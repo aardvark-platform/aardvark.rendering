@@ -436,13 +436,10 @@ module Kernels =
         )
 
     let quantify (i : int) (v : V3d) =
-        if i < 0 || i > 64 then
-            V3d(666.6, 666.6, 666.6)
-        else
-            let ql = uniform.QLuminance.[i] |> max 1
-            let qc = uniform.QChroma.[i] |> max 1
-            let t = v / V3d(ql,qc,qc)
-            V3d(round t.X, round t.Y, round t.Z)
+        let ql = uniform.QLuminance.[i] |> max 1
+        let qc = uniform.QChroma.[i] |> max 1
+        let t = v / V3d(ql,qc,qc)
+        V3i(int (round t.X), int (round t.Y), int (round t.Z))
         
 
     let inputImage =
@@ -483,10 +480,12 @@ module Kernels =
         Constants.cosTable.[m + 8 * x]
 
     [<LocalSize(X = 8, Y = 8)>]
-    let dct (size : V2i) (target : V4d[]) =
+    let dct (size : V2i) (target : V4i[]) =
         compute {
             let size = size
             let ll : V3d[] = allocateShared 64
+            let ll2 : V3i[] = allocateShared 64
+
 
             let gc = getGlobalId().XY
             let lc = getLocalId().XY
@@ -507,14 +506,14 @@ module Kernels =
             barrier()
 
 
-            ll.[Constants.inverseZigZagOrder.[lid]] <- dct
+            ll2.[Constants.inverseZigZagOrder.[lid]] <- dct
             barrier()
             
             let blockId = getWorkGroupId().XY 
             let blockCount = getWorkGroupCount().XY
             let tid = (blockId.X + blockCount.X * blockId.Y) * 64 + lid
  
-            target.[tid] <- V4d(ll.[lid], 1.0)
+            target.[tid] <- V4i(ll2.[lid], 1)
         }
 
     type Ballot () =
@@ -533,7 +532,7 @@ module Kernels =
 
         [<GLSLIntrinsic("findMSB({0})")>]
         static member MSB(u : uint32) : int =
-            failwith ""
+            Fun.HighestBit(int u)
 
         [<GLSLIntrinsic("gl_SubGroupLtMaskARB", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
         static member LessMask() : uint64 =
@@ -569,16 +568,15 @@ module Kernels =
     let acChrom = encoder.acChroma.table
 
 
-    let encode (index : int) (chroma : bool) (leading : int) (value : float) : int * uint32 =
-        let value = int value
-        
-        let dc = Ballot.MSB(uint32 (abs value)) + 1
-        let off = if value < 0 then (1 <<< dc) else 0
+    let encode (index : int) (chroma : bool) (leading : int) (value : int) : int * uint32 =
+
+        let scale = Ballot.MSB(uint32 (abs value)) + 1
+        let off = if value < 0 then (1 <<< scale) - 1 else 0
         let v = uint32 (off + value)
 
-        let mutable key = dc
+        let mutable key = scale
         if index <> 0 then
-            key <- (leading <<< 4) ||| dc
+            key <- (leading <<< 4) ||| scale
 
         let mutable huff = 0u
         if index = 0 && chroma then huff <- dcChrom.[key]
@@ -587,21 +585,24 @@ module Kernels =
         else huff <- acLum.[key]
             
         let len = Codeword.length huff
-        let huff = Codeword.code huff
-        len + dc, (huff <<< dc) ||| (v &&& ((1u <<< dc) - 1u))
+        let cc = Codeword.code huff
+        len + scale, (cc <<< scale) ||| (v &&& ((1u <<< scale) - 1u))
        
 
+   
+
     [<LocalSize(X = 32)>]
-    let encodeKernel (channel : int) (counter : int[]) (data : float[]) (ranges : V2i[]) (mask : uint32[]) =
+    let encodeKernel (counter : int[]) (data : int[]) (offsets : int[]) (sizes : int[]) (mask : uint32[]) =
         compute {
+            let channel : int = uniform?Arguments?channel 
             let mem = allocateShared 64
             let temp = allocateShared 64
             let offsetStore = allocateShared 1
 
             let offset = getWorkGroupId().X * 64
 
-            let lid = getLocalId().X
-            let llid = 2 * lid 
+            let lid0 = getLocalId().X
+            let llid = 2 * lid0
             let rlid = llid + 1
 
             let gid = getGlobalId().X
@@ -612,16 +613,16 @@ module Kernels =
             let lv = data.[li * 4 + channel]
             let rv = data.[ri * 4 + channel]
 
-            let lnz = llid = 0 || lv <> 0.0
-            let rnz = rv <> 0.0
+            let lnz = llid = 0 || lv <> 0
+            let rnz = rv <> 0
 
 
             // count leading zeros
-            let lessMask = Ballot.LessMask() |> uint32
-            let greaterMask = Ballot.GreaterMask() |> uint32
+            let lessMask        = Ballot.LessMask() |> uint32
+            let greaterMask     = Ballot.GreaterMask() |> uint32
+
             let lb = Ballot.Ballot(lnz) |> uint32
             let rb = Ballot.Ballot(rnz) |> uint32
-
 
             let lpm = Ballot.MSB(lb &&& lessMask)
             let rpm = Ballot.MSB(rb &&& lessMask)
@@ -652,7 +653,8 @@ module Kernels =
             let mutable rLength = 0
 
             if llid = 0 then
-                let v = if lid >= 64 then lv - data.[lid - 4*64] else lv
+                //(li - 64) * 4 + channel
+                let v = if li >= 64 then lv - data.[(li - 64) * 4 + channel] else lv
                 let lSize, lc = encode 0 (channel <> 0) 0 v
                 lCode <- lc
                 lLength <- lSize
@@ -661,24 +663,28 @@ module Kernels =
                 let lSize, lc = encode llid (channel <> 0) (llz % 16) lv
                 lCode <- lc
                 lLength <- lSize
-//
+
+
 //            elif llz >= 15 && llz % 16 = 1 && nonZeroAfterL then
 //                let lSize, lc = encode llid (channel <> 0) 15 0.0
 //                lCode <- lc
 //                lLength <- lSize
 
-
+            
             if rnz then
                 let rSize, rc = encode rlid (channel <> 0) (rlz % 16) rv
                 rCode <- rc
                 rLength <- rSize
+            elif rlid = 63 then
+                let rSize, rc = encode rlid (channel <> 0) 0 0
+                rCode <- rc
+                rLength <- rSize
 
+                
 //            elif rlz >= 15 && rlz % 16 = 1 && nonZeroAfterR then
 //                let rSize, rc = encode rlid (channel <> 0) 15 0.0
 //                rCode <- rc
 //                rLength <- rSize
-
-
 
 
             mem.[llid] <- lLength
@@ -758,6 +764,7 @@ module Kernels =
                     // oo = 0 => word <<< (32 - bitLength)
                     // oo = 16 => word <<< (16 - bitLength)
                     // oo = 24 => word <<< (8 - bitLength)
+
                     let a = word <<< (space - bitLength)
                     //let a = FShade.Primitives.Bitwise.BitFieldInsert(0u, word, oo, bitLength)
                     Ballot.AtomicOr(temp.[oi], a)
@@ -778,9 +785,11 @@ module Kernels =
 
             let bitCnt = mem.[63]
             let intCnt = (if bitCnt % 32 = 0 then bitCnt / 32 else 1 + bitCnt / 32)
-            if lid = 0 then
+            if llid = 0 then
                 let off = Ballot.AtomicAdd(counter.[0], intCnt)
-                ranges.[getWorkGroupId().X] <- V2i(off, bitCnt)
+                let gid = 3 * getWorkGroupId().X + channel
+                offsets.[gid] <- off //V2i(off, bitCnt)
+                sizes.[gid] <- bitCnt
                 offsetStore.[0] <- off
 
             barrier()
@@ -863,34 +872,29 @@ module Bit =
 type BitStream() =
     let mutable current = 0u
     let mutable currentLength = 0
-    let result = System.Collections.Generic.List<byte>()
-    let mutable str = ""
+    let result = System.Collections.Generic.List<byte>(4 <<< 20)
 
-    static let bla (f : byte[]) =
-        f |> Array.collect (fun b ->
-            if b = 0xFFuy then [| b; 0x00uy |]
-            else [| b |]
-        )
-   
-    let write arr =
-        let arr = bla arr
-        result.AddRange arr
-
-    let s = ()
-
+    let writeByte b =
+        if b = 0xFFuy then
+            result.Add 0xFFuy
+            result.Add 0x00uy
+        else
+            result.Add b
+       
     let writeCurrent() =
         assert(currentLength = 32)
-        write [|
-            Bit.take 0 8 current |> byte
-            Bit.take 8 8 current |> byte
-            Bit.take 16 8 current |> byte
-            Bit.take 24 8 current |> byte
-        |]
+       
+        Bit.take 0 8 current |> byte  |> writeByte
+        Bit.take 8 8 current |> byte  |> writeByte
+        Bit.take 16 8 current |> byte |> writeByte
+        Bit.take 24 8 current |> byte |> writeByte
+        
         current <- 0u
         currentLength <- 0
 
     member x.Write(word : uint32, offset : int, size : int) =
-        str <- str + Bit.toString offset size word
+        let total = result.Count * 8 + currentLength
+
         let space = 32 - currentLength
         if size <= space then
             let bits = Bit.take offset size word
@@ -920,19 +924,18 @@ type BitStream() =
     member x.Flush() =
         let mutable offset = 32 - currentLength
         while currentLength > 0 do
-            write [| byte (Bit.take offset 8 current) |]
-            currentLength <- currentLength - 8
-            offset <- offset + 8
+            if currentLength < 8 then
+                let v = (Bit.take offset currentLength current) <<< (8 - currentLength) |> byte
+                writeByte v
+                currentLength <- 0
+                offset <- offset + 8
+            else
+                writeByte (byte (Bit.take offset 8 current))
+                currentLength <- currentLength - 8
+                offset <- offset + 8
 
         current <- 0u
         currentLength <- 0
-
-    override x.ToString() =
-        let mutable res = ""
-        for i in 0 .. 8 .. str.Length - 1 do
-            let ss = str.Substring(i, min 8 (str.Length - i))
-            res <- res + ss + " "
-        res
 
     member x.ToArray() =
         x.Flush()
@@ -941,58 +944,61 @@ type BitStream() =
 type JpegStream() =
     let bs = BitStream()
 
-    
-
-    let encode (chroma : bool) (dc : bool) (leading : int) (value : float32) : unit =
-        let v = int value
-
-        let table =
-            match chroma, dc with
-                | false, true  -> Kernels.encoder.dcLuminance
-                | false, false -> Kernels.encoder.acLuminance
-                | true,  true  -> Kernels.encoder.dcChroma
-                | true,  false -> Kernels.encoder.acChroma
-                
-        let scale = Fun.HighestBit(abs v) + 1
-        let off = if v < 0 then (1 <<< scale) - 1 else 0
-        let v = uint32 (off + v)
-        let key =
-            match dc with
-                | true -> scale
-                | false -> (leading <<< 4) ||| scale
-
-        let huff = table.table.[key]
-        let name = if chroma then "cr" else "lum"
-        let kind = if dc then "dc" else "ac"
-        printfn "code(%s, %s, %d, %d): %s %s" name kind leading v (Codeword.toString huff) (Codeword.toString (Codeword.create scale v))
-        bs.WriteCode table.table.[key]
-        bs.Write(v, 32 - scale, scale)
+    let encode (result : System.Collections.Generic.List<V2i>) (chroma : bool) (dc : bool) (leading : int) (value : int) : unit =
+        let (len, code) = Kernels.encode (if dc then 0 else 1) chroma leading value
+        result.Add(V2i(len, int code))
+        bs.Write(code, 32 - len, len)
 
 
-    let writeBlock (lastDC : V3f) (block : V3f[]) (offset : int) =
+//        let v = value
+//
+//        let table =
+//            match chroma, dc with
+//                | false, true  -> Kernels.encoder.dcLuminance
+//                | false, false -> Kernels.encoder.acLuminance
+//                | true,  true  -> Kernels.encoder.dcChroma
+//                | true,  false -> Kernels.encoder.acChroma
+//                
+//        let scale = Fun.HighestBit(abs v) + 1
+//        let off = if v < 0 then (1 <<< scale) - 1 else 0
+//        let v = uint32 (off + v)
+//        let key =
+//            match dc with
+//                | true -> scale
+//                | false -> (leading <<< 4) ||| scale
+//
+//        let huff = table.table.[key]
+////        let name = if chroma then "cr" else "lum"
+////        let kind = if dc then "dc" else "ac"
+////        printfn "code(%s, %s, %d, %d): %s %s" name kind leading v (Codeword.toString huff) (Codeword.toString (Codeword.create scale v))
+//        bs.WriteCode table.table.[key]
+//        bs.Write(v, 32 - scale, scale)
+
+
+    let writeBlock (result : System.Collections.Generic.List<V2i>) (lastDC : V3i) (block : V3i[]) (offset : int) =
         for d in 0 .. 2 do
             let chroma = d <> 0
-            encode chroma true 0 (block.[offset].[d] - lastDC.[d])
+            encode result chroma true 0 (block.[offset].[d] - lastDC.[d])
             let mutable leading = 0
             let mutable i = 1 
             while i < 64 do
-                while i < 64 && block.[offset + i].[d] = 0.0f do 
+                while i < 64 && block.[offset + i].[d] = 0 do 
                     leading <- leading + 1
+                    if i <> 63 then result.Add V2i.Zero
                     i <- i + 1
 
                 if i < 64 then
                     let v = block.[offset + i]
 
                     while leading >= 16 do
-                        encode chroma false 15 0.0f
+                        encode result chroma false 15 0
                         leading <- leading - 16
 
-                        
-                    encode chroma false leading v.[d]
+                    encode result chroma false leading v.[d]
                     leading <- 0
                     i <- i + 1
                 else
-                    encode chroma false 0 0.0f
+                    encode result chroma false 0 0
         block.[offset]
 
     static member Value(v : int) =
@@ -1000,14 +1006,16 @@ type JpegStream() =
         let off = if v < 0 then (1 <<< scale) - 1 else 0
         uint32 (off + v)
 
-    member x.WriteBlocks(data : V3f[]) =
+    member x.WriteBlocks(data : V3i[]) =
+        let result = System.Collections.Generic.List<V2i>()
         let mutable offset = 0
-        let mutable lastDC = V3f.Zero
+        let mutable lastDC = V3i.Zero
         while offset < data.Length do
-            lastDC <- writeBlock lastDC data offset
+            lastDC <- writeBlock result lastDC data offset
             offset <- offset + 64
+
+        result.ToArray()
            
-    override x.ToString() = bs.ToString() 
     member x.ToArray() = bs.ToArray()
 
 type ReferenceCompressor() =
@@ -1041,7 +1049,7 @@ type ReferenceCompressor() =
         )
         
     static let quantifyBlock (quality : Quantization) (block : V3f[]) =
-        let round (v : V3f) = V4f((round v.X), (round v.Y), (round v.Z), 0.0f)
+        let round (v : V3f) = V4i(round v.X, round v.Y, round v.Z, 0.0f)
         Array.map3 (fun ql qc v -> round(v / V3f(float ql,float qc,float qc))) quality.luminance quality.chroma block
 
     static let zigZagOrder =
@@ -1094,10 +1102,10 @@ type ReferenceCompressor() =
 
         blocks |> Array.collect (ycbcrBlock >> dctBlock >> quantifyBlock quality >> zigZagBlock >> Array.map Vec.xyz) 
 
-    member x.Encode(data : V3f[]) =
+    member x.Encode(data : V3i[]) =
         let stream = JpegStream()
-        stream.WriteBlocks data
-        stream.ToArray()
+        let codes = stream.WriteBlocks data
+        stream.ToArray(), codes
 
 
     member x.Compress(data : PixImage<'a>, quality : Quantization) =
@@ -1174,8 +1182,9 @@ type Compressor(runtime : Runtime) =
     let dct = device |> ComputeShader.ofFunction Kernels.dct
     let encode = device |> ComputeShader.ofFunction Kernels.encodeKernel
 
-    let transform(data : Image) (alignedSize : V2i) (quality : Quantization) (dctBuffer : Buffer<V4f>) =
-        use dctInput = pool |> ComputeShader.newInputBinding dct
+    
+    let transform(data : Image) (alignedSize : V2i) (quality : Quantization) (dctBuffer : Buffer<V4i>) =
+        let dctInput = pool |> ComputeShader.newInputBinding dct
         
         dctInput.["InputImage"] <- data
         dctInput.["size"] <- alignedSize
@@ -1184,110 +1193,105 @@ type Compressor(runtime : Runtime) =
         dctInput.["QChroma"] <- quality.chroma
         dctInput.Flush()
 
-        dctBuffer.Upload(Array.zeroCreate (int dctBuffer.Count))
-
-        device.perform {
-            do! Command.Bind dct
-            do! Command.SetInputs dctInput
-            do! Command.Dispatch (alignedSize / V2i(8,8))
+        command {
+            try
+                do! Command.Bind dct
+                do! Command.SetInputs dctInput
+                do! Command.Dispatch (alignedSize / V2i(8,8))
+            finally
+                dctInput.Dispose()
         }
 
-    let encode (dctBuffer : Buffer<V4f>) (alignedSize : V2i) =
-        use input = runtime.DescriptorPool |> ComputeShader.newInputBinding encode
+    let encode (dctBuffer : Buffer<V4i>) (alignedSize : V2i) =
 
         let blocks = (alignedSize.X * alignedSize.Y) / 64
-        let ranges = device.CreateBuffer<V2i>(int64 blocks)
+        let offsetBuffer = device.CreateBuffer<V3i>(int64 blocks)
+        let sizeBuffer = device.CreateBuffer<V3i>(int64 blocks)
         let data = device.CreateBuffer<uint32>(64L * int64 blocks)
         let counter = device.CreateBuffer<int>(Array.zeroCreate 1)
 
-        input.["data"] <- dctBuffer
-        input.["ranges"] <- ranges
-        input.["counter"] <- counter
-        input.["mask"] <- data
-        input.Flush()
-
-        let offsets : V3i[] = Array.zeroCreate blocks
-        let counts : V3i[] = Array.zeroCreate blocks
-
-        for c in 0 .. 2 do
-            input.["channel"] <- c
-            input.Flush()
-
-            device.perform {
+        let run = 
+            command {
+                do! Command.ZeroBuffer(counter)
                 do! Command.Bind encode
-                do! Command.SetInputs input
-                do! Command.Dispatch blocks
+                for c in 0 .. 2 do
+                    let input = runtime.DescriptorPool |> ComputeShader.newInputBinding encode
+                    try
+                        input.["data"] <- dctBuffer
+                        input.["offsets"] <- offsetBuffer
+                        input.["sizes"] <- sizeBuffer
+                        input.["counter"] <- counter
+                        input.["mask"] <- data
+                        input.["channel"] <- c
+                        input.Flush()
+
+                        do! Command.SetInputs input
+                        do! Command.Dispatch blocks
+
+                    finally
+                        input.Dispose()
             }
 
-            let r = Array.zeroCreate blocks
-            ranges.Download(r)
-            for i in 0 .. blocks - 1 do
-                offsets.[i].[c] <- r.[i].X
-                counts.[i].[c] <- r.[i].Y
+        let download () = 
+            let cnt = Array.zeroCreate 1
+            counter.Download(cnt)
+
+            let arr = Array.zeroCreate cnt.[0]
+            data.Download(0L, arr, 0L, arr.LongLength)
+            let offsets = offsetBuffer.Download()
+            let sizes = sizeBuffer.Download()
+
+            device.Delete offsetBuffer
+            device.Delete sizeBuffer
+            device.Delete data
+            device.Delete counter
+
+            let sw = System.Diagnostics.Stopwatch.StartNew()
+            //Log.startTimed "DOWNLOAD OIDA"
+            let bs = BitStream()
+            for i in 0 .. offsets.Length - 1 do
+                let off = offsets.[i]
+                let cnt = sizes.[i]
+                for ci in 0 .. 2 do
+                    let offset = off.[ci]
+                    let size = cnt.[ci]
+
+                    let mutable i = 0
+                    let mutable remaining = size
+                    while remaining > 0 do
+                        bs.Write(arr.[offset + i], 0, min 32 remaining)
+                        i <- i + 1
+                        remaining <- remaining - 32
 
 
-        let cnt = Array.zeroCreate 1
-        counter.Download(cnt)
+            let r = bs.ToArray()
+            sw.Stop()
+            r, sw.MicroTime
 
-        let arr = Array.zeroCreate cnt.[0]
-        data.Download(0L, arr, 0L, arr.LongLength)
+        run, download
 
-        device.Delete ranges
-        device.Delete data
-        device.Delete counter
-
-        let bs = BitStream()
-        for i in 0 .. offsets.Length - 1 do
-            let off = offsets.[i]
-            let cnt = counts.[i]
-            for ci in 0 .. 2 do
-                let offset = off.[ci]
-                let size = cnt.[ci]
-
-                let mutable i = 0
-                let mutable remaining = size
-                while remaining > 0 do
-                    bs.Write(arr.[offset + i], 0, min 32 remaining)
-                    i <- i + 1
-                    remaining <- remaining - 32
-
-                let eob = 
-                    if ci = 0 then Kernels.encoder.acLuminance.table.[0]
-                    else Kernels.encoder.acChroma.table.[0]
-
-                bs.WriteCode(eob)
-
-        bs.ToArray()
-
-    member x.Compress(data : Image, quality : Quantization) : byte[] =
+    member x.Compress(data : Image, quality : Quantization) =
         let alignedSize = data.Size.XY |> Align.next2 8
-        let dctBuffer = device.CreateBuffer<V4f>(int64 alignedSize.X * int64 alignedSize.Y)
+        let dctBuffer = device.CreateBuffer<V4i>(int64 alignedSize.X * int64 alignedSize.Y)
 
-        transform data alignedSize quality dctBuffer
+        let (encode, download) = encode dctBuffer alignedSize
 
-        encode dctBuffer alignedSize
-
-    member x.Compress(data : PixImage<byte>, quality : Quantization) : byte[] =
-        //assert(data.Size.X % 8 = 0 && data.Size.Y % 8 = 0)
-        let image = device.CreateImage(PixTexture2d(PixImageMipMap [| data :> PixImage |], TextureParams.empty))
-        let alignedSize = Align.next2 8 data.Size
-        let dctBuffer = device.CreateBuffer<V4f>(int64 alignedSize.X * int64 alignedSize.Y)
-
-        transform image alignedSize quality dctBuffer
-
-        device.Delete image
-
-        let res = encode dctBuffer alignedSize
-        device.Delete dctBuffer
-        res
+        let compress = 
+            command {
+                do! transform data alignedSize quality dctBuffer
+                do! encode
+            }
+        compress, download
 
     member x.Transform(data : PixImage<'a>, quality : Quantization) =
         //assert(data.Size.X % 8 = 0 && data.Size.Y % 8 = 0)
         let image = device.CreateImage(PixTexture2d(PixImageMipMap [| data :> PixImage |], TextureParams.empty))
         let alignedSize = Align.next2 8 data.Size
-        let dctBuffer = device.CreateBuffer<V4f>(int64 alignedSize.X * int64 alignedSize.Y)
+        let dctBuffer = device.CreateBuffer<V4i>(int64 alignedSize.X * int64 alignedSize.Y)
 
-        transform image alignedSize quality dctBuffer
+        device.perform {
+            do! transform image alignedSize quality dctBuffer
+        }
 
         let res = dctBuffer.Download()
         device.Delete image
@@ -1308,8 +1312,15 @@ module Test =
                 if v &&& mask <> 0uy then str <- str + "1"
                 else str <- str + "0"
                 mask <- mask >>> 1
-            str <- str + " "
-        Log.line "%s" str
+            str <- str + ""
+        str
+
+    let photoshop =
+        [|
+            0x3Fuy; 0x5Buy; 0xBDuy; 0x6Auy; 0x4Duy; 0x7Fuy; 0xCCuy; 0x1Fuy; 0x99uy; 0xFAuy; 0x44uy; 0xD7uy; 0xB3uy; 0xAEuy; 0x93uy; 0x00uy; 0x1Auy; 0xFCuy; 0x2Buy; 0x71uy; 0x2Buy; 0xC0uy; 0xF0uy; 0xC5uy; 0xC1uy; 0xEFuy; 0x2Duy; 0xF5uy; 0x38uy; 0xDEuy; 0xCEuy; 0x58uy; 0x16uy; 0xE2uy; 0xF0uy; 0xFAuy; 0x6Buy; 0x3Auy; 0xA2uy; 0xCEuy; 0xF1uy; 0xCBuy; 0x15uy; 0x27uy; 0x92uy; 0x18uy; 0x65uy; 0x89uy; 0xF3uy; 0x3Buy; 0x53uy; 0xD9uy; 0xDAuy; 0x6Duy; 0x4Euy; 0x82uy; 0x5Duy; 0x9Fuy; 0x51uy; 0xC5uy; 0x59uy; 0xCEuy; 0x1Euy; 0x2Fuy; 0x0Fuy; 0x11uy; 0xF1uy; 0x0Cuy; 0x0Euy; 0x38uy; 0xC8uy; 0x47uy; 0x26uy; 0x3Cuy; 0x92uy; 0xC9uy; 0x97uy; 0x1Cuy; 0x81uy; 0x12uy; 0xC0uy; 0x32uy; 0x78uy; 0x79uy; 0x66uy; 0x06uy; 0x49uy; 0x63uy; 0xFCuy; 0xC4uy; 0xA1uy; 0x2Duy; 0x31uy; 0xC3uy; 0xEDuy; 0xADuy; 0x4Cuy; 0xB2uy; 0xEAuy; 0x34uy; 0xBAuy; 0x59uy; 0xCAuy; 0x03uy; 0x4Fuy; 0x28uy; 0x48uy; 0x4Buy; 0xF7uy; 0xD1uy; 0x95uy; 0xC7uy; 0x1Cuy; 0xB0uy; 0x65uy; 0x86uy; 0x6Cuy; 0x58uy; 0xE1uy; 0x39uy; 0x1Auy; 0x80uy; 0x87uy; 0x8Buy; 0x18uy; 0xE3uy; 0x9Euy; 0x63uy; 0xAAuy; 0xC7uy; 0x9Buy; 0x06uy; 0x39uy; 0x43uy; 0x34uy; 0x73uy; 0x62uy; 0x9Euy; 0x6Fuy
+        |]
+
+
 
     let run() =
         use app = new HeadlessVulkanApplication(false)
@@ -1320,14 +1331,15 @@ module Test =
 
         let rand = RandomSystem()
 
-        let pi = 
-            let pi = PixImage<byte>(Col.Format.RGBA, V2i(8,8))
-            pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
-                if c.X >= 4L then C4b.White
-                else C4b.Black
-                //rand.UniformC3f().ToC4b()
-            ) |> ignore
-            pi
+        let pi =
+            PixImage.Create(@"C:\Users\Schorsch\Desktop\nature.jpeg").ToPixImage<byte>(Col.Format.RGBA)
+//            let pi = PixImage<byte>(Col.Format.RGBA, V2i(1920,1080))
+//            pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
+////                if c.X >= 4L then C4b.Red
+////                else C4b.Green
+//                rand.UniformC3f().ToC4b()
+//            ) |> ignore
+//            pi
 
         
         Log.startTimed "CPU"
@@ -1343,9 +1355,7 @@ module Test =
             let cpu = cpu.[i]
             let gpu = gpu.[i]
 
-            if cpu = gpu then 
-                Log.line "block %d OK" i
-            else 
+            if cpu <> gpu then 
                 Log.start "block %d" i
                 Log.error "block %d: ERROR" i
                 Log.start "CPU"
@@ -1361,19 +1371,66 @@ module Test =
         Log.stop()
         
         
-        Log.start "CPU"
-        let encoded = ref.Encode(gpuData)
-        printBits encoded
-        let data = ref.ToImageData(pi.Size, Quantization.photoshop80, encoded)
+        let cpu, cpuCodes = ref.Encode(gpuData)
+        let data = ref.ToImageData(pi.Size, Quantization.photoshop80, cpu)
         File.writeAllBytes @"C:\Users\Schorsch\Desktop\wtf.jpg" data
+
+        let image = device.CreateImage(PixTexture2d(PixImageMipMap [|pi :> PixImage|], TextureParams.empty))
+        Log.startTimed "GPU"
+        let gpuCompress, download = comp.Compress(image, Quantization.photoshop80)
         Log.stop()
 
-        Log.start "GPU"
-        let encoded = comp.Compress(pi, Quantization.photoshop80)
-        printBits encoded
-        let data = ref.ToImageData(pi.Size, Quantization.photoshop80, encoded)
+
+        let cmd = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+        cmd.Begin(CommandBufferUsage.None)
+        cmd.Enqueue gpuCompress
+        cmd.End()
+
+        printf " 0: compress: "
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        for i in 1 .. 1000 do
+            device.GraphicsFamily.GetQueue().RunSynchronously(cmd)
+        sw.Stop()
+        printfn "%A" (sw.MicroTime / 1000)
+
+        
+        printf " 0: download: "
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        let gpu,time = download()
+        sw.Stop()
+        printfn "%A (%A)" sw.MicroTime time
+
+        cmd.Dispose()
+
+
+
+        let data = ref.ToImageData(pi.Size, Quantization.photoshop80, gpu)
         File.writeAllBytes @"C:\Users\Schorsch\Desktop\wtf2.jpg" data
-        Log.stop()
+
+        if cpu = gpu then 
+            Log.line "OK"
+        else 
+//            let cpu = printBits cpu
+//            let gpu = printBits gpu
+
+//            File.writeAllLines @"C:\Users\Schorsch\Desktop\cpu.txt" (cpu.ToCharArray() |> Array.map (fun c -> System.String [|c|]))
+//            File.writeAllLines @"C:\Users\Schorsch\Desktop\gpu.txt" (gpu.ToCharArray() |> Array.map (fun c -> System.String [|c|]))
+//            File.writeAllLines @"C:\Users\Schorsch\Desktop\photoshop.txt" ((printBits photoshop).ToCharArray() |> Array.map (fun c -> System.String [|c|]))
+//            
+            let gpuImg = PixImage.Create(@"C:\Users\Schorsch\Desktop\wtf2.jpg").ToPixImage<byte>(Col.Format.RGB)
+            let cpuImg = PixImage.Create(@"C:\Users\Schorsch\Desktop\wtf.jpg").ToPixImage<byte>(Col.Format.RGB)
+
+            let diffImg = PixImage<byte>(Col.Format.RGB, gpuImg.Size)
+            diffImg.GetMatrix<C4b>().SetMap2(gpuImg.GetMatrix<C4b>(), cpuImg.GetMatrix<C4b>(), fun (a : C4b) (b : C4b) -> 
+                let d = ((a.ToV4i() - b.ToV4i())).Abs
+                C4b((if d.X = 0 then 0uy else 255uy), (if d.Y = 0 then 0uy else 255uy), (if d.Z = 0 then 0uy else 255uy))
+            ) |> ignore
+            diffImg.SaveAsImage @"C:\Users\Schorsch\Desktop\diff.png"
+
+//            Log.line "%s" cpu
+//            Log.line "%s" gpu
+            Log.warn "ERROR"
+
 
 
         ()

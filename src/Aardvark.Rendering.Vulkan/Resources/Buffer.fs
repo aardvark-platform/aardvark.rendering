@@ -278,7 +278,13 @@ module BufferCommands =
                     Disposable.Empty
             }
 
-
+        static member ZeroBuffer(b : Buffer) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue cmd =
+                    VkRaw.vkCmdFillBuffer(cmd.Handle, b.Handle, 0UL, uint64 b.Size, 0u)
+                    Disposable.Empty
+            }
 // =======================================================================
 // Resource functions for Device
 // =======================================================================
