@@ -568,43 +568,28 @@ module Kernels =
     let dcChrom = encoder.dcChroma.table
     let acChrom = encoder.acChroma.table
 
+
     let encode (index : int) (chroma : bool) (leading : int) (value : float) : int * uint32 =
         let value = int value
-        if chroma then
-            if index = 0 then
-                let dc = Ballot.MSB(uint32 (abs value)) + 1
-                let off = if value < 0 then (1 <<< dc) else 0
-                let v = uint32 (off + value)
-                let huff = dcChrom.[dc]
-                let len = Codeword.length huff
-                let huff = Codeword.code huff
-                len + dc, (huff <<< dc) ||| v
-            else
-                let dc = Ballot.MSB(uint32 (abs value)) + 1
-                let off = if value < 0 then (1 <<< dc) else 0
-                let v = uint32 (off + value)
-                let huff = acChrom.[dc]
-                let len = Codeword.length huff
-                let huff = Codeword.code huff
-                len + dc, (huff <<< dc) ||| v
+        
+        let dc = Ballot.MSB(uint32 (abs value)) + 1
+        let off = if value < 0 then (1 <<< dc) else 0
+        let v = uint32 (off + value)
 
-        else
-            if index = 0 then
-                let dc = Ballot.MSB(uint32 (abs value)) + 1
-                let off = if value < 0 then (1 <<< dc) else 0
-                let v = uint32 (off + value)
-                let huff = dcLum.[dc]
-                let len = Codeword.length huff
-                let huff = Codeword.code huff
-                len + dc, (huff <<< dc) ||| v
-            else
-                let dc = Ballot.MSB(uint32 (abs value)) + 1
-                let off = if value < 0 then (1 <<< dc) else 0
-                let v = uint32 (off + value)
-                let huff = acLum.[dc]
-                let len = Codeword.length huff
-                let huff = Codeword.code huff
-                len + dc, (huff <<< dc) ||| v
+        let mutable key = dc
+        if index <> 0 then
+            key <- (leading <<< 4) ||| dc
+
+        let mutable huff = 0u
+        if index = 0 && chroma then huff <- dcChrom.[key]
+        elif index = 0 then huff <- dcLum.[key]
+        elif chroma then huff <- acChrom.[key]
+        else huff <- acLum.[key]
+            
+        let len = Codeword.length huff
+        let huff = Codeword.code huff
+        len + dc, (huff <<< dc) ||| (v &&& ((1u <<< dc) - 1u))
+       
 
     [<LocalSize(X = 32)>]
     let encodeKernel (channel : int) (counter : int[]) (data : float[]) (ranges : V2i[]) (mask : uint32[]) =
@@ -676,10 +661,11 @@ module Kernels =
                 let lSize, lc = encode llid (channel <> 0) (llz % 16) lv
                 lCode <- lc
                 lLength <- lSize
-
-            elif llz > 0 && llz % 16 = 0 && nonZeroAfterL then
-                lCode <- 0xF0u
-                lLength <- 8
+//
+//            elif llz >= 15 && llz % 16 = 1 && nonZeroAfterL then
+//                let lSize, lc = encode llid (channel <> 0) 15 0.0
+//                lCode <- lc
+//                lLength <- lSize
 
 
             if rnz then
@@ -687,9 +673,10 @@ module Kernels =
                 rCode <- rc
                 rLength <- rSize
 
-            elif rlz > 0 && rlz % 16 = 0 && nonZeroAfterR then
-                rCode <- 0xF0u
-                rLength <- 8
+//            elif rlz >= 15 && rlz % 16 = 1 && nonZeroAfterR then
+//                let rSize, rc = encode rlid (channel <> 0) 15 0.0
+//                rCode <- rc
+//                rLength <- rSize
 
 
 
@@ -741,15 +728,19 @@ module Kernels =
                     // oo = 0 => word <<< (32 - bitLength)
                     // oo = 16 => word <<< (16 - bitLength)
                     // oo = 24 => word <<< (8 - bitLength)
-                    let a = FShade.Primitives.Bitwise.BitFieldInsert(0u, word, oo, bitLength)
+
+                    let a = word <<< (space - bitLength)
+                    //let a = FShade.Primitives.Bitwise.BitFieldInsert(0u, word, oo, bitLength)
                     Ballot.AtomicOr(temp.[oi], a)
 
                 else
                     let rest = bitLength - space
-                    let a = FShade.Primitives.Bitwise.BitFieldInsert(0u, word >>> rest, oo, space)
+                    let a = (word >>> rest) &&& ((1u <<< space) - 1u)
+                    //let a = FShade.Primitives.Bitwise.BitFieldInsert(0u, word >>> rest, oo, space)
                     Ballot.AtomicOr(temp.[oi], a)
                     
-                    let b = FShade.Primitives.Bitwise.BitFieldInsert(0u, word, 0, rest)
+                    let b = (word &&& ((1u <<< rest) - 1u)) <<< (32 - rest)
+                    //let b = FShade.Primitives.Bitwise.BitFieldInsert(0u, word, 0, rest)
                     Ballot.AtomicOr(temp.[oi+1], b)
 
             if rLength > 0 then
@@ -767,15 +758,18 @@ module Kernels =
                     // oo = 0 => word <<< (32 - bitLength)
                     // oo = 16 => word <<< (16 - bitLength)
                     // oo = 24 => word <<< (8 - bitLength)
-                    let a = FShade.Primitives.Bitwise.BitFieldInsert(0u, word, oo, bitLength)
+                    let a = word <<< (space - bitLength)
+                    //let a = FShade.Primitives.Bitwise.BitFieldInsert(0u, word, oo, bitLength)
                     Ballot.AtomicOr(temp.[oi], a)
 
                 else
                     let rest = bitLength - space
-                    let a = FShade.Primitives.Bitwise.BitFieldInsert(0u, word >>> rest, oo, space)
+                    let a = (word >>> rest) &&& ((1u <<< space) - 1u)
+                    //let a = FShade.Primitives.Bitwise.BitFieldInsert(0u, word >>> rest, oo, space)
                     Ballot.AtomicOr(temp.[oi], a)
                     
-                    let b = FShade.Primitives.Bitwise.BitFieldInsert(0u, word, 0, rest)
+                    let b = (word &&& ((1u <<< rest) - 1u)) <<< (32 - rest)
+                    //let b = FShade.Primitives.Bitwise.BitFieldInsert(0u, word, 0, rest)
                     Ballot.AtomicOr(temp.[oi+1], b)
 
 
@@ -1103,15 +1097,7 @@ type ReferenceCompressor() =
     member x.Encode(data : V3f[]) =
         let stream = JpegStream()
         stream.WriteBlocks data
-        printfn "%s" (stream.ToString())
-        let arr = stream.ToArray()
-        printfn ""
-        let mutable str = ""
-        for i in 0 .. arr.Length - 1 do
-            let v = arr.[i]
-            str <- str + printBits v + " "
-        printfn "%s" str
-        arr
+        stream.ToArray()
 
 
     member x.Compress(data : PixImage<'a>, quality : Quantization) =
@@ -1269,7 +1255,7 @@ type Compressor(runtime : Runtime) =
                     if ci = 0 then Kernels.encoder.acLuminance.table.[0]
                     else Kernels.encoder.acChroma.table.[0]
 
-                bs.Write(eob)
+                bs.WriteCode(eob)
 
         bs.ToArray()
 
@@ -1280,6 +1266,20 @@ type Compressor(runtime : Runtime) =
         transform data alignedSize quality dctBuffer
 
         encode dctBuffer alignedSize
+
+    member x.Compress(data : PixImage<byte>, quality : Quantization) : byte[] =
+        //assert(data.Size.X % 8 = 0 && data.Size.Y % 8 = 0)
+        let image = device.CreateImage(PixTexture2d(PixImageMipMap [| data :> PixImage |], TextureParams.empty))
+        let alignedSize = Align.next2 8 data.Size
+        let dctBuffer = device.CreateBuffer<V4f>(int64 alignedSize.X * int64 alignedSize.Y)
+
+        transform image alignedSize quality dctBuffer
+
+        device.Delete image
+
+        let res = encode dctBuffer alignedSize
+        device.Delete dctBuffer
+        res
 
     member x.Transform(data : PixImage<'a>, quality : Quantization) =
         //assert(data.Size.X % 8 = 0 && data.Size.Y % 8 = 0)
@@ -1299,6 +1299,18 @@ module Test =
     let printMat8 (arr : 'a[]) =
         arr |> Array.map (sprintf "%A") |> Array.chunkBySize 8 |> Array.map (String.concat " ") |> Array.iter (Log.line "%s")
         
+    let printBits (data : byte[]) =
+        let mutable str = ""
+        for i in 0 .. data.Length - 1 do
+            let v = data.[i]
+            let mutable mask = 1uy <<< 7
+            for _ in 1 .. 8 do
+                if v &&& mask <> 0uy then str <- str + "1"
+                else str <- str + "0"
+                mask <- mask >>> 1
+            str <- str + " "
+        Log.line "%s" str
+
     let run() =
         use app = new HeadlessVulkanApplication(false)
         let device = app.Device
@@ -1311,8 +1323,8 @@ module Test =
         let pi = 
             let pi = PixImage<byte>(Col.Format.RGBA, V2i(8,8))
             pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
-                if c.X >= 4L then C4b.Red
-                else C4b.Green
+                if c.X >= 4L then C4b.White
+                else C4b.Black
                 //rand.UniformC3f().ToC4b()
             ) |> ignore
             pi
@@ -1347,17 +1359,22 @@ module Test =
                 Log.stop()
 
         Log.stop()
-
+        
+        
+        Log.start "CPU"
         let encoded = ref.Encode(gpuData)
+        printBits encoded
         let data = ref.ToImageData(pi.Size, Quantization.photoshop80, encoded)
         File.writeAllBytes @"C:\Users\Schorsch\Desktop\wtf.jpg" data
+        Log.stop()
 
+        Log.start "GPU"
+        let encoded = comp.Compress(pi, Quantization.photoshop80)
+        printBits encoded
+        let data = ref.ToImageData(pi.Size, Quantization.photoshop80, encoded)
+        File.writeAllBytes @"C:\Users\Schorsch\Desktop\wtf2.jpg" data
+        Log.stop()
 
-        
-        let image = device.CreateImage(PixTexture2d(PixImageMipMap [| pi :> PixImage |], TextureParams.empty))
-        let data = comp.Compress(image, Quantization.photoshop80)
-
-        printfn "%A" data
 
         ()
 
