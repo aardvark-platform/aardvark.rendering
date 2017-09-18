@@ -811,10 +811,66 @@ module Align =
     let next2 (a : int) (v : V2i) =
         V2i(next a v.X, next a v.Y)
 
+module Bit =
+    let take (offset : int) (size : int) (word : uint32) =
+        if offset >= 32 then 0u
+        elif offset <= 0 then
+            if size > 0 then
+                word >>> (32 - size)
+            else
+                0u
+        else
+            let e = min 32 (offset + size)
+            let size = e - offset
+            (word >>> (32 - e)) &&& ((1u <<< size) - 1u)
+            
+    let toString (offset : int) (size : int) (word : uint32) =
+        
+        if offset >= 32 then ""
+        elif offset <= 0 then
+            if size > 0 then
+                let mutable str = ""
+                let mutable mask = 1u <<< (size - 1)
+                let mutable v = word >>> (32 - size)
+                for i in 1 .. size do
+                    if v &&& mask <> 0u then str <- str + "1"
+                    else str <- str + "0"
+                    mask <- mask >>> 1
+                str
+            else
+                ""
+        else
+            let e = min 32 (offset + size)
+            let size = e - offset
+
+            
+            let mutable str = ""
+            let mutable mask = 1u <<< (size - 1)
+            let mutable v = (word >>> (32 - e)) &&& ((1u <<< size) - 1u)
+            for i in 1 .. size do
+                if v &&& mask <> 0u then str <- str + "1"
+                else str <- str + "0"
+                mask <- mask >>> 1
+            str
+
+    let print (v : uint32) =
+        let mutable mask = 0x80000000u
+        let mutable str = ""
+        let mutable started = false
+        for i in 0 .. 31 do
+            if v &&& mask <> 0u then
+                started <- true
+                str <- str + "1"
+            elif started then
+                str <- str + "0"
+            mask <- mask >>> 1
+        sprintf "%s" str
 
 type BitStream() =
-    let mutable current = Codeword.empty
+    let mutable current = 0u
+    let mutable currentLength = 0
     let result = System.Collections.Generic.List<byte>()
+    let mutable str = ""
 
     static let bla (f : byte[]) =
         f |> Array.collect (fun b ->
@@ -828,49 +884,139 @@ type BitStream() =
 
     let s = ()
 
-    member x.WriteUInt32(value : uint32) =
-        let a = Codeword.create 16 (value >>> 16)
-        x.Write a
-        let b = Codeword.create 16 value
-        x.Write b
+    let writeCurrent() =
+        assert(currentLength = 32)
+        write [|
+            Bit.take 0 8 current |> byte
+            Bit.take 8 8 current |> byte
+            Bit.take 16 8 current |> byte
+            Bit.take 24 8 current |> byte
+        |]
+        current <- 0u
+        currentLength <- 0
 
-    member x.Write(w : Codeword) =
-        let len = Codeword.length w
-        let appendBits = min len (16 - Codeword.length current)
-
-        if appendBits >= len then
-            current <- Codeword.append current w
-            ()
+    member x.Write(word : uint32, offset : int, size : int) =
+        str <- str + Bit.toString offset size word
+        let space = 32 - currentLength
+        if size <= space then
+            let bits = Bit.take offset size word
+            current <- (current <<< size) ||| bits
+            currentLength <- currentLength + size
         else
-            current <- Codeword.append current (Codeword.take appendBits w)
-            let h = current >>> 8 |> byte
-            let l = current |> byte
-            write [| h; l |]
-            current <- Codeword.skip appendBits w
+            if space > 0 then
+                let bits = Bit.take offset space word
+                current <- (current <<< space) ||| bits
+                currentLength <- 32
+            writeCurrent()
+
+            current <- Bit.take (offset + space) (size - space) word
+            currentLength <- (size - space)
+
+    member x.Write(word : uint32) =
+        x.Write(word, 0, 32)
+        
+    member x.WriteCode(word : Codeword) =
+        let len = Codeword.length word
+        let data = Codeword.code word
+        x.Write(data, (32 - len), len)
 
     member x.Write(b : byte) =
-        x.Write(Codeword.create 8 (uint32 b))
+        x.Write(uint32 b, 24, 8)
 
     member x.Flush() =
-        let len = Codeword.length current
-        if len > 0 then
-            let arr = Codeword.toByteArray current
-            write arr
-            current <- Codeword.empty
+        let mutable offset = 32 - currentLength
+        while currentLength > 0 do
+            write [| byte (Bit.take offset 8 current) |]
+            currentLength <- currentLength - 8
+            offset <- offset + 8
 
+        current <- 0u
+        currentLength <- 0
+
+    override x.ToString() =
+        let mutable res = ""
+        for i in 0 .. 8 .. str.Length - 1 do
+            let ss = str.Substring(i, min 8 (str.Length - i))
+            res <- res + ss + " "
+        res
 
     member x.ToArray() =
         x.Flush()
         result.ToArray()
 
+type JpegStream() =
+    let bs = BitStream()
+
+    
+
+    let encode (chroma : bool) (dc : bool) (leading : int) (value : float32) : unit =
+        let v = int value
+
+        let table =
+            match chroma, dc with
+                | false, true  -> Kernels.encoder.dcLuminance
+                | false, false -> Kernels.encoder.acLuminance
+                | true,  true  -> Kernels.encoder.dcChroma
+                | true,  false -> Kernels.encoder.acChroma
+                
+        let scale = Fun.HighestBit(abs v) + 1
+        let off = if v < 0 then (1 <<< scale) - 1 else 0
+        let v = uint32 (off + v)
+        let key =
+            match dc with
+                | true -> scale
+                | false -> (leading <<< 4) ||| scale
+
+        let huff = table.table.[key]
+        let name = if chroma then "cr" else "lum"
+        let kind = if dc then "dc" else "ac"
+        printfn "code(%s, %s, %d, %d): %s %s" name kind leading v (Codeword.toString huff) (Codeword.toString (Codeword.create scale v))
+        bs.WriteCode table.table.[key]
+        bs.Write(v, 32 - scale, scale)
 
 
-type Compressor(runtime : Runtime) =
-    let device = runtime.Device
-    let pool = runtime.DescriptorPool
+    let writeBlock (lastDC : V3f) (block : V3f[]) (offset : int) =
+        for d in 0 .. 2 do
+            let chroma = d <> 0
+            encode chroma true 0 (block.[offset].[d] - lastDC.[d])
+            let mutable leading = 0
+            let mutable i = 1 
+            while i < 64 do
+                while i < 64 && block.[offset + i].[d] = 0.0f do 
+                    leading <- leading + 1
+                    i <- i + 1
 
-    let dct = device |> ComputeShader.ofFunction Kernels.dct
-    let encode = device |> ComputeShader.ofFunction Kernels.encodeKernel
+                if i < 64 then
+                    let v = block.[offset + i]
+
+                    while leading >= 16 do
+                        encode chroma false 15 0.0f
+                        leading <- leading - 16
+
+                        
+                    encode chroma false leading v.[d]
+                    leading <- 0
+                    i <- i + 1
+                else
+                    encode chroma false 0 0.0f
+        block.[offset]
+
+    static member Value(v : int) =
+        let scale = Fun.HighestBit(abs v) + 1
+        let off = if v < 0 then (1 <<< scale) - 1 else 0
+        uint32 (off + v)
+
+    member x.WriteBlocks(data : V3f[]) =
+        let mutable offset = 0
+        let mutable lastDC = V3f.Zero
+        while offset < data.Length do
+            lastDC <- writeBlock lastDC data offset
+            offset <- offset + 64
+           
+    override x.ToString() = bs.ToString() 
+    member x.ToArray() = bs.ToArray()
+
+type ReferenceCompressor() =
 
     static let ycbcrBlock =
         let mat = 
@@ -904,7 +1050,6 @@ type Compressor(runtime : Runtime) =
         let round (v : V3f) = V4f((round v.X), (round v.Y), (round v.Z), 0.0f)
         Array.map3 (fun ql qc v -> round(v / V3f(float ql,float qc,float qc))) quality.luminance quality.chroma block
 
-    
     static let zigZagOrder =
         [|
             0;  1;  8;  16;  9;  2;  3; 10
@@ -921,6 +1066,127 @@ type Compressor(runtime : Runtime) =
         zigZagOrder |> Array.map (fun i -> 
             block.[i]
         )
+    
+    let printBits (v : byte) =
+        let mutable str = ""
+        let mutable mask = 1uy <<< 7
+        for _ in 1 .. 8 do
+            if v &&& mask <> 0uy then str <- str + "1"
+            else str <- str + "0"
+            mask <- mask >>> 1
+        str
+
+    member x.Transform(data : PixImage<'a>, quality : Quantization) =
+        //assert(data.Size.X % 8 = 0 && data.Size.Y % 8 = 0)
+        let alignedSize = Align.next2 8 data.Size
+
+        let blockCount = alignedSize / V2i(8,8)
+        let blocks = Array.zeroCreate (blockCount.X * blockCount.Y)
+            
+        let mat = data.GetMatrix<C4f>()
+
+        let mutable i = 0
+        for y in 0 .. blockCount.Y - 1 do
+            for x in 0 .. blockCount.X - 1 do
+                let blockMat = mat.SubMatrix(8 * V2i(x,y), V2i(8,8))
+
+                let arr = Array.zeroCreate 64
+                blockMat.ForeachXYIndex (fun (x : int64) (y : int64) (i : int64) ->
+                    let v = mat.[i]
+                    arr.[int x + 8 * int y] <- v.ToV3f()
+                )
+                blocks.[i] <- arr
+                i <- i + 1
+
+        blocks |> Array.collect (ycbcrBlock >> dctBlock >> quantifyBlock quality >> zigZagBlock >> Array.map Vec.xyz) 
+
+    member x.Encode(data : V3f[]) =
+        let stream = JpegStream()
+        stream.WriteBlocks data
+        printfn "%s" (stream.ToString())
+        let arr = stream.ToArray()
+        printfn ""
+        let mutable str = ""
+        for i in 0 .. arr.Length - 1 do
+            let v = arr.[i]
+            str <- str + printBits v + " "
+        printfn "%s" str
+        arr
+
+
+    member x.Compress(data : PixImage<'a>, quality : Quantization) =
+        let dctBuffer = x.Transform(data, quality)
+        x.Encode(dctBuffer)
+    
+    member x.ToImageData(realSize : V2i, quality : Quantization, scanData : byte[]) =
+        use ms = new System.IO.MemoryStream()
+
+        
+        let header = [| 0xFFuy; 0xD8uy;  |]
+        ms.Write(header, 0, header.Length)
+
+        let encode (v : uint16) =
+            [| byte (v >>> 8); byte v |]
+
+
+        let quant = 
+            Array.concat [
+                [| 0xFFuy; 0xDBuy; 0x00uy; 0x84uy |]
+                [| 0x00uy |]
+                quality.luminance |> zigZagBlock |> Array.map byte
+                [| 0x01uy |]
+                quality.chroma |> zigZagBlock |> Array.map byte
+            ]
+        ms.Write(quant, 0, quant.Length)
+
+        let sof =
+            Array.concat [
+                [| 0xFFuy; 0xC0uy; 0x00uy; 0x11uy |]
+                [| 0x08uy |]
+                encode (uint16 realSize.Y)
+                encode (uint16 realSize.X)
+                [| 0x03uy; |]
+                [| 0x01uy; 0x11uy; 0x00uy |]
+                [| 0x02uy; 0x11uy; 0x01uy |]
+                [| 0x03uy; 0x11uy; 0x01uy |]
+            ]
+        ms.Write(sof, 0, sof.Length)
+
+        let huff =
+            let huffSize (spec : HuffmanTable)  =
+                uint16 (1 + 16 + spec.values.Length)
+
+            let encodeHuff (kind : byte) (spec : HuffmanTable) =
+                Array.concat [
+                    [| kind |]
+                    Array.skip 1 spec.counts |> Array.map byte
+                    spec.values
+                ]
+
+            Array.concat [
+                [| 0xFFuy; 0xC4uy |]
+                encode (2us + huffSize Kernels.encoder.dcLuminance + huffSize  Kernels.encoder.dcChroma + huffSize  Kernels.encoder.acLuminance + huffSize  Kernels.encoder.acChroma)
+
+                encodeHuff 0x00uy  Kernels.encoder.dcLuminance
+                encodeHuff 0x01uy  Kernels.encoder.dcChroma
+                encodeHuff 0x10uy  Kernels.encoder.acLuminance
+                encodeHuff 0x11uy  Kernels.encoder.acChroma
+            ]
+        ms.Write(huff, 0, huff.Length)
+
+        let sos = [| 0xFFuy; 0xDAuy; 0x00uy; 0x0Cuy; 0x03uy; 0x01uy; 0x00uy; 0x02uy; 0x11uy; 0x03uy; 0x11uy; 0x00uy; 0x3Fuy; 0x00uy |]
+        ms.Write(sos, 0, sos.Length)
+
+        ms.Write(scanData, 0, scanData.Length)
+        ms.Write([| 0xFFuy; 0xD9uy |], 0, 2)
+        ms.ToArray()
+
+type Compressor(runtime : Runtime) =
+    let device = runtime.Device
+    let pool = runtime.DescriptorPool
+
+    let dct = device |> ComputeShader.ofFunction Kernels.dct
+    let encode = device |> ComputeShader.ofFunction Kernels.encodeKernel
 
     let transform(data : Image) (alignedSize : V2i) (quality : Quantization) (dctBuffer : Buffer<V4f>) =
         use dctInput = pool |> ComputeShader.newInputBinding dct
@@ -993,19 +1259,11 @@ type Compressor(runtime : Runtime) =
                 let size = cnt.[ci]
 
                 let mutable i = 0
-                while i <= size - 32 do
-                    bs.WriteUInt32 arr.[offset + i / 32]
-                    i <- i + 32
-
-                if size > i then
-                    let mutable rem = size - i
-                    if rem > 16 then
-                        let w = Codeword.create (rem - 16) (uint32 (arr.[offset + i/32] >>> 16))
-                        bs.Write(w)
-                        rem <- 16
-
-                    let w = Codeword.create rem (uint32 (arr.[offset + i/32]))
-                    bs.Write(w)
+                let mutable remaining = size
+                while remaining > 0 do
+                    bs.Write(arr.[offset + i], 0, min 32 remaining)
+                    i <- i + 1
+                    remaining <- remaining - 32
 
                 let eob = 
                     if ci = 0 then Kernels.encoder.acLuminance.table.[0]
@@ -1015,10 +1273,6 @@ type Compressor(runtime : Runtime) =
 
         bs.ToArray()
 
-
-
-
-
     member x.Compress(data : Image, quality : Quantization) : byte[] =
         let alignedSize = data.Size.XY |> Align.next2 8
         let dctBuffer = device.CreateBuffer<V4f>(int64 alignedSize.X * int64 alignedSize.Y)
@@ -1027,32 +1281,7 @@ type Compressor(runtime : Runtime) =
 
         encode dctBuffer alignedSize
 
-
-    member x.TransformCPU(data : PixImage<'a>, quality : Quantization) =
-        //assert(data.Size.X % 8 = 0 && data.Size.Y % 8 = 0)
-        let alignedSize = Align.next2 8 data.Size
-
-        let blockCount = alignedSize / V2i(8,8)
-        let blocks = Array.zeroCreate (blockCount.X * blockCount.Y)
-            
-        let mat = data.GetMatrix<C4f>()
-
-        let mutable i = 0
-        for y in 0 .. blockCount.Y - 1 do
-            for x in 0 .. blockCount.X - 1 do
-                let blockMat = mat.SubMatrix(8 * V2i(x,y), V2i(8,8))
-
-                let arr = Array.zeroCreate 64
-                blockMat.ForeachXYIndex (fun (x : int64) (y : int64) (i : int64) ->
-                    let v = mat.[i]
-                    arr.[int x + 8 * int y] <- v.ToV3f()
-                )
-                blocks.[i] <- arr
-                i <- i + 1
-
-        blocks |> Array.collect (ycbcrBlock >> dctBlock >> quantifyBlock quality >> zigZagBlock >> Array.map Vec.xyz) 
-
-    member x.TransformGPU(data : PixImage<'a>, quality : Quantization) =
+    member x.Transform(data : PixImage<'a>, quality : Quantization) =
         //assert(data.Size.X % 8 = 0 && data.Size.Y % 8 = 0)
         let image = device.CreateImage(PixTexture2d(PixImageMipMap [| data :> PixImage |], TextureParams.empty))
         let alignedSize = Align.next2 8 data.Size
@@ -1075,23 +1304,29 @@ module Test =
         let device = app.Device
         
         let comp = Compressor(app.Runtime)
-        
+        let ref = ReferenceCompressor()
+
         let rand = RandomSystem()
 
         let pi = 
-            let pi = PixImage<byte>(Col.Format.RGBA, V2i(64,64))
+            let pi = PixImage<byte>(Col.Format.RGBA, V2i(8,8))
             pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
-                rand.UniformC3f().ToC4b()
+                if c.X >= 4L then C4b.Red
+                else C4b.Green
+                //rand.UniformC3f().ToC4b()
             ) |> ignore
             pi
 
         
         Log.startTimed "CPU"
-        let cpu = comp.TransformCPU(pi, Quantization.photoshop80) |> Array.chunkBySize 64
+        let cpu = ref.Transform(pi, Quantization.photoshop80) 
         Log.stop()
 
+        let cpu = cpu |> Array.chunkBySize 64
+
         Log.startTimed "GPU"
-        let gpu = comp.TransformGPU(pi, Quantization.photoshop80) |> Array.chunkBySize 64
+        let gpuData = comp.Transform(pi, Quantization.photoshop80) 
+        let gpu = gpuData |> Array.chunkBySize 64
         for i in 0 .. gpu.Length - 1 do
             let cpu = cpu.[i]
             let gpu = gpu.[i]
@@ -1112,6 +1347,11 @@ module Test =
                 Log.stop()
 
         Log.stop()
+
+        let encoded = ref.Encode(gpuData)
+        let data = ref.ToImageData(pi.Size, Quantization.photoshop80, encoded)
+        File.writeAllBytes @"C:\Users\Schorsch\Desktop\wtf.jpg" data
+
 
         
         let image = device.CreateImage(PixTexture2d(PixImageMipMap [| pi :> PixImage |], TextureParams.empty))
