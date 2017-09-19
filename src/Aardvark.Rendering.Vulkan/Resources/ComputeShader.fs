@@ -306,6 +306,16 @@ module ``Compute Commands`` =
 
                         Disposable.Empty
                 }
+        static member DispatchIndirect (b : Buffer) =
+            { new Command() with
+                override x.Compatible = QueueFlags.Compute
+                override x.Enqueue(cmd) =
+                    
+                    cmd.AppendCommand()
+                    VkRaw.vkCmdDispatchIndirect(cmd.Handle, b.Handle, 0UL)
+
+                    Disposable.Empty
+            }
             
         static member Dispatch (size : V2i) = Command.Dispatch(V3i(size.X, size.Y, 1))
 

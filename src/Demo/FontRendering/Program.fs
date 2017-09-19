@@ -517,6 +517,27 @@ module VulkanTests =
         static member Coerce<'a when 'a : unmanaged>(buffer : Buffer) =
             Buffer<'a>(buffer.Device, buffer.Handle, buffer.Memory, buffer.Size / int64 sizeof<'a>)
 
+    [<AbstractClass>]
+    type ComputeFunction<'a, 'b>() =
+        
+        abstract member Dispose : unit -> unit
+        abstract member Invoke : 'a -> 'b
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+
+    module OptimizedClosures =
+        [<AbstractClass>]
+        type ComputeFunction<'a, 'b, 'c>() =
+            inherit OptimizedClosures.FSharpFunc<'a, 'b, 'c>()
+            
+            default x.Invoke(a) = fun b -> x.Invoke(a,b)
+
+            abstract member Dispose : unit -> unit
+            interface IDisposable with
+                member x.Dispose() = x.Dispose()
+
+
     module ScanImpl = 
     
         [<Literal>]
@@ -572,54 +593,6 @@ module VulkanTests =
                     outputData.[outputOffset + rgid * outputDelta] <- mem.[rlid]
 
             }
-        
-        [<LocalSize(X = halfScanSize)>]
-        let mapReduceKernel (map : Expr<'a -> 'b>) (reduce : Expr<'b -> 'b -> 'b>) (inputOffset : int) (inputDelta : int) (inputSize : int) (inputData : 'a[]) (outputOffset : int) (outputDelta : int) (outputData : 'b[]) =
-            compute {
-                let mem : 'b[] = allocateShared scanSize
-                let gid = getGlobalId().X
-
-                let gid0 = gid
-                let lid0 =  getLocalId().X
-
-                let lgid = 2 * gid0
-                let rgid = lgid + 1
-            
-                let llid = 2 * lid0
-                let rlid = llid + 1
-
-                if lgid < inputSize then mem.[llid] <- (%map) inputData.[inputOffset + lgid * inputDelta]
-                if rlid < inputSize then mem.[rlid] <- (%map) inputData.[inputOffset + rgid * inputDelta]
-
-
-                barrier()
-            
-                let mutable s = 1
-                let mutable d = 2
-                while d <= scanSize do
-                    if llid % d = 0 && llid >= s then
-                        mem.[llid] <- (%reduce) mem.[llid - s] mem.[llid]
-
-                    barrier()
-                    s <- s <<< 1
-                    d <- d <<< 1
-
-                d <- d >>> 1
-                s <- s >>> 1
-                while s >= 1 do
-                    if llid % d = 0 && llid + s < scanSize then
-                        mem.[llid + s] <- (%reduce) mem.[llid] mem.[llid + s]
-                    
-                    barrier()
-                    s <- s >>> 1
-                    d <- d >>> 1
-
-                if lgid < inputSize then
-                    outputData.[outputOffset + lgid * outputDelta] <- mem.[llid]
-                if rgid < inputSize then
-                    outputData.[outputOffset + rgid * outputDelta] <- mem.[rlid]
-
-            }
 
         [<LocalSize(X = halfScanSize)>]
         let fixupKernel (add : Expr<'a -> 'a -> 'a>) (inputData : 'a[]) (inputOffset : int) (inputDelta : int) (outputData : 'a[]) (outputOffset : int) (outputDelta : int) (groupSize : int) (count : int) =
@@ -638,6 +611,8 @@ module VulkanTests =
             }
       
         type Scan<'a when 'a : unmanaged>(runtime : Runtime, add : Expr<'a -> 'a -> 'a>) =
+            inherit OptimizedClosures.FSharpFunc<IBufferVector<'a>, IBufferVector<'a>, Command>()
+
             static let ceilDiv (v : int) (d : int) =
                 if v % d = 0 then v / d
                 else 1 + v / d
@@ -654,7 +629,7 @@ module VulkanTests =
 
             do device.OnDispose.Add (fun _ -> release())
 
-            member x.Invoke(input : IBufferVector<'a>, output : IBufferVector<'a>) =
+            override x.Invoke(input : IBufferVector<'a>, output : IBufferVector<'a>) =
                 let rec build (input : IBufferVector<'a>) (output : IBufferVector<'a>) =
                     command {
                         let cnt = int input.Size
@@ -708,6 +683,8 @@ module VulkanTests =
                     build input output
                 else
                     Command.Nop
+            
+            override x.Invoke(a) = fun b -> x.Invoke(a,b)
 
             member x.Compile(input : Buffer<'a>, output : Buffer<'a>) =
                 let cmd = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
@@ -716,9 +693,7 @@ module VulkanTests =
                 cmd.End()
                 cmd
 
-            member x.Dispose() = release()
-            interface IDisposable with
-                member x.Dispose() = x.Dispose()
+            //override x.Dispose() = release()
 
 
 
@@ -726,7 +701,7 @@ module VulkanTests =
     type DeviceScanExtensions private() =
         [<Extension>]
         static member CompileScan<'a when 'a : unmanaged> (this : Runtime, add : Expr<'a -> 'a -> 'a>) =
-            new ScanImpl.Scan<'a>(this, add)
+            ScanImpl.Scan<'a>(this, add) |> unbox<IBufferVector<'a> -> IBufferVector<'a> -> Command>
 
 
     [<StructuredFormatDisplay("{AsString}")>]
@@ -2381,28 +2356,15 @@ module VulkanTests =
 
 
         ()
+
     let testscan() =
-        testDCT()
-//
-//        let data = Jpeg.test()
-//        //data |> Array.map (sprintf "0x%02X") |> String.concat ";" |> printfn "%s"
-//        Log.warn "total size: %d (%.3f bpp)" data.Length (float (8 * data.Length) / float (Jpeg.imageSize.X * Jpeg.imageSize.Y))
-//
-//        File.writeAllBytes @"C:\Users\Schorsch\Desktop\wtf.jpg" data
-//
-//
-
-
-
-        System.Environment.Exit 0
-
         use app = new HeadlessVulkanApplication(false)
         let device = app.Device
 
         // generate random data
-        let cnt = 1 <<< 26
+        let cnt = 1920 * 1080 * 3
         let rand = RandomSystem()
-        let inputData = Array.init cnt (fun _ -> V4d(rand.UniformV3d(), rand.UniformDouble()) |> V4f)
+        let inputData = Array.init cnt (fun _ -> rand.UniformInt())
 
         // compile a scan using (+) as accumulation function
         let scanner = app.Runtime.CompileScan <@ (+) @>
@@ -2415,15 +2377,18 @@ module VulkanTests =
 
         // perform the scan once
         device.perform {
-            do! scanner.Invoke(input, output)
+            do! scanner input output
         }
 
         // compile a scan-command-buffer ahead of time
-        let cmd = scanner.Compile(input, output)
+        let cmd = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+        cmd.Begin(CommandBufferUsage.None)
+        cmd.Enqueue(scanner input output)
+        cmd.End()
 
         // run the pre-compiled scan 100 times and measure its execution-time
         let queue = device.GraphicsFamily.GetQueue()
-        let iter = 100
+        let iter = 10000
         let sw = System.Diagnostics.Stopwatch.StartNew()
         for i in 1 .. iter do
             queue.RunSynchronously cmd
@@ -2443,8 +2408,6 @@ module VulkanTests =
 
 
 
-        let mutable hist : MapExt<int, int * float> = MapExt.empty
-
         let mutable ok = true
         // download the result and check it against the CPU version
         let result = Array.zeroCreate cnt
@@ -2452,30 +2415,12 @@ module VulkanTests =
         for i in 0 .. cnt - 1 do
             if check.[i] <> result.[i] then
                 ok <- false
-//            let d = M44d.Distance2(M44d.op_Explicit result.[i], M44d.op_Explicit check.[i]) |> float
-//            let e = if d <= 0.0 then -1000 else Fun.Log10 d |> int
-//            hist <-
-//                hist |> MapExt.alter e (fun o ->
-//                    match o with
-//                        | Some (cnt, v) -> Some (cnt + 1, v + d)
-//                        | None -> Some (1, d)
-//                )
-//
-//        printfn "results"
-//        for (e,(cnt,v)) in MapExt.toSeq hist do
-//            if e <= -1000 then
-//                printfn "   0:          (%d)" cnt
-//            else
-//                let v = (v / float cnt)
-//                let v = v / (10.0 ** float e)
-//                printfn "   1E%d: %.3f (%d)" e v cnt
 
         if ok then printfn "OK"
         else printfn "ERROR"
 
         // relase all the resources
         cmd.Dispose()
-        scanner.Dispose()
         device.Delete input
         device.Delete output
 
@@ -2689,10 +2634,10 @@ let main argv =
     Aardvark.Init()
 
     Jpeg.Test.run()
-    Environment.Exit 0
 
     //tensorPerformance()
-    VulkanTests.testscan()
+    //VulkanTests.testscan()
+    Environment.Exit 0
 
 
     use app = new VulkanApplication(true)

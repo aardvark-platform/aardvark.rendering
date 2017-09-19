@@ -1,7 +1,12 @@
 ﻿namespace Jpeg
 
+open System
+open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Rendering.Vulkan
+open Microsoft.FSharp.NativeInterop
+
+#nowarn "9"
 
 type Codeword = uint32
 
@@ -102,6 +107,7 @@ type HuffmanTable =
         counts : int[]
         values : byte[]
         table : Codeword[]
+        decode : int -> uint32 -> byte * uint32
     }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -109,7 +115,7 @@ module HuffmanTable =
     [<AutoOpen>]
     module private Helpers = 
         
-        type private HuffTree =
+        type HuffTree =
             | Empty
             | Leaf of byte
             | Node of HuffTree * HuffTree
@@ -122,7 +128,7 @@ module HuffmanTable =
                 | [a] ->
                     [Node(a,Empty)]
 
-        let private build (counts : int[]) (values : byte[]) : HuffTree =
+        let build (counts : int[]) (values : byte[]) : HuffTree =
             let mutable currentValue = 0
 
             let rec build (level : int) (n : int) : list<HuffTree> =
@@ -153,9 +159,9 @@ module HuffmanTable =
                 | [n] -> n
                 | _ -> failwith "magic"
 
-        let createEncodeTable (counts : int[]) (values : byte[]) =
+        let createEncodeTable (tree : HuffTree) =
             let max = 256
-            let tree = build counts values
+//            let tree = build counts values
 
             let arr = Array.zeroCreate max
 
@@ -175,10 +181,29 @@ module HuffmanTable =
     let inline table (t : HuffmanTable) = t.table
 
     let create (counts : int[]) (values : byte[]) =
+        let tree = build counts values
+
+        let rec decode (t : HuffTree) (len : int) (code : uint32) =
+            match t with
+                | Leaf(dc) -> 
+                    let v = code >>> (32 - len)
+                    dc, v
+                | Empty -> 
+                    failwith ""
+                | Node(l,r) ->
+                    let b = (code >>> 31) &&& 1u
+                    if b = 1u then decode r (len - 1) (code <<< 1)
+                    else decode l (len - 1) (code <<< 1)
+
+        //let code = code <<< (32 - len)
+
+
+
         {
             counts = counts
             values = values
-            table = createEncodeTable counts values
+            table = createEncodeTable tree
+            decode = fun len code -> decode tree len (code <<< (32 - len))
         }
 
     let encode (word : byte) (table : HuffmanTable) =
@@ -404,7 +429,7 @@ module Kernels =
             Array.init 64 (fun i ->
                 let m = i % 8
                 let x = i / 8
-                cos ( (2.0 * float m + 1.0) * System.Math.PI * float x / 16.0)
+                cos ( (2.0 * float m + 1.0) * Constant.Pi * float x / 16.0)
             )
 
         let y =  V4d(  0.299,       0.587,      0.114,     -128.0 )
@@ -422,6 +447,17 @@ module Kernels =
                 21; 34; 37; 47; 50; 56; 59; 61
                 35; 36; 48; 49; 57; 58; 62; 63
             |]
+        let zigZagOrder =
+            [|
+                0;  1;  8;  16;  9;  2;  3; 10
+                17; 24; 32; 25; 18; 11;  4;  5
+                12; 19; 26; 33; 40; 48; 41; 34 
+                27; 20; 13;  6;  7; 14; 21; 28
+                35; 42; 49; 56; 57; 50; 43; 36
+                29; 22; 15; 23; 30; 37; 44; 51
+                58; 59; 52; 45; 38; 31; 39; 46
+                53; 60; 61; 54; 47; 55; 62; 63
+            |]
 
     type UniformScope with
         member x.QLuminance : Arr<64 N, int> = uniform?QLuminance
@@ -434,6 +470,10 @@ module Kernels =
             Vec.dot Constants.cb (V4d(v, 1.0)),
             Vec.dot Constants.cr (V4d(v, 1.0))
         )
+
+    [<GLSLIntrinsic("roundEven({0})")>]
+    let roundEven (v : float) =
+        System.Math.Round(v, 0, System.MidpointRounding.ToEven)
 
     let quantify (i : int) (v : V3d) =
         let ql = uniform.QLuminance.[i] |> max 1
@@ -450,116 +490,129 @@ module Kernels =
             addressV WrapMode.Clamp
         }
 
-    let test (pos : bool) =
-        let Sqrt2Half = sqrt 2.0 / 2.0
-        let mutable maxDCT = 0.0
-        for x in 0 .. 7 do
-            for y in 0 .. 7 do
-                let mutable sum = 0.0
-                let mutable i = 0
-                for n in 0 .. 7 do
-                    for m in 0 .. 7 do
-                        let a = cos ( (2.0 * float m + 1.0) * System.Math.PI * float x / 16.0)
-                        let b = cos ( (2.0 * float n + 1.0) * System.Math.PI * float y / 16.0)
-
-                        let f = a * b
-                        if pos && f > 0.0 then
-                            sum <- sum + f * 255.0
-                            
-                        elif not pos && f < 0.0 then
-                            sum <- sum + -f * 255.0
-
-                let f = (if x = 0 then Sqrt2Half else 1.0) * (if y = 0 then Sqrt2Half else 1.0)
-                let dct = 0.25 * f * sum
-
-                maxDCT <- max maxDCT dct
-        maxDCT
-
     let dctFactor (m : int) (x : int) =
         //cos ( (2.0 * float m + 1.0) * Constant.Pi * float x / 16.0)
         Constants.cosTable.[m + 8 * x]
 
-    [<LocalSize(X = 8, Y = 8)>]
-    let dct (size : V2i) (target : V4i[]) =
-        compute {
-            let size = size
-            let ll : V3d[] = allocateShared 64
-            let ll2 : V3i[] = allocateShared 64
+    [<GLSLIntrinsic("fma({0}, {1}, {2})")>]
+    let fma (a : float) (b : float) (c : float) : float = failwith ""
 
+    [<LocalSize(X = 8, Y = 8)>]
+    let dct (target : V4i[]) =
+        compute {
+            let values : V3d[] = allocateShared 64
+
+            let blockId = getWorkGroupId().XY 
+            let blockCount = getWorkGroupCount().XY
 
             let gc = getGlobalId().XY
             let lc = getLocalId().XY
             let lid = lc.Y * 8 + lc.X
+            let cid = Constants.inverseZigZagOrder.[lid]
 
-            ll.[lid] <- ycbcr inputImage.[gc, 0].XYZ
+            // every thread loads the RGB value and stores it in values (as YCbCr)
+            values.[lid] <- ycbcr inputImage.[gc, 0].XYZ
             barrier()
-            let f = (if lc.X = 0 then Constant.Sqrt2Half else 1.0) * (if lc.Y = 0 then Constant.Sqrt2Half else 1.0)
+
+            // figure out the DCT normalization factors
+            let fx = if lc.X = 0 then Constant.Sqrt2Half else 1.0
+            let fy = if lc.Y = 0 then Constant.Sqrt2Half else 1.0
+            let f = fx * fy
+            
+
+            // separated DCT
+            let mutable inner = V3d.Zero
+            let mutable i = 8 * lc.Y
+            for m in 0 .. 7 do
+                inner <- inner + values.[i] * dctFactor m lc.X
+                i <- i + 1
+
+            barrier()
+            values.[lid] <- inner
+            barrier()
 
             let mutable sum = V3d.Zero
-            let mutable i = 0
+            let mutable i = lc.X
             for n in 0 .. 7 do
-                for m in 0 .. 7 do
-                    sum <- sum + ll.[i] * dctFactor m lc.X * dctFactor n lc.Y
-                    i <- i + 1
+                sum <- sum + values.[i] * dctFactor n lc.Y
+                i <- i + 8
 
-            let dct = 0.25 * f * sum |> quantify lid
-            barrier()
+            // SIMPLE DCT:
+            // // sum all DCT coefficients for the current pixel
+            // let mutable sum = V3d.Zero
+            // let mutable i = 0
+            // for n in 0 .. 7 do
+            //     for m in 0 .. 7 do
+            //         let f = (dctFactor m lc.X * dctFactor n lc.Y)
+            //         sum <- 
+            //             V3d(
+            //                 fma values.[i].X f sum.X,
+            //                 fma values.[i].Y f sum.Y,
+            //                 fma values.[i].Z f sum.Z
+            //             )
+            //         //sum <- sum + values.[i] * dctFactor m lc.X * dctFactor n lc.Y
+            //         i <- i + 1
 
+            let dct = 0.25 * f * sum
 
-            ll2.[Constants.inverseZigZagOrder.[lid]] <- dct
-            barrier()
-            
-            let blockId = getWorkGroupId().XY 
-            let blockCount = getWorkGroupCount().XY
-            let tid = (blockId.X + blockCount.X * blockId.Y) * 64 + lid
- 
-            target.[tid] <- V4i(ll2.[lid], 1)
+            // quantify the dct values according to the quantization matrix
+            let qdct = quantify lid dct
+
+            // store the resulting values in target
+            let tid = (blockId.X + blockCount.X * blockId.Y) * 64 + cid
+            target.[tid] <- V4i(qdct, 0)
         }
 
-    type Ballot () =
-            
-        [<GLSLIntrinsic("gl_SubGroupSizeARB", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
-        static member SubGroupSize() : uint32 =
-            failwith ""
 
-        [<GLSLIntrinsic("ballotARB({0})", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
-        static member Ballot(a : bool) : uint64 =
-            failwith ""
+    let add (l : V2i) (r : V2i) =
+        if r.X <> 0 then
+            V2i(l.X + r.X, r.Y)
+        else
+            if l.X <> 0 then
+                V2i(l.X, l.Y)
+            else
+                V2i(0, r.Y)
 
-        [<GLSLIntrinsic("bitCount({0})")>]
-        static member BitCount(u : uint32) : int =
-            failwith ""
+    let leadingIsLast (b : bool) =
+        let scanSize = LocalSize.X
+        let mem : V2i[] = allocateShared LocalSize.X
+        let lid = getLocalId().X
 
-        [<GLSLIntrinsic("findMSB({0})")>]
-        static member MSB(u : uint32) : int =
-            Fun.HighestBit(int u)
+        mem.[lid] <- V2i((if b then 1 else 0), lid)
+        barrier()
 
-        [<GLSLIntrinsic("gl_SubGroupLtMaskARB", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
-        static member LessMask() : uint64 =
-            failwith ""
+        let mutable s = 1
+        let mutable d = 2
+        while d <= scanSize do
+            if lid % d = 0 && lid >= s then
+                mem.[lid] <- add mem.[lid - s] mem.[lid]
 
-        [<GLSLIntrinsic("gl_SubGroupLeMaskARB", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
-        static member LessEqualMask() : uint64 =
-            failwith ""
+            barrier()
+            s <- s <<< 1
+            d <- d <<< 1
 
-        [<GLSLIntrinsic("gl_SubGroupGtMaskARB", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
-        static member GreaterMask() : uint64 =
-            failwith ""
+        d <- d >>> 1
+        s <- s >>> 1
+        while s >= 1 do
+            if lid % d = 0 && lid + s < scanSize then
+                mem.[lid + s] <- add mem.[lid] mem.[lid + s]
+                    
+            barrier()
+            s <- s >>> 1
+            d <- d >>> 1
+              
 
-        [<GLSLIntrinsic("gl_SubGroupGeMaskARB", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
-        static member GreaterEqualMask() : uint64 =
-            failwith ""
-                
-        [<GLSLIntrinsic("addInvocationsAMD", "GL_AMD_shader_ballot", "GL_ARB_gpu_shader_int64")>]
-        static member AddInvocations(v : int) : int =
-            failwith ""
-        
-        [<GLSLIntrinsic("atomicOr({0}, {1})")>]
-        static member AtomicOr(r : 'a, v : 'a) : unit =
-            failwith ""
-        [<GLSLIntrinsic("atomicAdd({0}, {1})")>]
-        static member AtomicAdd(r : 'a, v : 'a) : 'a =
-            failwith ""
+        let vl = if lid > 0 then mem.[lid - 1] else V2i(0, -1)
+        let total = mem.[scanSize - 1].X
+        let mine = mem.[lid].X
+
+        let last = 
+            if vl.X <> 0 then vl.Y
+            else -1
+
+        let leading = lid - last - 1
+        let isLast = mine = total
+        leading, isLast
 
 
     let dcLum = encoder.dcLuminance.table
@@ -568,9 +621,23 @@ module Kernels =
     let acChrom = encoder.acChroma.table
 
 
-    let encode (index : int) (chroma : bool) (leading : int) (value : int) : int * uint32 =
+    [<GLSLIntrinsic("findMSB({0})")>]
+    let msb (v : uint32) =
+        Fun.HighestBit (int v)
 
-        let scale = Ballot.MSB(uint32 (abs value)) + 1
+    [<GLSLIntrinsic("atomicOr({0}, {1})")>]
+    let atomicOr (buf : uint32) (v : uint32) : unit =
+        failwith ""
+        
+    let flipByteOrder (v : uint32) =
+        let v = (v >>> 16) ||| (v <<< 16)
+        ((v &&& 0xFF00FF00u) >>> 8) ||| ((v &&& 0x00FF00FFu) <<< 8)
+
+
+
+
+    let encode (index : int) (chroma : bool) (leading : int) (value : int) : int * uint32 =
+        let scale = msb (uint32 (abs value)) + 1
         let off = if value < 0 then (1 <<< scale) - 1 else 0
         let v = uint32 (off + value)
 
@@ -588,223 +655,81 @@ module Kernels =
         let cc = Codeword.code huff
         len + scale, (cc <<< scale) ||| (v &&& ((1u <<< scale) - 1u))
        
-
-   
-
-    [<LocalSize(X = 32)>]
-    let encodeKernel (counter : int[]) (data : int[]) (offsets : int[]) (sizes : int[]) (mask : uint32[]) =
+    [<LocalSize(X = 64)>]
+    let codewordsKernel (data : int[]) (codewords : V2i[]) =
         compute {
-            let channel : int = uniform?Arguments?channel 
-            let mem = allocateShared 64
-            let temp = allocateShared 64
-            let offsetStore = allocateShared 1
+            let group = getWorkGroupId().X
+            let lid = getLocalId().X
+            let channel = getGlobalId().Y
+            let gid = 4 * getGlobalId().X + channel
+            let tid = (group * 3 + channel) * 64 + lid
 
-            let offset = getWorkGroupId().X * 64
+            let mutable value = data.[gid]
 
-            let lid0 = getLocalId().X
-            let llid = 2 * lid0
-            let rlid = llid + 1
-
-            let gid = getGlobalId().X
-            let li = 2 * gid
-            let ri = li + 1
-
-
-            let lv = data.[li * 4 + channel]
-            let rv = data.[ri * 4 + channel]
-
-            let lnz = llid = 0 || lv <> 0
-            let rnz = rv <> 0
-
-
-            // count leading zeros
-            let lessMask        = Ballot.LessMask() |> uint32
-            let greaterMask     = Ballot.GreaterMask() |> uint32
-
-            let lb = Ballot.Ballot(lnz) |> uint32
-            let rb = Ballot.Ballot(rnz) |> uint32
-
-            let lpm = Ballot.MSB(lb &&& lessMask)
-            let rpm = Ballot.MSB(rb &&& lessMask)
-                
-            let nonZeroAfterR = (lb &&& greaterMask) <> 0u || (rb &&& greaterMask) <> 0u
-            let nonZeroAfterL = rnz || nonZeroAfterR
-
-            let lp =
-                if lpm > rpm then 2 * lpm
-                else 2 * rpm + 1
-
-            let rp =
-                if lnz then li
-                else lp
-
-            let llz = li - lp - 1
-            let rlz = ri - rp - 1
-
-
-            let scanSize = 64
-
-            // encode values and write their bit-counts to mem
-            // TODO: what about >=16 zeros??? => should be done
-            // TODO: what about EOB marker
-            let mutable lCode = 0u
-            let mutable rCode = 0u
-            let mutable lLength = 0
-            let mutable rLength = 0
-
-            if llid = 0 then
-                //(li - 64) * 4 + channel
-                let v = if li >= 64 then lv - data.[(li - 64) * 4 + channel] else lv
-                let lSize, lc = encode 0 (channel <> 0) 0 v
-                lCode <- lc
-                lLength <- lSize
-
-            elif lnz then
-                let lSize, lc = encode llid (channel <> 0) (llz % 16) lv
-                lCode <- lc
-                lLength <- lSize
-
-
-//            elif llz >= 15 && llz % 16 = 1 && nonZeroAfterL then
-//                let lSize, lc = encode llid (channel <> 0) 15 0.0
-//                lCode <- lc
-//                lLength <- lSize
-
+            // differential DC encoding
+            if lid = 0 && gid >= 256 then 
+                value <- value - data.[gid - 256]
             
-            if rnz then
-                let rSize, rc = encode rlid (channel <> 0) (rlz % 16) rv
-                rCode <- rc
-                rLength <- rSize
-            elif rlid = 63 then
-                let rSize, rc = encode rlid (channel <> 0) 0 0
-                rCode <- rc
-                rLength <- rSize
 
-                
-//            elif rlz >= 15 && rlz % 16 = 1 && nonZeroAfterR then
-//                let rSize, rc = encode rlid (channel <> 0) 15 0.0
-//                rCode <- rc
-//                rLength <- rSize
+            // DC and all non-zero entries produce codewords
+            let hasOutput = lid = 0 || value <> 0
 
+            // count the leading non-encoding threads
+            let leading, isLast = leadingIsLast hasOutput
 
-            mem.[llid] <- lLength
-            mem.[rlid] <- rLength        
+            // leading-counts larger than 15 are handled separately
+            let leading = leading &&& 0xF
 
-            // scan mem
-            barrier()
-
-            let mutable s = 1
-            let mutable d = 2
-            while d <= scanSize do
-                if llid % d = 0 && llid >= s then
-                    mem.[llid] <- mem.[llid - s] + mem.[llid]
-
-                barrier()
-                s <- s <<< 1
-                d <- d <<< 1
-
-            d <- d >>> 1
-            s <- s >>> 1
-            while s >= 1 do
-                if llid % d = 0 && llid + s < scanSize then
-                    mem.[llid + s] <- mem.[llid] + mem.[llid + s]
-                    
-                barrier()
-                s <- s >>> 1
-                d <- d >>> 1
-                    
+            // check again if the thread shall produce an output
+            let hasOutput =
+                hasOutput ||                    // every thread that already caused an output still does
+                (leading = 15 && not isLast) || // a zero with 15 leading zeros causes an output (0xF0)
+                lid = 63                        // the last thread causes an output (EOB or simply its value)
 
 
-            temp.[llid] <- 0u
-            temp.[rlid] <- 0u
-            barrier()
+            let mutable cLen = 0
+            let mutable cData = 0u
+            if hasOutput then
+                // the last thread writes EOB (encode 0 0) if zero and the standard code if not
+                let leading = if lid = 63 && value = 0 then 0 else leading
 
-            if lLength > 0 then
-                let bitOffset = if llid > 0 then mem.[llid - 1] else 0
-                let bitLength = lLength
-                let store = lCode
+                // figure out the code
+                let (len, code) = encode lid (channel <> 0) leading value
+                cLen <- len
+                cData <- code
 
-                let oi = bitOffset / 32
-                let oo = bitOffset % 32
-
-                let word = store
-                let space = 32 - oo
-
-                if bitLength <= space then
-                    // oo = 0 => word <<< (32 - bitLength)
-                    // oo = 16 => word <<< (16 - bitLength)
-                    // oo = 24 => word <<< (8 - bitLength)
-
-                    let a = word <<< (space - bitLength)
-                    //let a = FShade.Primitives.Bitwise.BitFieldInsert(0u, word, oo, bitLength)
-                    Ballot.AtomicOr(temp.[oi], a)
-
-                else
-                    let rest = bitLength - space
-                    let a = (word >>> rest) &&& ((1u <<< space) - 1u)
-                    //let a = FShade.Primitives.Bitwise.BitFieldInsert(0u, word >>> rest, oo, space)
-                    Ballot.AtomicOr(temp.[oi], a)
-                    
-                    let b = (word &&& ((1u <<< rest) - 1u)) <<< (32 - rest)
-                    //let b = FShade.Primitives.Bitwise.BitFieldInsert(0u, word, 0, rest)
-                    Ballot.AtomicOr(temp.[oi+1], b)
-
-            if rLength > 0 then
-                let bitOffset = mem.[rlid - 1]
-                let bitLength = rLength
-                let store = rCode
-
-                let oi = bitOffset / 32
-                let oo = bitOffset % 32
-
-                let word = store
-                let space = 32 - oo
-
-                if bitLength <= space then
-                    // oo = 0 => word <<< (32 - bitLength)
-                    // oo = 16 => word <<< (16 - bitLength)
-                    // oo = 24 => word <<< (8 - bitLength)
-
-                    let a = word <<< (space - bitLength)
-                    //let a = FShade.Primitives.Bitwise.BitFieldInsert(0u, word, oo, bitLength)
-                    Ballot.AtomicOr(temp.[oi], a)
-
-                else
-                    let rest = bitLength - space
-                    let a = (word >>> rest) &&& ((1u <<< space) - 1u)
-                    //let a = FShade.Primitives.Bitwise.BitFieldInsert(0u, word >>> rest, oo, space)
-                    Ballot.AtomicOr(temp.[oi], a)
-                    
-                    let b = (word &&& ((1u <<< rest) - 1u)) <<< (32 - rest)
-                    //let b = FShade.Primitives.Bitwise.BitFieldInsert(0u, word, 0, rest)
-                    Ballot.AtomicOr(temp.[oi+1], b)
-
-
-
-            barrier()
-
-            let bitCnt = mem.[63]
-            let intCnt = (if bitCnt % 32 = 0 then bitCnt / 32 else 1 + bitCnt / 32)
-            if llid = 0 then
-                let off = Ballot.AtomicAdd(counter.[0], intCnt)
-                let gid = 3 * getWorkGroupId().X + channel
-                offsets.[gid] <- off //V2i(off, bitCnt)
-                sizes.[gid] <- bitCnt
-                offsetStore.[0] <- off
-
-            barrier()
-            let offset = offsetStore.[0]
-
-            if llid < intCnt then
-                mask.[offset + llid] <- temp.[llid]
-                    
-            if rlid < intCnt then
-                mask.[offset + rlid] <- temp.[rlid]
-
-            
+            // store the code in the codeword list
+            codewords.[tid] <- V2i(cLen, int cData)
         }
 
+    [<LocalSize(X = 64)>]
+    let assembleKernel (codewordCount : int) (codewords : V2i[]) (target : uint32[]) =
+        compute {
+            let id = getGlobalId().X
 
+            let codeValue = codewords.[id]
+            let offset = if id > 0 then codewords.[id - 1].X else 0
+            let size = codeValue.X - offset
+            let code = uint32 codeValue.Y
+
+            if size > 0 && code <> 0u then
+                let oi = offset / 32
+                let oo = offset % 32
+
+                let space = 32 - oo
+                if space >= size then
+                    let a = code <<< (space - size) |> flipByteOrder
+                    atomicOr target.[oi] a
+                else 
+                    let rest = size - space
+                    let a = (code >>> rest) &&& ((1u <<< space) - 1u) |> flipByteOrder
+                    atomicOr target.[oi] a
+
+                    let b = (code &&& ((1u <<< rest) - 1u)) <<< (32 - rest) |> flipByteOrder
+                    atomicOr target.[oi + 1] b
+
+        }
+      
 
 module Align =
     let next (a : int) (v : int) =
@@ -1031,26 +956,29 @@ type ReferenceCompressor() =
         fun (c : V3f[]) ->
             c |> Array.map (fun c -> mat.TransformPos(c * V3f(255.0f, 255.0f, 255.0f)))
 
-    static let dctBlock (block : V3f[]) =
+    static let dctBlock (bi : int) (block : V3f[]) =
+        if bi = 6340 then Log.warn "sadasdas"
         Array.init 64 (fun i ->
             let x = i % 8
             let y = i / 8
-            let cx = if x = 0 then float32 Constant.Sqrt2Half else 1.0f
-            let cy = if y = 0 then float32 Constant.Sqrt2Half else 1.0f
+            let fx = if x = 0 then float32 Constant.Sqrt2Half else 1.0f
+            let fy = if y = 0 then float32 Constant.Sqrt2Half else 1.0f
+            let f = fx * fy
 
             let mutable sum = V3f.Zero
-            for m in 0 .. 7 do
-                for n in 0 .. 7 do
-                    let a = cos ((2.0f * float32 m + 1.0f) * float32 x * float32 Constant.Pi / 16.0f)
-                    let b = cos ((2.0f * float32 n + 1.0f) * float32 y * float32 Constant.Pi / 16.0f)
-                    sum <- sum + block.[m + 8*n] * a * b
+            let mutable i = 0
+            for n in 0 .. 7 do
+                for m in 0 .. 7 do
+                    sum <- sum + block.[i] * (float32 <| Kernels.dctFactor m x) * (float32 <| Kernels.dctFactor n y)
+                    i <- i + 1
                 
-            0.25f * cx * cy * sum
+            0.25f * f * sum
         )
         
     static let quantifyBlock (quality : Quantization) (block : V3f[]) =
-        let round (v : V3f) = V4i(round v.X, round v.Y, round v.Z, 0.0f)
-        Array.map3 (fun ql qc v -> round(v / V3f(float ql,float qc,float qc))) quality.luminance quality.chroma block
+        let r (v : float32) = round v |> int
+        let round (v : V3f) = V4i(r v.X, r v.Y, r v.Z, 0)
+        Array.map3 (fun ql qc v -> round(v / V3f(float32 ql,float32 qc,float32 qc))) quality.luminance quality.chroma block
 
     static let zigZagOrder =
         [|
@@ -1100,7 +1028,7 @@ type ReferenceCompressor() =
                 blocks.[i] <- arr
                 i <- i + 1
 
-        blocks |> Array.collect (ycbcrBlock >> dctBlock >> quantifyBlock quality >> zigZagBlock >> Array.map Vec.xyz) 
+        blocks |> Array.mapi (fun i b -> b |> ycbcrBlock |> dctBlock i |> quantifyBlock quality  |> zigZagBlock |> Array.map Vec.xyz) |> Array.concat
 
     member x.Encode(data : V3i[]) =
         let stream = JpegStream()
@@ -1175,15 +1103,364 @@ type ReferenceCompressor() =
         ms.Write([| 0xFFuy; 0xD9uy |], 0, 2)
         ms.ToArray()
 
+
+type JpegCompressor(runtime : Runtime) =
+    let device = runtime.Device
+    let pool = runtime.DescriptorPool
+
+    let dct         = device |> ComputeShader.ofFunction Kernels.dct
+    let codewords   = device |> ComputeShader.ofFunction Kernels.codewordsKernel
+    let assemble    = device |> ComputeShader.ofFunction Kernels.assembleKernel
+    let scanner     = runtime.CompileScan <@ (+) : int -> int -> int @>
+    
+    member x.Runtime = runtime
+    member x.DescriptorPool = pool
+    member x.Device = device
+    member x.DctShader = dct
+    member x.CodewordShader = codewords
+    member x.AssembleShader = assemble
+    member x.Scan = scanner
+
+
+    member x.NewInstance(size : V2i, quality : Quantization) =
+        new JpegCompressorInstance(x, size, quality)
+
+and JpegCompressorInstance(parent : JpegCompressor, size : V2i, quality : Quantization) =
+    let device = parent.Device
+    let alignedSize = size |> Align.next2 8
+    
+    let alignedPixelCount   = int64 alignedSize.X * int64 alignedSize.Y
+    let outputSize          = alignedPixelCount
+
+    let dctBuffer           = device.CreateBuffer<V4i>(alignedPixelCount)
+    let codewordBuffer      = device.CreateBuffer<V2i>(alignedPixelCount * 3L)
+
+    let outputBuffer        = device.CreateBuffer<uint32>(outputSize)
+
+    let cpuBuffer           = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit outputSize
+    let bitCountBuffer      = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit 4L
+
+    // TODO: flexible encoders??
+    let encoder = Kernels.encoder
+
+    let codewordCountView   = codewordBuffer.Coerce<int>().Strided(2)
+
+
+    let dctInput =
+        let i = parent.DescriptorPool |> ComputeShader.newInputBinding parent.DctShader
+        i.["size"] <- alignedSize
+        i.["target"] <- dctBuffer
+        i.["QLuminance"] <- quality.luminance
+        i.["QChroma"] <- quality.chroma
+        i.Flush()
+        i
+        
+    let codewordInput = 
+        let i = parent.DescriptorPool |> ComputeShader.newInputBinding parent.CodewordShader
+        i.["data"] <- dctBuffer
+        i.["codewords"] <- codewordBuffer
+        i.Flush()
+        i
+        
+    let assembleInput =
+        let i = parent.DescriptorPool |> ComputeShader.newInputBinding parent.AssembleShader
+        i.["codewords"] <- codewordBuffer
+        i.["target"] <- outputBuffer
+        i.["codewordCount"] <- int codewordBuffer.Count
+        i.Flush()
+        i
+
+    let dctCommand =
+        command {
+            do! Command.Bind parent.DctShader
+            do! Command.SetInputs dctInput
+            do! Command.Dispatch (alignedSize / V2i(8,8))
+        }
+
+    let codewordCommand =
+        command {
+            do! Command.Bind(parent.CodewordShader)
+            do! Command.SetInputs codewordInput
+            do! Command.Dispatch(int dctBuffer.Count / 64, 3)
+        }
+
+    let assembleCommand = 
+        command {
+            do! Command.ZeroBuffer outputBuffer
+            do! Command.Bind(parent.AssembleShader)
+            do! Command.SetInputs assembleInput
+            do! Command.Dispatch(int codewordBuffer.Count / 64)
+        }
+
+    let header =
+        let zigZagOrder =
+            [|
+                0;  1;  8;  16;  9;  2;  3; 10
+                17; 24; 32; 25; 18; 11;  4;  5
+                12; 19; 26; 33; 40; 48; 41; 34 
+                27; 20; 13;  6;  7; 14; 21; 28
+                35; 42; 49; 56; 57; 50; 43; 36
+                29; 22; 15; 23; 30; 37; 44; 51
+                58; 59; 52; 45; 38; 31; 39; 46
+                53; 60; 61; 54; 47; 55; 62; 63
+            |]
+
+        use ms = new System.IO.MemoryStream()
+
+        
+        let header = [| 0xFFuy; 0xD8uy;  |]
+        ms.Write(header, 0, header.Length)
+
+        let encode (v : uint16) =
+            [| byte (v >>> 8); byte v |]
+
+
+        let quant = 
+            Array.concat [
+                [| 0xFFuy; 0xDBuy; 0x00uy; 0x84uy |]
+                [| 0x00uy |]
+                zigZagOrder |> Array.map (fun i -> quality.luminance.[i] |> byte)
+                [| 0x01uy |]
+                zigZagOrder |> Array.map (fun i -> quality.chroma.[i] |> byte)
+            ]
+        ms.Write(quant, 0, quant.Length)
+
+        let sof =
+            Array.concat [
+                [| 0xFFuy; 0xC0uy; 0x00uy; 0x11uy |]
+                [| 0x08uy |]
+                encode (uint16 size.Y)
+                encode (uint16 size.X)
+                [| 0x03uy; |]
+                [| 0x01uy; 0x11uy; 0x00uy |]
+                [| 0x02uy; 0x11uy; 0x01uy |]
+                [| 0x03uy; 0x11uy; 0x01uy |]
+            ]
+        ms.Write(sof, 0, sof.Length)
+
+        let huff =
+            let huffSize (spec : HuffmanTable)  =
+                uint16 (1 + 16 + spec.values.Length)
+
+            let encodeHuff (kind : byte) (spec : HuffmanTable) =
+                Array.concat [
+                    [| kind |]
+                    Array.skip 1 spec.counts |> Array.map byte
+                    spec.values
+                ]
+
+            Array.concat [
+                [| 0xFFuy; 0xC4uy |]
+                encode (2us + huffSize encoder.dcLuminance + huffSize  encoder.dcChroma + huffSize  encoder.acLuminance + huffSize  encoder.acChroma)
+
+                encodeHuff 0x00uy  encoder.dcLuminance
+                encodeHuff 0x01uy  encoder.dcChroma
+                encodeHuff 0x10uy  encoder.acLuminance
+                encodeHuff 0x11uy  encoder.acChroma
+            ]
+        ms.Write(huff, 0, huff.Length)
+
+        let sos = [| 0xFFuy; 0xDAuy; 0x00uy; 0x0Cuy; 0x03uy; 0x01uy; 0x00uy; 0x02uy; 0x11uy; 0x03uy; 0x11uy; 0x00uy; 0x3Fuy; 0x00uy |]
+        ms.Write(sos, 0, sos.Length)
+        ms.ToArray()
+
+    let overallCommand = 
+        command {
+            do! dctCommand
+            do! codewordCommand
+            do! parent.Scan codewordCountView codewordCountView
+            do! assembleCommand
+            do! Command.Copy(codewordBuffer, codewordBuffer.Size - 8L, bitCountBuffer, 0L, 4L)
+        }
+        
+    let encodeCommandBuffer =
+        let c = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Secondary)
+        c.Begin(CommandBufferUsage.None)
+        c.enqueue {
+            do! codewordCommand
+            do! parent.Scan codewordCountView codewordCountView
+            do! assembleCommand
+            do! Command.Copy(codewordBuffer, codewordBuffer.Size - 8L, bitCountBuffer, 0L, 4L)
+        }
+        c.End()
+        c
+
+    let mutable cmd : Option<Image * CommandBuffer> = None
+
+    let create (image : Image) =
+        dctInput.["InputImage"] <- image
+        dctInput.Flush()
+        let c = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+        c.Begin(CommandBufferUsage.None)
+        c.Enqueue(overallCommand)
+        c.End()
+        c
+        
+
+    let getCmd (image : Image) =
+        match cmd with
+            | Some(i,c) when i = image -> c
+            | Some(_,c) ->
+                c.Dispose()
+                let c = create image
+                cmd <- Some (image, c)
+                c
+            | None ->
+                let c = create image
+                cmd <- Some (image, c)
+                c
+
+
+    member x.Encode(image : Image) =
+        dctInput.["InputImage"] <- image
+        dctInput.Flush()
+        overallCommand
+        
+    member x.DownloadStream() =
+        let numberOfBits : int = bitCountBuffer.Memory.Mapped NativeInt.read
+        let byteCount = if numberOfBits % 8 = 0 then numberOfBits / 8 else 1 + numberOfBits / 8
+
+        device.perform {
+            do! Command.Copy(outputBuffer, 0L, cpuBuffer, 0L, int64 byteCount)
+        }
+
+        let ms = new System.IO.MemoryStream(byteCount * 2 + header.Length + 2)
+
+        ms.Write(header, 0, header.Length)
+
+        cpuBuffer.Memory.Mapped(fun ptr ->
+            let mutable ptr = ptr
+
+            for i in 0 .. byteCount - 1 do
+                let v : byte = NativeInt.read ptr
+
+                ms.WriteByte v
+
+                if v = 0xFFuy then
+                    ms.WriteByte 0x00uy
+
+                ptr <- ptr + 1n
+        )
+
+        ms.WriteByte(0xFFuy)
+        ms.WriteByte(0xD9uy)
+        ms.ToArray()
+
+    member x.Download() =
+        let numberOfBits : int = bitCountBuffer.Memory.Mapped NativeInt.read
+        let byteCount = if numberOfBits % 8 = 0 then numberOfBits / 8 else 1 + numberOfBits / 8
+
+        device.perform {
+            do! Command.Copy(outputBuffer, 0L, cpuBuffer, 0L, int64 byteCount)
+        }
+
+        let mutable result : byte[] = Array.zeroCreate (header.Length + 2 + byteCount * 2)
+        let mutable finalLength = 0
+
+        result |> NativePtr.withA (fun dst ->
+            let dstStart = NativePtr.toNativeInt dst
+            let mutable dst = dstStart
+            Marshal.Copy(header, 0, dstStart, header.Length)
+            dst <- dst + nativeint header.Length
+
+            cpuBuffer.Memory.Mapped(fun ptr ->
+                let mutable ptr = ptr
+
+                for i in 0 .. byteCount - 1 do
+                    let v : byte = NativeInt.read ptr
+
+                    NativeInt.write dst v
+                    dst <- dst + 1n
+
+                    if v = 0xFFuy then
+                        NativeInt.write dst 0x00uy
+                        dst <- dst + 1n
+
+                    ptr <- ptr + 1n
+                    
+                finalLength <- dst - dstStart |> int
+            )
+
+
+            NativeInt.write dst 0xD9FFus
+            dst <- dst + 2n
+
+            finalLength <- dst - dstStart |> int
+        )
+
+        Array.Resize(&result, finalLength)
+        result
+
+    member x.Compress(image : Image) =
+        device.GraphicsFamily.GetQueue().RunSynchronously (getCmd image)
+        x.Download()
+
+    member x.Dispose() =
+        dctInput.Dispose()
+        codewordInput.Dispose()
+        assembleInput.Dispose()
+
+        device.Delete dctBuffer      
+        device.Delete codewordBuffer 
+        device.Delete outputBuffer   
+        device.Delete cpuBuffer      
+        device.Delete bitCountBuffer 
+        match cmd with
+            | Some (_,cmd) -> cmd.Dispose()
+            | _ -> ()
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
+
 type Compressor(runtime : Runtime) =
     let device = runtime.Device
     let pool = runtime.DescriptorPool
 
     let dct = device |> ComputeShader.ofFunction Kernels.dct
-    let encode = device |> ComputeShader.ofFunction Kernels.encodeKernel
+    let codewords = device |> ComputeShader.ofFunction Kernels.codewordsKernel
+    let assemble = device |> ComputeShader.ofFunction Kernels.assembleKernel
+    let scanner = runtime.CompileScan <@ (+) : int -> int -> int @>
 
     let queries = device.CreateQueryPool 2
     
+    let codewords (input : Buffer<V4i>) (target : Buffer<V2i>) =
+        let i = runtime.DescriptorPool |> ComputeShader.newInputBinding codewords
+
+        //let target = device.CreateBuffer<V2i>(input.Count * 3L)
+        i.["data"] <- input
+        i.["codewords"] <- target
+        i.Flush()
+
+        command {
+            try
+                do! Command.Bind(codewords)
+                do! Command.SetInputs i
+                do! Command.Dispatch(int input.Count / 64, 3)
+            finally
+                i.Dispose()
+        }
+
+    let assemble (codewords : Buffer<V2i>) (output : Buffer<uint32>) =
+        let i = runtime.DescriptorPool |> ComputeShader.newInputBinding assemble
+
+        //let target = device.CreateBuffer<V2i>(input.Count * 3L)
+        i.["codewords"] <- codewords
+        i.["target"] <- output
+        i.["codewordCount"] <- int codewords.Count
+        i.Flush()
+        
+        command {
+            try
+                do! Command.ZeroBuffer output
+                do! Command.Bind(assemble)
+                do! Command.SetInputs i
+                do! Command.Dispatch(int codewords.Count / 64)
+            finally
+                i.Dispose()
+        }
+ 
+
     let transform(data : Image) (alignedSize : V2i) (quality : Quantization) (dctBuffer : Buffer<V4i>) =
         let dctInput = pool |> ComputeShader.newInputBinding dct
         
@@ -1206,91 +1483,104 @@ type Compressor(runtime : Runtime) =
                 dctInput.Dispose()
         }
 
-    let encode (dctBuffer : Buffer<V4i>) (alignedSize : V2i) =
-
-        let blocks = (alignedSize.X * alignedSize.Y) / 64
-        let offsetBuffer = device.CreateBuffer<V3i>(int64 blocks)
-        let sizeBuffer = device.CreateBuffer<V3i>(int64 blocks)
-        let data = device.CreateBuffer<uint32>(64L * int64 blocks)
-        let counter = device.CreateBuffer<int>(Array.zeroCreate 1)
-
-        let run = 
-            command {
-                do! Command.BeginQuery(queries, 1)
-                do! Command.ZeroBuffer(counter)
-                do! Command.Bind encode
-                for c in 0 .. 2 do
-                    let input = runtime.DescriptorPool |> ComputeShader.newInputBinding encode
-                    try
-                        input.["data"] <- dctBuffer
-                        input.["offsets"] <- offsetBuffer
-                        input.["sizes"] <- sizeBuffer
-                        input.["counter"] <- counter
-                        input.["mask"] <- data
-                        input.["channel"] <- c
-                        input.Flush()
-                        
-                        do! Command.SetInputs input
-                        do! Command.Dispatch blocks
-
-                    finally
-                        input.Dispose()
-                do! Command.EndQuery(queries, 1)
-            }
-
-        let download () = 
-            let cnt = Array.zeroCreate 1
-            counter.Download(cnt)
-
-            let arr = Array.zeroCreate cnt.[0]
-            data.Download(0L, arr, 0L, arr.LongLength)
-            let offsets = offsetBuffer.Download()
-            let sizes = sizeBuffer.Download()
-
-            device.Delete offsetBuffer
-            device.Delete sizeBuffer
-            device.Delete data
-            device.Delete counter
-
-            let sw = System.Diagnostics.Stopwatch.StartNew()
-            //Log.startTimed "DOWNLOAD OIDA"
-            let bs = BitStream()
-            for i in 0 .. offsets.Length - 1 do
-                let off = offsets.[i]
-                let cnt = sizes.[i]
-                for ci in 0 .. 2 do
-                    let offset = off.[ci]
-                    let size = cnt.[ci]
-
-                    let mutable i = 0
-                    let mutable remaining = size
-                    while remaining > 0 do
-                        bs.Write(arr.[offset + i], 0, min 32 remaining)
-                        i <- i + 1
-                        remaining <- remaining - 32
-
-
-            let r = bs.ToArray()
-            sw.Stop()
-            r, sw.MicroTime
-
-        run, download
-
-    member x.Times =
-        device.GetResults(queries) |> Array.map MicroTime
 
     member x.Compress(data : Image, quality : Quantization) =
         let alignedSize = data.Size.XY |> Align.next2 8
         let dctBuffer = device.CreateBuffer<V4i>(int64 alignedSize.X * int64 alignedSize.Y)
+        let codewordBuffer = device.CreateBuffer<V2i>(dctBuffer.Count * 3L)
+        let count = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit 4L
+        let output = device.CreateBuffer<uint32>(int64 alignedSize.X * int64 alignedSize.Y)
 
-        let (encode, download) = encode dctBuffer alignedSize
+        let cpuTarget = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit output.Size
 
-        let compress = 
+        let codewordCountBuffer = codewordBuffer.Coerce<int>().Strided(2)
+
+        let cmd = 
             command {
-                do! transform data alignedSize quality dctBuffer
-                do! encode
+                try
+                    do! transform data alignedSize quality dctBuffer
+                    do! codewords dctBuffer codewordBuffer
+                    do! scanner codewordCountBuffer codewordCountBuffer
+                    do! assemble codewordBuffer output
+                    do! Command.Copy(codewordBuffer, codewordBuffer.Size - 8L, count, 0L, 4L)
+                finally
+                    device.Delete dctBuffer
+                    device.Delete codewordBuffer
+                    device.Delete output
             }
-        compress, download
+
+        let download() = 
+            let numberOfBits : int = count.Memory.Mapped NativeInt.read
+            let byteCount = if numberOfBits % 8 = 0 then numberOfBits / 8 else 1 + numberOfBits / 8
+
+            device.perform {
+                do! Command.Copy(output, 0L, cpuTarget, 0L, int64 byteCount)
+            }
+
+            let mutable result : byte[] = Array.zeroCreate (byteCount * 2)
+            let mutable finalLength = 0
+
+            result |> NativePtr.withA (fun dst ->
+                cpuTarget.Memory.Mapped(fun ptr ->
+                    let mutable ptr = ptr
+                    let dstStart = NativePtr.toNativeInt dst
+                    let mutable dst = dstStart
+
+                    for i in 0 .. byteCount - 1 do
+                        let v : byte = NativeInt.read ptr
+
+                        //result.[oi] <- v
+                        NativeInt.write dst v
+                        dst <- dst + 1n
+
+                        if v = 0xFFuy then
+                            NativeInt.write dst 0x00uy
+                            dst <- dst + 1n
+
+                        ptr <- ptr + 1n
+                    
+                    finalLength <- dst - dstStart |> int
+                )
+            )
+
+            System.Array.Resize(&result, finalLength)
+            result
+
+        cmd, download
+
+    member x.GetCodewords(data : Image, quality : Quantization) =
+        let alignedSize = data.Size.XY |> Align.next2 8
+        let dctBuffer = device.CreateBuffer<V4i>(int64 alignedSize.X * int64 alignedSize.Y)
+        let codewordBuffer = device.CreateBuffer<V2i>(dctBuffer.Count * 3L)
+
+        let codewordCountBuffer = codewordBuffer.Coerce<int>().Strided(2)
+
+        device.perform {
+            do! transform data alignedSize quality dctBuffer
+            do! codewords dctBuffer codewordBuffer
+            do! scanner codewordCountBuffer codewordCountBuffer
+        }
+
+        let dct = dctBuffer.Download()
+        let res = codewordBuffer.Download()
+        device.Delete dctBuffer
+        device.Delete codewordBuffer
+        res, dct
+
+
+    member x.Times =
+        device.GetResults(queries) |> Array.map MicroTime
+
+    member x.Transform(data : Image, quality : Quantization) =
+        let alignedSize = data.Size.XY |> Align.next2 8
+        let dctBuffer = device.CreateBuffer<V4i>(int64 alignedSize.X * int64 alignedSize.Y)
+
+        command {
+            try
+                do! transform data alignedSize quality dctBuffer
+            finally
+                device.Delete dctBuffer
+        }
 
     member x.Transform(data : PixImage<'a>, quality : Quantization) =
         //assert(data.Size.X % 8 = 0 && data.Size.Y % 8 = 0)
@@ -1330,11 +1620,156 @@ module Test =
         |]
 
 
+    let valildateCodewords (runtime : Runtime) (pi : PixImage<byte>)=
+        let comp = Compressor(runtime)
+        let device = runtime.Device
+        let image = device.CreateImage(PixTexture2d(PixImageMipMap [| pi :> PixImage |], TextureParams.empty))
+        let words, dct = comp.GetCodewords(image, Quantization.photoshop80)
+            
+        let mutable leading = 0
+
+        let mutable last = V2i.Zero
+        for gid in 0 .. words.Length - 1 do
+            let w = words.[gid]
+            let lid = gid % 192
+            let block = gid / 192
+
+            let lIndex = lid % 64
+            let lChannel = lid / 64
+            let dIndex = block * 64 + lIndex
+            let v = dct.[dIndex].[lChannel]
+            if lIndex = 0 then leading <- 0
+            
+
+ 
+
+            let channelName = 
+                match lChannel with
+                    | 0 -> "Y"
+                    | 1 -> "Cb"
+                    | _ -> "Cr"
+            let off = last.X
+            let len = w.X - last.X
+            last <- w
+
+            let isLast = 
+                let mutable res = true
+                for o in lIndex+1 .. 63 do
+                    if dct.[block * 64 + o].[lChannel] <> 0 then res <- false
+                res
+
+            if lIndex = 0 || v <> 0 || (not isLast && leading >= 15) || lIndex = 63 then
+                let v = if lIndex = 0 && block > 0 then v - dct.[dIndex - 64].[lChannel] else v
+
+                let l = if lIndex = 63 && v = 0 then 0 else leading
+
+                let (cpuLength, cpuCode) = Kernels.encode lIndex (lChannel <> 0) l v
+
+                let w = uint32 w.Y
+
+                if len <> cpuLength || Bit.take (32 - len) len w <> Bit.take (32 - cpuLength) cpuLength cpuCode then
+                    let table =
+                        match lChannel, lIndex with
+                            | 0, 0 -> Kernels.encoder.dcLuminance
+                            | _, 0 -> Kernels.encoder.dcChroma
+                            | 0, _ -> Kernels.encoder.acLuminance
+                            | _, _ -> Kernels.encoder.acChroma
+
+                    let (code, bits) = table.decode len w
+                    let (ll, dc) =
+                        if lIndex = 0 then 0, int code
+                        else int (code >>> 4), int (code &&& 0xFuy)
+
+                    printfn "%A %A %A" ll dc bits
+                    Log.warn "bad code"
+
+                
+//                else 
+//                    Log.line "%s[%d/%d] = %A => (%d:%d:%s)" channelName block lIndex v off len (Bit.toString (32 - len) len w)
+
+                leading <- 0
+
+            else
+                if len > 0 then
+                    Log.warn "%s[%d] = %A => %d" channelName lid v len
+                leading <- leading + 1
+
+        device.Delete image
+
+
+    let testCodewords(runtime : Runtime) =
+        let comp = JpegCompressor(runtime)
+        let device = runtime.Device
+
+        let pi = PixImage.Create(@"C:\Users\Schorsch\Desktop\nature.jpeg").ToPixImage<byte>(Col.Format.RGBA)
+        let instance = comp.NewInstance(pi.Size, Quantization.photoshop80)
+
+        let image = device.CreateImage(PixTexture2d(PixImageMipMap [| pi :> PixImage |], TextureParams.empty))
+
+        let cmd = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+        cmd.Begin(CommandBufferUsage.None)
+        cmd.Enqueue (instance.Encode image)
+        cmd.End()
+        
+        let ref = ReferenceCompressor()
+        let queue = device.GraphicsFamily.GetQueue()
+        // warmup
+        for i in 1 .. 5 do queue.RunSynchronously cmd
+        for i in 1 .. 5 do instance.Download() |> ignore
+
+        printf " 0: encode: "
+        let iter = 1000
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        for i in 1 .. iter do
+            queue.RunSynchronously cmd
+        sw.Stop()
+        let tCompress = sw.MicroTime / iter
+        printfn "%A" tCompress
+        
+        let mutable data = Array.zeroCreate 0
+        printf " 0: download: "
+        let iter = 1000
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        for i in 1 .. iter do
+            data <- instance.Download()
+        sw.Stop()
+        let tDownload = sw.MicroTime / iter
+        printfn "%A" tDownload
+
+
+        Log.line "total: %A" (tDownload + tCompress)
+
+
+        
+        printf " 0: compress: "
+        let iter = 1000
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        for i in 1 .. iter do
+            data <- instance.Compress image
+        sw.Stop()
+        let tDownload = sw.MicroTime / iter
+        printfn "%A" tDownload
+
+
+
+        File.writeAllBytes @"C:\Users\Schorsch\Desktop\new.jpg" data
+
+
+        cmd.Dispose()
+
+
+
+
+        
 
     let run() =
         use app = new HeadlessVulkanApplication(true)
         let device = app.Device
         
+        testCodewords app.Runtime
+        System.Environment.Exit 0
+
+
         let comp = Compressor(app.Runtime)
         let ref = ReferenceCompressor()
 
@@ -1389,11 +1824,46 @@ module Test =
         let gpuCompress, download = comp.Compress(image, Quantization.photoshop80)
         Log.stop()
 
+        let tcmd = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+        tcmd.Begin(CommandBufferUsage.None)
+        tcmd.Enqueue(comp.Transform(image, Quantization.photoshop80))
+        tcmd.End()
+
+    
+        // warmup
+        let queue = device.GraphicsFamily.GetQueue()
+        for i in 1 .. 5 do queue.RunSynchronously(tcmd)
+
+        let iter = 10
+        let results = Array.zeroCreate iter
+
+        for e in 0 .. iter - 1 do
+            printf " 0: transform: "
+            let sw = System.Diagnostics.Stopwatch.StartNew()
+            for i in 1 .. 10000 do
+                queue.RunSynchronously(tcmd)
+            sw.Stop()
+            let time = sw.MicroTime / 10000
+            results.[e] <- time
+            printfn "%A" time
+
+        let avg = results |> Array.averageBy (fun v -> float v.TotalNanoseconds)
+        let stddev = (results |> Array.sumBy (fun v -> Fun.Square(float v.TotalNanoseconds - avg))) / (float iter - 1.0)
+        let dev = sqrt stddev |> int64 |> MicroTime
+        let avg = avg |> int64 |> MicroTime
+
+
+        Log.line "average:   %A" avg
+        Log.line "deviation: %A" dev
+
+        System.Environment.Exit 0
+
 
         let cmd = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
         cmd.Begin(CommandBufferUsage.None)
         cmd.Enqueue gpuCompress
         cmd.End()
+        
 
         printf " 0: compress: "
         let sw = System.Diagnostics.Stopwatch.StartNew()
@@ -1408,9 +1878,9 @@ module Test =
         
         printf " 0: download: "
         let sw = System.Diagnostics.Stopwatch.StartNew()
-        let gpu,time = download()
+        let gpu = download()
         sw.Stop()
-        printfn "%A (%A)" sw.MicroTime time
+        printfn "%A" sw.MicroTime
 
         cmd.Dispose()
 

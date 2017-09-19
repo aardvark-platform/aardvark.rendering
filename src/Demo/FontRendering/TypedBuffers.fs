@@ -121,7 +121,15 @@ type DeviceTypedBufferExtensions private() =
         let l = match l with | Some l -> max 0L (int64 l) | None -> 0L
         let h = match h with | Some h -> min (b.Size - 1L) (int64 h) | None -> b.Size - 1L
         BufferVector<'a>(b.Buffer, b.Offset + l * b.Delta, b.Delta, 1L + h - l) :> IBufferVector<_>
+        
+    [<Extension>]
+    static member Skip(b : IBufferVector<'a>, n : int64) =
+        BufferVector<'a>(b.Buffer, b.Offset + n * b.Delta, b.Delta, b.Size - n) :> IBufferVector<_>
 
+    [<Extension>]
+    static member Skip(b : IBufferVector<'a>, n : int) =
+        BufferVector<'a>(b.Buffer, b.Offset + int64 n * b.Delta, b.Delta, b.Size - int64 n) :> IBufferVector<_>
+            
     [<Extension>]
     static member Strided(b : IBufferVector<'a>, delta : int64) =
         BufferVector<'a>(b.Buffer, b.Offset, delta * b.Delta, 1L + (b.Size - 1L) / delta) :> IBufferVector<_>
