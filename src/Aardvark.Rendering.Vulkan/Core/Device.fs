@@ -786,7 +786,7 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
                 VkRenderPass.Null, 0u,
                 VkFramebuffer.Null, 
                 0u,
-                VkQueryControlFlags.None,
+                VkQueryControlFlags.PreciseBit,
                 VkQueryPipelineStatisticFlags.None
             )
 

@@ -382,7 +382,7 @@ module VulkanTests =
     open System.Runtime.CompilerServices
 
     type Buffer<'a when 'a : unmanaged>(device : Device, handle : VkBuffer, mem : DevicePtr, count : int64) =
-        inherit Buffer(device, handle, mem)
+        inherit Buffer(device, handle, mem, int64 sizeof<'a> * count)
 
         static let sl = sizeof<'a> |> int64
 

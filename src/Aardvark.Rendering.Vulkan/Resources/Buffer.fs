@@ -19,9 +19,9 @@ type Buffer =
     class
         inherit Resource<VkBuffer>
         val mutable public Memory : DevicePtr
+        val mutable public Size : int64
         val mutable public RefCount : int
 
-        member x.Size = x.Memory.Size
 
         interface IBackendBuffer with
             member x.Handle = x.Handle :> obj
@@ -29,7 +29,7 @@ type Buffer =
 
         member x.AddReference() = Interlocked.Increment(&x.RefCount) |> ignore
 
-        new(device, handle, memory) = { inherit Resource<_>(device, handle); Memory = memory; RefCount = 1 }
+        new(device, handle, memory, size) = { inherit Resource<_>(device, handle); Memory = memory; Size = size; RefCount = 1 }
     end
 
 type BufferView =
@@ -333,7 +333,7 @@ module Buffer =
                 emptyBuffers.TryRemove(key) |> ignore
             )   
 
-            Buffer(device, handle, ptr)
+            Buffer(device, handle, ptr, 256L)
         )
 
 
@@ -368,7 +368,7 @@ module Buffer =
             |> check "could not bind buffer-memory"
 
 
-        Buffer(device, handle, ptr)
+        Buffer(device, handle, ptr, size)
 
     let inline create  (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
         createConcurrent false flags size memory

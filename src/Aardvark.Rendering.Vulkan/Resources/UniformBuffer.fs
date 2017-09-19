@@ -84,7 +84,7 @@ type UniformBuffer =
         val mutable public Layout : UniformBufferLayout
 
         new(device : Device, handle : VkBuffer, mem : DevicePtr, storage : UnmanagedStruct, layout : UniformBufferLayout) = 
-            { inherit Buffer(device, handle, mem); Storage = storage; Layout = layout }
+            { inherit Buffer(device, handle, mem, mem.Size); Storage = storage; Layout = layout }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

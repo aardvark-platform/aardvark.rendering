@@ -1182,6 +1182,7 @@ type Compressor(runtime : Runtime) =
     let dct = device |> ComputeShader.ofFunction Kernels.dct
     let encode = device |> ComputeShader.ofFunction Kernels.encodeKernel
 
+    let queries = device.CreateQueryPool 2
     
     let transform(data : Image) (alignedSize : V2i) (quality : Quantization) (dctBuffer : Buffer<V4i>) =
         let dctInput = pool |> ComputeShader.newInputBinding dct
@@ -1195,9 +1196,12 @@ type Compressor(runtime : Runtime) =
 
         command {
             try
+                do! Command.Reset(queries)
+                do! Command.BeginQuery(queries, 0)
                 do! Command.Bind dct
                 do! Command.SetInputs dctInput
                 do! Command.Dispatch (alignedSize / V2i(8,8))
+                do! Command.EndQuery(queries, 0)
             finally
                 dctInput.Dispose()
         }
@@ -1212,6 +1216,7 @@ type Compressor(runtime : Runtime) =
 
         let run = 
             command {
+                do! Command.BeginQuery(queries, 1)
                 do! Command.ZeroBuffer(counter)
                 do! Command.Bind encode
                 for c in 0 .. 2 do
@@ -1224,12 +1229,13 @@ type Compressor(runtime : Runtime) =
                         input.["mask"] <- data
                         input.["channel"] <- c
                         input.Flush()
-
+                        
                         do! Command.SetInputs input
                         do! Command.Dispatch blocks
 
                     finally
                         input.Dispose()
+                do! Command.EndQuery(queries, 1)
             }
 
         let download () = 
@@ -1269,6 +1275,9 @@ type Compressor(runtime : Runtime) =
             r, sw.MicroTime
 
         run, download
+
+    member x.Times =
+        device.GetResults(queries) |> Array.map MicroTime
 
     member x.Compress(data : Image, quality : Quantization) =
         let alignedSize = data.Size.XY |> Align.next2 8
@@ -1323,7 +1332,7 @@ module Test =
 
 
     let run() =
-        use app = new HeadlessVulkanApplication(false)
+        use app = new HeadlessVulkanApplication(true)
         let device = app.Device
         
         let comp = Compressor(app.Runtime)
@@ -1332,7 +1341,7 @@ module Test =
         let rand = RandomSystem()
 
         let pi =
-            PixImage.Create(@"C:\Users\Schorsch\Desktop\nature.jpeg").ToPixImage<byte>(Col.Format.RGBA)
+            PixImage.Create(@"C:\Users\Schorsch\Desktop\nature2.jpg").ToPixImage<byte>(Col.Format.RGBA)
 //            let pi = PixImage<byte>(Col.Format.RGBA, V2i(1920,1080))
 //            pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
 ////                if c.X >= 4L then C4b.Red
@@ -1393,6 +1402,9 @@ module Test =
         sw.Stop()
         printfn "%A" (sw.MicroTime / 1000)
 
+        let times = comp.Times
+        for i in 0 .. times.Length - 1 do
+            Log.line "%d: %A" i times.[i]
         
         printf " 0: download: "
         let sw = System.Diagnostics.Stopwatch.StartNew()
