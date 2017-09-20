@@ -1170,26 +1170,34 @@ and JpegCompressorInstance(parent : JpegCompressor, size : V2i, quality : Quanti
         i.Flush()
         i
 
+    let stopwatches = parent.DescriptorPool.CreateStopwatchPool(4)
+
     let dctCommand =
         command {
+            do! stopwatches.Start 0
             do! Command.Bind parent.DctShader
             do! Command.SetInputs dctInput
             do! Command.Dispatch (alignedSize / V2i(8,8))
+            do! stopwatches.Stop 0
         }
 
     let codewordCommand =
         command {
+            do! stopwatches.Start 1
             do! Command.Bind(parent.CodewordShader)
             do! Command.SetInputs codewordInput
             do! Command.Dispatch(int dctBuffer.Count / 64, 3)
+            do! stopwatches.Stop 1
         }
 
     let assembleCommand = 
         command {
+            do! stopwatches.Start 2
             do! Command.ZeroBuffer outputBuffer
             do! Command.Bind(parent.AssembleShader)
             do! Command.SetInputs assembleInput
             do! Command.Dispatch(int codewordBuffer.Count / 64)
+            do! stopwatches.Stop 2
         }
 
     let header =
@@ -1268,11 +1276,15 @@ and JpegCompressorInstance(parent : JpegCompressor, size : V2i, quality : Quanti
     let overallCommand = 
         let run =
             command {
+                do! stopwatches.Begin()
                 do! dctCommand
                 do! codewordCommand
+                do! stopwatches.Start 3
                 do! parent.Scan codewordCountView codewordCountView
+                do! stopwatches.Stop 3
                 do! assembleCommand
                 do! Command.Copy(codewordBuffer, codewordBuffer.Size - 8L, bitCountBuffer, 0L, 4L)
+                do! stopwatches.End()
             }
         { new Command() with
             member x.Compatible = run.Compatible
@@ -1286,6 +1298,22 @@ and JpegCompressorInstance(parent : JpegCompressor, size : V2i, quality : Quanti
         dctInput.Flush()
         overallCommand
         
+    member x.ClearStats() =
+        device.perform {
+            do! stopwatches.Reset()
+        }
+
+    member x.GetStats() =
+        let times = stopwatches.Download()
+
+        Map.ofList [
+            "dct", MicroTime times.[0]
+            "code", MicroTime times.[1]
+            "asm", MicroTime times.[2]
+            "scan", MicroTime times.[3]
+        ]
+
+
     member x.DownloadStream() =
         let numberOfBits : int = bitCountBuffer.Memory.Mapped NativeInt.read
         let byteCount = if numberOfBits % 8 = 0 then numberOfBits / 8 else 1 + numberOfBits / 8
@@ -1341,7 +1369,6 @@ and JpegCompressorInstance(parent : JpegCompressor, size : V2i, quality : Quanti
         let mutable pSrc : nativeptr<byte> = NativePtr.ofNativeInt ptr
         let mutable pDst : nativeptr<byte> = NativePtr.ofNativeInt dst
         let mutable i = byteCount
-        let e : nativeint = ptr + nativeint byteCount
 
         while i <> 0 do
             let v : byte = NativePtr.read pSrc
@@ -1708,6 +1735,8 @@ module Test =
         for i in 1 .. 5 do queue.RunSynchronously cmd
         for i in 1 .. 5 do instance.Download() |> ignore
 
+
+        instance.ClearStats()
         printf " 0: encode: "
         let iter = 1000
         let sw = System.Diagnostics.Stopwatch.StartNew()
@@ -1716,7 +1745,8 @@ module Test =
         sw.Stop()
         let tCompress = sw.MicroTime / iter
         printfn "%A" tCompress
-        
+        printfn "%A" (instance.GetStats())
+
         let mutable data = Array.zeroCreate 0
         printf " 0: download: "
         let iter = 1000
