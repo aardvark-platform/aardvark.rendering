@@ -113,54 +113,62 @@ module ScanImpl =
 
         override x.Invoke(input : IBufferVector<'a>, output : IBufferVector<'a>) =
             let rec build (input : IBufferVector<'a>) (output : IBufferVector<'a>) =
-                command {
                     let cnt = int input.Size
                     if cnt > 1 then
                         let args0 = ComputeShader.newInputBinding scan pool
 
-                        try
-                            args0.["inputOffset"] <- input.Offset |> int
-                            args0.["inputDelta"] <- input.Delta |> int
-                            args0.["inputSize"] <- input.Size |> int
-                            args0.["inputData"] <- input.Buffer
-                            args0.["outputOffset"] <- output.Offset |> int
-                            args0.["outputDelta"] <- output.Delta |> int
-                            args0.["outputData"] <- output.Buffer
-                            args0.Flush()
+                        args0.["inputOffset"] <- input.Offset |> int
+                        args0.["inputDelta"] <- input.Delta |> int
+                        args0.["inputSize"] <- input.Size |> int
+                        args0.["inputData"] <- input.Buffer
+                        args0.["outputOffset"] <- output.Offset |> int
+                        args0.["outputDelta"] <- output.Delta |> int
+                        args0.["outputData"] <- output.Buffer
+                        args0.Flush()
 
-                            do! Command.Bind scan
-                            do! Command.SetInputs args0
-                            do! Command.Dispatch(ceilDiv (int input.Size) scanSize)
-                            do! Command.Sync(output.Buffer, VkAccessFlags.ShaderWriteBit, VkAccessFlags.ShaderReadBit)
-
-                            let oSums = output.[int64 scanSize - 1L .. ].Strided(scanSize)
-                            if oSums.Size > 0L then
-                            
-                                do! build oSums oSums
-
-                                let args1 = ComputeShader.newInputBinding fixup pool
+                        let cmd =
+                            command {
                                 try
-                                    args1.["inputData"] <- oSums.Buffer
-                                    args1.["inputOffset"] <- oSums.Offset |> int
-                                    args1.["inputDelta"] <- oSums.Delta |> int
-                                    args1.["outputData"] <- output.Buffer
-                                    args1.["outputOffset"] <- output.Offset |> int
-                                    args1.["outputDelta"] <- output.Delta |> int
-                                    args1.["count"] <- output.Size |> int
-                                    args1.["groupSize"] <- scanSize
-                                    args1.Flush()
+                                    do! Command.Bind scan
+                                    do! Command.SetInputs args0
+                                    do! Command.Dispatch(ceilDiv (int input.Size) scanSize)
+                                    do! Command.Sync(output.Buffer, VkAccessFlags.ShaderWriteBit, VkAccessFlags.ShaderReadBit)
+                                finally 
+                                    args0.Dispose()
+                            }
 
+                        let oSums = output.[int64 scanSize - 1L .. ].Strided(scanSize)
+
+                        
+                        if oSums.Size > 0L then
+                            let inner = build oSums oSums
+
+                            let args1 = ComputeShader.newInputBinding fixup pool
+                            args1.["inputData"] <- oSums.Buffer
+                            args1.["inputOffset"] <- oSums.Offset |> int
+                            args1.["inputDelta"] <- oSums.Delta |> int
+                            args1.["outputData"] <- output.Buffer
+                            args1.["outputOffset"] <- output.Offset |> int
+                            args1.["outputDelta"] <- output.Delta |> int
+                            args1.["count"] <- output.Size |> int
+                            args1.["groupSize"] <- scanSize
+                            args1.Flush()
+
+                            command {
+                                do! cmd
+                                do! inner
+                                try
                                     do! Command.Bind fixup
                                     do! Command.SetInputs args1
                                     do! Command.Dispatch(ceilDiv (int output.Size - scanSize) halfScanSize)
                                     do! Command.Sync(output.Buffer, VkAccessFlags.ShaderWriteBit, VkAccessFlags.ShaderReadBit)
-                                finally
+                                finally 
                                     args1.Dispose()
-
-
-                        finally
-                            args0.Dispose()
-                }
+                            }
+                        else
+                            cmd
+                    else
+                        Command.Nop
 
             if input.Size > 1L then
                 build input output

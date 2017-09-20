@@ -98,10 +98,6 @@ module Codeword =
         |]
             
 
-            
-            
-
-
 type HuffmanTable =
     {
         counts : int[]
@@ -356,8 +352,7 @@ module HuffmanEncoder =
                     |]
         }
 
-    
-
+   
 
 type Quantization =
     {
@@ -1126,6 +1121,9 @@ type JpegCompressor(runtime : Runtime) =
         new JpegCompressorInstance(x, size, quality)
 
 and JpegCompressorInstance(parent : JpegCompressor, size : V2i, quality : Quantization) =
+    static let check (str : string) (err : VkResult) =
+        if err <> VkResult.VkSuccess then failwithf "[Vulkan] %s" str
+    
     let device = parent.Device
     let alignedSize = size |> Align.next2 8
     
@@ -1144,6 +1142,8 @@ and JpegCompressorInstance(parent : JpegCompressor, size : V2i, quality : Quanti
     let encoder = Kernels.encoder
 
     let codewordCountView   = codewordBuffer.Coerce<int>().Strided(2)
+
+    let tempData = Marshal.AllocHGlobal (2n * nativeint outputSize)
 
 
     let dctInput =
@@ -1264,52 +1264,22 @@ and JpegCompressorInstance(parent : JpegCompressor, size : V2i, quality : Quanti
         ms.Write(sos, 0, sos.Length)
         ms.ToArray()
 
+    let mutable cleanup = None
     let overallCommand = 
-        command {
-            do! dctCommand
-            do! codewordCommand
-            do! parent.Scan codewordCountView codewordCountView
-            do! assembleCommand
-            do! Command.Copy(codewordBuffer, codewordBuffer.Size - 8L, bitCountBuffer, 0L, 4L)
+        let run =
+            command {
+                do! dctCommand
+                do! codewordCommand
+                do! parent.Scan codewordCountView codewordCountView
+                do! assembleCommand
+                do! Command.Copy(codewordBuffer, codewordBuffer.Size - 8L, bitCountBuffer, 0L, 4L)
+            }
+        { new Command() with
+            member x.Compatible = run.Compatible
+            member x.Enqueue cmd =
+                cleanup <- run.Enqueue(cmd) |> Some
+                Disposable.Empty
         }
-        
-    let encodeCommandBuffer =
-        let c = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Secondary)
-        c.Begin(CommandBufferUsage.None)
-        c.enqueue {
-            do! codewordCommand
-            do! parent.Scan codewordCountView codewordCountView
-            do! assembleCommand
-            do! Command.Copy(codewordBuffer, codewordBuffer.Size - 8L, bitCountBuffer, 0L, 4L)
-        }
-        c.End()
-        c
-
-    let mutable cmd : Option<Image * CommandBuffer> = None
-
-    let create (image : Image) =
-        dctInput.["InputImage"] <- image
-        dctInput.Flush()
-        let c = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
-        c.Begin(CommandBufferUsage.None)
-        c.Enqueue(overallCommand)
-        c.End()
-        c
-        
-
-    let getCmd (image : Image) =
-        match cmd with
-            | Some(i,c) when i = image -> c
-            | Some(_,c) ->
-                c.Dispose()
-                let c = create image
-                cmd <- Some (image, c)
-                c
-            | None ->
-                let c = create image
-                cmd <- Some (image, c)
-                c
-
 
     member x.Encode(image : Image) =
         dctInput.["InputImage"] <- image
@@ -1350,49 +1320,69 @@ and JpegCompressorInstance(parent : JpegCompressor, size : V2i, quality : Quanti
         let numberOfBits : int = bitCountBuffer.Memory.Mapped NativeInt.read
         let byteCount = if numberOfBits % 8 = 0 then numberOfBits / 8 else 1 + numberOfBits / 8
 
-        device.perform {
+        device.GraphicsFamily.run {
             do! Command.Copy(outputBuffer, 0L, cpuBuffer, 0L, int64 byteCount)
         }
 
-        let mutable result : byte[] = Array.zeroCreate (header.Length + 2 + byteCount * 2)
-        let mutable finalLength = 0
+        let dstStart = tempData
 
-        result |> NativePtr.withA (fun dst ->
-            let dstStart = NativePtr.toNativeInt dst
-            let mutable dst = dstStart
-            Marshal.Copy(header, 0, dstStart, header.Length)
-            dst <- dst + nativeint header.Length
+        // write the jpeg header
+        let mutable dst = dstStart
+        Marshal.Copy(header, 0, dstStart, header.Length)
+        dst <- dst + nativeint header.Length
 
-            cpuBuffer.Memory.Mapped(fun ptr ->
-                let mutable ptr = ptr
-
-                for i in 0 .. byteCount - 1 do
-                    let v : byte = NativeInt.read ptr
-
-                    NativeInt.write dst v
-                    dst <- dst + 1n
-
-                    if v = 0xFFuy then
-                        NativeInt.write dst 0x00uy
-                        dst <- dst + 1n
-
-                    ptr <- ptr + 1n
-                    
-                finalLength <- dst - dstStart |> int
-            )
+        // copy the data
+        let memHandle = cpuBuffer.Memory.Memory
+        let mutable ptr = 0n
+        VkRaw.vkMapMemory(device.Handle, memHandle.Handle, 0UL, uint64 byteCount, VkMemoryMapFlags.MinValue, &&ptr)
+            |> check "could not map memory"
 
 
-            NativeInt.write dst 0xD9FFus
-            dst <- dst + 2n
+        let mutable pSrc : nativeptr<byte> = NativePtr.ofNativeInt ptr
+        let mutable pDst : nativeptr<byte> = NativePtr.ofNativeInt dst
+        let mutable i = byteCount
+        let e : nativeint = ptr + nativeint byteCount
 
-            finalLength <- dst - dstStart |> int
-        )
+        while i <> 0 do
+            let v : byte = NativePtr.read pSrc
 
-        Array.Resize(&result, finalLength)
+            if v = 0xFFuy then
+                // writing two individual bytes seems to be more efficient
+                // NativePtr.write (NativePtr.ofNativeInt (NativePtr.toNativeInt pDst)) 0x00FFus
+                // pDst <- NativePtr.ofNativeInt ((NativePtr.toNativeInt pDst) + 2n)
+                NativePtr.write pDst 0xFFuy
+                pDst <- NativePtr.ofNativeInt ((NativePtr.toNativeInt pDst) + 1n)
+                NativePtr.write pDst 0x00uy
+                pDst <- NativePtr.ofNativeInt ((NativePtr.toNativeInt pDst) + 1n)
+            else
+                NativePtr.write pDst v
+                pDst <- NativePtr.ofNativeInt ((NativePtr.toNativeInt pDst) + 1n)
+
+            pSrc <- NativePtr.ofNativeInt ((NativePtr.toNativeInt pSrc) + 1n)
+            i <- i - 1
+               
+        dst <- NativePtr.toNativeInt pDst  
+        VkRaw.vkUnmapMemory(device.Handle, memHandle.Handle)
+
+        // write EOI
+        NativeInt.write dst 0xD9FFus
+        dst <- dst + 2n
+        let finalLength = dst - dstStart |> int
+
+        let result : byte[] = Array.zeroCreate finalLength
+
+        Marshal.Copy(tempData, result, 0, finalLength)
+        //Array.Resize(&result, finalLength)
         result
 
     member x.Compress(image : Image) =
-        device.GraphicsFamily.GetQueue().RunSynchronously (getCmd image)
+        dctInput.["InputImage"] <- image
+        dctInput.Flush()
+
+        device.GraphicsFamily.run {
+            do! overallCommand
+        }
+
         x.Download()
 
     member x.Dispose() =
@@ -1405,9 +1395,10 @@ and JpegCompressorInstance(parent : JpegCompressor, size : V2i, quality : Quanti
         device.Delete outputBuffer   
         device.Delete cpuBuffer      
         device.Delete bitCountBuffer 
-        match cmd with
-            | Some (_,cmd) -> cmd.Dispose()
-            | _ -> ()
+        match cleanup with
+            | Some c -> c.Dispose()
+            | None -> ()
+        Marshal.FreeHGlobal tempData
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

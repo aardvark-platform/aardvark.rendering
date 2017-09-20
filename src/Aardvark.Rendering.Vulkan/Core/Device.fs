@@ -786,7 +786,7 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
                 VkRenderPass.Null, 0u,
                 VkFramebuffer.Null, 
                 0u,
-                VkQueryControlFlags.PreciseBit,
+                VkQueryControlFlags.None,
                 VkQueryPipelineStatisticFlags.None
             )
 
@@ -873,6 +873,9 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
 
     member x.Cleanup() =
         cleanup()
+
+    member x.ClearCompensation() =
+        cleanupTasks.Clear()
 
     abstract member Dispose : unit -> unit
     default x.Dispose() =

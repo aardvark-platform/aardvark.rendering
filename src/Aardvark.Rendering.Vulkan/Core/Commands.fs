@@ -344,3 +344,4 @@ module ``Memory Commands`` =
 
         static member Copy(src : DevicePtr, dst : DevicePtr) =
             Command.Copy(src, 0L, dst, 0L, min src.Size dst.Size)
+
