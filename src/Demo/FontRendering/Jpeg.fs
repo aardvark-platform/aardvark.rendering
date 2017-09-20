@@ -650,6 +650,133 @@ module Kernels =
         let cc = Codeword.code huff
         len + scale, (cc <<< scale) ||| (v &&& ((1u <<< scale) - 1u))
        
+    
+    module Ballot = 
+        [<GLSLIntrinsic("ballotARB({0})", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
+        let ballot (b : bool) : uint64 =
+            failwith ""
+
+        [<GLSLIntrinsic("gl_SubGroupLtMaskARB", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
+        let lessMask() : uint64 =
+            failwith ""
+
+        [<GLSLIntrinsic("gl_SubGroupGtMaskARB", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
+        let greaterMask() : uint64 =
+            failwith ""
+            
+        [<GLSLIntrinsic("findMSB({0})")>]
+        let msb(v : uint32) : int =
+            failwith ""
+
+        [<GLSLIntrinsic("bitCount({0})")>]
+        let pop(u : uint32) : int =
+            failwith ""
+
+    let leadingIsLastBallot (ev : bool) (ov : bool) =
+        let eb = Ballot.ballot(ev) |> uint32
+        let ob = Ballot.ballot(ov) |> uint32
+
+        let i = getLocalId().X
+        let ei = 2 * i
+        let oi = ei + 1
+
+        let less        = Ballot.lessMask() |> uint32
+        let greater     = Ballot.lessMask() |> uint32
+
+        let les = eb &&& less |> Ballot.msb
+        let los = ob &&& less |> Ballot.msb
+
+        let eLast =
+            if les > los then 2 * les
+            else 2 * los + 1
+             
+        let oLast =
+            if ev then ei
+            else eLast 
+        
+        let eLeading = ei - eLast - 1
+        let oLeading = oi - oLast - 1
+
+        let cae = eb &&& greater |> Ballot.pop
+        let cao = ob &&& greater |> Ballot.pop
+
+        let oIsLast = ov && cae = 0 && cao = 0
+        let eIsLast = ev && oIsLast && not ov
+
+        (eLeading, oIsLast, oLeading, eIsLast)
+
+
+    [<LocalSize(X = 32)>]
+    let codewordsKernelBallot (data : int[]) (codewords : V2i[]) =
+        compute {
+            let group = getWorkGroupId().X
+            let channel = getGlobalId().Y
+
+            let llid = 2*getLocalId().X
+            let rlid = llid + 1
+
+            let lgid = 4 * (group * 64 + llid) + channel
+            let rgid = lgid + 4
+
+            let ltid = (group * 3 + channel) * 64 + llid
+            let rtid = (group * 3 + channel) * 64 + rlid
+                
+            
+            let mutable lValue = data.[lgid]
+            let mutable rValue = data.[rgid]
+
+            // differential DC encoding
+            if llid = 0 && lgid >= 256 then 
+                lValue <- lValue - data.[lgid - 256]
+
+
+            // DC and all non-zero entries produce codewords
+            let lHasOutput = llid = 0 || lValue <> 0
+            let rHasOutput = rValue <> 0
+
+            // count the leading non-encoding threads
+            let lLeading, lIsLast, rLeading, rIsLast = leadingIsLastBallot lHasOutput rHasOutput
+
+            
+            // leading-counts larger than 15 are handled separately
+            let lLeading = lLeading &&& 0xF
+            let rLeading = rLeading &&& 0xF
+
+            // check again if the thread shall produce an output
+            let lHasOutput =
+                lHasOutput ||                     // every thread that already caused an output still does
+                (lLeading = 15 && not lIsLast)    // a zero with 15 leading zeros causes an output (0xF0)
+
+            let rHasOutput =
+                rHasOutput ||                     // every thread that already caused an output still does
+                (rLeading = 15 && not rIsLast) || // a zero with 15 leading zeros causes an output (0xF0)
+                rlid = 63                         // the last thread causes an output (EOB or simply its value)
+                
+            let mutable lcLen = 0
+            let mutable lcData = 0u
+            let mutable rcLen = 0
+            let mutable rcData = 0u
+
+            if lHasOutput then
+                // figure out the code
+                let (len, code) = encode llid (channel <> 0) lLeading lValue
+                lcLen <- len
+                lcData <- code
+
+            if rHasOutput then
+                // the last thread writes EOB (encode 0 0) if zero and the standard code if not
+                let leading = if rlid = 63 && rValue = 0 then 0 else rLeading
+
+                // figure out the code
+                let (len, code) = encode rlid (channel <> 0) leading rValue
+                rcLen <- len
+                rcData <- code
+
+            // store the code in the codeword list
+            codewords.[ltid] <- V2i(lcLen, int lcData)
+            codewords.[rtid] <- V2i(rcLen, int rcData)
+        }
+
     [<LocalSize(X = 64)>]
     let codewordsKernel (data : int[]) (codewords : V2i[]) =
         compute {
@@ -725,6 +852,13 @@ module Kernels =
 
         }
       
+      
+//    [<LocalSize(X = 64)>]
+//    let copyKernel (input : V4d[]) (output : V4d[]) =
+//        compute {
+//            let id = getGlobalId().X
+//            output.[id] <- 2.0 * input.[id]
+//        }
 
 module Align =
     let next (a : int) (v : int) =
@@ -1104,7 +1238,7 @@ type JpegCompressor(runtime : Runtime) =
     let pool = runtime.DescriptorPool
 
     let dct         = device |> ComputeShader.ofFunction Kernels.dct
-    let codewords   = device |> ComputeShader.ofFunction Kernels.codewordsKernel
+    let codewords   = device |> ComputeShader.ofFunction Kernels.codewordsKernelBallot
     let assemble    = device |> ComputeShader.ofFunction Kernels.assembleKernel
     let scanner     = runtime.CompileScan <@ (+) : int -> int -> int @>
     
@@ -1719,7 +1853,7 @@ module Test =
         let comp = JpegCompressor(runtime)
         let device = runtime.Device
 
-        let pi = PixImage.Create(@"C:\Users\Schorsch\Desktop\nature.jpeg").ToPixImage<byte>(Col.Format.RGBA)
+        let pi = PixImage.Create(@".\nature.jpeg").ToPixImage<byte>(Col.Format.RGBA)
         let instance = comp.NewInstance(pi.Size, Quantization.photoshop80)
 
         let image = device.CreateImage(PixTexture2d(PixImageMipMap [| pi :> PixImage |], TextureParams.empty))
@@ -1735,17 +1869,20 @@ module Test =
         for i in 1 .. 5 do queue.RunSynchronously cmd
         for i in 1 .. 5 do instance.Download() |> ignore
 
-
         instance.ClearStats()
-        printf " 0: encode: "
+
+        Log.start "encode"
         let iter = 1000
         let sw = System.Diagnostics.Stopwatch.StartNew()
         for i in 1 .. iter do
             queue.RunSynchronously cmd
         sw.Stop()
         let tCompress = sw.MicroTime / iter
-        printfn "%A" tCompress
-        printfn "%A" (instance.GetStats())
+        Log.line "total : %A" tCompress
+        let stats = instance.GetStats()
+        for (name, time) in Map.toSeq stats do
+            Log.line "%s: %A" name (time / iter)
+        Log.stop()
 
         let mutable data = Array.zeroCreate 0
         printf " 0: download: "
