@@ -7,6 +7,7 @@ open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
+#nowarn "51"
 
 type Codeword = uint32
 
@@ -155,11 +156,11 @@ module HuffmanTable =
                 | [n] -> n
                 | _ -> failwith "magic"
 
-        let createEncodeTable (tree : HuffTree) =
-            let max = 256
-//            let tree = build counts values
 
-            let arr = Array.zeroCreate max
+        let createEncodeTable (values : byte[]) (tree : HuffTree) =
+            let max = values |> Array.max |> int
+
+            let arr = Array.zeroCreate (1 + max)
 
             let rec traverse (path : Codeword) (t : HuffTree) =
                 match t with
@@ -198,7 +199,7 @@ module HuffmanTable =
         {
             counts = counts
             values = values
-            table = createEncodeTable tree
+            table = createEncodeTable values tree
             decode = fun len code -> decode tree len (code <<< (32 - len))
         }
 
@@ -664,13 +665,6 @@ module Kernels =
         let greaterMask() : uint64 =
             failwith ""
             
-        [<GLSLIntrinsic("findMSB({0})")>]
-        let msb(v : uint32) : int =
-            failwith ""
-
-        [<GLSLIntrinsic("bitCount({0})")>]
-        let pop(u : uint32) : int =
-            failwith ""
 
     let leadingIsLastBallot (ev : bool) (ov : bool) =
         let eb = Ballot.ballot(ev) |> uint32
@@ -683,8 +677,8 @@ module Kernels =
         let less        = Ballot.lessMask() |> uint32
         let greater     = Ballot.lessMask() |> uint32
 
-        let les = eb &&& less |> Ballot.msb
-        let los = ob &&& less |> Ballot.msb
+        let les = eb &&& less |> Bitwise.MSB
+        let los = ob &&& less |> Bitwise.MSB
 
         let eLast =
             if les > los then 2 * les
@@ -697,8 +691,8 @@ module Kernels =
         let eLeading = ei - eLast - 1
         let oLeading = oi - oLast - 1
 
-        let cae = eb &&& greater |> Ballot.pop
-        let cao = ob &&& greater |> Ballot.pop
+        let cae = eb &&& greater |> Bitwise.BitCount
+        let cao = ob &&& greater |> Bitwise.BitCount
 
         let oIsLast = ov && cae = 0 && cao = 0
         let eIsLast = ev && oIsLast && not ov
@@ -836,7 +830,7 @@ module Kernels =
 
             if size > 0 && code <> 0u then
                 let oi = offset / 32
-                let oo = offset % 32
+                let oo = offset &&& 31
 
                 let space = 32 - oo
                 if space >= size then
@@ -844,7 +838,7 @@ module Kernels =
                     atomicOr target.[oi] a
                 else 
                     let rest = size - space
-                    let a = (code >>> rest) &&& ((1u <<< space) - 1u) |> flipByteOrder
+                    let a = (code >>> rest) |> flipByteOrder // &&& ((1u <<< space) - 1u) |> flipByteOrder
                     atomicOr target.[oi] a
 
                     let b = (code &&& ((1u <<< rest) - 1u)) <<< (32 - rest) |> flipByteOrder

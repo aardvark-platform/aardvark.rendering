@@ -5,6 +5,8 @@ open System
 type HeadlessVulkanApplication(debug : bool) =
     let requestedExtensions =
         [
+            yield "VK_EXT_shader_subgroup_ballot"
+            yield "VK_EXT_shader_subgroup_vote"
             if debug then
                 yield Instance.Extensions.DebugReport
         ]
