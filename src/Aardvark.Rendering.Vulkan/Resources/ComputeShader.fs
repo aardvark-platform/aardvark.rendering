@@ -230,6 +230,19 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
             NativePtr.free setHandles
         )   
 
+    let uploadCommand (buffers : list<UniformBuffer>) =
+        match buffers with
+            | [] -> Command.Nop
+            | _ -> 
+                { new Command() with
+                    member x.Compatible = QueueFlags.All
+                    member x.Enqueue cmd = 
+                        cmd.AppendCommand()
+                        for b in buffers do
+                            VkRaw.vkCmdUpdateBuffer(cmd.Handle, b.Handle, 0UL, uint64 b.Storage.Size, b.Storage.Pointer)
+                        Disposable.Empty
+                }
+
     member private x.AsString =
         references 
             |> Map.toSeq 
@@ -250,6 +263,34 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
 
     member x.Dispose() = release()
 
+   
+
+    member x.GetWriter<'a>(name : string) =
+        match Map.tryFind name references with
+            | Some refs ->
+                let buffers = System.Collections.Generic.List<UniformBuffer>()
+                let writers = 
+                    refs |> List.choose (fun r ->
+                        match r with
+                            | BindingReference.UniformRef(buffer, offset, valueType) ->
+                                let w = UniformWriters.getWriter offset valueType typeof<'a> |> unbox<UniformWriters.IWriter<'a>>
+                                buffers.Add buffer
+
+                                let write (value : 'a) =
+                                    w.WriteValue(value, buffer.Storage.Pointer)
+
+                                Some write
+                            | _ ->
+                                None
+                    )
+
+                let cmd = uploadCommand (CSharpList.toList buffers)
+
+                let write (value : 'a) =
+                    writers |> List.iter (fun w -> w value)
+                cmd, write
+            | None ->
+                Command.Nop, ignore
     member x.References = references
     member x.Device = device
     member x.DescriptorPool = pool

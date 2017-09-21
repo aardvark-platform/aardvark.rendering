@@ -287,6 +287,66 @@ module UniformWriters =
 
         new(writers : list<IWriter>) =
             SequenceWriter<'s, 'a>(writers |> List.map unbox |> List.toArray)
+    
+    type NoConversionArrayWriter<'a when 'a : unmanaged>(offset : int, length : int) =
+        inherit AbstractWriter<'a[]>()
+
+        static let sa = nativeint sizeof<'a>
+        
+        let totalSize = sa * nativeint length
+
+        override x.Write(value : 'a[], ptr : nativeint) =
+            let ptr = ptr + nativeint offset
+            let copySize = nativeint (min value.Length length) * sa
+
+            let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
+            try
+                if copySize > 0n then
+                    Marshal.Copy(gc.AddrOfPinnedObject(), ptr, copySize)
+                if totalSize > copySize then
+                    Marshal.Set(ptr + copySize, 0, totalSize - copySize)
+            finally
+                gc.Free()
+
+    type StridedArrayWriter<'a when 'a : unmanaged>(offset : int, length : int, stride : int) =
+        inherit AbstractWriter<'a[]>()
+
+        static let def = Unchecked.defaultof<'a>
+        let sb = nativeint stride
+
+        override x.Write(value : 'a[], ptr : nativeint) =
+            let mutable ptr = ptr + nativeint offset
+
+            let c = min value.Length length
+            for i in 0 .. c - 1 do
+                NativePtr.write (NativePtr.ofNativeInt ptr) value.[i]
+                ptr <- ptr + sb
+
+            for i in c .. length - 1 do
+                NativePtr.write (NativePtr.ofNativeInt ptr) def
+                ptr <- ptr + sb
+                
+
+    type ConversionArrayWriter<'a, 'b when 'b : unmanaged>(offset : int, length : int, stride : int, converter : 'a -> 'b) =
+        inherit AbstractWriter<'a[]>()
+
+        static let def = Unchecked.defaultof<'b>
+        let sb = nativeint stride
+
+        override x.Write(value : 'a[], ptr : nativeint) =
+            let mutable ptr = ptr + nativeint offset
+
+            let c = min value.Length length
+            for i in 0 .. c - 1 do
+                let b = converter value.[i]
+                NativePtr.write (NativePtr.ofNativeInt ptr) b
+                ptr <- ptr + sb
+
+            for i in c .. length - 1 do
+                NativePtr.write (NativePtr.ofNativeInt ptr) def
+                ptr <- ptr + sb
+                
+
 
     module private List =
         let rec mapOption (f : 'a -> Option<'b>) (l : list<'a>) =
@@ -296,8 +356,7 @@ module UniformWriters =
                     match f h, mapOption f rest with
                         | Some h, Some t -> Some (h :: t)
                         | _ ->  None
-                            
-
+              
     let rec private tryCreateWriterInternal (offset : int) (target : UniformType) (tSource : Type) =
         match target with
             | UniformType.RuntimeArray _ ->
@@ -368,30 +427,62 @@ module UniformWriters =
                     | _ ->
                         None
 
-            | UniformType.Array(itemType, len, s, a) ->
-                let iface = tSource.GetInterface(typedefof<System.Collections.Generic.IEnumerable<_>>.FullName)
-                if isNull iface then
-                    None
-                else
-                    let tItem = iface.GetGenericArguments().[0]
-                    let tSequence = tSource
-                    let writers = 
-                        List.init len id
-                        |> List.mapOption (fun i ->
-                            let off = offset + i * a
-                            match tryCreateWriterInternal off itemType tItem  with
-                                | Some writer -> Some writer
-                                | _ -> None
-                        )
+            | UniformType.Array(itemType, len, size, stride) ->
+                match itemType with
+                    | UniformType.Primitive(tt,tes,_) when tSource.IsArray ->
+                
+                        let tSourceElement = tSource.GetElementType()
 
-                    match writers with
-                        | Some writers ->
-                            let tWriter = typedefof<SequenceWriter<list<int>, int>>.MakeGenericType [|tSequence; tItem|]
-                            let ctor = tWriter.GetConstructor [| typeof<list<IWriter>> |]
-                            let writer = ctor.Invoke [|writers|] |> unbox<IWriter>
+                        let tTargetElement = PrimitiveType.toType tt
+                        if tTargetElement = tSourceElement then
+                            if tes = stride then
+                                let tWriter = typedefof<NoConversionArrayWriter<int>>.MakeGenericType [| tSourceElement |]
+                                let ctor = tWriter.GetConstructor [|typeof<int>; typeof<int>|]
+                                let writer = ctor.Invoke [|offset; len|] |> unbox<IWriter>
+                                Some writer
+                            else
+                                let tWriter = typedefof<StridedArrayWriter<int>>.MakeGenericType [| tSourceElement |]
+                                let ctor = tWriter.GetConstructor [| typeof<int>; typeof<int>; typeof<int> |]
+                                let writer = ctor.Invoke [| offset; len; stride |] |> unbox<IWriter>
+                                    
+                                Some writer
+
+                        else
+                            let converter = PrimitiveValueConverter.getConverter tSourceElement tTargetElement
+
+                            let tWriter = typedefof<ConversionArrayWriter<int, int>>.MakeGenericType [| tSourceElement; tTargetElement |]
+                            let ctor = tWriter.GetConstructor [| typeof<int>; typeof<int>; typeof<int>; converter.GetType() |]
+
+                            let writer = ctor.Invoke [| offset; len; stride; converter |] |> unbox<IWriter>
                             Some writer
-                        | _ ->
+
+
+
+
+                    | _ ->
+                        let iface = tSource.GetInterface(typedefof<System.Collections.Generic.IEnumerable<_>>.FullName)
+                        if isNull iface then
                             None
+                        else
+                            let tItem = iface.GetGenericArguments().[0]
+                            let tSequence = tSource
+                            let writers = 
+                                List.init len id
+                                |> List.mapOption (fun i ->
+                                    let off = offset + i * stride
+                                    match tryCreateWriterInternal off itemType tItem  with
+                                        | Some writer -> Some writer
+                                        | _ -> None
+                                )
+
+                            match writers with
+                                | Some writers ->
+                                    let tWriter = typedefof<SequenceWriter<list<int>, int>>.MakeGenericType [|tSequence; tItem|]
+                                    let ctor = tWriter.GetConstructor [| typeof<list<IWriter>> |]
+                                    let writer = ctor.Invoke [|writers|] |> unbox<IWriter>
+                                    Some writer
+                                | _ ->
+                                    None
     
     let cache = System.Collections.Concurrent.ConcurrentDictionary<int * UniformType * Type, Option<IWriter>>()
 

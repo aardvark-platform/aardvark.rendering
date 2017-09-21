@@ -109,6 +109,30 @@ type Command() =
         Command.Execute [cmd]
 
     static member Barrier = barrier
+    static member Reset(e : Event) =
+        { new Command() with
+            member x.Compatible = QueueFlags.All
+            member x.Enqueue cmd =
+                cmd.AppendCommand()
+                cmd.Reset(e, VkPipelineStageFlags.BottomOfPipeBit)  
+                Disposable.Empty
+        }
+    static member Set(e : Event) =
+        { new Command() with
+            member x.Compatible = QueueFlags.All
+            member x.Enqueue cmd =
+                cmd.AppendCommand()
+                cmd.Set(e, VkPipelineStageFlags.BottomOfPipeBit)  
+                Disposable.Empty
+        }
+    static member Wait(e : Event) =
+        { new Command() with
+            member x.Compatible = QueueFlags.All
+            member x.Enqueue cmd =
+                cmd.AppendCommand()
+                cmd.WaitAll [| e |]
+                Disposable.Empty
+        }
 
 [<AbstractClass; Sealed; Extension>]
 type CommandBufferExtensions private() =
@@ -131,6 +155,14 @@ type CommandBufferExtensions private() =
         CommandBufferExtensions.Enqueue(buffer, cmd)
         buffer.End()
         this.RunSynchronously(buffer)
+
+    [<Extension>]
+    static member Compile(this : CommandPool, level : CommandBufferLevel, cmd : ICommand) =
+        let buffer = this.CreateCommandBuffer(level)
+        buffer.Begin(CommandBufferUsage.SimultaneousUse)
+        CommandBufferExtensions.Enqueue(buffer, cmd)
+        buffer.End()
+        buffer
 //
 //    [<Extension>]
 //    static member Start(this : DeviceQueue, cmd : ICommand) =
