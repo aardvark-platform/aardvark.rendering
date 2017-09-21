@@ -354,16 +354,31 @@ module HuffmanEncoder =
         }
 
    
-
+[<StructuredFormatDisplay("{AsString}")>]
 type Quantization =
     {
         luminance : int[]
         chroma : int[]
-    }
+    } with
+
+    override x.ToString() =
+        x.AsString
+
+    member private x.AsString =
+        let padToWidth (w : int) (s : string) =
+            if s.Length < w then
+                System.String(' ', w - s.Length) + s
+            else
+                s
+        let lumLines = x.luminance |> Seq.map (string >> padToWidth 2) |> Seq.chunkBySize 8 |> Seq.map (String.concat "; " >> sprintf "    %s") |> String.concat "\r\n"
+        let chromaLines = x.chroma |> Seq.map (string >> padToWidth 2) |> Seq.chunkBySize 8 |> Seq.map (String.concat "; " >> sprintf "    %s") |> String.concat "\r\n"
     
+
+        sprintf "{\r\n  luminance: [|\r\n%s\r\n  |]\r\n  chroma: [|\r\n%s\r\n  |]\r\n}" lumLines chromaLines
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Quantization =
-    let private qBase =
+    let private qBaseLuminance =
         [|
             16;   11;   10;   16;   24;   40;   51;   61;
             12;   12;   14;   19;   26;   58;   60;   55;
@@ -375,17 +390,274 @@ module Quantization =
             72;   92;   95;   98;  112;  100;  103;   99;
         |]
 
-    let private getQ (q : float) =
+    let private qBaseChroma =
+        [|
+            17; 18; 24; 47; 99; 99; 99; 99
+            18; 21; 26; 66; 99; 99; 99; 99
+            24; 26; 56; 99; 99; 99; 99; 99
+            47; 66; 99; 99; 99; 99; 99; 99
+            99; 99; 99; 99; 99; 99; 99; 99
+            99; 99; 99; 99; 99; 99; 99; 99
+            99; 99; 99; 99; 99; 99; 99; 99
+            99; 99; 99; 99; 99; 99; 99; 99
+        |]
+
+    let private getQLuminance (q : float) =
         let q = q |> max 1.0 |> min 100.0
         let s = if q < 50.0 then 5000.0 / q else 200.0 - 2.0 * q
-        qBase |> Array.map (fun v ->
+        qBaseLuminance |> Array.map (fun v ->
+            floor ((s * float v + 50.0) / 100.0) |> int  |> max 1
+        )  
+
+    let private getQChroma (q : float) =
+        let q = q |> max 1.0 |> min 100.0
+        let s = if q < 50.0 then 5000.0 / q else 200.0 - 2.0 * q
+        qBaseChroma |> Array.map (fun v ->
             floor ((s * float v + 50.0) / 100.0) |> int  |> max 1
         )  
         
     let create (quality : float) =
-        let v = getQ quality
-        { luminance = v; chroma = v }
+        let v = getQLuminance quality
+        { luminance = getQLuminance quality; chroma = getQChroma quality }
+ 
+    let upsample (q : int[]) =
+        Array.init 64 (fun i ->
+            let cf = V2d(i % 8, i / 8) / 2.0
+            let c00 = V2i cf
+            let c10 = V2i.IO + c00
+            let c01 = V2i.OI + c00
+            let c11 = V2i.OI + c00
+
+            let q00 = float q.[8*c00.Y + c00.X]
+            let q01 = float q.[8*c01.Y + c01.X]
+            let q10 = float q.[8*c10.Y + c10.X]
+            let q11 = float q.[8*c11.Y + c11.X]
+
+            let f = cf - V2d c00
+            let qx0 = q00 * (1.0 - f.X) + q10 * f.X
+            let qx1 = q01 * (1.0 - f.X) + q11 * f.X
+            let q = qx0 * (1.0 - f.Y) + qx1 * f.Y
+
+            int q
+        )
+            
+    let scale2 (q : Quantization) =
+        { q with chroma = upsample q.chroma }
+
          
+    let photoshop10 =
+        {
+            luminance =
+                [|
+                    20; 16; 25; 39; 50; 46; 62; 68
+                    16; 18; 23; 38; 38; 53; 65; 68
+                    25; 23; 31; 38; 53; 65; 68; 68
+                    39; 38; 38; 53; 65; 68; 68; 68
+                    50; 38; 53; 65; 68; 68; 68; 68
+                    46; 53; 65; 68; 68; 68; 68; 68
+                    62; 65; 68; 68; 68; 68; 68; 68
+                    68; 68; 68; 68; 68; 68; 68; 68
+                |]
+            chroma = 
+                [|
+                    21; 25; 32; 38; 54; 68; 68; 68
+                    25; 28; 24; 38; 54; 68; 68; 68
+                    32; 24; 32; 43; 66; 68; 68; 68
+                    38; 38; 43; 53; 68; 68; 68; 68
+                    54; 54; 66; 68; 68; 68; 68; 68
+                    68; 68; 68; 68; 68; 68; 68; 68
+                    68; 68; 68; 68; 68; 68; 68; 68
+                    68; 68; 68; 68; 68; 68; 68; 68
+
+                |]
+        }
+    
+    let photoshop20 =
+        {
+            luminance =
+                [|
+                    18; 14; 14; 21; 30; 35; 34; 39
+                    14; 16; 16; 19; 26; 24; 30; 39
+                    14; 16; 17; 21; 24; 34; 46; 62
+                    21; 19; 21; 26; 33; 48; 62; 65
+                    30; 26; 24; 33; 51; 65; 65; 65
+                    35; 24; 34; 48; 65; 65; 65; 65
+                    34; 30; 46; 62; 65; 65; 65; 65
+                    39; 39; 62; 65; 65; 65; 65; 65
+                |]
+            chroma = 
+                [|
+                    20; 19; 22; 27; 26; 33; 49; 62
+                    19; 25; 23; 22; 26; 33; 45; 56
+                    22; 23; 26; 29; 33; 39; 59; 65
+                    27; 22; 29; 36; 39; 51; 65; 65
+                    26; 26; 33; 39; 51; 62; 65; 65
+                    33; 33; 39; 51; 62; 65; 65; 65
+                    49; 45; 59; 65; 65; 65; 65; 65
+                    62; 56; 65; 65; 65; 65; 65; 65
+                |]
+        }
+    
+    let photoshop30 =
+        {
+            luminance =
+                [|
+                    16; 11; 11; 16; 23; 27; 31; 30
+                    11; 12; 12; 15; 20; 23; 23; 30
+                    11; 12; 13; 16; 23; 26; 35; 47
+                    16; 15; 16; 23; 26; 37; 47; 64
+                    23; 20; 23; 26; 39; 51; 64; 64
+                    27; 23; 26; 37; 51; 64; 64; 64
+                    31; 23; 35; 47; 64; 64; 64; 64
+                    30; 30; 47; 64; 64; 64; 64; 64
+                |]
+            chroma = 
+                [|
+                    17; 15; 17; 21; 20; 26; 38; 48
+                    15; 19; 18; 17; 20; 26; 35; 43
+                    17; 18; 20; 22; 26; 30; 46; 53
+                    21; 17; 22; 28; 30; 39; 53; 64
+                    20; 20; 26; 30; 39; 48; 64; 64
+                    26; 26; 30; 39; 48; 63; 64; 64
+                    38; 35; 46; 53; 64; 64; 64; 64
+                    48; 43; 53; 64; 64; 64; 64; 64
+                |]
+        }
+    
+    let photoshop40 =
+        {
+            luminance =
+                [|
+                    12; 8;  8;  12; 17; 21; 24; 23
+                    8;  9;  9;  11; 15; 19; 18; 23
+                    8;  9;  10; 12; 19; 20; 27; 36
+                    12; 11; 12; 21; 20; 28; 36; 53
+                    17; 15; 19; 20; 30; 39; 51; 59
+                    21; 19; 20; 28; 39; 51; 59; 59
+                    24; 18; 27; 36; 51; 59; 59; 59
+                    23; 23; 36; 53; 59; 59; 59; 59
+                |]
+            chroma = 
+                [|
+                    17; 15; 17; 21; 20; 26; 38; 48
+                    15; 19; 18; 17; 20; 26; 35; 43
+                    17; 18; 20; 22; 26; 30; 46; 53
+                    21; 17; 22; 28; 30; 39; 53; 64
+                    20; 20; 26; 30; 39; 48; 64; 64
+                    26; 26; 30; 39; 48; 63; 64; 64
+                    38; 35; 46; 53; 64; 64; 64; 64
+                    48; 43; 53; 64; 64; 64; 64; 64
+                |]
+        }
+
+    let photoshop50 =
+        {
+            luminance =
+                [|
+                    8;  6;  6;  8;  12; 14; 16; 17
+                    6;  6;  6;  8;  10; 13; 12; 15
+                    6;  6;  7;  8;  13; 14; 18; 24
+                    8;  8;  8;  14; 13; 19; 24; 35
+                    12; 10; 13; 13; 20; 26; 34; 39
+                    14; 13; 14; 19; 26; 34; 39; 39
+                    16; 12; 18; 24; 34; 39; 39; 39
+                    17; 15; 24; 35; 39; 39; 39; 39
+                |]
+            chroma = 
+                [|
+                    9;  8;  9;  11; 14; 17; 19; 24
+                    8;  10; 9;  11; 14; 13; 17; 22
+                    9;  9;  13; 14; 13; 15; 23; 26
+                    11; 11; 14; 14; 15; 20; 26; 33
+                    14; 14; 13; 15; 20; 24; 33; 39
+                    17; 13; 15; 20; 24; 32; 39; 39
+                    19; 17; 23; 26; 33; 39; 39; 39
+                    24; 22; 26; 33; 39; 39; 39; 39
+                |]
+        }
+
+    // no subsampling from here
+    let photoshop51 =
+        {
+            luminance =
+                [|
+                    8;  5;  5;  8;  11; 13; 15; 17
+                    5;  6;  6;  7;  10; 12; 12; 15
+                    5;  6;  6;  8;  12; 13; 17; 23
+                    8;  7;  8;  13; 13; 18; 23; 34
+                    11; 10; 12; 13; 19; 25; 33; 38
+                    13; 12; 13; 18; 25; 33; 38; 38
+                    15; 12; 17; 23; 33; 38; 38; 38
+                    17; 15; 23; 34; 38; 38; 38; 38
+                |]
+            chroma = 
+                [|
+                    8;  9;  16; 29; 32; 38; 38; 38
+                    9;  14; 20; 26; 38; 38; 38; 38
+                    16; 20; 21; 38; 38; 38; 38; 38
+                    29; 26; 38; 38; 38; 38; 38; 38
+                    32; 38; 38; 38; 38; 38; 38; 38
+                    38; 38; 38; 38; 38; 38; 38; 38
+                    38; 38; 38; 38; 38; 38; 38; 38
+                    38; 38; 38; 38; 38; 38; 38; 38
+
+                |]
+        }
+
+    let photoshop60 =
+        {
+            luminance =
+                [|
+                    6;  4;  4;  6;  9; 11; 12; 16
+                    4;  5;  5;  6;  8; 10; 12; 12
+                    4;  5;  5;  6;  10; 12; 14; 19
+                    6;  6;  6;  11; 12; 15; 19; 28
+                    9;  8;  10; 12; 16; 20; 27; 31
+                    11; 10; 12; 15; 20; 27; 31; 31
+                    12; 12; 14; 19; 27; 31; 31; 31
+                    16; 12; 19; 28; 31; 31; 31; 31
+                |]
+            chroma = 
+                [|
+                    7;  7;  13; 24; 26; 31; 31; 31
+                    7;  12; 16; 21; 31; 31; 31; 31
+                    13; 16; 17; 31; 31; 31; 31; 31
+                    24; 21; 31; 31; 31; 31; 31; 31
+                    26; 31; 31; 31; 31; 31; 31; 31
+                    31; 31; 31; 31; 31; 31; 31; 31
+                    31; 31; 31; 31; 31; 31; 31; 31
+                    31; 31; 31; 31; 31; 31; 31; 31
+
+                |]
+        }
+
+    let photoshop70 =
+        {
+            luminance =
+                [|
+                    4;  3;  3;  4;  6;  7;  8;  10
+                    3;  3;  3;  4;  5;  6;  8;  10
+                    3;  3;  3;  4;  6;  9;  12; 12
+                    4;  4;  4;  7;  9;  12; 12; 17
+                    6;  5;  6;  9;  12; 13; 17; 20
+                    7;  6;  9;  12; 13; 17; 20; 20
+                    8;  8;  12; 12; 17; 20; 20; 20
+                    10; 10; 12; 17; 20; 20; 20; 20
+                |]
+            chroma = 
+                [|
+                    4;  5;  8;  15; 20; 20; 20; 20
+                    5;  7;  10; 14; 20; 20; 20; 20
+                    8;  10; 14; 20; 20; 20; 20; 20
+                    15; 14; 20; 20; 20; 20; 20; 20
+                    20; 20; 20; 20; 20; 20; 20; 20
+                    20; 20; 20; 20; 20; 20; 20; 20
+                    20; 20; 20; 20; 20; 20; 20; 20
+                    20; 20; 20; 20; 20; 20; 20; 20
+
+                |]
+        }
+
     let photoshop80 =
         {
             luminance =
@@ -412,6 +684,57 @@ module Quantization =
                 |]
         }
 
+    let photoshop90 =
+        {
+            luminance =
+                [|
+                    1; 1; 1; 1; 2; 2; 2; 3
+                    1; 1; 1; 1; 2; 2; 2; 3
+                    1; 1; 1; 1; 2; 3; 4; 5
+                    1; 1; 1; 2; 3; 4; 5; 7
+                    2; 2; 2; 3; 4; 5; 7; 8
+                    2; 2; 3; 4; 5; 7; 8; 8
+                    2; 2; 4; 5; 7; 8; 8; 8
+                    3; 3; 5; 7; 8; 8; 8; 8
+                |]
+            chroma = 
+                [|
+                    1; 1; 2; 5; 7; 8; 8; 8
+                    1; 2; 3; 5; 8; 8; 8; 8
+                    2; 3; 4; 8; 8; 8; 8; 8
+                    5; 5; 8; 8; 8; 8; 8; 8
+                    7; 8; 8; 8; 8; 8; 8; 8
+                    8; 8; 8; 8; 8; 8; 8; 8
+                    8; 8; 8; 8; 8; 8; 8; 8
+                    8; 8; 8; 8; 8; 8; 8; 8
+                |]
+        }
+
+    let photoshop100 =
+        {
+            luminance =
+                [|
+                    1; 1; 1; 1; 1; 1; 1; 1
+                    1; 1; 1; 1; 1; 1; 1; 1
+                    1; 1; 1; 1; 1; 1; 1; 2
+                    1; 1; 1; 1; 1; 1; 2; 2
+                    1; 1; 1; 1; 1; 2; 2; 3
+                    1; 1; 1; 1; 2; 2; 3; 3
+                    1; 1; 1; 2; 2; 3; 3; 3
+                    1; 1; 2; 2; 3; 3; 3; 3
+                |]
+            chroma = 
+                [|
+                    1; 1; 1; 2; 2; 3; 3; 3
+                    1; 1; 1; 2; 3; 3; 3; 3
+                    1; 1; 1; 3; 3; 3; 3; 3
+                    2; 2; 3; 3; 3; 3; 3; 3
+                    2; 3; 3; 3; 3; 3; 3; 3
+                    3; 3; 3; 3; 3; 3; 3; 3
+                    3; 3; 3; 3; 3; 3; 3; 3
+                    3; 3; 3; 3; 3; 3; 3; 3
+                |]
+        }
 
 
 [<ReflectedDefinition>]
@@ -492,6 +815,133 @@ module Kernels =
 
     [<GLSLIntrinsic("fma({0}, {1}, {2})")>]
     let fma (a : float) (b : float) (c : float) : float = failwith ""
+
+
+    let C = Array.init 8 (fun i -> cos (Constant.Pi / 16.0 * float i))
+    let S = C |> Array.mapi (fun i c -> if i = 0 then 1.0 / (2.0 * Constant.Sqrt2) else 1.0 / (4.0 * c))
+    let A = [| 0.0; C.[4]; C.[2] - C.[6]; C.[4]; C.[6] + C.[2]; C.[6] |]
+
+    [<LocalSize(X = 32)>]
+    let fdct (target : V4i[]) =
+        compute {
+            let values : V3d[] = allocateShared 256
+            let lid = getLocalId().X
+            let wid = getWorkGroupId().X
+
+            let vOffset = wid * 64
+
+
+
+            let s = inputImage.Size
+            let totalBlocks = V2i((if s.X % 8 = 0 then s.X / 8 else 1 + s.X / 8), (if s.Y % 8 = 0 then s.Y / 8 else 1 + s.Y/ 8))
+
+            let bid = 4 * wid + (lid / 8)
+            let bCoord = V2i(bid % totalBlocks.X, bid / totalBlocks.X)
+            
+
+            let li = lid % 8
+            let iOff = 8 * bCoord
+            let rOffset = vOffset + 8 * li
+            let v0 = ycbcr inputImage.[iOff + V2i(0, li), 0].XYZ
+            let v1 = ycbcr inputImage.[iOff + V2i(1, li), 0].XYZ
+            let v2 = ycbcr inputImage.[iOff + V2i(2, li), 0].XYZ
+            let v3 = ycbcr inputImage.[iOff + V2i(3, li), 0].XYZ
+            let v4 = ycbcr inputImage.[iOff + V2i(4, li), 0].XYZ
+            let v5 = ycbcr inputImage.[iOff + V2i(5, li), 0].XYZ
+            let v6 = ycbcr inputImage.[iOff + V2i(6, li), 0].XYZ
+            let v7 = ycbcr inputImage.[iOff + V2i(7, li), 0].XYZ
+
+            // dct on [rOffset .. rOffset + 7]
+            let v8 = v0 + v3
+            let v9 = v1 + v2
+            let v10 = v1 - v2
+            let v11 = v0 - v3
+            let v12 = -v4 - v5
+            let v13 = (v5 + v6) * A.[3]
+            let v14 = v6 + v7
+
+            let v15 = v8 + v9;
+            let v16 = v8 - v9;
+            let v17 = (v10 + v11) * A.[1]
+            let v18 = (v12 + v14) * A.[5]
+
+            let v19 = -v12 * A.[2] - v18
+            let v20 = v14 * A.[4] - v18
+
+            let v21 = v17 + v11
+            let v22 = v11 - v17
+            let v23 = v13 + v7
+            let v24 = v7 - v13
+
+            let v25 = v19 + v24
+            let v26 = v23 + v20
+            let v27 = v23 - v20
+            let v28 = v24 - v19
+
+            values.[rOffset + 0] <- S.[0] * v15
+            values.[rOffset + 1] <- S.[1] * v26
+            values.[rOffset + 2] <- S.[2] * v21
+            values.[rOffset + 3] <- S.[3] * v28
+            values.[rOffset + 4] <- S.[4] * v16
+            values.[rOffset + 5] <- S.[5] * v25
+            values.[rOffset + 6] <- S.[6] * v22
+            values.[rOffset + 7] <- S.[7] * v27
+            barrier()
+
+            let cOffset = vOffset + li
+            // dct on [cOffset .. 8 .. cOffset + ??]
+            let w0 = values.[cOffset + 0]  + values.[cOffset + 56]
+            let w1 = values.[cOffset + 8]  + values.[cOffset + 48]
+            let w2 = values.[cOffset + 16] + values.[cOffset + 40]
+            let w3 = values.[cOffset + 24] + values.[cOffset + 32]
+            let w4 = values.[cOffset + 24] - values.[cOffset + 32]
+            let w5 = values.[cOffset + 16] - values.[cOffset + 40]
+            let w6 = values.[cOffset + 8]  - values.[cOffset + 48]
+            let w7 = values.[cOffset + 0]  - values.[cOffset + 56]
+
+            let w8 = w0 + w3
+            let w9 = w1 + w2
+            let w10 = w1 - w2
+            let w11 = w0 - w3
+            let w12 = -w4 - w5
+            let w13 = (w5 + w6) * A.[3]
+            let w14 = w6 + w7
+
+            let w15 = w8 + w9;
+            let w16 = w8 - w9;
+            let w17 = (w10 + w11) * A.[1]
+            let w18 = (w12 + w14) * A.[5]
+
+            let w19 = -w12 * A.[2] - w18
+            let w20 = w14 * A.[4] - w18
+
+            let w21 = w17 + w11
+            let w22 = w11 - w17
+            let w23 = w13 + w7
+            let w24 = w7 - w13
+
+            let w25 = w19 + w24
+            let w26 = w23 + w20
+            let w27 = w23 - w20
+            let w28 = w24 - w19
+
+            values.[cOffset + 0]  <- S.[0] * w15
+            values.[cOffset + 8]  <- S.[1] * w26
+            values.[cOffset + 16] <- S.[2] * w21
+            values.[cOffset + 24] <- S.[3] * w28
+            values.[cOffset + 32] <- S.[4] * w16
+            values.[cOffset + 40] <- S.[5] * w25
+            values.[cOffset + 48] <- S.[6] * w22
+            values.[cOffset + 56] <- S.[7] * w27
+            barrier()
+
+            if bCoord.X < totalBlocks.X && bCoord.Y < totalBlocks.Y then
+                // write rows to output
+                let tid = bid * 64 + li * 8
+                for i in 0 .. 7 do
+                    let res = quantify (8 * li + i) values.[rOffset + i]
+                    target.[tid + i] <- V4i(res,0)
+        }
 
     [<LocalSize(X = 8, Y = 8)>]
     let dct (target : V4i[]) =
@@ -1230,7 +1680,7 @@ type ReferenceCompressor() =
 type JpegCompressor(runtime : Runtime) =
     let device = runtime.Device
     let pool = runtime.DescriptorPool
-
+    
     let dct         = device |> ComputeShader.ofFunction Kernels.dct
     let codewords   = device |> ComputeShader.ofFunction Kernels.codewordsKernelBallot
     let assemble    = device |> ComputeShader.ofFunction Kernels.assembleKernel
@@ -1298,7 +1748,7 @@ and JpegCompressorInstance(parent : JpegCompressor, size : V2i, quality : Quanti
         i.Flush()
         i
 
-    let stopwatches = parent.DescriptorPool.CreateStopwatchPool(4)
+    let stopwatches = parent.DescriptorPool.CreateStopwatchPool(5)
 
     let dctCommand =
         command {
@@ -1320,12 +1770,15 @@ and JpegCompressorInstance(parent : JpegCompressor, size : V2i, quality : Quanti
 
     let assembleCommand = 
         command {
-            do! stopwatches.Start 2
+            do! stopwatches.Start 3
             do! Command.ZeroBuffer outputBuffer
+            do! stopwatches.Stop 3
+            
+            do! stopwatches.Start 4
             do! Command.Bind(parent.AssembleShader)
             do! Command.SetInputs assembleInput
             do! Command.Dispatch(int codewordBuffer.Count / 64)
-            do! stopwatches.Stop 2
+            do! stopwatches.Stop 4
         }
 
     let header =
@@ -1407,9 +1860,9 @@ and JpegCompressorInstance(parent : JpegCompressor, size : V2i, quality : Quanti
                 do! stopwatches.Begin()
                 do! dctCommand
                 do! codewordCommand
-                do! stopwatches.Start 3
+                do! stopwatches.Start 2
                 do! parent.Scan codewordCountView codewordCountView
-                do! stopwatches.Stop 3
+                do! stopwatches.Stop 2
                 do! assembleCommand
                 do! Command.Copy(codewordBuffer, codewordBuffer.Size - 8L, bitCountBuffer, 0L, 4L)
                 do! stopwatches.End()
@@ -1435,11 +1888,12 @@ and JpegCompressorInstance(parent : JpegCompressor, size : V2i, quality : Quanti
         let times = stopwatches.Download()
 
         Map.ofList [
-            "dct", MicroTime times.[0]
+            "dct",  MicroTime times.[0]
             "code", MicroTime times.[1]
-            "asm", MicroTime times.[2]
-            "scan", MicroTime times.[3]
-        ]
+            "scan", MicroTime times.[2]
+            "zero", MicroTime times.[3]
+            "asm",  MicroTime times.[4]
+        ] 
 
 
     member x.DownloadStream() =
@@ -1847,8 +2301,8 @@ module Test =
         let comp = JpegCompressor(runtime)
         let device = runtime.Device
 
-        let pi = PixImage.Create(@".\nature.jpeg").ToPixImage<byte>(Col.Format.RGBA)
-        let instance = comp.NewInstance(pi.Size, Quantization.photoshop80)
+        let pi = PixImage.Create(@".\vs.png").ToPixImage<byte>(Col.Format.RGBA)
+        let instance = comp.NewInstance(pi.Size, Quantization.photoshop10)
 
         let image = device.CreateImage(PixTexture2d(PixImageMipMap [| pi :> PixImage |], TextureParams.empty))
 
@@ -1872,7 +2326,7 @@ module Test =
             queue.RunSynchronously cmd
         sw.Stop()
         let tCompress = sw.MicroTime / iter
-        Log.line "total : %A" tCompress
+        Log.line "total: %A" tCompress
         let stats = instance.GetStats()
         for (name, time) in Map.toSeq stats do
             Log.line "%s: %A" name (time / iter)
