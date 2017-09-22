@@ -130,11 +130,11 @@ module AttributeDescriptionExtensions =
             typeof<V4f>,        typeof<float32>
             typeof<V4d>,        typeof<float>
 
-            typeof<C3f>,        typeof<float>
+            typeof<C3f>,        typeof<float32>
             typeof<C4b>,        typeof<byte>
-            typeof<C4f>,        typeof<float>
+            typeof<C4f>,        typeof<float32>
 
-            typeof<M44f>,       typeof<float>
+            typeof<M44f>,       typeof<float32>
         ] 
 
     let internal glTypes =
