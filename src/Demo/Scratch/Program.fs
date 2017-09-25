@@ -734,7 +734,7 @@ open System.Runtime.InteropServices
 
 [<EntryPoint>]
 let main argv = 
-    Rendering.Examples.NullBufferTest.run() |> ignore
+    //Rendering.Examples.NullBufferTest.run() |> ignore
 
 //    
 //
