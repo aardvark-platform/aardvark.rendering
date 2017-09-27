@@ -388,8 +388,8 @@ module ComputeShader =
     let ofFunction (f : 'a -> 'b) (device : Device) =
         let shader = FShade.ComputeShader.ofFunction device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize f
         let glsl = shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSLVulkan
-
-        printfn "%s" glsl.code
+        
+        ShaderProgram.logLines glsl.code
 
         let localSize =
             if shader.csLocalSize.AllGreater 0 then shader.csLocalSize

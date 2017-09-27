@@ -90,13 +90,13 @@ module ShaderModule =
         result
 
     let ofGLSL (stage : ShaderStage) (code : string) (device : Device) =
-        match GLSLang.GLSLang.tryCompileSpirVBinary (glslangStage stage) code with
-            | Success binary ->
+        match GLSLang.GLSLang.tryCompile (glslangStage stage) "main" [string stage] code with
+            | Some binary, _ ->
                 let handle = device |> createRaw binary
                 let iface = ShaderInfo.ofBinary binary
                 let result = ShaderModule(device, handle, stage, iface)
                 result
-            | Error err ->
+            | None, err ->
                 Log.error "%s" err
                 failf "shader compiler returned errors %A" err
 

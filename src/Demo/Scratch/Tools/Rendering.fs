@@ -59,7 +59,7 @@ type DescriptionAttribute(desc : string) =
 
 type App private () =
     
-    static let app = lazy ( new OpenGlApplication(true) )
+    static let app = lazy ( new VulkanApplication(true) )
     static let mutable win : Option<SimpleRenderWindow> = None
     static let realTask = new ChangeableRenderTask()
     static let mutable config = BackendConfiguration.Default 
