@@ -213,7 +213,7 @@ module PipelineInfo =
                     let ct = CType.ofType fshadeBackend t
                     match ofCType ct with
                         | Success t -> t
-                        | Error e -> failwithf "[Vulkan] bad anarchy motherfucker 666: %A" e
+                        | Error e -> failwithf "[Vulkan] bad anarchy motherf***er 666: %A" e
 
     let ofEffectLayout (layout : EffectInputLayout) (outputs : Map<int, Symbol * AttachmentSignature>) =
             
