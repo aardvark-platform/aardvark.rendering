@@ -756,6 +756,6 @@ let main argv =
     Aardvark.Init()
 
     App.Config <- { BackendConfiguration.Default with useDebugOutput = true }
-    App.run(ShaderStuff.duplTexture())
+    App.run()
 
     0 // return an integer exit code

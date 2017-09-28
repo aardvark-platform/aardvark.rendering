@@ -499,6 +499,7 @@ module PointCloudRenderObjectSemantics =
                     let proj = proj.GetValue(token)
                     let size = size.GetValue(token)
                     let decider = decider.GetValue(token)
+
                     for d in data.Dependencies do d.GetValue token |> ignore
 
                     view, proj, size, decider
@@ -509,11 +510,13 @@ module PointCloudRenderObjectSemantics =
 
             let pool = runtime.CreateGeometryPool(config.attributeTypes)
             let mutable refCount = 0
-
+            
+            let oru = ref true
 
             let release() =
                 if Interlocked.Decrement(&refCount) = 0 then
                     pool.Dispose()
+                    oru := false
 
             let activate() =
                 Interlocked.Increment(&refCount) |> ignore
@@ -564,14 +567,9 @@ module PointCloudRenderObjectSemantics =
                     match g.Pointer with
                         | Some ptr -> pool.Free ptr
                         | None -> ()
-
-                let init () =
-                    //let a = runtime.ContextLock
-                    //a
-                    { new IDisposable with member x.Dispose() = () }
-
+                        
                 dependencies |> Loader.load rasterize {
-                    initLoadThread      = init
+                    continueLoader      = fun _ -> !oru
                     load                = load
                     unload              = unload
                     priority            = fun op -> if op.Count < 0 then -op.Value.level else op.Value.level
