@@ -4,9 +4,9 @@ source https://vrvis.myget.org/F/aardvark_public/api/v3/index.json
 
 nuget FSharp.Core ~> 4.0.0
 
-nuget Aardvark.Base.FSharp               ~> 3.0.35
-nuget Aardvark.Base.Incremental          ~> 3.0.35
-nuget Aardvark.Base.Runtime              ~> 3.0.35
+nuget Aardvark.Base.FSharp               ~> 3.0.37
+nuget Aardvark.Base.Incremental          ~> 3.0.37
+nuget Aardvark.Base.Runtime              ~> 3.0.37
                                          
 nuget FShade.Core                        ~> 3.2.5
 nuget FShade                             ~> 3.2.5
