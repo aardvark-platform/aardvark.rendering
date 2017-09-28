@@ -17,6 +17,7 @@ type ShaderModule =
         inherit Resource<VkShaderModule>
         val mutable public Stage : ShaderStage
         val mutable public Interface : Map<ShaderStage, ShaderInfo>
+        val mutable public SpirV : byte[]
 
         member x.TryGetShader(stage : ShaderStage, [<Out>] shader : byref<Shader>) =
             match Map.tryFind stage x.Interface with
@@ -32,7 +33,7 @@ type ShaderModule =
                     | Some i -> Shader(x, stage, i)
                     | _ -> failf "cannot get %A-Shader from module %A" stage x.Interface
 
-        new(device : Device, handle : VkShaderModule, stage, iface) = { inherit Resource<_>(device, handle); Stage = stage; Interface = iface }
+        new(device : Device, handle : VkShaderModule, stage, iface, spv) = { inherit Resource<_>(device, handle); Stage = stage; Interface = iface; SpirV = spv }
     end
 
 and Shader =
@@ -86,7 +87,13 @@ module ShaderModule =
     let ofBinary (stage : ShaderStage) (binary : byte[]) (device : Device) =
         let iface = ShaderInfo.ofBinary binary
         let handle = device |> createRaw binary
-        let result = ShaderModule(device, handle, stage, iface)
+        let result = ShaderModule(device, handle, stage, iface, binary)
+        result
+
+    let ofBinaryWithInfo (stage : ShaderStage) (info : ShaderInfo) (binary : byte[]) (device : Device) =
+        let iface = Map.ofList [stage, info]
+        let handle = device |> createRaw binary
+        let result = ShaderModule(device, handle, stage, iface, binary)
         result
 
     let ofGLSL (stage : ShaderStage) (code : string) (device : Device) =
@@ -94,7 +101,7 @@ module ShaderModule =
             | Some binary, _ ->
                 let handle = device |> createRaw binary
                 let iface = ShaderInfo.ofBinary binary
-                let result = ShaderModule(device, handle, stage, iface)
+                let result = ShaderModule(device, handle, stage, iface, binary)
                 result
             | None, err ->
                 Log.error "%s" err

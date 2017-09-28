@@ -78,6 +78,7 @@
     <Compile Include="Resources\ImageView.fs" />
     <Compile Include="Resources\Sampler.fs" />
     <Compile Include="Resources\RenderPass.fs" />
+    <Compile Include="Resources\BackendSurface.fs" />
     <Compile Include="Resources\Framebuffer.fs" />
     <Compile Include="Resources\ShaderModule.fs" />
     <Compile Include="Resources\DescriptorSetLayout.fs" />

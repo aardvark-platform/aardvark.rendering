@@ -16,7 +16,7 @@ type AirState =
         isActive            : IMod<bool>
         drawCallInfos       : IMod<list<DrawCallInfo>>
         mode                : IMod<IndexedGeometryMode>
-        surface             : IMod<ISurface>
+        surface             : Surface
 
         depthTest           : IMod<DepthTestMode>
         cullMode            : IMod<CullMode>
@@ -98,14 +98,9 @@ module ``Air Builder`` =
     type AirShaderBuilder() =
         inherit EffectBuilder()
 
-        member x.Run(f : unit -> IMod<list<FShadeEffect>>) =
-            let surface = 
-                f() |> Mod.map (fun effects ->
-                    effects
-                        |> FShade.Effect.compose
-                        |> FShadeSurface.Get
-                        :> ISurface
-                )
+        member x.Run(f : unit -> list<FShadeEffect>) =
+            let surface = f() |> FShade.Effect.compose |> Surface.FShadeSimple
+
             { new Air<unit>() with
                 member x.RunUnit(state) =
                     state <- { state with surface = surface }
@@ -505,15 +500,12 @@ type Air private() =
     // ================================================================================================================
     // Surface
     // ================================================================================================================
-    static member BindSurface(surface : IMod<ISurface>) =
-        modify (fun s -> { s with surface = surface })
-
     static member BindSurface(surface : ISurface) =
-        modify (fun s -> { s with surface = Mod.constant surface })
+        modify (fun s -> { s with surface = Surface.Backend surface })
 
     static member BindEffect (l : list<FShadeEffect>) =
-        let surf = FShadeSurface.Get (FShade.Effect.compose l) :> ISurface
-        modify (fun s -> { s with surface = Mod.constant surf })
+        let surf = FShade.Effect.compose l |> Surface.FShadeSimple
+        modify (fun s -> { s with surface = surf })
 
     static member BindShader = airShader
 

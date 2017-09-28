@@ -45,29 +45,28 @@ module DefaultSurfaces =
 
 [<AutoOpen>]
 module EffectAPI =
-    type private Effect = IMod<list<FShadeEffect>>
+    type private Effect = list<FShadeEffect>
 
     type EffectBuilder() =
         member x.Bind(f : 'a -> Expr<'b>, c : unit -> Effect) : Effect =
             let effect = toEffect f
-            c() |> Mod.map (fun c -> effect::c)
+            effect :: c()
 
         member x.Bind(f : FShadeEffect, c : unit -> Effect) : Effect =
-            c() |> Mod.map (fun c -> f::c)
+            f::c()
 
-        member x.Bind(m : IMod<'a>, f : 'a -> Effect) =
-            m |> Mod.bind f
 
-        member x.Return (u : unit) : Effect = Mod.constant []
+        member x.Return (u : unit) : Effect = []
 
-        member x.Zero() : Effect = Mod.constant []
+        member x.Zero() : Effect = []
 
-        member x.Combine(l : Effect, r : unit -> Effect) : Effect = Mod.map2 (fun l r -> l @ r) l (r())
+        member x.Combine(l : Effect, r : unit -> Effect) : Effect = 
+            l @ r()
 
         member x.Delay(f : unit -> Effect) = f
 
         member x.For(seq : seq<'a>, f : 'a -> Effect) : Effect =
-            seq |> Seq.toList |> List.map f |> Mod.mapN (Seq.concat >> Seq.toList)
+            seq |> Seq.toList |> List.collect f
 
         member x.Run(f : unit -> Effect) = f()
 

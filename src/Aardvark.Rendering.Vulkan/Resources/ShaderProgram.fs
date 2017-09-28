@@ -14,7 +14,9 @@ open Microsoft.FSharp.NativeInterop
 
 
 
-type ShaderProgram(device : Device, renderPass : RenderPass, shaders : array<Shader>, layout : PipelineLayout, original : BackendSurface) =
+type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLayout, original : BackendSurface) =
+    inherit RefCountedResource()
+
     static let allTopologies = Enum.GetValues(typeof<IndexedGeometryMode>) |> unbox<IndexedGeometryMode[]> |> Set.ofArray
 
     // get in-/outputs
@@ -74,8 +76,13 @@ type ShaderProgram(device : Device, renderPass : RenderPass, shaders : array<Sha
             )
         )
 
+    let mutable cacheName = Symbol.Empty
+
+    member internal x.CacheName
+        with get() = cacheName
+        and set n = cacheName <- n
+
     member x.Device = device
-    member x.RenderPass = renderPass
     member x.Shaders = shaders
     member x.PipelineLayout = layout
 
@@ -94,15 +101,7 @@ type ShaderProgram(device : Device, renderPass : RenderPass, shaders : array<Sha
     member x.SampleShading = fragInfo.sampleShading
     member x.ShaderCreateInfos = createInfos
 
-    interface IBackendSurface with
-        member x.Handle = x :> obj
-        member x.Inputs = inputs |> List.map (fun p -> p.name, p.hostType)
-        member x.Outputs = outputs |> List.map (fun p -> p.name, p.hostType)
-        member x.Uniforms = failf "not implemented"
-        member x.Samplers = original.Samplers |> Dictionary.toList |> List.map (fun ((a,b),c) -> (a,b,c))
-        member x.UniformGetters = original.Uniforms
-
-    member x.Dispose() =
+    override x.Destroy() =
         for s in shaders do device.Delete(s.Module)
         device.Delete(layout)
 
@@ -112,8 +111,13 @@ type ShaderProgram(device : Device, renderPass : RenderPass, shaders : array<Sha
                 NativePtr.free ptr
                 createInfos.[i] <- Unchecked.defaultof<_>
 
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
+    interface IBackendSurface with
+        member x.Handle = x :> obj
+        member x.Inputs = inputs |> List.map (fun p -> p.name, p.hostType)
+        member x.Outputs = outputs |> List.map (fun p -> p.name, p.hostType)
+        member x.Uniforms = failf "not implemented"
+        member x.Samplers = original.Samplers |> Dictionary.toList |> List.map (fun ((a,b),c) -> (a,b,c))
+        member x.UniformGetters = original.Uniforms
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderProgram =
@@ -179,7 +183,7 @@ module ShaderProgram =
             sb.Append(lastLine) |> ignore
             Report.Line("{0}", sb.ToString())
 
-    let ofBackendSurface (renderPass : RenderPass) (surface : BackendSurface) (device : Device) =
+    let private ofBackendSurfaceInternal (layout : Option<PipelineLayout>) (surface : BackendSurface) (device : Device) =
         let code = 
             layoutRx.Replace(surface.Code, fun m ->
                 let set = m.Groups.["set"].Value
@@ -238,25 +242,134 @@ module ShaderProgram =
                     let shader = shaderModule.[stage]
                     shader.ResolveSamplerDescriptions tryGetSamplerDescription
                 )
+
+        let layout = 
+            match layout with
+                | Some l -> l.AddRef(); l
+                | None -> device.CreatePipelineLayout(shaders)
+
+        new ShaderProgram(device, shaders, layout, surface)
+
+    module private FShadeStuff = 
+        open FShade
+        open System.IO
+
+        type EffectId =
+            {
+                hash : string
+                info : PipelineInfo
+            }
+
+        type EffectData =
+            {
+                shaders     : list<ShaderInfo * byte[]>
+                samplers    : Map<string * int, string * SamplerStateDescription>
+                glsl        : string
+                entries     : Map<Aardvark.Base.ShaderStage, string>
+                builtIns    : Map<Aardvark.Base.ShaderStage, Map<Imperative.ParameterKind, Set<string>>>
+            }
+
+ 
+        let pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
+
+        let ofData (pipelineLayout : PipelineLayout) (data : EffectData) (device : Device) =
+            let shaders = 
+                data.shaders |> List.toArray |> Array.map (fun (info, binary) ->
+                    let stage =
+                        match info.kind with
+                            | ShaderKind.Vertex -> Aardvark.Base.ShaderStage.Vertex
+                            | ShaderKind.TessControl _ -> Aardvark.Base.ShaderStage.TessControl
+                            | ShaderKind.TessEval _ -> Aardvark.Base.ShaderStage.TessEval
+                            | ShaderKind.Geometry _ -> Aardvark.Base.ShaderStage.Geometry
+                            | ShaderKind.Fragment _ -> Aardvark.Base.ShaderStage.Fragment
+                            | ShaderKind.Compute -> Aardvark.Base.ShaderStage.Compute
+                        
+                    let m = ShaderModule.ofBinaryWithInfo stage info binary device
+                    m.[stage]
+                )
                 
-        let pipelineLayout = device.CreatePipelineLayout(shaders)
-        new ShaderProgram(device, renderPass, shaders, pipelineLayout, surface)
+            let samplers =
+                data.samplers
+                    |> Map.toList 
+                    |> List.map (fun ((name, idx), (texName, desc)) ->
+                        (name, idx), { textureName = Symbol.Create texName; samplerState = desc }
+                    )
+                    |> Dictionary.ofList
+
+            let bs = BackendSurface(data.glsl, Dictionary.ofMap data.entries, data.builtIns, SymDict.empty, samplers, true)
+            new ShaderProgram(device, shaders, pipelineLayout, bs)
+
+        let shaderCachePath = 
+            let temp = Path.Combine(Path.GetTempPath(), "AardvarkVulkanShaderCache")
+            if not (Directory.Exists temp) then Directory.CreateDirectory temp |> ignore
+            temp
+
+        let ofModule  (layout : PipelineLayout) (effect : Imperative.Module) (device : Device) =
+
+            let surf = BackendSurface.ofModule effect
+
+            let prog = ofBackendSurfaceInternal (Some layout) surf device
+
+            let data =
+                { 
+                    shaders =
+                        prog.Shaders |> Array.toList |> List.map (fun shader ->
+                            shader.Interface, shader.Module.SpirV
+                        )
+
+                    samplers = 
+                        surf.Samplers 
+                            |> Dictionary.toSeq 
+                            |> Seq.map (fun (key, v) -> key, (string v.textureName, v.samplerState))
+                            |> Map.ofSeq
+
+                    glsl = surf.Code
+                    entries = surf.EntryPoints |> Dictionary.toMap
+                    builtIns = surf.BuiltIns
+                }
+
+            prog, data
+
+    
+    let backendSurfaceCache = Symbol.Create "BackendSurfaceCache"
+    let effectSurfaceCache = Symbol.Create "EffectSurfaceCache"
+
+    let ofBackendSurface (surface : BackendSurface) (device : Device) =
+        device.GetCached(backendSurfaceCache, surface, fun surface ->
+            let program = ofBackendSurfaceInternal None surface device
+            program.CacheName <- backendSurfaceCache
+            // leak programs
+            program.RefCount <- 1
+            program
+        )
+
+    let ofModule  (layout : PipelineLayout) (effect : FShade.Imperative.Module) (device : Device) =
+        device.GetCached(effectSurfaceCache, (layout, effect), fun (layout, effect) ->
+            let (program, data) = FShadeStuff.ofModule layout effect device
+            program.CacheName <- effectSurfaceCache
+            // leak programs
+            program.RefCount <- 1
+            program
+        )
 
     let delete (program : ShaderProgram) (device : Device) =
-        program.Dispose()
+        device.RemoveCached(program.CacheName, program)
+        Log.warn "ref: %s %A" (string program.CacheName) program.RefCount
+
 
 
 [<AbstractClass; Sealed; Extension>]
 type ContextShaderProgramExtensions private() =
     [<Extension>]
-    static member CreateShaderProgram(this : Device, pass : RenderPass, surface : ISurface) =
+    static member CreateShaderProgram(this : Device, signature : IFramebufferSignature, surface : ISurface) =
         match surface with
-            | :? SignaturelessBackendSurface as s -> s.Get pass |> unbox<ShaderProgram>
+            | :? SignaturelessBackendSurface as s -> 
+                s.Get signature |> unbox<ShaderProgram>
             | :? ShaderProgram as p -> p
-            | :? BackendSurface as bs -> this |> ShaderProgram.ofBackendSurface pass bs
+            | :? BackendSurface as bs -> this |> ShaderProgram.ofBackendSurface bs
             | :? IGeneratedSurface as gs ->
-                let bs = gs.Generate(this.Runtime, pass) 
-                this |> ShaderProgram.ofBackendSurface pass bs
+                let bs = gs.Generate(this.Runtime, signature) 
+                this |> ShaderProgram.ofBackendSurface bs
             | _ ->
                 failf "bad surface type: %A" surface
 

@@ -94,16 +94,15 @@ type DevicePreparedRenderObjectExtensions private() =
         
         let resources = System.Collections.Generic.List<IResourceLocation>()
 
-        let program = this.CreateShaderProgram(renderPass, ro.Surface)
-        let prog = program.Update(AdaptiveToken.Top).handle
+        let programLayout, program = this.CreateShaderProgram(renderPass, ro.Surface)
 
         let descriptorSets = 
-            prog.PipelineLayout.DescriptorSetLayouts |> Array.map (fun ds ->
+            programLayout.DescriptorSetLayouts |> Array.map (fun ds ->
                 let descriptors = 
                     ds.Bindings |> Array.choosei (fun i b ->
                         match b.Parameter with
                             | UniformBlockParameter block ->
-                                let buffer = this.CreateUniformBuffer(ro.AttributeScope, block.layout, ro.Uniforms, prog.UniformGetters)
+                                let buffer = this.CreateUniformBuffer(ro.AttributeScope, block.layout, ro.Uniforms, SymDict.empty)
                                 resources.Add buffer
                                 AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
 
@@ -141,13 +140,12 @@ type DevicePreparedRenderObjectExtensions private() =
                 res
             )
 
-
         let isCompatible (shaderType : ShaderType) (dataType : Type) =
             // TODO: verify type compatibility
             true
 
         let bufferViews =
-            prog.Inputs
+            programLayout.PipelineInfo.pInputs
                 |> List.sortBy (fun p -> p.location)
                 |> List.map (fun p ->
                     let perInstance, view =
@@ -178,7 +176,7 @@ type DevicePreparedRenderObjectExtensions private() =
                 | None -> true
 
         let inputAssembly = this.CreateInputAssemblyState(ro.Mode)
-        let inputState = this.CreateVertexInputState(prog, Mod.constant (VertexInputState.create bufferFormats))
+        let inputState = this.CreateVertexInputState(programLayout.PipelineInfo, Mod.constant (VertexInputState.create bufferFormats))
         let rasterizerState = this.CreateRasterizerState(ro.DepthTest, ro.CullMode, ro.FillMode)
         let colorBlendState = this.CreateColorBlendState(renderPass, ro.WriteBuffers, ro.BlendMode)
         let depthStencilState = this.CreateDepthStencilState(writeDepth, ro.DepthTest, ro.StencilMode)
@@ -186,6 +184,7 @@ type DevicePreparedRenderObjectExtensions private() =
         let pipeline =
             this.CreatePipeline(
                 program,
+                renderPass,
                 bufferFormats,
                 inputState,
                 inputAssembly,
@@ -224,7 +223,7 @@ type DevicePreparedRenderObjectExtensions private() =
         resources.Add bindings
 
         let descriptorBindings =
-            this.CreateDescriptorSetBinding(prog.PipelineLayout, Array.toList descriptorSets)
+            this.CreateDescriptorSetBinding(programLayout, Array.toList descriptorSets)
             
         resources.Add(descriptorBindings)
 

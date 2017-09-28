@@ -185,7 +185,7 @@ module RenderTasks =
 
     type SortKey = list<int>
 
-    type ProjectionComparer(projections : list<RenderObject -> IMod>) =
+    type ProjectionComparer(projections : list<RenderObject -> obj>) =
 
         let rec getRenderObject (ro : IRenderObject) =
             match ro with
@@ -195,9 +195,9 @@ module RenderTasks =
                 | :? PreparedMultiRenderObject as ro -> ro.First.original
                 | _ -> failwithf "[ProjectionComparer] unknown RenderObject: %A" ro
 
-        let ids = ConditionalWeakTable<IMod, ref<int>>()
+        let ids = ConditionalWeakTable<obj, ref<int>>()
         let mutable currentId = 0
-        let getId (m : IMod) =
+        let getId (m : obj) =
             match ids.TryGetValue m with
                 | (true, r) -> !r
                 | _ ->

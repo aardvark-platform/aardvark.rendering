@@ -433,12 +433,25 @@ module Resources =
             }
         )
         
-    type ShaderProgramResource(owner : IResourceCache, key : list<obj>, device : Device, renderPass : RenderPass, input : IMod<ISurface>) =
-        inherit ImmutableResourceLocation<ISurface, ShaderProgram>(
+
+    type ShaderProgramEffectResource(owner : IResourceCache, key : list<obj>, device : Device, layout : PipelineLayout, input : IMod<FShade.Imperative.Module>) =
+        inherit ImmutableResourceLocation<FShade.Imperative.Module, ShaderProgram>(
             owner, key, 
             input,
             {
-                icreate = fun (b : ISurface) -> device.CreateShaderProgram(renderPass, b)
+                icreate = fun (e : FShade.Imperative.Module) -> ShaderProgram.ofModule layout e device
+                idestroy = fun b -> device.Delete b
+                ieagerDestroy = false
+            }
+        )
+
+        
+    type ShaderProgramResource(owner : IResourceCache, key : list<obj>, device : Device, signature : IFramebufferSignature, input : ISurface) =
+        inherit ImmutableResourceLocation<ISurface, ShaderProgram>(
+            owner, key, 
+            Mod.constant input,
+            {
+                icreate = fun (b : ISurface) -> device.CreateShaderProgram(signature, b)
                 idestroy = fun b -> device.Delete b
                 ieagerDestroy = false
             }
@@ -457,7 +470,7 @@ module Resources =
                 (if res.restartEnable then 1u else 0u)
             )
 
-    type VertexInputStateResource(owner : IResourceCache, key : list<obj>, prog : ShaderProgram, input : IMod<Map<Symbol, VertexInputDescription>>) =
+    type VertexInputStateResource(owner : IResourceCache, key : list<obj>, prog : PipelineInfo, input : IMod<Map<Symbol, VertexInputDescription>>) =
         inherit AbstractPointerResource<VkPipelineVertexInputStateCreateInfo>(owner, key)
         static let collecti (f : int -> 'a -> list<'b>) (m : list<'a>) =
             m |> List.indexed |> List.collect (fun (i,v) -> f i v)
@@ -469,7 +482,7 @@ module Resources =
         override x.Compute(token) =
             let state = input.GetValue token
 
-            let inputs = prog.Inputs |> List.sortBy (fun p -> p.location)
+            let inputs = prog.pInputs |> List.sortBy (fun p -> p.location)
 
             let paramsWithInputs =
                 inputs |> List.map (fun p ->
@@ -694,15 +707,16 @@ module Resources =
                     | None -> failwith "[Resource] inconsistent state"
 
     type PipelineResource(owner : IResourceCache, key : list<obj>, 
-                            program : IResourceLocation<ShaderProgram>, 
-                            vertexInputState : Map<Symbol, VertexInputDescription>, 
-                            inputState : INativeResourceLocation<VkPipelineVertexInputStateCreateInfo>,
-                            inputAssembly : INativeResourceLocation<VkPipelineInputAssemblyStateCreateInfo>,
-                            rasterizerState : INativeResourceLocation<VkPipelineRasterizationStateCreateInfo>,
-                            colorBlendState : INativeResourceLocation<VkPipelineColorBlendStateCreateInfo>,
-                            multisample : MultisampleState,
-                            depthStencil : INativeResourceLocation<VkPipelineDepthStencilStateCreateInfo>
-                          ) =
+                          renderPass : RenderPass,
+                          program : IResourceLocation<ShaderProgram>, 
+                          vertexInputState : Map<Symbol, VertexInputDescription>, 
+                          inputState : INativeResourceLocation<VkPipelineVertexInputStateCreateInfo>,
+                          inputAssembly : INativeResourceLocation<VkPipelineInputAssemblyStateCreateInfo>,
+                          rasterizerState : INativeResourceLocation<VkPipelineRasterizationStateCreateInfo>,
+                          colorBlendState : INativeResourceLocation<VkPipelineColorBlendStateCreateInfo>,
+                          multisample : MultisampleState,
+                          depthStencil : INativeResourceLocation<VkPipelineDepthStencilStateCreateInfo>
+                         ) =
         inherit AbstractResourceLocation<nativeptr<VkPipeline>>(owner, key)
 
         let mutable handle : Option<Pipeline> = None
@@ -742,7 +756,7 @@ module Resources =
                     prog.ShaderCreateInfos |> NativePtr.withA (fun pShaderCreateInfos ->
 
                         let mutable viewportState =
-                            let vp = prog.RenderPass.AttachmentCount
+                            let vp = renderPass.AttachmentCount
                             VkPipelineViewportStateCreateInfo(
                                 VkStructureType.PipelineViewportStateCreateInfo, 0n,
                                 VkPipelineViewportStateCreateFlags.MinValue,
@@ -806,7 +820,7 @@ module Resources =
                                 colorBlendState,
                                 &&dynamicStates, //dynamic
                                 prog.PipelineLayout.Handle,
-                                prog.RenderPass.Handle,
+                                renderPass.Handle,
                                 0u,
                                 VkPipeline.Null,
                                 0
@@ -1037,6 +1051,8 @@ type ResourceManager(user : IResourceUser, device : Device) =
     let imageViewCache          = ResourceLocationCache<ImageView>(user)
     let samplerCache            = ResourceLocationCache<Sampler>(user)
     let programCache            = ResourceLocationCache<ShaderProgram>(user)
+    let simpleSurfaceCache      = System.Collections.Concurrent.ConcurrentDictionary<obj, ShaderProgram>()
+    let fshadeThingCache        = System.Collections.Concurrent.ConcurrentDictionary<obj, PipelineLayout * IMod<FShade.Imperative.Module>>()
     
     let vertexInputCache        = ResourceLocationCache<nativeptr<VkPipelineVertexInputStateCreateInfo>>(user)
     let inputAssemblyCache      = ResourceLocationCache<nativeptr<VkPipelineInputAssemblyStateCreateInfo>>(user)
@@ -1104,13 +1120,64 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateSampler(data : IMod<SamplerStateDescription>) =
         samplerCache.GetOrCreate([data :> obj], fun cache key -> new SamplerResource(cache, key, device, data))
         
-    member x.CreateShaderProgram(renderPass : RenderPass, data : IMod<ISurface>) =
-        programCache.GetOrCreate([data :> obj], fun cache key -> 
-            let prog = new ShaderProgramResource(cache, key, device, renderPass, data)
+    member x.CreateShaderProgram(signature : IFramebufferSignature, data : ISurface) =
+        let programKey = (signature, data) :> obj
+
+        let program = 
+            simpleSurfaceCache.GetOrAdd(programKey, fun _ ->
+                device.CreateShaderProgram(signature, data)
+            )
+
+        let resource = 
+            programCache.GetOrCreate([program :> obj], fun cache key -> 
+                { new AbstractResourceLocation<ShaderProgram>(cache, key) with
+                    override x.Create () = ()
+                    override x.Destroy () = ()
+                    override x.GetHandle t = { handle = program; version = 0 }
+                }
+            )
+        program.PipelineLayout, resource
+
+    member x.CreateShaderProgram(layout : PipelineLayout, data : IMod<FShade.Imperative.Module>) =
+        programCache.GetOrCreate([layout :> obj; data :> obj], fun cache key -> 
+            let prog = new ShaderProgramEffectResource(cache, key, device, layout, data)
             prog.Acquire()
             prog
         )
 
+    member x.CreateShaderProgram(signature : IFramebufferSignature, data : Aardvark.Base.Surface) =
+        match data with
+            | Surface.FShadeSimple effect ->
+                x.CreateShaderProgram(signature, FShadeSurface.Get(effect))
+                
+            | Surface.FShade(compile) -> 
+                let layout, module_ = 
+                    fshadeThingCache.GetOrAdd((signature, compile) :> obj, fun _ ->
+                        let outputs = 
+                            signature.ColorAttachments
+                                |> Map.toList
+                                |> List.map (fun (idx, (name, att)) -> string name, (att.GetType name, idx))
+                                |> Map.ofList
+            
+                        let layout, module_ = 
+                            compile { 
+                                PipelineInfo.fshadeConfig with 
+                                    outputs = outputs
+                            }
+                        let layout = device.CreatePipelineLayout(layout)
+
+                        layout, module_
+                    )
+
+                layout, x.CreateShaderProgram(layout, module_)
+
+            | Surface.Backend s -> 
+                
+                x.CreateShaderProgram(signature, s)
+
+            | Surface.None -> 
+                failwith "[Vulkan] encountered empty surface"
+    
     member x.CreateUniformBuffer(scope : Ag.Scope, layout : UniformBufferLayout, u : IUniformProvider, additional : SymbolDict<IMod>) =
         let values =
             layout.fields 
@@ -1140,7 +1207,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateDescriptorSet(layout : DescriptorSetLayout, bindings : list<AdaptiveDescriptor>) =
         descriptorSetCache.GetOrCreate([layout :> obj; bindings :> obj], fun cache key -> new DescriptorSetResource(cache, key, descriptorPool, layout, bindings))
         
-    member x.CreateVertexInputState(program : ShaderProgram, mode : IMod<Map<Symbol, VertexInputDescription>>) =
+    member x.CreateVertexInputState(program : PipelineInfo, mode : IMod<Map<Symbol, VertexInputDescription>>) =
         vertexInputCache.GetOrCreate([program :> obj; mode :> obj], fun cache key -> new VertexInputStateResource(cache, key, program, mode))
 
     member x.CreateInputAssemblyState(mode : IMod<IndexedGeometryMode>) =
@@ -1173,6 +1240,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
         )
 
     member x.CreatePipeline(program         : IResourceLocation<ShaderProgram>, 
+                            pass            : RenderPass,
                             inputs          : Map<Symbol, bool * Aardvark.Base.BufferView>,
                             inputState      : INativeResourceLocation<VkPipelineVertexInputStateCreateInfo>,
                             inputAssembly   : INativeResourceLocation<VkPipelineInputAssemblyStateCreateInfo>,
@@ -1183,7 +1251,6 @@ type ResourceManager(user : IResourceUser, device : Device) =
                         ) =
 
         let programHandle = program.Update(AdaptiveToken.Top).handle
-        let pass = programHandle.RenderPass
 
         let anyAttachment = 
             match pass.ColorAttachments |> Map.toSeq |> Seq.tryHead with
@@ -1198,6 +1265,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
             fun cache key ->
                 new PipelineResource(
                     cache, key,
+                    pass,
                     program,
                     inputs,
                     inputState,

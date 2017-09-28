@@ -101,7 +101,7 @@ module RenderTask =
                 RenderPass = RenderPass.main
                 DrawCallInfos = Mod.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)]
                 Mode = Mod.constant IndexedGeometryMode.TriangleList
-                Surface = Shaders.fs |> toEffect |> toFShadeSurface |> Mod.constant
+                Surface = Shaders.fs |> toEffect |> Surface.FShadeSimple
                 DepthTest = Mod.constant DepthTestMode.LessOrEqual
                 CullMode = Mod.constant CullMode.None
                 BlendMode = Mod.constant BlendMode.Blend
@@ -161,7 +161,7 @@ module RenderTask =
                 let compose =
                     ASet.ofList [
                         { RenderObjects.create color depth with
-                            Surface = effect |> FShade.Effect.compose |> toFShadeSurface |> Mod.constant
+                            Surface = effect |> FShade.Effect.compose |> Surface.FShadeSimple
                         }:> IRenderObject
                     ]
 

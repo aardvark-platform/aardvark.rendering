@@ -26,6 +26,7 @@ type ShaderType =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderType =
+    open System
 
     let glslDecoration (decorations : list<Decoration * int[]>) =
         if List.isEmpty decorations then
@@ -206,6 +207,7 @@ module ShaderType =
         match t with
             | ShaderType.Ptr(_,t) -> toType t
             | _ -> toPrimtiveType t
+
 
 type ShaderParameter = 
     { 
@@ -677,7 +679,7 @@ type ShaderUniformParameter =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderUniformParameter =
 
-    module private Dim =
+    module Dim =
         let toTextureDimension =
             LookupTable.lookupTable [
                 Dim.Dim1D, TextureDimension.Texture1D
@@ -689,7 +691,7 @@ module ShaderUniformParameter =
                 Dim.SubpassData, TextureDimension.Texture2D
             ]
 
-    module private ImageFormat =
+    module ImageFormat =
         let private textureFormats =
             // https://www.khronos.org/registry/spir-v/specs/1.0/SPIRV.html#Image_Format
             [|
@@ -1321,3 +1323,4 @@ module private ShaderInfo =
                     | sampler -> { t with description = sampler }
             )
         }
+

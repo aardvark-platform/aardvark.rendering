@@ -1835,46 +1835,46 @@ and JpegCompressorInstance(parent : JpegCompressor, size : V2i, quality : Quanti
         i.Flush()
         i
 
-    //let stopwatches = parent.DescriptorPool.CreateStopwatchPool(5)
+    let stopwatches = parent.DescriptorPool.CreateStopwatchPool(5)
 
     let dctCommand =
         command {
-            //do! stopwatches.Start 0
+            do! stopwatches.Start 0
             do! Command.Bind parent.DctShader
             do! Command.SetInputs dctInput
             do! Command.Dispatch (alignedSize / V2i(8,8))
-            //do! stopwatches.Stop 0
+            do! stopwatches.Stop 0
         }
 
     let codewordCommand =
         command {
-            //do! stopwatches.Start 1
+            do! stopwatches.Start 1
             do! Command.Bind(parent.CodewordShader)
             do! Command.SetInputs codewordInput
             do! Command.Dispatch(int dctBuffer.Count / 64, 3)
-            //do! stopwatches.Stop 1
+            do! stopwatches.Stop 1
         }
 
     let assembleCommand = 
         command {
-            //do! stopwatches.Start 3
+            do! stopwatches.Start 3
             do! Command.ZeroBuffer outputBuffer
-            //do! stopwatches.Stop 3
+            do! stopwatches.Stop 3
             
-            //do! stopwatches.Start 4
+            do! stopwatches.Start 4
             do! Command.Bind(parent.AssembleShader)
             do! Command.SetInputs assembleInput
             do! Command.Dispatch(int codewordBuffer.Count / 64)
-            //do! stopwatches.Stop 4
+            do! stopwatches.Stop 4
         }
 
     let rest =
         let cmd =
             command {
                 do! codewordCommand
-                //do! stopwatches.Start 2
+                do! stopwatches.Start 2
                 do! parent.Scan codewordCountView codewordCountView
-                //do! stopwatches.Stop 2
+                do! stopwatches.Stop 2
                 do! assembleCommand
                 do! Command.Copy(codewordBuffer, codewordBuffer.Size - 8L, bitCountBuffer, 0L, 4L)
             }
@@ -1883,8 +1883,17 @@ and JpegCompressorInstance(parent : JpegCompressor, size : V2i, quality : Quanti
 
     let overallCommand = 
         command {
+            do! stopwatches.Begin()
+
             do! dctCommand
             do! Command.Execute rest
+//            do! codewordCommand
+//            do! stopwatches.Start 2
+//            do! parent.Scan codewordCountView codewordCountView
+//            do! stopwatches.Stop 2
+//            do! assembleCommand
+//            do! Command.Copy(codewordBuffer, codewordBuffer.Size - 8L, bitCountBuffer, 0L, 4L)
+            do! stopwatches.End()
         }
 
     member x.Quality
@@ -1896,21 +1905,21 @@ and JpegCompressorInstance(parent : JpegCompressor, size : V2i, quality : Quanti
         dctInput.Flush()
         overallCommand
         
-    member x.ClearStats() = ()
-//        device.perform {
-//            do! stopwatches.Reset()
-//        }
+    member x.ClearStats() =
+        device.perform {
+            do! stopwatches.Reset()
+        }
 
-    member x.GetStats() = Map.empty
-//        let times = stopwatches.Download()
-//
-//        Map.ofList [
-//            "dct",  MicroTime times.[0]
-//            "code", MicroTime times.[1]
-//            "scan", MicroTime times.[2]
-//            "zero", MicroTime times.[3]
-//            "asm",  MicroTime times.[4]
-//        ] 
+    member x.GetStats() = 
+        let times = stopwatches.Download()
+
+        Map.ofList [
+            "dct",  MicroTime times.[0]
+            "code", MicroTime times.[1]
+            "scan", MicroTime times.[2]
+            "zero", MicroTime times.[3]
+            "asm",  MicroTime times.[4]
+        ] 
 
 
     member x.DownloadStream() =
@@ -2345,51 +2354,69 @@ module Test =
         for i in 1 .. 5 do queue.RunSynchronously cmd
         for i in 1 .. 5 do instance.Download() |> ignore
 
-        instance.ClearStats()
+        let mutable iteration = 1
 
-        Log.start "encode"
-        let iter = 1000
-        let sw = System.Diagnostics.Stopwatch.StartNew()
-        for i in 1 .. iter do
-            queue.RunSynchronously cmd
-        sw.Stop()
-        let tCompress = sw.MicroTime / iter
-        Log.line "total: %A" tCompress
-        let stats = instance.GetStats()
-        for (name, time) in Map.toSeq stats do
-            Log.line "%s: %A" name (time / iter)
-        Log.stop()
+        while true do
+            instance.ClearStats()
 
-        let mutable data = Array.zeroCreate 0
-        printf " 0: download: "
-        let iter = 1000
-        let sw = System.Diagnostics.Stopwatch.StartNew()
-        for i in 1 .. iter do
-            data <- instance.Download()
-        sw.Stop()
-        let tDownload = sw.MicroTime / iter
-        printfn "%A" tDownload
+            Log.start "encode %d" iteration
+            let iter = 1000
+            let sw = System.Diagnostics.Stopwatch.StartNew()
+            for i in 1 .. iter do
+                queue.RunSynchronously cmd
+            sw.Stop()
+            let tCompress = sw.MicroTime / iter
+            Log.line "total: %A" tCompress
+            let stats = instance.GetStats()
+            for (name, time) in Map.toSeq stats do
+                Log.line "%s: %A" name (time / iter)
 
+            
+            let iter = 100
+            let sw = System.Diagnostics.Stopwatch.StartNew()
+            for i in 1 .. iter do
+                instance.Download() |> ignore
+            sw.Stop()
+            let tDownload = sw.MicroTime / iter
+            Log.line "download: %A" tDownload
 
-        Log.line "total: %A" (tDownload + tCompress)
+            Log.stop()
+            iteration <- iteration + 1
 
-
-        
-        printf " 0: compress: "
-        let iter = 1000
-        let sw = System.Diagnostics.Stopwatch.StartNew()
-        for i in 1 .. iter do
-            data <- instance.Compress image
-        sw.Stop()
-        let tDownload = sw.MicroTime / iter
-        printfn "%A" tDownload
+            GC.Collect()
+            GC.WaitForFullGCComplete() |> ignore
 
 
-
-        File.writeAllBytes @"C:\Users\Schorsch\Desktop\new.jpg" data
-
-
-        cmd.Dispose()
+//        let mutable data = Array.zeroCreate 0
+//        printf " 0: download: "
+//        let iter = 1000
+//        let sw = System.Diagnostics.Stopwatch.StartNew()
+//        for i in 1 .. iter do
+//            data <- instance.Download()
+//        sw.Stop()
+//        let tDownload = sw.MicroTime / iter
+//        printfn "%A" tDownload
+//
+//
+//        Log.line "total: %A" (tDownload + tCompress)
+//
+//
+//        
+//        printf " 0: compress: "
+//        let iter = 1000
+//        let sw = System.Diagnostics.Stopwatch.StartNew()
+//        for i in 1 .. iter do
+//            data <- instance.Compress image
+//        sw.Stop()
+//        let tDownload = sw.MicroTime / iter
+//        printfn "%A" tDownload
+//
+//
+//
+//        File.writeAllBytes @"C:\Users\Schorsch\Desktop\new.jpg" data
+//
+//
+//        cmd.Dispose()
 
 
 
@@ -2397,7 +2424,7 @@ module Test =
         
 
     let run() =
-        use app = new HeadlessVulkanApplication(true)
+        use app = new HeadlessVulkanApplication(false)
         let device = app.Device
         
         testCodewords app.Runtime

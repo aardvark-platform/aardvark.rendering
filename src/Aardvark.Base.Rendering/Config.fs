@@ -42,7 +42,7 @@ type RenderObjectSorting =
     | Arbitrary
     | Dynamic of (Ag.Scope -> IDynamicRenderObjectSorter)
     | Static of cmp : IComparer<IRenderObject>
-    | Grouping of projections : (list<RenderObject -> IMod>) with
+    | Grouping of projections : (list<RenderObject -> obj>) with
 
     override x.GetHashCode() =
         match x with
@@ -72,19 +72,19 @@ type BackendConfiguration = {
 }
 
 module Projections =
-    let private empty = Mod.init () :> IMod
+    let private empty = obj()
 
     let surface (rj : RenderObject) =
-        rj.Surface :> IMod
+        rj.Surface :> obj
 
     let diffuseTexture (rj : RenderObject) =
         match rj.Uniforms.TryGetUniform (rj.AttributeScope, DefaultSemantic.DiffuseColorTexture) with
-            | Some t -> t
+            | Some t -> t :> obj
             | _ -> empty
 
     let indices (rj : RenderObject) =
         match rj.Indices with
-            | Some i -> i.Buffer :> IMod
+            | Some i -> i.Buffer :> obj
             | None -> empty
 
     let standard = [ surface; diffuseTexture; indices ]

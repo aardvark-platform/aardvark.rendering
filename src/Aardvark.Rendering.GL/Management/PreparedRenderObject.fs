@@ -358,7 +358,14 @@ type ResourceManagerExtensions private() =
 //                    | _ -> rj.Surface
 //            else rj.Surface
 
-        let program = x.CreateSurface(fboSignature, rj.Surface)
+        let surface =
+            match rj.Surface with
+                | Surface.Backend s -> Mod.constant s
+                | Surface.FShadeSimple e -> Mod.constant (FShadeSurface.Get e :> ISurface)
+                | Surface.FShade _ -> failwith "[GL] dynamic shaders not implemented" //e |> Mod.map (fun e -> FShadeSurface.Get e :> ISurface)
+                | Surface.None -> null
+
+        let program = x.CreateSurface(fboSignature, surface)
         let prog = program.Handle.GetValue()
 
         GL.Check "[Prepare] Create Surface"

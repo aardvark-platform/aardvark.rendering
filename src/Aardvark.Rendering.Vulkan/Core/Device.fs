@@ -99,6 +99,7 @@ type private QueueFamilyPool(allFamilies : array<QueueFamilyInfo>) =
                         available.[fam.index] <- { fam with count = 0 }
                         Some (allFamilies.[fam.index], fam.count)
 
+
 type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, wantedExtensions : Set<string>) as this =
     let pool = QueueFamilyPool(physical.QueueFamilies)
     let graphicsQueues  = pool.TryTakeSingleFamily(QueueFlags.Graphics, 4)
@@ -257,7 +258,26 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
     let mutable runtime = Unchecked.defaultof<IRuntime>
     let memoryLimits = physical.Limits.Memory
 
-    
+    let caches = System.Collections.Concurrent.ConcurrentDictionary<Symbol, obj>()
+
+    member x.GetCache(name : Symbol, create : 'a -> 'b) =
+        let res =
+            caches.GetOrAdd(name, fun name ->
+                DeviceCache<'a, 'b>(x, create) :> obj
+            )
+
+        res |> unbox<DeviceCache<'a, 'b>>
+
+    member x.GetCached(cacheName : Symbol, value : 'a, create : 'a -> 'b) : 'b =
+        let cache : DeviceCache<'a, 'b> = x.GetCache(cacheName, create)
+        cache.Invoke(value)
+
+    member x.RemoveCached(cacheName : Symbol, value : 'b) : unit =
+        match caches.TryGetValue cacheName with
+            | (true, (:? IDeviceCache<'b> as c)) -> c.Revoke value
+            | _ -> ()
+                
+
     member x.ComputeToken =
         let ref = currentResourceToken.Value
         match !ref with
@@ -356,6 +376,57 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
+
+and IDeviceCache<'b> =
+    abstract member Revoke : 'b -> unit
+
+and DeviceCache<'a, 'b when 'b :> RefCountedResource>(device : Device, create : 'a -> 'b) =
+    let store = Dict<'a, 'b>()
+    let back = Dict<'b, 'a>()
+
+    let create (value : 'a) =
+        let res = create value
+        back.[res] <- value
+        res
+
+    do  device.OnDispose.Add(fun _ ->
+            for k in back.Keys do
+                k.Destroy()
+            store.Clear()
+            back.Clear()
+        )
+
+    member x.Invoke(value : 'a) : 'b =
+        lock store (fun () -> 
+            let res = store.GetOrCreate(value, Func<'a, 'b>(create))
+            Interlocked.Increment(&res.RefCount) |> ignore
+            res
+        )
+
+    member x.Revoke(thing : 'b) : unit =
+        lock store (fun () ->
+            if Interlocked.Decrement(&thing.RefCount) = 0 then
+                match back.TryRemove thing with
+                    | (true, key) -> 
+                        store.Remove key |> ignore
+                        thing.Destroy()
+                    | _ ->
+                        failf "asdasds"
+        )
+
+    interface IDeviceCache<'b> with
+        member x.Revoke b = x.Revoke b
+
+
+and RefCountedResource =
+    class
+        val mutable public RefCount : int
+
+        abstract member Destroy : unit -> unit
+        default x.Destroy() = ()
+
+        new() = { RefCount = 0}
+    end
 
 and [<AbstractClass>] Resource =
     class

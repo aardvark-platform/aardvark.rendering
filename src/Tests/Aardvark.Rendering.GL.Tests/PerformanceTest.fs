@@ -197,7 +197,7 @@ module RenderTaskPerformance =
             objects
                 |> Sg.viewTrafo (cameraView  |> Mod.map CameraView.viewTrafo )
                 |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
-                |> Sg.surface (Mod.constant s)
+                |> Sg.surface s
                 |> Sg.pass transparency
                 |> Sg.blendMode (Mod.constant BlendMode.Blend)
                 |> Semantics.RenderObjectSemantics.Semantic.renderObjects
@@ -300,7 +300,7 @@ module StartupPerformance =
                 objectsSg
                     |> Sg.viewTrafo (Mod.constant cameraView.ViewTrafo)
                     |> Sg.projTrafo (Mod.constant (Frustum.projTrafo cameraProj))
-                    |> Sg.surface (Mod.constant effect)
+                    |> Sg.surface effect
 
             Report.BeginTimed("Gathering render objects")
             let renderObjects = ASet.toArray (sg.RenderObjects())
@@ -434,7 +434,7 @@ module IsActiveFlagPerformance =
                 objectsSg
                     |> Sg.viewTrafo (Mod.constant cameraView.ViewTrafo)
                     |> Sg.projTrafo (Mod.constant (Frustum.projTrafo cameraProj))
-                    |> Sg.surface (Mod.constant effect)
+                    |> Sg.surface effect
 
             Report.BeginTimed("Gathering render objects")
             let renderObjects = ASet.toArray (sg.RenderObjects())

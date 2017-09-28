@@ -861,7 +861,7 @@ module RenderingTests =
                 RenderPass = RenderPass.main
                 DrawCallInfos = Mod.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)]
                 Mode = Mod.constant IndexedGeometryMode.TriangleList
-                Surface = DefaultSurfaces.constantColor C4f.Gray |> toEffect |> toFShadeSurface |> Mod.constant
+                Surface = DefaultSurfaces.constantColor C4f.Gray |> toEffect |> Surface.FShadeSimple
                 DepthTest = Mod.constant Aardvark.Base.Rendering.DepthTestMode.LessOrEqual
                 CullMode = Mod.constant Aardvark.Base.Rendering.CullMode.None
                 BlendMode = Mod.constant Aardvark.Base.Rendering.BlendMode.Blend

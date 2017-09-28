@@ -158,6 +158,29 @@ module FShadeInterop =
             DefaultSemantic.Positions, typeof<V4d>
         ]
 
+    let private typeToFormat =
+        LookupTable.lookupTable [
+            typeof<int>, RenderbufferFormat.R32i
+            typeof<V2i>, RenderbufferFormat.Rg32i
+            typeof<V3i>, RenderbufferFormat.Rgb32i
+            typeof<V4i>, RenderbufferFormat.Rgba32i
+
+            typeof<C3f>, RenderbufferFormat.Rgb32f
+            typeof<C4f>, RenderbufferFormat.Rgba32f
+            
+            typeof<C3b>, RenderbufferFormat.Rgb8
+            typeof<C4b>, RenderbufferFormat.Rgba8
+
+            typeof<C3us>, RenderbufferFormat.Rgb16
+            typeof<C4us>, RenderbufferFormat.Rgba16
+
+            typeof<float>, RenderbufferFormat.R32f
+            typeof<V2d>, RenderbufferFormat.Rg32f
+            typeof<V3d>, RenderbufferFormat.Rgb32f
+            typeof<V4d>, RenderbufferFormat.Rgba32f
+        ]
+        
+
     let private formatToType =
         LookupTable.lookupTable [
             RenderbufferFormat.DepthComponent, typeof<float>
@@ -227,6 +250,15 @@ module FShadeInterop =
             RenderbufferFormat.Rgb8i, typeof<V3d>
             RenderbufferFormat.Rgb10A2ui, typeof<V4d>
         ]
+
+    type AttachmentSignature with
+        member x.GetType(name : Symbol) =
+            match builtInTypes.TryGetValue name with
+                | (true, t) -> t
+                | _ -> formatToType x.format
+                        
+        static member ofType (t : Type) =
+            { format = typeToFormat t; samples = 1 }
 
     type SamplerState with
         member x.SamplerStateDescription = toSamplerStateDescription x
