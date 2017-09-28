@@ -2252,7 +2252,8 @@ module TextureExtensions =
 
         let downloadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (level : int) (image : PixImage) =
             let format = image.PixFormat
-            GL.BindTexture(target, t.Handle)
+            let bindTarget =  getTextureTarget t
+            GL.BindTexture(bindTarget, t.Handle)
             GL.Check "could not bind texture"
 
             let pixelType, pixelFormat =
@@ -2305,7 +2306,7 @@ module TextureExtensions =
             GL.DeleteBuffer(b)
             GL.Check "could not delete buffer"
 
-            GL.BindTexture(target, 0)
+            GL.BindTexture(bindTarget, 0)
             GL.Check "could not unbind texture"
 
         let downloadTexture2D (t : Texture) (level : int) (image : PixImage) =
