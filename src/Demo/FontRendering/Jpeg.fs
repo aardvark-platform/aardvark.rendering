@@ -2427,6 +2427,64 @@ module Test =
         use app = new HeadlessVulkanApplication(false)
         let device = app.Device
         
+        
+
+        let a = device.CreateBuffer [| 1;2;3;4;5 |]
+        let b = device.CreateBuffer<int>(5L)
+
+        // create a new command-stream
+        let s = VKVM.CommandStream()
+
+        // copy bytes 0 .. 4
+        let c0 = s.CopyBuffer(a.Handle, b.Handle, [| VkBufferCopy(0UL, 0UL, 4UL) |])
+
+        // copy bytes 12 .. 24
+        let c1 = s.CopyBuffer(a.Handle, b.Handle, [| VkBufferCopy(12UL, 12UL, 8UL) |])
+
+        // update c0 to copy bytes 0 .. 8
+        s.Position <- c0
+        s.CopyBuffer(a.Handle, b.Handle, [| VkBufferCopy(0UL, 0UL, 8UL) |]) |> ignore
+        s.SeekToEnd()
+
+        let iter = 1 <<< 28
+        let arr = [| VkBufferCopy(0UL, 0UL, 8UL) |]
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        for i in 1 .. iter do
+            s.Position <- c0
+            s.CopyBuffer(a.Handle, b.Handle, arr) |> ignore
+        sw.Stop()
+        printfn "copy: %A" (sw.MicroTime / float iter)
+
+        s.SeekToEnd()
+        let bc = s.PipelineBarrier(VkPipelineStageFlags.BottomOfPipeBit, VkPipelineStageFlags.TopOfPipeBit, [||], [||], [||])
+        
+        let iter = 1 <<< 28
+        let a0 = [||]
+        let a1 = [||]
+        let a2 = [||]
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        for i in 1 .. iter do
+            s.Position <- bc
+            s.PipelineBarrier(VkPipelineStageFlags.BottomOfPipeBit, VkPipelineStageFlags.TopOfPipeBit, a0, a1, a2) |> ignore
+        sw.Stop()
+        printfn "barrier: %A" (sw.MicroTime / float iter)
+
+
+        // run the commands
+        let cmd = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+        cmd.Begin(CommandBufferUsage.None)
+        cmd.AppendCommand()
+        s.Run(cmd.Handle)
+        cmd.End()
+        device.GraphicsFamily.RunSynchronously(cmd)
+
+        // print the result
+        b.Download() |> printfn "%A"
+        System.Environment.Exit 0
+
+
+
+
         testCodewords app.Runtime
         System.Environment.Exit 0
 

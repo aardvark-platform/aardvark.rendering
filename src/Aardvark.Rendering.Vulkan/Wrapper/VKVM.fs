@@ -576,7 +576,7 @@ module VKVM =
         let mutable capacity = 0n
         let mutable length = 0n
         let mutable count = 0u
-
+        let mutable position = 0n
         let handle = 
             let handle = NativePtr.alloc 1
             NativePtr.write handle (CommandFragment(0u, 0n, NativePtr.zero))
@@ -592,32 +592,36 @@ module VKVM =
             and set (v : uint32) = NativePtr.write (NativePtr.cast handle) v
 
         member private x.HandleNext
-            with get() : nativeptr<CommandFragment> = NativePtr.read (NativePtr.ofNativeInt (4n + ptrSize + NativePtr.toNativeInt handle))
-            and set (c : nativeptr<CommandFragment>) = NativePtr.write (NativePtr.ofNativeInt (4n + ptrSize + NativePtr.toNativeInt handle)) c
+            with get() : nativeptr<CommandFragment> = NativePtr.read (NativePtr.ofNativeInt (8n + ptrSize + NativePtr.toNativeInt handle))
+            and set (c : nativeptr<CommandFragment>) = NativePtr.write (NativePtr.ofNativeInt (8n + ptrSize + NativePtr.toNativeInt handle)) c
 
         member private x.HandleCommands
-            with get() : nativeint = NativePtr.read (NativePtr.ofNativeInt (4n + NativePtr.toNativeInt handle))
-            and set (c : nativeint) = NativePtr.write (NativePtr.ofNativeInt (4n + NativePtr.toNativeInt handle)) c
+            with get() : nativeint = NativePtr.read (NativePtr.ofNativeInt (8n + NativePtr.toNativeInt handle))
+            and set (c : nativeint) = NativePtr.write (NativePtr.ofNativeInt (8n + NativePtr.toNativeInt handle)) c
             
         member private x.Append<'r>(size : int, f : nativeint -> unit) =
             let size = nativeint size
-            let e = length + size
+            let e = position + size
             if e > capacity then
                 let newCapacity = Fun.NextPowerOfTwo (int64 e) |> nativeint
                 update (fun h ->
                     let mutable h = h
-                    h.Commands <- Marshal.ReAllocHGlobal(h.Commands, newCapacity)
+                    if h.Commands = 0n then h.Commands <- Marshal.AllocHGlobal(newCapacity)
+                    else h.Commands <- Marshal.ReAllocHGlobal(h.Commands, newCapacity)
                     h
                 )
                 capacity <- newCapacity
 
-            let ptr = x.HandleCommands + length
+            let ptr = x.HandleCommands + position
             f ptr
-            let id = count
-            let offset = length
-            length <- e
-            count <- count + 1u
-            x.HandleCount <- count
+
+            let offset = position
+            position <- e
+            if e >= length then
+                length <- e
+                count <- count + 1u
+                x.HandleCount <- count
+
             offset
 
         [<MethodImpl(MethodImplOptions.NoInlining)>]
@@ -949,7 +953,30 @@ module VKVM =
                 for i in 0 .. regionCount - 1 do
                     NativePtr.set pRegions i regions.[i]
             )
+        
+        member x.CopyBuffer(src : VkBuffer, dst : VkBuffer, regions : VkBufferCopy[]) =
+            let regionCount = regions.Length
+            let baseSize = sizeof<CopyBufferCommand>
+            let regionSize = regionCount * sizeof<VkBufferCopy>
+            
+            let size = baseSize + regionSize
+            x.Append(size, fun ptr ->
+                let pRegions = NativePtr.ofNativeInt (ptr + nativeint baseSize)
 
+                let mutable cmd = Unchecked.defaultof<CopyBufferCommand>
+                cmd.Length <- uint32 size
+                cmd.OpCode <- CommandType.CopyBuffer
+                cmd.SrcBuffer <- src
+                cmd.DstBuffer <- dst
+                cmd.RegionCount <- uint32 regionCount
+                cmd.Regions <- pRegions
+
+                NativeInt.write ptr cmd
+
+                for i in 0 .. regionCount - 1 do
+                    NativePtr.set pRegions i regions.[i]
+            )
+        
         member x.CopyBufferToImage(src : VkBuffer, dst : VkImage, dstLayout : VkImageLayout, regions : VkBufferImageCopy[]) =
             let regionCount = regions.Length
             let baseSize = sizeof<CopyBufferToImageCommand>
@@ -1364,6 +1391,13 @@ module VKVM =
             cmd.Run <- fptr
             x.Append(&cmd)
 
+        member x.Position
+            with get() = position
+            and set p = position <- p
+
+
+        member x.SeekToEnd() =
+            position <- length
 
         member x.Handle = handle
 

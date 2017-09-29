@@ -2301,54 +2301,11 @@ let tensorPerformance() =
 
 
 
-
-
-
-[<StructLayout(LayoutKind.Sequential)>]
-type DrawCommand =
-    struct
-        val mutable public VertexCount : uint32
-        val mutable public InstanceCount : uint32
-        val mutable public FirstVertex : uint32
-        val mutable public FirstInstance : uint32
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
-type DrawIndexedCommand =
-    struct
-        val mutable public IndexCount : uint32
-        val mutable public InstanceCount : uint32
-        val mutable public FirstIndex : uint32
-        val mutable public VertexOffset : int32
-        val mutable public FirstInstance : uint32
-    end
-
-type CommandType =
-    | Draw = 10
-    | DrawIndexed = 11
-
-[<StructLayout(LayoutKind.Explicit)>]
-type Command =
-    struct
-        [<FieldOffset(0)>]
-        val mutable public Type : CommandType
-
-        [<FieldOffset(4)>]
-        val mutable public Draw : DrawCommand
-
-        [<FieldOffset(4)>]
-        val mutable public DrawIndexed : DrawIndexedCommand
-    end
-
 [<EntryPoint; STAThread>]
 let main argv = 
     
     Ag.initialize()
     Aardvark.Init()
-
-    printfn "size: %A" sizeof<Command>
-    System.Environment.Exit 0
-
 
 
 
