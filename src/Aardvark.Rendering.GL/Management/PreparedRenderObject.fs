@@ -25,7 +25,7 @@ type PreparedRenderObject =
         Program : IResource<Program, int>
         UniformBuffers : Map<int, IResource<UniformBufferView, int>>
         Uniforms : Map<int, IResource<UniformLocation, nativeint>>
-        Textures : Map<int, IResource<Texture, int> * IResource<Sampler, int>>
+        Textures : Map<int, IResource<Texture, V2i> * IResource<Sampler, int>>
         Buffers : list<int * BufferView * AttributeFrequency * IResource<Buffer, int>>
         IndexBuffer : Option<OpenGl.Enums.IndexType * IResource<Buffer, int>>
         
