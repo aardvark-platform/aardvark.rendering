@@ -5,6 +5,7 @@
 #include "vkvm.h"
 #include <stdio.h>
 
+
 DllExport(void) vmBindPipeline(VkCommandBuffer commandBuffer, VkPipeline* pipeline)
 {
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, *pipeline);

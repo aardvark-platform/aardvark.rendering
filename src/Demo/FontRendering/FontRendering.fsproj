@@ -65,6 +65,7 @@
     <Compile Include="TypedBuffers.fs" />
     <Compile Include="Scan.fs" />
     <Compile Include="Jpeg.fs" />
+    <Compile Include="NewRenderObjects.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <None Include="paket.references" />

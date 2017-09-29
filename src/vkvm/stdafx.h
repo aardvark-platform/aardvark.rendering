@@ -12,5 +12,6 @@
 #include <windows.h>
 
 
+#define DllExport(t) extern "C"  __declspec( dllexport ) t __cdecl
 
 // TODO: reference additional headers your program requires here
