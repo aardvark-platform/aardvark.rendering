@@ -576,7 +576,6 @@ module VKVM =
         let mutable capacity = 0n
         let mutable length = 0n
         let mutable count = 0u
-        let mutable offsets = System.Collections.Generic.List<nativeint>()
 
         let handle = 
             let handle = NativePtr.alloc 1
@@ -615,11 +614,11 @@ module VKVM =
             let ptr = x.HandleCommands + length
             f ptr
             let id = count
-            offsets.Add length
+            let offset = length
             length <- e
             count <- count + 1u
             x.HandleCount <- count
-            id
+            offset
 
         [<MethodImpl(MethodImplOptions.NoInlining)>]
         member private x.Append<'a when 'a : unmanaged>(data : byref<'a>) =
@@ -641,7 +640,6 @@ module VKVM =
                     capacity <- 0n
                     length <- 0n
                     count <- 0u
-                    offsets.Clear()
                     f
                 )
 
