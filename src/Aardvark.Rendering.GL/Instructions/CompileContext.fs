@@ -333,7 +333,7 @@ module ExecutionContext =
             | InstructionCode.HDrawArrays -> OpenGl.Unsafe.HDrawArrays (ptr 0) (ptr 1) (ptr 2) (ptr 3)
             | InstructionCode.HDrawElements -> OpenGl.Unsafe.HDrawElements (ptr 0) (ptr 1) (ptr 2) (int 3) (ptr 4)
             | InstructionCode.HDrawArraysIndirect -> OpenGl.Unsafe.HDrawArraysIndirect (ptr 0) (ptr 1) (ptr 2) (ptr 3) (int 4)
-            | InstructionCode.HDrawElementsIndirect -> OpenGl.Unsafe.HDrawElementsIndirect (ptr 0) (ptr 1) (ptr 2) (int 3) (ptr 4) (int 5)
+            | InstructionCode.HDrawElementsIndirect -> OpenGl.Unsafe.HDrawElementsIndirect (ptr 0) (ptr 1) (ptr 2) (int 3) (ptr 4)
             | InstructionCode.HSetDepthTest -> OpenGl.Unsafe.HSetDepthTest (ptr 0) 
             | InstructionCode.HSetCullFace -> OpenGl.Unsafe.HSetCullFace (ptr 0) 
             | InstructionCode.HSetPolygonMode -> OpenGl.Unsafe.HSetPolygonMode (ptr 0) 
