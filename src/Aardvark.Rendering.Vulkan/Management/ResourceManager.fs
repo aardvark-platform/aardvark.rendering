@@ -876,7 +876,7 @@ module Resources =
                     | Some h -> h.Dispose()
                     | _ -> ()
 
-                let call = DrawCall.Indirect(indexed, calls.handle)
+                let call = DrawCall.Indirect(indexed, calls.handle.Handle, calls.handle.Count)
                 handle <- Some call
                 NativePtr.write pointer call
 
@@ -909,7 +909,7 @@ module Resources =
 
         override x.GetHandle(token : AdaptiveToken) =
             if x.OutOfDate then
-                let calls = buffers |> List.map (fun (b,o) -> b.Update(token).handle, o) //calls.Update token
+                let calls = buffers |> List.map (fun (b,o) -> b.Update(token).handle.Handle, o) //calls.Update token
 
                 match handle with
                     | Some h -> h.Dispose()
@@ -937,7 +937,7 @@ module Resources =
         override x.Create() =
             for s in sets do s.Acquire()
             let ptr = NativePtr.alloc 1
-            let value = new DescriptorSetBinding(layout, 0, sets.Length)
+            let value = new DescriptorSetBinding(layout.Handle, 0, sets.Length)
             NativePtr.write ptr value
             handle <- ptr
 
@@ -1250,7 +1250,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
                             writeBuffers    : Option<Set<Symbol>>
                         ) =
 
-        let programHandle = program.Update(AdaptiveToken.Top).handle
+        //let programHandle = program.Update(AdaptiveToken.Top).handle
 
         let anyAttachment = 
             match pass.ColorAttachments |> Map.toSeq |> Seq.tryHead with
@@ -1258,7 +1258,8 @@ type ResourceManager(user : IResourceUser, device : Device) =
                 | None -> pass.DepthStencilAttachment |> Option.get
 
         let inputs = VertexInputState.create inputs
-        let ms = MultisampleState.create programHandle.SampleShading anyAttachment.samples
+        // TODO: sampleShading
+        let ms = MultisampleState.create false anyAttachment.samples
         let key = [ program :> obj; inputs :> obj; inputState :> obj; inputAssembly :> obj; rasterizerState :> obj; colorBlendState :> obj; ms :> obj; depthStencil :> obj ]
         pipelineCache.GetOrCreate(
             key,
@@ -1330,6 +1331,13 @@ type ResourceSet() =
                 else
                     r.Outputs.Add x |> ignore
             )
+
+    member x.AddAndEvaluate(r : IResourceLocation<'a>) =
+        x.EvaluateAlways AdaptiveToken.Top (fun t ->
+            all.Add r |> ignore
+            r.Update t
+        )
+     
 
     member x.Remove(r : IResourceLocation) =
         if all.Remove r then

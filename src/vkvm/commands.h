@@ -10,6 +10,9 @@
 #include <vulkan.h>
 #endif
 
+#include "vkvm.h"
+
+
 
 typedef struct CommandFragment_ {
 	uint32_t					CommandCount;
@@ -65,8 +68,16 @@ enum CommandType {
 	CmdExecuteCommands = 44,
 
 	CmdCallFragment = 100,
-	CmdCustom = 101
+	CmdCustom = 101,
+
+
+	CmdIndirectBindPipeline = 102,
+	CmdIndirectBindDescriptorSets = 103,
+	CmdIndirectBindIndexBuffer = 104,
+	CmdIndirectBindVertexBuffers = 105,
+	CmdIndirectDraw = 106
 };
+
 
 #define DEFCMD(n,a) typedef struct { uint32_t Length; CommandType OpCode; a## } n##Command;
 #define DEFCMD0(n) typedef struct { uint32_t Length; CommandType OpCode; } n##Command;
@@ -402,6 +413,32 @@ DEFCMD(CallFragment,
 DEFCMD(Custom,
 	void (*Run)(VkCommandBuffer);
 )
+
+
+DEFCMD(IndirectBindPipeline,
+	VkPipeline* Pipeline;
+)
+
+DEFCMD(IndirectBindDescriptorSets,
+	DescriptorSetBinding* Binding;
+)
+
+DEFCMD(IndirectBindIndexBuffer,
+	IndexBufferBinding* Binding;
+)
+
+DEFCMD(IndirectBindVertexBuffers,
+	VertexBufferBinding* Binding;
+)
+
+DEFCMD(IndirectDraw,
+	RuntimeStats* Stats;
+	int* IsActive;
+	DrawCall* Calls;
+)
+
+
+
 
 /*
 union CommandData {

@@ -757,6 +757,9 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
+    VulkanTests.run()
+    System.Environment.Exit 0
+
     App.Config <- { BackendConfiguration.Default with useDebugOutput = true }
     App.run()
 

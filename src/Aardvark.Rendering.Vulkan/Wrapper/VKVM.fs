@@ -1,5 +1,6 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
+open System
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Aardvark.Base
@@ -8,6 +9,179 @@ open Microsoft.FSharp.NativeInterop
 #nowarn "9"
 #nowarn "51"
 
+[<AutoOpen>]
+module IndirectCommands =
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type DrawCall =
+        struct
+            val mutable public IsIndirect       : int
+            val mutable public IsIndexed        : int
+            val mutable public IndirectBuffer   : VkBuffer
+            val mutable public IndirectCount    : int
+            val mutable public DrawCallCount    : int
+            val mutable public DrawCalls        : nativeptr<DrawCallInfo>
+
+
+            static member Indirect (indexed : bool, ib : VkBuffer, count : int) =
+                new DrawCall(true, indexed, ib, count, 0, NativePtr.zero)
+
+            static member Direct (indexed : bool, calls : DrawCallInfo[]) =
+                let pCalls = NativePtr.alloc calls.Length
+                for i in 0 .. calls.Length-1 do
+                    NativePtr.set pCalls i calls.[i]
+                new DrawCall(false, indexed, VkBuffer.Null, 0, calls.Length, pCalls)
+                
+            member x.Dispose() =
+                if not (NativePtr.isNull x.DrawCalls) then
+                    NativePtr.free x.DrawCalls
+
+                x.IndirectBuffer <- VkBuffer.Null
+                x.IndirectCount <- 0
+                x.DrawCalls <- NativePtr.zero
+                x.DrawCallCount <- 0
+
+            interface IDisposable with
+                member x.Dispose() = x.Dispose()
+
+            private new(isIndirect : bool, isIndexed : bool, ib : VkBuffer, ibc : int, callCount : int, pCalls : nativeptr<DrawCallInfo>) =
+                {
+                    IsIndirect = (if isIndirect then 1 else 0)
+                    IsIndexed = (if isIndexed then 1 else 0)
+                    IndirectBuffer = ib
+                    IndirectCount = ibc
+                    DrawCallCount = callCount
+                    DrawCalls = pCalls
+                }
+
+        end
+
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VertexBufferBinding =
+        struct
+            val mutable public FirstBinding : int
+            val mutable public BindingCount : int
+            val mutable public Buffers : nativeptr<VkBuffer>
+            val mutable public Offsets : nativeptr<uint64>
+
+            member x.Dispose() =
+                if not (NativePtr.isNull x.Buffers) then
+                    NativePtr.free x.Buffers
+                    x.Buffers <- NativePtr.zero
+
+                if not (NativePtr.isNull x.Offsets) then
+                    NativePtr.free x.Offsets
+                    x.Offsets <- NativePtr.zero
+
+                x.FirstBinding <- 0
+                x.BindingCount <- 0
+
+            interface IDisposable with
+                member x.Dispose() = x.Dispose()
+
+            member x.TryUpdate(first : int, buffers : array<VkBuffer>, offsets : int64[]) =
+                if x.FirstBinding = first && buffers.Length = x.BindingCount then
+                    let count = x.BindingCount
+                    for i in 0 .. count-1 do
+                        NativePtr.set x.Buffers i (buffers.[i])
+                        NativePtr.set x.Offsets i (uint64 offsets.[i])
+                    true
+                else
+                    false
+
+            new(first : int, buffers : array<VkBuffer>, offsets : int64[]) =
+                let count = buffers.Length
+                let pBuffers = NativePtr.alloc count
+                let pOffsets = NativePtr.alloc count
+
+                for i in 0 .. count-1 do
+                    NativePtr.set pBuffers i (buffers.[i])
+                    NativePtr.set pOffsets i (uint64 offsets.[i])
+
+                {
+                    FirstBinding = first
+                    BindingCount = count
+                    Buffers = pBuffers
+                    Offsets = pOffsets
+                }
+
+            new(first : int, buffersAndOffsets : array<VkBuffer * int64>) =
+                let count = buffersAndOffsets.Length
+                let pBuffers = NativePtr.alloc count
+                let pOffsets = NativePtr.alloc count
+
+                for i in 0 .. buffersAndOffsets.Length-1 do
+                    let (b, o) = buffersAndOffsets.[i]
+                    NativePtr.set pBuffers i b
+                    NativePtr.set pOffsets i (uint64 o)
+
+                {
+                    FirstBinding = first
+                    BindingCount = count
+                    Buffers = pBuffers
+                    Offsets = pOffsets
+                }
+        end
+
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type DescriptorSetBinding =
+        struct
+            val mutable public FirstIndex : int
+            val mutable public Count : int
+            val mutable public Layout : VkPipelineLayout
+            val mutable public Sets : nativeptr<VkDescriptorSet>
+
+            member x.Dispose() =
+                if not (NativePtr.isNull x.Sets) then
+                    NativePtr.free x.Sets
+                    x.Sets <- NativePtr.zero
+
+                x.Layout <- VkPipelineLayout.Null
+                x.FirstIndex <- 0
+                x.Count <- 0
+
+            interface IDisposable with
+                member x.Dispose() = x.Dispose()
+
+            new(layout : VkPipelineLayout, first : int, sets : array<VkDescriptorSet>) =
+                let count = sets.Length
+                let pSets = NativePtr.alloc count
+
+                for i in 0 .. count-1 do
+                    let s = sets.[i]
+                    NativePtr.set pSets i s
+
+                {
+                    FirstIndex = first
+                    Count = count
+                    Layout = layout
+                    Sets = pSets
+                }
+
+            new(layout : VkPipelineLayout, first : int, count : int) =
+                let pSets = NativePtr.alloc count
+
+                {
+                    FirstIndex = first
+                    Count = count
+                    Layout = layout
+                    Sets = pSets
+                }
+        end
+
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type IndexBufferBinding =
+        struct
+            val mutable public Buffer : VkBuffer
+            val mutable public Offset : VkDeviceSize
+            val mutable public Type : VkIndexType
+
+            new(b : VkBuffer, t : VkIndexType) = { Buffer = b; Offset = 0UL; Type = t }
+        end
+    
 
 module VKVM = 
 
@@ -72,6 +246,12 @@ module VKVM =
             | CallFragment = 100
             | Custom = 101
     
+            | IndirectBindPipeline = 102
+            | IndirectBindDescriptorSets = 103
+            | IndirectBindIndexBuffer = 104
+            | IndirectBindVertexBuffers = 105
+            | IndirectDraw = 106
+
         [<StructLayout(LayoutKind.Sequential)>]
         type BindPipelineCommand =
             struct
@@ -559,6 +739,47 @@ module VKVM =
                 val mutable public Run : nativeint
             end
 
+        [<StructLayout(LayoutKind.Sequential)>]
+        type IndirectBindPipelineCommand =
+            struct
+                val mutable public Length : uint32
+                val mutable public OpCode : CommandType  
+                val mutable public Pipeline : nativeptr<VkPipeline>
+            end
+
+        [<StructLayout(LayoutKind.Sequential)>]
+        type IndirectBindDescriptorSetsCommand =
+            struct
+                val mutable public Length : uint32
+                val mutable public OpCode : CommandType  
+                val mutable public Binding : nativeptr<DescriptorSetBinding>
+            end
+
+        [<StructLayout(LayoutKind.Sequential)>]
+        type IndirectBindIndexBufferCommand =
+            struct
+                val mutable public Length : uint32
+                val mutable public OpCode : CommandType  
+                val mutable public Binding : nativeptr<IndexBufferBinding>
+            end
+
+        [<StructLayout(LayoutKind.Sequential)>]
+        type IndirectBindVertexBuffersCommand =
+            struct
+                val mutable public Length : uint32
+                val mutable public OpCode : CommandType  
+                val mutable public Binding : nativeptr<VertexBufferBinding>
+            end
+
+        [<StructLayout(LayoutKind.Sequential)>]
+        type IndirectDrawCommand =
+            struct
+                val mutable public Length : uint32
+                val mutable public OpCode : CommandType  
+                val mutable public Stats : nativeptr<V2i>
+                val mutable public IsActive : nativeptr<int>
+                val mutable public Calls : nativeptr<DrawCall>
+            end
 
     [<AutoOpen>]
     module VM =
@@ -577,6 +798,10 @@ module VKVM =
         let mutable length = 0n
         let mutable count = 0u
         let mutable position = 0n
+
+        let mutable prev : Option<CommandStream> = None
+        let mutable next : Option<CommandStream> = None
+
         let handle = 
             let handle = NativePtr.alloc 1
             NativePtr.write handle (CommandFragment(0u, 0n, NativePtr.zero))
@@ -606,8 +831,14 @@ module VKVM =
                 let newCapacity = Fun.NextPowerOfTwo (int64 e) |> nativeint
                 update (fun h ->
                     let mutable h = h
-                    if h.Commands = 0n then h.Commands <- Marshal.AllocHGlobal(newCapacity)
-                    else h.Commands <- Marshal.ReAllocHGlobal(h.Commands, newCapacity)
+                    let ptr = 
+                        if h.Commands = 0n then Marshal.AllocHGlobal(newCapacity)
+                        else 
+                            let n = Marshal.AllocHGlobal(newCapacity)
+                            Marshal.Copy(h.Commands, n, length)
+                            Marshal.FreeHGlobal h.Commands
+                            n
+                    h.Commands <- ptr
                     h
                 )
                 capacity <- newCapacity
@@ -632,6 +863,25 @@ module VKVM =
                 NativeInt.write ptr data
             )
 
+        member x.Prev
+            with get() = prev
+            and private set p = prev <- p
+
+        member x.Next
+            with get() = next
+            and set (n : Option<CommandStream>) =
+                match n with
+                    | Some n ->
+                        n.Prev <- Some x
+                        next <- Some n
+                        x.HandleNext <- n.Handle
+                    | None ->
+                        match next with
+                            | Some n -> 
+                                n.Prev <- None
+                                next <- None
+                            | None -> ()
+                        x.HandleNext <- NativePtr.zero
 
         member x.Clear() =
             if count > 0u then
@@ -644,8 +894,15 @@ module VKVM =
                     capacity <- 0n
                     length <- 0n
                     count <- 0u
+                    position <- 0n
+
+
                     f
                 )
+
+        member x.Dispose() =
+            x.Clear()
+            NativePtr.free handle
 
         member x.BindPipeline(pipelineBindPoint : VkPipelineBindPoint, pipeline : VkPipeline) =
             let mutable cmd = 
@@ -668,7 +925,7 @@ module VKVM =
                 cmd.OpCode <- CommandType.SetViewport
                 cmd.FirstViewport <- first
                 cmd.ViewportCount <- uint32 count
-                cmd.Viewports <- pViewports
+                cmd.Viewports <- NativePtr.ofNativeInt (nsizeof<SetViewportCommand>)
                 NativeInt.write ptr cmd
 
                 for i in 0 .. count - 1 do
@@ -687,7 +944,7 @@ module VKVM =
                 cmd.OpCode <- CommandType.SetScissor
                 cmd.FirstScissor <- first
                 cmd.ScissorCount <- uint32 count
-                cmd.Scissors <- pScissors
+                cmd.Scissors <- NativePtr.ofNativeInt (nativeint sizeof<SetScissorCommand>)
                 NativeInt.write ptr cmd
                 
                 for i in 0 .. count - 1 do
@@ -783,9 +1040,9 @@ module VKVM =
                 cmd.Layout <- layout
                 cmd.FirstSet <- firstSet
                 cmd.SetCount <- uint32 setCount
-                cmd.DescriptorSets <- pSets
+                cmd.DescriptorSets <- NativePtr.ofNativeInt (nativeint baseSize)
                 cmd.DynamicOffsetCount <- uint32 offsetCount
-                cmd.DynamicOffsets <- pOffsets
+                cmd.DynamicOffsets <- NativePtr.ofNativeInt (nativeint baseSize + nativeint setSize)
 
                 NativeInt.write ptr cmd
 
@@ -825,8 +1082,8 @@ module VKVM =
                 cmd.OpCode <- CommandType.BindVertexBuffers
                 cmd.FirstBinding <- first
                 cmd.BindingCount <- uint32 count
-                cmd.Buffers <- pBuffers
-                cmd.Offsets <- pOffsets
+                cmd.Buffers <-  NativePtr.ofNativeInt (nativeint baseSize)
+                cmd.Offsets <- NativePtr.ofNativeInt (nativeint baseSize + nativeint bufferSize)
                 NativeInt.write ptr cmd
 
                 for i in 0 .. count - 1 do
@@ -922,7 +1179,7 @@ module VKVM =
                 cmd.DstImage <- dst
                 cmd.DstImageLayout <- dstLayout
                 cmd.RegionCount <- uint32 regionCount
-                cmd.Regions <- pRegions
+                cmd.Regions <- NativePtr.ofNativeInt (nativeint baseSize)
                 NativeInt.write ptr cmd
 
                 for i in 0 .. regionCount - 1 do
@@ -946,7 +1203,7 @@ module VKVM =
                 cmd.DstImage <- dst
                 cmd.DstImageLayout <- dstLayout
                 cmd.RegionCount <- uint32 regionCount
-                cmd.Regions <- pRegions
+                cmd.Regions <- NativePtr.ofNativeInt (nativeint baseSize)
                 cmd.Filter <- filter
                 NativeInt.write ptr cmd
 
@@ -969,7 +1226,7 @@ module VKVM =
                 cmd.SrcBuffer <- src
                 cmd.DstBuffer <- dst
                 cmd.RegionCount <- uint32 regionCount
-                cmd.Regions <- pRegions
+                cmd.Regions <- NativePtr.ofNativeInt (nativeint baseSize)
 
                 NativeInt.write ptr cmd
 
@@ -993,7 +1250,7 @@ module VKVM =
                 cmd.DstImage <- dst
                 cmd.DstImageLayout <- dstLayout
                 cmd.RegionCount <- uint32 regionCount
-                cmd.Regions <- pRegions
+                cmd.Regions <- NativePtr.ofNativeInt (nativeint baseSize)
 
                 NativeInt.write ptr cmd
 
@@ -1017,7 +1274,7 @@ module VKVM =
                 cmd.SrcImageLayout <- srcLayout
                 cmd.DstBuffer <- dst
                 cmd.RegionCount <- uint32 regionCount
-                cmd.Regions <- pRegions
+                cmd.Regions <- NativePtr.ofNativeInt (nativeint baseSize)
 
                 NativeInt.write ptr cmd
 
@@ -1066,9 +1323,9 @@ module VKVM =
                 cmd.OpCode <- CommandType.ClearColorImage
                 cmd.Image <- image
                 cmd.ImageLayout <- layout
-                cmd.Color <- pValues
+                cmd.Color <- NativePtr.ofNativeInt (nativeint baseSize)
                 cmd.RangeCount <- uint32 count
-                cmd.Ranges <- pRanges
+                cmd.Ranges <- NativePtr.ofNativeInt (nativeint baseSize + nativeint valueSize)
                 NativeInt.write ptr cmd
 
                 for i in 0 .. count - 1 do
@@ -1093,9 +1350,9 @@ module VKVM =
                 cmd.OpCode <- CommandType.ClearDepthStencilImage
                 cmd.Image <- image
                 cmd.ImageLayout <- layout
-                cmd.DepthStencil <- pValues
+                cmd.DepthStencil <- NativePtr.ofNativeInt (nativeint baseSize)
                 cmd.RangeCount <- uint32 count
-                cmd.Ranges <- pRanges
+                cmd.Ranges <- NativePtr.ofNativeInt (nativeint baseSize + nativeint valueSize)
                 NativeInt.write ptr cmd
 
                 for i in 0 .. count - 1 do
@@ -1120,9 +1377,9 @@ module VKVM =
                 cmd.Length <- uint32 size
                 cmd.OpCode <- CommandType.ClearAttachments
                 cmd.AttachmentCount <- uint32 attCount
-                cmd.Attachments <- pAtt
+                cmd.Attachments <- NativePtr.ofNativeInt (nativeint baseSize)
                 cmd.RectCount <- uint32 rectCount
-                cmd.Rects <- pRect
+                cmd.Rects <- NativePtr.ofNativeInt (nativeint baseSize + nativeint attSize)
                 NativeInt.write ptr cmd
 
                 for i in 0 .. attCount - 1 do NativePtr.set pAtt i attachments.[i]
@@ -1146,7 +1403,7 @@ module VKVM =
                 cmd.DstImage <- dst
                 cmd.DstImageLayout <- dstLayout
                 cmd.RegionCount <- uint32 regionCount
-                cmd.Regions <- pRegions
+                cmd.Regions <- NativePtr.ofNativeInt (nativeint baseSize)
                 NativeInt.write ptr cmd
 
                 for i in 0 .. regionCount - 1 do
@@ -1192,21 +1449,25 @@ module VKVM =
                 let bPtr = NativePtr.ofNativeInt (ptr + nativeint baseSize + nativeint eSize + nativeint mSize)
                 let iPtr = NativePtr.ofNativeInt (ptr + nativeint baseSize + nativeint eSize + nativeint mSize + nativeint bSize)
 
+                let ePtr0 = NativePtr.ofNativeInt (nativeint baseSize)
+                let mPtr0 = NativePtr.ofNativeInt (nativeint baseSize + nativeint eSize)
+                let bPtr0 = NativePtr.ofNativeInt (nativeint baseSize + nativeint eSize + nativeint mSize)
+                let iPtr0 = NativePtr.ofNativeInt (nativeint baseSize + nativeint eSize + nativeint mSize + nativeint bSize)
 
 
                 let mutable cmd = Unchecked.defaultof<WaitEventsCommand>
                 cmd.Length <- uint32 size
                 cmd.OpCode <- CommandType.WaitEvents
                 cmd.EventCount <- uint32 eCount
-                cmd.Events <- ePtr
+                cmd.Events <- ePtr0
                 cmd.SrcStageMask <- srcStageMask
                 cmd.DstStageMask <- dstStageMask
                 cmd.MemoryBarrierCount <- uint32 mCount
-                cmd.MemoryBarriers <- mPtr
+                cmd.MemoryBarriers <- mPtr0
                 cmd.BufferMemoryBarrierCount <- uint32 bCount
-                cmd.BufferMemoryBarriers <- bPtr
+                cmd.BufferMemoryBarriers <- bPtr0
                 cmd.ImageMemoryBarrierCount <- uint32 iCount
-                cmd.ImageMemoryBarriers <- iPtr
+                cmd.ImageMemoryBarriers <- iPtr0
                 NativeInt.write ptr cmd
 
                 for i in 0 .. eCount - 1 do NativePtr.set ePtr i events.[i]
@@ -1230,6 +1491,9 @@ module VKVM =
                 let mPtr = NativePtr.ofNativeInt (ptr + nativeint baseSize)
                 let bPtr = NativePtr.ofNativeInt (ptr + nativeint baseSize + nativeint mSize)
                 let iPtr = NativePtr.ofNativeInt (ptr + nativeint baseSize + nativeint mSize + nativeint bSize)
+                let mPtr0 = NativePtr.ofNativeInt (nativeint baseSize)
+                let bPtr0 = NativePtr.ofNativeInt (nativeint baseSize + nativeint mSize)
+                let iPtr0 = NativePtr.ofNativeInt (nativeint baseSize + nativeint mSize + nativeint bSize)
 
 
 
@@ -1239,11 +1503,11 @@ module VKVM =
                 cmd.SrcStageMask <- srcStageMask
                 cmd.DstStageMask <- dstStageMask
                 cmd.MemoryBarrierCount <- uint32 mCount
-                cmd.MemoryBarriers <- mPtr
+                cmd.MemoryBarriers <- mPtr0
                 cmd.BufferMemoryBarrierCount <- uint32 bCount
-                cmd.BufferMemoryBarriers <- bPtr
+                cmd.BufferMemoryBarriers <- bPtr0
                 cmd.ImageMemoryBarrierCount <- uint32 iCount
-                cmd.ImageMemoryBarriers <- iPtr
+                cmd.ImageMemoryBarriers <- iPtr0
                 NativeInt.write ptr cmd
 
                 for i in 0 .. mCount - 1 do NativePtr.set mPtr i memoryBarriers.[i]
@@ -1332,7 +1596,7 @@ module VKVM =
                 let mutable cmd = Unchecked.defaultof<BeginRenderPassCommand>
                 cmd.Length <- uint32 size
                 cmd.OpCode <- CommandType.BeginRenderPass
-                cmd.RenderPassBegin <- pInfo
+                cmd.RenderPassBegin <- NativePtr.ofNativeInt(nativeint baseSize)
                 cmd.Contents <- contents
                 NativeInt.write ptr cmd
 
@@ -1369,7 +1633,7 @@ module VKVM =
                 cmd.Length <- uint32 size
                 cmd.OpCode <- CommandType.ExecuteCommands
                 cmd.CommandBufferCount <- uint32 bCount
-                cmd.CommandBuffers <- bPtr
+                cmd.CommandBuffers <- NativePtr.ofNativeInt (nativeint baseSize)
                 NativeInt.write ptr cmd
 
                 for i in 0 .. bCount - 1 do NativePtr.set bPtr i buffers.[i]
@@ -1391,10 +1655,51 @@ module VKVM =
             cmd.Run <- fptr
             x.Append(&cmd)
 
+
+        member x.IndirectBindPipeline(pointer : nativeptr<VkPipeline>) =
+            let mutable cmd = Unchecked.defaultof<IndirectBindPipelineCommand>
+            cmd.Length <- usizeof<IndirectBindPipelineCommand>
+            cmd.OpCode <- CommandType.IndirectBindPipeline
+            cmd.Pipeline <- pointer
+            x.Append(&cmd)
+
+        member x.IndirectBindDescriptorSets(pointer : nativeptr<DescriptorSetBinding>) =
+            let mutable cmd = Unchecked.defaultof<IndirectBindDescriptorSetsCommand>
+            cmd.Length <- usizeof<IndirectBindDescriptorSetsCommand>
+            cmd.OpCode <- CommandType.IndirectBindDescriptorSets
+            cmd.Binding <- pointer
+            x.Append(&cmd)
+
+        member x.IndirectBindIndexBuffer(pointer : nativeptr<IndexBufferBinding>) =
+            let mutable cmd = Unchecked.defaultof<IndirectBindIndexBufferCommand>
+            cmd.Length <- usizeof<IndirectBindIndexBufferCommand>
+            cmd.OpCode <- CommandType.IndirectBindIndexBuffer
+            cmd.Binding <- pointer
+            x.Append(&cmd)
+
+        member x.IndirectBindVertexBuffers(pointer : nativeptr<VertexBufferBinding>) =
+            let mutable cmd = Unchecked.defaultof<IndirectBindVertexBuffersCommand>
+            cmd.Length <- usizeof<IndirectBindVertexBuffersCommand>
+            cmd.OpCode <- CommandType.IndirectBindVertexBuffers
+            cmd.Binding <- pointer
+            x.Append(&cmd)
+            
+
+        member x.IndirectDraw(stats : nativeptr<V2i>, isActive : nativeptr<int>, calls : nativeptr<DrawCall>) =
+            let mutable cmd = Unchecked.defaultof<IndirectDrawCommand>
+            cmd.Length <- usizeof<IndirectDrawCommand>
+            cmd.OpCode <- CommandType.IndirectDraw
+            cmd.Stats <- stats
+            cmd.IsActive <- isActive
+            cmd.Calls <- calls
+            x.Append(&cmd)
+
         member x.Position
             with get() = position
             and set p = position <- p
-
+            
+        member x.SeekToBegin() =
+            position <- 0n
 
         member x.SeekToEnd() =
             position <- length
@@ -1405,5 +1710,6 @@ module VKVM =
         member x.Run(cmd : VkCommandBuffer) =
             VM.vmRun(cmd, handle)
 
-
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
    

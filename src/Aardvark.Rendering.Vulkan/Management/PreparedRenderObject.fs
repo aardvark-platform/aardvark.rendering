@@ -13,6 +13,7 @@ open Aardvark.Base.Incremental
 #nowarn "9"
 #nowarn "51"
 
+
 type PreparedRenderObject =
     {
         device                  : Device
@@ -20,6 +21,7 @@ type PreparedRenderObject =
         
         resources               : list<IResourceLocation>
 
+        pipelineLayout          : PipelineLayout
         pipeline                : INativeResourceLocation<VkPipeline>
         indexBuffer             : Option<INativeResourceLocation<IndexBufferBinding>>
         descriptorSets          : INativeResourceLocation<DescriptorSetBinding>
@@ -238,6 +240,7 @@ type DevicePreparedRenderObjectExtensions private() =
                 original                    = ro
                 resources                   = CSharpList.toList resources
                 descriptorSets              = descriptorBindings
+                pipelineLayout              = programLayout
                 pipeline                    = pipeline
                 vertexBuffers               = bindings
                 indexBuffer                 = indexBufferBinding
