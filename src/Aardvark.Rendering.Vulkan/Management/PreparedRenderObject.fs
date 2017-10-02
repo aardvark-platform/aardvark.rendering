@@ -187,7 +187,6 @@ type DevicePreparedRenderObjectExtensions private() =
             this.CreatePipeline(
                 program,
                 renderPass,
-                bufferFormats,
                 inputState,
                 inputAssembly,
                 rasterizerState,

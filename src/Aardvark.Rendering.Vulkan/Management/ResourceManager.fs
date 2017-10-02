@@ -709,7 +709,6 @@ module Resources =
     type PipelineResource(owner : IResourceCache, key : list<obj>, 
                           renderPass : RenderPass,
                           program : IResourceLocation<ShaderProgram>, 
-                          vertexInputState : Map<Symbol, VertexInputDescription>, 
                           inputState : INativeResourceLocation<VkPipelineVertexInputStateCreateInfo>,
                           inputAssembly : INativeResourceLocation<VkPipelineInputAssemblyStateCreateInfo>,
                           rasterizerState : INativeResourceLocation<VkPipelineRasterizationStateCreateInfo>,
@@ -1068,6 +1067,8 @@ type ResourceManager(user : IResourceUser, device : Device) =
     let isActiveCache           = ResourceLocationCache<nativeptr<int>>(user)
 
 
+    member x.ResourceUser = user
+
     member x.Dispose() =
         device.Delete descriptorPool
         bufferCache.Clear()
@@ -1241,7 +1242,6 @@ type ResourceManager(user : IResourceUser, device : Device) =
 
     member x.CreatePipeline(program         : IResourceLocation<ShaderProgram>, 
                             pass            : RenderPass,
-                            inputs          : Map<Symbol, bool * Aardvark.Base.BufferView>,
                             inputState      : INativeResourceLocation<VkPipelineVertexInputStateCreateInfo>,
                             inputAssembly   : INativeResourceLocation<VkPipelineInputAssemblyStateCreateInfo>,
                             rasterizerState : INativeResourceLocation<VkPipelineRasterizationStateCreateInfo>,
@@ -1257,10 +1257,10 @@ type ResourceManager(user : IResourceUser, device : Device) =
                 | Some (_,(_,a)) -> a
                 | None -> pass.DepthStencilAttachment |> Option.get
 
-        let inputs = VertexInputState.create inputs
+        //let inputs = VertexInputState.create inputs
         // TODO: sampleShading
         let ms = MultisampleState.create false anyAttachment.samples
-        let key = [ program :> obj; inputs :> obj; inputState :> obj; inputAssembly :> obj; rasterizerState :> obj; colorBlendState :> obj; ms :> obj; depthStencil :> obj ]
+        let key = [ program :> obj; inputState :> obj; inputAssembly :> obj; rasterizerState :> obj; colorBlendState :> obj; ms :> obj; depthStencil :> obj ]
         pipelineCache.GetOrCreate(
             key,
             fun cache key ->
@@ -1268,7 +1268,6 @@ type ResourceManager(user : IResourceUser, device : Device) =
                     cache, key,
                     pass,
                     program,
-                    inputs,
                     inputState,
                     inputAssembly,
                     rasterizerState,
