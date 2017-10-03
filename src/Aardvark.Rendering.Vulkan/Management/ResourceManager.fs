@@ -36,7 +36,7 @@ type IResourceLocation =
     abstract member Update : AdaptiveToken -> ResourceInfo<obj>
     abstract member Acquire : unit -> unit
     abstract member Release : unit -> unit
-    abstract member RelaseAll : unit -> unit
+    abstract member ReleaseAll : unit -> unit
     abstract member Key : list<obj>
     abstract member Owner : IResourceCache
     
@@ -110,7 +110,7 @@ type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
 
         member x.Acquire() = x.Acquire()
         member x.Release() = x.Release()
-        member x.RelaseAll() = x.RelaseAll()
+        member x.ReleaseAll() = x.RelaseAll()
         member x.Owner = owner
         member x.Key = key
 
@@ -332,7 +332,7 @@ type ResourceLocationCache<'h>(user : IResourceUser) =
 
     member x.Clear() =
         let res = store.Values |> Seq.toArray
-        for r in res do r.RelaseAll()
+        for r in res do r.ReleaseAll()
 
     interface IResourceCache with
         member x.AddLocked l = user.AddLocked l
