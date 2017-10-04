@@ -10,6 +10,7 @@ open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
+open Management
 
 #nowarn "9"
 #nowarn "51"
@@ -726,11 +727,11 @@ module GeometryPoolUtilities =
         let vertexSize = types |> Map.toSeq |> Seq.sumBy (fun (_,t) -> Marshal.SizeOf t |> int64)
 
         let reallocIfNeeded () =
-            let newCapacity = manager.LastUsedByte + 1n |> int64 |> Fun.NextPowerOfTwo |> max minCapacity
+            let newCapacity = manager.Capactiy + 1n |> int64 |> Fun.NextPowerOfTwo |> max minCapacity
             if newCapacity <> capacity then
                 let result = 
                     lock.Lock.Use(fun () ->
-                        let newCapacity = manager.LastUsedByte + 1n |> int64 |> Fun.NextPowerOfTwo |> max minCapacity
+                        let newCapacity = manager.Capactiy + 1n |> int64 |> Fun.NextPowerOfTwo |> max minCapacity
                         if capacity <> newCapacity then
                             Log.line "realloc %A -> %A" (Mem (vertexSize * capacity)) (Mem (vertexSize * newCapacity))
                             let copySize = min capacity newCapacity
@@ -817,7 +818,7 @@ module GeometryPoolUtilities =
 //            finally 
 //                t.Sync()
 
-        member x.Free(ptr : managedptr) =
+        member x.Free(ptr : Block<unit>) =
             manager.Free ptr
             reallocIfNeeded()
             Interlocked.Decrement(&count) |> ignore

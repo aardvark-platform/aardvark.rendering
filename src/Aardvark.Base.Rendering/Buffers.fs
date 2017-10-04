@@ -139,6 +139,7 @@ type ILockedResource =
 
 module LockedResource =
 
+    //possibly broken.
     let inline render (r : ILockedResource) (f : unit -> 'x) =
         r.Lock.Enter(ResourceUsage.Render, r.OnLock)
         try f()

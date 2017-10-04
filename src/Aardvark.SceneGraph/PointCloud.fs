@@ -435,7 +435,7 @@ module PointCloudRenderObjectSemantics =
         open Aardvark.SceneGraph.Semantics
         open Aardvark.Base.Ag
 
-        type private LoadedGeometry(pool : IGeometryPool, ptr : managedptr, geometry : Option<IndexedGeometry>) =
+        type private LoadedGeometry(pool : IGeometryPool, ptr : Management.Block<unit>, geometry : Option<IndexedGeometry>) =
             let range =
                 match geometry with
                     | Some g -> Range1i(int ptr.Offset, int ptr.Offset + int ptr.Size - 1)

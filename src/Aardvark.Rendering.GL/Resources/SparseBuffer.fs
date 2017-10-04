@@ -10,6 +10,9 @@ open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Rendering.GL
 
+open Aardvark.Base.Management
+
+
 [<AbstractClass>]
 type SparseBuffer(ctx : Context, size : nativeint, handle : int, beforeRender : unit -> unit, afterRender : unit -> unit) =
     inherit Buffer(ctx, size, handle)
@@ -176,9 +179,9 @@ module private SparseBufferImplementation =
 
         member x.AdjustCapacity(c : nativeint) =
             if c <> x.SizeInBytes then
-                LockedResource.update x (fun () ->
-                    //if c < x.SizeInBytes then Log.warn "shrink: %A" (Mem c)
-                    //else  Log.warn "grow: %A" (Mem c)
+                lock x (fun () ->
+                    if c < x.SizeInBytes then Log.warn "shrink: %A where (x=%A)" (Mem c) (Mem x.SizeInBytes)
+                    else  Log.warn "grow: %A where (x=%A)" (Mem c) (Mem x.SizeInBytes)
                     writeFences.WaitCPU()
                     let copySize = min c x.SizeInBytes
 
@@ -192,6 +195,9 @@ module private SparseBufferImplementation =
                         GL.NamedCopyBufferSubData(handle, temp, 0n, 0n, copySize)
                         GL.Check "could not copy to temp buffer"
 
+                        GL.InvalidateBufferData(handle)
+                        GL.Check "could not invalidate buffer"
+
                         GL.NamedBufferData(handle, c, 0n, BufferUsageHint.StaticDraw)
                         GL.Check "could not resize buffer"
                     
@@ -200,19 +206,21 @@ module private SparseBufferImplementation =
 
                         GL.DeleteBuffer(temp)
                         GL.Check "could not delete temp buffer"
+
+                        
                     else
                         GL.NamedBufferData(handle, c, 0n, BufferUsageHint.StaticDraw)
                         GL.Check "could not resize buffer"
 
-                    GL.Sync()
                     x.SizeInBytes <- c
+                    GL.Sync()
                 )
 
         override x.Release() =
             usedBytes <- MapExt.empty
 
         override x.PerformWrite(offset : nativeint, size : nativeint, data : nativeint) =
-            LockedResource.render x (fun () ->
+            lock x (fun () ->
                 if offset < 0n || size < 0n || offset + size > x.SizeInBytes then
                     failwith "[GL] write region out of bounds"
             
@@ -313,7 +321,7 @@ type SparseBufferGeometryPool(ctx : Context, types : Map<Symbol, Type>) =
     let mutable rendering = 0
     let notRendering = new ManualResetEventSlim(true)
     let hasFrees = new ManualResetEventSlim(false)
-    let mutable pendingFrees : list<managedptr> = []
+    let mutable pendingFrees : list<Block<unit>> = []
     let fences = FenceSet()
 
     let beforeRender() =
@@ -333,15 +341,12 @@ type SparseBufferGeometryPool(ctx : Context, types : Map<Symbol, Type>) =
         
     let manager = MemoryManager.createNop()
         
-    let free ( ptrs : list<managedptr>) =
+    let free ( ptrs : list<Block<unit>>) =
         use __ = ctx.ResourceLock
-        //fences.WaitGPU()
 
         for (_,(b,_,s)) in Map.toSeq buffers do
             for p in ptrs do
                 b.Commitment(p.Offset * s, p.Size * s, false)
-                        
-        //fences.Enqueue()
 
         for f in ptrs do
             manager.Free f
@@ -350,7 +355,7 @@ type SparseBufferGeometryPool(ctx : Context, types : Map<Symbol, Type>) =
         new Thread(ThreadStart(fun () ->
             try
                 while true do
-                    WaitHandle.WaitAll([| hasFrees.WaitHandle; notRendering.WaitHandle |]) |> ignore
+                    WaitHandle.WaitAll([| hasFrees.WaitHandle |]) |> ignore
                     hasFrees.Reset()
 
                     let frees = Interlocked.Exchange(&pendingFrees, [])
@@ -363,6 +368,7 @@ type SparseBufferGeometryPool(ctx : Context, types : Map<Symbol, Type>) =
 
     member x.Alloc(fvc : int, g : IndexedGeometry) =
         let ptr = manager.Alloc(nativeint fvc)
+
         use __ = ctx.ResourceLock
         Interlocked.Increment(&count) |> ignore
 
@@ -383,10 +389,9 @@ type SparseBufferGeometryPool(ctx : Context, types : Map<Symbol, Type>) =
                 | _ ->
                     ()
         GL.Sync()
-        //fences.Enqueue()
         ptr
 
-    member x.Free(ptr : managedptr) =
+    member x.Free(ptr : Block<unit>) =
         Interlocked.Decrement(&count) |> ignore
         if notRendering.IsSet then
             free [ptr]

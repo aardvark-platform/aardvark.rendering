@@ -34,7 +34,7 @@ module IExistentialArrayProcessorExts =
 type GeometryPool2(runtime : IRuntime, attributes : Map<Symbol, Type>) =
     let pool = runtime.CreateGeometryPool(attributes)
 
-    let ranges = Dict<IndexedGeometry, managedptr>()
+    let ranges = Dict<IndexedGeometry, Management.Block<unit>>()
 
     let faceVertexCount (g : IndexedGeometry) =
         if g.IndexedAttributes.Count = 0 then 
@@ -69,7 +69,7 @@ type GeometryPool2(runtime : IRuntime, attributes : Map<Symbol, Type>) =
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-//
+
 //[<AutoOpen>]
 //module private TypedBuffers =
 //    type ITypedBuffer =

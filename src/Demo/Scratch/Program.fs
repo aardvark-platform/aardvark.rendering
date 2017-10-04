@@ -731,6 +731,83 @@ open Ranges
 
 open Aardvark.Rendering.Vulkan
 open System.Runtime.InteropServices
+open Aardvark.Application
+open Aardvark.SceneGraph
+
+open System
+let test () =
+
+    
+    let app = new OpenGlApplication()
+    
+    let enabled = ref false
+
+    let fu = obj()
+    let d = System.Collections.Generic.List()
+    
+    Aardvark.Rendering.GL.RuntimeConfig.SupressSparseBuffers <- true
+
+    let runtime = app.Runtime :> IRuntime
+    let win = app.CreateGameWindow()
+    let ss = runtime.CreateFramebuffer(win.FramebufferSignature,V2i.II |> Mod.constant)
+    
+    Log.line "START THING"
+    let pool = runtime.CreateGeometryPool( [DefaultSemantic.Positions, typeof<V4f>; DefaultSemantic.Colors, typeof<V4f>] |> Map.ofList )
+
+    
+    let ct = ref 10000
+
+    let disp() =
+        Log.startTimed "clearing %d ptrs" (d.Count)
+        for p in d do
+            pool.Free p 
+        Log.stop()
+        lock fu ( fun _ -> d.Clear() )
+
+    win.Keyboard.KeyDown(Keys.Space).Values.Add( fun _ -> enabled := true )
+    win.Keyboard.KeyDown(Keys.C).Values.Add( fun _ -> disp() )
+    win.Keyboard.KeyDown(Keys.P).Values.Add( fun _ -> ct := !ct * 10; Log.line "ct=%d" (!ct))
+    win.Keyboard.KeyDown(Keys.L).Values.Add( fun _ -> ct := !ct / 10; Log.line "ct=%d" (!ct))
+    win.Keyboard.KeyDown(Keys.X).Values.Add( fun _ -> 
+        for i in 1..10 do (System.GC.Collect(System.Int32.MaxValue, GCCollectionMode.Forced, true); System.GC.WaitForFullGCComplete() |> ignore) 
+        Log.line "Collected GC NOW.")
+    win.Keyboard.KeyUp(Keys.Space).Values.Add( fun _ -> enabled := false )
+    win.Keyboard.KeyDown(Keys.D).Values.Add( fun _ -> Log.line "- render -"; win.RenderTask.Run(RenderToken.Empty, ss |> Mod.force) )
+    
+
+    async {
+        do! Async.SwitchToNewThread()
+        let mutable i = 0
+        while true do
+            System.Threading.Thread.Sleep 1
+            if !enabled then
+                let positions = Array.init !ct (constF V4f.IIII)
+                let ptr = pool.Alloc( IndexedGeometry( Mode = IndexedGeometryMode.PointList, IndexedAttributes = SymDict.ofList [ DefaultSemantic.Positions, positions :> System.Array; DefaultSemantic.Colors, positions :> System.Array ] ) )
+                lock fu ( fun _ -> d.Add ptr )
+                GC.Collect(System.Int32.MaxValue, GCCollectionMode.Forced, true)
+                i <- i+1
+                Log.line "i#%d : added %d vals" i (!ct * (d.Count))
+        } |> Async.Start
+        
+    match pool.TryGetBufferView(DefaultSemantic.Positions), pool.TryGetBufferView(DefaultSemantic.Colors) with
+    | Some pos, Some col -> 
+        let sg = Sg.draw IndexedGeometryMode.PointList 
+                    |> Sg.vertexBuffer DefaultSemantic.Positions pos
+                    |> Sg.vertexBuffer DefaultSemantic.Colors col
+                    |> Sg.shader {
+                            do! DefaultSurfaces.trafo
+                        }
+        
+        win.RenderTask <- runtime.CompileRender(win.FramebufferSignature,sg)
+    | _ -> Log.error "fail"; ()
+
+
+   
+
+    win.Run()
+
+    ()
+
 
 [<EntryPoint>]
 let main argv = 
@@ -755,7 +832,11 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
+    test () 
+    System.Environment.Exit 0
+
     App.Config <- { BackendConfiguration.Default with useDebugOutput = true }
     App.run()
 
     0 // return an integer exit code
+

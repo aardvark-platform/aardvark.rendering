@@ -12,9 +12,11 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Rendering.GL
+open Management
 
 #nowarn "9"
 #nowarn "51"
+
 
 [<AutoOpen>]
 module ResizeBufferImplementation =
@@ -487,9 +489,9 @@ module ManagedBufferImplementation =
 
         let mutable count = 0
 
-        let mutable pendingFrees : list<managedptr> = []
+        let mutable pendingFrees : list<Block<unit>> = []
         
-        let free ( ptrs : list<managedptr>) =
+        let free ( ptrs : list<Block<unit>>) =
             use __ = ctx.ResourceLock
             fences.WaitGPU()
 
@@ -551,7 +553,7 @@ module ManagedBufferImplementation =
             fences.Enqueue()
             ptr
 
-        member x.Free(ptr : managedptr) =
+        member x.Free(ptr : Block<unit>) =
             Interlocked.Decrement(&count) |> ignore
             Interlocked.Change(&pendingFrees, fun l -> ptr :: l) |> ignore
             hasFrees.Set() |> ignore
@@ -571,7 +573,7 @@ module ManagedBufferImplementation =
             member x.UsedMemory = handles |> Map.toSeq |> Seq.sumBy (fun (_,(b,_,_)) -> b.UsedMemory)
             member x.Dispose() = x.Dispose()
             member x.Alloc(c,g) = x.Alloc(c,g)
-            member x.Free p = x.Free p
+            member x.Free p = x.Free ( p )
             member x.TryGetBufferView sem = x.TryGetBufferView sem
 
     and private Page(b : int, offset : nativeint, size : nativeint, totalSize : ref<int64>) =
@@ -639,7 +641,7 @@ module ManagedBufferImplementation =
                 pageRef.[pi].Commitment(c)
 
 
-        member internal x.Commitment(ptrs : list<managedptr>, elementSize : nativeint, c : bool) =
+        member internal x.Commitment(ptrs : list<Management.Block<unit>>, elementSize : nativeint, c : bool) =
             let ctx = ctx.CurrentContextHandle.Value
             
             for ptr in ptrs do
@@ -705,10 +707,10 @@ module ManagedBufferImplementation =
         let mutable count = 0
 
         let cap() =
-            if manager.LastUsedByte < 0n then
+            if manager.Capactiy < 0n then
                 0n
             else
-                let res = int64 manager.LastUsedByte + 1L |> Fun.NextPowerOfTwo |> nativeint
+                let res = int64 manager.Capactiy + 1L |> Fun.NextPowerOfTwo |> nativeint
                 max res minCapacity
 
         member internal x.BeforeRender() =
@@ -770,7 +772,7 @@ module ManagedBufferImplementation =
             )
             ptr
 
-        member x.Free(ptr : managedptr) =
+        member x.Free(ptr : Block<unit>) =
             Interlocked.Decrement(&count) |> ignore
             Interlocked.Change(&pendingFrees, fun l -> ptr :: l) |> ignore
             hasFrees.Set() |> ignore
@@ -790,7 +792,7 @@ module ManagedBufferImplementation =
             member x.UsedMemory = handles |> Map.toSeq |> Seq.sumBy (fun (_,(b,_,_)) -> b.SizeInBytes) |> Mem
             member x.Dispose() = x.Dispose()
             member x.Alloc(c,g) = x.Alloc(c,g)
-            member x.Free p = x.Free p
+            member x.Free p = x.Free (p)
             member x.TryGetBufferView sem = x.TryGetBufferView sem
 
     and private ResizeGeometryPoolBuffer(parent : ResizeGeometryPool, ctx : Context, handle : int, rw : ReaderWriterLockSlim, initialCap : nativeint) =
