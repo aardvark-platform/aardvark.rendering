@@ -326,19 +326,34 @@ type PreparedRenderObjectCommand(scope : ResourceSet, manager : ResourceManager,
 
 
 let run() =
-    let app = new VulkanApplication(true)
+    let app = new VulkanApplication(false)
     let runtime = app.Runtime
-    let win = app.CreateSimpleRenderWindow(1)
+    //let win = app.CreateSimpleRenderWindow(1)
+
+    let signature =
+        runtime.CreateFramebufferSignature(
+            1,
+            [
+                DefaultSemantic.Colors, RenderbufferFormat.Rgba8
+                DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
+            ]
+        )
+
+    let size = Mod.constant (V2i(1024, 768))
+    let fbo = runtime.CreateFramebuffer(signature, size)
+    fbo.Acquire()
+
+    let handle = fbo.GetValue()
 
     let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
-    let perspective = win.Sizes  |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
-    let viewTrafo = DefaultCameraController.control win.Mouse win.Keyboard win.Time view
+    let perspective = size  |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
+    let viewTrafo = Mod.constant view //DefaultCameraController.control win.Mouse win.Keyboard win.Time view
 
     let box = Box3d(-V3d.Half, V3d.Half)
 
+    let cnt = 20
     let simpleThings =
         Sg.ofList [
-            let cnt = 10
             let size = 1.5 * float cnt
             let off = -size / 2.0
             let rand = RandomSystem()
@@ -367,21 +382,51 @@ let run() =
 
     let objects = sg.RenderObjects() |> ASet.toList
 
-    let task = new RenderTaskNew.RenderTask(runtime.Device, unbox win.FramebufferSignature, false, false)
+    let task = new RenderTaskNew.RenderTask(runtime.Device, unbox signature, false, false)
     
     let tokens = HashSet()
 
-    for o in objects do
-        task.Add(o) |> tokens.Add |> ignore
+    let sw = System.Diagnostics.Stopwatch()
 
-    win.Keyboard.KeyDown(Keys.X).Values.Add (fun _ ->
-        if tokens.Count > 0 then
-            let t = tokens |> Seq.head
-            tokens.Remove t |> ignore
-            transact (fun () -> task.Remove t)
-    )
+    //let set = CSet.empty
+    //let task = runtime.CompileRender(signature, set)
 
-    win.RenderTask <- task
+    let output = OutputDescription.ofFramebuffer handle
+    for i in 1 .. 4 do
+        transact (fun () -> task.Clear())
+        task.Run(AdaptiveToken.Top, RenderToken.Empty, output)
+        transact (fun () -> for o in objects do task.Add o |> ignore)
+        task.Run(AdaptiveToken.Top, RenderToken.Empty, output)
 
-    win.Run()
+    let iter = 100000
+    for i in 1 .. iter do
+        transact (fun () -> task.Clear())
+        task.Run(AdaptiveToken.Top, RenderToken.Empty, output)
+        sw.Start()
+        transact (fun () -> for o in objects do task.Add o |> ignore)
+        task.Run(AdaptiveToken.Top, RenderToken.Empty, output)
+        sw.Stop()
+    let buildAndRender = sw.MicroTime / iter
+
+    sw.Restart()
+    for i in 1 .. iter do
+        task.Run(AdaptiveToken.Top, RenderToken.Empty, output)
+    sw.Stop()
+    let renderTime = sw.MicroTime / iter
+
+    let buildTime = buildAndRender - renderTime
+
+    printfn "%A" (buildTime / (cnt * cnt))
+
+//
+//    win.Keyboard.KeyDown(Keys.X).Values.Add (fun _ ->
+//        if tokens.Count > 0 then
+//            let t = tokens |> Seq.head
+//            tokens.Remove t |> ignore
+//            transact (fun () -> task.Remove t)
+//    )
+//
+//    win.RenderTask <- task
+//
+//    win.Run()
 

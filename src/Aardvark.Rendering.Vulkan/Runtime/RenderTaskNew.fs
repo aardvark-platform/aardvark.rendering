@@ -36,6 +36,10 @@ module RenderTaskNew =
                 | :? IResourceLocation -> version <- version + 1
                 | _ -> ()
  
+        member x.Dispose() =
+            cache.Clear()
+
+
         member x.Compile(o : IRenderObject) : IResourceLocation<VKVM.CommandStream> =
             let call = 
                 cache.GetOrCreate([o :> obj], fun owner key ->
@@ -133,6 +137,13 @@ module RenderTaskNew =
                 let stream = res.Update(t).handle
                 stream, res
             )
+
+        member x.Dispose() =
+            compiler.Dispose()
+            first.Dispose()
+            last.Dispose()
+            dirty.Clear()
+            cmdBuffer.Dispose()
 
         member x.First = firstToken
         member x.Last = lastToken
@@ -283,9 +294,15 @@ module RenderTaskNew =
             let t = cmd.Append(o)
             RenderTaskObjectToken(cmd, t) :> IToken
 
+
         member x.Remove(t : IToken) =
             let t = unbox<RenderTaskObjectToken> t
             t.Buffer.Remove(t.Token)
+
+        member x.Clear() =
+            for c in passes.Values do
+                c.Dispose()
+            passes.Clear()
 
         override x.Dispose() = ()
 

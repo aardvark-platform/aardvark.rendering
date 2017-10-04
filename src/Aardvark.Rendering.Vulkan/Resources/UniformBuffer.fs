@@ -145,6 +145,8 @@ module UniformWriters =
     type IWriter = 
         abstract member Write : AdaptiveToken * IAdaptiveObject * nativeint -> unit
         abstract member WriteUnsafeValue : obj * nativeint -> unit
+        abstract member TargetSize : nativeint
+        abstract member WithOffset : nativeint -> IWriter
 
     type IWriter<'a> =
         inherit IWriter
@@ -156,9 +158,10 @@ module UniformWriters =
         static let fieldCache = System.Collections.Concurrent.ConcurrentDictionary<FieldInfo, 'a -> 'b>()
 
         static let compileProperty (prop : PropertyInfo) =
+            let name = sprintf "%s.getProperty%s" prop.DeclaringType.FullName prop.Name
             let meth = 
                 new DynamicMethod(
-                    Guid.NewGuid() |> string,
+                    name,
                     MethodAttributes.Static ||| MethodAttributes.Public,
                     CallingConventions.Standard,
                     typeof<'b>,
@@ -176,9 +179,10 @@ module UniformWriters =
             func.Invoke
 
         static let compileField (field : FieldInfo) =
+            let name = sprintf "%s.getField%s" field.DeclaringType.FullName field.Name
             let meth = 
                 new DynamicMethod(
-                    Guid.NewGuid() |> string,
+                    name,
                     MethodAttributes.Static ||| MethodAttributes.Public,
                     CallingConventions.Standard,
                     typeof<'b>,
@@ -199,10 +203,13 @@ module UniformWriters =
         static member Field(f : FieldInfo) = fieldCache.GetOrAdd(f, Func<_,_>(compileField))
 
 
+
+
     [<AbstractClass>]
     type AbstractWriter<'a>() =
         abstract member Write : 'a * nativeint -> unit
-
+        abstract member TargetSize : nativeint
+        default x.TargetSize = -1n
 
         interface IWriter with
             member x.Write(caller, value, ptr) =
@@ -213,11 +220,221 @@ module UniformWriters =
                 match value with
                     | :? 'a as value -> x.Write(value, ptr)
                     | _ -> failf "unexpected value %A (expecting %A)" value typeof<'a>
-                
+
+            member x.TargetSize = x.TargetSize
+
+            member x.WithOffset (offset : nativeint) =
+                OffsetWriter<'a>(offset, x) :> IWriter
 
         interface IWriter<'a> with
             member x.WriteValue(value, ptr) = x.Write(value, ptr)
 
+    and OffsetWriter<'a>(offset : nativeint, writer : IWriter<'a>) =
+        inherit AbstractWriter<'a>()
+
+        override x.Write(value, ptr) =
+            writer.WriteValue(value, ptr + offset)
+
+        override x.TargetSize =
+            writer.TargetSize
+
+    module NewWriters =
+        type PrimitiveWriter<'a when 'a : unmanaged> private() =
+            inherit AbstractWriter<'a>()
+            static let instance = PrimitiveWriter<'a>() :> IWriter<'a>
+            static let sa = nativeint sizeof<'a>
+
+            static member Instance = instance
+
+            override x.TargetSize =
+                sa
+
+            override x.Write(value : 'a, ptr : nativeint) =
+                NativePtr.write (NativePtr.ofNativeInt ptr) value
+            
+        type MapWriter<'a, 'b>(mapping : 'a -> 'b, inner : IWriter<'b>) =
+            inherit AbstractWriter<'a>()
+            
+            override x.TargetSize =
+                inner.TargetSize
+
+            override x.Write(value : 'a, ptr : nativeint) =
+                inner.WriteValue(mapping value, ptr)
+            
+        type FieldWriter<'a, 'b>(field : FieldInfo, inner : IWriter<'b>) =
+            inherit MapWriter<'a, 'b>(ReflectionCompiler<'a, 'b>.Field field, inner)
+            
+        type PropertyWriter<'a, 'b>(prop : PropertyInfo, inner : IWriter<'b>) =
+            inherit MapWriter<'a, 'b>(ReflectionCompiler<'a, 'b>.Property prop, inner)
+
+        type StructWriter<'a>(targetSize : nativeint, fieldWriters : array<nativeint * IWriter>) =
+            inherit AbstractWriter<'a>()
+            let fieldWriters = fieldWriters |> Array.map (fun (o,w) -> o, (unbox<IWriter<'a>> w))
+
+            override x.TargetSize = targetSize
+
+            override x.Write(value : 'a, ptr : nativeint) =
+                for (offset, writer) in fieldWriters do
+                    writer.WriteValue(value, ptr + offset)
+            
+        type ArrayWriter<'a>(count : int, stride : nativeint, inner : IWriter<'a>) =
+            inherit AbstractWriter<'a[]>()
+      
+            let targetSize = nativeint (count - 1) * stride + inner.TargetSize
+
+            override x.TargetSize = targetSize
+                
+            override x.Write(value : 'a[], ptr : nativeint) =
+                let mutable offset = 0n
+
+                let cnt = min value.Length count
+                for i in 0 .. cnt - 1 do
+                    inner.WriteValue(value.[i], ptr + offset)
+                    offset <- offset + stride
+
+                let remaining = targetSize - offset
+                if remaining > 0n then
+                    Marshal.Set(ptr + offset, 0, remaining)
+
+        type ArrWriter<'d, 'a when 'd :> INatural>(targetCount : int, stride : nativeint, inner : IWriter<'a>) =
+            inherit AbstractWriter<Arr<'d, 'a>>()
+            
+            let targetSize = nativeint (targetCount - 1) * stride + inner.TargetSize
+            let inputCount = Peano.getSize typeof<'d>
+
+            
+                
+            let firstEmptyByte = (stride * nativeint (inputCount - 1) + inner.TargetSize)
+            let missingBytes = targetSize - firstEmptyByte
+                
+
+            override x.TargetSize = targetSize
+
+            override x.Write(values : Arr<'d, 'a>, ptr : nativeint) =
+                let mutable offset = 0n
+                for i in 0 .. inputCount - 1 do
+                    inner.WriteValue(values.[i], ptr + offset)
+                    offset <- offset + stride
+                
+                if missingBytes > 0n then
+                    Marshal.Set(ptr + firstEmptyByte, 0, missingBytes)
+
+                
+
+        let private newPrimitiveWriter (t : Type) =
+            let tWriter = typedefof<PrimitiveWriter<int>>.MakeGenericType [| t |]
+            let prop = tWriter.GetProperty("Instance", BindingFlags.Static ||| BindingFlags.Public)
+            prop.GetValue(null) |> unbox<IWriter>
+            
+        let private newMapWriter (tSource : Type) (tTarget : Type) (f : obj) (inner : IWriter) =
+            let tWriter = typedefof<MapWriter<_,_>>.MakeGenericType [| tSource; tTarget |]
+            let ctor = tWriter.GetConstructor [| f.GetType(); inner.GetType() |]
+            ctor.Invoke [| f; inner :> obj |] |> unbox<IWriter>
+            
+        let private newFieldWriter (fi : FieldInfo) (inner : IWriter) =
+            let tWriter = typedefof<FieldWriter<_,_>>.MakeGenericType [| fi.DeclaringType; fi.FieldType |]
+            let ctor = tWriter.GetConstructor [| typeof<FieldInfo>; inner.GetType() |]
+            ctor.Invoke [| fi :> obj; inner :> obj |] |> unbox<IWriter>
+            
+        let private newPropertyWriter (pi : PropertyInfo) (inner : IWriter) =
+            let tWriter = typedefof<PropertyWriter<_,_>>.MakeGenericType [| pi.DeclaringType; pi.PropertyType |]
+            let ctor = tWriter.GetConstructor [| typeof<PropertyInfo>; inner.GetType() |]
+            ctor.Invoke [| pi :> obj; inner :> obj |] |> unbox<IWriter>
+
+        let private newStructWriter (structType : Type) (targetSize : nativeint) (fieldWriters : list<nativeint * IWriter>) =
+            let t = typedefof<StructWriter<_>>.MakeGenericType [| structType |]
+            let ctor = t.GetConstructor [| typeof<nativeint>; typeof<array<nativeint * IWriter>> |]
+            ctor.Invoke [| targetSize :> obj; fieldWriters |> List.toArray :> obj |] |> unbox<IWriter>
+
+        let private newArrayWriter (elemType : Type) (count : int) (stride : nativeint) (inner : IWriter) =
+            let t = typedefof<ArrayWriter<_>>.MakeGenericType [| elemType |]
+            let ctor = t.GetConstructor [| typeof<int>; typeof<nativeint>; inner.GetType() |]
+            ctor.Invoke [| count :> obj; stride :> obj; inner :> obj |] |> unbox<IWriter>
+        
+        let private newArrWriter (lenType : Type) (elemType : Type) (count : int) (stride : nativeint) (inner : IWriter) =
+            let t = typedefof<ArrWriter<_,_>>.MakeGenericType [| lenType; elemType |]
+            let ctor = t.GetConstructor [| typeof<int>; typeof<nativeint>; inner.GetType() |]
+            ctor.Invoke [| count :> obj; stride :> obj; inner :> obj |] |> unbox<IWriter>
+
+
+        let (|ArrayOf|_|) (t : Type) =
+            if t.IsArray then
+                Some (t.GetElementType())
+            else
+                None
+
+        let (|ArrOf|_|) (t : Type) =
+            if t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<Arr<_,_>> then
+                let targs = t.GetGenericArguments()
+                Some (targs.[0], targs.[1])
+            else
+                None
+
+        let (|SeqOf|_|) (t : Type) =
+            let iface = t.GetInterface(typedefof<seq<_>>.FullName)
+            if isNull iface then
+                None
+            else
+                Some (iface.GetGenericArguments().[0])
+
+        let rec createWriterInternal (target : UniformType) (tSource : Type) =
+            match target with
+                | UniformType.Primitive(t, s, a) ->
+                    let tTarget = PrimitiveType.toType t
+
+                    let prim = newPrimitiveWriter tTarget
+
+                    if tTarget = tSource then
+                        prim
+                    else
+                        let converter = PrimitiveValueConverter.getConverter tSource tTarget
+                        newMapWriter tSource tTarget converter prim
+
+                
+                | UniformType.Struct(layout) ->
+                    match layout.size with
+                        | Size.Fixed s ->
+                            let fieldWriters =
+                                layout.fields |> List.map (fun f ->
+                                    let fi = tSource.GetField(f.name, BindingFlags.Public ||| BindingFlags.NonPublic ||| BindingFlags.Instance)
+
+                                    if isNull fi then
+                                        let pi = tSource.GetProperty(f.name, BindingFlags.Public ||| BindingFlags.NonPublic ||| BindingFlags.Instance)
+                                        if isNull pi then
+                                            failwith "asdasdasd"
+                                    
+                                        let inner = createWriterInternal f.fieldType pi.PropertyType
+                                        nativeint f.offset, newPropertyWriter pi inner
+                            
+                                    else
+                                        let inner = createWriterInternal f.fieldType fi.FieldType
+                                        nativeint f.offset, newFieldWriter fi inner
+                                )
+
+                            newStructWriter tSource (nativeint s) fieldWriters
+                        | _ ->
+                            failf "uniform-structs need to have a fixed size"
+
+                | UniformType.Array(itemType, len, size, stride) ->
+                    match tSource with
+                        | ArrayOf tSourceElem ->
+                            let elemWriter = createWriterInternal itemType tSourceElem
+                            newArrayWriter tSourceElem len (nativeint stride) elemWriter
+
+                        | ArrOf(tLength, tSourceElem) ->
+                            let elemWriter = createWriterInternal itemType tSourceElem
+                            newArrWriter tLength tSourceElem len (nativeint stride) elemWriter
+
+                        | SeqOf tSourceElem ->
+                            failf ""
+
+                        | _ ->
+                            failf "not a sequence type"
+
+                | UniformType.RuntimeArray _ ->
+                    failf "cannot create writer for RuntimeArray"
+
+            
 
     type SingleValueWriter<'a when 'a : unmanaged>(offset : int) =
         inherit AbstractWriter<'a>()
@@ -326,7 +543,6 @@ module UniformWriters =
                 NativePtr.write (NativePtr.ofNativeInt ptr) def
                 ptr <- ptr + sb
                 
-
     type ConversionArrayWriter<'a, 'b when 'b : unmanaged>(offset : int, length : int, stride : int, converter : 'a -> 'b) =
         inherit AbstractWriter<'a[]>()
 
@@ -345,7 +561,6 @@ module UniformWriters =
             for i in c .. length - 1 do
                 NativePtr.write (NativePtr.ofNativeInt ptr) def
                 ptr <- ptr + sb
-                
 
 
     module private List =
@@ -488,9 +703,18 @@ module UniformWriters =
 
     let tryGetWriter (offset : int) (tTarget : UniformType) (tSource : Type) =
         let key = (offset, tTarget, tSource)
-        cache.GetOrAdd(key, fun (offset, tTarget, tSource) ->
-            tryCreateWriterInternal offset tTarget tSource
-        )
+        let writer = 
+            cache.GetOrAdd(key, fun (offset, tTarget, tSource) ->
+               // NewWriters.createWriterInternal tTarget tSource |> Some
+                tryCreateWriterInternal offset tTarget tSource
+            )
+        writer
+//        match writer with
+//            | Some w -> 
+//                if offset = 0 then w |> Some
+//                else w.WithOffset (nativeint offset) |> Some
+//            | None ->
+//                None
     
     let getWriter (offset : int) (tTarget : UniformType) (tSource : Type) =
         match tryGetWriter offset tTarget tSource with
