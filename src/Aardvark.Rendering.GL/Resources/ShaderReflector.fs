@@ -421,12 +421,15 @@ module ShaderInterface =
                     let location = GL.GetProgramResourceLocation(p, iface, pi)
                     let size = GL.GetProgramResource(p, iface, pi, ProgramProperty.ArraySize)
                     
-
-                    let _type =
-                        if size > 1 then FixedArray(_type, -1, size)
-                        else _type
-
-                    let path = parsePath name
+                    let path, _type =
+                        match parsePath name with
+                            | ShaderPath.Item(path, 0) ->
+                                path, FixedArray(_type, -1, size)
+                            | path ->
+                                if size > 1 then 
+                                    path, FixedArray(_type, -1, size)
+                                else
+                                    path, _type
 
                     if iface = ProgramInterface.Uniform then
                         match _type with
@@ -693,7 +696,7 @@ module ShaderInterface =
         use __ = ctx.ResourceLock
         let info = ctx.Driver
 
-        if info.version > Version(4,0,0) && info.device <> GPUVendor.Intel then
+        if info.version >= Version(4,0,0) && info.device <> GPUVendor.Intel then
             GL4.shaderInterface baseSlot p
         else
             GL.shaderInterface baseSlot p

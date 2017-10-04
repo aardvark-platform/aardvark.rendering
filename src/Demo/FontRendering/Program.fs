@@ -388,8 +388,8 @@ let main argv =
     Aardvark.Init()
 
     //tensorPerformance()
-    VulkanTests.run()
-    Environment.Exit 0
+    //VulkanTests.run()
+    //Environment.Exit 0
 
 
     use app = new VulkanApplication(true)
@@ -646,7 +646,7 @@ let main argv =
     let sg = 
         active |> Mod.map (fun a ->
             if a then
-                Sg.group [label3]
+                Sg.group [label3; label2; label1]
                     //|> Sg.andAlso quad
                     |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
                     |> Sg.projTrafo (win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))

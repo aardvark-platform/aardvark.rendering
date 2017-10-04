@@ -595,18 +595,18 @@ module OpenGLObjectInterpreter =
 
                         Translations.toGLMode realMode
 
-                let indexType =
+                let (indexType, indexSize) =
                     match o.Original.Indices with
-                        | None -> 0
+                        | None -> (0, 0)
                         | Some view ->
 
                             let indexType = view.ElementType
-                            if indexType = typeof<byte> then int OpenGl.Enums.IndexType.UnsignedByte
-                            elif indexType = typeof<uint16> then int OpenGl.Enums.IndexType.UnsignedShort
-                            elif indexType = typeof<uint32> then int OpenGl.Enums.IndexType.UnsignedInt
-                            elif indexType = typeof<sbyte> then int OpenGl.Enums.IndexType.UnsignedByte
-                            elif indexType = typeof<int16> then int OpenGl.Enums.IndexType.UnsignedShort
-                            elif indexType = typeof<int32> then int OpenGl.Enums.IndexType.UnsignedInt
+                            if indexType = typeof<byte> then (int OpenGl.Enums.IndexType.UnsignedByte, 1)
+                            elif indexType = typeof<uint16> then (int OpenGl.Enums.IndexType.UnsignedShort, 2)
+                            elif indexType = typeof<uint32> then (int OpenGl.Enums.IndexType.UnsignedInt, 4)
+                            elif indexType = typeof<sbyte> then (int OpenGl.Enums.IndexType.UnsignedByte, 1)
+                            elif indexType = typeof<int16> then (int OpenGl.Enums.IndexType.UnsignedShort, 2)
+                            elif indexType = typeof<int32> then (int OpenGl.Enums.IndexType.UnsignedInt, 4)
                             else failwithf "unsupported index type: %A"  indexType
 
                 gl.bindProgram program.Handle
@@ -661,9 +661,9 @@ module OpenGLObjectInterpreter =
                         if indexed then
                             for c in calls do
                                 if c.InstanceCount = 1 then
-                                    gl.drawElements mode c.FaceVertexCount indexType (nativeint c.FirstIndex)
+                                    gl.drawElements mode c.FaceVertexCount indexType (nativeint (c.FirstIndex * indexSize))
                                 elif c.InstanceCount > 0 then
-                                    gl.drawElementsInstanced mode c.FaceVertexCount indexType (nativeint c.FirstIndex) c.InstanceCount
+                                    gl.drawElementsInstanced mode c.FaceVertexCount indexType (nativeint (c.FirstIndex * indexSize)) c.InstanceCount
                                     
                         else
                             for c in calls do

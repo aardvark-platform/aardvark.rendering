@@ -418,14 +418,14 @@ module RenderTasks =
             x.PushArg(int OpenGl.Enums.TextureUnit.Texture0 + slot)
             x.Call(OpenGl.Pointers.ActiveTexture)
             
-        member x.BindTexture (texture : IResource<Texture, int>) =
-            let target = 
-                let r = texture.Handle.GetValue()
-                Translations.toGLTarget r.Dimension r.IsArray r.Multisamples
+        member x.BindTexture (texture : IResource<Texture, V2i>) =
+//            let target = 
+//                let r = texture.Handle.GetValue()
+//                Translations.toGLTarget r.Dimension r.IsArray r.Multisamples
 
             x.BeginCall(2)
             x.PushIntArg(texture.Pointer |> NativePtr.toNativeInt)
-            x.PushArg(target)
+            x.PushIntArg(4n + NativePtr.toNativeInt texture.Pointer)
             x.Call(OpenGl.Pointers.BindTexture)
 
         member x.TexParameteri(target : int, name : TextureParameterName, value : int) =

@@ -414,7 +414,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     member private x.ArrayBufferCache       : ResourceCache<Buffer, int>                    = arrayBufferCache
     member private x.BufferCache            : ResourceCache<Buffer, int>                    = bufferCache
-    member private x.TextureCache           : ResourceCache<Texture, int>                   = textureCache
+    member private x.TextureCache           : ResourceCache<Texture, V2i>                   = textureCache
     member private x.IndirectBufferCache    : ResourceCache<IndirectBuffer, V2i>            = indirectBufferCache
     member private x.ProgramCache           : ResourceCache<Program, int>                   = programCache
     member private x.SamplerCache           : ResourceCache<Sampler, int>                   = samplerCache
@@ -525,7 +525,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             update = fun h b    -> textureManager.Update(h, b)
             delete = fun h      -> textureManager.Delete h
             info =   fun h      -> h.SizeInBytes |> Mem |> ResourceInfo
-            view =   fun h      -> h.Handle
+            view =   fun r      -> V2i(r.Handle, Translations.toGLTarget r.Dimension r.IsArray r.Multisamples)
             kind = ResourceKind.Texture
         })
 
