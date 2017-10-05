@@ -109,16 +109,12 @@ module Sg =
         new(map : Map<Symbol,IMod>, child : ISg) = UniformApplicator( (new Providers.SimpleUniformHolder( map) :> IUniformProvider), Mod.constant child)
 
 
-    type SurfaceApplicator(surface : IMod<ISurface>, child : IMod<ISg>) =
+    type SurfaceApplicator(surface : Surface, child : IMod<ISg>) =
         inherit AbstractApplicator(child)
 
         member x.Surface = surface
 
-        new(value : IMod<ISurface>, child : ISg) = SurfaceApplicator(value, Mod.constant child)
-
-        new(value : IEvent<ISurface>, child : IMod<ISg>) = SurfaceApplicator(Mod.fromEvent value, child)
-        new(value : IEvent<ISurface>, child : ISg) = SurfaceApplicator(Mod.fromEvent value, Mod.constant child)
-        new(value : ISurface, child : ISg) = SurfaceApplicator(Mod.constant value, Mod.constant child)
+        new(value : Surface, child : ISg) = SurfaceApplicator(value, Mod.constant child)
 
     type TextureApplicator(semantic : Symbol, texture : IMod<ITexture>, child : IMod<ISg>) =
         inherit UniformApplicator(semantic, texture :> IMod, child)

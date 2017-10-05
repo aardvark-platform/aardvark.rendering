@@ -1517,6 +1517,9 @@ type Image =
         val mutable public Format : VkFormat
         val mutable public Memory : DevicePtr
         val mutable public Layout : VkImageLayout
+        val mutable public RefCount : int
+
+        member x.AddReference() = Interlocked.Increment(&x.RefCount) |> ignore
 
         interface ITexture with 
             member x.WantMipMaps = x.MipMapLevels > 1
@@ -1567,6 +1570,7 @@ type Image =
                 Format = fmt
                 Memory = mem
                 Layout = layout
+                RefCount = 1
             }
     end
 
@@ -1654,7 +1658,7 @@ and ImageSubresource(image : Image, aspect : ImageAspect, level : int, slice : i
 // ===========================================================================================
 
 [<Struct>]
-type DeviceVector<'a when 'a : unmanaged>(memory : DeviceMemory, info : VectorInfo) =
+type DeviceVector<'a when 'a : unmanaged>(memory : DevicePtr, info : VectorInfo) =
     member x.Device = memory.Device
     member x.Info = info
 
@@ -1719,7 +1723,7 @@ type DeviceVector<'a when 'a : unmanaged>(memory : DeviceMemory, info : VectorIn
             )
         
 [<Struct>]
-type DeviceMatrix<'a when 'a : unmanaged>(memory : DeviceMemory, info : MatrixInfo) =
+type DeviceMatrix<'a when 'a : unmanaged>(memory : DevicePtr, info : MatrixInfo) =
     member x.Device = memory.Device
     member x.Info = info
 
@@ -1812,7 +1816,7 @@ type DeviceMatrix<'a when 'a : unmanaged>(memory : DeviceMemory, info : MatrixIn
             )
        
 [<Struct>]
-type DeviceVolume<'a when 'a : unmanaged>(memory : DeviceMemory, info : VolumeInfo) =
+type DeviceVolume<'a when 'a : unmanaged>(memory : DevicePtr, info : VolumeInfo) =
     member x.Device = memory.Device
     member x.Info = info
 
@@ -1966,7 +1970,7 @@ type DeviceVolume<'a when 'a : unmanaged>(memory : DeviceMemory, info : VolumeIn
             )
        
 [<Struct>]
-type DeviceTensor4<'a when 'a : unmanaged>(memory : DeviceMemory, info : Tensor4Info) =
+type DeviceTensor4<'a when 'a : unmanaged>(memory : DevicePtr, info : Tensor4Info) =
     member x.Device = memory.Device
     member x.Info = info
 
@@ -2221,7 +2225,7 @@ type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4
 
     static let sa = sizeof<'a> |> int64
 
-    let tensor = DeviceTensor4<'a>(unbox buffer.Memory, info)
+    let tensor = DeviceTensor4<'a>(buffer.Memory, info)
 
     static let defaultValue =
         match typeof<'a> with
@@ -3022,7 +3026,9 @@ module ``Image Command Extensions`` =
                             elif source = VkImageLayout.PresentSrcKhr then VkPipelineStageFlags.TransferBit
                             elif source = VkImageLayout.Preinitialized then VkPipelineStageFlags.HostBit
                             elif source = VkImageLayout.TransferSrcOptimal then VkPipelineStageFlags.TransferBit
-                            elif source = VkImageLayout.ShaderReadOnlyOptimal then VkPipelineStageFlags.FragmentShaderBit
+                            elif source = VkImageLayout.ShaderReadOnlyOptimal then 
+                                if cmd.QueueFamily.Flags &&& QueueFlags.Graphics <> QueueFlags.None then VkPipelineStageFlags.FragmentShaderBit
+                                else VkPipelineStageFlags.ComputeShaderBit
                             elif source = VkImageLayout.Undefined then VkPipelineStageFlags.HostBit // VK_PIPELINE_STAGE_FLAGS_HOST_BIT
                             elif source = VkImageLayout.General then VkPipelineStageFlags.HostBit
                             else VkPipelineStageFlags.None
@@ -3032,7 +3038,10 @@ module ``Image Command Extensions`` =
                             elif target = VkImageLayout.TransferDstOptimal then VkPipelineStageFlags.TransferBit
                             elif target = VkImageLayout.ColorAttachmentOptimal then VkPipelineStageFlags.ColorAttachmentOutputBit
                             elif target = VkImageLayout.DepthStencilAttachmentOptimal then VkPipelineStageFlags.EarlyFragmentTestsBit
-                            elif target = VkImageLayout.ShaderReadOnlyOptimal then VkPipelineStageFlags.VertexShaderBit
+                            elif target = VkImageLayout.ShaderReadOnlyOptimal then 
+                                if cmd.QueueFamily.Flags &&& QueueFlags.Graphics <> QueueFlags.None then VkPipelineStageFlags.VertexShaderBit
+                                else VkPipelineStageFlags.ComputeShaderBit
+
                             elif target = VkImageLayout.PresentSrcKhr then VkPipelineStageFlags.TransferBit
                             elif target = VkImageLayout.General then VkPipelineStageFlags.HostBit
 
@@ -3166,10 +3175,11 @@ module Image =
         result
 
     let delete (img : Image) (device : Device) =
-        if device.Handle <> 0n && img.Handle.IsValid then
-            VkRaw.vkDestroyImage(img.Device.Handle, img.Handle, NativePtr.zero)
-            img.Memory.Dispose()
-            img.Handle <- VkImage.Null
+        if Interlocked.Decrement(&img.RefCount) = 0 then
+            if device.Handle <> 0n && img.Handle.IsValid then
+                VkRaw.vkDestroyImage(img.Device.Handle, img.Handle, NativePtr.zero)
+                img.Memory.Dispose()
+                img.Handle <- VkImage.Null
 
     let create (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : TextureFormat) (usage : VkImageUsageFlags) (device : Device) =
         let vkfmt = VkFormat.ofTextureFormat fmt
@@ -3364,6 +3374,7 @@ module Image =
                 failf "BitmapTexture considered obsolete"
 
             | :? Image as t ->
+                t.AddReference()
                 t
 
             | _ ->

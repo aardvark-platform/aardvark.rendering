@@ -60,7 +60,7 @@ let testCompile() =
             Mode                = Mod.constant IndexedGeometryMode.TriangleList
         
 
-            Surface             = Mod.constant (surface :> ISurface)
+            Surface             = Surface.Backend (surface :> ISurface)
                       
             DepthTest           = Mod.constant DepthTestMode.LessOrEqual
             CullMode            = Mod.constant CullMode.None

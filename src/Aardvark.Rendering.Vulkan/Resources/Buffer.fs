@@ -19,14 +19,17 @@ type Buffer =
     class
         inherit Resource<VkBuffer>
         val mutable public Memory : DevicePtr
+        val mutable public Size : int64
+        val mutable public RefCount : int
 
-        member x.Size = x.Memory.Size
 
         interface IBackendBuffer with
             member x.Handle = x.Handle :> obj
             member x.SizeInBytes = nativeint x.Memory.Size
 
-        new(device, handle, memory) = { inherit Resource<_>(device, handle); Memory = memory }
+        member x.AddReference() = Interlocked.Increment(&x.RefCount) |> ignore
+
+        new(device, handle, memory, size) = { inherit Resource<_>(device, handle); Memory = memory; Size = size; RefCount = 1 }
     end
 
 type BufferView =
@@ -191,6 +194,62 @@ module BufferCommands =
         static member inline Copy(src : Buffer, dst : Buffer) = 
             Command.Copy(src, 0L, dst, 0L, min src.Size dst.Size)
 
+        static member Sync(b : Buffer, src : VkAccessFlags, dst : VkAccessFlags) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue cmd =
+                    let mutable barrier =
+                        VkBufferMemoryBarrier(
+                            VkStructureType.BufferMemoryBarrier, 0n,
+                            src,
+                            dst,
+                            VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+                            b.Handle,
+                            0UL,
+                            uint64 b.Size
+                        )
+
+                    let srcStage =
+                        match src with
+                            | VkAccessFlags.HostReadBit -> VkPipelineStageFlags.HostBit
+                            | VkAccessFlags.HostWriteBit -> VkPipelineStageFlags.HostBit
+                            | VkAccessFlags.IndexReadBit -> VkPipelineStageFlags.VertexInputBit
+                            | VkAccessFlags.IndirectCommandReadBit -> VkPipelineStageFlags.DrawIndirectBit
+                            | VkAccessFlags.ShaderReadBit -> VkPipelineStageFlags.ComputeShaderBit
+                            | VkAccessFlags.ShaderWriteBit -> VkPipelineStageFlags.ComputeShaderBit
+                            | VkAccessFlags.TransferReadBit -> VkPipelineStageFlags.TransferBit
+                            | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
+                            | VkAccessFlags.UniformReadBit -> VkPipelineStageFlags.ComputeShaderBit
+                            | VkAccessFlags.VertexAttributeReadBit -> VkPipelineStageFlags.VertexInputBit
+                            | _ -> VkPipelineStageFlags.None
+                            
+                    let dstStage =
+                        match dst with
+                            | VkAccessFlags.HostReadBit -> VkPipelineStageFlags.HostBit
+                            | VkAccessFlags.HostWriteBit -> VkPipelineStageFlags.HostBit
+                            | VkAccessFlags.IndexReadBit -> VkPipelineStageFlags.VertexInputBit
+                            | VkAccessFlags.IndirectCommandReadBit -> VkPipelineStageFlags.DrawIndirectBit
+                            | VkAccessFlags.ShaderReadBit -> VkPipelineStageFlags.VertexShaderBit
+                            | VkAccessFlags.ShaderWriteBit -> VkPipelineStageFlags.VertexShaderBit
+                            | VkAccessFlags.TransferReadBit -> VkPipelineStageFlags.TransferBit
+                            | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
+                            | VkAccessFlags.UniformReadBit -> VkPipelineStageFlags.VertexShaderBit
+                            | VkAccessFlags.VertexAttributeReadBit -> VkPipelineStageFlags.VertexInputBit
+                            | _ -> VkPipelineStageFlags.None
+
+                    VkRaw.vkCmdPipelineBarrier(
+                        cmd.Handle, 
+                        srcStage, 
+                        dstStage,
+                        VkDependencyFlags.None,
+                        0u, NativePtr.zero,
+                        1u, &&barrier,
+                        0u, NativePtr.zero
+                    )
+
+                    Disposable.Empty
+            }
+
         static member SyncWrite(b : Buffer) =
             { new Command() with
                 member x.Compatible = QueueFlags.All
@@ -219,7 +278,13 @@ module BufferCommands =
                     Disposable.Empty
             }
 
-
+        static member ZeroBuffer(b : Buffer) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue cmd =
+                    VkRaw.vkCmdFillBuffer(cmd.Handle, b.Handle, 0UL, uint64 b.Size, 0u)
+                    Disposable.Empty
+            }
 // =======================================================================
 // Resource functions for Device
 // =======================================================================
@@ -268,7 +333,7 @@ module Buffer =
                 emptyBuffers.TryRemove(key) |> ignore
             )   
 
-            Buffer(device, handle, ptr)
+            Buffer(device, handle, ptr, 256L)
         )
 
 
@@ -295,15 +360,13 @@ module Buffer =
         if reqs.memoryTypeBits &&& (1u <<< memory.Index) = 0u then
             failf "cannot create buffer using memory %A" memory
 
-        let ptr = 
-            if memory.IsHostVisible then memory.AllocRaw(int64 reqs.size) :> DevicePtr
-            else memory.Alloc(int64 reqs.alignment, int64 reqs.size)
+        let ptr = memory.Alloc(int64 reqs.alignment, int64 reqs.size)
 
         VkRaw.vkBindBufferMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
             |> check "could not bind buffer-memory"
 
 
-        Buffer(device, handle, ptr)
+        Buffer(device, handle, ptr, size)
 
     let inline create  (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
         createConcurrent false flags size memory
@@ -322,7 +385,7 @@ module Buffer =
             let buffer = device |> alloc flags deviceAlignedSize
             let deviceMem = buffer.Memory
         
-            let hostPtr = device.HostMemory.AllocTemp(align, deviceAlignedSize)
+            let hostPtr = device.HostMemory.Alloc(align, deviceAlignedSize)
             hostPtr.Mapped (fun dst -> writer dst)
 
             device.eventually {
@@ -341,7 +404,7 @@ module Buffer =
         let deviceAlignedSize = Alignment.next align (int64 buffer.Size)
         let deviceMem = buffer.Memory
         
-        let hostPtr = device.HostMemory.AllocTemp(align, deviceAlignedSize)
+        let hostPtr = device.HostMemory.Alloc(align, deviceAlignedSize)
         hostPtr.Mapped (fun dst -> writer dst)
 
         device.eventually {
@@ -350,10 +413,11 @@ module Buffer =
         }
 
     let delete (buffer : Buffer) (device : Device) =
-        if buffer.Handle.IsValid && buffer.Size > 0L then
-            VkRaw.vkDestroyBuffer(device.Handle, buffer.Handle, NativePtr.zero)
-            buffer.Handle <- VkBuffer.Null
-            buffer.Memory.Dispose()
+        if Interlocked.Decrement(&buffer.RefCount) = 0 then
+            if buffer.Handle.IsValid && buffer.Size > 0L then
+                VkRaw.vkDestroyBuffer(device.Handle, buffer.Handle, NativePtr.zero)
+                buffer.Handle <- VkBuffer.Null
+                buffer.Memory.Dispose()
 
     let tryUpdate (data : IBuffer) (buffer : Buffer) =
         match data with 
@@ -399,6 +463,7 @@ module Buffer =
                     
 
             | :? Buffer as b ->
+                b.AddReference()
                 b
 
             | _ ->

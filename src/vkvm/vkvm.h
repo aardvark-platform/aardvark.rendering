@@ -8,7 +8,6 @@
 #include "stdafx.h"
 #include <stdio.h>
 #include <vulkan.h>
-#define DllExport(t) extern "C"  __declspec( dllexport ) t __cdecl
 #endif
 
 
@@ -53,6 +52,7 @@ typedef struct {
 	uint64_t Offset;
 	VkIndexType Type;
 } IndexBufferBinding;
+
 
 DllExport(void) vmBindPipeline(VkCommandBuffer commandBuffer, VkPipeline* pipeline);
 DllExport(void) vmBindDescriptorSets(VkCommandBuffer commandBuffer, DescriptorSetBinding* binding);

@@ -45,8 +45,8 @@ module SgFSharp =
         let camera (cam : IMod<Camera>) (sg : ISg) =
             sg |> viewTrafo (cam |> Mod.map Camera.viewTrafo) |> projTrafo (cam |> Mod.map Camera.projTrafo)
 
-        let surface (m : IMod<ISurface>) (sg : ISg) =
-            Sg.SurfaceApplicator(m, sg) :> ISg
+        let surface (m : ISurface) (sg : ISg) =
+            Sg.SurfaceApplicator(Surface.Backend m, sg) :> ISg
 
         let group (s : #seq<ISg>) =
             Sg.Group s

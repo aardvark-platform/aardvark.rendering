@@ -290,79 +290,81 @@ type Swapchain(device : Device, description : SwapchainDescription) =
     member x.Samples = description.samples
 
     member x.RenderFrame (render : Framebuffer -> 'a) =
-        if disposed <> 0 then 
-            failf "cannot use disposed Swapchain"
+        lock x (fun () ->
+            if disposed <> 0 then 
+                failf "cannot use disposed Swapchain"
 
-        device.perform {
-            update()
+            device.perform {
+                update()
 
-            // acquire a swapchain image for rendering
-            do! x.AcquireNextImage
+                // acquire a swapchain image for rendering
+                do! x.AcquireNextImage
 
-            // determine color and output images (may differ when using MSAA)
-            let outputIndex = int !currentBuffer
-            let backbuffer = buffers.[outputIndex].Image
+                // determine color and output images (may differ when using MSAA)
+                let outputIndex = int !currentBuffer
+                let backbuffer = buffers.[outputIndex].Image
 
-            let framebuffer = framebuffer.Value
-            let colorView = framebuffer.Attachments.[DefaultSemantic.Colors]
-            let depthView = Map.tryFind DefaultSemantic.Depth framebuffer.Attachments
+                let framebuffer = framebuffer.Value
+                let colorView = framebuffer.Attachments.[DefaultSemantic.Colors]
+                let depthView = Map.tryFind DefaultSemantic.Depth framebuffer.Attachments
 
-            // resolve(renderView, resolveView)
-            // blit(resolveView, transformView)
+                // resolve(renderView, resolveView)
+                // blit(resolveView, transformView)
 
-            // clear color & depth
-            do! Command.ClearColor(colorView.Image.[ImageAspect.Color], C4f.Black)
-            match depthView with
-                | Some v -> do! Command.ClearDepthStencil(v.Image.[ImageAspect.DepthStencil], 1.0, 0u)
-                | _ -> ()
+                // clear color & depth
+                do! Command.ClearColor(colorView.Image.[ImageAspect.Color], C4f.Black)
+                match depthView with
+                    | Some v -> do! Command.ClearDepthStencil(v.Image.[ImageAspect.DepthStencil], 1.0, 0u)
+                    | _ -> ()
 
-            // ensure that colorImage is ColorAttachmentOptimal
-            do! Command.TransformLayout(colorView.Image, VkImageLayout.ColorAttachmentOptimal)
+                // ensure that colorImage is ColorAttachmentOptimal
+                do! Command.TransformLayout(colorView.Image, VkImageLayout.ColorAttachmentOptimal)
 
-            // render the scene
-            let res = render framebuffer
+                // render the scene
+                let res = render framebuffer
 
-            // the color-data is currently stored in colorView
-            let mutable currentImage = colorView.Image
+                // the color-data is currently stored in colorView
+                let mutable currentImage = colorView.Image
 
-            // if the colorView is multisampled we need to resolve it to a temporary 
-            // single-sampled image (resolvedImage)
-            match resolvedImage with
-                | Some resolvedImage ->
-                    // resolve multisamples
-                    do! Command.TransformLayout(colorView.Image, VkImageLayout.TransferSrcOptimal)
-                    do! Command.TransformLayout(resolvedImage, VkImageLayout.TransferDstOptimal)
-                    do! Command.ResolveMultisamples(colorView.Image.[ImageAspect.Color, 0, *], resolvedImage.[ImageAspect.Color, 0, *])
+                // if the colorView is multisampled we need to resolve it to a temporary 
+                // single-sampled image (resolvedImage)
+                match resolvedImage with
+                    | Some resolvedImage ->
+                        // resolve multisamples
+                        do! Command.TransformLayout(colorView.Image, VkImageLayout.TransferSrcOptimal)
+                        do! Command.TransformLayout(resolvedImage, VkImageLayout.TransferDstOptimal)
+                        do! Command.ResolveMultisamples(colorView.Image.[ImageAspect.Color, 0, *], resolvedImage.[ImageAspect.Color, 0, *])
 
-                    // the color-data is now stored in the resolved image
-                    currentImage <- resolvedImage
-                | None ->
-                    ()
+                        // the color-data is now stored in the resolved image
+                        currentImage <- resolvedImage
+                    | None ->
+                        ()
 
-            // since the blit might include an ImageTrafo we need to sompute
-            // appropriate ranges
-            let srcRange = Box3i(V3i(0,0,0), V3i(size.X - 1, size.Y - 1, 0))
-            let dstRange = srcRange.Transformed description.blitTrafo
+                // since the blit might include an ImageTrafo we need to sompute
+                // appropriate ranges
+                let srcRange = Box3i(V3i(0,0,0), V3i(size.X - 1, size.Y - 1, 0))
+                let dstRange = srcRange.Transformed description.blitTrafo
 
-            // blit the current image to the final backbuffer using the ranges from above
-            do! Command.TransformLayout(currentImage, VkImageLayout.TransferSrcOptimal)
-            do! Command.TransformLayout(backbuffer, VkImageLayout.TransferDstOptimal)
-            do! Command.Blit(
-                    currentImage.[ImageAspect.Color, 0, *],
-                    srcRange,
-                    backbuffer.[ImageAspect.Color, 0, *],
-                    dstRange,
-                    VkFilter.Nearest
-                )
+                // blit the current image to the final backbuffer using the ranges from above
+                do! Command.TransformLayout(currentImage, VkImageLayout.TransferSrcOptimal)
+                do! Command.TransformLayout(backbuffer, VkImageLayout.TransferDstOptimal)
+                do! Command.Blit(
+                        currentImage.[ImageAspect.Color, 0, *],
+                        srcRange,
+                        backbuffer.[ImageAspect.Color, 0, *],
+                        dstRange,
+                        VkFilter.Nearest
+                    )
 
-            // finally the backbuffer needs to be in layout PresentSrcKhr
-            do! Command.TransformLayout(backbuffer, VkImageLayout.PresentSrcKhr)
+                // finally the backbuffer needs to be in layout PresentSrcKhr
+                do! Command.TransformLayout(backbuffer, VkImageLayout.PresentSrcKhr)
 
-            // present the backbuffer
-            do! x.Present
+                // present the backbuffer
+                do! x.Present
 
-            return res
-        }
+                return res
+            }
+        )
 
     member x.Dispose() =
         let o = System.Threading.Interlocked.Exchange(&disposed, 1)

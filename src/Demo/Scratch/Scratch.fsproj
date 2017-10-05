@@ -68,8 +68,6 @@
     <Compile Include="Tools\Rendering.fs" />
     <Compile Include="Staging\Time.fs" />
     <Compile Include="Staging\Proc.fs" />
-    <Compile Include="Staging\GeometryPool.fs" />
-    <Compile Include="Staging\Optimizer.fs" />
     <Compile Include="Staging\Dispatcher.fs" />
     <Compile Include="Staging\QuotationCompiler.fs" />
     <Compile Include="Staging\Ag.fs" />
@@ -77,7 +75,6 @@
     <Compile Include="Staging\Geometry.fs" />
     <Compile Include="Staging\ShaderSwitch.fs" />
     <Compile Include="Staging\ComputeShader.fs" />
-    <Compile Include="Staging\EagerResource.fs" />
     <Compile Include="Experiments\Fonts.fs" />
     <Compile Include="Experiments\NullBufferTest.fs" />
     <Compile Include="Experiments\Playground.fs" />
@@ -89,6 +86,7 @@
     <Compile Include="PGM.fs" />
     <Compile Include="ImageFormat.fs" />
     <Compile Include="Volumes.fs" />
+    <Compile Include="VulkanTests.fs" />
     <Compile Include="Program.fs" />
     <None Include="paket.references" />
   </ItemGroup>
@@ -308,6 +306,23 @@
   <Choose>
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
       <ItemGroup>
+        <Reference Include="System.Runtime.Serialization">
+          <Paket>True</Paket>
+        </Reference>
+        <Reference Include="System.Xml">
+          <Paket>True</Paket>
+        </Reference>
+        <Reference Include="FsPickler">
+          <HintPath>..\..\..\packages\FsPickler\lib\net45\FsPickler.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+      </ItemGroup>
+    </When>
+  </Choose>
+  <Choose>
+    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
+      <ItemGroup>
         <Reference Include="System.Collections.Immutable">
           <HintPath>..\..\..\packages\System.Collections.Immutable\lib\netstandard1.0\System.Collections.Immutable.dll</HintPath>
           <Private>True</Private>
@@ -352,17 +367,6 @@
   <Choose>
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
       <ItemGroup>
-        <Reference Include="System.Runtime.InteropServices.RuntimeInformation">
-          <HintPath>..\..\..\packages\System.Runtime.InteropServices.RuntimeInformation\lib\net45\System.Runtime.InteropServices.RuntimeInformation.dll</HintPath>
-          <Private>True</Private>
-          <Paket>True</Paket>
-        </Reference>
-      </ItemGroup>
-    </When>
-  </Choose>
-  <Choose>
-    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
-      <ItemGroup>
         <Reference Include="AssimpNet">
           <HintPath>..\..\..\packages\Unofficial.AssimpNet\lib\net45\AssimpNet.dll</HintPath>
           <Private>True</Private>
@@ -371,5 +375,4 @@
       </ItemGroup>
     </When>
   </Choose>
-  <Import Project="..\..\..\packages\NETStandard.Library\build\NETStandard.Library.targets" Condition="Exists('..\..\..\packages\NETStandard.Library\build\NETStandard.Library.targets')" Label="Paket" />
 </Project>

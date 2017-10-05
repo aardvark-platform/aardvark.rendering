@@ -84,7 +84,14 @@ type private MappedIndirectBuffer private(device : Device, indexed : bool, store
 type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug : bool) as this =
     let instance = device.Instance
     do device.Runtime <- this
-    let manager = new ResourcesNew.ResourceManager(device)
+
+    let noUser =
+        { new IResourceUser with
+            member x.AddLocked _ = ()
+            member x.RemoveLocked _ = ()
+        }
+
+    let manager = new ResourceManager(noUser, device)
 
     static let shaderStages =
         LookupTable.lookupTable [
@@ -142,6 +149,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     let onDispose = Event<unit>()
 
+
+    member x.DescriptorPool = manager.DescriptorPool
     member x.Device = device
     member x.ResourceManager = manager
     member x.ContextLock = device.Token :> IDisposable
@@ -186,12 +195,12 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
     member x.CompileRender (renderPass : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) =
-        new RenderTasks.RenderTask(manager, unbox renderPass, set, Mod.constant engine, shareTextures, shareBuffers) :> IRenderTask
+        new RenderTasks.RenderTask(device, unbox renderPass, set, Mod.constant engine, shareTextures, shareBuffers) :> IRenderTask
 
     member x.CompileClear(signature : IFramebufferSignature, color : IMod<Map<Symbol, C4f>>, depth : IMod<Option<float>>) : IRenderTask =
         let pass = unbox<RenderPass> signature
         let colors = pass.ColorAttachments |> Map.toSeq |> Seq.map (fun (_,(sem,att)) -> sem, color |> Mod.map (Map.find sem)) |> Map.ofSeq
-        new RenderTasks.ClearTask(manager, unbox signature, colors, depth, Some (Mod.constant 0u)) :> IRenderTask
+        new RenderTasks.ClearTask(device, unbox signature, colors, depth, Some (Mod.constant 0u)) :> IRenderTask
 
 
 
@@ -365,8 +374,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.Dispose() = 
         onDispose.Trigger()
         debugSubscription.Dispose()
-        Log.warn "dispose resource manager"
-        //manager.Dispose()
+        manager.Dispose()
         device.Dispose()
         
     interface IDisposable with
@@ -375,38 +383,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     interface IRuntime with
         member x.OnDispose = onDispose.Publish
         member x.AssembleEffect (effect : FShade.Effect, signature : IFramebufferSignature) =
-            let module_ = signature.Link(effect, Range1d(0.0, 1.0), false)
-            let glsl = 
-                module_ |> ModuleCompiler.compileGLSLVulkan
-            
-            let entries =
-                module_.entries
-                    |> Seq.choose (fun e -> 
-                        let stage = e.decorations |> List.tryPick (function Imperative.EntryDecoration.Stages { self = self } -> Some self | _ -> None)
-                        match stage with
-                            | Some stage ->
-                                Some (shaderStages stage, "main")
-                            | None ->
-                                None
-                    ) 
-                    |> Dictionary.ofSeq
-
-
-            let samplers = Dictionary.empty
-
-            for KeyValue(k,v) in effect.Uniforms do
-                match v.uniformValue with
-                    | UniformValue.Sampler(texName,sam) ->
-                        samplers.[(k, 0)] <- { textureName = Symbol.Create texName; samplerState = sam.SamplerStateDescription }
-                    | UniformValue.SamplerArray semSams ->
-                        for i in 0 .. semSams.Length - 1 do
-                            let (sem, sam) = semSams.[i]
-                            samplers.[(k, i)] <- { textureName = Symbol.Create sem; samplerState = sam.SamplerStateDescription }
-                    | _ ->
-                        ()
-
-            // TODO: gl_PointSize (builtIn)
-            BackendSurface(glsl.code, entries, Map.empty, SymDict.empty, samplers, true)
+            BackendSurface.ofEffectSimple signature effect
 
         member x.ResourceManager = failf "not implemented"
 

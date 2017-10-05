@@ -18,15 +18,17 @@ type ShaderType =
     | Vector of compType : ShaderType * dim : int
     | Matrix of colType : ShaderType * dim : int
     | Array of elementType : ShaderType * length : int
-    | Struct of name : string * fields : list<ShaderType * string * list<Decoration * uint32[]>>
-    | Image of sampledType : ShaderType * dim : Dim * depth : int * arrayed : bool * ms : int * sampled : bool * format : int
+    | Struct of name : string * fields : list<ShaderType * string * list<Decoration * int[]>>
+    | Image of sampledType : ShaderType * dim : Dim * depth : int * arrayed : bool * ms : int * sampled : bool * format : ImageFormat
     | SampledImage of ShaderType
     | Ptr of StorageClass * ShaderType
+    | RuntimeArray of ShaderType
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderType =
+    open System
 
-    let glslDecoration (decorations : list<Decoration * uint32[]>) =
+    let glslDecoration (decorations : list<Decoration * int[]>) =
         if List.isEmpty decorations then
             ""
         else
@@ -206,11 +208,12 @@ module ShaderType =
             | ShaderType.Ptr(_,t) -> toType t
             | _ -> toPrimtiveType t
 
+
 type ShaderParameter = 
     { 
         paramName : string
         paramType : ShaderType
-        paramDecorations : list<Decoration * uint32[]> 
+        paramDecorations : list<Decoration * int[]> 
     }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -358,23 +361,29 @@ module PrimitiveType =
             | ShaderType.Matrix(comp, dim) -> PrimitiveType.Matrix(ofShaderType comp, dim)
             | _ -> failf "cannot convert type %A to PrimitiveType" t 
 
+type Size =
+    | Fixed of int
+    | Dynamic
 
 type UniformType =
     | Struct of UniformBufferLayout
     | Primitive of t : PrimitiveType * size : int * align : int
     | Array of elementType : UniformType * length : int * size : int * align : int
+    | RuntimeArray of elementType : UniformType * elementSize : int * elementAlign : int
 
     member x.align =
         match x with
             | Struct l -> l.align
             | Primitive(_,s,a) -> a
             | Array(_,_,s,a) -> a
+            | RuntimeArray(_,s,a) -> a
 
     member x.size =
         match x with
             | Struct l -> l.size
-            | Primitive(_,s,a) -> s
-            | Array(e,l, s, a) -> s
+            | Primitive(_,s,a) -> Fixed s
+            | Array(e,l, s, a) -> Fixed s
+            | RuntimeArray _ -> Dynamic
 
 and UniformBufferField =
     {
@@ -386,7 +395,7 @@ and UniformBufferField =
 and UniformBufferLayout = 
     { 
         align : int
-        size : int
+        size : Size
         fields : list<UniformBufferField>
     }
 
@@ -441,12 +450,36 @@ module UniformBufferLayoutStd140 =
                 let et = toUniformType bt
                 let physicalSize = et.size
 
-                let size =
-                    if physicalSize % 16 = 0 then physicalSize
-                    else physicalSize + 16 - (physicalSize % 16)
+                match physicalSize with
+                    | Fixed physicalSize ->
+                        let size =
+                            if physicalSize % 16 = 0 then physicalSize
+                            else physicalSize + 16 - (physicalSize % 16)
 
-                UniformType.Array(et, len, size * len, size)
+                        UniformType.Array(et, len, size * len, size)
+                    | Dynamic ->
+                        failwith "UniformBuffer cannot contain arrays of dynamically sized objects"
+                
 
+            | ShaderType.RuntimeArray(bt) -> 
+                // the size of each element in the array will be the size
+                // of the element type rounded up to a multiple of the size
+                // of a vec4. This is also the array's alignment.
+                // The array's size will be this rounded-up element's size
+                // times the number of elements in the array.
+                let et = toUniformType bt
+                let physicalSize = et.size
+                
+                match physicalSize with
+                    | Fixed physicalSize ->
+                        let size =
+                            if physicalSize % 16 = 0 then physicalSize
+                            else physicalSize + 16 - (physicalSize % 16)
+
+                        UniformType.RuntimeArray(et, size, size)
+                    | Dynamic ->
+                        failwith "UniformBuffer cannot contain arrays of dynamically sized objects"
+                
 
             | ShaderType.Matrix(colType, cols) ->
                 // same layout as an array of N vectors each with 
@@ -486,7 +519,7 @@ module UniformBufferLayoutStd140 =
             | ShaderType.SampledImage _ ->
                 failf "cannot use SampledImage in UniformBuffer"
 
-    and structLayout (fields : list<ShaderType * string * list<Decoration * uint32[]>>) : UniformBufferLayout =
+    and structLayout (fields : list<ShaderType * string * list<Decoration * int[]>>) : UniformBufferLayout =
         let mutable currentOffset = 0
         let mutable offsets : Map<string, int> = Map.empty
         let mutable types : Map<string, ShaderType> = Map.empty
@@ -495,11 +528,11 @@ module UniformBufferLayoutStd140 =
 
         let fields = 
             fields |> List.map (fun (t,n,dec) ->
+                if currentOffset < 0 then
+                    failwith "UniformBuffer cannot contain fields after RuntimeArray"
+
                 let t = toUniformType t
                 let align = t.align
-                let size = t.size
-
-
 
                 // align the field offset
                 if currentOffset % align <> 0 then
@@ -513,10 +546,15 @@ module UniformBufferLayoutStd140 =
                         | Some o -> o
                         | None -> currentOffset
 
-                // keep track of the biggest member
-                if size > biggestFieldSize then
-                    biggestFieldSize <- size
-                    biggestFieldAlign <- align
+                let size = t.size
+                match size with
+                    | Dynamic ->
+                        ()
+                    | Fixed size ->
+                        // keep track of the biggest member
+                        if size > biggestFieldSize then
+                            biggestFieldSize <- size
+                            biggestFieldAlign <- align
 
                 let result = 
                     {
@@ -525,8 +563,13 @@ module UniformBufferLayoutStd140 =
                         offset      = offset
                     }
 
-                // store the member's offset
-                currentOffset <- offset + size
+                match size with
+                    | Fixed size ->
+                        // store the member's offset
+                        currentOffset <- offset + size
+                    | Dynamic ->
+                        currentOffset <- -1
+
                 result
             )
 
@@ -541,8 +584,9 @@ module UniformBufferLayoutStd140 =
             else biggestFieldAlign + 16 - (biggestFieldAlign % 16)
 
         let structSize =
-            if currentOffset % structAlign = 0 then currentOffset
-            else currentOffset + structAlign - (currentOffset % structAlign)
+            if currentOffset < 0 then Dynamic
+            elif currentOffset % structAlign = 0 then Fixed currentOffset
+            else currentOffset + structAlign - (currentOffset % structAlign) |> Fixed
 
         { align = structAlign; size = structSize; fields = fields }
 
@@ -635,7 +679,7 @@ type ShaderUniformParameter =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderUniformParameter =
 
-    module private Dim =
+    module Dim =
         let toTextureDimension =
             LookupTable.lookupTable [
                 Dim.Dim1D, TextureDimension.Texture1D
@@ -647,7 +691,7 @@ module ShaderUniformParameter =
                 Dim.SubpassData, TextureDimension.Texture2D
             ]
 
-    module private ImageFormat =
+    module ImageFormat =
         let private textureFormats =
             // https://www.khronos.org/registry/spir-v/specs/1.0/SPIRV.html#Image_Format
             [|
@@ -693,7 +737,8 @@ module ShaderUniformParameter =
                 TextureFormat.R8ui
             |]
 
-        let toTextureFormat (fmt : int) =
+        let toTextureFormat (fmt : ImageFormat) =
+            let fmt = int fmt
             if fmt < 1 || fmt >= textureFormats.Length then None
             else Some textureFormats.[fmt]
 
@@ -866,6 +911,7 @@ type ShaderKind =
     | TessEval of TessellationFlags
     | Geometry of GeometryInfo
     | Fragment of FragmentInfo
+    | Compute
 
 type ShaderInfo = 
     { 
@@ -876,6 +922,7 @@ type ShaderInfo =
 
         inputs          : list<ShaderIOParameter>
         uniformBlocks   : list<ShaderUniformBlock>
+        storageBlocks   : list<ShaderUniformBlock>
         textures        : list<ShaderTextureInfo>
         outputs         : list<ShaderIOParameter>
     }
@@ -992,7 +1039,7 @@ module private ShaderInfo =
 
                 | OpTypeVoid r              -> types.[r] <- ShaderType.Void
                 | OpTypeBool r              -> types.[r] <- ShaderType.Bool
-                | OpTypeInt (r, w, s)       -> types.[r] <- ShaderType.Int(int w, s = 1u)
+                | OpTypeInt (r, w, s)       -> types.[r] <- ShaderType.Int(int w, s = 1)
                 | OpTypeFloat (r, w)        -> types.[r] <- ShaderType.Float(int w)
                 | OpTypeVector (r, c, d)    -> types.[r] <- ShaderType.Vector(types.[c], int d)
                 | OpTypeMatrix (r, c, d)    -> types.[r] <- ShaderType.Matrix(types.[c], int d)
@@ -1000,9 +1047,9 @@ module private ShaderInfo =
                 | OpTypeSampler r           -> types.[r] <- ShaderType.Sampler
                 | OpTypeSampledImage (r,t)  -> types.[r] <- ShaderType.SampledImage(types.[t])
                 | OpTypePointer (r, c, t)   -> types.[r] <- ShaderType.Ptr(c, types.[t])
-                
+                | OpTypeRuntimeArray(r,t)   -> types.[r] <- ShaderType.RuntimeArray(types.[t])
                 | OpTypeImage(r,sampledType,dim,depth, arrayed, ms, sampled,format,access) ->
-                    types.[r] <- ShaderType.Image(types.[sampledType], unbox<Dim> dim, int depth, (arrayed = 1u), int ms, (sampled = 1u), format)
+                    types.[r] <- ShaderType.Image(types.[sampledType], unbox<Dim> dim, int depth, (arrayed = 1), int ms, (sampled = 1), format)
 
                 | OpTypeStruct (r, fts) -> 
                     let fieldTypes = fts |> Array.toList |> List.map (fun ft -> types.[ft])
@@ -1114,8 +1161,8 @@ module private ShaderInfo =
                         | ExecutionMode.OutputLineStrip         -> m.geometryFlags <- m.geometryFlags ||| GeometryFlags.OutputLineStrip
                         | ExecutionMode.OutputTriangleStrip     -> m.geometryFlags <- m.geometryFlags ||| GeometryFlags.OutputTriangleStrip
 
-                        | ExecutionMode.Invocations             -> m.invocations <- int (Option.get arg)
-                        | ExecutionMode.OutputVertices          -> m.outputVertices <- int (Option.get arg)
+                        | ExecutionMode.Invocations             -> m.invocations <- arg.[0]
+                        | ExecutionMode.OutputVertices          -> m.outputVertices <- arg.[0]
 
 
                         | ExecutionMode.PixelCenterInteger      -> m.fragFlags <- m.fragFlags ||| FragmentFlags.PixelCenterInteger
@@ -1146,12 +1193,12 @@ module private ShaderInfo =
                     let fields =
                         fields |> List.mapi (fun fi (t,_,_) ->
                             let name = 
-                                match memberNames.TryGetValue ((id, uint32 fi)) with
+                                match memberNames.TryGetValue ((id, fi)) with
                                     | (true, name) -> name
                                     | _ -> sprintf "field%d" fi
 
                             let decorations =
-                                match memberDecorations.TryGetValue((id, uint32 fi)) with
+                                match memberDecorations.TryGetValue((id, fi)) with
                                     | (true, dec) -> dec |> CSharpList.toList
                                     | _ -> []
 
@@ -1182,11 +1229,13 @@ module private ShaderInfo =
                         | ExecutionModel.TessellationEvaluation -> ShaderStage.TessEval, TessEval m.tessFlags
                         | ExecutionModel.Geometry -> ShaderStage.Geometry, Geometry { flags = m.geometryFlags; outputVertices = m.outputVertices; invocations = m.invocations }
                         | ExecutionModel.Fragment -> ShaderStage.Fragment, Fragment { flags = m.fragFlags; discard = m.discards; sampleShading = false }
+                        | ExecutionModel.GLCompute -> ShaderStage.Compute, Compute
                         | m -> failf "unsupported ExecutionModel %A" m
 
                 let inputs          = CSharpList.empty
                 let outputs         = CSharpList.empty
                 let uniformBlocks   = CSharpList.empty
+                let storageBlocks   = CSharpList.empty
                 let textures        = CSharpList.empty
                 let builtInInputs   = Dict.empty
                 let builtInOutputs  = Dict.empty
@@ -1222,8 +1271,12 @@ module private ShaderInfo =
 
                         | Ptr((StorageClass.Uniform | StorageClass.Image | StorageClass.UniformConstant),_) ->
                             match ShaderUniformParameter.ofShaderParameter vPar with
-                                | UniformBlockParameter block -> uniformBlocks.Add block
-                                | ImageParameter img -> textures.Add img
+                                | UniformBlockParameter block -> 
+                                    match block.layout.size with
+                                        | Fixed _ -> uniformBlocks.Add block
+                                        | Dynamic -> storageBlocks.Add block
+                                | ImageParameter img -> 
+                                    textures.Add img
 
                         | _ ->
                             ()
@@ -1235,6 +1288,7 @@ module private ShaderInfo =
                     builtInOutputs  = Dict.toMap builtInOutputs
                     inputs          = CSharpList.toList inputs
                     uniformBlocks   = CSharpList.toList uniformBlocks
+                    storageBlocks   = CSharpList.toList storageBlocks
                     textures        = CSharpList.toList textures
                     outputs         = CSharpList.toList outputs
                 }
@@ -1245,16 +1299,20 @@ module private ShaderInfo =
         ofInstructions m.instructions
 
     let ofBinary (code : byte[]) =
-        use reader = new System.IO.BinaryReader(new System.IO.MemoryStream(code))
-        reader 
-            |> Serializer.read
+        Module.ofByteArray code
             |> ofModule
+//        use reader = new System.IO.BinaryReader(new System.IO.MemoryStream(code))
+//        reader 
+//            |> Serializer.read
+//            |> ofModule
 
     let ofStream (stream : System.IO.Stream) =
-        use reader = new System.IO.BinaryReader(stream)
-        reader 
-            |> Serializer.read
+        Module.readFrom stream
             |> ofModule
+//        use reader = new System.IO.BinaryReader(stream)
+//        reader 
+//            |> Serializer.read
+//            |> ofModule
 
 
     let resolveSamplerDescriptions (resolve : ShaderTextureInfo -> list<SamplerDescription>) (info : ShaderInfo) =
@@ -1265,3 +1323,4 @@ module private ShaderInfo =
                     | sampler -> { t with description = sampler }
             )
         }
+

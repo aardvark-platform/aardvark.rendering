@@ -23,7 +23,7 @@ type IndirectBuffer =
             member x.Count = x.Count
 
         new(device : Device, handle : VkBuffer, ptr : DevicePtr, count : int) = 
-            { inherit Buffer(device, handle, ptr); Count = count }
+            { inherit Buffer(device, handle, ptr, int64 count * 20L); Count = count }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -55,6 +55,7 @@ module IndirectBuffer =
     let create (indexed : bool) (b : IIndirectBuffer) (device : Device) =
         match b with
             | :? IndirectBuffer as b ->
+                b.AddReference()
                 b
 
             | :? Aardvark.Base.IndirectBuffer as b ->

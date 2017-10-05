@@ -5,6 +5,8 @@ open System
 type HeadlessVulkanApplication(debug : bool) =
     let requestedExtensions =
         [
+            yield "VK_EXT_shader_subgroup_ballot"
+            yield "VK_EXT_shader_subgroup_vote"
             if debug then
                 yield Instance.Extensions.DebugReport
         ]
@@ -40,12 +42,15 @@ type HeadlessVulkanApplication(debug : bool) =
     
         new Instance(Version(1,0,0), enabledLayers, enabledExtensions)
 
+
     // choose a physical device
     let physicalDevice = 
         if instance.Devices.Length = 0 then
             failwithf "[Vulkan] could not get vulkan devices"
         else
             ConsoleDeviceChooser.run instance.Devices
+
+    do instance.PrintInfo(Logger.Default, physicalDevice.Index)
 
     // create a device
     let device = 

@@ -72,10 +72,38 @@ type private QueueFamilyPool(allFamilies : array<QueueFamilyInfo>) =
                         available.[fam.index] <- { fam with count = 0 }
                         Some (allFamilies.[fam.index], fam.count)
 
+    member x.TryTakeExplicit(caps : QueueFlags, count : int) =
+        let families = 
+            available 
+                |> Array.toList
+                |> List.indexed
+                |> List.filter (fun (i, f) -> f.count > 0 && f.flags = caps)
+                |> List.sortByDescending (snd >> familyScore)
+        
+        let mutable chosen = None
+
+        for (i, f) in families  do
+            if Option.isNone chosen then
+                if f.count >= count then
+                    available.[i] <- { f with count = f.count - count }
+                    chosen <- Some (f.index, count)
+
+        match chosen with
+            | Some (familyIndex, count) -> 
+                Some (allFamilies.[familyIndex], count)
+
+            | None ->
+                match families with
+                    | [] -> None
+                    | (_, fam) :: _ -> 
+                        available.[fam.index] <- { fam with count = 0 }
+                        Some (allFamilies.[fam.index], fam.count)
+
+
 type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, wantedExtensions : Set<string>) as this =
     let pool = QueueFamilyPool(physical.QueueFamilies)
     let graphicsQueues  = pool.TryTakeSingleFamily(QueueFlags.Graphics, 4)
-    let computeQueues   = pool.TryTakeSingleFamily(QueueFlags.Compute, 2)
+    let computeQueues   = pool.TryTakeExplicit(QueueFlags.Compute, 2)
     let transferQueues  = pool.TryTakeSingleFamily(QueueFlags.Transfer ||| QueueFlags.SparseBinding, 2)
     let onDispose = Event<unit>()
 
@@ -230,6 +258,37 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
     let mutable runtime = Unchecked.defaultof<IRuntime>
     let memoryLimits = physical.Limits.Memory
 
+    let caches = System.Collections.Concurrent.ConcurrentDictionary<Symbol, obj>()
+
+    member x.GetCache(name : Symbol, create : 'a -> 'b) =
+        let res =
+            caches.GetOrAdd(name, fun name ->
+                DeviceCache<'a, 'b>(x, create) :> obj
+            )
+
+        res |> unbox<DeviceCache<'a, 'b>>
+
+    member x.GetCached(cacheName : Symbol, value : 'a, create : 'a -> 'b) : 'b =
+        let cache : DeviceCache<'a, 'b> = x.GetCache(cacheName, create)
+        cache.Invoke(value)
+
+    member x.RemoveCached(cacheName : Symbol, value : 'b) : unit =
+        match caches.TryGetValue cacheName with
+            | (true, (:? IDeviceCache<'b> as c)) -> c.Revoke value
+            | _ -> ()
+                
+
+    member x.ComputeToken =
+        let ref = currentResourceToken.Value
+        match !ref with
+            | Some t ->
+                t.AddRef()
+                t
+            | None ->
+                let queue = computeFamily.Value.GetQueue()
+                let t = new DeviceToken(queue, ref)
+                ref := Some t
+                t 
 
     member x.Token =
         let ref = currentResourceToken.Value
@@ -317,6 +376,57 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
+
+and IDeviceCache<'b> =
+    abstract member Revoke : 'b -> unit
+
+and DeviceCache<'a, 'b when 'b :> RefCountedResource>(device : Device, create : 'a -> 'b) =
+    let store = Dict<'a, 'b>()
+    let back = Dict<'b, 'a>()
+
+    let create (value : 'a) =
+        let res = create value
+        back.[res] <- value
+        res
+
+    do  device.OnDispose.Add(fun _ ->
+            for k in back.Keys do
+                k.Destroy()
+            store.Clear()
+            back.Clear()
+        )
+
+    member x.Invoke(value : 'a) : 'b =
+        lock store (fun () -> 
+            let res = store.GetOrCreate(value, Func<'a, 'b>(create))
+            Interlocked.Increment(&res.RefCount) |> ignore
+            res
+        )
+
+    member x.Revoke(thing : 'b) : unit =
+        lock store (fun () ->
+            if Interlocked.Decrement(&thing.RefCount) = 0 then
+                match back.TryRemove thing with
+                    | (true, key) -> 
+                        store.Remove key |> ignore
+                        thing.Destroy()
+                    | _ ->
+                        failf "asdasds"
+        )
+
+    interface IDeviceCache<'b> with
+        member x.Revoke b = x.Revoke b
+
+
+and RefCountedResource =
+    class
+        val mutable public RefCount : int
+
+        abstract member Destroy : unit -> unit
+        default x.Destroy() = ()
+
+        new() = { RefCount = 0}
+    end
 
 and [<AbstractClass>] Resource =
     class
@@ -661,6 +771,7 @@ and DeviceCommandPool internal(device : Device, index : int, queueFamily : Devic
 //            | _ -> 
         { new CommandBuffer(device, pool, queueFamily, level) with
             override x.Dispose() =
+                x.Cleanup()
                 let mutable handle = x.Handle
                 VkRaw.vkFreeCommandBuffers(device.Handle, pool, 1u, &&handle)
 
@@ -833,6 +944,9 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
 
     member x.Cleanup() =
         cleanup()
+
+    member x.ClearCompensation() =
+        cleanupTasks.Clear()
 
     abstract member Dispose : unit -> unit
     default x.Dispose() =
@@ -1157,7 +1271,16 @@ and DeviceHeap internal(device : Device, memory : MemoryInfo, heap : MemoryHeapI
         VkRaw.vkAllocateMemory(device.Handle, &&info, NativePtr.zero, &&mem)
             |> check "could not 'allocate' null pointer for device heap"
 
-        new DeviceMemory(this, mem, 0L)
+        let hostPtr = 
+            if hostVisible then
+                let mutable ptr = 0n
+                VkRaw.vkMapMemory(device.Handle, mem, 0UL, 16UL, VkMemoryMapFlags.MinValue, &&ptr)
+                    |> check "could not map memory"
+                ptr
+            else
+                0n
+
+        new DeviceMemory(this, mem, 0L, hostPtr)
 
     let mutable nullptr = None
 
@@ -1187,9 +1310,6 @@ and DeviceHeap internal(device : Device, memory : MemoryInfo, heap : MemoryHeapI
     member x.Alloc(align : int64, size : int64) = manager.Alloc(align, size)
     member x.Free(ptr : DevicePtr) = ptr.Dispose()
 
-    member x.AllocTemp(align : int64, size : int64) =
-        x.AllocRaw(size) :> DevicePtr
-
 
     member x.TryAllocRaw(size : int64, [<Out>] ptr : byref<DeviceMemory>) =
         if heap.TryAdd size then
@@ -1205,7 +1325,18 @@ and DeviceHeap internal(device : Device, memory : MemoryInfo, heap : MemoryHeapI
             VkRaw.vkAllocateMemory(device.Handle, &&info, NativePtr.zero, &&mem)
                 |> check "could not allocate memory"
 
-            ptr <- new DeviceMemory(x, mem, size)
+            
+            let hostPtr = 
+                if hostVisible then
+                    let mutable hostPtr = 0n
+                    VkRaw.vkMapMemory(device.Handle, mem, 0UL, uint64 size, VkMemoryMapFlags.MinValue, &&hostPtr)
+                        |> check "could not map memory"
+                    hostPtr
+                else
+                    0n
+
+
+            ptr <- new DeviceMemory(x, mem, size, hostPtr)
             true
         else
             false
@@ -1227,6 +1358,7 @@ and DeviceHeap internal(device : Device, memory : MemoryInfo, heap : MemoryHeapI
             lock ptr (fun () ->
                 if ptr.Handle.IsValid then
                     heap.Remove ptr.Size
+                    if hostVisible then VkRaw.vkUnmapMemory(device.Handle, ptr.Handle)
                     VkRaw.vkFreeMemory(device.Handle, ptr.Handle, NativePtr.zero)
                     ptr.Handle <- VkDeviceMemory.Null
                     ptr.Size <- 0L
@@ -1345,6 +1477,8 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
 
     let addBlock(this : DeviceMemoryManager) =
         let store = heap.AllocRaw blockSize
+
+
         Interlocked.Add(&allocatedMemory, blockSize) |> ignore
         blocks.Add store |> ignore
 
@@ -1463,9 +1597,9 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
         )
             
 
-and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int64) =
+and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int64, hostPtr : nativeint) =
     inherit DevicePtr(Unchecked.defaultof<_>, 0L, size)
-    static let nullptr = new DeviceMemory(Unchecked.defaultof<_>, VkDeviceMemory.Null, 0L)
+    static let nullptr = new DeviceMemory(Unchecked.defaultof<_>, VkDeviceMemory.Null, 0L, 0n)
 
     let mutable handle = handle
     let mutable size = size
@@ -1484,6 +1618,8 @@ and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int
 
     member x.IsNull = handle.IsNull
     member x.IsValid = handle.IsValid
+
+    member x.HostPointer = hostPtr
 
     override x.Dispose() = heap.Free(x)
     override x.Memory = x
@@ -1543,17 +1679,15 @@ and [<AllowNullLiteral>] DevicePtr internal(memory : DeviceMemory, offset : int6
         let memory = x.Memory
         if memory.Heap.IsHostVisible then
             let device = memory.Heap.Device
-            let mutable mapped = false
-            Monitor.Enter memory
+            Monitor.Enter x
             try
-                let mutable ptr = 0n
-                VkRaw.vkMapMemory(device.Handle, memory.Handle, uint64 x.Offset, uint64 x.Size, 0u, &&ptr)
-                    |> check "could not map memory"
-                mapped <- true
+                let ptr = memory.HostPointer + nativeint x.Offset
                 f ptr
             finally 
-                if mapped then VkRaw.vkUnmapMemory(device.Handle, memory.Handle)
-                Monitor.Exit memory
+                let mutable range = VkMappedMemoryRange(VkStructureType.MappedMemoryRange, 0n, memory.Handle, uint64 x.Offset, uint64 x.Size)
+                VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, &&range)
+                    |> check "could not flush memory range"
+                Monitor.Exit x
         else
             failf "cannot map host-invisible memory"
 

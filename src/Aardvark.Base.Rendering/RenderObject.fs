@@ -221,6 +221,14 @@ type IRenderObject =
     abstract member RenderPass : RenderPass
     abstract member AttributeScope : Ag.Scope
 
+[<RequireQualifiedAccess>]
+type Surface =
+    | FShadeSimple of FShade.Effect
+    | FShade of (FShade.EffectConfig -> FShade.EffectInputLayout * IMod<FShade.Imperative.Module>)
+    | Backend of ISurface
+    | None
+
+
 [<CustomEquality>]
 [<CustomComparison>]
 type RenderObject =
@@ -236,7 +244,7 @@ type RenderObject =
         mutable Mode                : IMod<IndexedGeometryMode>
         
 
-        mutable Surface             : IMod<ISurface>
+        mutable Surface             : Surface
                               
         mutable DepthTest           : IMod<DepthTestMode>
         mutable CullMode            : IMod<CullMode>
@@ -276,7 +284,7 @@ type RenderObject =
           IndirectBuffer = null
 
           Mode = null
-          Surface = null
+          Surface = Surface.None
           DepthTest = null
           CullMode = null
           BlendMode = null
@@ -331,7 +339,7 @@ module RenderObjectExtensions =
           DrawCallInfos = null
           IndirectBuffer = null
           Mode = null
-          Surface = null
+          Surface = Surface.None
           DepthTest = null
           CullMode = null
           BlendMode = null

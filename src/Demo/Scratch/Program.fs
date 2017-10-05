@@ -190,7 +190,7 @@ module ShaderStuff =
             |> Sg.uniform "A" (Mod.constant V3d.IOI)
             |> Sg.uniform "B" (Mod.constant V3d.OII)
             |> Sg.uniform "C" (Mod.constant 1.0)
-            |> Sg.diffuseFileTexture' @"/home/schorsch/bla.png" true
+            |> Sg.diffuseFileTexture' @"D:\file\pix\mtl2\image0.jpg" true
 
 
 
@@ -811,6 +811,8 @@ let test () =
 
 [<EntryPoint>]
 let main argv = 
+    //Rendering.Examples.NullBufferTest.run() |> ignore
+
 //    
 //
 //    let a = RangeSet.Empty.Add(Range1l(0L, 10L)).Add(Range1l(100L, 1000L)).Add(Range1l(12L, 98L))
@@ -831,10 +833,7 @@ let main argv =
 
     Ag.initialize()
     Aardvark.Init()
-
-    test () 
-    System.Environment.Exit 0
-
+    
     App.Config <- { BackendConfiguration.Default with useDebugOutput = true }
     App.run()
 

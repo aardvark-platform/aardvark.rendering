@@ -545,7 +545,7 @@ let main argv =
                     do! DefaultSurfaces.trafo               
                     
                     // if the parent fillmode is not filled make the quad red.
-                    let! fill = parentFill
+                    let fill = parentFill |> Mod.force
                     match fill with
                         | FillMode.Fill -> do! DefaultSurfaces.diffuseTexture
                         | _ -> do! DefaultSurfaces.constantColor C4f.Red 

@@ -14,7 +14,9 @@ open Microsoft.FSharp.NativeInterop
 
 
 
-type ShaderProgram(device : Device, renderPass : RenderPass, shaders : array<Shader>, layout : PipelineLayout, original : BackendSurface) =
+type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLayout, original : BackendSurface) =
+    inherit RefCountedResource()
+
     static let allTopologies = Enum.GetValues(typeof<IndexedGeometryMode>) |> unbox<IndexedGeometryMode[]> |> Set.ofArray
 
     // get in-/outputs
@@ -74,8 +76,13 @@ type ShaderProgram(device : Device, renderPass : RenderPass, shaders : array<Sha
             )
         )
 
+    let mutable cacheName = Symbol.Empty
+
+    member internal x.CacheName
+        with get() = cacheName
+        and set n = cacheName <- n
+
     member x.Device = device
-    member x.RenderPass = renderPass
     member x.Shaders = shaders
     member x.PipelineLayout = layout
 
@@ -94,15 +101,7 @@ type ShaderProgram(device : Device, renderPass : RenderPass, shaders : array<Sha
     member x.SampleShading = fragInfo.sampleShading
     member x.ShaderCreateInfos = createInfos
 
-    interface IBackendSurface with
-        member x.Handle = x :> obj
-        member x.Inputs = inputs |> List.map (fun p -> p.name, p.hostType)
-        member x.Outputs = outputs |> List.map (fun p -> p.name, p.hostType)
-        member x.Uniforms = failf "not implemented"
-        member x.Samplers = original.Samplers |> Dictionary.toList |> List.map (fun ((a,b),c) -> (a,b,c))
-        member x.UniformGetters = original.Uniforms
-
-    member x.Dispose() =
+    override x.Destroy() =
         for s in shaders do device.Delete(s.Module)
         device.Delete(layout)
 
@@ -112,28 +111,108 @@ type ShaderProgram(device : Device, renderPass : RenderPass, shaders : array<Sha
                 NativePtr.free ptr
                 createInfos.[i] <- Unchecked.defaultof<_>
 
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
+    interface IBackendSurface with
+        member x.Handle = x :> obj
+        member x.Inputs = inputs |> List.map (fun p -> p.name, p.hostType)
+        member x.Outputs = outputs |> List.map (fun p -> p.name, p.hostType)
+        member x.Uniforms = failf "not implemented"
+        member x.Samplers = original.Samplers |> Dictionary.toList |> List.map (fun ((a,b),c) -> (a,b,c))
+        member x.UniformGetters = original.Uniforms
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderProgram =
-    let private versionRx = System.Text.RegularExpressions.Regex @"\#version[ \t]+[0-9]+[\r\n]*"
+    let private versionRx = System.Text.RegularExpressions.Regex @"\#version.*$"
     let private layoutRx = System.Text.RegularExpressions.Regex @"layout[ \t]*\([ \t]*set[ \t]*\=[ \t]*(?<set>[0-9]+),[ \t]*binding[ \t]*\=[ \t]*(?<binding>[0-9]+)[ \t]*\)[ \t\r\n]*uniform[ \t]+(?<name>[_a-zA-Z0-9]+)[ \t\r\n]*\{"
-    let ofBackendSurface (renderPass : RenderPass) (surface : BackendSurface) (device : Device) =
+    
 
-        let code = layoutRx.Replace(surface.Code, Text.RegularExpressions.MatchEvaluator(fun m ->
-            let set = m.Groups.["set"].Value
-            let binding = m.Groups.["binding"].Value
-            let name = m.Groups.["name"].Value
+    let withLineNumbers (code : string) : string =
+        let lineCount = String.lineCount code
+        let lineColumns = 1 + int (Fun.Log10 lineCount)
+        let lineFormatLen = lineColumns + 3
+        let sb = new System.Text.StringBuilder(code.Length + lineFormatLen * lineCount + 10)
+            
+        let fmtStr = "{0:" + lineColumns.ToString() + "} : "
+        let mutable lineEnd = code.IndexOf('\n')
+        let mutable lineStart = 0
+        let mutable lineCnt = 1
+        while (lineEnd >= 0) do
+            let line = code.Substring(lineStart, lineEnd - lineStart + 1)
+            sb.Append(lineCnt.ToString().PadLeft(lineColumns)) |> ignore
+            sb.Append(": ")  |> ignore
+            sb.Append(line) |> ignore
+            lineStart <- lineEnd + 1
+            lineCnt <- lineCnt + 1
+            lineEnd <- code.IndexOf('\n', lineStart)
+            ()
 
-            sprintf "layout(set = %s, binding = %s, std140)\r\nuniform %s\r\n{" set binding name
-        ))
+        let lastLine = code.Substring(lineStart)
+        if lastLine.Length > 0 then
+            sb.Append(lineCnt.ToString()) |> ignore
+            sb.Append(": ")  |> ignore
+            sb.Append(lastLine) |> ignore
 
-        let codes =
+        sb.ToString()
+    
+    let logLines (code : string) =
+        let lineCount = String.lineCount code
+        let lineColumns = 1 + int (Fun.Log10 lineCount)
+        let lineFormatLen = lineColumns + 3
+        let sb = new System.Text.StringBuilder(code.Length + lineFormatLen * lineCount + 10)
+            
+        let fmtStr = "{0:" + lineColumns.ToString() + "} : "
+        let mutable lineEnd = code.IndexOf('\n')
+        let mutable lineStart = 0
+        let mutable lineCnt = 1
+        while (lineEnd >= 0) do
+            sb.Clear() |> ignore
+            let line = code.Substring(lineStart, lineEnd - lineStart)
+            sb.Append(lineCnt.ToString().PadLeft(lineColumns)) |> ignore
+            sb.Append(": ")  |> ignore
+            sb.Append(line) |> ignore
+            Report.Line("{0}", sb.ToString())
+            lineStart <- lineEnd + 1
+            lineCnt <- lineCnt + 1
+            lineEnd <- code.IndexOf('\n', lineStart)
+            ()
+
+        let lastLine = code.Substring(lineStart)
+        if lastLine.Length > 0 then
+            sb.Clear() |> ignore
+            sb.Append(lineCnt.ToString()) |> ignore
+            sb.Append(": ")  |> ignore
+            sb.Append(lastLine) |> ignore
+            Report.Line("{0}", sb.ToString())
+
+    let private ofBackendSurfaceInternal (layout : Option<PipelineLayout>) (surface : BackendSurface) (device : Device) =
+        let code = 
+            layoutRx.Replace(surface.Code, fun m ->
+                let set = m.Groups.["set"].Value
+                let binding = m.Groups.["binding"].Value
+                let name = m.Groups.["name"].Value
+
+                sprintf "layout(set = %s, binding = %s, std140)\r\nuniform %s\r\n{" set binding name
+            )
+        
+        let code = 
+            versionRx.Replace(code, "#version 450 core")
+
+        logLines code
+
+        let logs = System.Collections.Generic.Dictionary<ShaderStage, string>()
+
+        let tryGetSamplerDescription (info : ShaderTextureInfo) =
+            List.init info.count (fun index ->
+                match surface.Samplers.TryGetValue((info.name, index)) with
+                    | (true, sam) -> sam
+                    | _ -> 
+                        Log.warn "[Vulkan] could not resolve sampler/texture for %s[%d]" info.name index
+                        { textureName = Symbol.Create(info.name + string index); samplerState = SamplerStateDescription() }
+            )
+
+        let binaries =
             surface.EntryPoints
-                |> Dictionary.toArray
-                |> Array.sortBy fst
-                |> Array.map (fun (stage, entry) ->
+                |> Dictionary.toMap
+                |> Map.map (fun stage entry ->
                     let define =
                         match stage with
                             | ShaderStage.Vertex -> "Vertex"
@@ -141,76 +220,156 @@ module ShaderProgram =
                             | ShaderStage.Geometry -> "Geometry"
                             | ShaderStage.TessControl -> "TessControl"
                             | ShaderStage.TessEval -> "TessEval"
+                            | ShaderStage.Compute -> "Compute"
                             | _ -> failwithf "unsupported shader stage: %A" stage
 
-                    let code = code.Replace(sprintf "%s(" entry, "main(")
-                    stage, versionRx.Replace(code, "#version 450 core\r\n" + (sprintf "#define %s\r\n" define))
+                    let gStage = ShaderModule.glslangStage stage 
+
+                    match GLSLang.GLSLang.tryCompile gStage entry [define] code with
+                        | Some binary, log ->
+                            logs.[stage] <- log
+                            binary
+                        | None, err ->
+                            Log.error "[Vulkan] %A shader compilation failed: %A" stage err
+                            failf "%A shader compilation failed: %A" stage err
                 )
 
-        printfn "%s" (snd codes.[0])
+        let shaders = 
+            binaries
+                |> Map.toArray
+                |> Array.map (fun (stage, binary) ->
+                    let shaderModule = device.CreateShaderModule(stage, binary)
+                    let shader = shaderModule.[stage]
+                    shader.ResolveSamplerDescriptions tryGetSamplerDescription
+                )
 
-        let shaders = Array.zeroCreate codes.Length
-        let mutable program = Unchecked.defaultof<_>
+        let layout = 
+            match layout with
+                | Some l -> l.AddRef(); l
+                | None -> device.CreatePipelineLayout(shaders)
 
-        let mutable index = 0
-        for (stage, code) in codes do
-            match GLSLang.GLSLang.tryCreateShader (ShaderModule.glslangStage stage) code with
-                | Success shader ->
-                    shaders.[index] <- shader
-                | Error err ->
-                    Log.error "[Vulkan] %A shader compilation failed: %A" stage err
-                    failf "%A shader compilation failed: %A" stage err
-            index <- index + 1
+        new ShaderProgram(device, shaders, layout, surface)
 
-        match GLSLang.GLSLang.tryCreateProgram shaders with
-            | Success prog ->
-                try
-                    let tryGetSamplerDescription (info : ShaderTextureInfo) =
-                        List.init info.count (fun index ->
-                            match surface.Samplers.TryGetValue((info.name, index)) with
-                                | (true, sam) -> sam
-                                | _ -> 
-                                    Log.warn "[Vulkan] could not resolve sampler/texture for %s[%d]" info.name index
-                                    { textureName = Symbol.Create(info.name + string index); samplerState = SamplerStateDescription() }
+    module private FShadeStuff = 
+        open FShade
+        open System.IO
+
+        type EffectId =
+            {
+                hash : string
+                info : PipelineInfo
+            }
+
+        type EffectData =
+            {
+                shaders     : list<ShaderInfo * byte[]>
+                samplers    : Map<string * int, string * SamplerStateDescription>
+                glsl        : string
+                entries     : Map<Aardvark.Base.ShaderStage, string>
+                builtIns    : Map<Aardvark.Base.ShaderStage, Map<Imperative.ParameterKind, Set<string>>>
+            }
+
+ 
+        let pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
+
+        let ofData (pipelineLayout : PipelineLayout) (data : EffectData) (device : Device) =
+            let shaders = 
+                data.shaders |> List.toArray |> Array.map (fun (info, binary) ->
+                    let stage =
+                        match info.kind with
+                            | ShaderKind.Vertex -> Aardvark.Base.ShaderStage.Vertex
+                            | ShaderKind.TessControl _ -> Aardvark.Base.ShaderStage.TessControl
+                            | ShaderKind.TessEval _ -> Aardvark.Base.ShaderStage.TessEval
+                            | ShaderKind.Geometry _ -> Aardvark.Base.ShaderStage.Geometry
+                            | ShaderKind.Fragment _ -> Aardvark.Base.ShaderStage.Fragment
+                            | ShaderKind.Compute -> Aardvark.Base.ShaderStage.Compute
+                        
+                    let m = ShaderModule.ofBinaryWithInfo stage info binary device
+                    m.[stage]
+                )
+                
+            let samplers =
+                data.samplers
+                    |> Map.toList 
+                    |> List.map (fun ((name, idx), (texName, desc)) ->
+                        (name, idx), { textureName = Symbol.Create texName; samplerState = desc }
+                    )
+                    |> Dictionary.ofList
+
+            let bs = BackendSurface(data.glsl, Dictionary.ofMap data.entries, data.builtIns, SymDict.empty, samplers, true)
+            new ShaderProgram(device, shaders, pipelineLayout, bs)
+
+        let shaderCachePath = 
+            let temp = Path.Combine(Path.GetTempPath(), "AardvarkVulkanShaderCache")
+            if not (Directory.Exists temp) then Directory.CreateDirectory temp |> ignore
+            temp
+
+        let ofModule  (layout : PipelineLayout) (effect : Imperative.Module) (device : Device) =
+
+            let surf = BackendSurface.ofModule effect
+
+            let prog = ofBackendSurfaceInternal (Some layout) surf device
+
+            let data =
+                { 
+                    shaders =
+                        prog.Shaders |> Array.toList |> List.map (fun shader ->
+                            shader.Interface, shader.Module.SpirV
                         )
 
-                    let shaders = 
-                        codes |> Array.map (fun (stage,_) ->
-                            match prog.TryGetSpirVForStage (ShaderModule.glslangStage stage) with
-                                | Some spirv ->
-                                    let m = device.CreateShaderModule(stage, spirv)
-                                    m.[stage].ResolveSamplerDescriptions tryGetSamplerDescription
-                                | _ ->
-                                    failf "could not get spirv for stage: %A" stage
-                        )
+                    samplers = 
+                        surf.Samplers 
+                            |> Dictionary.toSeq 
+                            |> Seq.map (fun (key, v) -> key, (string v.textureName, v.samplerState))
+                            |> Map.ofSeq
 
-                    let pipelineLayout = device.CreatePipelineLayout(shaders)
-                    new ShaderProgram(device, renderPass, shaders, pipelineLayout, surface)
-                    //ShaderProgram(device, map, pipelineLayout, renderPass, inputs, outputs, uniforms, surface.SamplerStates, surface.Uniforms |> SymDict.map (fun _ v -> v :> obj), surface, List.toArray first.Interface.inputs)
+                    glsl = surf.Code
+                    entries = surf.EntryPoints |> Dictionary.toMap
+                    builtIns = surf.BuiltIns
+                }
 
-                finally
-                    shaders |> Array.iter (fun s -> s.Dispose())
-                    prog.Dispose()
+            prog, data
 
-            | Error err ->
-                Log.error "[Vulkan] program compilation failed: %A" err
-                failf "program compilation failed: %A" err
+    
+    let backendSurfaceCache = Symbol.Create "BackendSurfaceCache"
+    let effectSurfaceCache = Symbol.Create "EffectSurfaceCache"
+
+    let ofBackendSurface (surface : BackendSurface) (device : Device) =
+        device.GetCached(backendSurfaceCache, surface, fun surface ->
+            let program = ofBackendSurfaceInternal None surface device
+            program.CacheName <- backendSurfaceCache
+            // leak programs
+            program.RefCount <- 1
+            program
+        )
+
+    let ofModule  (layout : PipelineLayout) (effect : FShade.Imperative.Module) (device : Device) =
+        device.GetCached(effectSurfaceCache, (layout, effect), fun (layout, effect) ->
+            let (program, data) = FShadeStuff.ofModule layout effect device
+            program.CacheName <- effectSurfaceCache
+            // leak programs
+            program.RefCount <- 1
+            program
+        )
 
     let delete (program : ShaderProgram) (device : Device) =
-        program.Dispose()
+        device.RemoveCached(program.CacheName, program)
+        Log.warn "ref: %s %A" (string program.CacheName) program.RefCount
+
 
 
 [<AbstractClass; Sealed; Extension>]
 type ContextShaderProgramExtensions private() =
     [<Extension>]
-    static member CreateShaderProgram(this : Device, pass : RenderPass, surface : ISurface) =
+    static member CreateShaderProgram(this : Device, signature : IFramebufferSignature, surface : ISurface) =
         match surface with
-            | :? SignaturelessBackendSurface as s -> s.Get pass |> unbox<ShaderProgram>
+            | :? SignaturelessBackendSurface as s -> 
+                s.Get signature |> unbox<ShaderProgram>
             | :? ShaderProgram as p -> p
-            | :? BackendSurface as bs -> this |> ShaderProgram.ofBackendSurface pass bs
+            | :? BackendSurface as bs -> this |> ShaderProgram.ofBackendSurface bs
             | :? IGeneratedSurface as gs ->
-                let bs = gs.Generate(this.Runtime, pass) 
-                this |> ShaderProgram.ofBackendSurface pass bs
+                let bs = gs.Generate(this.Runtime, signature) 
+                this |> ShaderProgram.ofBackendSurface bs
             | _ ->
                 failf "bad surface type: %A" surface
 

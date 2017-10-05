@@ -11,15 +11,13 @@ open Aardvark.SceneGraph
 module SurfaceSemantics =
 
     type ISg with
-        member x.Surface : IMod<ISurface> = x?Surface
+        member x.Surface : Surface = x?Surface
 
     module Semantic =
-        let surface (s : ISg) : IMod<ISurface> = s?Surface
+        let surface (s : ISg) : Surface = s?Surface
 
-    let private emptySurface : IMod<ISurface> = 
-        Mod.custom (fun s -> 
-            failwith "empty surface encountered. Solution: add a surface to your scene graph."
-        )
+    let private emptySurface : Surface = 
+        Surface.None
 
     [<Semantic>]
     type SurfaceSem() =

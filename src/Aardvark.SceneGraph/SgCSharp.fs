@@ -47,13 +47,7 @@ type SceneGraphExtensions =
     static member Trafo(sg : ISg, modelTrafo : Trafo3d) = Sg.trafo (Mod.constant modelTrafo) sg
 
     [<Extension>]
-    static member Surface(sg : ISg, surface : ISurface) = Sg.SurfaceApplicator(Mod.constant surface, sg) :> ISg
-
-    [<Extension>]
-    static member Surface(sg : ISg, surface : IEvent<ISurface>) = Sg.SurfaceApplicator(surface, sg) :> ISg
-
-    [<Extension>]
-    static member Surface(sg : ISg, surface : IMod<ISurface>) = Sg.SurfaceApplicator(surface, sg) :> ISg
+    static member Surface(sg : ISg, surface : ISurface) = Sg.SurfaceApplicator(Surface.Backend surface, sg) :> ISg
 
     [<Extension>]
     static member FillMode(sg : ISg, mode : IEvent<FillMode>) = Sg.FillModeApplicator(mode, sg) :> ISg

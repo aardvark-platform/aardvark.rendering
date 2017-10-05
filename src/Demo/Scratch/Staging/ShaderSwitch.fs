@@ -17,6 +17,7 @@ open Aardvark.Base.Monads.State
 open Microsoft.FSharp.NativeInterop
 
 module ``Shader Switch`` =
+    open FShade
 
     [<Demo("Shader Switch")>]
     let sg ()=
@@ -50,20 +51,41 @@ module ``Shader Switch`` =
 
         let fboSig = App.FramebufferSignature
 
-        let shaderRed = App.Runtime.PrepareEffect(fboSig, [ DefaultSurfaces.trafo |> toEffect
-                                                            DefaultSurfaces.constantColor C4f.Red |> toEffect
-                                                          ]) :> ISurface
+        let effectRed = 
+            Effect.compose [
+                DefaultSurfaces.trafo |> toEffect
+                DefaultSurfaces.constantColor C4f.Red |> toEffect
+            ]
 
-        let shaderGreen = App.Runtime.PrepareEffect(fboSig, [ DefaultSurfaces.trafo |> toEffect
-                                                              DefaultSurfaces.constantColor C4f.Green |> toEffect
-                                                              DefaultSurfaces.simpleLighting |> toEffect ]) :> ISurface
+        let effectGreen = 
+            Effect.compose [
+                DefaultSurfaces.trafo |> toEffect
+                DefaultSurfaces.constantColor C4f.Green |> toEffect
+                DefaultSurfaces.simpleLighting |> toEffect
+            ]
 
-        let shaderBlue  = App.Runtime.PrepareEffect(fboSig, [ DefaultSurfaces.trafo |> toEffect
-                                                              DefaultSurfaces.constantColor C4f.Blue |> toEffect
-                                                              DefaultSurfaces.simpleLighting |> toEffect ]) :> ISurface
+        let effectBlue = 
+            Effect.compose [
+                DefaultSurfaces.trafo |> toEffect
+                DefaultSurfaces.constantColor C4f.Blue |> toEffect
+                DefaultSurfaces.simpleLighting |> toEffect
+            ]
 
-        let shaderMod = Mod.init shaderRed
+        let effects = [| effectRed; effectGreen; effectBlue |]
+        let effectId = Mod.init 0
 
+        let compile (config : EffectConfig) =
+            let modules = effects |> Array.map (Effect.toModule config)
+            let layout = EffectInputLayout.ofModules modules
+
+
+            let modules = modules |> Array.map (EffectInputLayout.apply layout)
+
+            let currentModule = effectId |> Mod.map (fun i -> modules.[i % modules.Length])
+
+            layout, currentModule
+
+  
         let initial = geometries.Count
         let random = Random()
         App.Keyboard.DownWithRepeats.Values.Add(fun k ->
@@ -102,15 +124,11 @@ module ``Shader Switch`` =
                 Report.Line("new geometry count: {0}", geometries.Count)
 
             if k = Keys.U then
-                
-                let sr = rnd.Next(3)
+                let sr = effectId.Value + 1
                 Report.Line("switching shader: {0}", sr)
 
                 transact (fun () ->
-                    Mod.change shaderMod (match sr with
-                                          | 1 -> shaderRed
-                                          | 2 -> shaderGreen
-                                          | _ -> shaderBlue)
+                    effectId.Value <- sr
                 )
                 
         )
@@ -125,8 +143,12 @@ module ``Shader Switch`` =
             )
         )
 
-        let sg = Sg.set(geometries |> ASet.map (fun (vg,t) -> Sg.ofIndexedGeometry vg |> Sg.trafo (Mod.constant t)))
+        let surface (sg : ISg) =
+            Sg.SurfaceApplicator(Surface.FShade compile, sg) :> ISg
+
+        let sg = 
+            Sg.set(geometries |> ASet.map (fun (vg,t) -> Sg.ofIndexedGeometry vg |> Sg.trafo (Mod.constant t)))
                 |> Sg.fillMode mode
                 |> Sg.uniform "LightLocation" (Mod.constant (10.0 * V3d.III))
-                |> Sg.surface shaderMod
+                |> surface
         sg

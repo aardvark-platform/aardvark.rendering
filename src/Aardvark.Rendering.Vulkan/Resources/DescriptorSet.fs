@@ -15,11 +15,9 @@ open Microsoft.FSharp.NativeInterop
 
 type Descriptor =
     | UniformBuffer of int * UniformBuffer
+    | StorageBuffer of int * Buffer
     | CombinedImageSampler of int * array<Option<ImageView * Sampler>>
-
-type AdaptiveDescriptor =
-    | AdaptiveUniformBuffer of int * UniformBuffer
-    | AdaptiveCombinedImageSampler of int * array<Option<IResource<ImageView, VkImageView> * IResource<Sampler, VkSampler>>>
+    | StorageImage of int * ImageView
 
 type DescriptorSet =
     class
@@ -34,33 +32,39 @@ type DescriptorSet =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DescriptorSet =
     let alloc (layout : DescriptorSetLayout) (pool : DescriptorPool) =
-        let worked = Interlocked.Change(&pool.SetCount, fun c -> if c <= 0 then 0, false else c-1, true)
-        if worked then
-            let mutable info =
-                VkDescriptorSetAllocateInfo(
-                    VkStructureType.DescriptorSetAllocateInfo, 0n, 
-                    pool.Handle, 
-                    1u, 
-                    &&layout.Handle
-                )
+        lock pool (fun () ->
+            let worked = Interlocked.Change(&pool.SetCount, fun c -> if c <= 0 then 0, false else c-1, true)
+            if worked then
+                let mutable info =
+                    VkDescriptorSetAllocateInfo(
+                        VkStructureType.DescriptorSetAllocateInfo, 0n, 
+                        pool.Handle, 
+                        1u, 
+                        &&layout.Handle
+                    )
 
-            let mutable handle = VkDescriptorSet.Null
-            VkRaw.vkAllocateDescriptorSets(pool.Device.Handle, &&info, &&handle)
-                |> check "could not allocate DescriptorSet"
+                let mutable handle = VkDescriptorSet.Null
+                VkRaw.vkAllocateDescriptorSets(pool.Device.Handle, &&info, &&handle)
+                    |> check "could not allocate DescriptorSet"
 
-            DescriptorSet(pool.Device, pool, layout, handle)
-        else
-            failf "cannot allocate DescriptorSet (out of slots)"
+                DescriptorSet(pool.Device, pool, layout, handle)
+            else
+                failf "cannot allocate DescriptorSet (out of slots)"
+        )
 
     let free (desc : DescriptorSet) (pool : DescriptorPool) =
-        if desc.Handle.IsValid then
-            VkRaw.vkFreeDescriptorSets(pool.Device.Handle, pool.Handle, 1u, &&desc.Handle)
-                |> check "could not free DescriptorSet"
+        lock pool (fun () ->
+            if desc.Handle.IsValid then
+                VkRaw.vkFreeDescriptorSets(pool.Device.Handle, pool.Handle, 1u, &&desc.Handle)
+                    |> check "could not free DescriptorSet"
 
-            desc.Handle <- VkDescriptorSet.Null
+                desc.Handle <- VkDescriptorSet.Null
+        )
 
     let update (descriptors : array<Descriptor>) (set : DescriptorSet) (pool : DescriptorPool) =
         let device = pool.Device
+        let pool = ()
+
         let layout = set.Layout
         let cnt = descriptors |> Array.sumBy (function CombinedImageSampler(_, arr) -> arr.Length | _ -> 1)
         let mutable bufferInfos = NativePtr.stackalloc cnt
@@ -70,6 +74,30 @@ module DescriptorSet =
             descriptors
                 |> Array.collect (fun desc ->
                     match desc with
+                        | StorageBuffer (binding, b) ->
+                            let info = 
+                                VkDescriptorBufferInfo(
+                                    b.Handle, 
+                                    0UL, 
+                                    uint64 b.Size
+                                )
+
+                            NativePtr.write bufferInfos info
+                            let ptr = bufferInfos
+                            bufferInfos <- NativePtr.step 1 bufferInfos
+
+                            [|
+                                VkWriteDescriptorSet(
+                                    VkStructureType.WriteDescriptorSet, 0n,
+                                    set.Handle,
+                                    uint32 binding,
+                                    0u, 1u, VkDescriptorType.StorageBuffer,
+                                    NativePtr.zero,
+                                    ptr,
+                                    NativePtr.zero
+                                )
+                            |]
+
                         | UniformBuffer (binding, ub) ->
                             let info = 
                                 VkDescriptorBufferInfo(
@@ -93,6 +121,7 @@ module DescriptorSet =
                                     NativePtr.zero
                                 )
                             |]
+
                         | CombinedImageSampler(binding, arr) ->
                             arr |> Array.choosei (fun i vs ->
                                 match vs with
@@ -123,6 +152,30 @@ module DescriptorSet =
                                         None
                             )
 
+                        | StorageImage(binding, view) ->
+                            let info =
+                                VkDescriptorImageInfo(
+                                    VkSampler.Null,
+                                    view.Handle,
+                                    VkImageLayout.General
+                                )
+
+                            NativePtr.write imageInfos info
+                            let ptr = imageInfos
+                            imageInfos <- NativePtr.step 1 imageInfos
+                            
+                            let write = 
+                                VkWriteDescriptorSet(
+                                    VkStructureType.WriteDescriptorSet, 0n,
+                                    set.Handle,
+                                    uint32 binding,
+                                    0u, 1u, VkDescriptorType.StorageImage,
+                                    ptr,
+                                    NativePtr.zero,
+                                    NativePtr.zero
+                                )
+
+                            [| write |]
                    )
 
         let pWrites = NativePtr.pushStackArray writes

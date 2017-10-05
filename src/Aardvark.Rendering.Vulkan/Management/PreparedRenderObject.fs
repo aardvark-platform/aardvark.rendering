@@ -13,21 +13,21 @@ open Aardvark.Base.Incremental
 #nowarn "9"
 #nowarn "51"
 
-open ResourcesNew
 
 type PreparedRenderObject =
     {
         device                  : Device
         original                : RenderObject
         
-        resources               : list<IResource>
+        resources               : list<IResourceLocation>
 
-        pipeline                : IResource<Pipeline, VkPipeline>
-        indexBuffer             : Option<IResource<IndexBufferBinding, IndexBufferBinding>>
-        descriptorSets          : IResource<DescriptorSetBinding, DescriptorSetBinding>
-        vertexBuffers           : IResource<VertexBufferBinding, VertexBufferBinding>
-        drawCalls               : IResource<DrawCall, DrawCall>
-        isActive                : IResource<bool, int>
+        pipelineLayout          : PipelineLayout
+        pipeline                : INativeResourceLocation<VkPipeline>
+        indexBuffer             : Option<INativeResourceLocation<IndexBufferBinding>>
+        descriptorSets          : INativeResourceLocation<DescriptorSetBinding>
+        vertexBuffers           : INativeResourceLocation<VertexBufferBinding>
+        drawCalls               : INativeResourceLocation<DrawCall>
+        isActive                : INativeResourceLocation<int>
         activation              : IDisposable
     }
     member x.DrawCallInfos = x.original.DrawCallInfos
@@ -35,15 +35,13 @@ type PreparedRenderObject =
     member x.AttributeScope = x.original.AttributeScope
 
     member x.Dispose() =
-        for r in x.resources do r.Release(null)
+        for r in x.resources do r.Release()
 
     member x.Update(caller : AdaptiveToken, token : RenderToken) =
-        for r in x.resources do r.Update(caller, ResourceUpdateToken(-1L, token)) |> ignore
+        for r in x.resources do r.Update(caller) |> ignore
 
-
-//
-//    member x.IncrementReferenceCount() =
-//        for r in x.resources do r.Acquire()
+    member x.IncrementReferenceCount() =
+        for r in x.resources do r.Acquire()
 
 
     interface IPreparedRenderObject with
@@ -89,27 +87,24 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
+open Aardvark.Rendering.Vulkan.Resources
 
 [<AbstractClass; Sealed; Extension>]
 type DevicePreparedRenderObjectExtensions private() =
 
     static let prepareObject (token : AdaptiveToken) (this : ResourceManager) (renderPass : RenderPass) (ro : RenderObject) =
         
-        let resources = System.Collections.Generic.List<IResource>()
+        let resources = System.Collections.Generic.List<IResourceLocation>()
 
-        let program = this.CreateShaderProgram(renderPass, ro.Surface)
-        resources.Add program
-                
-        program.Acquire()
-        let prog,_ = program.GetHandle(AdaptiveToken.Top, ResourceUpdateToken(-1L, RenderToken.Empty))
+        let programLayout, program = this.CreateShaderProgram(renderPass, ro.Surface)
 
         let descriptorSets = 
-            prog.PipelineLayout.DescriptorSetLayouts |> Array.map (fun ds ->
+            programLayout.DescriptorSetLayouts |> Array.map (fun ds ->
                 let descriptors = 
                     ds.Bindings |> Array.choosei (fun i b ->
                         match b.Parameter with
                             | UniformBlockParameter block ->
-                                let buffer = this.CreateUniformBuffer(ro.AttributeScope, block.layout, ro.Uniforms, prog.UniformGetters)
+                                let buffer = this.CreateUniformBuffer(ro.AttributeScope, block.layout, ro.Uniforms, SymDict.empty)
                                 resources.Add buffer
                                 AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
 
@@ -130,9 +125,6 @@ type DevicePreparedRenderObjectExtensions private() =
                                                     let tex = this.CreateImage(tex)
                                                     let view = this.CreateImageView(tex)
                                                     let sam = this.CreateSampler(Mod.constant samplerState)
-                                                    resources.Add tex
-                                                    resources.Add view
-                                                    resources.Add sam
 
                                                     Some(view, sam)
 
@@ -146,18 +138,16 @@ type DevicePreparedRenderObjectExtensions private() =
                     )
 
                 let res = this.CreateDescriptorSet(ds, Array.toList descriptors)
-                resources.Add res
 
                 res
             )
-
 
         let isCompatible (shaderType : ShaderType) (dataType : Type) =
             // TODO: verify type compatibility
             true
 
         let bufferViews =
-            prog.Inputs
+            programLayout.PipelineInfo.pInputs
                 |> List.sortBy (fun p -> p.location)
                 |> List.map (fun p ->
                     let perInstance, view =
@@ -174,8 +164,7 @@ type DevicePreparedRenderObjectExtensions private() =
         let buffers =
             bufferViews 
                 |> List.map (fun (name,loc, _, view) ->
-                    let buffer = this.CreateVertexBuffer(view.Buffer)
-                    resources.Add buffer
+                    let buffer = this.CreateBuffer(view.Buffer)
                     buffer, int64 view.Offset
                 )
 
@@ -183,19 +172,29 @@ type DevicePreparedRenderObjectExtensions private() =
         let bufferFormats = 
             bufferViews |> List.map (fun (name,location, perInstance, view) -> name, (perInstance, view)) |> Map.ofSeq
 
+        let writeDepth =
+            match ro.WriteBuffers with
+                | Some set -> Set.contains DefaultSemantic.Depth set
+                | None -> true
+
+        let inputAssembly = this.CreateInputAssemblyState(ro.Mode)
+        let inputState = this.CreateVertexInputState(programLayout.PipelineInfo, Mod.constant (VertexInputState.create bufferFormats))
+        let rasterizerState = this.CreateRasterizerState(ro.DepthTest, ro.CullMode, ro.FillMode)
+        let colorBlendState = this.CreateColorBlendState(renderPass, ro.WriteBuffers, ro.BlendMode)
+        let depthStencilState = this.CreateDepthStencilState(writeDepth, ro.DepthTest, ro.StencilMode)
 
         let pipeline =
             this.CreatePipeline(
-                renderPass, program,
-                bufferFormats,
-                ro.Mode,
-                ro.FillMode, 
-                ro.CullMode,
-                ro.BlendMode,
-                ro.DepthTest,
-                ro.StencilMode,
+                program,
+                renderPass,
+                inputState,
+                inputAssembly,
+                rasterizerState,
+                colorBlendState,
+                depthStencilState,
                 ro.WriteBuffers
             )
+
         resources.Add pipeline
 
         let indexed = Option.isSome ro.Indices
@@ -203,8 +202,7 @@ type DevicePreparedRenderObjectExtensions private() =
             match ro.Indices with
                 | Some view -> 
                     let buffer = this.CreateIndexBuffer(view.Buffer)
-                    let res = this.CreateIndexBufferBinding(buffer, view.ElementType)
-                    resources.Add buffer
+                    let res = this.CreateIndexBufferBinding(buffer, VkIndexType.ofType view.ElementType)
                     resources.Add res
                     Some res
                 | None -> 
@@ -215,25 +213,25 @@ type DevicePreparedRenderObjectExtensions private() =
         let calls =
             match ro.IndirectBuffer with
                 | null -> 
-                    this.CreateDrawCall(ro.DrawCallInfos, indexed)
+                    this.CreateDrawCall(indexed, ro.DrawCallInfos)
                 | b -> 
-                    let indirect = this.CreateIndirectBuffer(b, indexed)
-                    resources.Add indirect
-                    this.CreateDrawCall(indirect, indexed)
+                    let indirect = this.CreateIndirectBuffer(indexed, b)
+                    this.CreateDrawCall(indexed, indirect)
         resources.Add calls
         let bindings =
-            this.CreateVertexBufferBinding(List.unzip buffers)
+            this.CreateVertexBufferBinding(buffers)
             
         resources.Add bindings
 
         let descriptorBindings =
-            this.CreateDescriptorSetBinding(prog.PipelineLayout, Array.toList descriptorSets)
+            this.CreateDescriptorSetBinding(programLayout, Array.toList descriptorSets)
             
         resources.Add(descriptorBindings)
 
         let isActive = this.CreateIsActive ro.IsActive
         resources.Add isActive
 
+        for r in resources do r.Acquire()
 
         let res = 
             {
@@ -241,6 +239,7 @@ type DevicePreparedRenderObjectExtensions private() =
                 original                    = ro
                 resources                   = CSharpList.toList resources
                 descriptorSets              = descriptorBindings
+                pipelineLayout              = programLayout
                 pipeline                    = pipeline
                 vertexBuffers               = bindings
                 indexBuffer                 = indexBufferBinding

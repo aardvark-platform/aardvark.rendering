@@ -47,7 +47,7 @@ type private SparseBlock =
 
 [<Obsolete("not finished yet")>]
 type SparseBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer, virtualSize : int64) =
-    inherit Buffer(device, handle, new DevicePtr(DeviceMemory.Null, 0L, virtualSize))
+    inherit Buffer(device, handle, new DevicePtr(DeviceMemory.Null, 0L, virtualSize), virtualSize)
     
     let mutable reqs = VkMemoryRequirements()
     do VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, &&reqs)
@@ -294,7 +294,7 @@ type SparseBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
         )
 
 type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer, virtualSize : int64) =
-    inherit Buffer(device, handle, new DevicePtr(DeviceMemory.Null, 0L, 2L <<< 30))
+    inherit Buffer(device, handle, new DevicePtr(DeviceMemory.Null, 0L, 2L <<< 30), virtualSize)
 
     let align, memoryTypeBits = 
         let mutable reqs = VkMemoryRequirements()
@@ -426,7 +426,7 @@ type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
         LockedResource.access x (fun () ->
             let align = device.MinUniformBufferOffsetAlignment
             let alignedSize = size |> Alignment.next align
-            let temp = device.HostMemory.AllocTemp(align, alignedSize)
+            let temp = device.HostMemory.Alloc(align, alignedSize)
             let res = temp.Mapped writer
             device.TransferFamily.run {
                 try do! Command.Copy(temp, 0L, x, offset, size)
@@ -445,7 +445,7 @@ type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
         LockedResource.access x (fun () ->
             let align = device.MinUniformBufferOffsetAlignment
             let alignedSize = size |> Alignment.next align
-            let temp = device.HostMemory.AllocTemp(align, alignedSize)
+            let temp = device.HostMemory.Alloc(align, alignedSize)
 
             device.TransferFamily.run {
                 try do! Command.Copy(x, offset, temp, 0L, size)

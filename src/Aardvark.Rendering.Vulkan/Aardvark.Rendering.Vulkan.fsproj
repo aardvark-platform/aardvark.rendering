@@ -64,6 +64,7 @@
     <Compile Include="Wrapper\Types.fs" />
     <Compile Include="Wrapper\Vulkan.fs" />
     <Compile Include="Wrapper\PCI.fs" />
+    <Compile Include="Wrapper\VKVM.fs" />
     <Compile Include="Core\Utilities.fs" />
     <Compile Include="Core\Info.fs" />
     <Compile Include="Core\Limits.fs" />
@@ -78,6 +79,7 @@
     <Compile Include="Resources\ImageView.fs" />
     <Compile Include="Resources\Sampler.fs" />
     <Compile Include="Resources\RenderPass.fs" />
+    <Compile Include="Resources\BackendSurface.fs" />
     <Compile Include="Resources\Framebuffer.fs" />
     <Compile Include="Resources\ShaderModule.fs" />
     <Compile Include="Resources\DescriptorSetLayout.fs" />
@@ -93,16 +95,17 @@
     <Compile Include="Resources\CommandResources.fs" />
     <Compile Include="Resources\GeometryPool.fs" />
     <Compile Include="Resources\SparseImage.fs" />
+    <Compile Include="Resources\ComputeShader.fs" />
+    <Compile Include="Resources\QueryPool.fs" />
     <Compile Include="Swapchain\Surface.fs" />
     <Compile Include="Swapchain\SwapchainDescription.fs" />
     <Compile Include="Swapchain\Swapchain.fs" />
     <Compile Include="Management\ResourceManager.fs" />
-    <Compile Include="Management\ResourcesNew.fs" />
-    <Compile Include="Management\ResourcesNewer.fs" />
     <Compile Include="Management\PreparedRenderObject.fs" />
     <Compile Include="Runtime\DebugReport.fs" />
     <Compile Include="Runtime\GraphicsCommands.fs" />
     <Compile Include="Runtime\Compiler.fs" />
+    <Compile Include="Runtime\RenderTaskNew.fs" />
     <Compile Include="Runtime\RenderTasks.fs" />
     <Compile Include="Runtime\Runtime.fs" />
     <Compile Include="Runtime\Headless.fs" />
@@ -264,6 +267,23 @@
   <Choose>
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
       <ItemGroup>
+        <Reference Include="System.Runtime.Serialization">
+          <Paket>True</Paket>
+        </Reference>
+        <Reference Include="System.Xml">
+          <Paket>True</Paket>
+        </Reference>
+        <Reference Include="FsPickler">
+          <HintPath>..\..\packages\FsPickler\lib\net45\FsPickler.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+      </ItemGroup>
+    </When>
+  </Choose>
+  <Choose>
+    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
+      <ItemGroup>
         <Reference Include="GLSLangSharp">
           <HintPath>..\..\packages\GLSLangSharp\lib\net45\GLSLangSharp.dll</HintPath>
           <Private>True</Private>
@@ -316,16 +336,4 @@
       </ItemGroup>
     </When>
   </Choose>
-  <Choose>
-    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
-      <ItemGroup>
-        <Reference Include="System.Runtime.InteropServices.RuntimeInformation">
-          <HintPath>..\..\packages\System.Runtime.InteropServices.RuntimeInformation\lib\net45\System.Runtime.InteropServices.RuntimeInformation.dll</HintPath>
-          <Private>True</Private>
-          <Paket>True</Paket>
-        </Reference>
-      </ItemGroup>
-    </When>
-  </Choose>
-  <Import Project="..\..\packages\NETStandard.Library\build\NETStandard.Library.targets" Condition="Exists('..\..\packages\NETStandard.Library\build\NETStandard.Library.targets')" Label="Paket" />
 </Project>

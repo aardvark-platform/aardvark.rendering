@@ -282,7 +282,7 @@ module RenderTasks =
 
     type SortKey = list<int>
 
-    type ProjectionComparer(projections : list<RenderObject -> IMod>) =
+    type ProjectionComparer(projections : list<RenderObject -> obj>) =
 
         let rec getRenderObject (ro : IRenderObject) =
             match ro with
@@ -294,18 +294,15 @@ module RenderTasks =
                 | _ -> failwithf "[ProjectionComparer] unknown RenderObject: %A" ro
 
         let mutable constantId = 0
-        let constantTable = Dict<IMod, int>()
+        let constantTable = Dict<obj, int>()
 
-        let getConstantId (m : IMod) =
+        let getConstantId (m : obj) =
             constantTable.GetOrCreate(m, fun m ->
-                Interlocked.Decrement(&constantId)
+                Interlocked.Increment(&constantId)
             )
 
-        let getId (m : IMod) =
-            if m.IsConstant then
-                getConstantId m
-            else
-                m.Id
+        let getId (m : obj) =
+            getConstantId m
 
         let maxKey = Int32.MaxValue :: (projections |> List.map (fun _ -> Int32.MaxValue))
 

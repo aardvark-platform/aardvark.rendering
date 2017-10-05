@@ -282,8 +282,8 @@ module GeometryPoolUtilities =
         abstract member OnUnlock : Option<ResourceUsage> -> unit
 
 
-    type MappedBufferOld(device : Device, lock : ResourceLock2, usage : VkBufferUsageFlags, handle : VkBuffer, devPtr : DevicePtr) =
-        inherit Buffer(device, handle, devPtr)
+    type MappedBufferOld(device : Device, lock : ResourceLock2, usage : VkBufferUsageFlags, handle : VkBuffer, devPtr : DevicePtr, size : int64) =
+        inherit Buffer(device, handle, devPtr, size)
         static let sRange = sizeof<VkMappedMemoryRange> |> nativeint
 
         let transfer = device.TransferFamily
@@ -298,7 +298,7 @@ module GeometryPoolUtilities =
                 VkBufferCreateInfo(
                     VkStructureType.BufferCreateInfo, 0n,
                     VkBufferCreateFlags.None,
-                    uint64 devPtr.Size, 
+                    uint64 size, 
                     VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit,
                     device.AllSharingMode,
                     device.AllQueueFamiliesCnt, device.AllQueueFamiliesPtr
@@ -316,7 +316,7 @@ module GeometryPoolUtilities =
             VkRaw.vkMapMemory(device.Handle, hm.Handle, 0UL, uint64 hm.Size, VkMemoryMapFlags.MinValue, &&ptr)
                 |> check "could not map memory"
             
-            hm, Buffer(device, handle, hm)
+            hm, Buffer(device, handle, hm, size)
 
         let mutable isEmpty = true
 
@@ -386,7 +386,7 @@ module GeometryPoolUtilities =
 
                         let newBuffer = 
                             let b = device.CreateBuffer(usage, newCapacity)
-                            new MappedBufferOld(device, lock, usage, b.Handle, b.Memory)
+                            new MappedBufferOld(device, lock, usage, b.Handle, b.Memory, b.Size)
 
                         let update =
                             command {
@@ -427,10 +427,9 @@ module GeometryPoolUtilities =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
-    type StreamingBufferOld(device : Device, rlock : ResourceLock2, usage : VkBufferUsageFlags, handle : VkBuffer, devPtr : DevicePtr) =
-        inherit Buffer(device, handle, devPtr)
-        let size = devPtr.Size
-        
+    type StreamingBufferOld(device : Device, rlock : ResourceLock2, usage : VkBufferUsageFlags, handle : VkBuffer, devPtr : DevicePtr, size : int64) =
+        inherit Buffer(device, handle, devPtr, size)
+
         let streamSize = size
 
         let mutable scratchBuffer, scratchMem, scratchPtr =
@@ -578,10 +577,8 @@ module GeometryPoolUtilities =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
-    type StreamingBuffer(device : Device, rlock : ResourceLock2, usage : VkBufferUsageFlags, handle : VkBuffer, devPtr : DevicePtr) =
-        inherit Buffer(device, handle, devPtr)
-        let size = devPtr.Size
-        
+    type StreamingBuffer(device : Device, rlock : ResourceLock2, usage : VkBufferUsageFlags, handle : VkBuffer, devPtr : DevicePtr, size : int64) =
+        inherit Buffer(device, handle, devPtr, size)
         let streamSize = size
 
         let mutable scratchBuffer, scratchMem, scratchPtr =
@@ -682,17 +679,17 @@ module GeometryPoolUtilities =
         static member CreateMappedBuffer(device : Device, lock : ResourceLock2, usage : VkBufferUsageFlags, size : int64) =
             let usage = VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.TransferSrcBit ||| usage
             let b = device |> Buffer.allocConcurrent true usage size
-            new MappedBufferOld(device, lock, usage, b.Handle, b.Memory)
+            new MappedBufferOld(device, lock, usage, b.Handle, b.Memory, size)
 
 
         [<Extension>]
         static member CreateStreamingBuffer(device : Device, lock : ResourceLock2, usage : VkBufferUsageFlags, size : int64) =
             if size = 0L then
-                new StreamingBuffer(device, lock, usage, VkBuffer.Null, DevicePtr.Null)
+                new StreamingBuffer(device, lock, usage, VkBuffer.Null, DevicePtr.Null, size)
             else
                 let usage = VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.TransferSrcBit ||| usage
                 let b = device |> Buffer.allocConcurrent true usage size
-                new StreamingBuffer(device, lock, usage, b.Handle, b.Memory)
+                new StreamingBuffer(device, lock, usage, b.Handle, b.Memory, size)
 
 
     type GeometryPool(device : Device, types : Map<Symbol, Type>) as this =
