@@ -1264,8 +1264,8 @@ module ``Image Format Extensions`` =
                 VkFormat.Astc1212SrgbBlock, null               
             ]
 
-        let ofPixFormat (fmt : PixFormat) =
-            TextureFormat.ofPixFormat fmt TextureParams.empty |> ofTextureFormat
+        let ofPixFormat (fmt : PixFormat) (t : TextureParams) =
+            TextureFormat.ofPixFormat fmt t |> ofTextureFormat
 
     type VolumeInfo with
         member x.Transformed(t : ImageTrafo) =
@@ -1288,15 +1288,15 @@ module ``Image Format Extensions`` =
 
     type Device with
         
-        member x.GetSupportedFormat(tiling : VkImageTiling, fmt : PixFormat) =
-            let retry f = x.GetSupportedFormat(tiling, PixFormat(fmt.Type, f))
+        member x.GetSupportedFormat(tiling : VkImageTiling, fmt : PixFormat, t : TextureParams) =
+            let retry f = x.GetSupportedFormat(tiling, PixFormat(fmt.Type, f), t)
 
             match fmt.Format with
                 | Col.Format.BGR    -> retry Col.Format.RGB
                 | Col.Format.BGRA   -> retry Col.Format.RGBA
                 | Col.Format.BGRP   -> retry Col.Format.RGBP
                 | _ -> 
-                    let test = VkFormat.ofPixFormat fmt
+                    let test = VkFormat.ofPixFormat fmt t
                     let features = x.PhysicalDevice.GetFormatFeatures(tiling, test)
 
                     if features <> VkFormatFeatureFlags.None then
@@ -2400,8 +2400,8 @@ type TensorImageCube(faces : TensorImageMipMap[]) =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module TensorImage =
-    let create<'a when 'a : unmanaged> (size : V3i) (format : Col.Format) (device : Device) : TensorImage<'a> =
-        let imageFormat = device.GetSupportedFormat(VkImageTiling.Optimal, PixFormat(typeof<'a>, format))
+    let create<'a when 'a : unmanaged> (size : V3i) (format : Col.Format) (srgb : bool) (device : Device) : TensorImage<'a> =
+        let imageFormat = device.GetSupportedFormat(VkImageTiling.Optimal, PixFormat(typeof<'a>, format), { TextureParams.empty with wantSrgb = srgb })
         let format = PixFormat(VkFormat.expectedType imageFormat, VkFormat.toColFormat imageFormat)
 
         if format.Type <> typeof<'a> then
@@ -2412,7 +2412,7 @@ module TensorImage =
         let buffer = device.HostMemory |> Buffer.create (VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.TransferSrcBit) sizeInBytes
         TensorImage<'a>(buffer, size, format.Format, imageFormat)
 
-    let inline private erase (creator : V3i -> Col.Format -> Device-> TensorImage<'a>) (size : V3i) (format : Col.Format) (device : Device) = creator size format device :> TensorImage
+    let inline private erase (creator : V3i -> Col.Format -> bool -> Device-> TensorImage<'a>) (size : V3i) (format : Col.Format) (tp : bool) (device : Device) = creator size format tp device :> TensorImage
 
     let private creators =
         Dictionary.ofList [
@@ -2430,16 +2430,16 @@ module TensorImage =
             // TODO: any others?
         ]
 
-    let createUntyped (size : V3i) (format : PixFormat) (device : Device) =
-        creators.[format.Type] size format.Format device
+    let createUntyped (size : V3i) (format : PixFormat) (srgb : bool) (device : Device) =
+        creators.[format.Type] size format.Format srgb device
 
-    let ofPixImage (img : PixImage) (device : Device) =
-        let dst = createUntyped (V3i(img.Size.X, img.Size.Y, 1)) img.PixFormat device
+    let ofPixImage (img : PixImage) (srgb : bool) (device : Device) =
+        let dst = createUntyped (V3i(img.Size.X, img.Size.Y, 1)) img.PixFormat srgb device
         dst.Write(img, ImageTrafo.MirrorY)
         dst
 
-    let ofPixVolume (img : PixVolume) (device : Device) =
-        let dst = createUntyped (V3i(img.Size.X, img.Size.Y, 1)) img.PixFormat device
+    let ofPixVolume (img : PixVolume) (srgb : bool) (device : Device) =
+        let dst = createUntyped (V3i(img.Size.X, img.Size.Y, 1)) img.PixFormat srgb device
         dst.Write(img)
         dst
 
@@ -2485,7 +2485,7 @@ module ``Devil Loader`` =
             PixFormat(types t, colFormat fmt)
 
     module TensorImage =
-        let ofFile (file : string) (device : Device) =
+        let ofFile (file : string) (srgb : bool) (device : Device) =
             lock devilLock (fun () ->
                 PixImage.InitDevil()
 
@@ -2501,11 +2501,11 @@ module ``Devil Loader`` =
                     let format      = IL.GetFormat()
                     let data        = IL.GetData()
                     let pixFormat   = PixFormat.ofDevil format channelType
-
+                    
                     let bytesPerPixel = IL.GetInteger(IntName.ImageBytesPerPixel)
                     let rowSize = nativeint bytesPerPixel * nativeint width
                     
-                    let target = device |> TensorImage.createUntyped (V3i(width, height, 1)) pixFormat
+                    let target = device |> TensorImage.createUntyped (V3i(width, height, 1)) pixFormat srgb
                     target.Write(data, rowSize, pixFormat.Format, ImageTrafo.Rot0)
 
                     target
@@ -2519,42 +2519,42 @@ module ``Devil Loader`` =
 type DeviceTensorExtensions private() =
 
     [<Extension>]
-    static member inline CreateTensorImage<'a when 'a : unmanaged>(device : Device, size : V3i, format : Col.Format) : TensorImage<'a> =
-        TensorImage.create size format device
+    static member inline CreateTensorImage<'a when 'a : unmanaged>(device : Device, size : V3i, format : Col.Format, srgb : bool) : TensorImage<'a> =
+        TensorImage.create size format srgb device
         
     [<Extension>]
-    static member inline CreateTensorImage(device : Device, size : V3i, format : PixFormat) : TensorImage =
-        TensorImage.createUntyped size format device
+    static member inline CreateTensorImage(device : Device, size : V3i, format : PixFormat, srgb : bool) : TensorImage =
+        TensorImage.createUntyped size format srgb device
         
     [<Extension>]
-    static member inline Create(device : Device, data : PixImage) : TensorImage =
-        device |> TensorImage.ofPixImage data
+    static member inline Create(device : Device, data : PixImage, srgb : bool) : TensorImage =
+        device |> TensorImage.ofPixImage data srgb
         
     [<Extension>]
-    static member inline Create(device : Device, data : PixImageMipMap, levels : int) : TensorImageMipMap =
+    static member inline Create(device : Device, data : PixImageMipMap, levels : int, srgb : bool) : TensorImageMipMap =
         TensorImageMipMap(
-            data.ImageArray |> Array.take levels |> Array.map (fun l -> TensorImage.ofPixImage l device)
+            data.ImageArray |> Array.take levels |> Array.map (fun l -> TensorImage.ofPixImage l srgb device)
         )
 
     [<Extension>]
-    static member inline Create(device : Device, data : PixImageCube, levels : int) : TensorImageCube =
+    static member inline Create(device : Device, data : PixImageCube, levels : int, srgb : bool) : TensorImageCube =
         TensorImageCube(
             data.MipMapArray |> Array.map (fun face ->
-                DeviceTensorExtensions.Create(device, face, levels)
+                DeviceTensorExtensions.Create(device, face, levels, srgb)
             )
         )
 
     [<Extension>]
-    static member inline Create(device : Device, data : PixImageMipMap) =
-        DeviceTensorExtensions.Create(device, data, data.LevelCount)
+    static member inline Create(device : Device, data : PixImageMipMap, srgb : bool) =
+        DeviceTensorExtensions.Create(device, data, data.LevelCount, srgb)
 
     [<Extension>]
-    static member inline Create(device : Device, data : PixImageCube) =
-        DeviceTensorExtensions.Create(device, data, data.MipMapArray.[0].LevelCount)
+    static member inline Create(device : Device, data : PixImageCube, srgb : bool) =
+        DeviceTensorExtensions.Create(device, data, data.MipMapArray.[0].LevelCount, srgb)
 
     [<Extension>]
-    static member inline Create(device : Device, data : PixVolume) : TensorImage =
-        device |> TensorImage.ofPixVolume data
+    static member inline Create(device : Device, data : PixVolume, srgb : bool) : TensorImage =
+        device |> TensorImage.ofPixVolume data srgb
 
     [<Extension>]
     static member Delete(device : Device, m : TensorImage) =
@@ -2660,7 +2660,7 @@ module DeviceTensorCommandExtensions =
     module private MustCompile =
 
         let createImage (device : Device) =
-            let img = device.CreateTensorImage<byte>(V3i.III, Col.Format.RGBA)
+            let img = device.CreateTensorImage<byte>(V3i.III, Col.Format.RGBA, false)
 
             let v = img.Vector
             let m = img.Matrix
@@ -3191,7 +3191,7 @@ module Image =
         let format = pi.ImageArray.[0].PixFormat
         let size = pi.ImageArray.[0].Size
 
-        let format = device.GetSupportedFormat(VkImageTiling.Optimal, format)
+        let format = device.GetSupportedFormat(VkImageTiling.Optimal, format, info)
         let textureFormat = VkFormat.toTextureFormat format
         let expectedFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
 
@@ -3228,7 +3228,7 @@ module Image =
                 // upload the levels
                 for level in 0 .. uploadLevels - 1 do
                     let data = pi.ImageArray.[level]
-                    let temp = device.CreateTensorImage(V3i(data.Size.X, data.Size.Y, 1), expectedFormat)
+                    let temp = device.CreateTensorImage(V3i(data.Size.X, data.Size.Y, 1), expectedFormat, info.wantSrgb)
                     temp.Write(data, ImageTrafo.MirrorY)
                     tempImages.Add temp
                     do! Command.Copy(temp, image.[ImageAspect.Color, level, 0])
@@ -3252,7 +3252,7 @@ module Image =
         let format = face0.ImageArray.[0].PixFormat
         let size = face0.ImageArray.[0].Size
 
-        let format = device.GetSupportedFormat(VkImageTiling.Optimal, format)
+        let format = device.GetSupportedFormat(VkImageTiling.Optimal, format, info)
         let textureFormat = VkFormat.toTextureFormat format
 
         let expectedFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
@@ -3291,7 +3291,7 @@ module Image =
                 for level in 0 .. uploadLevels - 1 do
                     for face in 0 .. 5 do
                         let data = pi.MipMapArray.[face].ImageArray.[level]
-                        let temp = device.CreateTensorImage(V3i(data.Size.X, data.Size.Y, 1), expectedFormat)
+                        let temp = device.CreateTensorImage(V3i(data.Size.X, data.Size.Y, 1), expectedFormat, info.wantSrgb)
                         temp.Write(data, ImageTrafo.MirrorY)
                         tempImages.Add temp
                         do! Command.Copy(temp, image.[ImageAspect.Color, level, face])
@@ -3311,7 +3311,7 @@ module Image =
     let ofFile (file : string) (info : TextureParams) (device : Device) =
         if not (System.IO.File.Exists file) then failf "file does not exists: %A" file
 
-        let temp = device |> TensorImage.ofFile file
+        let temp = device |> TensorImage.ofFile file info.wantSrgb
         let size = temp.Size
         let textureFormat = VkFormat.toTextureFormat temp.ImageFormat
 
@@ -3384,7 +3384,7 @@ module Image =
         let format = src.Image.Format
         let sourcePixFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
 
-        let temp = device.CreateTensorImage(V3i(dst.Size.X, dst.Size.Y, 1), sourcePixFormat)
+        let temp = device.CreateTensorImage(V3i(dst.Size.X, dst.Size.Y, 1), sourcePixFormat, false)
         try
             device.GraphicsFamily.run {
                 let layout = src.Image.Layout
@@ -3400,7 +3400,7 @@ module Image =
         let format = dst.Image.Format
         let dstPixFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
         
-        let temp = device.CreateTensorImage(V3i(dst.Size.X, dst.Size.Y, 1), dstPixFormat)
+        let temp = device.CreateTensorImage(V3i(dst.Size.X, dst.Size.Y, 1), dstPixFormat, false)
         temp.Write(src, ImageTrafo.MirrorY)
         let layout = dst.Image.Layout
         device.eventually {

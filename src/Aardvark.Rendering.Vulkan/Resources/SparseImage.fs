@@ -402,7 +402,7 @@ module SparseTextureImplemetation =
     type Bind<'a when 'a : unmanaged> = { level : int; slice : int; index : V3i; data : NativeTensor4<'a> }
 
     type DoubleBufferedSparseImage<'a when 'a : unmanaged>(device : Device, size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, usage : VkImageUsageFlags, brickSize : V3i, maxMemory : int64) =
-        let fmt = VkFormat.ofPixFormat (PixFormat(typeof<'a>, format))
+        let fmt = VkFormat.ofPixFormat (PixFormat(typeof<'a>, format)) TextureParams.empty
         let usage = VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| usage
 
         let mutable flushAfterUpload = true

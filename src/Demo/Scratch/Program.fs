@@ -182,6 +182,7 @@ module ShaderStuff =
 
     [<Demo("Duplicate Texture Name Demo")>]
     let duplTexture() =
+        let tex = FileTexture(@"C:\Users\Schorsch\Development\WorkDirectory\pattern.jpg", { TextureParams.mipmapped with wantSrgb = true })
         Sg.fullScreenQuad
             |> Sg.effect [
                 DefaultSurfaces.trafo |> toEffect
@@ -190,7 +191,7 @@ module ShaderStuff =
             |> Sg.uniform "A" (Mod.constant V3d.IOI)
             |> Sg.uniform "B" (Mod.constant V3d.OII)
             |> Sg.uniform "C" (Mod.constant 1.0)
-            |> Sg.diffuseFileTexture' @"D:\file\pix\mtl2\image0.jpg" true
+            |> Sg.diffuseTexture (tex :> ITexture |> Mod.constant)
 
 
 
