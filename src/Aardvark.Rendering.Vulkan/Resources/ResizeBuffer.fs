@@ -426,7 +426,7 @@ type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
         LockedResource.access x (fun () ->
             let align = device.MinUniformBufferOffsetAlignment
             let alignedSize = size |> Alignment.next align
-            let temp = device.HostMemory.AllocTemp(align, alignedSize)
+            let temp = device.HostMemory.Alloc(align, alignedSize)
             let res = temp.Mapped writer
             device.TransferFamily.run {
                 try do! Command.Copy(temp, 0L, x, offset, size)
@@ -445,7 +445,7 @@ type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
         LockedResource.access x (fun () ->
             let align = device.MinUniformBufferOffsetAlignment
             let alignedSize = size |> Alignment.next align
-            let temp = device.HostMemory.AllocTemp(align, alignedSize)
+            let temp = device.HostMemory.Alloc(align, alignedSize)
 
             device.TransferFamily.run {
                 try do! Command.Copy(x, offset, temp, 0L, size)

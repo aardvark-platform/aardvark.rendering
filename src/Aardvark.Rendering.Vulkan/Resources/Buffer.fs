@@ -360,9 +360,7 @@ module Buffer =
         if reqs.memoryTypeBits &&& (1u <<< memory.Index) = 0u then
             failf "cannot create buffer using memory %A" memory
 
-        let ptr = 
-            if memory.IsHostVisible then memory.AllocRaw(int64 reqs.size) :> DevicePtr
-            else memory.Alloc(int64 reqs.alignment, int64 reqs.size)
+        let ptr = memory.Alloc(int64 reqs.alignment, int64 reqs.size)
 
         VkRaw.vkBindBufferMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
             |> check "could not bind buffer-memory"
@@ -387,7 +385,7 @@ module Buffer =
             let buffer = device |> alloc flags deviceAlignedSize
             let deviceMem = buffer.Memory
         
-            let hostPtr = device.HostMemory.AllocTemp(align, deviceAlignedSize)
+            let hostPtr = device.HostMemory.Alloc(align, deviceAlignedSize)
             hostPtr.Mapped (fun dst -> writer dst)
 
             device.eventually {
@@ -406,7 +404,7 @@ module Buffer =
         let deviceAlignedSize = Alignment.next align (int64 buffer.Size)
         let deviceMem = buffer.Memory
         
-        let hostPtr = device.HostMemory.AllocTemp(align, deviceAlignedSize)
+        let hostPtr = device.HostMemory.Alloc(align, deviceAlignedSize)
         hostPtr.Mapped (fun dst -> writer dst)
 
         device.eventually {

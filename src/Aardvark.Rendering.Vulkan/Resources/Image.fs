@@ -1658,7 +1658,7 @@ and ImageSubresource(image : Image, aspect : ImageAspect, level : int, slice : i
 // ===========================================================================================
 
 [<Struct>]
-type DeviceVector<'a when 'a : unmanaged>(memory : DeviceMemory, info : VectorInfo) =
+type DeviceVector<'a when 'a : unmanaged>(memory : DevicePtr, info : VectorInfo) =
     member x.Device = memory.Device
     member x.Info = info
 
@@ -1723,7 +1723,7 @@ type DeviceVector<'a when 'a : unmanaged>(memory : DeviceMemory, info : VectorIn
             )
         
 [<Struct>]
-type DeviceMatrix<'a when 'a : unmanaged>(memory : DeviceMemory, info : MatrixInfo) =
+type DeviceMatrix<'a when 'a : unmanaged>(memory : DevicePtr, info : MatrixInfo) =
     member x.Device = memory.Device
     member x.Info = info
 
@@ -1816,7 +1816,7 @@ type DeviceMatrix<'a when 'a : unmanaged>(memory : DeviceMemory, info : MatrixIn
             )
        
 [<Struct>]
-type DeviceVolume<'a when 'a : unmanaged>(memory : DeviceMemory, info : VolumeInfo) =
+type DeviceVolume<'a when 'a : unmanaged>(memory : DevicePtr, info : VolumeInfo) =
     member x.Device = memory.Device
     member x.Info = info
 
@@ -1970,7 +1970,7 @@ type DeviceVolume<'a when 'a : unmanaged>(memory : DeviceMemory, info : VolumeIn
             )
        
 [<Struct>]
-type DeviceTensor4<'a when 'a : unmanaged>(memory : DeviceMemory, info : Tensor4Info) =
+type DeviceTensor4<'a when 'a : unmanaged>(memory : DevicePtr, info : Tensor4Info) =
     member x.Device = memory.Device
     member x.Info = info
 
@@ -2223,7 +2223,7 @@ type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4
 
     static let sa = sizeof<'a> |> int64
 
-    let tensor = DeviceTensor4<'a>(unbox buffer.Memory, info)
+    let tensor = DeviceTensor4<'a>(buffer.Memory, info)
 
     static let defaultValue =
         match typeof<'a> with
