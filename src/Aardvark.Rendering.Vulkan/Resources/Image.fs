@@ -2174,20 +2174,22 @@ type TensorImage(buffer : Buffer, info : Tensor4Info, format : PixFormat, imageF
     abstract member Write : data : nativeint * rowSize : nativeint * format : Col.Format * trafo : ImageTrafo -> unit
     abstract member Read : data : nativeint * rowSize : nativeint * format : Col.Format * trafo : ImageTrafo -> unit
 
-    member x.Write(img : PixImage) =
+    member x.Write(img : PixImage, beforeRead : ImageTrafo) =
         img.Visit { 
             new PixImageVisitor<int>() with 
                 override __.Visit(img : PixImage<'a>, value : 'a) =
+                    let img = img.Transformed beforeRead |> unbox<PixImage<'a>>
                     NativeVolume.using img.Volume (fun src ->
                         x.Write src
                     )
                     1
         } |> ignore
 
-    member x.Read(img : PixImage) =
+    member x.Read(img : PixImage, beforeWrite : ImageTrafo) =
         img.Visit { 
             new PixImageVisitor<int>() with 
                 override __.Visit(img : PixImage<'a>, value : 'a) =
+                    let img = img.Transformed beforeWrite |> unbox<PixImage<'a>>
                     NativeVolume.using img.Volume (fun dst ->
                         x.Read dst
                     )
@@ -2429,7 +2431,7 @@ module TensorImage =
 
     let ofPixImage (img : PixImage) (device : Device) =
         let dst = createUntyped (V3i(img.Size.X, img.Size.Y, 1)) img.PixFormat device
-        dst.Write(img)
+        dst.Write(img, ImageTrafo.MirrorY)
         dst
 
     let ofPixVolume (img : PixVolume) (device : Device) =
@@ -3217,7 +3219,7 @@ module Image =
                 for level in 0 .. uploadLevels - 1 do
                     let data = pi.ImageArray.[level]
                     let temp = device.CreateTensorImage(V3i(data.Size.X, data.Size.Y, 1), expectedFormat)
-                    temp.Write data
+                    temp.Write(data, ImageTrafo.MirrorY)
                     tempImages.Add temp
                     do! Command.Copy(temp, image.[ImageAspect.Color, level, 0])
 
@@ -3280,7 +3282,7 @@ module Image =
                     for face in 0 .. 5 do
                         let data = pi.MipMapArray.[face].ImageArray.[level]
                         let temp = device.CreateTensorImage(V3i(data.Size.X, data.Size.Y, 1), expectedFormat)
-                        temp.Write data
+                        temp.Write(data, ImageTrafo.MirrorY)
                         tempImages.Add temp
                         do! Command.Copy(temp, image.[ImageAspect.Color, level, face])
 
@@ -3346,7 +3348,8 @@ module Image =
                 device |> ofPixImageCube c.PixImageCube c.TextureParams
 
             | :? NullTexture as t ->
-                Image(device, VkImage.Null, V3i.Zero, 0, 0, 1, TextureDimension.Texture2D, VkFormat.Undefined, DevicePtr.Null, VkImageLayout.ShaderReadOnlyOptimal)
+                device |> ofPixImageMipMap (PixImageMipMap [| PixImage<byte>(Col.Format.RGBA, V2i.II) :> PixImage |]) TextureParams.empty
+                //Image(device, VkImage.Null, V3i.Zero, 1, 1, 1, TextureDimension.Texture2D, VkFormat.Undefined, DevicePtr.Null, VkImageLayout.ShaderReadOnlyOptimal)
 
             | :? PixTexture3d as t ->
                 failf "please implement volume textures"
@@ -3378,7 +3381,7 @@ module Image =
                 do! Command.Copy(src, temp)
                 do! Command.TransformLayout(src.Image, layout)
             }
-            temp.Read(dst)
+            temp.Read(dst, ImageTrafo.MirrorY)
         finally
             device.Delete temp
 
@@ -3387,7 +3390,7 @@ module Image =
         let dstPixFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
         
         let temp = device.CreateTensorImage(V3i(dst.Size.X, dst.Size.Y, 1), dstPixFormat)
-        temp.Write(src)
+        temp.Write(src, ImageTrafo.MirrorY)
         let layout = dst.Image.Layout
         device.eventually {
             try
