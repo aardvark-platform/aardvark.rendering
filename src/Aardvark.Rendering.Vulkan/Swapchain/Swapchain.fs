@@ -138,7 +138,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                         Unchecked.defaultof<_>,
                         VkImageLayout.Undefined
                     )
-                device.CreateImageView(image, 0, 1, 0, 1, VkComponentMapping.Identity)
+                device.CreateOutputImageView(image, 0, 1, 0, 1)
 
             )
 
@@ -153,8 +153,8 @@ type Swapchain(device : Device, description : SwapchainDescription) =
             // hacky-hack
             image.Format <- description.colorFormat
             token.Enqueue (Command.TransformLayout(image, VkImageLayout.ColorAttachmentOptimal))
-
-            let view = device.CreateImageView(image, 0, 1, 0, 1, VkComponentMapping.Identity)
+            
+            let view = device.CreateOutputImageView(image, 0, 1, 0, 1)
             view
 
         let depthView =
@@ -171,7 +171,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                     image.Format <- depthFormat
                     token.Enqueue (Command.TransformLayout(image, VkImageLayout.DepthStencilAttachmentOptimal))
 
-                    let view = device.CreateImageView(image, 0, 1, 0, 1, VkComponentMapping.Identity)
+                    let view = device.CreateOutputImageView(image, 0, 1, 0, 1)
 
                     Some view
                 | _ -> 

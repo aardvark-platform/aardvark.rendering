@@ -123,7 +123,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                                 | Some (:? IMod<ITexture> as tex) ->
 
                                                     let tex = this.CreateImage(tex)
-                                                    let view = this.CreateImageView(tex)
+                                                    let view = this.CreateImageView(img.samplerType, tex)
                                                     let sam = this.CreateSampler(Mod.constant samplerState)
 
                                                     Some(view, sam)

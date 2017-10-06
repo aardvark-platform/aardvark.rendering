@@ -998,7 +998,7 @@ module Resources =
             else
                 { handle = pointer; version = version }
  
-    type ImageViewResource(owner : IResourceCache, key : list<obj>, device : Device, image : IResourceLocation<Image>) =
+    type ImageViewResource(owner : IResourceCache, key : list<obj>, device : Device, samplerType : ShaderSamplerType, image : IResourceLocation<Image>) =
         inherit AbstractResourceLocation<ImageView>(owner, key)
 
         let mutable handle : Option<ImageView> = None
@@ -1022,7 +1022,7 @@ module Resources =
                     | Some h -> device.Delete h
                     | None -> ()
 
-                let h = device.CreateImageView(image.handle, VkComponentMapping.Identity)
+                let h = device.CreateInputImageView(image.handle, samplerType, VkComponentMapping.Identity)
                 handle <- Some h
 
                 { handle = h; version = 0 }
@@ -1115,8 +1115,8 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateImage(input : IMod<ITexture>) =
         imageCache.GetOrCreate([input :> obj], fun cache key -> new ImageResource(cache, key, device, input))
         
-    member x.CreateImageView(input : IResourceLocation<Image>) =
-        imageViewCache.GetOrCreate([input :> obj], fun cache key -> new ImageViewResource(cache, key, device, input))
+    member x.CreateImageView(samplerType : ShaderSamplerType, input : IResourceLocation<Image>) =
+        imageViewCache.GetOrCreate([samplerType :> obj; input :> obj], fun cache key -> new ImageViewResource(cache, key, device, samplerType, input))
         
     member x.CreateSampler(data : IMod<SamplerStateDescription>) =
         samplerCache.GetOrCreate([data :> obj], fun cache key -> new SamplerResource(cache, key, device, data))

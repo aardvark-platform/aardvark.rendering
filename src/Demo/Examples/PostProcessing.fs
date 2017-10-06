@@ -39,20 +39,6 @@ module PostProcessing =
     let pointSize = Mod.init 50.0
     let pointCount = 2048
 
-    let pointSg = 
-        let rand = Random()
-        let randomV3f() = V3f(rand.NextDouble(), rand.NextDouble(), rand.NextDouble())
-        let randomColor() = C4b(rand.NextDouble(), rand.NextDouble(), rand.NextDouble(), 1.0)
-
-        Sg.draw IndexedGeometryMode.PointList
-            |> Sg.vertexAttribute DefaultSemantic.Positions (Array.init pointCount (fun _ -> randomV3f()) |> Mod.constant)
-            |> Sg.vertexAttribute DefaultSemantic.Colors (Array.init pointCount (fun _ -> randomColor()) |> Mod.constant)
-            |> Sg.viewTrafo Interactive.DefaultViewTrafo
-            |> Sg.projTrafo Interactive.DefaultProjTrafo
-            |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.pointSprite |> toEffect; DefaultSurfaces.pointSpriteFragment |> toEffect; DefaultSurfaces.vertexColor |> toEffect]
-            |> Sg.uniform "PointSize" pointSize
-
-
     // we now need to define some shaders performing the per-pixel blur on a given input texture.
     // since the gaussian filter is separable we create two shaders performing the vertical and horizontal blur.
     module Shaders =
@@ -104,6 +90,34 @@ module PostProcessing =
 
                 return V4d(color.XYZ, 1.0)
             }
+            
+        type PSVertex = { [<TexCoord; Interpolation(InterpolationMode.Sample)>] tc : V2d; [<SamplePosition>] sp : V2d }
+
+        let pointSpriteFragment (v : PSVertex) =
+            fragment {
+                let tc = v.tc // + 0.00000001 * v.sp
+
+                let c = 2.0 * tc - V2d.II
+                if c.Length > 1.0 then
+                    discard()
+
+                return v
+            }
+
+    let pointSg = 
+        let rand = Random()
+        let randomV3f() = V3f(rand.NextDouble(), rand.NextDouble(), rand.NextDouble())
+        let randomColor() = C4b(rand.NextDouble(), rand.NextDouble(), rand.NextDouble(), 1.0)
+
+        Sg.draw IndexedGeometryMode.PointList
+            |> Sg.vertexAttribute DefaultSemantic.Positions (Array.init pointCount (fun _ -> randomV3f()) |> Mod.constant)
+            |> Sg.vertexAttribute DefaultSemantic.Colors (Array.init pointCount (fun _ -> randomColor()) |> Mod.constant)
+            |> Sg.viewTrafo Interactive.DefaultViewTrafo
+            |> Sg.projTrafo Interactive.DefaultProjTrafo
+            |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.pointSprite |> toEffect; Shaders.pointSpriteFragment |> toEffect; DefaultSurfaces.vertexColor |> toEffect]
+            |> Sg.uniform "PointSize" pointSize
+
+
 
 
     // for rendering the filtered image we need a fullscreen quad
@@ -179,8 +193,11 @@ module PostProcessing =
 
         let mainResult =
             fullscreenQuad 
-                |> Sg.texture DefaultSemantic.DiffuseColorTexture blurredOnlyX
-                |> Sg.effect [Shaders.gaussY |> toEffect]
+                |> Sg.texture DefaultSemantic.DiffuseColorTexture mainResult
+                |> Sg.effect [DefaultSurfaces.diffuseTexture |> toEffect]
+        
+//                |> Sg.texture DefaultSemantic.DiffuseColorTexture blurredOnlyX
+//                |> Sg.effect [Shaders.gaussY |> toEffect]
         
         Sg.group' [mainResult; overlayOriginal]
 

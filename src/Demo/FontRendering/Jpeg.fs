@@ -2433,7 +2433,7 @@ module Test =
         let b = device.CreateBuffer<int>(5L)
 
         // create a new command-stream
-        let s = VKVM.CommandStream()
+        let s = new VKVM.CommandStream()
 
         // copy bytes 0 .. 4
         let c0 = s.CopyBuffer(a.Handle, b.Handle, [| VkBufferCopy(0UL, 0UL, 4UL) |])

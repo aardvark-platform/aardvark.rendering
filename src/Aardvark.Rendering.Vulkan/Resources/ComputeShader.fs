@@ -67,8 +67,8 @@ type ComputeShaderInputBinding(pool : DescriptorPool, shader : ComputeShader, se
 type BindingReference =
     | UniformRef of buffer : UniformBuffer * offset : int * valueType : UniformType
     | StorageBufferRef of set : int * binding : int * elementType : UniformType
-    | SampledImageRef of set : int * binding : int * index : int * sampler : Sampler
-    | StorageImageRef of set : int * binding : int * format : Option<TextureFormat>
+    | SampledImageRef of set : int * binding : int * index : int * info : ShaderSamplerType * sampler : Sampler
+    | StorageImageRef of set : int * binding : int * info : ShaderSamplerType
 
 [<StructuredFormatDisplay("{AsString}")>]
 type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : DescriptorSet[], references : Map<string, list<BindingReference>>, imageArrays : MapExt<int * int, Option<ImageView * Sampler>[]>, buffers : List<UniformBuffer>) =
@@ -145,19 +145,18 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
                     w.WriteUnsafeValue(value, buffer.Storage.Pointer)
                     dirtyBuffers <- HSet.add buffer dirtyBuffers
 
-                | StorageImageRef(set, binding, format) ->
-
+                | StorageImageRef(set, binding, info) ->
                     let view, res = 
                         match value with
                             | :? Image as img -> 
-                                let view = device.CreateImageView(img, 0, 1, 0, 1, VkComponentMapping.Identity)
+                                let view = device.CreateOutputImageView(img, 0, 1, 0, 1)
                                 view, Some { new IDisposable with member x.Dispose() = device.Delete view }
 
                             | :? ImageView as view ->
                                 view, None
 
                             | :? ImageSubresourceRange as r ->
-                                let view = device.CreateImageView(r.Image, r.BaseLevel, r.LevelCount, r.BaseSlice, r.SliceCount, VkComponentMapping.Identity)
+                                let view = device.CreateOutputImageView(r.Image, r.BaseLevel, r.LevelCount, r.BaseSlice, r.SliceCount)
                                 view, Some { new IDisposable with member x.Dispose() = device.Delete view }
 
                             | _ -> 
@@ -167,7 +166,7 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
                     update set binding write
                     setResource set binding 0 res
 
-                | SampledImageRef(set, binding, index, sampler) ->
+                | SampledImageRef(set, binding, index, info, sampler) ->
                     let content = imageArrays.[(set, binding)]
                     let res = 
                         match value with
@@ -177,7 +176,7 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
 
                             | :? ITexture as tex ->
                                 let image = device.CreateImage tex
-                                let view = device.CreateImageView(image, VkComponentMapping.Identity)
+                                let view = device.CreateInputImageView(image, info, VkComponentMapping.Identity)
                                 content.[index] <- Some (view, sampler)
                                 Some { new IDisposable with member x.Dispose() = device.Delete image; device.Delete view }
 
@@ -249,9 +248,8 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
             |> Seq.map (fun (name, rs) ->
                 match rs with
                     | UniformRef(_,_,t) :: _ -> sprintf "%s : %s" name (prettyName t)
-                    | StorageImageRef(_,_,Some fmt) :: _ -> sprintf "%s : image<%A>" name fmt
-                    | StorageImageRef(_,_,None) :: _ -> sprintf "%s : image" name
-                    | SampledImageRef(_,_,_,_) :: _ -> sprintf "%s : sampler" name
+                    | StorageImageRef(_,_,_) :: _ -> sprintf "%s : image" name
+                    | SampledImageRef(_,_,_,_,_) :: _ -> sprintf "%s : sampler" name
                     | StorageBufferRef(_,_,et) :: _ -> sprintf "%s : buffer<%s>" name (prettyName et)
                     | _ -> sprintf "%s : unknown" name
             )
@@ -526,7 +524,7 @@ module ComputeShader =
                                                                     failf "unsupported image type %A" value
                                                         
                                                         let imageView =
-                                                            device.CreateImageView(image, VkComponentMapping.Identity)
+                                                            device.CreateInputImageView(image, imgInfo.samplerType, VkComponentMapping.Identity)
 
                                                         imageViews.Add(imageView)
 
@@ -552,7 +550,7 @@ module ComputeShader =
                                         
                                         match value with
                                             | :? Image as img ->
-                                                let view = device.CreateImageView(img, 0, 1, 0, 1, VkComponentMapping.Identity)
+                                                let view = device.CreateOutputImageView(img, 0, 1, 0, 1)
                                                 imageViews.Add view
                                                 Descriptor.StorageImage(b.Binding, view)
 
@@ -560,7 +558,7 @@ module ComputeShader =
                                                 Descriptor.StorageImage(b.Binding, view)
                                                 
                                             | :? ImageSubresourceRange as r ->
-                                                let view = device.CreateImageView(r.Image, r.BaseLevel, r.LevelCount, r.BaseSlice, r.SliceCount, VkComponentMapping.Identity)
+                                                let view = device.CreateOutputImageView(r.Image, r.BaseLevel, r.LevelCount, r.BaseSlice, r.SliceCount)
                                                 imageViews.Add view
                                                 Descriptor.StorageImage(b.Binding, view)
 
@@ -660,7 +658,7 @@ module ComputeShader =
                         for i in 0 .. img.count - 1 do
                             match Map.tryFind (name, i) shader.Samplers, Map.tryFind (name, i) shader.TextureNames with
                                 | Some sampler, Some texName ->
-                                    let reference = SampledImageRef(si, bi, i, sampler)
+                                    let reference = SampledImageRef(si, bi, i, img.samplerType, sampler)
                                     let old = references.GetOrCreate(texName, fun _ -> [])
                                     references.[texName] <- reference :: old
                                 | _ ->
@@ -673,7 +671,7 @@ module ComputeShader =
                             if i.name.StartsWith "cs_" then i.name.Substring 3
                             else i.name
 
-                        let reference = StorageImageRef(si, bi, i.format)
+                        let reference = StorageImageRef(si, bi, i.samplerType)
                         references.[name] <- [reference]
                         //descriptors.[bi] <- Descriptor.StorageImage(bi, Unchecked.defaultof<_>)
 

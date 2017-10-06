@@ -641,20 +641,25 @@ type ShaderUniformBlock =
         layout      : UniformBufferLayout
     }
 
+type ShaderSamplerType =
+    {        
+        dimension       : TextureDimension
+        isArray         : bool
+        isMultisampled  : bool
+    }
+
 type ShaderTextureInfo =
     {
         set             : int
         binding         : int
-        name            : string
         count           : int
+        name            : string
         description     : list<SamplerDescription>
         resultType      : PrimitiveType
-        dimension       : TextureDimension 
         isDepth         : Option<bool>
-        isArray         : bool
-        isMultisampled  : bool
         isSampled       : bool
         format          : Option<TextureFormat>
+        samplerType     : ShaderSamplerType
     }
 
 type ShaderUniformParameter =
@@ -765,12 +770,15 @@ module ShaderUniformParameter =
                             count           = 1
                             description     = []
                             resultType      = PrimitiveType.ofShaderType resultType
-                            dimension       = Dim.toTextureDimension dim
                             isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
-                            isArray         = isArray
-                            isMultisampled  = (if isMS = 0 then false else true)
                             isSampled       = isSampled
                             format          = ImageFormat.toTextureFormat fmt
+                            samplerType =
+                                {
+                                    dimension       = Dim.toTextureDimension dim
+                                    isArray         = isArray
+                                    isMultisampled  = (if isMS = 0 then false else true)
+                                }
                         }
 
                     | ShaderType.Array((ShaderType.SampledImage(ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt)) | ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt)), len) ->
@@ -781,12 +789,15 @@ module ShaderUniformParameter =
                             count           = len
                             description     = []
                             resultType      = PrimitiveType.ofShaderType resultType
-                            dimension       = Dim.toTextureDimension dim
                             isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
-                            isArray         = isArray
-                            isMultisampled  = (if isMS = 0 then false else true)
-                            isSampled       = isSampled
                             format          = ImageFormat.toTextureFormat fmt
+                            isSampled       = isSampled
+                            samplerType =
+                                {
+                                    dimension       = Dim.toTextureDimension dim
+                                    isMultisampled  = (if isMS = 0 then false else true)
+                                    isArray         = isArray
+                                }
                         }
 
                     | ShaderType.Struct(name, fields) ->

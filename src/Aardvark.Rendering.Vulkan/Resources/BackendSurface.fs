@@ -325,12 +325,15 @@ module PipelineInfo =
                                 count           = 1
                                 description     = []
                                 resultType      = PrimitiveType.ofShaderType resultType
-                                dimension       = ShaderUniformParameter.Dim.toTextureDimension dim
                                 isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
-                                isArray         = isArray
-                                isMultisampled  = (if isMS = 0 then false else true)
                                 isSampled       = isSampled
                                 format          = ShaderUniformParameter.ImageFormat.toTextureFormat fmt
+                                samplerType =
+                                    {
+                                        dimension       = ShaderUniformParameter.Dim.toTextureDimension dim
+                                        isArray         = isArray
+                                        isMultisampled  = (if isMS = 0 then false else true)
+                                    }
                             }
 
                         | ShaderType.Array((ShaderType.SampledImage(ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt)) | ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt)), len) ->
@@ -341,12 +344,15 @@ module PipelineInfo =
                                 count           = len
                                 description     = []
                                 resultType      = PrimitiveType.ofShaderType resultType
-                                dimension       = ShaderUniformParameter.Dim.toTextureDimension dim
                                 isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
-                                isArray         = isArray
-                                isMultisampled  = (if isMS = 0 then false else true)
                                 isSampled       = isSampled
                                 format          = ShaderUniformParameter.ImageFormat.toTextureFormat fmt
+                                samplerType =
+                                    {
+                                        dimension       = ShaderUniformParameter.Dim.toTextureDimension dim
+                                        isArray         = isArray
+                                        isMultisampled  = (if isMS = 0 then false else true)
+                                    }
                             }
                         | _ ->
                             failwith "invalid texture uniform"

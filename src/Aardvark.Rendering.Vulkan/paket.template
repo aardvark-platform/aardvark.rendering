@@ -9,3 +9,4 @@ description
 files
     ..\..\bin\Release\Aardvark.Rendering.Vulkan.dll ==> lib\net45
     ..\..\bin\Release\Aardvark.Rendering.Vulkan.pdb ==> lib\net45
+    ..\..\bin\Release\Aardvark.Rendering.Vulkan.dll.config ==> lib\net45

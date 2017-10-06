@@ -1277,10 +1277,13 @@ module AdaptiveResourcesEager =
 
 
 
-
 [<EntryPoint>]
 [<STAThread>]
 let main args =
+    Trie.Test.run()
+
+    System.Environment.Exit 0
+
     //Management.run()
 
     //colorLockTest()
@@ -1303,9 +1306,9 @@ let main args =
     Interactive.Renderer <- Vulkan
     
     Aardvark.Rendering.GL.RuntimeConfig.SupressSparseBuffers <- false
-    //Examples.PostProcessing.run()
+    Examples.PostProcessing.run()
     //Examples.CommandTest.run()
-    Examples.LoD.run()
+    //Examples.LoD.run()
     //Examples.Shadows.run()
     //Examples.AssimpInterop.run() 
     //Examples.ShaderSignatureTest.run()

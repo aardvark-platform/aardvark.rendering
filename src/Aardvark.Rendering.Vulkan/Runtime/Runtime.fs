@@ -216,10 +216,11 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             bindings |> Map.map (fun s o ->
                 match o with
                     | :? IBackendTextureOutputView as view ->
-                        device.CreateImageView(unbox view.texture, view.level, 1, view.slice, 1, VkComponentMapping.Identity)
+                        let img = unbox<Image> view.texture
+                        device.CreateOutputImageView(img, view.level, 1, view.slice, 1)
 
                     | :? Image as img ->
-                        device.CreateImageView(img, 0, 1, 0, 1, VkComponentMapping.Identity)
+                        device.CreateOutputImageView(img, 0, 1, 0, 1)
 
                     | _ -> failf "invalid framebuffer attachment %A: %A" s o
             )
