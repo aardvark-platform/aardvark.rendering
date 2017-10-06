@@ -76,6 +76,7 @@
     <Compile Include="Compute.fs" />
     <Compile Include="ShaderSwitches.fs" />
     <Compile Include="Commands.fs" />
+    <Compile Include="Trie.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <None Include="paket.references" />
