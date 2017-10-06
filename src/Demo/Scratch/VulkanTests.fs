@@ -44,7 +44,7 @@ type ResourceManager with
                             | Some (:? IMod<ITexture> as tex) ->
 
                                 let tex = x.CreateImage(tex)
-                                let view = x.CreateImageView(tex)
+                                let view = x.CreateImageView(image.samplerType, tex)
                                 let sam = x.CreateSampler(Mod.constant samplerState)
 
                                 Some(view, sam)
