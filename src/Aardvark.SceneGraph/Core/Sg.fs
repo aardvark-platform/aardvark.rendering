@@ -116,6 +116,9 @@ module Sg =
 
         new(value : Surface, child : ISg) = SurfaceApplicator(value, Mod.constant child)
 
+        new(value : ISurface, child : ISg) = SurfaceApplicator(Surface.Backend value, Mod.constant child)
+        new(value : ISurface, child : IMod<ISg>) = SurfaceApplicator(Surface.Backend value, child)
+
     type TextureApplicator(semantic : Symbol, texture : IMod<ITexture>, child : IMod<ISg>) =
         inherit UniformApplicator(semantic, texture :> IMod, child)
 
@@ -247,68 +250,67 @@ module Sg =
         inherit AbstractApplicator(child)
         member x.WriteEnabled = writeEnabled
 
-    type Group(elements : seq<ISg>) =
-        let aset = cset(elements)
+    type Group(content : cset<ISg>) =
 
         interface IGroup with
             member x.Children = x.ASet
 
-        member x.ASet : aset<ISg> = aset :> aset<_>
+        member x.ASet : aset<ISg> = content :> aset<_>
 
         member x.Add v =
             transact (fun () ->
-               aset.Add v
+               content.Add v
             )
 
         member x.Remove v =
             transact (fun () ->
-                aset.Remove v
+                content.Remove v
             )
 
         member x.Clear() =
             transact (fun () ->
-                aset.Clear()
+                content.Clear()
             )
 
         member x.UnionWith v =
             transact (fun () ->
-                aset.UnionWith v
+                content.UnionWith v
             )
 
         member x.ExceptWith v =
             transact (fun () ->
-                aset.ExceptWith v
+                content.ExceptWith v
             )
 
         member x.SymmetricExceptWith v =
             transact (fun () ->
-                aset.SymmetricExceptWith v
+                content.SymmetricExceptWith v
             )
 
         member x.IntersectWith v =
             transact (fun () ->
-                aset.IntersectWith v
+                content.IntersectWith v
             )
 
 
-        member x.Count = aset.Count
+        member x.Count = content.Count
 
         interface System.Collections.IEnumerable with
-            member x.GetEnumerator() = (aset :> System.Collections.IEnumerable).GetEnumerator()
+            member x.GetEnumerator() = (content :> System.Collections.IEnumerable).GetEnumerator()
 
         interface IEnumerable<ISg> with
-            member x.GetEnumerator() = (aset :> seq<_>).GetEnumerator()
+            member x.GetEnumerator() = (content :> seq<_>).GetEnumerator()
 
         interface ICollection<ISg> with
             member x.IsReadOnly = false
             member x.Add v = x.Add v |> ignore
             member x.Remove v = x.Remove v
             member x.Clear() = x.Clear()
-            member x.Contains v = aset.Contains v
+            member x.Contains v = content.Contains v
             member x.Count = x.Count
             member x.CopyTo(arr, index) =
                 let mutable id = index
-                for e in aset do
+                for e in content do
                     arr.[id] <- e
                     id <- id + 1
 
@@ -318,16 +320,18 @@ module Sg =
             member x.IntersectWith other = x.IntersectWith other
             member x.ExceptWith other = x.ExceptWith other
             member x.SymmetricExceptWith other = x.SymmetricExceptWith other
-            member x.IsSubsetOf other = (aset :> ISet<ISg>).IsSubsetOf other
-            member x.IsSupersetOf other = (aset :> ISet<ISg>).IsSupersetOf other
-            member x.IsProperSubsetOf other = (aset :> ISet<ISg>).IsProperSubsetOf other
-            member x.IsProperSupersetOf other = (aset :> ISet<ISg>).IsProperSupersetOf other
-            member x.Overlaps other = (aset :> ISet<ISg>).Overlaps other
-            member x.SetEquals other = (aset :> ISet<ISg>).SetEquals other
+            member x.IsSubsetOf other = (content :> ISet<ISg>).IsSubsetOf other
+            member x.IsSupersetOf other = (content :> ISet<ISg>).IsSupersetOf other
+            member x.IsProperSubsetOf other = (content :> ISet<ISg>).IsProperSubsetOf other
+            member x.IsProperSupersetOf other = (content :> ISet<ISg>).IsProperSupersetOf other
+            member x.Overlaps other = (content :> ISet<ISg>).Overlaps other
+            member x.SetEquals other = (content :> ISet<ISg>).SetEquals other
 
-        new() = Group(Seq.empty)
+        new() = Group(CSet.empty)
 
-        new([<ParamArray>] items: ISg[]) = Group(items |> Array.toSeq)
+        new([<ParamArray>] items: ISg[]) = Group(items |> CSet.ofArray)
+
+        new(items : seq<ISg>) = Group(items |> CSet.ofSeq)
         
     type Set(content : aset<ISg>) =
 
@@ -335,6 +339,10 @@ module Sg =
             member x.Children = content
 
         member x.ASet = content
+
+        new([<ParamArray>] items: ISg[]) = Set(items |> ASet.ofArray)
+
+        new(items : seq<ISg>) = Set(items |> ASet.ofSeq)
 
     type AsyncLoadApplicator(fboSignature : IFramebufferSignature, child : IMod<ISg>) =
         inherit AbstractApplicator(child)

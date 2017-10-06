@@ -48,10 +48,10 @@ module SgFSharp =
         let surface (m : ISurface) (sg : ISg) =
             Sg.SurfaceApplicator(Surface.Backend m, sg) :> ISg
 
-        let group (s : #seq<ISg>) =
+        let group (s : seq<ISg>) =
             Sg.Group s
 
-        let group' (s : #seq<ISg>) =
+        let group' (s : seq<ISg>) =
             Sg.Group s :> ISg
 
 
@@ -72,7 +72,7 @@ module SgFSharp =
 
 
         let andAlso (sg : ISg) (andSg : ISg) = 
-            group [sg;andSg] :> ISg
+            Sg.Group [sg;andSg] :> ISg
 
         let geometrySet mode attributeTypes (geometries : aset<_>) =
             Sg.GeometrySet(geometries,mode,attributeTypes) :> ISg

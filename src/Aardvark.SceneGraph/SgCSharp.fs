@@ -50,6 +50,9 @@ type SceneGraphExtensions =
     static member Surface(sg : ISg, surface : ISurface) = Sg.SurfaceApplicator(Surface.Backend surface, sg) :> ISg
 
     [<Extension>]
+    static member Surface(sg : ISg, surface : Surface) = Sg.SurfaceApplicator(surface, sg) :> ISg
+
+    [<Extension>]
     static member FillMode(sg : ISg, mode : IEvent<FillMode>) = Sg.FillModeApplicator(mode, sg) :> ISg
 
     [<Extension>]
