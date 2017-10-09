@@ -165,6 +165,9 @@ module RenderTasks =
         override x.FramebufferSignature = Some fboSignature
         override x.Runtime = Some ctx.Runtime
         override x.Perform(token : AdaptiveToken, t : RenderToken, desc : OutputDescription) =
+            
+            GL.Check "[RenderTask.Run] Entry"
+
             let fbo = desc.framebuffer // TODO: fix outputdesc
             if not <| fboSignature.IsAssignableFrom fbo.Signature then
                 failwithf "incompatible FramebufferSignature\nexpected: %A but got: %A" fboSignature fbo.Signature
@@ -191,7 +194,7 @@ module RenderTasks =
                 beforeRender.OnNext()
                 NativePtr.write runtimeStats V2i.Zero
                 let stats = x.Perform(token, t, fbo, desc)
-                GL.Check "RenderTask.Run"
+                GL.Check "[RenderTask.Run] Perform"
                 afterRender.OnNext()
                 let rt = NativePtr.read runtimeStats
                 t.AddDrawCalls(rt.X, rt.Y)

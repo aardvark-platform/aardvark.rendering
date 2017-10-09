@@ -159,6 +159,7 @@ module ResizeBufferImplementation =
                     x.Realloc(oldCapacity, newCapacity)
                 )
                 x.SizeInBytes <- newCapacity
+                updateBuffer ctx (int64 oldCapacity) (int64 newCapacity)
 
         member x.UseReadUnsafe(offset : nativeint, size : nativeint, reader : nativeint -> 'x) =
             using ctx.ResourceLock (fun _ ->
@@ -182,6 +183,7 @@ module ResizeBufferImplementation =
                         afterResize()
                     )
                     x.SizeInBytes <- newCapacity
+                    updateBuffer ctx (int64 oldCapacity) (int64 newCapacity)
             )
 
         member x.UseRead(offset : nativeint, size : nativeint, reader : nativeint -> 'x) =
@@ -883,7 +885,7 @@ module MappedBufferImplementations =
 
         member x.Capacity = buffer.SizeInBytes
 
-        member x.Resize(newCapacity) =
+        member x.Resize(newCapacity : nativeint) =
             buffer.Resize(newCapacity)
 
         member x.UseWrite(offset : nativeint, size : nativeint, f : nativeint -> 'a) =

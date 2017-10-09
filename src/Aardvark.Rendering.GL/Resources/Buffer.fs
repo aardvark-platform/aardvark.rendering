@@ -57,13 +57,16 @@ type Buffer =
 [<AutoOpen>]
 module BufferExtensions =
 
-    let private addBuffer (ctx:Context) size =
+    let addBuffer (ctx:Context) size =
         Interlocked.Increment(&ctx.MemoryUsage.BufferCount) |> ignore
         Interlocked.Add(&ctx.MemoryUsage.BufferMemory,size) |> ignore
 
-    let private removeBuffer (ctx:Context) size =
+    let removeBuffer (ctx:Context) size =
         Interlocked.Decrement(&ctx.MemoryUsage.BufferCount)  |> ignore
         Interlocked.Add(&ctx.MemoryUsage.BufferMemory,-size) |> ignore
+
+    let updateBuffer (ctx:Context) oldSize newSize =
+        Interlocked.Add(&ctx.MemoryUsage.BufferMemory, newSize-oldSize) |> ignore
 
     /// <summary>
     /// helper function translating our self-defined BufferUsage

@@ -387,11 +387,14 @@ type private LayoutManager<'a>() =
 
 
 type ManagedDrawCall(call : DrawCallInfo, release : IDisposable) =
+    let mutable isDisposed = false
     member x.Call = call
         
-    member x.Dispose() = release.Dispose()
+    member x.Dispose() = if not isDisposed then 
+                            release.Dispose()
+                            isDisposed <- true
     interface IDisposable with
-        member x.Dispose() = release.Dispose()
+        member x.Dispose() = x.Dispose()
 
 type ManagedPool(runtime : IRuntime, signature : GeometrySignature) =
     static let zero : byte[] = Array.zeroCreate 1280000
@@ -565,6 +568,10 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
     override x.Compute(token) =
         store.GetValue()
 
+    override x.Finalize() =
+        try store.Dispose()
+        with _ -> ()    
+
 [<AbstractClass; Sealed; Extension>]
 type IRuntimePoolExtensions private() =
 
@@ -609,7 +616,7 @@ module ``Pool Semantics`` =
 
                 let r = p.Calls.GetReader()
                 let calls =
-                    let buffer = DrawCallBuffer(pool.Runtime, true)
+                    let buffer = DrawCallBuffer(pool.Runtime, true) // who manages this? using finalizer for now
                     Mod.custom (fun self ->
                         let deltas = r.GetOperations self
                         for d in deltas do

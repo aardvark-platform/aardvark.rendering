@@ -165,8 +165,11 @@ module Sg =
                                     content |> Mod.map (fun s -> 
                                         let b = s.bounds
                                         let bounds = Box2d(b.Min.X - e.left, b.Min.Y - e.bottom, b.Max.X + e.right, b.Max.Y + e.top)
-                                        Trafo3d.Scale(bounds.SizeX, bounds.SizeY, 1.0) *
-                                        Trafo3d.Translation(bounds.Min.X, bounds.Min.Y, 0.0)
+                                        if bounds.IsValid then
+                                            Trafo3d.Scale(bounds.SizeX, bounds.SizeY, 1.0) *
+                                            Trafo3d.Translation(bounds.Min.X, bounds.Min.Y, 0.0)
+                                        else
+                                            Trafo3d.Scale(0.0)
                                     )
 
                                 match old.TryGetUniform(scope, sem) with
