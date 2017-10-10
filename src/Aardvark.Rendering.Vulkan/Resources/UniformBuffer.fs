@@ -312,6 +312,9 @@ module UniformWriters =
             
         type PropertyWriter<'a, 'b>(prop : PropertyInfo, inner : IWriter<'b>) =
             inherit MapWriter<'a, 'b>(ReflectionCompiler<'a, 'b>.Property prop, inner)
+            
+        type CallWriter<'a, 'b>(mi : MethodInfo, inner : IWriter<'b>) =
+            inherit MapWriter<'a, 'b>((mi.CreateDelegate(typeof<Func<'a, 'b>>) |> unbox<Func<'a, 'b>>).Invoke, inner)
 
         type StructWriter<'a>(targetSize : nativeint, fieldWriters : array<nativeint * IWriter>) =
             inherit AbstractWriter<'a>()
@@ -386,7 +389,7 @@ module UniformWriters =
                 if remaining > 0n then
                     Marshal.Set(ptr + offset, 0, remaining)
 
-        type SubTypeTestWriter<'a, 'b>(inner : IWriter<'b>) =
+        type SubTypeTestWriter<'a, 'b when 'a : not struct>(inner : IWriter<'b>) =
             inherit AbstractWriter<'a>()
             
             override x.TargetSize =
@@ -394,8 +397,20 @@ module UniformWriters =
 
             override x.Write(value : 'a, ptr : nativeint) =
                 match value :> obj with
+                    | null -> Marshal.Set(ptr, 0, inner.TargetSize)
                     | :? 'b as b -> inner.WriteValue(b, ptr)
-                    | _ -> ()
+                    | _ -> Marshal.Set(ptr, 0, inner.TargetSize)
+
+        type ZeroWhenNullWriter<'a when 'a : not struct>(inner : IWriter<'a>) =
+            inherit AbstractWriter<'a>()
+            
+            override x.TargetSize =
+                inner.TargetSize
+
+            override x.Write(value : 'a, ptr : nativeint) =
+                match value :> obj with
+                    | null -> Marshal.Set(ptr, 0, inner.TargetSize)
+                    | _ -> inner.WriteValue(value, ptr)
 
         type PrimitiveArrayWriter<'a when 'a : unmanaged>(count : int) =
             inherit AbstractWriter<'a[]>()
@@ -431,6 +446,9 @@ module UniformWriters =
         type PrimitivePropertyWriter<'a, 'b when 'b : unmanaged>(prop : PropertyInfo) =
             inherit PrimitiveMapWriter<'a, 'b>(ReflectionCompiler<'a, 'b>.Property prop)
                
+        type PrimitiveCallWriter<'a, 'b when 'b : unmanaged>(mi : MethodInfo) =
+            inherit PrimitiveMapWriter<'a, 'b>((mi.CreateDelegate(typeof<Func<'a, 'b>>) |> unbox<Func<'a, 'b>>).Invoke)
+
 
         let private newPrimitiveWriter (t : Type) =
             let tWriter = typedefof<PrimitiveWriter<int>>.MakeGenericType [| t |]
@@ -466,6 +484,24 @@ module UniformWriters =
                 let tWriter = typedefof<PropertyWriter<_,_>>.MakeGenericType [| pi.DeclaringType; pi.PropertyType |]
                 let ctor = tWriter.GetConstructor [| typeof<PropertyInfo>; inner.GetType() |]
                 ctor.Invoke [| pi :> obj; inner :> obj |] |> unbox<IWriter>
+                
+        let private newCallWriter (mi : MethodInfo) (inner : IWriter) =
+            let args = mi.GetParameters()
+            if mi.ReturnType.IsBlittable && inner.IsPrimitive then
+                let tWriter = typedefof<PrimitiveCallWriter<int, int>>.MakeGenericType [| args.[0].ParameterType; mi.ReturnType |]
+                let ctor = tWriter.GetConstructor [| typeof<MethodInfo> |]
+                ctor.Invoke [| mi :> obj |] |> unbox<IWriter>
+            else
+                let tWriter = typedefof<CallWriter<_,_>>.MakeGenericType [| args.[0].ParameterType; mi.ReturnType |]
+                let ctor = tWriter.GetConstructor [| typeof<MethodInfo>; inner.GetType() |]
+                ctor.Invoke [| mi :> obj; inner :> obj |] |> unbox<IWriter>
+                
+        let private newMemberWriter (mi : MemberInfo) (inner : IWriter) =
+            match mi with
+                | :? FieldInfo as fi -> newFieldWriter fi inner
+                | :? PropertyInfo as pi -> newPropertyWriter pi inner
+                | :? MethodInfo as mi -> newCallWriter mi inner
+                | _ -> failwith "sadasdasdd"
 
         let private newStructWriter (structType : Type) (targetSize : nativeint) (fieldWriters : list<nativeint * IWriter>) =
             let t = typedefof<StructWriter<_>>.MakeGenericType [| structType |]
@@ -491,6 +527,11 @@ module UniformWriters =
             let t = typedefof<SubTypeTestWriter<_,_>>.MakeGenericType [| tDeclared; tReal |]
             let ctor = t.GetConstructor [| inner.GetType() |]
             ctor.Invoke [| inner :> obj |] |> unbox<IWriter>
+            
+        let private newZeroWhenNullWriter (inner : IWriter) =
+            let t = typedefof<ZeroWhenNullWriter<_>>.MakeGenericType [| inner.ValueType |]
+            let ctor = t.GetConstructor [| inner.GetType() |]
+            ctor.Invoke [|inner :> obj |] |> unbox<IWriter>
 
         let private newPrimitiveArrayWriter (tElem : Type) (cnt : int) =
             let t = typedefof<PrimitiveArrayWriter<int>>.MakeGenericType [| tElem |]
@@ -518,6 +559,14 @@ module UniformWriters =
             else
                 Some (iface.GetGenericArguments().[0])
 
+        type MemberInfo with
+            member x.Type =
+                match x with
+                    | :? FieldInfo as fi -> fi.FieldType
+                    | :? PropertyInfo as pi -> pi.PropertyType
+                    | :? MethodInfo as mi -> mi.ReturnType
+                    | _ -> failf "invalid member info"
+
         let rec tryCreateWriterInternal (target : UniformType) (tSource : Type) =
             match target with
                 | UniformType.Primitive(t, s, a) ->
@@ -541,24 +590,20 @@ module UniformWriters =
                                     let table = 
                                         cases |> Seq.collect (fun ci ->
                                             ci.GetFields() |> Seq.map (fun pi ->
-                                                ci.Name + "_" + pi.Name, pi
+                                                ci.Name + "_" + pi.Name, pi :> MemberInfo
                                             )
                                         )
                                         |> Map.ofSeq
-                                        |> Map.add "tag" (tSource.GetProperty("Tag", BindingFlags.Public ||| BindingFlags.NonPublic ||| BindingFlags.Instance))
+                                        |> Map.add "tag" (FSharpValue.PreComputeUnionTagMemberInfo(tSource, true))
                                     
+
                                     layout.fields |> List.mapOption (fun f ->
                                         match Map.tryFind f.name table with
                                             | Some pi ->
-                                                match tryCreateWriterInternal f.fieldType pi.PropertyType with
+                                                match tryCreateWriterInternal f.fieldType pi.Type with
                                                     | Some inner ->
-                                                        let w = newPropertyWriter pi inner
-                                                        let w = 
-                                                            if pi.DeclaringType <> tSource then 
-                                                                newSubTypeTestWriter tSource pi.DeclaringType w
-                                                            else
-                                                                w
-
+                                                        let w = newMemberWriter pi inner
+                                                        let w = if f.name <> "tag" then newSubTypeTestWriter tSource pi.DeclaringType w else w
                                                         Some (nativeint f.offset, w)
                                                     | None ->
                                                         None

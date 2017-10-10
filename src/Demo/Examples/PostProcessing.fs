@@ -228,11 +228,11 @@ module PostProcessing =
 
         let mainResult =
             fullscreenQuad 
-                |> Sg.texture DefaultSemantic.DiffuseColorTexture mainResult
-                |> Sg.effect [DefaultSurfaces.diffuseTexture |> toEffect]
-        
-//                |> Sg.texture DefaultSemantic.DiffuseColorTexture blurredOnlyX
-//                |> Sg.effect [Shaders.gaussY |> toEffect]
+//                |> Sg.texture DefaultSemantic.DiffuseColorTexture mainResult
+//                |> Sg.effect [DefaultSurfaces.diffuseTexture |> toEffect]
+//        
+                |> Sg.texture DefaultSemantic.DiffuseColorTexture blurredOnlyX
+                |> Sg.effect [Shaders.gaussY |> toEffect]
         
         Sg.group' [mainResult; overlayOriginal]
 
