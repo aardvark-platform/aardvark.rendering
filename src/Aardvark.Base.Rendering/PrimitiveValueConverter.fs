@@ -1039,31 +1039,42 @@ module PrimitiveValueConverter =
             let t = typedefof<UnboxLambda<_>>.MakeGenericType [| t |]
             Activator.CreateInstance(t)
 
+    let rec tryGetConverter (inType : Type) (outType : Type) =
+        lock mapping (fun () ->
+            match mapping.TryGet(inType, outType) with
+                | (true, conv) ->
+                    Some conv
+                | _ ->
+                    if outType.IsArray && inType.IsArray then
+                        let inType' = inType.GetElementType()
+                        let outType' = outType.GetElementType()
+                        match tryGetConverter inType' outType' with
+                            | Some innerConv ->
+                                let tconv = typedefof<ArrayMapLambda<_,_>>.MakeGenericType [| inType'; outType' |] 
+                                let ctor = 
+                                    tconv.GetConstructor(
+                                        BindingFlags.NonPublic ||| BindingFlags.Public ||| BindingFlags.Instance ||| BindingFlags.CreateInstance, 
+                                        Type.DefaultBinder, 
+                                        [| innerConv.GetType() |],
+                                        null
+                                    )
+
+                                let conv = ctor.Invoke [|innerConv|]
+                                mapping.Add(inType, outType, conv)
+                                Some conv
+
+                            | None ->
+                                None
+
+                    else
+                        None
+            )
+
     let rec getConverter (inType : Type) (outType : Type) =
-        match mapping.TryGet(inType, outType) with
-            | (true, conv) ->
-                conv
-            | _ ->
-                if outType.IsArray && inType.IsArray then
-                    let inType' = inType.GetElementType()
-                    let outType' = outType.GetElementType()
-                    let innerConv = getConverter inType' outType'
+        match tryGetConverter inType outType with
+            | Some c -> c
+            | None -> failwithf "unknown conversion from %A to %A" inType.FullName outType.FullName
 
-                    let tconv = typedefof<ArrayMapLambda<_,_>>.MakeGenericType [| inType'; outType' |] 
-                    let ctor = 
-                        tconv.GetConstructor(
-                            BindingFlags.NonPublic ||| BindingFlags.Public ||| BindingFlags.Instance ||| BindingFlags.CreateInstance, 
-                            Type.DefaultBinder, 
-                            [| innerConv.GetType() |],
-                            null
-                        )
-
-                    let conv = ctor.Invoke [|innerConv|]
-                    mapping.Add(inType, outType, conv)
-                    conv
-
-                else
-                    failwithf "unknown conversion from %A to %A" inType.FullName outType.FullName
 
     type private ArrayConverterCache<'a>() =
         static let conv = Dict<Type, Array -> 'a[]>()

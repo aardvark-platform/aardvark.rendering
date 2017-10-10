@@ -1280,10 +1280,6 @@ module AdaptiveResourcesEager =
 [<EntryPoint>]
 [<STAThread>]
 let main args =
-    Trie.Test.run()
-
-    System.Environment.Exit 0
-
     //Management.run()
 
     //colorLockTest()

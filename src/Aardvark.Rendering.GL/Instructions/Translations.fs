@@ -117,12 +117,17 @@ module Translations =
             | _ -> failwithf "unknown FillMode: %A" f
 
     let toGLTarget (d : TextureDimension) (isArray : bool) (samples : int) =
-        match (d, isArray) with
-            | (TextureDimension.Texture1D, false) -> int TextureTarget.Texture1D
-            | (TextureDimension.Texture1D, true) -> int TextureTarget.Texture1DArray
-            | (TextureDimension.Texture2D, false) -> int TextureTarget.Texture2D
-            | (TextureDimension.Texture2D, true) -> int TextureTarget.Texture2DArray
-            | (TextureDimension.Texture3D, false) -> int TextureTarget.Texture3D
-            | (TextureDimension.TextureCube, false) -> int TextureTarget.TextureCubeMap
-            | (TextureDimension.TextureCube, true) -> int TextureTarget.TextureCubeMapArray
+        match (d, isArray, false) with
+            | (TextureDimension.Texture1D, false, false) -> int TextureTarget.Texture1D
+            | (TextureDimension.Texture1D, true, false) -> int TextureTarget.Texture1DArray
+            | (TextureDimension.Texture2D, false, false) -> int TextureTarget.Texture2D
+            | (TextureDimension.Texture2D, true, false) -> int TextureTarget.Texture2DArray
+            | (TextureDimension.Texture3D, false, false) -> int TextureTarget.Texture3D
+            | (TextureDimension.TextureCube, false, false) -> int TextureTarget.TextureCubeMap
+            | (TextureDimension.TextureCube, true, false) -> int TextureTarget.TextureCubeMapArray
+
+            
+            | (TextureDimension.Texture2D, false, true) -> int TextureTarget.Texture2DMultisample
+            | (TextureDimension.Texture2D, true, true) -> int TextureTarget.Texture2DMultisampleArray
+
             | _ -> failwithf "unknown TextureDimension: %A" d

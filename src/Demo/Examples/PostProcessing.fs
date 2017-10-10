@@ -68,16 +68,30 @@ module PostProcessing =
             let sum = Array.sum res
             res |> Array.map (fun v -> v / sum)
 
+        type Bla =
+            | Bla of float
+            | Blubb of int
+
+        type UniformScope with
+            member x.Bla : Option<float> = x?Bla
 
         let gaussX (v : Vertex) =
             fragment {
                 let mutable color = V4d.Zero
+
+                let factor =
+                    match uniform.Bla with
+                        | Some f -> V3d(f, 1.0, 1.0)
+                        | None -> V3d.III
+
                 let off = V2d(1.0 / float uniform.ViewportSize.X, 0.0)
                 for x in -halfFilterSize..halfFilterSize do
                     let w = weights.[x+halfFilterSize]
                     color <- color + w * inputTex.Sample(v.tc + (float x) * off)
 
-                return V4d(color.XYZ, 1.0)
+                
+
+                return V4d(factor * color.XYZ, 1.0)
             }
 
         let gaussY (v : Vertex) =
@@ -91,7 +105,7 @@ module PostProcessing =
                 return V4d(color.XYZ, 1.0)
             }
             
-        type PSVertex = { [<TexCoord; Interpolation(InterpolationMode.Sample)>] tc : V2d; [<SamplePosition>] sp : V2d }
+        type PSVertex = { [<TexCoord; Interpolation(InterpolationMode.Sample)>] tc : V2d }
 
         let pointSpriteFragment (v : PSVertex) =
             fragment {
@@ -131,9 +145,13 @@ module PostProcessing =
     // is quite simple using the RenderTask utilities provided in Base.Rendering.
     // from the rendering we get an IMod<ITexture> which will be outOfDate whenever
     // something changes in pointScene and updated whenever subsequent passes need it.
+
+    let signature = //win.FramebufferSignature
+        win.Runtime.CreateFramebufferSignature(8, [DefaultSemantic.Colors, RenderbufferFormat.Rgba8; DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8])
+
     let mainTask =
         pointSg
-            |> Sg.compile win.Runtime win.FramebufferSignature 
+            |> Sg.compile win.Runtime signature
          
    
     let mainResult =
@@ -141,12 +159,29 @@ module PostProcessing =
             |> RenderTask.renderToColor win.Sizes
  
 
+    let bla =
+        Mod.init (Some 1.0)
+
+    Interactive.Keyboard.DownWithRepeats.Values.Add (fun k ->
+        match k with
+            | Keys.X -> 
+                transact (fun () -> 
+                    bla.Value <- 
+                        match bla.Value with
+                            | Some v -> None
+                            | None -> Some 0.5
+                )
+            | _ ->
+                ()
+    )
+
     // by taking the texture created above and the fullscreen quad we can now apply
     // the first gaussian filter to it and in turn get a new IMod<ITexture>     
     let blurredOnlyX =
         fullscreenQuad 
             |> Sg.texture DefaultSemantic.DiffuseColorTexture mainResult
             |> Sg.effect [Shaders.gaussX |> toEffect]
+            |> Sg.uniform "Bla" bla
             |> Sg.compile win.Runtime win.FramebufferSignature
             |> RenderTask.renderToColor win.Sizes
 
