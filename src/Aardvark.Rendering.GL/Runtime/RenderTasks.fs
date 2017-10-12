@@ -1133,7 +1133,7 @@ module RenderTasks =
             f |> Seq.sortWith (fun a b -> cmp.Compare(a.Object, b.Object)) |> Seq.toList
 
         override x.Update(token : AdaptiveToken, rt : RenderToken, dirty : HashSet<_>) =
-            let deltas = fragmentReader.GetOperations(AdaptiveToken.Top)
+            let deltas = fragmentReader.GetOperations(token)
             for d in deltas do
                 match d with
                     | Add(_,f) -> dirty.Add f |> ignore
@@ -1153,17 +1153,16 @@ module RenderTasks =
 
                 if not <| isNull current then current.Next <- last
                 else first <- last
+                last.Next <- null
             )
 
         override x.Run(t) =
-            
             if disposeCnt > 0 then
                 failwithf "Running disposed glvmprogram"
 
             vmStats.TotalInstructions <- 0
             vmStats.RemovedInstructions <- 0
             if not (isNull first) then
-                last.Next <- null
                 GLVM.vmRun(first.Handle, VMMode.RuntimeRedundancyChecks, &vmStats)
 
             t.AddInstructions(vmStats.TotalInstructions, vmStats.TotalInstructions - vmStats.RemovedInstructions)
