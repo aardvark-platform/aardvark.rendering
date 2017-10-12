@@ -8,13 +8,12 @@ open Aardvark.Base.Incremental
 module TrafoOperators =
 
     type private UnaryCache<'a, 'b when 'a : not struct and 'b : not struct> private(store : Option<ConditionalWeakTable<'a, 'b>>, f : 'a -> 'b) =
-        inherit FSharpFunc<'a, 'b>()
         let store = 
             match store with
                 | Some s -> s
                 | None -> ConditionalWeakTable<'a, 'b>()
 
-        override x.Invoke (a : 'a) =
+        member x.Invoke (a : 'a) =
             lock store (fun () ->
                 match store.TryGetValue(a) with
                     | (true, b) -> b
@@ -36,11 +35,11 @@ module TrafoOperators =
             lock store (fun () ->
                 match store.TryGetValue(a) with
                     | (true, inner) ->
-                        UnaryCache<'b, 'c>(inner, f a) |> unbox
+                        UnaryCache<'b, 'c>(inner, f a).Invoke
                     | _ ->
                         let inner = ConditionalWeakTable()
                         store.Add(a, inner)
-                        UnaryCache<'b, 'c>(inner, f a) |> unbox
+                        UnaryCache<'b, 'c>(inner, f a).Invoke
             )
 
         override x.Invoke(a : 'a, b : 'b) =
@@ -63,13 +62,13 @@ module TrafoOperators =
 
     module Trafo3d = 
         let inverse : IMod<Trafo3d> -> IMod<Trafo3d> = 
-            UnaryCache<IMod<Trafo3d>, IMod<Trafo3d>>(Mod.map (fun t -> t.Inverse)) |> unbox<_>
+            UnaryCache<IMod<Trafo3d>, IMod<Trafo3d>>(Mod.map (fun t -> t.Inverse)).Invoke 
 
         let normalMatrix : IMod<Trafo3d> -> IMod<M33d> = 
-            UnaryCache<IMod<Trafo3d>, IMod<M33d>>(Mod.map (fun t -> t.Backward.Transposed.UpperLeftM33())) |> unbox<_>
+            UnaryCache<IMod<Trafo3d>, IMod<M33d>>(Mod.map (fun t -> t.Backward.Transposed.UpperLeftM33())).Invoke
 
     let (<*>) : IMod<Trafo3d> -> IMod<Trafo3d> -> IMod<Trafo3d> = 
-        BinaryCache<IMod<Trafo3d>, IMod<Trafo3d>, IMod<Trafo3d>>(Mod.map2 (*)) |> unbox<_>
+        BinaryCache<IMod<Trafo3d>, IMod<Trafo3d>, IMod<Trafo3d>>(Mod.map2 (*)).Invoke
 
 [<AbstractClass>]
 type DefaultingModTable() =

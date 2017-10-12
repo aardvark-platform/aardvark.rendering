@@ -982,30 +982,26 @@ module PrimitiveValueConverter =
 
     [<AutoOpen>]
     module private Lambdas =
-        type ArrayMapLambda<'a, 'b>(converter : 'a -> 'b) =
-            inherit FSharpFunc<Array, 'b[]>()
-
-            override x.Invoke(arr : Array) =
-                arr |> unbox |> Array.map converter
-
-        type UntypedArrayMapLambda<'a, 'b>(converter : 'a -> 'b) =
-            inherit FSharpFunc<Array, Array>()
-
-            override x.Invoke(arr : Array) =
-                arr |> unbox |> Array.map converter :> Array
-    
-        type ComposedLambda<'a, 'b, 'c>(f : 'a -> 'b, g : 'b -> 'c) =
-            inherit FSharpFunc<'a, 'c>()
-            override x.Invoke(a : 'a) = g (f a)
-
-        type IdLambda<'a>() =
-            inherit FSharpFunc<'a, 'a>()
-            override x.Invoke(v : 'a) = v
-
-        type UnboxLambda<'a>() =
-            inherit FSharpFunc<obj, 'a>()
-            override x.Invoke(v : obj) = unbox<'a> v
-
+        type UnboxLambda<'a> private() =
+            static let instance = fun (v : obj) -> unbox<'a> v
+            static member Instance = instance
+            
+        type IdLambda<'a> private() =
+            static let instance = fun (v : 'a) -> v
+            static member Instance = instance
+               
+        type ComposedLambda<'a, 'b, 'c> private() =
+            static member Create(f : 'a -> 'b, g : 'b -> 'c) =
+                f >> g
+         
+        type UntypedArrayMapLambda<'a, 'b> private() =
+            static member Create(converter : 'a -> 'b) =
+                fun (arr : Array) -> arr |> unbox |> Array.map converter :> Array
+                   
+        type ArrayMapLambda<'a, 'b> private() =
+            static member Create(converter : 'a -> 'b) =
+                fun (arr : 'a[]) -> arr |> Array.map converter
+                     
 
         let compose (f : obj) (g : obj) =
             let ft = f.GetType()
@@ -1014,15 +1010,16 @@ module PrimitiveValueConverter =
             let (b',c) = FSharpType.GetFunctionElements gt
             if b <> b' then failwith "[PrimitiveValueConverter] cannot compose functions"
             let t = typedefof<ComposedLambda<_,_,_>>.MakeGenericType [| a; b; c |]
-            let ctor = 
-                t.GetConstructor(
-                    BindingFlags.NonPublic ||| BindingFlags.Instance ||| BindingFlags.CreateInstance ||| BindingFlags.Public ||| BindingFlags.Static, 
+            let mi = 
+                t.GetMethod(
+                    "Create",
+                    BindingFlags.NonPublic ||| BindingFlags.Static ||| BindingFlags.Public, 
                     Type.DefaultBinder, 
                     [| ft; gt|], 
                     null
                 )
 
-            ctor.Invoke [| f; g |]
+            mi.Invoke(null, [| f; g |])
 
         let withTranspose (f : obj) =
             let ft = f.GetType()
@@ -1033,11 +1030,11 @@ module PrimitiveValueConverter =
 
         let idFunction (t : Type) =
             let t = typedefof<IdLambda<_>>.MakeGenericType [| t |]
-            Activator.CreateInstance(t)
+            t.GetProperty("Instance").GetValue(null)
 
         let unboxFunction (t : Type) =
             let t = typedefof<UnboxLambda<_>>.MakeGenericType [| t |]
-            Activator.CreateInstance(t)
+            t.GetProperty("Instance").GetValue(null)
 
     let rec tryGetConverter (inType : Type) (outType : Type) =
         lock mapping (fun () ->
@@ -1051,15 +1048,18 @@ module PrimitiveValueConverter =
                         match tryGetConverter inType' outType' with
                             | Some innerConv ->
                                 let tconv = typedefof<ArrayMapLambda<_,_>>.MakeGenericType [| inType'; outType' |] 
-                                let ctor = 
-                                    tconv.GetConstructor(
-                                        BindingFlags.NonPublic ||| BindingFlags.Public ||| BindingFlags.Instance ||| BindingFlags.CreateInstance, 
+                                
+                                
+                                let mi = 
+                                    tconv.GetMethod(
+                                        "Create",
+                                        BindingFlags.NonPublic ||| BindingFlags.Public ||| BindingFlags.Static, 
                                         Type.DefaultBinder, 
                                         [| innerConv.GetType() |],
                                         null
                                     )
 
-                                let conv = ctor.Invoke [|innerConv|]
+                                let conv = mi.Invoke(null, [|innerConv|])
                                 mapping.Add(inType, outType, conv)
                                 Some conv
 
@@ -1087,9 +1087,9 @@ module PrimitiveValueConverter =
                         unbox
                     else
                         let t = t.MakeGenericType [| inputType; typeof<'a> |]
-                        let ctor = t.GetConstructor(BindingFlags.NonPublic ||| BindingFlags.Instance ||| BindingFlags.CreateInstance ||| BindingFlags.Public ||| BindingFlags.Static, Type.DefaultBinder, [| FSharpType.MakeFunctionType(inputType, typeof<'a>) |], null)
+                        let mi = t.GetMethod("Create", BindingFlags.NonPublic ||| BindingFlags.Static ||| BindingFlags.Public, Type.DefaultBinder, [| FSharpType.MakeFunctionType(inputType, typeof<'a>) |], null)
                         let conv = getConverter inputType typeof<'a>
-                        ctor.Invoke [|conv|] |> unbox<Array -> 'a[]>
+                        mi.Invoke(null, [|conv|]) |> unbox<Array -> 'a[]>
                 ) )
             )
 
@@ -1105,9 +1105,9 @@ module PrimitiveValueConverter =
                         id
                     else
                         let t = t.MakeGenericType [| inputType; outputType |]
-                        let ctor = t.GetConstructor(BindingFlags.NonPublic ||| BindingFlags.Instance ||| BindingFlags.CreateInstance ||| BindingFlags.Public ||| BindingFlags.Static, Type.DefaultBinder, [| FSharpType.MakeFunctionType(inputType, outputType) |], null)
+                        let mi = t.GetMethod("Create", BindingFlags.NonPublic ||| BindingFlags.Static ||| BindingFlags.Public, Type.DefaultBinder, [| FSharpType.MakeFunctionType(inputType, outputType) |], null)
                         let conv = getConverter inputType outputType
-                        ctor.Invoke [|conv|] |> unbox<Array -> Array>
+                        mi.Invoke(null, [|conv|]) |> unbox<Array -> Array>
                 ) )
             )
 
