@@ -352,19 +352,24 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             let drawFbo = OpenGL.GL.GenFramebuffer()
 
             OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.ReadFramebuffer,readFbo)
+            GL.Check "could not bind read framebuffer"
             match ms with
                 | :? BackendTextureOutputView as ms ->
                     let tex = ms.texture |> unbox<Texture>
-                    GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, tex.Handle, ms.level)
+                    GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2DMultisample, tex.Handle, ms.level)
+                    GL.Check "could not set read framebuffer texture"
                     
                 | :? Renderbuffer as ms ->
                     GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, ms.Handle)
+                    GL.Check "could not set read framebuffer texture"
 
                 | _ ->
                     failwithf "[GL] cannot resolve %A" ms
               
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer,drawFbo)
+            GL.Check "could not bind write framebuffer"
             GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, tex.Handle, 0)
+            GL.Check "could not set write framebuffer texture"
 
             let mutable src = Box2i(0, 0, size.X, size.Y)
             let mutable dst = Box2i(0, 0, size.X, size.Y)
@@ -381,6 +386,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                     
 
             GL.BlitFramebuffer(src.Min.X, src.Min.Y, src.Max.X, src.Max.Y, dst.Min.X, dst.Min.Y, dst.Max.X, dst.Max.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest)
+            GL.Check "could not blit framebuffer"
 
             GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, 0)
             GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, 0, 0)
@@ -391,7 +397,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             GL.DeleteFramebuffer drawFbo
 
             GL.BindFramebuffer(FramebufferTarget.Framebuffer,oldFbo)
-
+            GL.Check "error cleanup"
         )
 
     member x.GenerateMipMaps(t : IBackendTexture) =

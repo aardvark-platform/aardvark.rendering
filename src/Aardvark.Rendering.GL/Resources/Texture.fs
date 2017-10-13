@@ -249,12 +249,13 @@ module TextureCreationExtensions =
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
 
-                GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels - 1)
-                GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
-                GL.TexParameter(target, TextureParameterName.TextureWrapS, int TextureWrapMode.ClampToEdge)
-                GL.TexParameter(target, TextureParameterName.TextureWrapT, int TextureWrapMode.ClampToEdge)
-                GL.TexParameter(target, TextureParameterName.TextureMinFilter, int TextureMinFilter.Linear)
-                GL.TexParameter(target, TextureParameterName.TextureMagFilter, int TextureMagFilter.Linear)
+                if samples = 1 then // parameters only valid for non-multisampled textures
+                    GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels - 1)
+                    GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
+                    GL.TexParameter(target, TextureParameterName.TextureWrapS, int TextureWrapMode.ClampToEdge)
+                    GL.TexParameter(target, TextureParameterName.TextureWrapT, int TextureWrapMode.ClampToEdge)
+                    GL.TexParameter(target, TextureParameterName.TextureMinFilter, int TextureMinFilter.Linear)
+                    GL.TexParameter(target, TextureParameterName.TextureMagFilter, int TextureMagFilter.Linear)
 
 
                 if samples = 1 then

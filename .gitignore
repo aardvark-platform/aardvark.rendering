@@ -45,3 +45,4 @@ src/GLVM/*.dylib
 /src/vkvm/*.so
 .ionide.debug
 /src/Demo/Scratch/InteractionModels.g.fs
+/.paket/Paket.Restore.targets

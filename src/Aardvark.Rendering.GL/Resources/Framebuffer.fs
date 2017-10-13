@@ -127,7 +127,7 @@ module FramebufferExtensions =
                                 if o.Count > 1 then
                                     GL.FramebufferTextureLayer(FramebufferTarget.Framebuffer, attachment, o.Handle, level, slice)
                                 else
-                                    GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, TextureTarget.Texture2D, o.Handle, level)
+                                    GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, (if o.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), o.Handle, level)
                                 GL.Check "could not attach texture"
 
         
