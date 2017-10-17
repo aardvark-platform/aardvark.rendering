@@ -54,7 +54,7 @@ and IResourceCache =
     abstract member Remove          : key : list<obj> -> unit
 
 type INativeResourceLocation<'a when 'a : unmanaged> = 
-    inherit IResourceLocation
+    inherit IResourceLocation<'a>
     abstract member Pointer : nativeptr<'a>
 
 
@@ -117,7 +117,16 @@ type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
 
     interface IResourceLocation<'a> with
         member x.Update t = x.Update t
-        
+//   
+//[<AbstractClass>]
+//type AbstractNativeResourceLocation<'a when 'a : unmanaged>(owner : IResourceCache, key : list<obj>) =
+//    inherit AbstractResourceLocation<'a>(owner, key)
+//    abstract member Pointer : nativeptr<'a>
+//
+//    interface INativeResourceLocation<'a> with
+//        member x.Pointer = x.Pointer
+//
+
 [<AbstractClass; Sealed; Extension>]
 type ModResourceExtensionStuff() =
     [<Extension>]
@@ -286,7 +295,7 @@ type MutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, in
 
 [<AbstractClass>]
 type AbstractPointerResource<'a when 'a : unmanaged>(owner : IResourceCache, key : list<obj>) =
-    inherit AbstractResourceLocation<nativeptr<'a>>(owner, key)
+    inherit AbstractResourceLocation<'a>(owner, key)
 
     let mutable ptr = NativePtr.zero
     let mutable version = 0
@@ -296,9 +305,13 @@ type AbstractPointerResource<'a when 'a : unmanaged>(owner : IResourceCache, key
     abstract member Free : 'a -> unit
     default x.Free _ = ()
 
-    interface INativeResourceLocation<'a> with
-        member x.Pointer = ptr
+    member x.Pointer = ptr
 
+    member x.NoChange() =
+        dec &version
+
+    interface INativeResourceLocation<'a> with
+        member x.Pointer = x.Pointer
 
     override x.Create() =
         ptr <- NativePtr.alloc 1
@@ -318,10 +331,11 @@ type AbstractPointerResource<'a when 'a : unmanaged>(owner : IResourceCache, key
                 x.Free v
 
             NativePtr.write ptr value
+            hasHandle <- true
             inc &version
-            { handle = ptr; version = version }
+            { handle = NativePtr.read ptr; version = version }
         else
-            { handle = ptr; version = version }
+            { handle = NativePtr.read ptr; version = version }
 
 
 type ResourceLocationCache<'h>(user : IResourceUser) =
@@ -740,303 +754,223 @@ module Resources =
                           multisample : MultisampleState,
                           depthStencil : INativeResourceLocation<VkPipelineDepthStencilStateCreateInfo>
                          ) =
-        inherit AbstractResourceLocation<nativeptr<VkPipeline>>(owner, key)
-
-        let mutable handle : Option<Pipeline> = None
-        let mutable pointer : nativeptr<VkPipeline> = NativePtr.zero
-        let mutable version = 0
+        inherit AbstractPointerResource<VkPipeline>(owner, key)
 
         static let check str err =
             if err <> VkResult.VkSuccess then failwithf "[Vulkan] %s" str
 
         override x.Create() =
+            base.Create()
             program.Acquire()
             inputState.Acquire()
             inputAssembly.Acquire()
             rasterizerState.Acquire()
             colorBlendState.Acquire()
             depthStencil.Acquire()
-            pointer <- NativePtr.alloc 1
 
         override x.Destroy() =
+            base.Destroy()
             program.Release()
             inputState.Release()
             inputAssembly.Release()
             rasterizerState.Release()
             colorBlendState.Release()
             depthStencil.Release()
-            NativePtr.free pointer
             
 
-        override x.GetHandle(token : AdaptiveToken) =
-            if x.OutOfDate then
-                let program = program.Update token
+        override x.Compute(token : AdaptiveToken) =
+            let program = program.Update token
                 
-                let prog = program.handle
-                let device = prog.Device
+            let prog = program.handle
+            let device = prog.Device
 
-                let pipeline = 
-                    prog.ShaderCreateInfos |> NativePtr.withA (fun pShaderCreateInfos ->
+            let pipeline = 
+                prog.ShaderCreateInfos |> NativePtr.withA (fun pShaderCreateInfos ->
 
-                        let mutable viewportState =
-                            let vp = renderPass.AttachmentCount
-                            VkPipelineViewportStateCreateInfo(
-                                VkStructureType.PipelineViewportStateCreateInfo, 0n,
-                                VkPipelineViewportStateCreateFlags.MinValue,
+                    let mutable viewportState =
+                        let vp = renderPass.AttachmentCount
+                        VkPipelineViewportStateCreateInfo(
+                            VkStructureType.PipelineViewportStateCreateInfo, 0n,
+                            VkPipelineViewportStateCreateFlags.MinValue,
                 
-                                uint32 vp,
-                                NativePtr.zero,
+                            uint32 vp,
+                            NativePtr.zero,
 
-                                uint32 vp,
-                                NativePtr.zero
-                            )
+                            uint32 vp,
+                            NativePtr.zero
+                        )
 
-                        let pSampleMasks = NativePtr.pushStackArray multisample.sampleMask
-                        let mutable multisampleState =
-                            let ms = multisample
-                            VkPipelineMultisampleStateCreateInfo(
-                                VkStructureType.PipelineMultisampleStateCreateInfo, 0n,
-                                VkPipelineMultisampleStateCreateFlags.MinValue,
+                    let pSampleMasks = NativePtr.pushStackArray multisample.sampleMask
+                    let mutable multisampleState =
+                        let ms = multisample
+                        VkPipelineMultisampleStateCreateInfo(
+                            VkStructureType.PipelineMultisampleStateCreateInfo, 0n,
+                            VkPipelineMultisampleStateCreateFlags.MinValue,
                 
-                                unbox ms.samples,
-                                (if ms.sampleShadingEnable then 1u else 0u),
-                                float32 ms.minSampleShading,
-                                pSampleMasks,
-                                (if ms.alphaToCoverageEnable then 1u else 0u),
-                                (if ms.alphaToOneEnable then 1u else 0u)
-                            )
+                            unbox ms.samples,
+                            (if ms.sampleShadingEnable then 1u else 0u),
+                            float32 ms.minSampleShading,
+                            pSampleMasks,
+                            (if ms.alphaToCoverageEnable then 1u else 0u),
+                            (if ms.alphaToOneEnable then 1u else 0u)
+                        )
             
-                        let dynamicStates = [| VkDynamicState.Viewport; VkDynamicState.Scissor |]
+                    let dynamicStates = [| VkDynamicState.Viewport; VkDynamicState.Scissor |]
         
-                        let pDynamicStates = NativePtr.pushStackArray dynamicStates
+                    let pDynamicStates = NativePtr.pushStackArray dynamicStates
             
-                        let mutable dynamicStates =
-                            VkPipelineDynamicStateCreateInfo(
-                                VkStructureType.PipelineDynamicStateCreateInfo, 0n,
-                                VkPipelineDynamicStateCreateFlags.MinValue, 
+                    let mutable dynamicStates =
+                        VkPipelineDynamicStateCreateInfo(
+                            VkStructureType.PipelineDynamicStateCreateInfo, 0n,
+                            VkPipelineDynamicStateCreateFlags.MinValue, 
 
-                                uint32 dynamicStates.Length,
-                                pDynamicStates
-                            )
+                            uint32 dynamicStates.Length,
+                            pDynamicStates
+                        )
 
-                        // TODO: tessellation input-patch-size
+                    // TODO: tessellation input-patch-size
 
-                        let inputState = inputState.Update(token) |> ignore; inputState.Pointer
-                        let inputAssembly = inputAssembly.Update(token) |> ignore; inputAssembly.Pointer
-                        let rasterizerState = rasterizerState.Update(token) |> ignore; rasterizerState.Pointer
-                        let depthStencil = depthStencil.Update(token) |> ignore; depthStencil.Pointer
-                        let colorBlendState = colorBlendState.Update(token) |> ignore; colorBlendState.Pointer
+                    let inputState = inputState.Update(token) |> ignore; inputState.Pointer
+                    let inputAssembly = inputAssembly.Update(token) |> ignore; inputAssembly.Pointer
+                    let rasterizerState = rasterizerState.Update(token) |> ignore; rasterizerState.Pointer
+                    let depthStencil = depthStencil.Update(token) |> ignore; depthStencil.Pointer
+                    let colorBlendState = colorBlendState.Update(token) |> ignore; colorBlendState.Pointer
 
-                        let mutable desc =
-                            VkGraphicsPipelineCreateInfo(
-                                VkStructureType.GraphicsPipelineCreateInfo, 0n,
-                                VkPipelineCreateFlags.None,
-                                uint32 prog.ShaderCreateInfos.Length,
-                                pShaderCreateInfos,
-                                inputState,
-                                inputAssembly,
-                                NativePtr.zero, // tessellation
-                                &&viewportState,
-                                rasterizerState,
-                                &&multisampleState,
-                                depthStencil,
-                                colorBlendState,
-                                &&dynamicStates, //dynamic
-                                prog.PipelineLayout.Handle,
-                                renderPass.Handle,
-                                0u,
-                                VkPipeline.Null,
-                                0
-                            )
+                    let mutable desc =
+                        VkGraphicsPipelineCreateInfo(
+                            VkStructureType.GraphicsPipelineCreateInfo, 0n,
+                            VkPipelineCreateFlags.None,
+                            uint32 prog.ShaderCreateInfos.Length,
+                            pShaderCreateInfos,
+                            inputState,
+                            inputAssembly,
+                            NativePtr.zero, // tessellation
+                            &&viewportState,
+                            rasterizerState,
+                            &&multisampleState,
+                            depthStencil,
+                            colorBlendState,
+                            &&dynamicStates, //dynamic
+                            prog.PipelineLayout.Handle,
+                            renderPass.Handle,
+                            0u,
+                            VkPipeline.Null,
+                            0
+                        )
 
-                        let mutable handle = VkPipeline.Null
-                        VkRaw.vkCreateGraphicsPipelines(device.Handle, VkPipelineCache.Null, 1u, &&desc, NativePtr.zero, &&handle)
-                            |> check "could not create pipeline"
+                    let mutable handle = VkPipeline.Null
+                    VkRaw.vkCreateGraphicsPipelines(device.Handle, VkPipelineCache.Null, 1u, &&desc, NativePtr.zero, &&handle)
+                        |> check "could not create pipeline"
 
-                        Pipeline(device, handle, Unchecked.defaultof<_>)
+                    Pipeline(device, handle, Unchecked.defaultof<_>)
 
-                    )
+                )
 
-                match handle with
-                    | Some h -> device.Delete h
-                    | None -> ()
-
-                handle <- Some pipeline
-                NativePtr.write pointer pipeline.Handle
-
-                inc &version
-                
-                { handle = pointer; version = version }
-            else
-                { handle = pointer; version = version }
+            pipeline.Handle
     
-        interface INativeResourceLocation<VkPipeline> with
-            member x.Pointer = pointer
+        override x.Free(p : VkPipeline) =
+            VkRaw.vkDestroyPipeline(renderPass.Device.Handle, p, NativePtr.zero)
 
     type IndirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, calls : IResourceLocation<IndirectBuffer>) =
-        inherit AbstractResourceLocation<nativeptr<DrawCall>>(owner, key)
-
-        let mutable handle : Option<DrawCall> = None
-        let mutable pointer = NativePtr.zero
-        let mutable version = 0
-
-        interface INativeResourceLocation<DrawCall> with
-            member x.Pointer = pointer
+        inherit AbstractPointerResource<DrawCall>(owner, key)
 
         override x.Create() =
+            base.Create()
             calls.Acquire()
-            pointer <- NativePtr.alloc 1
 
         override x.Destroy() =
-            match handle with   
-                | Some h -> 
-                    h.Dispose()
-                    handle <- None
-                | None -> ()
-
-            NativePtr.free pointer
+            base.Destroy()
             calls.Release()
 
-        override x.GetHandle(token : AdaptiveToken) =
-            if x.OutOfDate then
-                let calls = calls.Update token
+        override x.Compute(token : AdaptiveToken) =
+            let calls = calls.Update token
+            let call = DrawCall.Indirect(indexed, calls.handle.Handle, calls.handle.Count)
+            call
 
-                match handle with
-                    | Some h -> h.Dispose()
-                    | _ -> ()
-
-                let call = DrawCall.Indirect(indexed, calls.handle.Handle, calls.handle.Count)
-                handle <- Some call
-                NativePtr.write pointer call
-
-                inc &version
-
-                { handle = pointer; version = version }
-            else
-                { handle = pointer; version = version }
+        override x.Free(call : DrawCall) =
+            call.Dispose()
 
     type BufferBindingResource(owner : IResourceCache, key : list<obj>, buffers : list<IResourceLocation<Buffer> * int64>) =
-        inherit AbstractResourceLocation<nativeptr<VertexBufferBinding>>(owner, key)
+        inherit AbstractPointerResource<VertexBufferBinding>(owner, key)
 
-        let mutable handle : Option<VertexBufferBinding> = None
-        let mutable pointer = NativePtr.zero
-        let mutable version = 0
-
-        interface INativeResourceLocation<VertexBufferBinding> with
-            member x.Pointer = pointer
 
         override x.Create() =
+            base.Create()
             for (b,_) in buffers do b.Acquire()
-            pointer <- NativePtr.alloc 1
 
         override x.Destroy() =
-            match handle with   
-                | Some h -> 
-                    h.Dispose()
-                    handle <- None
-                | None -> ()
-
-            NativePtr.free pointer
+            base.Destroy()
             for (b,_) in buffers do b.Release()
 
-        override x.GetHandle(token : AdaptiveToken) =
-            if x.OutOfDate then
-                let calls = buffers |> List.map (fun (b,o) -> b.Update(token).handle.Handle, o) //calls.Update token
+        override x.Compute(token : AdaptiveToken) =
+            let calls = buffers |> List.map (fun (b,o) -> b.Update(token).handle.Handle, o) //calls.Update token
+            let call = new VertexBufferBinding(0, List.toArray calls)
+            call
 
-                match handle with
-                    | Some h -> h.Dispose()
-                    | _ -> ()
-
-                let call = new VertexBufferBinding(0, List.toArray calls)
-                handle <- Some call
-                NativePtr.write pointer call
-
-                inc &version
-
-                { handle = pointer; version = version }
-            else
-                { handle = pointer; version = version }
+        override x.Free(b : VertexBufferBinding) =
+            b.Dispose()
 
     type DescriptorSetBindingResource(owner : IResourceCache, key : list<obj>, layout : PipelineLayout, sets : list<IResourceLocation<DescriptorSet>>) =
-        inherit AbstractResourceLocation<nativeptr<DescriptorSetBinding>>(owner, key)
+        inherit AbstractPointerResource<DescriptorSetBinding>(owner, key)
 
         let sets = List.toArray sets
-
-        let mutable handle : nativeptr<DescriptorSetBinding> = NativePtr.zero
         let mutable setVersions = Array.init sets.Length (fun _ -> -1)
-        let mutable version = 0
-        
-        interface INativeResourceLocation<DescriptorSetBinding> with
-            member x.Pointer = handle
+        let mutable target = None
 
         override x.Create() =
+            base.Create()
             for s in sets do s.Acquire()
-            let ptr = NativePtr.alloc 1
-            let value = new DescriptorSetBinding(layout.Handle, 0, sets.Length)
-            NativePtr.write ptr value
-            handle <- ptr
 
         override x.Destroy() =
+            base.Destroy()
             for s in sets do s.Release()
-            NativePtr.free handle
-            handle <- NativePtr.zero
             setVersions <- Array.init sets.Length (fun _ -> -1)
 
-        override x.GetHandle(token : AdaptiveToken) =
-            if x.OutOfDate then
-                let mutable changed = false
-                let target = NativePtr.read handle
-                
-                for i in 0 .. sets.Length - 1 do
-                    let info = sets.[i].Update(token)
-                    NativePtr.set target.Sets i info.handle.Handle
-                    if info.version <> setVersions.[i] then
-                        setVersions.[i] <- info.version
-                        changed <- true
+        override x.Compute(token : AdaptiveToken) =
+            let mutable changed = false
+            let target =
+                match target with
+                    | Some t -> t
+                    | None ->
+                        let t = new DescriptorSetBinding(layout.Handle, 0, sets.Length)
+                        target <- Some t
+                        t
+            for i in 0 .. sets.Length - 1 do
+                let info = sets.[i].Update(token)
+                NativePtr.set target.Sets i info.handle.Handle
+                if info.version <> setVersions.[i] then
+                    setVersions.[i] <- info.version
+                    changed <- true
 
-                if changed then inc &version
+            if not changed then x.NoChange()
 
-                { handle = handle; version = version }
-            else
-                { handle = handle; version = version }
+            target
+
+        override x.Free(t : DescriptorSetBinding) =
+            t.Dispose()
  
     type IndexBufferBindingResource(owner : IResourceCache, key : list<obj>, indexType : VkIndexType, index : IResourceLocation<Buffer>) =
-        inherit AbstractResourceLocation<nativeptr<IndexBufferBinding>>(owner, key)
+        inherit AbstractPointerResource<IndexBufferBinding>(owner, key)
 
-        let mutable handle : Option<IndexBufferBinding> = None
-        let mutable pointer = NativePtr.zero
-        let mutable version = 0
-        
-        interface INativeResourceLocation<IndexBufferBinding> with
-            member x.Pointer = pointer
-
+ 
         override x.Create() =
+            base.Create()
             index.Acquire()
-            pointer <- NativePtr.alloc 1
 
         override x.Destroy() =
-            match handle with   
-                | Some h -> 
-                    handle <- None
-                | None -> ()
-
-            NativePtr.free pointer
+            base.Destroy()
             index.Release()
 
-        override x.GetHandle(token : AdaptiveToken) =
-            if x.OutOfDate then
-                let index = index.Update token
+        override x.Compute(token : AdaptiveToken) =
+            let index = index.Update token
 
-                let ibo = IndexBufferBinding(index.handle.Handle, indexType)
-                handle <- Some ibo
-                NativePtr.write pointer ibo
+            let ibo = IndexBufferBinding(index.handle.Handle, indexType)
+            ibo
 
-                inc &version
+        override x.Free(ibo : IndexBufferBinding) =
+            //ibo.TryDispose()
+            ()
 
-                { handle = pointer; version = version }
-            else
-                { handle = pointer; version = version }
- 
     type ImageViewResource(owner : IResourceCache, key : list<obj>, device : Device, samplerType : ShaderSamplerType, image : IResourceLocation<Image>) =
         inherit AbstractResourceLocation<ImageView>(owner, key)
 
@@ -1364,6 +1298,7 @@ type ResourceSet() =
     member x.Add(r : IResourceLocation) =
         if all.Add r then
             lock r (fun () ->
+                r.Acquire()
                 if r.OutOfDate then
                     lock dirty (fun () -> dirty.Add r |> ignore)
                 else
@@ -1380,6 +1315,7 @@ type ResourceSet() =
     member x.Remove(r : IResourceLocation) =
         if all.Remove r then
             lock r (fun () ->
+                r.Release()
                 r.RemoveOutput x
                 lock dirty (fun () -> dirty.Remove r |> ignore)
             )

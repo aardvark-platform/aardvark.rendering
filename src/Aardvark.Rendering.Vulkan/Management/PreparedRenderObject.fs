@@ -53,12 +53,16 @@ type PreparedRenderObject =
         member x.Dispose() = x.Dispose()
 
 type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
+    let id = newId()
+
     let first =
         match children with
             | [] -> failwith "PreparedMultiRenderObject cannot be empty"
             | h::_ -> h
 
     let last = children |> List.last
+
+    member x.Id = id
 
     member x.Children = children
 
@@ -231,7 +235,7 @@ type DevicePreparedRenderObjectExtensions private() =
         let isActive = this.CreateIsActive ro.IsActive
         resources.Add isActive
 
-        for r in resources do r.Acquire()
+        //for r in resources do r.Acquire()
 
         let res = 
             {

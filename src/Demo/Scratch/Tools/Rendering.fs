@@ -73,6 +73,7 @@ type App private () =
                 let w = app.Value.CreateSimpleRenderWindow(8)
                 w.RenderTask <- realTask
                 win <- Some w
+                w.Closed.Add (fun _ -> realTask.Inner <- RenderTask.empty)
                 w 
 
     static let withCam (sg : ISg) =

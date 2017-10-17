@@ -42,6 +42,8 @@ module DefaultSurfaces =
 
     let instanceTrafo = InstanceTrafo.instanceTrafo
 
+    let stableTrafo = SimpleLighting.stableTrafo
+    let stableHeadlight = SimpleLighting.stableLight
 
 [<AutoOpen>]
 module EffectAPI =

@@ -189,13 +189,12 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         device.UploadLevel(image.[ImageAspect.Color, level, slice], source)
 
     member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) =
-        let t = AdaptiveToken.Top
-        try manager.PrepareRenderObject(t, unbox fboSignature, rj) :> IPreparedRenderObject
-        finally for l in t.Locked do t.ExitRead l
+        manager.PrepareRenderObject(unbox fboSignature, rj) :> IPreparedRenderObject
 
 
     member x.CompileRender (renderPass : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) =
-        new RenderTasks.RenderTask(device, unbox renderPass, set, Mod.constant engine, shareTextures, shareBuffers) :> IRenderTask
+        new RenderTaskNew.DependentRenderTask(device, unbox renderPass, set, true, true) :> IRenderTask
+        //new RenderTasks.RenderTask(device, unbox renderPass, set, Mod.constant engine, shareTextures, shareBuffers) :> IRenderTask
 
     member x.CompileClear(signature : IFramebufferSignature, color : IMod<Map<Symbol, C4f>>, depth : IMod<Option<float>>) : IRenderTask =
         let pass = unbox<RenderPass> signature

@@ -47,7 +47,7 @@ type TrieNode<'a when 'a :> ILinked<'a>>(parent : Trie<'a>, key : obj) =
             | None -> children.Count = 0
             | _ -> false
 
-    member x.Add(key : list<obj>, l : TrieRef<'a>, r : TrieRef<'a>, newValue : 'a) =
+    member internal x.Add(key : list<obj>, l : TrieRef<'a>, r : TrieRef<'a>, newValue : 'a) =
         match key with
             | [] -> 
                 match value with
@@ -188,22 +188,22 @@ type TrieNode<'a when 'a :> ILinked<'a>>(parent : Trie<'a>, key : obj) =
         
         self @ children |> String.concat "; " |> sprintf "[ %s ]"
 
-and [<CompilationRepresentation(CompilationRepresentationFlags.UseNullAsTrueValue)>] TrieRef<'a when 'a :> ILinked<'a>> =
+and [<CompilationRepresentation(CompilationRepresentationFlags.UseNullAsTrueValue)>] internal TrieRef<'a when 'a :> ILinked<'a>> =
     | Nothing
     | Value of 'a
     | Node of TrieNode<'a>
     
     static member Last (x : TrieRef<'a>) =
         match x with
-            | Nothing -> None
-            | Value a -> Some a
-            | Node t -> t.Last
+            | TrieRef.Nothing -> None
+            | TrieRef.Value a -> Some a
+            | TrieRef.Node t -> t.Last
             
     static member First (x : TrieRef<'a>) =
         match x with
-            | Nothing -> None
-            | Value a -> Some a
-            | Node t -> t.First
+            | TrieRef.Nothing -> None
+            | TrieRef.Value a -> Some a
+            | TrieRef.Node t -> t.First
 
 and [<StructuredFormatDisplay("{AsString}")>] Trie<'a when 'a :> ILinked<'a>>() =
     let mutable first : Option<'a> = None

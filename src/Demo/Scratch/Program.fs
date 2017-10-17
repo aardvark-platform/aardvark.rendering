@@ -83,9 +83,9 @@ let bla() =
 let blubber() =
     Sg.box' C4b.Red Box3d.Unit
         |> Sg.effect [
-            DefaultSurfaces.trafo |> toEffect
+            DefaultSurfaces.stableTrafo |> toEffect
             DefaultSurfaces.constantColor C4f.Red |> toEffect
-            DefaultSurfaces.simpleLighting |> toEffect
+            DefaultSurfaces.stableHeadlight |> toEffect
         ]
         
 

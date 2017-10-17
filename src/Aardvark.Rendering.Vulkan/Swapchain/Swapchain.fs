@@ -228,8 +228,10 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                         device.Delete v.Image
                         device.Delete v
                     )
+                    device.Delete framebuffer
                 )
-                resolvedImage |> Option.iter device.Delete
+                resolvedImage|> Option.iter device.Delete
+                buffers |> Array.iter device.Delete
 
                 //handle, buffers, framebuffer, resolvedView
                 let (newHandle, newBuffers, newFramebuffer, newResolvedImage) = recreate handle newSize
@@ -378,6 +380,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                     device.Delete v.Image
                     device.Delete v
                 )
+                device.Delete framebuffer
             )
 
             resolvedImage|> Option.iter device.Delete

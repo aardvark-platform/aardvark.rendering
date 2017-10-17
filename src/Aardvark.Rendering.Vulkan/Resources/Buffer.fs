@@ -336,6 +336,17 @@ module Buffer =
             Buffer(device, handle, ptr, 256L)
         )
 
+    let setName (name : string) (b : Buffer) =
+        let pName = CStr.salloc name
+        let mutable info =
+            VkDebugMarkerObjectNameInfoEXT(
+                unbox 1000022000, 0n,
+                VkDebugReportObjectTypeEXT.VkDebugReportObjectTypeBufferExt,
+                uint64 b.Handle.Handle,
+                pName
+            )
+        VkRaw.vkDebugMarkerSetObjectNameEXT(b.Device.Handle, &&info)
+            |> check "could not set buffer name"
 
     let createConcurrent (conc : bool) (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
         let device = memory.Device

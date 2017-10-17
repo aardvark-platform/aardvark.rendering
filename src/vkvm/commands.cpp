@@ -9,8 +9,14 @@
 
 #define getptr(t,v,r) (r*)(((char*)((t##Command*)data)->v##) + (intptr_t)data) 
 
-static void enqueueCommand (VkCommandBuffer buffer, CommandType op, void* data)
+typedef struct {
+	VkPipeline CurrentPipeline;
+} CommandState;
+
+static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, CommandType op, void* data)
 {
+	VkPipeline pipe;
+
 	switch (op)
 	{
 	case CmdBindPipeline:
@@ -404,10 +410,11 @@ static void enqueueCommand (VkCommandBuffer buffer, CommandType op, void* data)
 		break;
 
 	case CmdIndirectBindPipeline:
-		vmBindPipeline(
-			buffer,
-			get(IndirectBindPipeline, data)->Pipeline
-		);
+		pipe = *get(IndirectBindPipeline, data)->Pipeline;
+		if (state->CurrentPipeline != pipe) {
+			state->CurrentPipeline = pipe;
+			vkCmdBindPipeline(buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
+		}
 		break;
 	case CmdIndirectBindDescriptorSets:
 		vmBindDescriptorSets(
@@ -444,6 +451,7 @@ static void enqueueCommand (VkCommandBuffer buffer, CommandType op, void* data)
 
 DllExport(void) vmRun(VkCommandBuffer buffer, CommandFragment* fragment)
 {
+	CommandState state = { nullptr };
 	while (fragment)
 	{
 		auto ptr = (char*)fragment->Commands;
@@ -453,7 +461,7 @@ DllExport(void) vmRun(VkCommandBuffer buffer, CommandFragment* fragment)
 			auto length = *(uint32_t*)(ptr);
 			auto op = *(CommandType*)(ptr + 4);
 
-			enqueueCommand(buffer, op, (void*)ptr);
+			enqueueCommand(&state, buffer, op, (void*)ptr);
 
 			ptr = ptr + length;
 		}

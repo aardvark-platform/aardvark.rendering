@@ -84,8 +84,7 @@ module CommandAPI =
                 let! s = State.get
                 if s.resources.Add r then
                     s.scope.Add r
-                let info = r.Update AdaptiveToken.Top
-                return! f(info.handle)
+                return! f(r.Pointer)
             }
 
     type Command private() =
@@ -93,8 +92,7 @@ module CommandAPI =
             State.get |> State.map (fun s ->
                 if s.resources.Add r then
                     s.scope.Add r
-                let info = r.Update AdaptiveToken.Top
-                info.handle
+                r.Pointer
             )
         static member Use (r : IResourceLocation) =
             State.get |> State.map (fun s ->
@@ -107,32 +105,28 @@ module CommandAPI =
             State.custom (fun s ->
                 if s.resources.Add p then
                     s.scope.Add p
-                let info = p.Update AdaptiveToken.Top
-                let off = s.stream.IndirectBindPipeline info.handle
+                let off = s.stream.IndirectBindPipeline p.Pointer
                 s, ()
             )
         static member IndirectBindVertexBuffer(p : INativeResourceLocation<VertexBufferBinding>) : Command<unit> =
             State.custom (fun s ->
                 if s.resources.Add p then
                     s.scope.Add p
-                let info = p.Update AdaptiveToken.Top
-                let off = s.stream.IndirectBindVertexBuffers info.handle
+                let off = s.stream.IndirectBindVertexBuffers p.Pointer
                 s, ()
             )
         static member IndirectBindIndexBuffer(p : INativeResourceLocation<IndexBufferBinding>) : Command<unit> =
             State.custom (fun s ->
                 if s.resources.Add p then
                     s.scope.Add p
-                let info = p.Update AdaptiveToken.Top
-                let off = s.stream.IndirectBindIndexBuffer info.handle
+                let off = s.stream.IndirectBindIndexBuffer p.Pointer
                 s, ()
             )
         static member IndirectBindDescriptorSets(p : INativeResourceLocation<DescriptorSetBinding>) : Command<unit> =
             State.custom (fun s ->
                 if s.resources.Add p then
                     s.scope.Add p
-                let info = p.Update AdaptiveToken.Top
-                let off = s.stream.IndirectBindDescriptorSets info.handle
+                let off = s.stream.IndirectBindDescriptorSets p.Pointer
                 s, ()
             )
         static member IndirectDraw(isActive : INativeResourceLocation<int>, call : INativeResourceLocation<DrawCall>) : Command<unit> =
@@ -142,9 +136,7 @@ module CommandAPI =
                 if s.resources.Add isActive then
                     s.scope.Add isActive
 
-                let callInfo = call.Update AdaptiveToken.Top
-                let isActiveInfo = isActive.Update AdaptiveToken.Top
-                let off = s.stream.IndirectDraw(s.stats, isActiveInfo.handle, callInfo.handle)
+                let off = s.stream.IndirectDraw(s.stats, isActive.Pointer, call.Pointer)
                 s, ()
             )
 

@@ -18,131 +18,172 @@ open Aardvark.Base.Runtime
 
 module RenderTaskNew =
 
-    type CommandStreamResource(owner, key, o : IRenderObject, resources : ResourceSet, manager : ResourceManager, renderPass : RenderPass, stats : nativeptr<V2i>) =
-        inherit AbstractResourceLocation<VKVM.CommandStream>(owner, key)
+    [<AbstractClass; Sealed; Extension>]
+    type IRenderObjectExts private() =
+        [<Extension>]
+        static member ComputeBoundingBox (o : IRenderObject) : IMod<Box3d> =
+            match o with
+                | :? RenderObject as o ->
+                    match Ag.tryGetAttributeValue o.AttributeScope "GlobalBoundingBox" with
+                        | Success box -> box
+                        | _ -> failwith "[Vulkan] could not get BoundingBox for RenderObject"
+                    
+                | :? MultiRenderObject as o ->
+                    o.Children |> List.map IRenderObjectExts.ComputeBoundingBox |> Mod.mapN Box3d
+
+                | :? PreparedMultiRenderObject as o ->
+                    o.Children |> List.map IRenderObjectExts.ComputeBoundingBox |> Mod.mapN Box3d
+                    
+                | :? PreparedRenderObject as o ->
+                    IRenderObjectExts.ComputeBoundingBox o.original
+
+                | _ ->
+                    failf "invalid renderobject %A" o
+
+    type ICommandStreamResource =
+        inherit IResourceLocation<VKVM.CommandStream>
+        abstract member Stream : VKVM.CommandStream
+        abstract member Resources : seq<IResourceLocation>
+
+        abstract member GroupKey : list<obj>
+        abstract member BoundingBox : IMod<Box3d>
+
+    module CommandStreams = 
+        type CommandStreamResource(owner, key, o : IRenderObject, resources : ResourceSet, manager : ResourceManager, renderPass : RenderPass, stats : nativeptr<V2i>) =
+            inherit AbstractResourceLocation<VKVM.CommandStream>(owner, key)
          
-        let mutable stream = Unchecked.defaultof<VKVM.CommandStream>
-        let mutable prep : PreparedMultiRenderObject = Unchecked.defaultof<_>
+            let mutable stream = Unchecked.defaultof<VKVM.CommandStream>
+            let mutable prep : PreparedMultiRenderObject = Unchecked.defaultof<_>
 
-        let compile (o : IRenderObject) =
-            let o = manager.PrepareRenderObject(renderPass, o)
-            for o in o.Children do
-                for r in o.resources do resources.Add r
+            let compile (o : IRenderObject) =
+                let o = manager.PrepareRenderObject(renderPass, o)
+                for o in o.Children do
+                    for r in o.resources do resources.Add r
                                 
-                stream.IndirectBindPipeline(o.pipeline.Pointer) |> ignore
-                stream.IndirectBindDescriptorSets(o.descriptorSets.Pointer) |> ignore
+                    stream.IndirectBindPipeline(o.pipeline.Pointer) |> ignore
+                    stream.IndirectBindDescriptorSets(o.descriptorSets.Pointer) |> ignore
 
-                match o.indexBuffer with
-                    | Some ib ->
-                        stream.IndirectBindIndexBuffer(ib.Pointer) |> ignore
-                    | None ->
+                    match o.indexBuffer with
+                        | Some ib ->
+                            stream.IndirectBindIndexBuffer(ib.Pointer) |> ignore
+                        | None ->
+                            ()
+
+                    stream.IndirectBindVertexBuffers(o.vertexBuffers.Pointer) |> ignore
+                    stream.IndirectDraw(stats, o.isActive.Pointer, o.drawCalls.Pointer) |> ignore
+                o
+
+
+
+            let bounds = lazy (o.ComputeBoundingBox())
+
+
+            member x.Stream = stream
+            member x.Object = prep
+            member x.GroupKey = [prep.Children.[0].pipeline :> obj; prep.Id :> obj]
+            member x.BoundingBox = bounds.Value
+
+            interface ICommandStreamResource with
+                member x.Stream = x.Stream
+                member x.Resources = prep.Children |> Seq.collect (fun c -> c.resources)
+                member x.GroupKey = x.GroupKey
+                member x.BoundingBox = x.BoundingBox
+
+            override x.Create() =
+                stream <- new VKVM.CommandStream()
+                let p = compile o
+                prep <- p
+
+            override x.Destroy() = 
+                stream.Dispose()
+                for o in prep.Children do
+                    for r in o.resources do resources.Remove r
+                prep <- Unchecked.defaultof<_>
+
+            override x.GetHandle _ = 
+                { handle = stream; version = 0 }   
+
+    module Compiler = 
+        open CommandStreams
+
+        type RenderObjectCompiler(manager : ResourceManager, renderPass : RenderPass) =
+            inherit ResourceSet()
+
+            let stats : nativeptr<V2i> = NativePtr.alloc 1
+            let cache = ResourceLocationCache<VKVM.CommandStream>(manager.ResourceUser)
+            let mutable version = 0
+
+            override x.InputChanged(t ,i) =
+                base.InputChanged(t, i)
+                match i with
+                    | :? IResourceLocation<UniformBuffer> -> ()
+                    | :? IResourceLocation -> version <- version + 1
+                    | _ -> ()
+ 
+            member x.Dispose() =
+                cache.Clear()
+
+            member x.Compile(o : IRenderObject) : ICommandStreamResource =
+                let call = 
+                    cache.GetOrCreate([o :> obj], fun owner key ->
+                        new CommandStreamResource(owner, key, o, x, manager, renderPass, stats)
+                    )
+                call.Acquire()
+                call |> unbox<ICommandStreamResource>
+            
+            member x.CurrentVersion = version
+
+    module ChangeableCommandBuffers = 
+        open Compiler
+
+        [<AbstractClass>]
+        type AbstractChangeableCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>) =
+            inherit Mod.AbstractMod<CommandBuffer>()
+
+            let device = pool.Device
+            let compiler = RenderObjectCompiler(manager, renderPass)
+            let mutable resourceVersion = 0
+            let mutable cmdVersion = -1
+            let mutable cmdViewports = [||]
+
+            let cmdBuffer = pool.CreateCommandBuffer(CommandBufferLevel.Secondary)
+            let dirty = HashSet<ICommandStreamResource>()
+
+            abstract member Release : unit -> unit
+            abstract member Prolog : VKVM.CommandStream
+            abstract member Sort : AdaptiveToken -> bool
+            default x.Sort _ = false
+
+            override x.InputChanged(t : obj, o : IAdaptiveObject) =
+                match o with
+                    | :? ICommandStreamResource as r ->
+                        lock dirty (fun () -> dirty.Add r |> ignore)
+                    | _ ->
                         ()
 
-                stream.IndirectBindVertexBuffers(o.vertexBuffers.Pointer) |> ignore
-                stream.IndirectDraw(stats, o.isActive.Pointer, o.drawCalls.Pointer) |> ignore
-            o
-
-        member x.Stream = stream
-        member x.Object = prep
-
-        override x.Create() =
-            stream <- new VKVM.CommandStream()
-            let p = compile o
-            prep <- p
-
-        override x.Destroy() = 
-            stream.Dispose()
-            for o in prep.Children do
-                for r in o.resources do resources.Remove r
-            prep <- Unchecked.defaultof<_>
-
-        override x.GetHandle _ = 
-            { handle = stream; version = 0 }   
-
-    type RenderObjectCompiler(manager : ResourceManager, renderPass : RenderPass) =
-        inherit ResourceSet()
-
-        let stats : nativeptr<V2i> = NativePtr.alloc 1
-        let cache = ResourceLocationCache<VKVM.CommandStream>(manager.ResourceUser)
-        let mutable version = 0
-
-        override x.InputChanged(t ,i) =
-            base.InputChanged(t, i)
-            match i with
-                | :? IResourceLocation<UniformBuffer> -> ()
-                | :? IResourceLocation -> version <- version + 1
-                | _ -> ()
- 
-        member x.Dispose() =
-            cache.Clear()
-
-        member x.Compile(o : IRenderObject) : CommandStreamResource =
-            let call = 
-                cache.GetOrCreate([o :> obj], fun owner key ->
-                    new CommandStreamResource(owner, key, o, x, manager, renderPass, stats)
+            member x.Compile(o : IRenderObject) =
+                let res = compiler.Compile(o)
+                lock x (fun () ->
+                    let o = x.OutOfDate
+                    try x.EvaluateAlways AdaptiveToken.Top (fun t -> res.Update(t) |> ignore; res)
+                    finally x.OutOfDate <- o
                 )
-            call.Acquire()
-            call |> unbox<CommandStreamResource>
-            
-        member x.CurrentVersion = version
 
-    type IToken = interface end
-
-    type private OrderToken(s : VKVM.CommandStream, r : Option<CommandStreamResource>) =
-        member x.Stream = s
-        member x.Resource = r
-        interface IToken
-
-    [<AbstractClass>]
-    type AbstractChangeableCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>) =
-        inherit Mod.AbstractMod<CommandBuffer>()
-
-        let device = pool.Device
-        let compiler = RenderObjectCompiler(manager, renderPass)
-        let mutable resourceVersion = 0
-        let mutable cmdVersion = -1
-        let mutable cmdViewports = [||]
-
-        let cmdBuffer = pool.CreateCommandBuffer(CommandBufferLevel.Secondary)
-        let dirty = HashSet<CommandStreamResource>()
-
-        abstract member Release : unit -> unit
-        abstract member Prolog : VKVM.CommandStream
-        abstract member Sort : AdaptiveToken -> bool
-        default x.Sort _ = false
-
-        override x.InputChanged(t : obj, o : IAdaptiveObject) =
-            match o with
-                | :? CommandStreamResource as r ->
-                    lock dirty (fun () -> dirty.Add r |> ignore)
-                | _ ->
-                    ()
-
-        member x.Compile(o : IRenderObject) =
-            let res = compiler.Compile(o)
-            x.EvaluateAlways AdaptiveToken.Top (fun t ->
-                let stream = res.Update(t).handle
-                res
-            )
-
-        member x.Changed() =
-            cmdVersion <- -1
-            x.MarkOutdated()
+            member x.Changed() =
+                cmdVersion <- -1
+                x.MarkOutdated()
             
 
-        member x.Destroy(r : CommandStreamResource) =
-            lock dirty (fun () -> dirty.Remove r |> ignore)
-            r.Release()
+            member x.Destroy(r : ICommandStreamResource) =
+                lock dirty (fun () -> dirty.Remove r |> ignore)
+                r.Release()
 
-        member x.Dispose() =
-            compiler.Dispose()
-            dirty.Clear()
-            cmdBuffer.Dispose()
+            member x.Dispose() =
+                compiler.Dispose()
+                dirty.Clear()
+                cmdBuffer.Dispose()
 
-        override x.Compute (t : AdaptiveToken) =
-            x.EvaluateAlways t (fun t ->
-            
-                        
+            override x.Compute (t : AdaptiveToken) =
                 // update all dirty programs 
                 let dirty =
                     lock dirty (fun () ->
@@ -192,207 +233,114 @@ module RenderTaskNew =
                     cmdBuffer.End()
 
                 cmdBuffer
-            )
             
-    [<AbstractClass>]
-    type AbstractChangeableSetCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>) =
-        inherit AbstractChangeableCommandBuffer(manager, pool, renderPass, viewports)
+        [<AbstractClass>]
+        type AbstractChangeableSetCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>) =
+            inherit AbstractChangeableCommandBuffer(manager, pool, renderPass, viewports)
 
-        abstract member Add : IRenderObject -> bool
-        abstract member Remove : IRenderObject -> bool
+            abstract member Add : IRenderObject -> bool
+            abstract member Remove : IRenderObject -> bool
 
+        type ChangeableUnorderedCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>) =
+            inherit AbstractChangeableSetCommandBuffer(manager, pool, renderPass, viewports)
 
-    type ChangeableUnorderedCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>) =
-        inherit AbstractChangeableSetCommandBuffer(manager, pool, renderPass, viewports)
+            let first = new VKVM.CommandStream()
+            let trie = Trie<VKVM.CommandStream>()
+            do trie.Add([], first)
 
-        let first = new VKVM.CommandStream()
-        let trie = Trie<VKVM.CommandStream>()
-        do trie.Add([], first)
+            let cache = Dict<IRenderObject, ICommandStreamResource>()
+            override x.Prolog = first
 
-        let cache = Dict<IRenderObject, CommandStreamResource>()
+            override x.Release() =
+                cache.Clear()
+                first.Dispose()
+                trie.Clear()
 
-        static let key (s : CommandStreamResource) =
-            let ro = s.Object.Children.[0]
-            [ ro.pipeline :> obj; ro.original.Id :> obj ]
- 
-        override x.Prolog = first
-
-        override x.Release() =
-            cache.Clear()
-            first.Dispose()
-            trie.Clear()
-
-        override x.Add(o : IRenderObject) =
-            if not (cache.ContainsKey o) then
-                let resource = x.Compile o
-                let key = key resource
-                trie.Add(key, resource.Stream)
-                cache.[o] <- resource
-                true
-            else
-                false
-
-        override x.Remove(o : IRenderObject) =
-            match cache.TryRemove o with
-                | (true, r) ->
-                    let key = key r
-                    trie.Remove key |> ignore
-                    x.Destroy r 
-                    true
-                | _ ->
-                    false
-
-    type ChangeableOrderedCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>, sorter : IMod<Box3d[] -> int[]>) =
-        inherit AbstractChangeableSetCommandBuffer(manager, pool, renderPass, viewports)
-        
-        let first = new VKVM.CommandStream()
-
-        let cache = Dict<IRenderObject, IMod<Box3d> * CommandStreamResource>()
-
-        static let rec boundingBox (o : IRenderObject) : IMod<Box3d> =
-            match o with
-                | :? RenderObject as o ->
-                    match Ag.tryGetAttributeValue o.AttributeScope "GlobalBoundingBox" with
-                        | Success box -> box
-                        | _ -> failwith "[Vulkan] could not get BoundingBox for RenderObject"
-                    
-                | :? MultiRenderObject as o ->
-                    o.Children |> List.map boundingBox |> Mod.mapN Box3d
-
-                | :? PreparedMultiRenderObject as o ->
-                    o.Children |> List.map boundingBox |> Mod.mapN Box3d
-                    
-                | :? PreparedRenderObject as o ->
-                    boundingBox o.original
-
-                | _ ->
-                    failf "invalid renderobject %A" o
-
-        override x.Add(o : IRenderObject) =
-            if not (cache.ContainsKey o) then
-                let res = x.Compile o
-                let bb = boundingBox res.Object
-                cache.[o] <- (bb, res)
-                x.Changed()
-                true
-            else
-                false
-
-        override x.Remove(o : IRenderObject) =
-            match cache.TryRemove o with
-                | (true, (_,res)) -> 
-                    x.Destroy res
+            override x.Add(o : IRenderObject) =
+                if not (cache.ContainsKey o) then
+                    let resource = x.Compile o
+                    let key = resource.GroupKey
+                    trie.Add(key, resource.Stream)
+                    cache.[o] <- resource
                     x.Changed()
                     true
-                | _ -> 
+                else
                     false
 
-        override x.Prolog = first
+            override x.Remove(o : IRenderObject) =
+                match cache.TryRemove o with
+                    | (true, r) ->
+                        let key = r.GroupKey
+                        trie.Remove key |> ignore
+                        x.Destroy r 
+                        x.Changed()
+                        true
+                    | _ ->
+                        false
 
-        override x.Release() =
-            first.Dispose()
+        type ChangeableOrderedCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>, sorter : IMod<Trafo3d -> Box3d[] -> int[]>) =
+            inherit AbstractChangeableSetCommandBuffer(manager, pool, renderPass, viewports)
+        
+            let first = new VKVM.CommandStream()
 
-        override x.Sort t =
-            let sorter = sorter.GetValue t
-            let all = cache.Values |> Seq.toArray
+            let cache = Dict<IRenderObject, IMod<Box3d> * ICommandStreamResource>()
 
-            let boxes = Array.zeroCreate all.Length
-            let streams = Array.zeroCreate all.Length
-            for i in 0 .. all.Length - 1 do
-                let (bb, s) = all.[i]
-                let bb = bb.GetValue t
-                boxes.[i] <- bb
-                streams.[i] <- s.Stream
-
-            let perm = sorter boxes
-            let mutable last = first
-            for i in perm do
-                let s = streams.[i]
-                last.Next <- Some s
-            last.Next <- None
+            let mutable camera = Mod.constant Trafo3d.Identity
 
 
-            true
+            override x.Add(o : IRenderObject) =
+                if not (cache.ContainsKey o) then
+                    if cache.Count = 0 then
+                        match Ag.tryGetAttributeValue o.AttributeScope "ViewTrafo" with
+                            | Success trafo -> camera <- trafo
+                            | _ -> failf "could not get camera view"
+
+                    let res = x.Compile o
+                    let bb = res.BoundingBox
+                    cache.[o] <- (bb, res)
+                    x.Changed()
+                    true
+                else
+                    false
+
+            override x.Remove(o : IRenderObject) =
+                match cache.TryRemove o with
+                    | (true, (_,res)) -> 
+                        x.Destroy res
+                        x.Changed()
+                        true
+                    | _ -> 
+                        false
+
+            override x.Prolog = first
+
+            override x.Release() =
+                first.Dispose()
+
+            override x.Sort t =
+                let sorter = sorter.GetValue t
+                let all = cache.Values |> Seq.toArray
+
+                let boxes = Array.zeroCreate all.Length
+                let streams = Array.zeroCreate all.Length
+                for i in 0 .. all.Length - 1 do
+                    let (bb, s) = all.[i]
+                    let bb = bb.GetValue t
+                    boxes.[i] <- bb
+                    streams.[i] <- s.Stream
+
+                let viewTrafo = camera.GetValue t
+                let perm = sorter viewTrafo boxes
+                let mutable last = first
+                for i in perm do
+                    let s = streams.[i]
+                    last.Next <- Some s
+                last.Next <- None
 
 
-    type ChangeableStaticallyOrderedCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>) =
-        inherit AbstractChangeableCommandBuffer(manager, pool, renderPass, viewports)
+                true
 
-        let mutable last = new VKVM.CommandStream()
-        let mutable first = new VKVM.CommandStream(Next = Some last)
-
-        let lastToken = OrderToken(last, None) :> IToken
-        let firstToken = OrderToken(first, None) :> IToken
-
-        override x.Release() =
-            first.Dispose()
-            last.Dispose()
-
-        override x.Prolog = first
-
-        member x.First = firstToken
-        member x.Last = lastToken
-
-        member x.Remove(f : IToken) =
-            let f = unbox<OrderToken> f
-            let stream = f.Stream
-            let prev = 
-                match stream.Prev with
-                    | Some p -> p
-                    | None -> first 
-
-            let next = 
-                match stream.Next with
-                    | Some n -> n
-                    | None -> last
-                    
-            prev.Next <- Some next
-
-            match f.Resource with
-                | Some r -> x.Destroy r
-                | _ -> ()
-
-            x.Changed()
-
-        member x.InsertAfter(t : IToken, o : IRenderObject) =
-            let t = unbox<OrderToken> t
-            let res = x.Compile o
-            let stream = res.Stream
-
-            let prev = t.Stream
-            let next =
-                match prev.Next with
-                    | Some n -> n
-                    | None -> last
-
-            prev.Next <- Some stream
-            stream.Next <- Some next
-
-            x.Changed()
-            OrderToken(stream, Some res) :> IToken
-
-        member x.InsertBefore(t : IToken, o : IRenderObject) =
-            let t = unbox<OrderToken> t
-            let res = x.Compile o
-            let stream = res.Stream
-
-            let next = t.Stream
-            let prev = 
-                match next.Prev with
-                    | Some n -> n
-                    | None -> first
-
-            prev.Next <- Some stream
-            stream.Next <- Some next
-
-            x.Changed()
-            OrderToken(stream, Some res) :> IToken
-
-        member inline x.Prepend(o : IRenderObject) =
-            x.InsertAfter(firstToken, o)
-
-        member inline x.Append(o : IRenderObject) =
-            x.InsertBefore(lastToken, o)
+    open ChangeableCommandBuffers
 
     type RenderTask(device : Device, renderPass : RenderPass, shareTextures : bool, shareBuffers : bool) =
         inherit AbstractRenderTask()
@@ -413,6 +361,21 @@ module RenderTaskNew =
 
         let manager = new ResourceManager(user, device)
 
+        static let sortByCamera (order : RenderPassOrder) (trafo : Trafo3d) (boxes : Box3d[]) =
+            let sign = 
+                match order with
+                    | RenderPassOrder.BackToFront -> 1
+                    | RenderPassOrder.FrontToBack -> -1
+                    | _ -> failf "invalid order %A" order
+
+            let compare (l : Box3d) (r : Box3d) =
+                let l = trafo.Forward.TransformPos l.Center
+                let r = trafo.Forward.TransformPos r.Center
+                sign * compare l.Z r.Z
+
+
+            boxes.CreatePermutationQuickSort(Func<_,_,_>(compare))
+
         member x.Add(o : IRenderObject) =
             let key = o.RenderPass
             let cmd =
@@ -421,9 +384,10 @@ module RenderTaskNew =
                     | _ ->
                         let c = 
                             match key.Order with
-                                | RenderPassOrder.BackToFront -> failwith ""
-                                | RenderPassOrder.FrontToBack -> failwith ""
-                                | _ -> ChangeableUnorderedCommandBuffer(manager, pool, renderPass, viewports) :> AbstractChangeableSetCommandBuffer
+                                | RenderPassOrder.BackToFront | RenderPassOrder.FrontToBack -> 
+                                    ChangeableOrderedCommandBuffer(manager, pool, renderPass, viewports, Mod.constant (sortByCamera key.Order)) :> AbstractChangeableSetCommandBuffer
+                                | _ -> 
+                                    ChangeableUnorderedCommandBuffer(manager, pool, renderPass, viewports) :> AbstractChangeableSetCommandBuffer
                         passes.[key] <- c
                         x.MarkOutdated()
                         c
@@ -441,8 +405,17 @@ module RenderTaskNew =
             for c in passes.Values do
                 c.Dispose()
             passes.Clear()
+            locks.Clear()
+            cmd.Reset()
+            x.MarkOutdated()
 
-        override x.Dispose() = ()
+        override x.Dispose() =
+            transact (fun () ->
+                x.Clear()
+                cmd.Dispose()
+                pool.Dispose()
+                manager.Dispose()
+            )
 
         override x.FramebufferSignature = Some (renderPass :> _)
 
@@ -492,8 +465,27 @@ module RenderTaskNew =
 
             device.GraphicsFamily.RunSynchronously cmd
             
+    type DependentRenderTask(device : Device, renderPass : RenderPass, objects : aset<IRenderObject>, shareTextures : bool, shareBuffers : bool) =
+        inherit RenderTask(device, renderPass, shareTextures, shareBuffers)
 
+        let reader = objects.GetReader()
 
+        override x.Perform(token : AdaptiveToken, rt : RenderToken, desc : OutputDescription) =
+            x.OutOfDate <- true
+            let deltas = reader.GetOperations token
+            if not (HDeltaSet.isEmpty deltas) then
+                transact (fun () -> 
+                    for d in deltas do
+                        match d with
+                            | Add(_,o) -> x.Add o |> ignore
+                            | Rem(_,o) -> x.Remove o |> ignore
+                )
+
+            base.Perform(token, rt, desc)
+
+        override x.Dispose() =
+            reader.Dispose()
+            base.Dispose()
 
 
 

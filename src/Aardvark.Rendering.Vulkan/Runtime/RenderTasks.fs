@@ -330,7 +330,7 @@ module RenderTasks =
         let mutable currentToken = Unchecked.defaultof<AdaptiveToken>
 
         let prepare (o : IRenderObject) =
-            this.ResourceManager.PrepareRenderObject(currentToken, renderPass, o, this.HookRenderObject)
+            this.ResourceManager.PrepareRenderObject(renderPass, o, this.HookRenderObject)
 
         let preparedCache = Cache<IRenderObject, PreparedMultiRenderObject>(prepare)
         let objectReader = objects.GetReader()

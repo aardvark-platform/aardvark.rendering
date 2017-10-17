@@ -68,19 +68,19 @@ module Compiler =
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module Instruction =
         let bindPipeline (r : INativeResourceLocation<VkPipeline>) : Instruction =
-            VKVM.Pointers.vmBindPipeline, [| r.Update(AdaptiveToken.Top).handle :> obj |]
+            VKVM.Pointers.vmBindPipeline, [| r.Pointer :> obj |]
 
         let bindDescriptorSets (r : INativeResourceLocation<DescriptorSetBinding>) : Instruction =
-            VKVM.Pointers.vmBindDescriptorSets, [| r.Update(AdaptiveToken.Top).handle :> obj |]
+            VKVM.Pointers.vmBindDescriptorSets, [| r.Pointer :> obj |]
 
         let bindVertexBuffers (r : INativeResourceLocation<VertexBufferBinding>) : Instruction =
-            VKVM.Pointers.vmBindVertexBuffers, [| r.Update(AdaptiveToken.Top).handle :> obj |]
+            VKVM.Pointers.vmBindVertexBuffers, [| r.Pointer :> obj |]
             
         let bindIndexBuffer (r : INativeResourceLocation<IndexBufferBinding>) : Instruction =
-            VKVM.Pointers.vmBindIndexBuffer, [| r.Update(AdaptiveToken.Top).handle :> obj |]
+            VKVM.Pointers.vmBindIndexBuffer, [| r.Pointer :> obj |]
 
         let draw (stats : nativeptr<V2i>) (isActive : INativeResourceLocation<int>) (r : INativeResourceLocation<DrawCall>) : Instruction =
-            VKVM.Pointers.vmDraw, [| stats :> obj; isActive.Update(AdaptiveToken.Top).handle :> obj; r.Update(AdaptiveToken.Top).handle :> obj |]
+            VKVM.Pointers.vmDraw, [| stats :> obj; isActive.Pointer :> obj; r.Pointer :> obj |]
 
     let compileSingle (scope : CompilerScope) (prev : Option<PreparedRenderObject>) (self : PreparedRenderObject) =
         match prev with

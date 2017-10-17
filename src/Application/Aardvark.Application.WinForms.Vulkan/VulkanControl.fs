@@ -145,7 +145,8 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
 
         member x.Invoke f =
             if not x.IsDisposed then
-                base.Invoke (new System.Action(f)) |> ignore
+                try base.Invoke (new System.Action(f)) |> ignore
+                with _ -> ()
 
     interface IRenderTarget with
         member x.FramebufferSignature = x.RenderPass :> IFramebufferSignature
