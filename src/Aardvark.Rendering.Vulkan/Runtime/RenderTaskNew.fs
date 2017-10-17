@@ -18,12 +18,49 @@ open Aardvark.Base.Runtime
 
 module RenderTaskNew =
 
+    type CommandStreamResource(owner, key, o : IRenderObject, resources : ResourceSet, manager : ResourceManager, renderPass : RenderPass, stats : nativeptr<V2i>) =
+        inherit AbstractResourceLocation<VKVM.CommandStream>(owner, key)
+         
+        let mutable stream = Unchecked.defaultof<VKVM.CommandStream>
+        let mutable prep : PreparedMultiRenderObject = Unchecked.defaultof<_>
+
+        let compile (o : IRenderObject) =
+            let o = manager.PrepareRenderObject(renderPass, o)
+            for o in o.Children do
+                for r in o.resources do resources.Add r
+                                
+                stream.IndirectBindPipeline(o.pipeline.Pointer) |> ignore
+                stream.IndirectBindDescriptorSets(o.descriptorSets.Pointer) |> ignore
+
+                match o.indexBuffer with
+                    | Some ib ->
+                        stream.IndirectBindIndexBuffer(ib.Pointer) |> ignore
+                    | None ->
+                        ()
+
+                stream.IndirectBindVertexBuffers(o.vertexBuffers.Pointer) |> ignore
+                stream.IndirectDraw(stats, o.isActive.Pointer, o.drawCalls.Pointer) |> ignore
+            o
+
+        member x.Stream = stream
+        member x.Object = prep
+
+        override x.Create() =
+            stream <- new VKVM.CommandStream()
+            let p = compile o
+            prep <- p
+
+        override x.Destroy() = 
+            stream.Dispose()
+            for o in prep.Children do
+                for r in o.resources do resources.Remove r
+            prep <- Unchecked.defaultof<_>
+
+        override x.GetHandle _ = 
+            { handle = stream; version = 0 }   
 
     type RenderObjectCompiler(manager : ResourceManager, renderPass : RenderPass) =
         inherit ResourceSet()
-        
-        static let get (t : AdaptiveToken) (r : INativeResourceLocation<'a>) =
-            r.Update(t).handle
 
         let stats : nativeptr<V2i> = NativePtr.alloc 1
         let cache = ResourceLocationCache<VKVM.CommandStream>(manager.ResourceUser)
@@ -39,75 +76,25 @@ module RenderTaskNew =
         member x.Dispose() =
             cache.Clear()
 
-
-        member x.Compile(o : IRenderObject) : IResourceLocation<VKVM.CommandStream> =
+        member x.Compile(o : IRenderObject) : CommandStreamResource =
             let call = 
                 cache.GetOrCreate([o :> obj], fun owner key ->
-                    let mutable stream = Unchecked.defaultof<VKVM.CommandStream> //new VKVM.CommandStream()
-                    let mutable prep : Option<PreparedMultiRenderObject> = None
-                
-                    let compile (o : IRenderObject) =
-                        x.EvaluateAlways AdaptiveToken.Top (fun t ->
-                            let o = manager.PrepareRenderObject(t, renderPass, o)
-                            for o in o.Children do
-                                for r in o.resources do x.Add r
-
-                                stream.IndirectBindPipeline(get t o.pipeline) |> ignore
-                                stream.IndirectBindDescriptorSets(get t o.descriptorSets) |> ignore
-
-                                match o.indexBuffer with
-                                    | Some ib ->
-                                        stream.IndirectBindIndexBuffer(get t ib) |> ignore
-                                    | None ->
-                                        ()
-
-                                stream.IndirectBindVertexBuffers(get t o.vertexBuffers) |> ignore
-                                stream.IndirectDraw(stats, get t o.isActive, get t o.drawCalls) |> ignore
-                            o
-                        )
-
-                    { new AbstractResourceLocation<VKVM.CommandStream>(owner, key) with
-
-                        member x.Create() =
-                            stream <- new VKVM.CommandStream()
-
-                        member y.Destroy() = 
-                            stream.Dispose()
-                            match prep with
-                                | Some p -> 
-                                    for o in p.Children do
-                                        for r in o.resources do x.Remove r
-                                    prep <- None
-                                | None -> 
-                                    ()
-
-                        member x.GetHandle _ = 
-                            match prep with
-                                | Some p -> 
-                                    { handle = stream; version = 0 }   
-
-                                | None ->
-                                    let p = compile o
-                                    prep <- Some p
-                                    { handle = stream; version = 0 }   
-
-                    }
+                    new CommandStreamResource(owner, key, o, x, manager, renderPass, stats)
                 )
             call.Acquire()
-            call
+            call |> unbox<CommandStreamResource>
             
         member x.CurrentVersion = version
 
     type IToken = interface end
 
-    type private OrderToken(s : VKVM.CommandStream, r : Option<IResourceLocation<VKVM.CommandStream>>) =
+    type private OrderToken(s : VKVM.CommandStream, r : Option<CommandStreamResource>) =
         member x.Stream = s
         member x.Resource = r
         interface IToken
 
-
-
-    type ChangeableCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>) =
+    [<AbstractClass>]
+    type AbstractChangeableCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>) =
         inherit Mod.AbstractMod<CommandBuffer>()
 
         let device = pool.Device
@@ -115,100 +102,47 @@ module RenderTaskNew =
         let mutable resourceVersion = 0
         let mutable cmdVersion = -1
         let mutable cmdViewports = [||]
-        let mutable last = new VKVM.CommandStream()
-        let mutable first = new VKVM.CommandStream(Next = Some last)
-
-        let lastToken = OrderToken(last, None) :> IToken
-        let firstToken = OrderToken(first, None) :> IToken
 
         let cmdBuffer = pool.CreateCommandBuffer(CommandBufferLevel.Secondary)
-        let dirty = HashSet<IResourceLocation<VKVM.CommandStream>>()
+        let dirty = HashSet<CommandStreamResource>()
+
+        abstract member Release : unit -> unit
+        abstract member Prolog : VKVM.CommandStream
+        abstract member Sort : AdaptiveToken -> bool
+        default x.Sort _ = false
 
         override x.InputChanged(t : obj, o : IAdaptiveObject) =
             match o with
-                | :? IResourceLocation<VKVM.CommandStream> as r ->
+                | :? CommandStreamResource as r ->
                     lock dirty (fun () -> dirty.Add r |> ignore)
                 | _ ->
                     ()
 
-        member private x.Compile(o : IRenderObject) =
+        member x.Compile(o : IRenderObject) =
             let res = compiler.Compile(o)
             x.EvaluateAlways AdaptiveToken.Top (fun t ->
                 let stream = res.Update(t).handle
-                stream, res
+                res
             )
+
+        member x.Changed() =
+            cmdVersion <- -1
+            x.MarkOutdated()
+            
+
+        member x.Destroy(r : CommandStreamResource) =
+            lock dirty (fun () -> dirty.Remove r |> ignore)
+            r.Release()
 
         member x.Dispose() =
             compiler.Dispose()
-            first.Dispose()
-            last.Dispose()
             dirty.Clear()
             cmdBuffer.Dispose()
 
-        member x.First = firstToken
-        member x.Last = lastToken
-
-        member x.Remove(f : IToken) =
-            let f = unbox<OrderToken> f
-            let stream = f.Stream
-            let prev = 
-                match stream.Prev with
-                    | Some p -> p
-                    | None -> first 
-
-            let next = 
-                match stream.Next with
-                    | Some n -> n
-                    | None -> last
-                    
-            prev.Next <- Some next
-
-            match f.Resource with
-                | Some r -> lock dirty (fun () -> dirty.Remove r |> ignore)
-                | _ -> ()
-            stream.Dispose()
-            cmdVersion <- -1
-            x.MarkOutdated()
-
-        member x.InsertAfter(t : IToken, o : IRenderObject) =
-            let t = unbox<OrderToken> t
-            let stream, res = x.Compile o
-
-            let prev = t.Stream
-            let next =
-                match prev.Next with
-                    | Some n -> n
-                    | None -> last
-
-            prev.Next <- Some stream
-            stream.Next <- Some next
-
-            cmdVersion <- -1
-            x.MarkOutdated()
-            OrderToken(stream, Some res) :> IToken
-
-        member x.InsertBefore(t : IToken, o : IRenderObject) =
-            let t = unbox<OrderToken> t
-            let stream,res = x.Compile o
-
-            let next = t.Stream
-            let prev = 
-                match next.Prev with
-                    | Some n -> n
-                    | None -> first
-
-            prev.Next <- Some stream
-            stream.Next <- Some next
-
-            cmdVersion <- -1
-            x.MarkOutdated()
-            OrderToken(stream, Some res) :> IToken
-
-        member x.Append(o : IRenderObject) =
-            x.InsertBefore(lastToken, o)
-
         override x.Compute (t : AdaptiveToken) =
             x.EvaluateAlways t (fun t ->
+            
+                        
                 // update all dirty programs 
                 let dirty =
                     lock dirty (fun () ->
@@ -229,13 +163,16 @@ module RenderTaskNew =
                 let contentChanged      = cmdVersion < 0 || dirty.Length > 0
                 let viewportChanged     = cmdViewports <> vps
                 let versionChanged      = cmdVersion >= 0 && resourceVersion <> cmdVersion
+                let orderChanged        = x.Sort t
 
-                if contentChanged || versionChanged || viewportChanged then
+                if contentChanged || versionChanged || viewportChanged || orderChanged then
+                    let first = x.Prolog
                     let cause =
                         String.concat "; " [
                             if contentChanged then yield "content"
                             if versionChanged then yield "resources"
                             if viewportChanged then yield "viewport"
+                            if orderChanged then yield "order"
                         ]
                         |> sprintf "{ %s }"
 
@@ -243,7 +180,7 @@ module RenderTaskNew =
                     cmdViewports <- vps
                     cmdVersion <- resourceVersion
 
-                    if viewportChanged then 
+                    if viewportChanged then
                         first.SeekToBegin()
                         first.SetViewport(0u, vps |> Array.map (fun b -> VkViewport(float32 b.Min.X, float32 b.Min.X, float32 (1 + b.SizeX), float32 (1 + b.SizeY), 0.0f, 1.0f))) |> ignore
                         first.SetScissor(0u, vps |> Array.map (fun b -> VkRect2D(VkOffset2D(b.Min.X, b.Min.X), VkExtent2D(1 + b.SizeX, 1 + b.SizeY)))) |> ignore
@@ -256,17 +193,212 @@ module RenderTaskNew =
 
                 cmdBuffer
             )
+            
+    [<AbstractClass>]
+    type AbstractChangeableSetCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>) =
+        inherit AbstractChangeableCommandBuffer(manager, pool, renderPass, viewports)
 
-    type private RenderTaskObjectToken(cmd : ChangeableCommandBuffer, t : IToken) =
-        member x.Buffer = cmd
-        member x.Token = t
-        interface IToken
+        abstract member Add : IRenderObject -> bool
+        abstract member Remove : IRenderObject -> bool
+
+
+    type ChangeableUnorderedCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>) =
+        inherit AbstractChangeableSetCommandBuffer(manager, pool, renderPass, viewports)
+
+        let first = new VKVM.CommandStream()
+        let trie = Trie<VKVM.CommandStream>()
+        do trie.Add([], first)
+
+        let cache = Dict<IRenderObject, CommandStreamResource>()
+
+        static let key (s : CommandStreamResource) =
+            let ro = s.Object.Children.[0]
+            [ ro.pipeline :> obj; ro.original.Id :> obj ]
+ 
+        override x.Prolog = first
+
+        override x.Release() =
+            cache.Clear()
+            first.Dispose()
+            trie.Clear()
+
+        override x.Add(o : IRenderObject) =
+            if not (cache.ContainsKey o) then
+                let resource = x.Compile o
+                let key = key resource
+                trie.Add(key, resource.Stream)
+                cache.[o] <- resource
+                true
+            else
+                false
+
+        override x.Remove(o : IRenderObject) =
+            match cache.TryRemove o with
+                | (true, r) ->
+                    let key = key r
+                    trie.Remove key |> ignore
+                    x.Destroy r 
+                    true
+                | _ ->
+                    false
+
+    type ChangeableOrderedCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>, sorter : IMod<Box3d[] -> int[]>) =
+        inherit AbstractChangeableSetCommandBuffer(manager, pool, renderPass, viewports)
+        
+        let first = new VKVM.CommandStream()
+
+        let cache = Dict<IRenderObject, IMod<Box3d> * CommandStreamResource>()
+
+        static let rec boundingBox (o : IRenderObject) : IMod<Box3d> =
+            match o with
+                | :? RenderObject as o ->
+                    match Ag.tryGetAttributeValue o.AttributeScope "GlobalBoundingBox" with
+                        | Success box -> box
+                        | _ -> failwith "[Vulkan] could not get BoundingBox for RenderObject"
+                    
+                | :? MultiRenderObject as o ->
+                    o.Children |> List.map boundingBox |> Mod.mapN Box3d
+
+                | :? PreparedMultiRenderObject as o ->
+                    o.Children |> List.map boundingBox |> Mod.mapN Box3d
+                    
+                | :? PreparedRenderObject as o ->
+                    boundingBox o.original
+
+                | _ ->
+                    failf "invalid renderobject %A" o
+
+        override x.Add(o : IRenderObject) =
+            if not (cache.ContainsKey o) then
+                let res = x.Compile o
+                let bb = boundingBox res.Object
+                cache.[o] <- (bb, res)
+                x.Changed()
+                true
+            else
+                false
+
+        override x.Remove(o : IRenderObject) =
+            match cache.TryRemove o with
+                | (true, (_,res)) -> 
+                    x.Destroy res
+                    x.Changed()
+                    true
+                | _ -> 
+                    false
+
+        override x.Prolog = first
+
+        override x.Release() =
+            first.Dispose()
+
+        override x.Sort t =
+            let sorter = sorter.GetValue t
+            let all = cache.Values |> Seq.toArray
+
+            let boxes = Array.zeroCreate all.Length
+            let streams = Array.zeroCreate all.Length
+            for i in 0 .. all.Length - 1 do
+                let (bb, s) = all.[i]
+                let bb = bb.GetValue t
+                boxes.[i] <- bb
+                streams.[i] <- s.Stream
+
+            let perm = sorter boxes
+            let mutable last = first
+            for i in perm do
+                let s = streams.[i]
+                last.Next <- Some s
+            last.Next <- None
+
+
+            true
+
+
+    type ChangeableStaticallyOrderedCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>) =
+        inherit AbstractChangeableCommandBuffer(manager, pool, renderPass, viewports)
+
+        let mutable last = new VKVM.CommandStream()
+        let mutable first = new VKVM.CommandStream(Next = Some last)
+
+        let lastToken = OrderToken(last, None) :> IToken
+        let firstToken = OrderToken(first, None) :> IToken
+
+        override x.Release() =
+            first.Dispose()
+            last.Dispose()
+
+        override x.Prolog = first
+
+        member x.First = firstToken
+        member x.Last = lastToken
+
+        member x.Remove(f : IToken) =
+            let f = unbox<OrderToken> f
+            let stream = f.Stream
+            let prev = 
+                match stream.Prev with
+                    | Some p -> p
+                    | None -> first 
+
+            let next = 
+                match stream.Next with
+                    | Some n -> n
+                    | None -> last
+                    
+            prev.Next <- Some next
+
+            match f.Resource with
+                | Some r -> x.Destroy r
+                | _ -> ()
+
+            x.Changed()
+
+        member x.InsertAfter(t : IToken, o : IRenderObject) =
+            let t = unbox<OrderToken> t
+            let res = x.Compile o
+            let stream = res.Stream
+
+            let prev = t.Stream
+            let next =
+                match prev.Next with
+                    | Some n -> n
+                    | None -> last
+
+            prev.Next <- Some stream
+            stream.Next <- Some next
+
+            x.Changed()
+            OrderToken(stream, Some res) :> IToken
+
+        member x.InsertBefore(t : IToken, o : IRenderObject) =
+            let t = unbox<OrderToken> t
+            let res = x.Compile o
+            let stream = res.Stream
+
+            let next = t.Stream
+            let prev = 
+                match next.Prev with
+                    | Some n -> n
+                    | None -> first
+
+            prev.Next <- Some stream
+            stream.Next <- Some next
+
+            x.Changed()
+            OrderToken(stream, Some res) :> IToken
+
+        member inline x.Prepend(o : IRenderObject) =
+            x.InsertAfter(firstToken, o)
+
+        member inline x.Append(o : IRenderObject) =
+            x.InsertBefore(lastToken, o)
 
     type RenderTask(device : Device, renderPass : RenderPass, shareTextures : bool, shareBuffers : bool) =
         inherit AbstractRenderTask()
 
         let pool = device.GraphicsFamily.CreateCommandPool()
-        let passes = SortedDictionary<Aardvark.Base.Rendering.RenderPass, ChangeableCommandBuffer>()
+        let passes = SortedDictionary<Aardvark.Base.Rendering.RenderPass, AbstractChangeableSetCommandBuffer>()
         let viewports = Mod.init [||]
         
         let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
@@ -287,17 +419,23 @@ module RenderTaskNew =
                 match passes.TryGetValue key with
                     | (true,c) -> c
                     | _ ->
-                        let c = ChangeableCommandBuffer(manager, pool, renderPass, viewports)
+                        let c = 
+                            match key.Order with
+                                | RenderPassOrder.BackToFront -> failwith ""
+                                | RenderPassOrder.FrontToBack -> failwith ""
+                                | _ -> ChangeableUnorderedCommandBuffer(manager, pool, renderPass, viewports) :> AbstractChangeableSetCommandBuffer
                         passes.[key] <- c
                         x.MarkOutdated()
                         c
-            let t = cmd.Append(o)
-            RenderTaskObjectToken(cmd, t) :> IToken
+            cmd.Add(o)
 
-
-        member x.Remove(t : IToken) =
-            let t = unbox<RenderTaskObjectToken> t
-            t.Buffer.Remove(t.Token)
+        member x.Remove(o : IRenderObject) =
+            let key = o.RenderPass
+            match passes.TryGetValue key with
+                | (true,c) -> 
+                    c.Remove o
+                | _ ->
+                    false
 
         member x.Clear() =
             for c in passes.Values do

@@ -114,6 +114,7 @@
     <Compile Include="PixImageCube.fs" />
     <Compile Include="ShaderInterface.fs" />
     <Compile Include="Ordered.fs" />
+    <Compile Include="Trie.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />

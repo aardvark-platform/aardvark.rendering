@@ -1713,3 +1713,11 @@ module VKVM =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
    
+        interface ILinked<CommandStream> with
+            member x.Prev
+                with get() = x.Prev
+                and set p = x.Prev <- p
+
+            member x.Next
+                with get() = x.Next
+                and set n = x.Next <- n

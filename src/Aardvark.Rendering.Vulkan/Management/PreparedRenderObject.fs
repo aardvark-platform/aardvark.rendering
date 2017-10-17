@@ -92,7 +92,7 @@ open Aardvark.Rendering.Vulkan.Resources
 [<AbstractClass; Sealed; Extension>]
 type DevicePreparedRenderObjectExtensions private() =
 
-    static let prepareObject (token : AdaptiveToken) (this : ResourceManager) (renderPass : RenderPass) (ro : RenderObject) =
+    static let prepareObject (this : ResourceManager) (renderPass : RenderPass) (ro : RenderObject) =
         
         let resources = System.Collections.Generic.List<IResourceLocation>()
 
@@ -251,18 +251,18 @@ type DevicePreparedRenderObjectExtensions private() =
         res
 
     [<Extension>]
-    static member PrepareRenderObject(this : ResourceManager, token : AdaptiveToken, renderPass : RenderPass, ro : RenderObject) =
-        prepareObject token this renderPass ro
+    static member PrepareRenderObject(this : ResourceManager, renderPass : RenderPass, ro : RenderObject) =
+        prepareObject this renderPass ro
 
     [<Extension>]
-    static member PrepareRenderObject(this : ResourceManager, token : AdaptiveToken, renderPass : RenderPass, ro : IRenderObject, hook : RenderObject -> RenderObject) =
+    static member PrepareRenderObject(this : ResourceManager, renderPass : RenderPass, ro : IRenderObject, hook : RenderObject -> RenderObject) =
         match ro with
             | :? RenderObject as ro ->
-                let res = prepareObject token this renderPass (hook ro)
+                let res = prepareObject this renderPass (hook ro)
                 new PreparedMultiRenderObject([res])
 
             | :? MultiRenderObject as mo ->
-                let all = mo.Children |> List.collect (fun c -> DevicePreparedRenderObjectExtensions.PrepareRenderObject(this, token, renderPass, c, hook).Children)
+                let all = mo.Children |> List.collect (fun c -> DevicePreparedRenderObjectExtensions.PrepareRenderObject(this, renderPass, c, hook).Children)
                 new PreparedMultiRenderObject(all)
 
             | :? PreparedRenderObject as o ->
@@ -275,5 +275,5 @@ type DevicePreparedRenderObjectExtensions private() =
                 failf "unsupported RenderObject-type: %A" ro
 
     [<Extension>]
-    static member PrepareRenderObject(this : ResourceManager, token : AdaptiveToken, renderPass : RenderPass, ro : IRenderObject) =
-        DevicePreparedRenderObjectExtensions.PrepareRenderObject(this, token, renderPass, ro, id)
+    static member PrepareRenderObject(this : ResourceManager, renderPass : RenderPass, ro : IRenderObject) =
+        DevicePreparedRenderObjectExtensions.PrepareRenderObject(this, renderPass, ro, id)
