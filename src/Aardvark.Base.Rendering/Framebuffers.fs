@@ -327,6 +327,7 @@ module TextureFormat =
             TextureFormat.Rgba32f, PixFormat.FloatRGBA
             TextureFormat.DepthComponent32, PixFormat.UIntGray
             TextureFormat.DepthComponent32f, PixFormat.FloatGray
+            TextureFormat.Rgba16f, PixFormat(typeof<float16>, Col.Format.RGBA)
         ]
 
     let pixelSizeInBits =
