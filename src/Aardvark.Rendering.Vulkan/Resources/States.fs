@@ -355,6 +355,35 @@ module VertexInputState =
                     }
         )
  
+    let ofTypes (o : Map<Symbol, bool * Type>) =
+        o |> Map.map (fun k (perInstance, viewType) ->
+            match viewType with
+                | TypeInfo.Patterns.MatrixOf(s, et) ->
+                    let rowFormat =
+                        match s.X with
+                            | 2 -> VkFormat.R32g32Sfloat
+                            | 3 -> VkFormat.R32g32b32Sfloat
+                            | _ -> VkFormat.R32g32b32a32Sfloat
+
+                    let rowSize = getFormatSize rowFormat
+                    let totalSize = s.Y * rowSize
+                    { 
+                        inputFormat = rowFormat
+                        stride = totalSize
+                        stepRate = if perInstance then VkVertexInputRate.Instance else VkVertexInputRate.Vertex
+                        offsets = List.init s.Y (fun r -> r * rowSize)
+                    }
+
+                | _ -> 
+                    let fmt = toVkFormat viewType
+                    { 
+                        inputFormat = fmt
+                        stride = getFormatSize fmt
+                        stepRate = if perInstance then VkVertexInputRate.Instance else VkVertexInputRate.Vertex
+                        offsets = [0]
+                    }
+        )
+ 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RasterizerState =
     let private toVkPolygonMode =

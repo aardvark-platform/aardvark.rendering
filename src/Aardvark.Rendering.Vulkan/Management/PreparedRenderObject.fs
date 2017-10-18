@@ -253,6 +253,56 @@ type DevicePreparedRenderObjectExtensions private() =
             }
 
         res
+        
+    [<Extension>]
+    static member CreateDescriptorSets (this : ResourceManager, layout : PipelineLayout, uniforms : IUniformProvider) =
+        let resources = System.Collections.Generic.List<IResourceLocation>()
+        let sets = 
+            layout.DescriptorSetLayouts |> Array.map (fun ds ->
+                let descriptors = 
+                    ds.Bindings |> Array.choosei (fun i b ->
+                        match b.Parameter with
+                            | UniformBlockParameter block ->
+                                let buffer = this.CreateUniformBuffer(Ag.emptyScope, block.layout, uniforms, SymDict.empty)
+                                resources.Add buffer
+                                AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
+
+                            | ImageParameter img ->
+                                match img.description with
+                                    | [] ->
+                                        Log.warn "could not get sampler information for: %A" img
+                                        None
+
+                                    | descriptions ->
+                                        let viewSam = 
+                                            descriptions |> List.map (fun desc -> 
+                                                let textureName = desc.textureName
+                                                let samplerState = desc.samplerState
+                                                match uniforms.TryGetUniform(Ag.emptyScope, textureName) with
+                                                | Some (:? IMod<ITexture> as tex) ->
+
+                                                    let tex = this.CreateImage(tex)
+                                                    let view = this.CreateImageView(img.samplerType, tex)
+                                                    let sam = this.CreateSampler(Mod.constant samplerState)
+
+                                                    Some(view, sam)
+
+                                                | _ ->
+                                                    Log.warn "[Vulkan] could not find texture: %A" textureName
+                                                    None
+                                            )
+
+                                        AdaptiveDescriptor.AdaptiveCombinedImageSampler(i, List.toArray viewSam) |> Some
+                                
+                    )
+
+                let res = this.CreateDescriptorSet(ds, Array.toList descriptors)
+
+                res
+            )
+
+        sets, CSharpList.toList resources
+
 
     [<Extension>]
     static member PrepareRenderObject(this : ResourceManager, renderPass : RenderPass, ro : RenderObject) =

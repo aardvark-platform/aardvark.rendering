@@ -1310,7 +1310,11 @@ type ResourceSet() =
             all.Add r |> ignore
             r.Update t
         )
-     
+    member x.AddAndUpdate(r : IResourceLocation) =
+        x.EvaluateAlways AdaptiveToken.Top (fun t ->
+            all.Add r |> ignore
+            r.Update t |> ignore
+        )   
 
     member x.Remove(r : IResourceLocation) =
         if all.Remove r then
