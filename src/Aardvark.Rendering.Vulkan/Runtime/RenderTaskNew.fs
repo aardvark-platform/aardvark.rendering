@@ -16,6 +16,359 @@ open Aardvark.Base.Runtime
 #nowarn "9"
 #nowarn "51"
 
+type ICommandStreamResource =
+    inherit IResourceLocation<VKVM.CommandStream>
+    abstract member Stream : VKVM.CommandStream
+    abstract member Resources : seq<IResourceLocation>
+
+    abstract member GroupKey : list<obj>
+    abstract member BoundingBox : IMod<Box3d>
+
+module RenderCommands =
+ 
+    [<RequireQualifiedAccess>]
+    type Tree<'a> =
+        | Empty
+        | Leaf of 'a
+        | Node of Option<'a> * list<Tree<'a>> 
+     
+    type ClearValues =
+        {
+            colors  : Map<Symbol, IMod<C4f>>
+            depth   : Option<IMod<float>>
+            stencil : Option<IMod<int>>
+        }
+
+    type PipelineState =
+        {
+            surface             : Aardvark.Base.Surface
+
+            depthTest           : IMod<DepthTestMode>
+            cullMode            : IMod<CullMode>
+            blendMode           : IMod<BlendMode>
+            fillMode            : IMod<FillMode>
+            stencilMode         : IMod<StencilMode>
+            multisample         : IMod<bool>
+            writeBuffers        : Option<Set<Symbol>>
+            globalUniforms      : IUniformProvider
+
+            geometryMode        : IndexedGeometryMode
+            vertexInputTypes    : Map<Symbol, Type>
+            perGeometryUniforms : Map<string, Type>
+        }
+   
+
+    type Geometry =
+        {
+            vertexAttributes    : Map<Symbol, IMod<IBuffer>>
+            indices             : Option<Aardvark.Base.BufferView>
+            uniforms            : Map<string, IMod>
+            call                : IMod<list<DrawCallInfo>>
+        }
+
+    type TreeRenderObject(pipe : PipelineState, geometries : IMod<Tree<Geometry>>) =
+        let id = newId()
+
+        member x.Pipeline = pipe
+        member x.Geometries = geometries
+
+        interface IRenderObject with
+            member x.AttributeScope = Ag.emptyScope
+            member x.Id = id
+            member x.RenderPass = RenderPass.main
+            
+
+    type RenderCommand =
+        | Objects of aset<IRenderObject>
+        | ViewDependent of pipeline : PipelineState * (Trafo3d -> Trafo3d -> list<Geometry>)
+
+    type Command = 
+        | Render of objects : aset<IRenderObject>
+        | Clear of values : ClearValues
+        | Blit of sourceAttachment : Symbol * target : IBackendTextureOutputView
+
+    type PreparedPipelineState =
+        {
+            ppPipeline  : INativeResourceLocation<VkPipeline>
+            ppLayout    : PipelineLayout
+        }
+
+    type PreparedGeometry =
+        {
+            pgOriginal      : Geometry
+            pgDescriptors   : INativeResourceLocation<DescriptorSetBinding>
+            pgAttributes    : INativeResourceLocation<VertexBufferBinding>
+            pgIndex         : Option<INativeResourceLocation<IndexBufferBinding>>
+            pgCall          : INativeResourceLocation<DrawCall>
+            pgResources     : list<IResourceLocation>
+        }
+
+    type ResourceManager with
+        member x.PreparePipelineState (renderPass : RenderPass, state : PipelineState) =
+            let layout, program = x.CreateShaderProgram(renderPass, state.surface)
+
+            let inputs = 
+                layout.PipelineInfo.pInputs |> List.map (fun p ->
+                    let name = Symbol.Create p.name
+                    match Map.tryFind name state.vertexInputTypes with
+                        | Some t -> (name, (false, t))
+                        | None -> failf "could not get shader input %A" name
+                )
+                |> Map.ofList
+
+            let inputState =
+                x.CreateVertexInputState(layout.PipelineInfo, Mod.constant (VertexInputState.ofTypes inputs))
+
+            let inputAssembly =
+                x.CreateInputAssemblyState(Mod.constant state.geometryMode)
+
+            let rasterizerState =
+                x.CreateRasterizerState(state.depthTest, state.cullMode, state.fillMode)
+
+            let colorBlendState =
+                x.CreateColorBlendState(renderPass, state.writeBuffers, state.blendMode)
+
+            let depthStencil =
+                let depthWrite = 
+                    match state.writeBuffers with
+                        | None -> true
+                        | Some s -> Set.contains DefaultSemantic.Depth s
+                x.CreateDepthStencilState(depthWrite, state.depthTest, state.stencilMode)
+
+            let pipeline = 
+                x.CreatePipeline(
+                    program,
+                    renderPass,
+                    inputState,
+                    inputAssembly,
+                    rasterizerState,
+                    colorBlendState,
+                    depthStencil,
+                    state.writeBuffers
+                )
+            {
+                ppPipeline  = pipeline
+                ppLayout    = layout
+            }
+
+        member x.PrepareGeometry(state : PreparedPipelineState, g : Geometry) : PreparedGeometry =
+            let resources = System.Collections.Generic.List<IResourceLocation>()
+
+            let layout = state.ppLayout
+
+            let descriptorSets, additionalResources = 
+                x.CreateDescriptorSets(layout, UniformProvider.ofMap g.uniforms)
+
+            resources.AddRange additionalResources
+
+            let vertexBuffers = 
+                layout.PipelineInfo.pInputs 
+                    |> List.sortBy (fun i -> i.location) 
+                    |> List.map (fun i ->
+                        let sem = i.semantic 
+                        match Map.tryFind sem g.vertexAttributes with
+                            | Some b ->
+                                x.CreateBuffer(b), 0L
+                            | None ->
+                                failf "geometry does not have buffer %A" sem
+                    )
+
+            let dsb = x.CreateDescriptorSetBinding(layout, Array.toList descriptorSets)
+            let vbb = x.CreateVertexBufferBinding(vertexBuffers)
+
+            let isIndexed, ibo =
+                match g.indices with
+                    | Some ib ->
+                        let b = x.CreateIndexBuffer ib.Buffer
+                        let ibb = x.CreateIndexBufferBinding(b, VkIndexType.ofType ib.ElementType)
+                        resources.Add ibb
+                        true, ibb |> Some
+                    | None ->
+                        false, None
+
+            let call = x.CreateDrawCall(isIndexed, g.call)
+
+            resources.Add dsb
+            resources.Add vbb
+            resources.Add call
+
+
+
+            {
+                pgOriginal      = g
+                pgDescriptors   = dsb
+                pgAttributes    = vbb
+                pgIndex         = ibo
+                pgCall          = call
+                pgResources     = CSharpList.toList resources
+            }
+
+    type TreeCommandStreamResource(owner, key, pipe : PipelineState, things : IMod<Tree<Geometry>>, resources : ResourceSet, manager : ResourceManager, renderPass : RenderPass, stats : nativeptr<V2i>) =
+        inherit AbstractResourceLocation<VKVM.CommandStream>(owner, key)
+         
+        let id = newId()
+
+        let mutable stream = Unchecked.defaultof<VKVM.CommandStream>
+        let mutable entry = Unchecked.defaultof<VKVM.CommandStream>
+        let preparedPipeline = manager.PreparePipelineState(renderPass, pipe)
+
+        let bounds = lazy (Mod.constant Box3d.Invalid)
+        let allResources = ReferenceCountingSet<IResourceLocation>()
+        let mutable state = Tree.Empty
+
+        let isActive =
+            let isActive = NativePtr.alloc 1
+            NativePtr.write isActive 1
+            isActive
+
+        let prepare (g : Geometry) =
+            let res = manager.PrepareGeometry(preparedPipeline, g)
+            for r in res.pgResources do 
+                if allResources.Add r then 
+                    resources.AddAndUpdate r
+                    r.Update(AdaptiveToken.Top) |> ignore
+
+            let stream = new VKVM.CommandStream()
+            stream.IndirectBindDescriptorSets(res.pgDescriptors.Pointer) |> ignore
+            stream.IndirectBindVertexBuffers(res.pgAttributes.Pointer) |> ignore
+            match res.pgIndex with
+                | Some ibb -> stream.IndirectBindIndexBuffer(ibb.Pointer) |> ignore
+                | None -> ()
+            stream.IndirectDraw(stats, isActive, res.pgCall.Pointer) |> ignore
+
+
+            res, stream
+
+        let release (pg : PreparedGeometry, stream : VKVM.CommandStream) =
+            for r in pg.pgResources do
+                if allResources.Remove r then 
+                    resources.Remove r
+            stream.Dispose()
+
+        let isIdentical (pg : PreparedGeometry, stream : VKVM.CommandStream) (o : Geometry) =
+            System.Object.ReferenceEquals(pg.pgOriginal, o)
+
+        let update (t : Tree<Geometry>) =
+            
+            let rec destroy (t : Tree<_>) =
+                match t with
+                    | Tree.Empty -> ()
+                    | Tree.Leaf v -> release v
+                    | Tree.Node(s,c) ->
+                        s |> Option.iter release
+                        c |> List.iter destroy
+
+            let rec update (o : Tree<_>) (n : Tree<Geometry>) =
+                match o, n with
+                    
+                    | _, Tree.Empty ->
+                        destroy o
+                        Tree.Empty
+
+                    | Tree.Empty, Tree.Leaf g -> Tree.Leaf (prepare g)
+                    | Tree.Empty, Tree.Node(self, children) ->
+                        let self =
+                            match self with
+                                | Some self -> Some (prepare self)
+                                | None -> None
+                        let children = children |> List.map (update Tree.Empty)
+                        Tree.Node(self, children)
+
+
+                    | Tree.Leaf o, Tree.Leaf n -> 
+                        if isIdentical o n then 
+                            Tree.Leaf o
+                        else
+                            release o
+                            Tree.Leaf(prepare n)
+
+                    | Tree.Leaf o, Tree.Node(ns,nc) ->
+                        let self = 
+                            match ns with
+                                | Some ns ->
+                                    if isIdentical o ns then 
+                                        Some o
+                                    else
+                                        release o
+                                        Some (prepare ns)
+                                | None ->
+                                    None
+                        let children = nc |> List.map (update Tree.Empty)
+                        Tree.Node(self, children)
+
+                    | Tree.Node(os, oc), Tree.Leaf(n) ->
+                        oc |> List.iter destroy
+                        let self = 
+                            match os with
+                                | None -> prepare n
+                                | Some os ->
+                                    if isIdentical os n then os
+                                    else
+                                        release os
+                                        prepare n
+                        Tree.Leaf self
+                    | Tree.Node(os, oc), Tree.Node(ns, nc) ->
+                        let self = 
+                            match os, ns with
+                                | None, Some ns -> Some (prepare ns)
+                                | Some os, None -> release os; None
+                                | None, None -> None
+                                | Some os, Some ns ->
+                                    if isIdentical os ns then 
+                                        Some os
+                                    else
+                                        release os
+                                        Some (prepare ns)
+                        let children = List.map2 update oc nc
+                        Tree.Node(self, children)
+            
+            state <- update state t
+
+            let rec link (last : VKVM.CommandStream) (t : Tree<PreparedGeometry * VKVM.CommandStream>) =
+                match t with
+                    | Tree.Empty -> last
+                    | Tree.Leaf(_,v) -> 
+                        last.Next <- Some v
+                        v
+                    | Tree.Node(Some(_,s), children) ->
+                        last.Next <- Some s
+                        children |> List.fold link s
+                    | Tree.Node(None, children) ->
+                        children |> List.fold link last
+                        
+            let final = link entry state
+            final.Next <- None
+
+        member x.Stream = stream
+        member x.GroupKey = [preparedPipeline.ppPipeline :> obj; id :> obj]
+        member x.BoundingBox = bounds.Value
+
+        interface ICommandStreamResource with
+            member x.Stream = x.Stream
+            member x.Resources = allResources :> seq<_>
+            member x.GroupKey = x.GroupKey
+            member x.BoundingBox = x.BoundingBox
+
+        override x.Create() =
+            stream <- new VKVM.CommandStream()
+            entry <- new VKVM.CommandStream()
+            stream.Call(entry) |> ignore
+
+            if allResources.Add preparedPipeline.ppPipeline then resources.Add preparedPipeline.ppPipeline
+            
+        override x.Destroy() = 
+            stream.Dispose()
+            entry.Dispose()
+            for r in allResources do resources.Remove r
+            allResources.Clear()
+            
+        override x.GetHandle token =
+            let tree = things.GetValue token
+            update tree
+            { handle = stream; version = 0 }   
+
+
+
 module RenderTaskNew =
 
     [<AbstractClass; Sealed; Extension>]
@@ -39,14 +392,6 @@ module RenderTaskNew =
 
                 | _ ->
                     failf "invalid renderobject %A" o
-
-    type ICommandStreamResource =
-        inherit IResourceLocation<VKVM.CommandStream>
-        abstract member Stream : VKVM.CommandStream
-        abstract member Resources : seq<IResourceLocation>
-
-        abstract member GroupKey : list<obj>
-        abstract member BoundingBox : IMod<Box3d>
 
     module CommandStreams = 
         type CommandStreamResource(owner, key, o : IRenderObject, resources : ResourceSet, manager : ResourceManager, renderPass : RenderPass, stats : nativeptr<V2i>) =
@@ -126,7 +471,11 @@ module RenderTaskNew =
             member x.Compile(o : IRenderObject) : ICommandStreamResource =
                 let call = 
                     cache.GetOrCreate([o :> obj], fun owner key ->
-                        new CommandStreamResource(owner, key, o, x, manager, renderPass, stats)
+                        match o with
+                            | :? RenderCommands.TreeRenderObject as o ->
+                                new RenderCommands.TreeCommandStreamResource(owner, key, o.Pipeline, o.Geometries, x, manager, renderPass, stats) :> ICommandStreamResource
+                            | _ -> 
+                                new CommandStreamResource(owner, key, o, x, manager, renderPass, stats) :> ICommandStreamResource
                     )
                 call.Acquire()
                 call |> unbox<ICommandStreamResource>
