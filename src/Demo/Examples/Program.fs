@@ -1276,13 +1276,32 @@ module AdaptiveResourcesEager =
             maxTime
 
 
+open Aardvark.Application.WinForms
 
 [<EntryPoint>]
 [<STAThread>]
 let main args =
     //Management.run()
 
+    let useVulkan = true
+
+    Ag.initialize()
+    Aardvark.Init()
+
     //colorLockTest()
+    let app,win =
+        if useVulkan then
+            let app = new Aardvark.Application.WinForms.VulkanApplication()
+            let win = app.CreateSimpleRenderWindow()
+            app :> Aardvark.Application.IApplication,win :> Aardvark.Application.IRenderWindow
+        else
+            let app = new Aardvark.Application.WinForms.OpenGlApplication()
+            let win = app.CreateGameWindow()
+            app:> Aardvark.Application.IApplication,win :> Aardvark.Application.IRenderWindow
+    CullingTest.run app win |> ignore
+    //CullingTest.runInstanced () |> ignore
+    //CullingTest.runStructural app win|> ignore
+    System.Environment.Exit 0
 
 
     //Examples.Tutorial.run()
