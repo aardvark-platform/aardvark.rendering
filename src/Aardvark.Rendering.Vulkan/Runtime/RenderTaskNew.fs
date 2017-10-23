@@ -725,6 +725,17 @@ module RenderTaskNew =
 
             boxes.CreatePermutationQuickSort(Func<_,_,_>(compare))
 
+        member x.HookRenderObject(o : IRenderObject) =
+            match o with
+                | :? RenderObject as o -> 
+                    x.HookRenderObject o:> IRenderObject
+
+                | :? MultiRenderObject as o ->
+                    MultiRenderObject(o.Children |> List.map x.HookRenderObject) :> IRenderObject
+
+                | _ ->
+                    o
+
         member x.Add(o : IRenderObject) =
             let key = o.RenderPass
             let cmd =
@@ -740,7 +751,7 @@ module RenderTaskNew =
                         passes.[key] <- c
                         x.MarkOutdated()
                         c
-            cmd.Add(o)
+            cmd.Add(x.HookRenderObject o)
 
         member x.Remove(o : IRenderObject) =
             let key = o.RenderPass
