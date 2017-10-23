@@ -218,6 +218,8 @@ type VrRenderer() =
             }
         )
 
+    member x.DesiredSize = desiredSize
+
     member x.Shutdown() =
         isAlive <- false
 
