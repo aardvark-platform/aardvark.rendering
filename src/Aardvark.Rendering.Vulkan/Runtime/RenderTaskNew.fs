@@ -737,6 +737,7 @@ module RenderTaskNew =
                     o
 
         member x.Add(o : IRenderObject) =
+            let o = x.HookRenderObject o
             let key = o.RenderPass
             let cmd =
                 match passes.TryGetValue key with
@@ -751,7 +752,7 @@ module RenderTaskNew =
                         passes.[key] <- c
                         x.MarkOutdated()
                         c
-            cmd.Add(x.HookRenderObject o)
+            cmd.Add(o)
 
         member x.Remove(o : IRenderObject) =
             let key = o.RenderPass

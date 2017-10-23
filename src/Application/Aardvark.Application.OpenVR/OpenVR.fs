@@ -16,8 +16,8 @@ type VrDeviceType =
     | TrackingReference = 3
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module VrDeviceType =
-    let internal ofETrackedDeviceClass =
+module internal VrDeviceType =
+    let ofETrackedDeviceClass =
         LookupTable.lookupTable [
             ETrackedDeviceClass.Controller, VrDeviceType.Controller
             ETrackedDeviceClass.HMD, VrDeviceType.Hmd
@@ -29,10 +29,10 @@ module VrDeviceType =
         ]
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module Trafo =
-    let private flip = Trafo3d.FromBasis(V3d.IOO, V3d.OOI, -V3d.OIO, V3d.Zero)
+module internal Trafo =
+    let flip = Trafo3d.FromBasis(V3d.IOO, V3d.OOI, -V3d.OIO, V3d.Zero)
 
-    let internal ofHmdMatrix34 (x : HmdMatrix34_t) =
+    let ofHmdMatrix34 (x : HmdMatrix34_t) =
         let t = 
             M44f(
                 x.m0, x.m4, x.m8,  0.0f,
@@ -44,18 +44,18 @@ module Trafo =
         let t = M44d.op_Explicit(t)
         Trafo3d(t,t.Inverse) * flip
 
-    let internal ofHmdMatrix44 (x : HmdMatrix44_t) =
+    let ofHmdMatrix44 (x : HmdMatrix44_t) =
         let t = M44f(x.m0,x.m1,x.m2,x.m3,x.m4,x.m5,x.m6,x.m7,x.m8,x.m9,x.m10,x.m11,x.m12,x.m13,x.m14,x.m15) 
         let t = M44d.op_Explicit(t)
         Trafo3d(t,t.Inverse)
 
 
-    let internal angularVelocity (v : HmdVector3_t) =
+    let angularVelocity (v : HmdVector3_t) =
         let v = V3d(-v.v0, -v.v1, -v.v2) // transposed world
         flip.Forward.TransformDir v
 
 
-    let internal velocity (v : HmdVector3_t) =
+    let velocity (v : HmdVector3_t) =
         let v = V3d(v.v0, v.v1, v.v2)
         flip.Forward.TransformDir v
 
@@ -99,14 +99,21 @@ type VrDevice(system : CVRSystem, deviceType : VrDeviceType, index : int) =
     let vendor  = lazy ( getString ETrackedDeviceProperty.Prop_ManufacturerName_String )
     let model   = lazy ( getString ETrackedDeviceProperty.Prop_ModelNumber_String )
     
+    let events = Event<VREvent_t>()
+
     let state = MotionState()
 
     member x.Type = deviceType
 
     member x.MotionState = state
 
+    member x.Events = events.Publish
+
     member internal x.Update(poses : TrackedDevicePose_t[]) =
         state.Update(&poses.[index])
+
+    member internal x.Trigger(evt : byref<VREvent_t>) =
+        events.Trigger(evt)
 
 type VrTexture =
     class
@@ -162,13 +169,18 @@ type VrRenderer() =
             failwithf "[OpenVR] %s" (OpenVR.GetStringForHmdError err)
         sys
     
-    let devices =
+    let devicesPerIndex =
         [|
             for i in 0u .. OpenVR.k_unMaxTrackedDeviceCount-1u do
                 let deviceType = system.GetTrackedDeviceClass i
                 if deviceType <> ETrackedDeviceClass.Invalid then
-                    yield VrDevice(system, VrDeviceType.ofETrackedDeviceClass deviceType, int i)
+                    yield VrDevice(system, VrDeviceType.ofETrackedDeviceClass deviceType, int i) |> Some
+                else
+                    yield None
         |]
+
+    let devices = devicesPerIndex |> Array.choose id
+        
 
     let hmds = devices |> Array.filter (fun d -> d.Type = VrDeviceType.Hmd)
     let controllers = devices |> Array.filter (fun d -> d.Type = VrDeviceType.Controller)
@@ -218,6 +230,20 @@ type VrRenderer() =
             }
         )
 
+    let processEvents() =
+        let mutable evt : VREvent_t = Unchecked.defaultof<VREvent_t>
+        while system.PollNextEvent(&evt, uint32 sizeof<VREvent_t>) do
+            let id = evt.trackedDeviceIndex |> int
+            if id >= 0 && id < devicesPerIndex.Length then
+                match devicesPerIndex.[id] with
+                    | Some device ->
+                        device.Trigger(&evt)
+
+                    | None ->
+                        ()
+
+            
+
     member x.DesiredSize = desiredSize
 
     member x.Shutdown() =
@@ -232,6 +258,8 @@ type VrRenderer() =
         let (lTex, rTex) = x.OnLoad infos.[0] 
 
         while isAlive do
+            processEvents()
+
             let err = compositor.WaitGetPoses(renderPoses, gamePoses)
             if err = EVRCompositorError.None then
 
@@ -260,26 +288,5 @@ type VrRenderer() =
 
     member x.Hmd = hmds.[0]
 
-
     member x.Controllers = controllers
-
-
-
-module Test =
-
-    let run () = 
-        let mutable err = EVRInitError.None
-        let sys = OpenVR.Init(&err)
-        if err <> EVRInitError.None then
-            Log.error "[OpenVR] %s" (OpenVR.GetStringForHmdError err)
-            failwithf "[OpenVR] %s" (OpenVR.GetStringForHmdError err)
-
-        let compositor = OpenVR.Compositor
-
-        let t : Texture_t = failwith ""
-
-        //compositor.Submit()
-
-
-        ()
 

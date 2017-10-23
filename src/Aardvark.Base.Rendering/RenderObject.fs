@@ -379,6 +379,11 @@ type MultiRenderObject(children : list<IRenderObject>) =
         member x.RenderPass = first.Value.RenderPass
         member x.AttributeScope = first.Value.AttributeScope
 
+    override x.GetHashCode() = children.GetHashCode()
+    override x.Equals o =
+        match o with
+            | :? MultiRenderObject as o -> children.Equals(o.Children)
+            | _ -> false
 
 type IAdaptiveBufferReader =
     inherit IAdaptiveObject

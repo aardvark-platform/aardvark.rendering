@@ -189,6 +189,9 @@ type VulkanVRApplication(samples : int, debug : bool) =
         device.Delete rImg
         device.Delete dImg
 
+        // dispose the app
+        app.Dispose()
+
     interface IRenderTarget with
         member x.Runtime = app.Runtime :> IRuntime
         member x.Sizes = Mod.constant x.DesiredSize
