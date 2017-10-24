@@ -402,6 +402,32 @@ let picking() =
 
     App.Runtime.CompileRender(App.FramebufferSignature, objs)
 
+[<Demo("Frustum Merge")>]
+let frustumMerge() =
+
+    let lProj = { left = -0.2; right = 0.3; top = 0.25; bottom = -0.25; near = 1.0; far = 10.0 }
+    let rProj = { left = -0.3; right = 0.2; top = 0.25; bottom = -0.25; near = 1.0; far = 10.0 }
+
+    let lViewProj = Trafo3d.Translation(0.7, 0.0, 0.0) * Frustum.projTrafo lProj
+    let rViewProj = Trafo3d.Translation(-0.7, 0.0, 0.0) * Frustum.projTrafo rProj
+
+    let merged = ViewProjection.mergeStereo lViewProj rViewProj
+
+    let frustum (color : C4b) (viewProj : Trafo3d) =
+        Sg.wireBox' color (Box3d(-V3d.III, V3d.III))
+            |> Sg.transform (viewProj.Inverse)
+
+    Sg.ofList [
+        frustum C4b.Green lViewProj
+        frustum C4b.Red rViewProj
+        frustum C4b.Yellow merged
+    ]
+    |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, V3d.OIO, V3d.Zero))
+    |> Sg.shader {
+        do! DefaultSurfaces.trafo
+        do! DefaultSurfaces.vertexColor
+    }
+
 
 
 [<Demo>]
@@ -829,82 +855,6 @@ let main argv =
 //    printfn ""
 //
 //    System.Environment.Exit 0
-
-
-    let view = CameraView.lookAt (V3d(6,6,6)) V3d.Zero V3d.OOI |> CameraView.viewTrafo
-    let proj = Frustum.perspective 60.0 0.1 100.0 1.0 |> Frustum.projTrafo
-
-
-    let vp = view * proj
-
-    let decompose (vp : Trafo3d) =
-        let b = vp.Backward
-        let fCenter = b.TransformPosProj V3d.OOI
-        let nCenter = b.TransformPosProj -V3d.OOI
-        let nRight  = b.TransformPosProj (V3d(1.0, 0.0, -1.0))
-
-//        let f = ((b.C2.XYZ + b.C3.XYZ) * (-b.M32 + b.M33) - (-b.C2.XYZ + b.C3.XYZ) * (b.M32 + b.M33)) / ((-b.M32 + b.M33) * (b.M32 + b.M33))
-//        let f = (b.C2.XYZ * -b.M32 + b.C3.XYZ * -b.M32 + b.C2.XYZ * b.M33 + b.C3.XYZ * b.M33 + b.C2.XYZ * b.M32 - b.C3.XYZ * b.M32 + b.C2.XYZ * b.M33 - b.C3.XYZ * b.M33) / ((-b.M32 + b.M33) * (b.M32 + b.M33))
-//        let fa = b.C2.XYZ * -b.M32 + b.C3.XYZ * -b.M32 + b.C2.XYZ * b.M33 + b.C3.XYZ * b.M33 + b.C2.XYZ * b.M32 - b.C3.XYZ * b.M32 + b.C2.XYZ * b.M33 - b.C3.XYZ * b.M33
-//        let fa = b.M33 * (2.0 * b.C2.XYZ) + b.M32 * (-2.0 * b.C3.XYZ)
-//        let fa = 2.0 * (b.M33 * b.C2.XYZ - b.M32 * b.C3.XYZ)
-
-        let ft = Vec.normalize (b.M33 * b.C2.XYZ - b.M32 * b.C3.XYZ)
-
-        let f = fCenter - nCenter |> Vec.normalize
-        let r = nRight - nCenter |> Vec.normalize
-        let u = Vec.cross r f
-        let location = V3d(b.M02 / b.M32, b.M12 / b.M32, b.M22 / b.M32)
-        let view = Trafo3d.FromBasis(r, u, -f, location)
-
-        view.Inverse, view * vp
-
-    let frustumContaining (points : list<V3d>) =
-        let mutable near = Double.PositiveInfinity
-        let mutable far = Double.NegativeInfinity
-
-        let mutable bounds1 = Box2d.Invalid
-
-        for p in points do
-            let pp = p.XY / -p.Z
-
-            if pp.X < bounds1.Min.X then bounds1.Min.X <- pp.X
-            if pp.X > bounds1.Max.X then bounds1.Max.X <- pp.X
-            if pp.Y < bounds1.Min.Y then bounds1.Min.Y <- pp.Y
-            if pp.Y > bounds1.Max.Y then bounds1.Max.Y <- pp.Y
-
-            near <- min near -p.Z
-            far <- max far -p.Z
-
-        if bounds1.IsEmpty || bounds1.IsInvalid || far <= near then
-            None
-        else
-                    
-            let l = bounds1.Min.X * near
-
-            Some {
-                left = bounds1.Min.X * near
-                right = bounds1.Max.X * near
-                top = bounds1.Max.Y * near
-                bottom = bounds1.Min.Y * near
-                near = near
-                far = far
-            }
-
-    let edgePoints (vp : Trafo3d) =
-        List.map vp.Backward.TransformPosProj [
-            V3d(-1.0, -1.0, -1.0)
-            V3d(-1.0, -1.0,  1.0)
-            V3d(-1.0,  1.0, -1.0)
-            V3d(-1.0,  1.0,  1.0)
-            V3d( 1.0, -1.0, -1.0)
-            V3d( 1.0, -1.0,  1.0)
-            V3d( 1.0,  1.0, -1.0)
-            V3d( 1.0,  1.0,  1.0)
-        ]
-
-
-    System.Environment.Exit 0
 
 
 

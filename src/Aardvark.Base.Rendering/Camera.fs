@@ -315,6 +315,17 @@ module ViewProjection =
             plane.Dot(maxDir plane.XYZ b)
 
 
+        let intersect (a : Plane3d) (b : Plane3d) (c : Plane3d) =
+            let mutable pt = V3d.Zero
+            if a.Intersects(b,c, &pt) then
+                pt
+            else
+                failwith "no plane intersection"
+
+        
+        let inline proj (pt : V3d) = V3d(pt.XY / -pt.Z, -pt.Z)
+
+
     let containing (viewPos : V3d) (bounds : Box3d) =
         let angularRange =
             bounds.ComputeCorners()
@@ -422,6 +433,15 @@ module ViewProjection =
                 ]
         )
 
+    let leftPlane (viewProj : Trafo3d) =
+        let r0 = viewProj.Forward.R0
+        let r3 = viewProj.Forward.R3
+        r3 - r0 
+
+    let rightPlane (viewProj : Trafo3d) =
+        let r0 = viewProj.Forward.R0
+        let r3 = viewProj.Forward.R3
+        r3 + r0 
 
     let toHull3d (viewProj : Trafo3d) =
         let r0 = viewProj.Forward.R0
@@ -431,8 +451,8 @@ module ViewProjection =
 
 
         Hull3d [|
-            r3 + r0 |> toPlane  // left
             r3 - r0 |> toPlane  // right
+            r3 + r0 |> toPlane  // left
             r3 + r1 |> toPlane  // bottom
             r3 - r1 |> toPlane  // top
             r3 + r2 |> toPlane  // near
@@ -490,6 +510,44 @@ module ViewProjection =
 
     let inline toFastHull3dDX (viewProj : Trafo3d) =
         FastHull3d(toHull3dDX viewProj)
+
+    let mergeStereo (lProj : Trafo3d) (rProj : Trafo3d) =
+        let p (v : V4d) = Plane3d(v.XYZ, -v.W)
+
+        let lPlane = rightPlane lProj |> p
+        let rPlane = leftPlane rProj |> p
+
+        let location = intersect lPlane rPlane Plane3d.YPlane
+        let view = Trafo3d.Translation(-location)
+
+        let points = 
+            Array.concat [|
+                frustumCorners |> Array.map lProj.Backward.TransformPosProj
+                frustumCorners |> Array.map rProj.Backward.TransformPosProj
+            |]
+
+        let projected =
+            points |> Array.map (view.Forward.TransformPos >> proj)
+
+        let bounds = Box3d(projected)
+
+        let near = bounds.Min.Z
+        let far  = bounds.Max.Z
+
+        let frustum =
+            {
+                left        = bounds.Min.X * near
+                right       = bounds.Max.X * near
+                top         = bounds.Max.Y * near
+                bottom      = bounds.Min.Y * near
+                near        = near
+                far         = far
+            }
+
+        let proj = Frustum.projTrafo frustum
+        view * proj
+
+
 
 [<Extension;AutoOpen>]
 type CameraCSharpExtensions() =
