@@ -216,7 +216,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                 match o with
                     | :? IBackendTextureOutputView as view ->
                         let img = unbox<Image> view.texture
-                        device.CreateOutputImageView(img, view.level, 1, view.slice, 1)
+                        let slices = 1 + view.slices.Max - view.slices.Min
+                        device.CreateOutputImageView(img, view.level, 1, view.slices.Min, slices)
 
                     | :? Image as img ->
                         device.CreateOutputImageView(img, 0, 1, 0, 1)
@@ -358,16 +359,16 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                 | :? IBackendTextureOutputView as view ->
                     let image = unbox<Image> view.texture
                     let flags = VkFormat.toAspect image.Format
-                    image.[unbox (int flags), view.level, view.slice]
+                    image.[unbox (int flags), view.level, view.slices.Min .. view.slices.Max]
                 | :? Image as img ->
                     let flags = VkFormat.toAspect img.Format
-                    img.[unbox (int flags), 0, 0]
+                    img.[unbox (int flags), 0, 0 .. 0]
                 | _ ->
                     failf "invalid input for blit: %A" source
 
         let dst = 
             let img = unbox<Image> target
-            img.[src.Aspect, 0, 0]
+            img.[src.Aspect, 0, 0 .. src.SliceCount - 1]
 
         token.Enqueue (Command.ResolveMultisamples(src, dst))
 
