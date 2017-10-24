@@ -78,6 +78,7 @@
     <Compile Include="Commands.fs" />
     <Compile Include="Trie.fs" />
     <Compile Include="CullingTest.fs" />
+    <Compile Include="Stereo.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <None Include="paket.references" />

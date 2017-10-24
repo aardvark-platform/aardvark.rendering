@@ -1288,6 +1288,9 @@ let main args =
     Ag.initialize()
     Aardvark.Init()
 
+    Examples.Stereo.run()
+    System.Environment.Exit 0
+
     //colorLockTest()
     let app,win =
         if useVulkan then

@@ -321,6 +321,7 @@ type AbstractPointerResource<'a when 'a : unmanaged>(owner : IResourceCache, key
             let v = NativePtr.read ptr
             x.Free v
             NativePtr.free ptr
+            hasHandle <- false
 
     override x.GetHandle(token : AdaptiveToken) =
         if x.OutOfDate then
@@ -915,7 +916,7 @@ module Resources =
 
         let sets = List.toArray sets
         let mutable setVersions = Array.init sets.Length (fun _ -> -1)
-        let mutable target = None
+        let mutable target : Option<DescriptorSetBinding> = None
 
         override x.Create() =
             base.Create()
@@ -925,7 +926,9 @@ module Resources =
             base.Destroy()
             for s in sets do s.Release()
             setVersions <- Array.init sets.Length (fun _ -> -1)
-
+            match target with
+                | Some t -> t.Dispose(); target <- None
+                | None -> ()
         override x.Compute(token : AdaptiveToken) =
             let mutable changed = false
             let target =
@@ -947,7 +950,7 @@ module Resources =
             target
 
         override x.Free(t : DescriptorSetBinding) =
-            t.Dispose()
+            () //t.Dispose()
  
     type IndexBufferBindingResource(owner : IResourceCache, key : list<obj>, indexType : VkIndexType, index : IResourceLocation<Buffer>) =
         inherit AbstractPointerResource<IndexBufferBinding>(owner, key)
