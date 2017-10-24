@@ -99,9 +99,23 @@ type VrDevice(system : CVRSystem, deviceType : VrDeviceType, index : int) =
     let vendor  = lazy ( getString ETrackedDeviceProperty.Prop_ManufacturerName_String )
     let model   = lazy ( getString ETrackedDeviceProperty.Prop_ModelNumber_String )
     
+    let axis = 
+        [|
+            if deviceType = VrDeviceType.Controller then
+                for i in 0 .. 4 do
+                    let t = getInt (ETrackedDeviceProperty.Prop_Axis0Type_Int32 + unbox i) |> unbox<EVRControllerAxisType>
+                    if t <> EVRControllerAxisType.k_eControllerAxis_None then
+                        yield VrAxis(system, t, index, i)
+        |]
+
+    let axisByIndex =
+        axis |> Seq.map (fun a -> a.Index, a) |> Map.ofSeq
+
     let events = Event<VREvent_t>()
 
     let state = MotionState()
+
+    member x.Axis = axis
 
     member x.Type = deviceType
 
@@ -112,8 +126,79 @@ type VrDevice(system : CVRSystem, deviceType : VrDeviceType, index : int) =
     member internal x.Update(poses : TrackedDevicePose_t[]) =
         state.Update(&poses.[index])
 
+        let mutable state = VRControllerState_t()
+        if system.GetControllerState(uint32 index, &state, uint32 sizeof<VRControllerState_t>) then
+            for a in axis do a.Update(&state)
+
     member internal x.Trigger(evt : byref<VREvent_t>) =
+        let buttonIndex = int evt.data.controller.button |> unbox<EVRButtonId>
+        if buttonIndex >= EVRButtonId.k_EButton_Axis0 && buttonIndex <= EVRButtonId.k_EButton_Axis4 then
+            let ai = buttonIndex - EVRButtonId.k_EButton_Axis0 |> int
+            match Map.tryFind ai axisByIndex with
+                | Some a -> a.Trigger(&evt)
+                | None -> ()
+
         events.Trigger(evt)
+
+and VrAxis(system : CVRSystem, axisType : EVRControllerAxisType, deviceIndex : int, axisIndex : int) =
+    let touched = Mod.init false
+    let pressed = Mod.init false
+    let position = Mod.init None
+    
+    let touch = Event<unit>()
+    let untouch = Event<unit>()
+    let press = Event<unit>()
+    let unpress = Event<unit>()
+
+    member x.Touched = touched :> IMod<_>
+    member x.Pressed = pressed :> IMod<_>
+    member x.Position = position :> IMod<_>
+    member x.Touch = touch.Publish
+    member x.UnTouch = untouch.Publish
+    member x.Press = press.Publish
+    member x.UnPress = unpress.Publish
+
+    member x.Index = axisIndex
+
+    member internal x.Update(s : byref<VRControllerState_t>) =
+        if touched.Value then
+            let pos : VRControllerAxis_t =
+                match axisIndex with
+                    | 0 -> s.rAxis0
+                    | 1 -> s.rAxis1
+                    | 2 -> s.rAxis2
+                    | 3 -> s.rAxis3
+                    | 4 -> s.rAxis4
+                    | _ -> raise <| System.IndexOutOfRangeException()
+                
+            transact (fun () ->
+                position.Value <- Some (V2d(pos.x, pos.y))
+            )
+        else
+            match position.Value with
+                | Some _ -> transact (fun () -> position.Value <- None)
+                | _ -> ()
+        ()
+
+    member internal x.Trigger(e : byref<VREvent_t>) =
+        let eventType = e.eventType |> int |> unbox<EVREventType>
+        transact (fun () ->
+            match eventType with
+                | EVREventType.VREvent_ButtonTouch -> 
+                    touch.Trigger()
+                    touched.Value <- true
+                | EVREventType.VREvent_ButtonUntouch -> 
+                    untouch.Trigger()
+                    touched.Value <- false
+                | EVREventType.VREvent_ButtonPress -> 
+                    press.Trigger()
+                    pressed.Value <- true
+                | EVREventType.VREvent_ButtonUnpress -> 
+                    unpress.Trigger()
+                    pressed.Value <- false
+                | _ -> ()
+        )
+
 
 type VrTexture =
     class
