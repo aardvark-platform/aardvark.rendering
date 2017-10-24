@@ -220,6 +220,13 @@ type VrTexture =
             let i = Texture_t(eColorSpace = EColorSpace.Auto, eType = ETextureType.Vulkan, handle = ptr)
             let b = VRTextureBounds_t(uMin = 0.0f, uMax = 1.0f, vMin = 0.0f, vMax = 1.0f)
             new VrTexture(ptr, i, EVRSubmitFlags.Submit_Default, b)
+
+        static member Vulkan(data : VRVulkanTextureData_t, bounds : Box2d) =
+            let ptr = Marshal.AllocHGlobal sizeof<VRVulkanTextureData_t>
+            NativeInt.write ptr data
+            let i = Texture_t(eColorSpace = EColorSpace.Auto, eType = ETextureType.Vulkan, handle = ptr)
+            let b = VRTextureBounds_t(uMin = float32 bounds.Min.X, uMax = float32 bounds.Max.X, vMin = float32 bounds.Min.Y, vMax = float32 bounds.Max.Y)
+            new VrTexture(ptr, i, EVRSubmitFlags.Submit_Default, b)
             
         static member D3D12(data : D3D12TextureData_t) =
             let ptr = Marshal.AllocHGlobal sizeof<D3D12TextureData_t>
@@ -334,11 +341,13 @@ type VrRenderer() =
     member x.Shutdown() =
         isAlive <- false
 
+    member x.Info = infos.[0]
+
     abstract member OnLoad : info : VrRenderInfo -> VrTexture * VrTexture
     abstract member Render : unit -> unit
     abstract member Release : unit -> unit
 
-    member x.Run (render : VrRenderInfo * VrRenderInfo -> VrTexture * VrTexture) =
+    member x.Run () =
         if not isAlive then raise <| ObjectDisposedException("VrSystem")
         let (lTex, rTex) = x.OnLoad infos.[0] 
 

@@ -66,6 +66,33 @@ module StereoShader =
         }
 
 module Stereo =
+    open Aardvark.Application.OpenVR
+    let runVive() =
+        let app = new VulkanVRApplicationLayered(true)
+        
+        let info = app.Info
+
+        let task =
+            Sg.box' C4b.Red Box3d.Unit
+                |> Sg.shader {
+                    do! DefaultSurfaces.trafo
+                    do! StereoShader.trafo
+                    do! DefaultSurfaces.constantColor C4f.Red
+                    //do! DefaultSurfaces.simpleLighting
+                }
+                |> Sg.viewTrafo info.viewTrafo
+                |> Sg.uniform "LeftProj" info.lProjTrafo
+                |> Sg.uniform "RightProj" info.rProjTrafo
+                |> Sg.projTrafo info.lProjTrafo
+                |> Sg.compile app.Runtime app.FramebufferSignature
+
+        app.RenderTask <- task
+
+
+        app.Run()
+        
+        ()
+
     let run() =
         let app = new VulkanApplication(false)
         let win = app.CreateSimpleRenderWindow(1)
