@@ -47,7 +47,7 @@ module RenderTasks =
 
 
         abstract member Perform : AdaptiveToken * RenderToken * Framebuffer -> unit
-        abstract member Release : unit -> unit
+        abstract member Release2 : unit -> unit
 
         member x.UseRender (action : unit -> 'r) =
             let locks = lock locks (fun () -> Seq.toList locks)
@@ -61,12 +61,12 @@ module RenderTasks =
         member x.Device = device
         member x.ResourceManager = manager
 
-        override x.Dispose() =
+        override x.Release() =
             if not isDisposed then
                 isDisposed <- true
                 //Log.warn "manager dispose not implemented"
                 manager.Dispose()
-                x.Release()
+                x.Release2()
                 NativePtr.free runtimeStats
 
         override x.FramebufferSignature = Some fboSignature
@@ -454,7 +454,7 @@ module RenderTasks =
             )
 
 
-        override x.Release() =
+        override x.Release2() =
             preparedObjectReader.Dispose()
             commandBuffers |> Map.iter (fun _ c -> c.Dispose())
             pool.Dispose()

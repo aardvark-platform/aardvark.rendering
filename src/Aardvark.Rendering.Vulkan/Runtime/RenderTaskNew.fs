@@ -744,10 +744,11 @@ module RenderTaskNew =
                     | (true,c) -> c
                     | _ ->
                         let c = 
-                            match key.Order with
-                                | RenderPassOrder.BackToFront | RenderPassOrder.FrontToBack -> 
-                                    ChangeableOrderedCommandBuffer(manager, pool, renderPass, viewports, Mod.constant (sortByCamera key.Order)) :> AbstractChangeableSetCommandBuffer
-                                | _ -> 
+                            // TODO: sorting broken
+//                            match key.Order with
+//                                | RenderPassOrder.BackToFront | RenderPassOrder.FrontToBack -> 
+//                                    ChangeableOrderedCommandBuffer(manager, pool, renderPass, viewports, Mod.constant (sortByCamera key.Order)) :> AbstractChangeableSetCommandBuffer
+//                                | _ -> 
                                     ChangeableUnorderedCommandBuffer(manager, pool, renderPass, viewports) :> AbstractChangeableSetCommandBuffer
                         passes.[key] <- c
                         x.MarkOutdated()
@@ -770,7 +771,7 @@ module RenderTaskNew =
             cmd.Reset()
             x.MarkOutdated()
 
-        override x.Dispose() =
+        override x.Release() =
             transact (fun () ->
                 x.Clear()
                 cmd.Dispose()
@@ -844,7 +845,7 @@ module RenderTaskNew =
 
             base.Perform(token, rt, desc)
 
-        override x.Dispose() =
+        override x.Release() =
             reader.Dispose()
             base.Dispose()
 

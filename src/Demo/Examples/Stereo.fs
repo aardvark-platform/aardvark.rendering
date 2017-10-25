@@ -11,6 +11,8 @@ open Aardvark.Application.WinForms
 open Aardvark.Base.Incremental.Operators
 open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering.Vulkan
+open Aardvark.Rendering.Text
 
 module StereoShader =
     open FShade
@@ -45,6 +47,17 @@ module StereoShader =
             yield { t.P2 with layer = 1; pos = uniform.RightProj * (uniform.ViewTrafo * t.P2.wp) }
         }
 
+    let fancyColor (v : Vertex) =
+        vertex {
+            return { v with c = V4d(v.pos.XYZ, 1.0) }
+        }
+    let flip (v : Vertex) =
+        vertex {
+            let version : int = uniform?Version
+            let zero = 1.0E-10 * float (version % 2)
+            return { v with pos = V4d(1.0, -1.0, 1.0 + zero, 1.0) * v.pos }
+        }
+
     let inputSampler =
         sampler2dArray {
             texture uniform?InputTexture
@@ -66,24 +79,142 @@ module StereoShader =
         }
 
 module Stereo =
+    open System.Windows.Forms
+    open System.Drawing
+    open Aardvark.Rendering.Text
+    open System.IO
+    open System.Text
+
+    type Hook() =
+        inherit TextWriter()
+
+        let mutable currentLine = ""
+
+        let lines = Mod.init []
+        let mutable lineCount = 0
+        let maxLines = 30
+
+        let text = lines |> Mod.map (List.rev >> String.concat "\r\n")
+
+        member x.Text = text
+
+        override x.Encoding = Encoding.UTF8
+        override x.Write(str : string) = currentLine <- currentLine + str
+        override x.WriteLine(str : string) = currentLine <- str; x.WriteLine()
+        override x.WriteLine() = 
+            let str = currentLine
+            //inner.WriteLine(str)
+            currentLine <- ""
+
+            transact (fun () ->
+                let old = 
+                    if lineCount >= maxLines then 
+                        List.take (maxLines - 1) lines.Value
+                    else 
+                        lineCount <- lineCount + 1
+                        lines.Value
+                    
+                lines.Value <- str :: old
+            )
+            
+
+
+
     open Aardvark.Application.OpenVR
     let runVive() =
+        let captain = new Hook()
+
         let app = new VulkanVRApplicationLayered(true)
         
+        app.Controllers |> Array.iter (fun c ->
+            c.Axis |> Array.iter (fun a ->
+                a.Press.Add ( fun _ -> captain.WriteLine("arrrr {0}", string a))
+            )
+        )
+
+        async {
+            let d = new System.Windows.Forms.Form()
+            
+            
+            //d.ClientSize <- Drawing.Size(2 * app.DesiredSize.X, app.DesiredSize.Y)
+            d.WindowState <- FormWindowState.Maximized
+            d.FormBorderStyle <- FormBorderStyle.None
+
+            let mode = GraphicsMode(Col.Format.RGBA, 8, 24, 8, 2, 8, ImageTrafo.MirrorY)
+            let impl = new VulkanRenderControl(app.Runtime, mode)
+
+
+            let consoleTrafo = 
+                impl.Sizes |> Mod.map (fun s -> 
+                    Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
+                    Trafo3d.Translation(-0.95, 0.9, 0.0)
+                )
+
+            let helpTrafo = 
+                impl.Sizes |> Mod.map (fun s -> 
+                    Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
+                    Trafo3d.Translation(-0.95, -0.95, 0.0)
+                    
+                )
+
+
+            
+            captain.WriteLine("HOOK")
+
+            let font = Font("Consolas")
+            let overlay1 =
+                Sg.text font C4b.White (captain.Text)
+                    |> Sg.scale 0.05
+                    |> Sg.projTrafo consoleTrafo
+
+            let overlay2 =
+                Sg.text font C4b.White (Mod.constant "press ESC to exit")
+                    |> Sg.scale 0.05
+                    |> Sg.projTrafo helpTrafo
+                
+            let overlay = Sg.ofList [overlay1; overlay2]
+
+            let task =
+                Sg.fullScreenQuad
+                    |> Sg.diffuseTexture app.Texture
+                    |> Sg.uniform "Version" app.Version
+                    |> Sg.shader {
+                        do! StereoShader.flip
+                        do! DefaultSurfaces.diffuseTexture
+                    }
+
+                    |> Sg.andAlso overlay
+                    |> Sg.compile app.Runtime impl.FramebufferSignature
+
+            impl.RenderTask <-task
+            impl.Dock <- System.Windows.Forms.DockStyle.Fill
+            d.Controls.Add impl
+
+            impl.KeyDown.Add (fun k ->
+                if k.KeyCode = Keys.Escape then
+                    d.Close()
+            )
+
+            System.Windows.Forms.Application.Run(d)
+            app.Shutdown()
+
+        } |> Async.Start
+
         let info = app.Info
 
         let task =
             Sg.box' C4b.Red Box3d.Unit
+                |> Sg.scale 2.0
                 |> Sg.shader {
+                    do! StereoShader.fancyColor
                     do! DefaultSurfaces.trafo
                     do! StereoShader.trafo
-                    do! DefaultSurfaces.constantColor C4f.Red
-                    //do! DefaultSurfaces.simpleLighting
+                    //do! DefaultSurfaces.constantColor C4f.Red
+                    do! DefaultSurfaces.simpleLighting
                 }
                 |> Sg.viewTrafo info.viewTrafo
                 |> Sg.uniform "LeftProj" info.lProjTrafo
                 |> Sg.uniform "RightProj" info.rProjTrafo
-                |> Sg.projTrafo info.lProjTrafo
                 |> Sg.compile app.Runtime app.FramebufferSignature
 
         app.RenderTask <- task

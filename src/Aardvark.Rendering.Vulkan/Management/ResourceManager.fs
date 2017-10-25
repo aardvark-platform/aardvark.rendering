@@ -1282,6 +1282,7 @@ type ResourceSet() =
     let all = ReferenceCountingSet<IResourceLocation>()
     let locked = ReferenceCountingSet<ILockedResource>()
     let dirty = System.Collections.Generic.HashSet<IResourceLocation>()
+    let dirtyCalls = System.Collections.Generic.HashSet<IResourceLocation>()
 
     member x.AddLocked(l : ILockedResource) =
         lock locked (fun () -> locked.Add l |> ignore)
@@ -1295,6 +1296,7 @@ type ResourceSet() =
 
     override x.InputChanged(_,i) =
         match i with
+            | :? INativeResourceLocation<DrawCall> as c -> lock dirty (fun () -> dirtyCalls.Add c |> ignore)
             | :? IResourceLocation as r -> lock dirty (fun () -> dirty.Add r |> ignore)
             | _ -> ()
 
@@ -1303,7 +1305,7 @@ type ResourceSet() =
             lock r (fun () ->
                 r.Acquire()
                 if r.OutOfDate then
-                    lock dirty (fun () -> dirty.Add r |> ignore)
+                    x.InputChanged(null, r)
                 else
                     r.Outputs.Add x |> ignore
             )
@@ -1330,11 +1332,17 @@ type ResourceSet() =
     member x.Update(token : AdaptiveToken) =
         x.EvaluateAlways token (fun token ->
             let rec update () =
+                x.OutOfDate <- true
                 let arr = 
                     lock dirty (fun () -> 
-                        let arr = HashSet.toArray dirty
-                        dirty.Clear()
-                        arr
+                        if dirtyCalls.Count = 0 then
+                            let arr = HashSet.toArray dirty
+                            dirty.Clear()
+                            arr
+                        else
+                            let arr = HashSet.toArray dirtyCalls
+                            dirtyCalls.Clear()
+                            arr
                     )
 
                 if arr.Length > 0 then

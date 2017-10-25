@@ -141,7 +141,7 @@ module RenderTasks =
         abstract member ProcessDeltas : AdaptiveToken * RenderToken -> unit
         abstract member UpdateResources : AdaptiveToken * RenderToken -> unit
         abstract member Perform : AdaptiveToken * RenderToken * Framebuffer * OutputDescription -> unit
-        abstract member Release : unit -> unit
+        abstract member Release2 : unit -> unit
 
 
 
@@ -156,12 +156,12 @@ module RenderTasks =
             x.ProcessDeltas(token, t)
             x.UpdateResources(token, t)
 
-        override x.Dispose() =
+        override x.Release() =
             if not isDisposed then
                 isDisposed <- true
                 let dummy = ref 0
                 currentContext.Outputs.Consume(dummy) |> ignore
-                x.Release()
+                x.Release2()
         override x.FramebufferSignature = Some fboSignature
         override x.Runtime = Some ctx.Runtime
         override x.Perform(token : AdaptiveToken, t : RenderToken, desc : OutputDescription) =
@@ -1472,7 +1472,7 @@ module RenderTasks =
 
 
 
-        override x.Release() =
+        override x.Release2() =
             preparedObjectReader.Dispose()
             resources.Dispose()
             for (_,t) in Map.toSeq subtasks do
@@ -1565,7 +1565,7 @@ module RenderTasks =
                 GL.Check "could not bind framebuffer"
             )
 
-        override x.Dispose() =
+        override x.Release() =
             color.RemoveOutput x
             depth.RemoveOutput x
         override x.FramebufferSignature = fboSignature |> Some
@@ -2277,7 +2277,7 @@ module ``Command Tasks`` =
                 runStats |> List.iter (fun l -> l.Value)
                 rt.AddPrimitiveCount(primitivesGenerated.Value)
 
-        override x.Release() =
+        override x.Release2() =
             commandReader.Dispose()
             resources.Dispose()
             subtask.Dispose()

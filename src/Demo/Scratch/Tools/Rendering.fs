@@ -26,7 +26,7 @@ type private ChangeableRenderTask() =
     override x.Perform (token : AdaptiveToken, t : RenderToken, o : OutputDescription) = 
         current.Run(token, t, o)
 
-    override x.Dispose() = current <- RenderTask.empty
+    override x.Release() = current <- RenderTask.empty
 
     override x.PerformUpdate(token, t) = current.Update(token, t)
 

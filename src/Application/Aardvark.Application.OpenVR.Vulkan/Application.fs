@@ -214,10 +214,12 @@ type VulkanVRApplication(samples : int, debug : bool) =
         member x.Time = time
 
 
-type VulkanVRApplicationLayered(samples : int, debug : bool) =
+type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
     inherit VrRenderer()
 
-    let app = new HeadlessVulkanApplication(debug)
+    
+
+    let app = new HeadlessVulkanApplication(debug, this.GetVulkanInstanceExtensions(), fun d -> this.GetVulkanDeviceExtensions d.Handle)
     let device = app.Device
 
     let mutable task = RenderTask.empty
@@ -241,9 +243,15 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) =
 
     let caller = AdaptiveObject()
 
+    let version = Mod.init 0
+    let tex = Mod.custom (fun _ -> fImg :> ITexture)
+
     new(samples) = VulkanVRApplicationLayered(samples, false)
     new(debug) = VulkanVRApplicationLayered(1, debug)
     new() = VulkanVRApplicationLayered(1, false)
+
+    member x.Version = version
+    member x.Texture = tex
 
 
     member x.FramebufferSignature = renderPass :> IFramebufferSignature
@@ -316,9 +324,9 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) =
                 m_pInstance = device.Instance.Handle,
                 m_pQueue = queue,
                 m_nQueueFamilyIndex = uint32 device.GraphicsFamily.Index,
-                m_nWidth = uint32 cImg.Size.X, 
-                m_nHeight = uint32 cImg.Size.Y,
-                m_nFormat = uint32 cImg.Format,
+                m_nWidth = uint32 fImg.Size.X, 
+                m_nHeight = uint32 fImg.Size.Y,
+                m_nFormat = uint32 fImg.Format,
                 m_nSampleCount = uint32 samples
             )
 
@@ -358,15 +366,23 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) =
         )
         let a = cImg.[ImageAspect.Color, *, 0]
 
+        let srcBox = Box3i(V3i(0,info.framebufferSize.Y - 1,0), V3i(info.framebufferSize.X - 1, 0, 0))
+        let lBox = Box3i(V3i.Zero, V3i(info.framebufferSize - V2i.II, 0))
+        let rBox = Box3i(V3i(info.framebufferSize.X, 0, 0), V3i(2*info.framebufferSize.X - 1, info.framebufferSize.Y-1, 0))
+
         device.perform {
             do! Command.TransformLayout(cImg, VkImageLayout.TransferSrcOptimal)
-            do! Command.Copy(cImg.[ImageAspect.Color, 0, 0], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(info.framebufferSize, 1))
-            do! Command.Copy(cImg.[ImageAspect.Color, 0, 1], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i(info.framebufferSize.X, 0, 0), V3i(info.framebufferSize, 1))
+
+            do! Command.Blit(cImg.[ImageAspect.Color, 0, 0], srcBox, fImg.[ImageAspect.Color, 0, 0], lBox, VkFilter.Nearest)
+            do! Command.Blit(cImg.[ImageAspect.Color, 0, 1], srcBox, fImg.[ImageAspect.Color, 0, 0], rBox, VkFilter.Nearest)
+
+            //do! Command.Copy(cImg.[ImageAspect.Color, 0, 0], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(info.framebufferSize, 1))
+            //do! Command.Copy(cImg.[ImageAspect.Color, 0, 1], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i(info.framebufferSize.X, 0, 0), V3i(info.framebufferSize, 1))
             
             do! Command.TransformLayout(fImg, VkImageLayout.TransferSrcOptimal)
         }
 
-        transact (fun () -> time.MarkOutdated())
+        transact (fun () -> time.MarkOutdated(); version.Value <- version.Value + 1)
 
     override x.Release() = 
         // delete views

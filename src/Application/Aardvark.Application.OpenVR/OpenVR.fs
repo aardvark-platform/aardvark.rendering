@@ -28,24 +28,108 @@ module internal VrDeviceType =
             ETrackedDeviceClass.Invalid, VrDeviceType.Other
         ]
 
+
+module Unhate =
+    open System.Collections.Generic
+   
+    [<Flags>]
+    type Flags =
+        | None          = 0x00
+        | Transpose     = 0x01
+        | Invert        = 0x02
+        | GLFlip        = 0x04
+        
+       
+    let private oursToTheirs = Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero)
+    let private theirsToOurs = oursToTheirs.Inverse
+ 
+    let private applyFlags (f : Flags) (res : Trafo3d) =
+        let t = f.HasFlag Flags.Transpose
+        let i = f.HasFlag Flags.Invert
+        let f = f.HasFlag Flags.GLFlip
+
+        let mutable res = res
+        if t then
+            res <- Trafo3d(res.Forward.Transposed, res.Backward.Transposed)
+ 
+        if i then
+            res <- res.Inverse
+ 
+        if f then
+            res <- oursToTheirs * res * theirsToOurs
+ 
+       
+        res
+ 
+    let private allFlags = unbox<Flags> 0x07
+ 
+    let private all = List<ModRef<Flags>>()
+    let private trafos = Dict<string, ModRef<Flags>>()
+ 
+ 
+    let unhate() =
+        let rec unhate (id : int) =
+            if id >= all.Count then
+                true
+ 
+            elif unhate (id + 1) then
+                let v = all.[id].Value
+                let nv = int v + 1
+                let newFlags = unbox<Flags> nv &&& allFlags
+                let step = nv > int allFlags
+                all.[id].Value <- newFlags
+                step
+ 
+            else
+                false
+ 
+        transact (fun () -> unhate 0 |> ignore)
+ 
+        printf " 0: unhate# "
+        for (name, v) in Dict.toSeq trafos do
+            printf "%s: %A " name v.Value
+        printfn ""
+ 
+    let register (name : string) (m : IMod<Trafo3d>) =
+        let flags = trafos.GetOrCreate(name, fun _ ->
+            let m = Mod.init Flags.None
+            all.Add m
+            m
+        )
+        Mod.map2 applyFlags flags m
+ 
+module UnhateTest =
+    let run() =
+        let trafo =
+                Mod.init (Trafo3d.Translation(5.0, 6.0, 7.0))
+                |> Unhate.register "a"
+ 
+        while true do
+            printfn "%A" (trafo.GetValue().Forward)
+            Console.ReadLine() |> ignore
+            Unhate.unhate()
+
+
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module internal Trafo =
-    let flip = Trafo3d.FromBasis(V3d.IOO, V3d.OOI, -V3d.OIO, V3d.Zero)
+    
+    let private flip = Trafo3d.Identity
 
     let ofHmdMatrix34 (x : HmdMatrix34_t) =
         let t = 
             M44f(
-                x.m0, x.m4, x.m8,  0.0f,
-                x.m1, x.m5, x.m9,  0.0f,
-                x.m2, x.m6, x.m10, 0.0f,
-                x.m3, x.m7, x.m11, 1.0f
+                x.m0, x.m1, x.m2,  x.m3,
+                x.m4, x.m5, x.m6,  x.m7,
+                x.m8, x.m9, x.m10, x.m11,
+                0.0f, 0.0f, 0.0f, 1.0f
             ) 
 
         let t = M44d.op_Explicit(t)
-        Trafo3d(t,t.Inverse) * flip
+        Trafo3d(t,t.Inverse) //* flip
 
     let ofHmdMatrix44 (x : HmdMatrix44_t) =
-        let t = M44f(x.m0,x.m1,x.m2,x.m3,x.m4,x.m5,x.m6,x.m7,x.m8,x.m9,x.m10,x.m11,x.m12,x.m13,x.m14,x.m15) 
+        let t = M44f(x.m0,x.m1,x.m2,x.m3,x.m4,x.m5,x.m6,x.m7,x.m8,x.m9,x.m10,x.m11,x.m12,x.m13,x.m14,x.m15)
         let t = M44d.op_Explicit(t)
         Trafo3d(t,t.Inverse)
 
@@ -76,7 +160,11 @@ type MotionState() =
         if newPose.bDeviceIsConnected && newPose.bPoseIsValid && newPose.eTrackingResult = ETrackingResult.Running_OK then
             let t = Trafo.ofHmdMatrix34 newPose.mDeviceToAbsoluteTracking
             isValid.Value <- true
-            pose.Value <- t
+
+//            let m = M44d.Identity
+//            let m = M44d.FromBasis(V3d.IOO, -V3d.OOI, V3d.OIO, V3d.Zero) * m * M44d.FromBasis(V3d.IOO, V3d.OOI, -V3d.OIO, V3d.Zero)
+
+            pose.Value <- Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, V3d.OIO, V3d.Zero) * t * Trafo3d.FromBasis(V3d.IOO, V3d.OOI, -V3d.OIO, V3d.Zero)
             angularVelocity.Value <- Trafo.angularVelocity newPose.vAngularVelocity
             velocity.Value <- Trafo.velocity newPose.vVelocity
         else
@@ -149,6 +237,9 @@ and VrAxis(system : CVRSystem, axisType : EVRControllerAxisType, deviceIndex : i
     let untouch = Event<unit>()
     let press = Event<unit>()
     let unpress = Event<unit>()
+
+    override x.ToString() =
+        sprintf "{ device = %d; axis = %d }" deviceIndex axisIndex
 
     member x.Touched = touched :> IMod<_>
     member x.Pressed = pressed :> IMod<_>
@@ -277,9 +368,12 @@ type VrRenderer() =
     let hmds = devices |> Array.filter (fun d -> d.Type = VrDeviceType.Hmd)
     let controllers = devices |> Array.filter (fun d -> d.Type = VrDeviceType.Controller)
     
+
+
     let compositor = OpenVR.Compositor
     let renderPoses = Array.zeroCreate (int OpenVR.k_unMaxTrackedDeviceCount)
     let gamePoses = Array.zeroCreate (int OpenVR.k_unMaxTrackedDeviceCount)
+
 
     [<VolatileField>]
     let mutable isAlive = true
@@ -287,12 +381,13 @@ type VrRenderer() =
     let check (str : string) (err : EVRCompositorError) =
         if err <> EVRCompositorError.None then
             Log.error "[OpenVR] %A: %s" err str
-            failwithf "[OpenVR] %A: %s" err str
+            //failwithf "[OpenVR] %A: %s" err str
 
     let depthRange = Range1d(0.1, 100.0) |> Mod.init
 
     let lProj =
         let headToEye = system.GetEyeToHeadTransform(EVREye.Eye_Left) |> Trafo.ofHmdMatrix34 |> Trafo.inverse
+        //let headToEye = Trafo3d.Scale(1.0, 1.0, -1.0) * headToEye
         depthRange |> Mod.map (fun range ->
             let proj = system.GetProjectionMatrix(EVREye.Eye_Left, float32 range.Min, float32 range.Max)
             headToEye * Trafo.ofHmdMatrix44 proj
@@ -300,8 +395,9 @@ type VrRenderer() =
 
     let rProj =
         let headToEye = system.GetEyeToHeadTransform(EVREye.Eye_Right) |> Trafo.ofHmdMatrix34 |> Trafo.inverse
+        //let headToEye = Trafo3d.Scale(1.0, 1.0, -1.0) * headToEye
         depthRange |> Mod.map (fun range ->
-            let proj = system.GetProjectionMatrix(EVREye.Eye_Left, float32 range.Min, float32 range.Max)
+            let proj = system.GetProjectionMatrix(EVREye.Eye_Right, float32 range.Min, float32 range.Max)
             headToEye * Trafo.ofHmdMatrix44 proj
         )
 
@@ -312,13 +408,16 @@ type VrRenderer() =
         V2i(int width, int height)
 
 
+    let view (t : Trafo3d) =
+        t.Inverse * Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, V3d.OIO, V3d.Zero)
+
     let infos =
         hmds |> Array.map (fun hmd ->
             {
                 framebufferSize = desiredSize
-                viewTrafo = hmd.MotionState.Pose |> Mod.map Trafo.inverse
-                lProjTrafo = lProj
-                rProjTrafo = rProj
+                viewTrafo = hmd.MotionState.Pose |> Mod.map view |> Unhate.register "viewTrafo" //CameraView.lookAt (V3d(3,4,5)) V3d.Zero V3d.OOI |> CameraView.viewTrafo |> Mod.constant //hmd.MotionState.Pose |> Mod.map Trafo.inverse |> Unhate.register "viewTrafo"
+                lProjTrafo = lProj |> Unhate.register "proj"// Frustum.perspective 40.0 1.0 100.0 1.0 |> Frustum.projTrafo |> Mod.constant //lProj |> Unhate.register "proj"
+                rProjTrafo = rProj |> Unhate.register "proj"// Frustum.perspective 40.0 1.0 100.0 1.0 |> Frustum.projTrafo |> Mod.constant //rProj |> Unhate.register "proj"
             }
         )
 
@@ -335,7 +434,19 @@ type VrRenderer() =
                         ()
 
             
+    member x.GetVulkanInstanceExtensions() = 
+        let b = System.Text.StringBuilder(4096, 4096)
+        let len = compositor.GetVulkanInstanceExtensionsRequired(b, 4096u) 
+        let str = b.ToString()
+        str.Split(' ') |> Array.toList
 
+    member x.GetVulkanDeviceExtensions(physicalDevice : nativeint) = 
+        let b = System.Text.StringBuilder(4096, 4096)
+        let len = compositor.GetVulkanDeviceExtensionsRequired(physicalDevice, b, 4096u) 
+        let str = b.ToString()
+        str.Split(' ') |> Array.toList
+
+    member x.Compositor = compositor
     member x.DesiredSize = desiredSize
 
     member x.Shutdown() =
@@ -375,10 +486,10 @@ type VrRenderer() =
             else
                 Log.error "[OpenVR] %A" err
         
+        OpenVR.Shutdown()
         lTex.Dispose()
         rTex.Dispose()
         x.Release()
-        OpenVR.Shutdown()
 
     member x.Hmd = hmds.[0]
 

@@ -1288,7 +1288,10 @@ let main args =
     Ag.initialize()
     Aardvark.Init()
 
-    Examples.Stereo.run()
+    //Aardvark.Application.OpenVR.UnhateTest.run()
+
+    Examples.Stereo.runVive()
+
     System.Environment.Exit 0
 
     //colorLockTest()
