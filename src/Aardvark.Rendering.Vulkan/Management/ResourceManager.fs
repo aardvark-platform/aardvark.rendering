@@ -820,6 +820,18 @@ module Resources =
         
                     let pDynamicStates = NativePtr.pushStackArray dynamicStates
             
+                    let mutable pTessState = NativePtr.stackalloc 1
+                    if prog.HasTessellation then
+                        let state = 
+                            VkPipelineTessellationStateCreateInfo(
+                                VkStructureType.PipelineTessellationStateCreateInfo, 0n,
+                                VkPipelineTessellationStateCreateFlags.MinValue,
+                                uint32 prog.TessellationPatchSize
+                            )
+                        NativePtr.write pTessState state
+                    else
+                        pTessState <- NativePtr.zero
+
                     let mutable dynamicStates =
                         VkPipelineDynamicStateCreateInfo(
                             VkStructureType.PipelineDynamicStateCreateInfo, 0n,
@@ -845,7 +857,7 @@ module Resources =
                             pShaderCreateInfos,
                             inputState,
                             inputAssembly,
-                            NativePtr.zero, // tessellation
+                            pTessState,
                             &&viewportState,
                             rasterizerState,
                             &&multisampleState,

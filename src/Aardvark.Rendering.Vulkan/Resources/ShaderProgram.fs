@@ -100,6 +100,10 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
     member x.FragmentFlags = fragInfo.flags
     member x.SampleShading = fragInfo.sampleShading
     member x.ShaderCreateInfos = createInfos
+    member x.TessellationPatchSize = 
+        match tessInfo with
+            | Some i -> i.outputVertices
+            | None -> 0
 
     override x.Destroy() =
         for s in shaders do device.Delete(s.Module)
