@@ -236,7 +236,7 @@ type PreparedRenderObjectCommand(scope : ResourceSet, manager : ResourceManager,
                 manager.CreateVertexInputState(layout.PipelineInfo, Mod.constant (VertexInputState.create bufferViews))
 
             let inputAssembly =
-                manager.CreateInputAssemblyState(ro.Mode)
+                manager.CreateInputAssemblyState(ro.Mode, program)
 
             let rasterizerState =
                 manager.CreateRasterizerState(ro.DepthTest, ro.CullMode, ro.FillMode)
