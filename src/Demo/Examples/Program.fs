@@ -1290,9 +1290,9 @@ let main args =
 
     //Aardvark.Application.OpenVR.UnhateTest.run()
 
-    Examples.Tessellation.run()
+    //Examples.Tessellation.run()
     //Examples.Stereo.runVive()
-
+    Examples.TessellatedSphere.run()
     System.Environment.Exit 0
 
     //colorLockTest()
@@ -1328,7 +1328,8 @@ let main args =
     Interactive.Renderer <- Vulkan
     
     Aardvark.Rendering.GL.RuntimeConfig.SupressSparseBuffers <- false
-    Examples.PostProcessing.run()
+    //Examples.PostProcessing.run()
+
     //Examples.CommandTest.run()
     //Examples.LoD.run()
     //Examples.Shadows.run()
