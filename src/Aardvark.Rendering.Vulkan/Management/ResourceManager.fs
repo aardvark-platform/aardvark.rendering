@@ -1334,15 +1334,13 @@ type ResourceSet() =
                     r.Outputs.Add x |> ignore
             )
 
-    member x.AddAndEvaluate(r : IResourceLocation<'a>) =
-        x.EvaluateAlways AdaptiveToken.Top (fun t ->
-            all.Add r |> ignore
-            r.Update t
-        )
     member x.AddAndUpdate(r : IResourceLocation) =
         x.EvaluateAlways AdaptiveToken.Top (fun t ->
-            all.Add r |> ignore
-            r.Update t |> ignore
+            if all.Add r then
+                lock r (fun () ->
+                    r.Acquire()
+                )
+            r.Update(t) |> ignore
         )   
 
     member x.Remove(r : IResourceLocation) =
@@ -1350,7 +1348,11 @@ type ResourceSet() =
             lock r (fun () ->
                 r.Release()
                 r.RemoveOutput x
-                lock dirty (fun () -> dirty.Remove r |> ignore)
+                lock dirty (fun () ->
+                    match r with
+                        | :? INativeResourceLocation<DrawCall> as r -> dirtyCalls.Remove r |> ignore
+                        | _ -> dirty.Remove r |> ignore
+                )
             )
 
     member x.Update(token : AdaptiveToken) =

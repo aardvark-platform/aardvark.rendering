@@ -414,7 +414,7 @@ module GeometryPoolUtilities =
 
         member x.Dispose() =
             if hostBuffer.Handle.IsValid then
-                VkRaw.vkUnmapMemory(device.Handle, hm.Handle)
+                //VkRaw.vkUnmapMemory(device.Handle, hm.Handle)
                 device.Delete hostBuffer
                 ptr <- 0n
                 device.Delete(x)
@@ -581,7 +581,7 @@ module GeometryPoolUtilities =
         inherit Buffer(device, handle, devPtr, size)
         let streamSize = size
 
-        let mutable scratchBuffer, scratchMem, scratchPtr =
+        let mutable scratchBuffer, scratchMem =
             if size > 0L then
                 let mutable buffer = VkBuffer.Null
                 let mutable info =
@@ -605,48 +605,42 @@ module GeometryPoolUtilities =
                 if not compatible then
                     failf "cannot create buffer with host visible memory"
 
-                let bufferMem = device.HostMemory.AllocRaw(int64 reqs.size)
+                let bufferMem = device.HostMemory.Alloc(int64 reqs.alignment, int64 reqs.size)
 
-                VkRaw.vkBindBufferMemory(device.Handle, buffer, bufferMem.Handle, 0UL)
+                VkRaw.vkBindBufferMemory(device.Handle, buffer, bufferMem.Memory.Handle, uint64 bufferMem.Offset)
                     |> check "could not bind buffer memory"
 
-                let mutable memPtr = 0n
-                VkRaw.vkMapMemory(device.Handle, bufferMem.Handle, 0UL, uint64 bufferMem.Size, VkMemoryMapFlags.MinValue, &&memPtr)
-                    |> check "could not map memory"
+//                let mutable memPtr = 0n
+//                VkRaw.vkMapMemory(device.Handle, bufferMem.Handle, 0UL, uint64 bufferMem.Size, VkMemoryMapFlags.MinValue, &&memPtr)
+//                    |> check "could not map memory"
 
-                let mutable all = VkMappedMemoryRange(VkStructureType.MappedMemoryRange, 0n, bufferMem.Handle, 0UL, uint64 bufferMem.Size)
-                VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, &&all)
-                    |> check "could not flush mapped range"
+//                let mutable all = VkMappedMemoryRange(VkStructureType.MappedMemoryRange, 0n, bufferMem.Handle, 0UL, uint64 bufferMem.Size)
+//                VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, &&all)
+//                    |> check "could not flush mapped range"
 
                 
 
-                buffer, bufferMem, memPtr
+                buffer, bufferMem
             else
-                VkBuffer.Null, DeviceMemory.Null, 0n
+                VkBuffer.Null, DevicePtr.Null
 
         let mutable isEmpty = true
 
         member x.Dispose() =
             if scratchBuffer.IsValid then
                 device.Delete x
+                //VkRaw.vkUnmapMemory(device.Handle, scratchMem.Handle)
                 VkRaw.vkDestroyBuffer(device.Handle, scratchBuffer, NativePtr.zero)
                 scratchMem.Dispose()
                 scratchBuffer <- VkBuffer.Null
-                scratchPtr <- 0n
+                //scratchPtr <- 0n
 
         member x.Write(offset : int64, size : int64, data : nativeint) =
             rlock.Lock.Use(ResourceUsage.Access, fun () ->
                 isEmpty <- false
-                Marshal.Copy(data, scratchPtr + nativeint offset, size)
-                let mutable region =
-                    VkMappedMemoryRange(
-                        VkStructureType.MappedMemoryRange, 0n,
-                        scratchMem.Handle, 
-                        uint64 offset, uint64 size
-                    )
-
-                VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, &&region)
-                    |> check "could not flush range"
+                scratchMem.Mapped (fun scratchPtr ->
+                    Marshal.Copy(data, scratchPtr + nativeint offset, size)
+                )
 
                 let cmd = device.TransferFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
                 cmd.Begin(CommandBufferUsage.OneTimeSubmit)
