@@ -120,7 +120,7 @@ module RenderCommands =
                 x.CreateVertexInputState(layout.PipelineInfo, Mod.constant (VertexInputState.ofTypes inputs))
 
             let inputAssembly =
-                x.CreateInputAssemblyState(Mod.constant state.geometryMode)
+                x.CreateInputAssemblyState(Mod.constant state.geometryMode, program)
 
             let rasterizerState =
                 x.CreateRasterizerState(state.depthTest, state.cullMode, state.fillMode)

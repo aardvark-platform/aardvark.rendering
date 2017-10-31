@@ -496,12 +496,24 @@ module Resources =
             }
         )
 
-    type InputAssemblyStateResource(owner : IResourceCache, key : list<obj>, input : IMod<IndexedGeometryMode>) =
+    type InputAssemblyStateResource(owner : IResourceCache, key : list<obj>, input : IMod<IndexedGeometryMode>, program : IResourceLocation<ShaderProgram>) =
         inherit AbstractPointerResource<VkPipelineInputAssemblyStateCreateInfo>(owner, key)
+
+        override x.Create() =
+            base.Create()
+            program.Acquire()
+
+        override x.Destroy() =
+            base.Destroy()
+            program.Release()
 
         override x.Compute(token) =
             let m = input.GetValue token
-            let res = InputAssemblyState.ofIndexedGeometryMode m
+            let p = program.Update token
+            let res = 
+                if p.handle.HasTessellation then { topology = VkPrimitiveTopology.PatchList; restartEnable = false }
+                else InputAssemblyState.ofIndexedGeometryMode m
+
             VkPipelineInputAssemblyStateCreateInfo(
                 VkStructureType.PipelineInputAssemblyStateCreateInfo, 0n,
                 VkPipelineInputAssemblyStateCreateFlags.MinValue,
@@ -1199,8 +1211,8 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateVertexInputState(program : PipelineInfo, mode : IMod<Map<Symbol, VertexInputDescription>>) =
         vertexInputCache.GetOrCreate([program :> obj; mode :> obj], fun cache key -> new VertexInputStateResource(cache, key, program, mode))
 
-    member x.CreateInputAssemblyState(mode : IMod<IndexedGeometryMode>) =
-        inputAssemblyCache.GetOrCreate([mode :> obj], fun cache key -> new InputAssemblyStateResource(cache, key, mode))
+    member x.CreateInputAssemblyState(mode : IMod<IndexedGeometryMode>, program : IResourceLocation<ShaderProgram>) =
+        inputAssemblyCache.GetOrCreate([mode :> obj; program :> obj], fun cache key -> new InputAssemblyStateResource(cache, key, mode, program))
 
     member x.CreateDepthStencilState(depthWrite : bool, depth : IMod<DepthTestMode>, stencil : IMod<StencilMode>) =
         depthStencilCache.GetOrCreate([depthWrite :> obj; depth :> obj; stencil :> obj], fun cache key -> new DepthStencilStateResource(cache, key, depthWrite, depth, stencil))

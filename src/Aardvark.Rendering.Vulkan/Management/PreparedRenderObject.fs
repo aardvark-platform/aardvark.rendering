@@ -181,7 +181,9 @@ type DevicePreparedRenderObjectExtensions private() =
                 | Some set -> Set.contains DefaultSemantic.Depth set
                 | None -> true
 
-        let inputAssembly = this.CreateInputAssemblyState(ro.Mode)
+
+
+        let inputAssembly = this.CreateInputAssemblyState(ro.Mode, program)
         let inputState = this.CreateVertexInputState(programLayout.PipelineInfo, Mod.constant (VertexInputState.create bufferFormats))
         let rasterizerState = this.CreateRasterizerState(ro.DepthTest, ro.CullMode, ro.FillMode)
         let colorBlendState = this.CreateColorBlendState(renderPass, ro.WriteBuffers, ro.BlendMode)
