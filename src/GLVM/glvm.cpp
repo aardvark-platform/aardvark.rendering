@@ -838,7 +838,7 @@ DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* m
 
 		if (info->InstanceCount != 1 || info->FirstInstance != 0)
 		{
-			glDrawElementsInstancedBaseVertexBaseInstance(m, info->FaceVertexCount, indexType, (const void*)(int64_t)info->FirstIndex, info->InstanceCount, info->BaseVertex, info->FirstInstance);
+			glDrawElementsInstancedBaseVertexBaseInstance(m, info->FaceVertexCount, indexType, (const void*)(int64_t)(info->FirstIndex*4), info->InstanceCount, info->BaseVertex, info->FirstInstance);
 		}
 		else
 		{
