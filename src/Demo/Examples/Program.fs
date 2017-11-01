@@ -1292,7 +1292,7 @@ let main args =
 
     //Examples.Tessellation.run()
     //Examples.Stereo.runVive()
-    Examples.TessellatedSphere.run()
+    Examples.GeometryComposition.run()
     System.Environment.Exit 0
 
     //colorLockTest()

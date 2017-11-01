@@ -82,6 +82,7 @@
     <Compile Include="Stereo.fs" />
     <Compile Include="Tessellation.fs" />
     <Compile Include="TessellatedSphere.fs" />
+    <Compile Include="GeometryComposition.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <None Include="paket.references" />
