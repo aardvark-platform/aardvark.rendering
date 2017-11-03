@@ -80,6 +80,7 @@
     <Compile Include="Trie.fs" />
     <Compile Include="CullingTest.fs" />
     <Compile Include="Stereo.fs" />
+    <Compile Include="Wobble.fs" />
     <Compile Include="Tessellation.fs" />
     <Compile Include="TessellatedSphere.fs" />
     <Compile Include="GeometryComposition.fs" />
