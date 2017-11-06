@@ -27,6 +27,7 @@ type Buffer =
             member x.Handle = x.Handle :> obj
             member x.SizeInBytes = nativeint x.Memory.Size
 
+
         member x.AddReference() = Interlocked.Increment(&x.RefCount) |> ignore
 
         new(device, handle, memory, size) = { inherit Resource<_>(device, handle); Memory = memory; Size = size; RefCount = 1 }

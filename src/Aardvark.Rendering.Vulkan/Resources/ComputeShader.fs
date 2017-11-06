@@ -25,6 +25,11 @@ type ComputeShader =
         val mutable public TextureNames : Map<string * int, string>
         val mutable public Samplers : Map<string * int, Sampler>
         val mutable public GroupSize : V3i
+
+        interface IComputeShader with
+            member x.LocalSize = x.GroupSize
+
+
         new(d,s,l,p,tn,sd,gs) = { Device = d; ShaderModule = s; Layout = l; Handle = p; TextureNames = tn; Samplers = sd; GroupSize = gs }
     end
 
@@ -310,6 +315,9 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
+    interface IComputeShaderInputBinding with
+        member x.Item 
+            with set (name : string) (value : obj) = x.[name] <- value
 
 [<AutoOpen>]
 module ``Compute Commands`` =
@@ -383,8 +391,7 @@ module ComputeShader =
             shader.TextureNames <- Map.empty
             shader.Samplers <- Map.empty
 
-    let ofFunction (f : 'a -> 'b) (device : Device) =
-        let shader = FShade.ComputeShader.ofFunction device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize f
+    let ofFShade (shader : FShade.ComputeShader) (device : Device) =
         let glsl = shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSLVulkan
         
         ShaderProgram.logLines glsl.code
@@ -432,6 +439,10 @@ module ComputeShader =
                 ComputeShader(device, sm, layout, handle, shader.csTextureNames, samplers, shader.csLocalSize)
             | _ ->
                 failf "could not create compute shader"
+
+    let ofFunction (f : 'a -> 'b) (device : Device) =
+        let shader = FShade.ComputeShader.ofFunction device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize f
+        ofFShade shader device
 
     let createInputBinding (tryGetValue : string -> Option<obj>) (shader : ComputeShader) (pool : DescriptorPool) =
         let device = shader.Device
