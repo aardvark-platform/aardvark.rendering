@@ -49,6 +49,7 @@ type Buffer =
             member x.Handle = x.Handle :> obj
             member x.SizeInBytes = x.SizeInBytes
 
+
         new(ctx : Context, size : nativeint, handle : int) = { Context = ctx; SizeInBytes = size; Handle = handle}
     end
 

@@ -164,7 +164,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CompileClear(signature, color, depth) = x.CompileClear(signature, color, depth)
       
             
-
+        member x.CreateBuffer(size : nativeint) = x.CreateBuffer(size) :> IBackendBuffer
+        member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = x.Upload(src, dst, dstOffset, size)
+        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) = x.Download(src, srcOffset, dst, size)
 
         member x.PrepareSurface (signature, s : ISurface) = x.PrepareSurface(signature, s) :> IBackendSurface
         member x.DeleteSurface (s : IBackendSurface) = 
@@ -227,6 +229,31 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
         member x.CreateMappedIndirectBuffer(indexed)  =
             x.CreateMappedIndirectBuffer (indexed)
+            
+        member x.Compile (c : FShade.ComputeShader) = failwith ""
+        member x.Invoke(shader, groupCount, input) = failwith ""
+        member x.NewInputBinding(shader) = failwith ""
+        member x.Delete(shader : IComputeShader) = failwith ""
+
+    member x.CreateBuffer(size : nativeint) =
+        use __ = ctx.ResourceLock
+        let handle = GL.GenBuffer()
+        GL.Check "could not create buffer"
+        GL.NamedBufferData(handle, size, 0n, BufferUsageHint.StaticDraw)
+        GL.Check "could not allocate buffer"
+        Buffer(ctx, size, handle)
+
+    member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
+        use __ = ctx.ResourceLock
+        GL.NamedBufferSubData(unbox dst.Handle, dstOffset, size, src)
+        GL.Check "could not upload buffer data"
+        GL.Sync()
+
+    member x.Download(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
+        use __ = ctx.ResourceLock
+        GL.GetNamedBufferSubData(unbox src.Handle, srcOffset, size, dst)
+        GL.Check "could not download buffer data"
+        GL.Sync()
 
 
     member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>) =

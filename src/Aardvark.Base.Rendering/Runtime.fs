@@ -450,6 +450,14 @@ type IGeometryPool =
     abstract member Free : Management.Block<unit> -> unit
     abstract member TryGetBufferView : Symbol -> Option<BufferView>
     
+
+type IComputeShader =
+    abstract member LocalSize : V3i
+
+type IComputeShaderInputBinding =
+    inherit IDisposable
+    abstract member Item : string -> obj with set
+
 [<AbstractClass; Sealed; Extension>]
 type IGeometryPoolExtensions private() =
     [<Extension>]
@@ -486,10 +494,22 @@ and IRuntime =
     abstract member PrepareSurface : IFramebufferSignature * ISurface -> IBackendSurface
     abstract member PrepareRenderObject : IFramebufferSignature * IRenderObject -> IPreparedRenderObject
 
+    abstract member Compile : FShade.ComputeShader -> IComputeShader
+    abstract member Delete : IComputeShader -> unit
+
+    abstract member NewInputBinding : IComputeShader -> IComputeShaderInputBinding
+    abstract member Invoke : shader : IComputeShader * groupCount : V3i * input : IComputeShaderInputBinding -> unit
 
     abstract member DeleteBuffer : IBackendBuffer -> unit
     abstract member DeleteTexture : IBackendTexture -> unit
     abstract member DeleteSurface : IBackendSurface -> unit
+
+
+    abstract member CreateBuffer : size : nativeint -> IBackendBuffer
+    abstract member Copy : srcData : nativeint * dst : IBackendBuffer * dstOffset : nativeint * size : nativeint -> unit
+    abstract member Copy : srcBuffer : IBackendBuffer * srcOffset : nativeint * dstData : nativeint * size : nativeint -> unit
+
+
 
 
 
