@@ -93,10 +93,18 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     let manager = new ResourceManager(noUser, device)
 
+    let allPools = System.Collections.Generic.List<DescriptorPool>()
     let threadedPools =
         new ThreadLocal<DescriptorPool>(fun _ ->
-            device.CreateDescriptorPool(1 <<< 18, 1 <<< 18)
+            let p = device.CreateDescriptorPool(1 <<< 18, 1 <<< 18)
+            lock allPools (fun () -> allPools.Add p)
+            p
         )
+
+    do device.OnDispose.Add (fun _ -> 
+        allPools |> Seq.iter device.Delete
+        allPools.Clear()
+    )
 
     static let shaderStages =
         LookupTable.lookupTable [
@@ -393,7 +401,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             VkBufferUsageFlags.StorageBufferBit ||| 
             VkBufferUsageFlags.VertexBufferBit |||
             VkBufferUsageFlags.IndexBufferBit ||| 
-            VkBufferUsageFlags.IndirectBufferBit
+            VkBufferUsageFlags.IndirectBufferBit 
 
         device.CreateBuffer(usage, int64 size)
 
@@ -408,7 +416,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         device.Delete temp
 
     member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
-        let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit (int64 size)
+        let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 size)
         let src = unbox<Buffer> src
 
         device.perform {
@@ -480,6 +488,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
             x.Copy(src, srcOffset, dst, size)
 
+        member x.MaxLocalSize = device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize
+
         member x.Compile (c : FShade.ComputeShader) =
             ComputeShader.ofFShade c device :> IComputeShader
 
@@ -491,7 +501,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.Invoke(shader : IComputeShader, groupCount : V3i, inputs : IComputeShaderInputBinding) =
             let shader = unbox<Aardvark.Rendering.Vulkan.ComputeShader> shader
-            let inputs = unbox<ComputeShaderInputBinding> inputs
+            let inputs = unbox<InputBinding> inputs
             device.perform {
                 do! Command.Bind shader
                 do! inputs.Bind

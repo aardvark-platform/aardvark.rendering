@@ -33,42 +33,6 @@ type ComputeShader =
         new(d,s,l,p,tn,sd,gs) = { Device = d; ShaderModule = s; Layout = l; Handle = p; TextureNames = tn; Samplers = sd; GroupSize = gs }
     end
 
-type ComputeShaderInputBinding(pool : DescriptorPool, shader : ComputeShader, sets : DescriptorSet[], storageBuffers : Dictionary<string, Buffer>, images : Dictionary<string, Image>, release : unit -> unit) =
-    let device = pool.Device
-
-
-    let setHandles = NativePtr.alloc sets.Length
-    do for i in 0 .. sets.Length - 1 do NativePtr.set setHandles i sets.[i].Handle
-
-    member x.Bind =
-        { new Command() with
-            override x.Compatible = QueueFlags.All
-            override x.Enqueue(cmd : CommandBuffer) =
-                cmd.AppendCommand()
-                VkRaw.vkCmdBindDescriptorSets(cmd.Handle, VkPipelineBindPoint.Compute, shader.Layout.Handle, 0u, uint32 sets.Length, setHandles, 0u, NativePtr.zero)
-                Disposable.Empty
-        }
-
-    member x.TryGetBuffer(name : string) =
-        match storageBuffers.TryGetValue name with
-            | (true, b) -> Some b
-            | _ -> None
-        
-
-    member x.Dispose() =
-        for s in sets do pool.Free s
-        release()
-        for b in storageBuffers.Values do device.Delete b
-        for i in images.Values do device.Delete i
-        storageBuffers.Clear()
-        images.Clear()
-
-        NativePtr.free setHandles
-
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
-
-
 type BindingReference =
     | UniformRef of buffer : UniformBuffer * offset : int * valueType : UniformType
     | StorageBufferRef of set : int * binding : int * elementType : UniformType
@@ -194,15 +158,20 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
                     setResource set binding index res
 
                 | StorageBufferRef(set, binding, elementType) ->
-                    let buffer,res =
+                    let buffer,offset,size,res =
                         match value with
                             | :? IBuffer as b -> 
                                 let buffer = device.CreateBuffer(VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.StorageBufferBit, b)
-                                buffer, Some { new IDisposable with member x.Dispose() = device.Delete buffer }
+                                buffer, 0L, buffer.Size, Some { new IDisposable with member x.Dispose() = device.Delete buffer }
+
+                            | :? IBufferView as b ->
+                                let buffer = b.Buffer.Handle |> unbox<Buffer>
+                                buffer, int64 b.Offset, int64 b.Size, None
+
                             | _ -> 
                                 failf "unexpected storage buffer %A" value
 
-                    let write = Descriptor.StorageBuffer(binding, buffer)
+                    let write = Descriptor.StorageBuffer(binding, buffer, offset, size)
                     update set binding write
                     setResource set binding 0 res
         )
@@ -319,12 +288,13 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
         member x.Item 
             with set (name : string) (value : obj) = x.[name] <- value
 
+        member x.Flush() =
+            x.Flush()
+
 [<AutoOpen>]
 module ``Compute Commands`` =
     
     type Command with
-        static member SetInputs (binding : ComputeShaderInputBinding) =
-            binding.Bind
 
         static member SetInputs (binding : InputBinding) =
             binding.Bind
@@ -444,158 +414,6 @@ module ComputeShader =
         let shader = FShade.ComputeShader.ofFunction device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize f
         ofFShade shader device
 
-    let createInputBinding (tryGetValue : string -> Option<obj>) (shader : ComputeShader) (pool : DescriptorPool) =
-        let device = shader.Device
-        let storageBuffers  = Dictionary<string, Buffer>()
-        let images          = Dictionary<string, Image>()
-        let imageViews      = List<ImageView>()
-        let uniformBuffers  = List<UniformBuffer>()
-        
-        use token = device.Token
-
-        let sets = 
-            shader.Layout.DescriptorSetLayouts |> Array.map (fun dsl ->
-                let set = pool.Alloc(dsl)
-
-                let bindings = 
-                    dsl.Bindings |> Array.map (fun b ->
-                        match b.Parameter with
-                            | UniformBlockParameter block ->
-                                match b.DescriptorType with
-                                    | VkDescriptorType.UniformBuffer ->
-                                        let buffer = device.CreateUniformBuffer(block.layout)
-                                        uniformBuffers.Add buffer
-
-                                        for field in block.layout.fields do
-                                            let name =
-                                                if field.name.StartsWith "cs_" then field.name.Substring 3
-                                                else field.name
-
-                                            match tryGetValue name with
-                                                | Some o ->
-                                                    let writer = UniformWriters.getWriter field.offset field.fieldType (o.GetType())
-                                                    writer.WriteUnsafeValue(o, buffer.Storage.Pointer)
-
-                                                | None ->
-                                                    failf "no value given for uniform %A" field.name
-
-                                        device.Upload buffer
-                                        Descriptor.UniformBuffer(b.Binding, buffer)
-
-                                    | VkDescriptorType.StorageBuffer ->
-                                        match block.layout.fields with
-                                            | [ field ] ->
-                                                match tryGetValue field.name with
-                                                    | Some o ->
-                                                        match o with
-                                                            | :? IBuffer as o ->
-                                                                match storageBuffers.TryGetValue field.name with
-                                                                    | (true, buffer) -> 
-                                                                        Descriptor.StorageBuffer(b.Binding, buffer)
-                                                                    | _ -> 
-                                                                        let o = device.CreateBuffer(VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.StorageBufferBit, o)
-                                                                        storageBuffers.[field.name] <- o
-                                                                        Descriptor.StorageBuffer(b.Binding, o)
-
-                                                            | _ ->
-                                                                failf "unupported storage buffer argument %A" o
-                                                                
-
-                                                    | None ->
-                                                        failf "no value given for uniform %A" field.name
-                                                
-                                            | _ ->
-                                                failf "storage buffers cannot contain multiple fields atm."
-
-                                    | t ->
-                                        failf "unsupported compute shader input: %A" t
-
-                            | ImageParameter imgInfo when imgInfo.isSampled ->
-                                let samplerName = b.Name
-
-                                let viewsAndSamplers = 
-                                    Array.init imgInfo.count (fun i ->
-                                        let key = (samplerName, i)
-                                        match Map.tryFind key shader.TextureNames with
-                                            | Some textureName ->
-                                                match tryGetValue textureName with
-                                                    | Some value ->
-                                                        let sampler = shader.Samplers.[key]
-
-                                                        let image = 
-                                                            match value with
-                                                                | :? ITexture as t ->
-                                                                    match images.TryGetValue textureName with
-                                                                        | (true, img) -> img
-                                                                        | _ -> 
-                                                                            let img = device.CreateImage(t)
-                                                                            images.[textureName] <- img
-                                                                            img
-                                                                | _ ->
-                                                                    failf "unsupported image type %A" value
-                                                        
-                                                        let imageView =
-                                                            device.CreateInputImageView(image, imgInfo.samplerType, VkComponentMapping.Identity)
-
-                                                        imageViews.Add(imageView)
-
-                                                        Some(imageView, sampler)
-
-
-                                                    | None ->
-                                                        None
-                                            | None ->
-                                                None
-                                    )
-
-                                Descriptor.CombinedImageSampler(b.Binding, viewsAndSamplers)
-
-                            | ImageParameter imgInfo ->
-                                
-                                let name =
-                                    if b.Name.StartsWith "cs_" then b.Name.Substring 3
-                                    else b.Name
-
-                                match tryGetValue name with
-                                    | Some value ->
-                                        
-                                        match value with
-                                            | :? Image as img ->
-                                                let view = device.CreateOutputImageView(img, 0, 1, 0, 1)
-                                                imageViews.Add view
-                                                Descriptor.StorageImage(b.Binding, view)
-
-                                            | :? ImageView as view ->
-                                                Descriptor.StorageImage(b.Binding, view)
-                                                
-                                            | :? ImageSubresourceRange as r ->
-                                                let view = device.CreateOutputImageView(r.Image, r.BaseLevel, r.LevelCount, r.BaseSlice, r.SliceCount)
-                                                imageViews.Add view
-                                                Descriptor.StorageImage(b.Binding, view)
-
-                                            | _ ->
-                                                failf "unexpected storage image: %A" value
-
-
-                                    | None -> 
-                                        failf "no image found with name %A" name
-
-                    )
-
-                pool.Update(set, bindings)
-
-                set
-
-            )
-
-        token.Sync()
-
-
-        let dispose() =
-            for view in imageViews do device.Delete view
-            for ub in uniformBuffers do device.Delete ub
-
-        new ComputeShaderInputBinding(pool, shader, sets, storageBuffers, images, dispose)
 
 
     let private (|UniformBufferBinding|StorageBufferBinding|SampledImageBinding|StorageImageBinding|Other|) (b : DescriptorSetLayoutBinding) =
