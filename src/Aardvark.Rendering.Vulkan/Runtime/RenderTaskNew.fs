@@ -248,16 +248,16 @@ module RenderCommands =
         let isIdentical (pg : PreparedGeometry, stream : VKVM.CommandStream) (o : Geometry) =
             System.Object.ReferenceEquals(pg.pgOriginal, o)
 
+        let rec destroy (t : Tree<PreparedGeometry * VKVM.CommandStream>) =
+            match t with
+                | Tree.Empty -> ()
+                | Tree.Leaf v -> release v
+                | Tree.Node(s,c) ->
+                    s |> Option.iter release
+                    c |> List.iter destroy
+
         let update (t : Tree<Geometry>) =
             
-            let rec destroy (t : Tree<_>) =
-                match t with
-                    | Tree.Empty -> ()
-                    | Tree.Leaf v -> release v
-                    | Tree.Node(s,c) ->
-                        s |> Option.iter release
-                        c |> List.iter destroy
-
             let rec update (o : Tree<_>) (n : Tree<Geometry>) =
                 match o, n with
                     

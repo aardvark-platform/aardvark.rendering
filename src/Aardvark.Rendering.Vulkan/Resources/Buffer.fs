@@ -431,7 +431,7 @@ module Buffer =
                 buffer.Handle <- VkBuffer.Null
                 buffer.Memory.Dispose()
 
-    let tryUpdate (data : IBuffer) (buffer : Buffer) =
+    let rec tryUpdate (data : IBuffer) (buffer : Buffer) =
         match data with 
             | :? ArrayBuffer as ab ->
                 let size = ab.Data.LongLength * int64 (Marshal.SizeOf ab.ElementType)
@@ -450,10 +450,15 @@ module Buffer =
                     true
                 else
                     false
+                
+            | :? IBufferView as bv ->
+                let handle = bv.Buffer.Handle
+                tryUpdate handle buffer
+
             | _ ->
                 false
 
-    let ofBuffer (flags : VkBufferUsageFlags) (buffer : IBuffer) (device : Device) =
+    let rec ofBuffer (flags : VkBufferUsageFlags) (buffer : IBuffer) (device : Device) =
         match buffer with
             | :? ArrayBuffer as ab ->
                 if ab.Data.Length <> 0 then
@@ -477,6 +482,10 @@ module Buffer =
             | :? Buffer as b ->
                 b.AddReference()
                 b
+
+            | :? IBufferView as bv ->
+                let handle = bv.Buffer.Handle
+                ofBuffer flags handle device
 
             | _ ->
                 failf "unsupported buffer type %A" buffer

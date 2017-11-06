@@ -234,6 +234,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.Invoke(shader, groupCount, input) = failwith ""
         member x.NewInputBinding(shader) = failwith ""
         member x.Delete(shader : IComputeShader) = failwith ""
+        member x.MaxLocalSize = failwith ""
+
+
 
     member x.CreateBuffer(size : nativeint) =
         use __ = ctx.ResourceLock
