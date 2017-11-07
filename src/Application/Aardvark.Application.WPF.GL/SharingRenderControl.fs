@@ -419,7 +419,9 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
             Map.ofList [0, (DefaultSemantic.Colors, { samples = samples; format = RenderbufferFormat.Rgba8 })], 
             Map.empty, 
             Some { samples = samples; format = RenderbufferFormat.Depth24Stencil8 }, 
-            None
+            None,
+            1,
+            Set.empty
         )
 
     let startTime = DateTime.Now

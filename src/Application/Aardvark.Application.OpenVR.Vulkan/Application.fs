@@ -28,11 +28,21 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
     let time = Mod.custom(fun _ -> start + sw.Elapsed)
 
     let renderPass = 
-        device.CreateRenderPass 
-            <| Map.ofList [
+        device.CreateRenderPass(
+            Map.ofList [
                 DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples }
                 DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = samples }
-              ]
+            ],
+            2,
+            Set.ofList [
+                "ViewTrafo"; "ProjTrafo"; 
+                "ModelViewTrafo"; "ViewProjTrafo"; 
+                "ModelViewProjTrafo"; 
+                "ViewTrafoInv"; "ProjTrafoInv"; 
+                "ModelViewTrafoInv"; "ViewProjTrafoInv"; 
+                "ModelViewProjTrafoInv"
+            ]
+        )
 
     let caller = AdaptiveObject()
 

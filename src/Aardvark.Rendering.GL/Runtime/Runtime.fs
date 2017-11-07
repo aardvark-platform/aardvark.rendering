@@ -10,7 +10,7 @@ open OpenTK.Graphics.OpenGL4
 open Aardvark.Base.Incremental
 open FShade
 
-type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * AttachmentSignature>, images : Map<int, Symbol>, depth : Option<AttachmentSignature>, stencil : Option<AttachmentSignature>) =
+type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * AttachmentSignature>, images : Map<int, Symbol>, depth : Option<AttachmentSignature>, stencil : Option<AttachmentSignature>, layers : int, perLayer : Set<string>) =
    
     let signatureAssignableFrom (mine : AttachmentSignature) (other : AttachmentSignature) =
         let myCol = RenderbufferFormat.toColFormat mine.format
@@ -37,12 +37,18 @@ type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * Attachm
     member x.DepthAttachment = depth
     member x.StencilAttachment = depth
     member x.Images = images
+
+    member x.LayerCount = layers
+    member x.PerLayerUniforms = perLayer
+
     member x.IsAssignableFrom (other : IFramebufferSignature) =
         if x.Equals other then 
             true
         else
             match other with
                 | :? FramebufferSignature as other ->
+                    layers = other.LayerCount &&
+                    perLayer = other.PerLayerUniforms &&
                     runtime = other.Runtime &&
                     colorsAssignableFrom colors other.ColorAttachments
                     // TODO: check depth and stencil (cumbersome for combined DepthStencil attachments)
@@ -59,6 +65,8 @@ type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * Attachm
         member x.StencilAttachment = stencil
         member x.IsAssignableFrom other = x.IsAssignableFrom other
         member x.Images = images
+        member x.LayerCount = layers
+        member x.PerLayerUniforms = perLayer
 
 type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     static let aardStage =
@@ -146,8 +154,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
         member x.ResourceManager = manager :> IResourceManager
 
-        member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>) =
-            x.CreateFramebufferSignature(attachments, images) :> IFramebufferSignature
+        member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>, layers : int, perLayer : Set<string>) =
+            x.CreateFramebufferSignature(attachments, images, layers, perLayer) :> IFramebufferSignature
 
         member x.DeleteFramebufferSignature(signature : IFramebufferSignature) =
             ()
@@ -259,7 +267,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         GL.Sync()
 
 
-    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>) =
+    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>, layers : int, perLayer : Set<string>) =
         let attachments = Map.ofSeq (SymDict.toSeq attachments)
 
         let depth =
@@ -284,7 +292,10 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
         let images = images |> Seq.mapi (fun i s -> (i,s)) |> Map.ofSeq
 
-        FramebufferSignature(x, indexedColors, images, depth, stencil)
+        FramebufferSignature(x, indexedColors, images, depth, stencil, layers, perLayer)
+        
+    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>) =
+        x.CreateFramebufferSignature(attachments, images, 1, Set.empty)
 
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)

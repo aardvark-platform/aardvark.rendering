@@ -49,17 +49,17 @@ type PipelineLayout =
                 x.Handle <- VkPipelineLayout.Null
                 x.DescriptorSetLayouts <- Array.empty
 
-        interface IFramebufferSignature with
-            member x.ColorAttachments = 
-                let a : AttachmentSignature = failwith ""
-                x.PipelineInfo.pOutputs 
-                    |> List.map (fun p -> p.location, (Symbol.Create p.name, AttachmentSignature.ofType p.hostType)) 
-                    |> Map.ofList
-            member x.IsAssignableFrom _ = false
-            member x.Images = Map.empty
-            member x.Runtime = Unchecked.defaultof<_>
-            member x.StencilAttachment = None
-            member x.DepthAttachment = None
+//        interface IFramebufferSignature with
+//            member x.ColorAttachments = 
+//                let a : AttachmentSignature = failwith ""
+//                x.PipelineInfo.pOutputs 
+//                    |> List.map (fun p -> p.location, (Symbol.Create p.name, AttachmentSignature.ofType p.hostType)) 
+//                    |> Map.ofList
+//            member x.IsAssignableFrom _ = false
+//            member x.Images = Map.empty
+//            member x.Runtime = Unchecked.defaultof<_>
+//            member x.StencilAttachment = None
+//            member x.DepthAttachment = None
 
         new(device, handle, descriptorSetLayouts, ubs, tex, info) = 
             { inherit Resource<_>(device, handle); DescriptorSetLayouts = descriptorSetLayouts; UniformBlocks = ubs; Textures = tex; PipelineInfo = info; ReferenceCount = 1 }
