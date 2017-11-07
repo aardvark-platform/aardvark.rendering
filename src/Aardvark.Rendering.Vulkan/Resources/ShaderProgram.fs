@@ -250,7 +250,7 @@ module ShaderProgram =
         let layout = 
             match layout with
                 | Some l -> l.AddRef(); l
-                | None -> device.CreatePipelineLayout(shaders)
+                | None -> device.CreatePipelineLayout(shaders, 1, Set.empty)
 
         new ShaderProgram(device, shaders, layout, surface)
 
@@ -347,7 +347,7 @@ module ShaderProgram =
             program
         )
 
-    let ofModule  (layout : PipelineLayout) (effect : FShade.Imperative.Module) (device : Device) =
+    let ofModule (layout : PipelineLayout) (effect : FShade.Imperative.Module) (device : Device) =
         device.GetCached(effectSurfaceCache, (layout, effect), fun (layout, effect) ->
             let (program, data) = FShadeStuff.ofModule layout effect device
             program.CacheName <- effectSurfaceCache

@@ -231,10 +231,20 @@ module Stereo =
 
         let signature =
             runtime.CreateFramebufferSignature(
-                1,
-                [
-                    DefaultSemantic.Colors, RenderbufferFormat.Rgba8
-                    DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
+                SymDict.ofList [
+                    DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+                    DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+                ],
+                Set.empty,
+                2, 
+                Set.ofList [
+                    "ProjTrafo"; 
+                    "ViewProjTrafo"; 
+                    "ModelViewProjTrafo"
+
+                    "ProjTrafoInv"; 
+                    "ViewProjTrafoInv"; 
+                    "ModelViewProjTrafoInv"
                 ]
             )    
 
@@ -254,10 +264,10 @@ module Stereo =
 
 
         let lProj =
-            { left = -0.4; right = 0.1; top = 0.25; bottom = -0.25; near = 1.0; far = 100.0 } |> Frustum.projTrafo |> Mod.constant
+            { left = -0.4; right = 0.1; top = 0.25; bottom = -0.25; near = 1.0; far = 100.0 } |> Frustum.projTrafo 
             
         let rProj =
-            { left = -0.1; right = 0.4; top = 0.25; bottom = -0.25; near = 1.0; far = 100.0 } |> Frustum.projTrafo |> Mod.constant
+            { left = -0.1; right = 0.4; top = 0.25; bottom = -0.25; near = 1.0; far = 100.0 } |> Frustum.projTrafo
 
 
         let framebuffer =
@@ -273,14 +283,10 @@ module Stereo =
             Sg.box' C4b.Red Box3d.Unit
                 |> Sg.shader {
                     do! DefaultSurfaces.trafo
-                    do! StereoShader.trafo
                     do! DefaultSurfaces.constantColor C4f.Red
-                    //do! DefaultSurfaces.simpleLighting
                 }
                 |> Sg.viewTrafo cameraView
-                |> Sg.uniform "LeftProj" lProj
-                |> Sg.uniform "RightProj" rProj
-                |> Sg.projTrafo lProj
+                |> Sg.uniform "ProjTrafo" (Mod.constant [| rProj; lProj |])
                 |> Sg.compile runtime signature
 
         let clear = runtime.CompileClear(signature, Mod.constant C4f.Green, Mod.constant 1.0)

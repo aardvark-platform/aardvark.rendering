@@ -281,7 +281,14 @@ module FShadeInterop =
                     flipHandedness = flip
                 }
 
-            effect |> Effect.toModule config
+            if x.LayerCount > 1 then
+                effect 
+                    // TODO: other topologies????
+                    |> Effect.toLayeredEffect x.LayerCount x.PerLayerUniforms InputTopology.Triangle
+                    |> Effect.toModule config
+
+            else
+                effect |> Effect.toModule config
 
         member x.ExtractSemantics() =
             let colors = x.ColorAttachments |> Map.toSeq |> Seq.map (fun (k,(i,s)) -> (k,i)) |> Seq.toList

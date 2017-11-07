@@ -1165,7 +1165,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
                                 PipelineInfo.fshadeConfig with 
                                     outputs = outputs
                             }
-                        let layout = device.CreatePipelineLayout(layout)
+                        let layout = device.CreatePipelineLayout(layout, signature.LayerCount, signature.PerLayerUniforms)
 
                         layout, module_
                     )
@@ -1184,6 +1184,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
             layout.fields 
             |> List.map (fun (f) ->
                 let sem = Symbol.Create f.name
+
                 match Uniforms.tryGetDerivedUniform f.name u with
                     | Some r -> f, r
                     | None -> 
