@@ -375,7 +375,7 @@ module ComputeShader =
         match sm.TryGetShader ShaderStage.Compute with
             | (true, shaderInfo) ->
                 let layout =
-                    device.CreatePipelineLayout [| shaderInfo |]
+                    device.CreatePipelineLayout([| shaderInfo |], 1, Set.empty)
 
                 let shaderInfo =
                     VkPipelineShaderStageCreateInfo(

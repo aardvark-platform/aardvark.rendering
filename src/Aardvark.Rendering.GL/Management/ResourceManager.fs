@@ -233,6 +233,7 @@ type UniformBufferManager(ctx : Context, block : ShaderBlock) =
             |> List.map (fun f ->
                 let name = ShaderPath.name f.Path
                 let sem = Symbol.Create name
+
                 match Uniforms.tryGetDerivedUniform name u with
                     | Some v -> sem, v
                     | None -> 

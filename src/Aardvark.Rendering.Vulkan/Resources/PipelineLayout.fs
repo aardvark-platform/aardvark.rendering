@@ -35,6 +35,8 @@ type PipelineLayout =
         val mutable public UniformBlocks : list<ShaderUniformBlock * VkShaderStageFlags>
         val mutable public Textures : list<ShaderTextureInfo * VkShaderStageFlags>
         val mutable public ReferenceCount : int
+        val mutable public LayerCount : int
+        val mutable public PerLayerUniforms : Set<string>
 
         member x.AddRef() =
             if Interlocked.Increment(&x.ReferenceCount) = 1 then
@@ -49,26 +51,28 @@ type PipelineLayout =
                 x.Handle <- VkPipelineLayout.Null
                 x.DescriptorSetLayouts <- Array.empty
 
-//        interface IFramebufferSignature with
-//            member x.ColorAttachments = 
-//                let a : AttachmentSignature = failwith ""
-//                x.PipelineInfo.pOutputs 
-//                    |> List.map (fun p -> p.location, (Symbol.Create p.name, AttachmentSignature.ofType p.hostType)) 
-//                    |> Map.ofList
-//            member x.IsAssignableFrom _ = false
-//            member x.Images = Map.empty
-//            member x.Runtime = Unchecked.defaultof<_>
-//            member x.StencilAttachment = None
-//            member x.DepthAttachment = None
+        interface IFramebufferSignature with
+            member x.ColorAttachments = 
+                let a : AttachmentSignature = failwith ""
+                x.PipelineInfo.pOutputs 
+                    |> List.map (fun p -> p.location, (Symbol.Create p.name, AttachmentSignature.ofType p.hostType)) 
+                    |> Map.ofList
+            member x.IsAssignableFrom _ = false
+            member x.Images = Map.empty
+            member x.Runtime = Unchecked.defaultof<_>
+            member x.StencilAttachment = None
+            member x.DepthAttachment = None
+            member x.LayerCount = x.LayerCount
+            member x.PerLayerUniforms = x.PerLayerUniforms
 
-        new(device, handle, descriptorSetLayouts, ubs, tex, info) = 
-            { inherit Resource<_>(device, handle); DescriptorSetLayouts = descriptorSetLayouts; UniformBlocks = ubs; Textures = tex; PipelineInfo = info; ReferenceCount = 1 }
+        new(device, handle, descriptorSetLayouts, ubs, tex, info, layerCount : int, perLayer : Set<string>) = 
+            { inherit Resource<_>(device, handle); DescriptorSetLayouts = descriptorSetLayouts; UniformBlocks = ubs; Textures = tex; PipelineInfo = info; ReferenceCount = 1; LayerCount = layerCount; PerLayerUniforms = perLayer }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module PipelineLayout =
 
-    let ofPipelineInfo (layout : PipelineInfo) (device : Device) =
+    let ofPipelineInfo (layout : PipelineInfo) (layers : int) (perLayer : Set<string>) (device : Device) =
         let uniformBlocks = Dict.empty
         let textures = Dict.empty
         let storageBlocks = Dict.empty
@@ -161,15 +165,15 @@ module PipelineLayout =
             let textures =
                 textures |> List.map (fun t -> (t, VkShaderStageFlags.All))
 
-            PipelineLayout(device, handle, setLayouts, uniformBlocks, textures, layout)
+            PipelineLayout(device, handle, setLayouts, uniformBlocks, textures, layout, layers, perLayer)
         )
 
-    let ofEffectLayout (layout : FShade.EffectInputLayout) (device : Device) =
+    let ofEffectLayout (layout : FShade.EffectInputLayout) (layers : int) (perLayer : Set<string>) (device : Device) =
         let info = PipelineInfo.ofEffectLayout layout Map.empty
-        ofPipelineInfo info device
+        ofPipelineInfo info layers perLayer device
  
 
-    let ofShaders (shaders : array<Shader>) (device : Device) =
+    let ofShaders (shaders : array<Shader>) (layers : int) (perLayer : Set<string>) (device : Device) =
         // figure out which stages reference which uniforms/textures
         let uniformBlocks = Dict.empty
         let textures = Dict.empty
@@ -295,7 +299,7 @@ module PipelineLayout =
                     pEffectLayout   = None
                 }    
                       
-            PipelineLayout(device, handle, setLayouts, uniformBlocks, textures, info)
+            PipelineLayout(device, handle, setLayouts, uniformBlocks, textures, info, layers, perLayer)
         )
 
     let delete (layout : PipelineLayout) (device : Device) =
@@ -304,16 +308,16 @@ module PipelineLayout =
 [<AbstractClass; Sealed; Extension>]
 type ContextPipelineLayoutExtensions private() =
     [<Extension>]
-    static member inline CreatePipelineLayout(this : Device, shaders : array<Shader>) =
-        this |> PipelineLayout.ofShaders shaders
+    static member inline CreatePipelineLayout(this : Device, shaders : array<Shader>, layers : int, perLayer : Set<string>) =
+        this |> PipelineLayout.ofShaders shaders layers perLayer
         
     [<Extension>]
-    static member inline CreatePipelineLayout(this : Device, info : PipelineInfo) =
-        this |> PipelineLayout.ofPipelineInfo info
+    static member inline CreatePipelineLayout(this : Device, info : PipelineInfo, layers : int, perLayer : Set<string>) =
+        this |> PipelineLayout.ofPipelineInfo info layers perLayer
 
     [<Extension>]
-    static member inline CreatePipelineLayout(this : Device, info : FShade.EffectInputLayout) =
-        this |> PipelineLayout.ofEffectLayout info
+    static member inline CreatePipelineLayout(this : Device, info : FShade.EffectInputLayout, layers : int, perLayer : Set<string>) =
+        this |> PipelineLayout.ofEffectLayout info layers perLayer
 
 
     [<Extension>]

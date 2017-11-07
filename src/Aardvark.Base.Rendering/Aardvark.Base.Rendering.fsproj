@@ -82,6 +82,7 @@
     <Compile Include="ResourceManagement.fs" />
     <Compile Include="Runtime.fs" />
     <Compile Include="RuntimeExtensions.fs" />
+    <Compile Include="ShaderInterface.fs" />
     <Compile Include="Uniforms.fs" />
     <Compile Include="RenderTask.fs" />
     <Compile Include="Camera.fs" />
@@ -113,7 +114,6 @@
     <Compile Include="GridCell.fs" />
     <Compile Include="ImageTrafo.fs" />
     <Compile Include="PixImageCube.fs" />
-    <Compile Include="ShaderInterface.fs" />
     <Compile Include="Ordered.fs" />
     <Compile Include="Trie.fs" />
   </ItemGroup>
