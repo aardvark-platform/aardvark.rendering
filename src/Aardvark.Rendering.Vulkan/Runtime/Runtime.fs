@@ -216,9 +216,9 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
 
-    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>) =
+    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>, layers : int, perLayer : Set<string>) =
         let attachments = attachments |> SymDict.toMap
-        device.CreateRenderPass(attachments) :> IFramebufferSignature
+        device.CreateRenderPass(attachments, layers, perLayer) :> IFramebufferSignature
 
     member x.DeleteFramebufferSignature(signature : IFramebufferSignature) =
         device.Delete(unbox<RenderPass> signature)
@@ -436,7 +436,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.ResourceManager = failf "not implemented"
 
-        member x.CreateFramebufferSignature(a,b) = x.CreateFramebufferSignature(a,b)
+        member x.CreateFramebufferSignature(a,b,c,d) = x.CreateFramebufferSignature(a,b,c,d)
         member x.DeleteFramebufferSignature(s) = x.DeleteFramebufferSignature(s)
 
         member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = x.Download(t, level, slice, target)

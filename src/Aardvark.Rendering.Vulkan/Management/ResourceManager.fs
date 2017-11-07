@@ -1100,8 +1100,8 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.Device = device
     member x.DescriptorPool = descriptorPool
 
-    member x.CreateRenderPass(signature : Map<Symbol, AttachmentSignature>) =
-        device.CreateRenderPass(signature)
+//    member x.CreateRenderPass(signature : Map<Symbol, AttachmentSignature>) =
+//        device.CreateRenderPass(signature)
 
     member x.CreateBuffer(input : IMod<IBuffer>) =
         bufferCache.GetOrCreate([input :> obj], fun cache key -> new BufferResource(cache, key, device, VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit, input))

@@ -487,7 +487,7 @@ and IRuntime =
     abstract member ResourceManager : IResourceManager
     abstract member ContextLock : IDisposable
 
-    abstract member CreateFramebufferSignature : attachments : SymbolDict<AttachmentSignature> * Set<Symbol> -> IFramebufferSignature
+    abstract member CreateFramebufferSignature : attachments : SymbolDict<AttachmentSignature> * textures : Set<Symbol> * layers : int * perLayerUniforms : Set<string> -> IFramebufferSignature
     abstract member DeleteFramebufferSignature : IFramebufferSignature -> unit
 
     abstract member AssembleEffect : FShade.Effect * IFramebufferSignature -> BackendSurface
@@ -562,6 +562,9 @@ and [<AllowNullLiteral>] IFramebufferSignature =
     abstract member DepthAttachment : Option<AttachmentSignature>
     abstract member StencilAttachment : Option<AttachmentSignature>
     abstract member Images : Map<int, Symbol>
+
+    abstract member LayerCount : int
+    abstract member PerLayerUniforms : Set<string>
 
     abstract member IsAssignableFrom : other : IFramebufferSignature -> bool
 

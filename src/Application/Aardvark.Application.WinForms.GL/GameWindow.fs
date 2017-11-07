@@ -355,7 +355,9 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
             Map.ofList [0, (DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples })],
             Map.empty,
             depthSignature,
-            None
+            None,
+            1,
+            Set.empty
         )
 
 
