@@ -847,7 +847,7 @@ module RenderTaskNew =
 
         override x.Release() =
             reader.Dispose()
-            base.Dispose()
+            base.Release()
 
 
 
