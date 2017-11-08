@@ -426,7 +426,25 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, size))
         device.Delete temp
 
-        
+    member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = 
+        let src = unbox<Image> src
+        let dst = unbox<Image> dst
+
+        device.perform {
+            if src.Samples = dst.Samples then
+                do! Command.Copy(
+                        src.[ImageAspect.Color, srcBaseLevel .. srcBaseLevel + levels - 1, srcBaseSlice .. srcBaseSlice + slices - 1],
+                        dst.[ImageAspect.Color, dstBaseLevel .. dstBaseLevel + levels - 1, dstBaseSlice .. dstBaseSlice + slices - 1]
+                    )
+            else
+                for l in 0 .. levels - 1 do
+                    let srcLevel = srcBaseLevel + l
+                    let dstLevel = dstBaseLevel + l
+                    do! Command.ResolveMultisamples(
+                            src.[ImageAspect.Color, srcLevel, srcBaseSlice .. srcBaseSlice + slices - 1],
+                            dst.[ImageAspect.Color, dstLevel, dstBaseSlice .. dstBaseSlice + slices - 1]
+                        )
+        }
 
 
     interface IRuntime with
@@ -467,6 +485,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.CreateSparseTexture<'a when 'a : unmanaged> (size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'a> =
             x.CreateSparseTexture<'a>(size, levels, slices, dim, format, brickSize, maxMemory)
+        member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = x.Copy(src, srcBaseSlice, srcBaseLevel, dst, dstBaseSlice, dstBaseLevel, slices, levels)
 
 
         member x.CreateFramebuffer(signature, bindings) = x.CreateFramebuffer(signature, bindings)
