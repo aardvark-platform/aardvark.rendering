@@ -284,6 +284,16 @@ module Stereo =
                 override x.Destroy h = destroy h
             } :> IOutputMod<_>
 
+    let runNew() =
+        let sg =
+            Sg.box' C4b.Red Box3d.Unit
+                |> Sg.shader {
+                    do! DefaultSurfaces.trafo
+                    do! DefaultSurfaces.simpleLighting
+                }
+
+        Utilities.run Display.Stereo Backend.Vulkan sg
+
     let run() =
         let app = new VulkanApplication(true)
         let win = app.CreateSimpleRenderWindow(1)
