@@ -6,6 +6,32 @@ open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Valve.VR
 open Aardvark.Application
+open Aardvark.Application.WinForms
+open System.Windows.Forms
+open Aardvark.SceneGraph
+
+module StereoShader =
+    open FShade
+    open FShade.Imperative
+
+    type Vertex = 
+        {
+            [<Layer>]           layer   : int
+            [<Position>]        pos     : V4d
+            [<WorldPosition>]   wp      : V4d
+            [<Normal>]          n       : V3d
+            [<BiNormal>]        b       : V3d
+            [<Tangent>]         t       : V3d
+            [<Color>]           c       : V4d
+            [<TexCoord>]        tc      : V2d
+        }
+
+    let flip (v : Vertex) =
+        vertex {
+            let version : int = uniform?Version
+            let zero = 1.0E-10 * float (version % 2)
+            return { v with pos = V4d(1.0, -1.0, 1.0 + zero, 1.0) * v.pos }
+        }
 
 type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
     inherit VrRenderer()
@@ -49,6 +75,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
     let version = Mod.init 0
     let tex = Mod.custom (fun _ -> fImg :> ITexture)
 
+
     new(samples) = VulkanVRApplicationLayered(samples, false)
     new(debug) = VulkanVRApplicationLayered(1, debug)
     new() = VulkanVRApplicationLayered(1, false)
@@ -62,6 +89,58 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
     member x.Sizes = Mod.constant x.DesiredSize
     member x.Samples = samples
     member x.Time = time
+
+    member x.ShowWindow() =
+        async {
+            let d = new Form()
+            
+            
+            //d.ClientSize <- Drawing.Size(2 * app.DesiredSize.X, app.DesiredSize.Y)
+            d.WindowState <- FormWindowState.Maximized
+            d.FormBorderStyle <- FormBorderStyle.None
+
+            let mode = GraphicsMode(Col.Format.RGBA, 8, 24, 8, 2, 8, ImageTrafo.MirrorY)
+            let impl = new VulkanRenderControl(app.Runtime, mode)
+
+
+            let consoleTrafo = 
+                impl.Sizes |> Mod.map (fun s -> 
+                    Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
+                    Trafo3d.Translation(-0.95, 0.9, 0.0)
+                )
+
+            let helpTrafo = 
+                impl.Sizes |> Mod.map (fun s -> 
+                    Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
+                    Trafo3d.Translation(-0.95, -0.95, 0.0)
+                    
+                )
+
+            let task =
+                Sg.fullScreenQuad
+                    |> Sg.diffuseTexture x.Texture
+                    |> Sg.uniform "Version" x.Version
+                    |> Sg.shader {
+                        do! StereoShader.flip
+                        do! DefaultSurfaces.diffuseTexture
+                    }
+
+                    |> Sg.compile app.Runtime impl.FramebufferSignature
+
+            impl.RenderTask <-task
+            impl.Dock <- System.Windows.Forms.DockStyle.Fill
+            d.Controls.Add impl
+
+            impl.KeyDown.Add (fun k ->
+                if k.KeyCode = Keys.Escape then
+                    d.Close()
+            )
+
+            System.Windows.Forms.Application.Run(d)
+            x.Shutdown()
+
+        } |> Async.Start
+
 
     member x.RenderTask
         with get() = task
@@ -141,14 +220,14 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
         VrTexture.Vulkan(fTex, Box2d(V2d.OO, V2d(0.5, 1.0))), VrTexture.Vulkan(fTex, Box2d(V2d(0.5, 0.0), V2d.II))
 
     override x.Render() = 
-        let view, lProj, rProj =
-            caller.EvaluateAlways AdaptiveToken.Top (fun t ->
-                let view = info.viewTrafo.GetValue t
-                let lProj = info.lProjTrafo.GetValue t
-                let rProj = info.rProjTrafo.GetValue t
-
-                view, lProj, rProj
-            )
+//        let view, lProj, rProj =
+//            caller.EvaluateAlways AdaptiveToken.Top (fun t ->
+//                let view = info.viewTrafo.GetValue t
+//                let lProj = info.lProjTrafo.GetValue t
+//                let rProj = info.rProjTrafo.GetValue t
+//
+//                view, lProj, rProj
+//            )
 
         let output = OutputDescription.ofFramebuffer fbo
 

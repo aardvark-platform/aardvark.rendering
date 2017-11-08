@@ -209,13 +209,13 @@ module Stereo =
                 |> Sg.shader {
                     do! StereoShader.fancyColor
                     do! DefaultSurfaces.trafo
-                    do! StereoShader.trafo
+                    //do! StereoShader.trafo
                     //do! DefaultSurfaces.constantColor C4f.Red
                     do! DefaultSurfaces.simpleLighting
                 }
-                |> Sg.viewTrafo info.viewTrafo
-                |> Sg.uniform "LeftProj" info.lProjTrafo
-                |> Sg.uniform "RightProj" info.rProjTrafo
+                |> Sg.viewTrafo (info.viewTrafos |> Mod.map (Array.item 0))
+                |> Sg.uniform "ViewTrafo" info.viewTrafos
+                |> Sg.uniform "ProjTrafo" info.projTrafos
                 |> Sg.compile app.Runtime app.FramebufferSignature
 
         app.RenderTask <- task

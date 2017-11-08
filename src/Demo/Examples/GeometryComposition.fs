@@ -174,22 +174,29 @@ module GeometryComposition =
 
         let withLightDir (v : Vertex) =
             vertex {
-                return { v with ldir = V3d.Zero - (uniform.ViewTrafo * v.wp).XYZ |> Vec.normalize; n = (uniform.ViewTrafo * V4d(v.n, 0.0)).XYZ }
+                return { v with ldir = (uniform.ViewTrafo * (V4d(50.0, 60.0, 70.0, 1.0) - v.wp)).XYZ |> Vec.normalize; n = (uniform.ViewTrafo * V4d(v.n, 0.0)).XYZ |> Vec.normalize }
             }
 
     open FShade
+    open Aardvark.Application.OpenVR
 
     let run() =
         use app = new VulkanApplication(false)
-        let win = app.CreateSimpleRenderWindow(8)
+        let win = app.CreateSimpleRenderWindow(8) 
+        let run() = win.Run()
+        let cameraView  = DefaultCameraController.control win.Mouse win.Keyboard win.Time (CameraView.LookAt(V3d(2.5, -3.0, 1.5), V3d(2.5, 0.0, 0.0), V3d.OOI))    
+        let frustum     = win.Sizes     |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))       
+        let viewTrafo   = cameraView    |> Mod.map CameraView.viewTrafo :> IMod
+        let projTrafo   = frustum       |> Mod.map Frustum.projTrafo :> IMod
+        let win = win:> IRenderTarget
 
 
-
-        let cameraView  =  DefaultCameraController.control win.Mouse win.Keyboard win.Time (CameraView.LookAt(V3d(2.5, -3.0, 1.5), V3d(2.5, 0.0, 0.0), V3d.OOI))    
-        let frustum     =  win.Sizes    |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))       
-            
-        let viewTrafo   = cameraView    |> Mod.map CameraView.viewTrafo
-        let projTrafo   = frustum       |> Mod.map Frustum.projTrafo        
+//        let app = new VulkanVRApplicationLayered(false)
+//        let win = app :> IRenderTarget
+//        let viewTrafo = app.Info.viewTrafos :> IMod
+//        let projTrafo = app.Info.projTrafos :> IMod
+//        let run () = app.Run()
+        //app.ShowWindow()
 
 
         let rec allInsertions (v : 'a) (l : list<'a>) =
@@ -214,8 +221,8 @@ module GeometryComposition =
             [ 
                 "divide", toEffect Shader.divide
                 "shrink", toEffect Shader.shrink 
-                //"extrude", toEffect Shader.extrude
-                "invert", toEffect Shader.invert
+                "extrude", toEffect Shader.extrude
+                //"invert", toEffect Shader.invert
                 //"tricolor", toEffect Shader.tricolor
             ]
 
@@ -244,6 +251,9 @@ module GeometryComposition =
         let h = ceil (float combinations.Length / float w) |> int
 
         let font = Font("Consolas")
+
+        let u (n : String) (m : IMod) (s : ISg) =
+            Sg.UniformApplicator(n, m, s) :> ISg
 
         win.RenderTask <-
             Sg.ofList [
@@ -298,14 +308,16 @@ module GeometryComposition =
                                     label
                                 ]
                                 //|> Sg.depthTest (Mod.constant DepthTestMode.None)
-                                |> Sg.translate (2.0 * float i) 0.0 (-1.5 * float j)
+                                |> Sg.translate (2.0 * float i) 0.0 (1.5 * float j)
 
             ]
+            |> Sg.scale 0.5
             //|> Sg.fillMode (Mod.constant FillMode.Line)
-            |> Sg.viewTrafo viewTrafo
-            |> Sg.projTrafo projTrafo
+            |> u "ViewTrafo" viewTrafo
+            |> u "ProjTrafo" projTrafo
             |> Sg.compile app.Runtime win.FramebufferSignature
 
-        win.Run()
-        win.Dispose()
+        run()
+        System.Environment.Exit 0
+        //win.Dispose()
 
