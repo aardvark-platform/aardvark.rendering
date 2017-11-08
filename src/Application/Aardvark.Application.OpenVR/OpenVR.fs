@@ -170,8 +170,94 @@ type MotionState() =
         else
             isValid.Value <- false
 
+
+module RenderModels =
+    open Aardvark.SceneGraph
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type Vertex =
+        struct
+            val mutable public Postion : V3f
+            val mutable public Normal : V3f
+            val mutable public TexCoord : V2f
+        end
+        
+    [<StructLayout(LayoutKind.Sequential)>]
+    type TextureMap =
+        struct
+            val mutable public Width : uint16
+            val mutable public Height : uint16
+            val mutable public Data : nativeptr<byte>
+        end
+        
+    [<StructLayout(LayoutKind.Sequential)>]
+    type RenderModel =
+        struct
+            val mutable public InternalHandle : uint64
+            val mutable public VertexData : nativeptr<Vertex>
+            val mutable public VertexCount : uint32
+            val mutable public IndexData : nativeptr<uint16>
+            val mutable public TriangleCount : uint32
+            val mutable public TextureMap : TextureMap
+        end
+
+    let private modelCache = System.Collections.Concurrent.ConcurrentDictionary<string, Option<ISg>>()
+
+    let toSg (m : RenderModel) =
+        let call = DrawCallInfo(FaceVertexCount = int m.TriangleCount * 3, InstanceCount = 1)
+        let mode = IndexedGeometryMode.TriangleList
+
+        let indexBuffer = NativeMemoryBuffer(NativePtr.toNativeInt m.IndexData, int m.TriangleCount * 3 * sizeof<uint16>)
+        let indexBufferView = BufferView(Mod.constant (indexBuffer :> IBuffer), typeof<uint16>)
+
+        let vertexBuffer = NativeMemoryBuffer(NativePtr.toNativeInt m.VertexData, int m.VertexCount * sizeof<Vertex>) :> IBuffer
+        let positions = BufferView(Mod.constant vertexBuffer, typeof<V3f>, 0, sizeof<Vertex>)
+        let normals = BufferView(Mod.constant vertexBuffer, typeof<V3f>, 12, sizeof<Vertex>)
+        let coords = BufferView(Mod.constant vertexBuffer, typeof<V2f>, 24, sizeof<Vertex>)
+
+        let sg = 
+            Sg.VertexIndexApplicator(indexBufferView, Sg.render mode call) :> ISg 
+                |> Sg.vertexBuffer DefaultSemantic.Positions positions
+                |> Sg.vertexBuffer DefaultSemantic.Normals normals
+                |> Sg.vertexBuffer DefaultSemantic.DiffuseColorCoordinates coords
+
+        let tex = m.TextureMap
+        if tex.Width > 0us && tex.Height > 0us then
+            let info =
+                VolumeInfo(
+                    0L,
+                    V3l(int tex.Width, int tex.Height, 4),
+                    V3l(4, int tex.Width * 4, 1)
+                )
+
+            let volume = NativeVolume<byte>(tex.Data, info)
+            let image = PixImage<byte>(Col.Format.RGBA, V2i(int tex.Width, int tex.Height))
+
+            NativeVolume.using image.Volume (fun dst ->
+                NativeVolume.copy volume dst
+            )
+            
+            let texture = PixTexture2d(PixImageMipMap [| image :> PixImage |], true) :> ITexture
+
+            Sg.diffuseTexture' texture sg
+        else
+            sg
+
+    let load (name : string) =
+        modelCache.GetOrAdd(name, fun name ->
+            let mutable ptr = 0n
+            if OpenVR.RenderModels.LoadRenderModel_Async(name, &ptr) = EVRRenderModelError.None then
+                let model : RenderModel = NativeInt.read ptr
+                let sg = toSg model
+                Some sg
+            else
+                None
+        )
+
+
+
 type VrDevice(system : CVRSystem, deviceType : VrDeviceType, index : int) =
-    
+
     let getString (prop : ETrackedDeviceProperty) =
         let builder = System.Text.StringBuilder(4096, 4096)
         let mutable err = ETrackedPropertyError.TrackedProp_Success
@@ -183,6 +269,9 @@ type VrDevice(system : CVRSystem, deviceType : VrDeviceType, index : int) =
         let len = system.GetInt32TrackedDeviceProperty(uint32 index, prop, &err)
 
         len
+        
+    let renderModelName = lazy ( getString ETrackedDeviceProperty.Prop_RenderModelName_String )
+    let renderModel = lazy ( RenderModels.load renderModelName.Value )
 
     let vendor  = lazy ( getString ETrackedDeviceProperty.Prop_ManufacturerName_String )
     let model   = lazy ( getString ETrackedDeviceProperty.Prop_ModelNumber_String )
@@ -202,6 +291,9 @@ type VrDevice(system : CVRSystem, deviceType : VrDeviceType, index : int) =
     let events = Event<VREvent_t>()
 
     let state = MotionState()
+
+    member x.RenderModel =
+        model.Value
 
     member x.Axis = axis
 
