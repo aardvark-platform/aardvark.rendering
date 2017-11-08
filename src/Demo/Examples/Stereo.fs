@@ -68,10 +68,11 @@ module StereoShader =
 
     let sample (v : Effects.Vertex) =
         fragment {
-            if v.tc.X > 0.505 then 
+            let margin : float = uniform?Margin
+            if v.tc.X > 0.5 + (margin / 2.0) then 
                 let tc = V2d(2.0 * (v.tc.X - 0.5), v.tc.Y)
                 return inputSampler.Sample(tc, 1)
-            elif v.tc.X < 0.495 then
+            elif v.tc.X < 0.5 - (margin / 2.0) then
                 let tc = V2d(2.0 * v.tc.X, v.tc.Y)
                 return inputSampler.Sample(tc, 0)
             else
@@ -224,79 +225,204 @@ module Stereo =
         
         ()
 
+    [<AbstractClass>]
+    type OutputMod<'a, 'b>(inputs : list<IOutputMod>) =
+        inherit AbstractOutputMod<'b>()
+
+        let mutable handle : Option<'a> = None
+
+        abstract member View : 'a -> 'b
+        default x.View a = unbox a
+        
+        abstract member TryUpdate : AdaptiveToken * 'a -> bool
+        default x.TryUpdate(_,_) = false
+
+        abstract member Create : AdaptiveToken -> 'a
+        abstract member Destroy : 'a -> unit
+
+        override x.Create() =
+            for i in inputs do i.Acquire()
+
+        override x.Destroy() =
+            for i in inputs do i.Release()
+            match handle with
+                | Some h -> 
+                    x.Destroy h
+                    handle <- None
+                | _ ->
+                    ()
+
+        override x.Compute(t, rt) =
+            let handle = 
+                match handle with
+                    | Some h ->
+                        if not (x.TryUpdate(t, h)) then
+                            x.Destroy(h)
+                            let h = x.Create(t)
+                            handle <- Some h
+                            h
+                        else
+                            h
+                    | None ->
+                        let h = x.Create t
+                        handle <- Some h
+                        h
+            x.View handle
+                    
+    module OutputMod =
+        let custom (dependent : list<IOutputMod>) (create : AdaptiveToken -> 'a) (tryUpdate : AdaptiveToken -> 'a -> bool) (destroy : 'a -> unit) (view : 'a -> 'b) =
+            { new OutputMod<'a, 'b>(dependent) with
+                override x.Create t = create t
+                override x.TryUpdate(t,h) = tryUpdate t h
+                override x.Destroy h = destroy h
+                override x.View h = view h
+            } :> IOutputMod<_> 
+            
+        let simple (create : AdaptiveToken -> 'a) (destroy : 'a -> unit) =
+            { new OutputMod<'a, 'a>([]) with
+                override x.Create t = create t
+                override x.Destroy h = destroy h
+            } :> IOutputMod<_>
+
     let run() =
-        let app = new VulkanApplication(false)
+        let app = new VulkanApplication(true)
         let win = app.CreateSimpleRenderWindow(1)
         let runtime = app.Runtime :> IRuntime
+
+
+        let samples = 8
 
         let signature =
             runtime.CreateFramebufferSignature(
                 SymDict.ofList [
-                    DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
-                    DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+                    DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples }
+                    DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = samples }
                 ],
                 Set.empty,
                 2, 
                 Set.ofList [
                     "ProjTrafo"; 
+                    "ViewTrafo"; 
+                    "ModelViewTrafo"; 
                     "ViewProjTrafo"; 
                     "ModelViewProjTrafo"
-
+                    
                     "ProjTrafoInv"; 
+                    "ViewTrafoInv"; 
+                    "ModelViewTrafoInv"; 
                     "ViewProjTrafoInv"; 
                     "ModelViewProjTrafoInv"
                 ]
             )    
 
-        let colors = runtime.CreateTextureArray(V2i(1024, 1024), TextureFormat.Rgba8, 1, 1, 2)
-        let depth = runtime.CreateTextureArray(V2i(1024, 1024), TextureFormat.Depth24Stencil8, 1, 1, 2)
+        //let size = V2i(960, 1080)
 
+        let s = win.Sizes |> Mod.map (fun s -> s / V2i(2,1))
+
+        let colors =
+            OutputMod.custom 
+                []
+                (fun t -> runtime.CreateTextureArray(s.GetValue t, TextureFormat.Rgba8, 1, samples, 2))
+                (fun t h -> h.Size.XY = s.GetValue t)
+                (fun h -> runtime.DeleteTexture h)
+                id
+                
+        let depth =
+            OutputMod.custom 
+                []
+                (fun t -> runtime.CreateTextureArray(s.GetValue t, TextureFormat.Depth24Stencil8, 1, samples, 2))
+                (fun t h -> h.Size.XY = s.GetValue t)
+                (fun h -> runtime.DeleteTexture h)
+                id
+
+        let resolved =
+            OutputMod.custom 
+                []
+                (fun t -> runtime.CreateTextureArray(s.GetValue t, TextureFormat.Rgba8, 1, 1, 2))
+                (fun t h -> h.Size.XY = s.GetValue t)
+                (fun h -> runtime.DeleteTexture h)
+                id
+                
+        let framebuffer =
+            OutputMod.custom
+                [colors; depth]
+                (fun t -> runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, colors.GetValue(t).[0] :> IFramebufferOutput; DefaultSemantic.Depth, depth.GetValue(t).[0] :> IFramebufferOutput]))
+                (fun t h -> false)
+                (fun h -> runtime.DeleteFramebuffer h)
+                id
+
+        
 
         let cameraView = 
             CameraView.lookAt (V3d(6.0, 6.0, 6.0)) V3d.Zero V3d.OOI
                 |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
                 |> Mod.map CameraView.viewTrafo
 
-        let projection = 
-            win.Sizes 
-                |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y))
-                |> Mod.map Frustum.projTrafo
+        let near = 0.1
+        let far = 100.0
 
-
-        let lProj =
-            { left = -0.4; right = 0.1; top = 0.25; bottom = -0.25; near = 1.0; far = 100.0 } |> Frustum.projTrafo 
-            
-        let rProj =
-            { left = -0.1; right = 0.4; top = 0.25; bottom = -0.25; near = 1.0; far = 100.0 } |> Frustum.projTrafo
-
-
-        let framebuffer =
-            runtime.CreateFramebuffer(
-                signature,
-                [
-                    DefaultSemantic.Colors, colors.[0] :> IFramebufferOutput
-                    DefaultSemantic.Depth, depth.[0]:> IFramebufferOutput
-                ]
+        let views =
+            cameraView |> Mod.map (fun view ->
+                [| 
+                    view * Trafo3d.Translation(0.05, 0.0, 0.0)
+                    view * Trafo3d.Translation(-0.05, 0.0, 0.0)
+                |]
             )
 
+        let projs =
+            // taken from oculus rift
+            let outer = 1.0537801252809621805875367233154
+            let inner = 0.77567951104961310377955052031392
+
+            win.Sizes |> Mod.map (fun size ->
+                let aspect = float size.X / float size.Y 
+                let y = tan (120.0 * Constant.RadiansPerDegree / 2.0) / aspect //(outer + inner) / (2.0 * aspect)
+
+                [|
+                    { left = -outer * near; right = inner * near; top = y * near; bottom = -y * near; near = near; far = far } |> Frustum.projTrafo 
+                    { left = -inner * near; right = outer * near; top = y * near; bottom = -y * near; near = near; far = far } |> Frustum.projTrafo 
+                |]
+            )
+
+        let font = Font("Consolas")
+
         let task =
-            Sg.box' C4b.Red Box3d.Unit
-                |> Sg.shader {
-                    do! DefaultSurfaces.trafo
-                    do! DefaultSurfaces.constantColor C4f.Red
-                }
-                |> Sg.viewTrafo cameraView
-                |> Sg.uniform "ProjTrafo" (Mod.constant [| rProj; lProj |])
-                |> Sg.compile runtime signature
+            Sg.ofList [
+                Sg.box' C4b.Red Box3d.Unit
+                Sg.unitSphere' 5 C4b.Blue 
+                    |> Sg.scale 0.5
+                    |> Sg.translate 0.0 0.0 2.0
 
-        let clear = runtime.CompileClear(signature, Mod.constant C4f.Green, Mod.constant 1.0)
+                Sg.text font C4b.White ~~"test"
+                    |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, 3.0 * V3d.OOI))
+            ]
+            |> Sg.shader {
+                do! DefaultSurfaces.trafo
+                do! DefaultSurfaces.simpleLighting
+            }
 
-        let result =
+            |> Sg.viewTrafo cameraView
+            |> Sg.uniform "ProjTrafo" projs
+            |> Sg.uniform "ViewTrafo" views
+            |> Sg.compile runtime signature
+
+        let clear = runtime.CompileClear(signature, Mod.constant C4f.Black, Mod.constant 1.0)
+        resolved.Acquire()
+        framebuffer.Acquire()
+
+        let margin =
             Mod.custom (fun t ->
-                let o = OutputDescription.ofFramebuffer framebuffer
+                let fbo = framebuffer.GetValue(t)
+                let colors = colors.GetValue t
+                let final = resolved.GetValue t
+
+                let o = OutputDescription.ofFramebuffer fbo
                 clear.Run(t, RenderToken.Empty, o)
                 task.Run(t, RenderToken.Empty, o)
-                colors :> ITexture
+
+                runtime.Copy(colors, 0, 0, final, 0, 0, 2, 1)
+
+                0.001
             )
 
         let final =
@@ -304,15 +430,13 @@ module Stereo =
                 |> Sg.shader {
                     do! StereoShader.sample
                 }
-                |> Sg.uniform "InputTexture" result //(Mod.constant (colors :> ITexture))
+                |> Sg.uniform "Margin" margin
+                |> Sg.uniform "InputTexture" (resolved |> Mod.map (fun t -> t :> ITexture)) //(Mod.constant (colors :> ITexture))
                 |> Sg.compile runtime win.FramebufferSignature
 
-//        let task0 = 
-//            RenderTask.custom (fun _ ->
-//                let o = OutputDescription.ofFramebuffer framebuffer
-//                clear.Run(AdaptiveToken.Top, RenderToken.Empty, o)
-//                task.Run(AdaptiveToken.Top, RenderToken.Empty, o)
-//            )
 
-        win.RenderTask <- final //RenderTask.ofList [task0; final]
+        win.RenderTask <- final
         win.Run()
+        framebuffer.Release()
+        resolved.Release()
+        System.Environment.Exit 0

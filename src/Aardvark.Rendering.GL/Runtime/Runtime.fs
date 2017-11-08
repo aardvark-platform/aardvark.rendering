@@ -175,7 +175,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateBuffer(size : nativeint) = x.CreateBuffer(size) :> IBackendBuffer
         member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = x.Upload(src, dst, dstOffset, size)
         member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) = x.Download(src, srcOffset, dst, size)
-
+        member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = x.Copy(src, srcBaseSlice, srcBaseLevel, dst, dstBaseSlice, dstBaseLevel, slices, levels)
         member x.PrepareSurface (signature, s : ISurface) = x.PrepareSurface(signature, s) :> IBackendSurface
         member x.DeleteSurface (s : IBackendSurface) = 
             match s with
@@ -244,6 +244,21 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.Delete(shader : IComputeShader) = failwith ""
         member x.MaxLocalSize = failwith ""
 
+    
+    member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) =
+        let src = unbox<Texture> src
+        let dst = unbox<Texture> dst
+        
+        let mutable size = src.GetSize srcBaseLevel
+        for l in 0 .. levels - 1 do
+            let srcLevel = srcBaseLevel + l
+            let dstLevel = dstBaseLevel + l
+            for s in 0 .. slices - 1 do
+                if src.Multisamples = dst.Multisamples then
+                    ctx.Copy(src, srcLevel, srcBaseSlice + s, V2i.Zero, dst, dstLevel, dstBaseSlice + s, V2i.Zero, size)
+                else
+                    ctx.Blit(src, srcLevel, srcBaseSlice + s, Box2i(V2i.Zero, size - V2i.II), dst, dstLevel, dstBaseSlice + s, Box2i(V2i.Zero, size - V2i.II), false)
+            size <- size / 2
 
 
     member x.CreateBuffer(size : nativeint) =

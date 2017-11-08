@@ -816,7 +816,7 @@ module RenderTaskNew =
                         do! Command.TransformLayout(img, VkImageLayout.ColorAttachmentOptimal)
 
                 do! Command.BeginPass(renderPass, fbo, false)
-                do! Command.ExecuteSequential passCmds
+                do! Command.Execute passCmds
                 do! Command.EndPass
 
                 for i in 0 .. fbo.ImageViews.Length - 1 do
