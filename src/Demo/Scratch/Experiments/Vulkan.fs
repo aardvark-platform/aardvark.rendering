@@ -453,6 +453,7 @@ module Lod =
     let cloud =
         Sg.pointCloud data {
             lodDecider              = Mod.constant (LodData.defaultLodDecider 40.0)
+            freeze                  = Mod.constant false
             maxReuseRatio           = 0.5
             minReuseCount           = 1L <<< 20
             pruneInterval           = 500

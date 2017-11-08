@@ -276,6 +276,7 @@ module LoD =
     let cloud =
         pointCloud data {
             lodDecider              = Mod.constant (LodData.defaultLodDecider 5.0)
+            freeze                  = Mod.constant false
             maxReuseRatio           = 0.5
             minReuseCount           = 1L <<< 20
             pruneInterval           = 500

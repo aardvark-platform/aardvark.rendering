@@ -307,6 +307,8 @@ type PointCloudInfo =
         /// decider function
         lodDecider : IMod<LodData.Decider>
 
+        freeze : IMod<bool>
+
         /// an optional custom view trafo
         customView : Option<IMod<Trafo3d>>
 
@@ -467,8 +469,7 @@ module PointCloudRenderObjectSemantics =
                 scope?Runtime
 
             let ro = RenderObject.ofScope scope
-
-
+            
             let decider = 
                 config.lodDecider
 
@@ -492,11 +493,21 @@ module PointCloudRenderObjectSemantics =
                 match ro.Uniforms.TryGetUniform(scope, Symbol.Create "ViewportSize") with
                     | Some (:? IMod<V2i> as v) -> v
                     | _ -> scope?ViewportSize
+                    
+
+            
+            let vp =
+                let both = Mod.map2 (fun a b -> a,b) view proj 
+                config.freeze |> Mod.bind(fun frozen ->
+                    if frozen then
+                        Mod.constant (view.GetValue(), proj.GetValue())
+                    else
+                        both
+                )
 
             let dependencies =
                 Mod.custom (fun token ->
-                    let view = view.GetValue(token)
-                    let proj = proj.GetValue(token)
+                    let view,proj = vp.GetValue(token)
                     let size = size.GetValue(token)
                     let decider = decider.GetValue(token)
 
