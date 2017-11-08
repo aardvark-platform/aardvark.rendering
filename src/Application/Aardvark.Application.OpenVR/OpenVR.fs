@@ -429,9 +429,8 @@ type VrTexture =
 type VrRenderInfo =
     {
         framebufferSize     : V2i
-        viewTrafo           : IMod<Trafo3d>
-        lProjTrafo          : IMod<Trafo3d>
-        rProjTrafo          : IMod<Trafo3d>
+        viewTrafos          : IMod<Trafo3d[]>
+        projTrafos          : IMod<Trafo3d[]>
     }
 
 [<AbstractClass>]
@@ -477,20 +476,17 @@ type VrRenderer() =
 
     let depthRange = Range1d(0.1, 100.0) |> Mod.init
 
-    let lProj =
-        let headToEye = system.GetEyeToHeadTransform(EVREye.Eye_Left) |> Trafo.ofHmdMatrix34 |> Trafo.inverse
+
+    let projections =
+        //let headToEye = system.GetEyeToHeadTransform(EVREye.Eye_Right) |> Trafo.ofHmdMatrix34 |> Trafo.inverse
         //let headToEye = Trafo3d.Scale(1.0, 1.0, -1.0) * headToEye
         depthRange |> Mod.map (fun range ->
             let proj = system.GetProjectionMatrix(EVREye.Eye_Left, float32 range.Min, float32 range.Max)
-            headToEye * Trafo.ofHmdMatrix44 proj
-        )
+            let lProj = Trafo.ofHmdMatrix44 proj
 
-    let rProj =
-        let headToEye = system.GetEyeToHeadTransform(EVREye.Eye_Right) |> Trafo.ofHmdMatrix34 |> Trafo.inverse
-        //let headToEye = Trafo3d.Scale(1.0, 1.0, -1.0) * headToEye
-        depthRange |> Mod.map (fun range ->
             let proj = system.GetProjectionMatrix(EVREye.Eye_Right, float32 range.Min, float32 range.Max)
-            headToEye * Trafo.ofHmdMatrix44 proj
+            let rProj = Trafo.ofHmdMatrix44 proj
+            [| lProj; rProj|]
         )
 
     let desiredSize =
@@ -501,15 +497,22 @@ type VrRenderer() =
 
 
     let view (t : Trafo3d) =
-        t.Inverse * Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, V3d.OIO, V3d.Zero)
+        let lHeadToEye = system.GetEyeToHeadTransform(EVREye.Eye_Left) |> Trafo.ofHmdMatrix34 |> Trafo.inverse
+        let rHeadToEye = system.GetEyeToHeadTransform(EVREye.Eye_Right) |> Trafo.ofHmdMatrix34 |> Trafo.inverse
+
+        let view = t.Inverse * Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, V3d.OIO, V3d.Zero)
+
+        [|
+            view * lHeadToEye
+            view * rHeadToEye
+        |]
 
     let infos =
         hmds |> Array.map (fun hmd ->
             {
                 framebufferSize = desiredSize
-                viewTrafo = hmd.MotionState.Pose |> Mod.map view |> Unhate.register "viewTrafo" //CameraView.lookAt (V3d(3,4,5)) V3d.Zero V3d.OOI |> CameraView.viewTrafo |> Mod.constant //hmd.MotionState.Pose |> Mod.map Trafo.inverse |> Unhate.register "viewTrafo"
-                lProjTrafo = lProj |> Unhate.register "proj"// Frustum.perspective 40.0 1.0 100.0 1.0 |> Frustum.projTrafo |> Mod.constant //lProj |> Unhate.register "proj"
-                rProjTrafo = rProj |> Unhate.register "proj"// Frustum.perspective 40.0 1.0 100.0 1.0 |> Frustum.projTrafo |> Mod.constant //rProj |> Unhate.register "proj"
+                viewTrafos = hmd.MotionState.Pose |> Mod.map view  //CameraView.lookAt (V3d(3,4,5)) V3d.Zero V3d.OOI |> CameraView.viewTrafo |> Mod.constant //hmd.MotionState.Pose |> Mod.map Trafo.inverse |> Unhate.register "viewTrafo"
+                projTrafos = projections
             }
         )
 
