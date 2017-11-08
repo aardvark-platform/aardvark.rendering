@@ -521,7 +521,10 @@ module RenderTasks =
         interface IRenderTask with
             member x.Update(c, t) = ()
             member x.Run(c,t,o) = x.Run(c,t,o)
-            member x.Dispose() = ()
+            member x.Dispose() = 
+                cmd.Dispose()
+                pool.Dispose()
+
             member x.FrameId = 0UL
             member x.FramebufferSignature = Some (renderPass :> _)
             member x.Runtime = Some device.Runtime
