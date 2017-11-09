@@ -285,14 +285,32 @@ module Stereo =
             } :> IOutputMod<_>
 
     let runNew() =
-        let sg =
-            Sg.box' C4b.Red Box3d.Unit
+        let font = Font "Consolas"
+
+        show {
+            display Display.Mono
+            samples 1
+            backend Backend.Vulkan
+            debug false
+
+            scene (
+                Sg.ofList [
+                    Sg.box' C4b.Red Box3d.Unit
+
+                    Sg.unitSphere' 5 C4b.Blue 
+                        |> Sg.scale 0.5
+                        |> Sg.translate 0.0 0.0 2.0
+
+                    Sg.text font C4b.White ~~"test"
+                        |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, 3.0 * V3d.OOI))
+                ]
+
                 |> Sg.shader {
                     do! DefaultSurfaces.trafo
                     do! DefaultSurfaces.simpleLighting
                 }
-
-        Utilities.run Display.Stereo Backend.Vulkan sg
+            )
+        }
 
     let run() =
         let app = new VulkanApplication(true)
