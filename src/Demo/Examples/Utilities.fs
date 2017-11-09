@@ -25,6 +25,17 @@ type Display =
     | Stereo
     | OpenVR
 
+type RenderConfig =
+    {
+        backend     : Backend
+        debug       : bool
+        samples     : int
+        display     : Display
+        scene       : ISg
+    }
+
+
+
 module Utilities =
     open System.Windows.Forms
 
@@ -113,13 +124,13 @@ module Utilities =
             }
 
 
-    let private runMonoScreen (backend : Backend) (scene : ISg) =
+    let private runMonoScreen (cfg : RenderConfig) =
         let app =
-            match backend with
-                | Backend.GL -> new OpenGlApplication(true) :> IApplication
-                | Backend.Vulkan -> new VulkanApplication(true) :> IApplication
+            match cfg.backend with
+                | Backend.GL -> new OpenGlApplication(cfg.debug) :> IApplication
+                | Backend.Vulkan -> new VulkanApplication(cfg.debug) :> IApplication
 
-        let win = app.CreateSimpleRenderWindow(8)
+        let win = app.CreateSimpleRenderWindow(cfg.samples)
 
         let view =
             CameraView.lookAt (V3d(6,6,6)) V3d.Zero V3d.OOI
@@ -132,7 +143,7 @@ module Utilities =
                 |> Mod.map Frustum.projTrafo
 
         let task =
-            scene
+            cfg.scene
             |> Sg.viewTrafo view
             |> Sg.projTrafo proj
             |> Sg.compile win.Runtime win.FramebufferSignature
@@ -145,16 +156,16 @@ module Utilities =
         app.Dispose()
 
 
-    let private runStereoScreen (backend : Backend) (scene : ISg) =
+    let private runStereoScreen (cfg : RenderConfig) =
         let app =
-            match backend with
-                | Backend.GL -> new OpenGlApplication(true) :> IApplication
-                | Backend.Vulkan -> new VulkanApplication(true) :> IApplication
+            match cfg.backend with
+                | Backend.GL -> new OpenGlApplication(cfg.debug) :> IApplication
+                | Backend.Vulkan -> new VulkanApplication(cfg.debug) :> IApplication
 
         let win = app.CreateSimpleRenderWindow(1)
         let runtime = app.Runtime
 
-        let samples = 8
+        let samples = cfg.samples
         let signature =
             runtime.CreateFramebufferSignature(
                 SymDict.ofList [
@@ -245,7 +256,7 @@ module Utilities =
             )
 
         let stereoTask =
-            scene
+            cfg.scene
             |> Sg.uniform "ViewTrafo" views
             |> Sg.uniform "ProjTrafo" projs
             |> Sg.viewTrafo view
@@ -295,27 +306,73 @@ module Utilities =
         
         app.Dispose()
 
-    let private runOpenVR (backend : Backend) (scene : ISg) =
-        match backend with
+    let private runOpenVR (cfg : RenderConfig) =
+        match cfg.backend with
             | Backend.Vulkan ->
-                let app = VulkanVRApplicationLayered(8, true)
+                let app = VulkanVRApplicationLayered(cfg.samples, cfg.debug)
 
                 let hmdLocation = app.Hmd.MotionState.Pose |> Mod.map (fun t -> t.Forward.C3.XYZ)
 
                 let sg =
-                    scene
+                    cfg.scene
                     |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
                     |> Sg.uniform "ProjTrafo" app.Info.projTrafos
                     |> Sg.uniform "CameraLocation" hmdLocation
                     |> Sg.uniform "LightLocation" hmdLocation
 
-                app.RenderTask <- app.Runtime.CompileRender(app.FramebufferSignature, scene)
+                app.RenderTask <- app.Runtime.CompileRender(app.FramebufferSignature, sg)
                 app.Run()
             | Backend.GL -> 
                 failwith "no OpenGL OpenVR backend atm."
 
+    let runConfig (cfg : RenderConfig) =
+        match cfg.display with
+            | Display.Mono -> runMonoScreen cfg
+            | Display.Stereo -> runStereoScreen cfg
+            | Display.OpenVR -> runOpenVR cfg
+
     let run (display : Display) (backend : Backend) (scene : ISg) =
-        match display with
-            | Display.Mono -> runMonoScreen backend scene
-            | Display.Stereo -> runStereoScreen backend scene
-            | Display.OpenVR -> runOpenVR backend scene
+        runConfig {
+            scene = scene
+            display = display
+            backend = backend
+            debug = true
+            samples = 8
+        }
+
+[<AutoOpen>]
+module ``Render Utilities`` =
+    type ShowBuilder() =
+        member x.Yield(()) =
+            {
+                backend = Backend.Vulkan
+                debug = true
+                samples = 8
+                display = Display.Mono
+                scene = Sg.empty
+            }
+
+        [<CustomOperation("backend")>]
+        member x.Backend(s : RenderConfig, b : Backend) =
+            { s with backend = b }
+
+        [<CustomOperation("debug")>]
+        member x.Debug(s : RenderConfig, d : bool) =
+            { s with debug = d }
+
+        [<CustomOperation("samples")>]
+        member x.Samples(state : RenderConfig, s : int) =
+            { state with samples = s }
+
+        [<CustomOperation("display")>]
+        member x.Display(s : RenderConfig, d : Display) =
+            { s with display = d }
+
+        [<CustomOperation("scene")>]
+        member x.Scene(state : RenderConfig, s : ISg) =
+            { state with scene = s }
+
+        member x.Run(cfg : RenderConfig) =
+            Utilities.runConfig cfg
+
+    let show = ShowBuilder()

@@ -181,14 +181,14 @@ module GeometryComposition =
     open Aardvark.Application.OpenVR
 
     let run() =
-        use app = new VulkanApplication(false)
-        let win = app.CreateSimpleRenderWindow(8) 
-        let run() = win.Run()
-        let cameraView  = DefaultCameraController.control win.Mouse win.Keyboard win.Time (CameraView.LookAt(V3d(2.5, -3.0, 1.5), V3d(2.5, 0.0, 0.0), V3d.OOI))    
-        let frustum     = win.Sizes     |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))       
-        let viewTrafo   = cameraView    |> Mod.map CameraView.viewTrafo :> IMod
-        let projTrafo   = frustum       |> Mod.map Frustum.projTrafo :> IMod
-        let win = win:> IRenderTarget
+//        use app = new VulkanApplication(false)
+//        let win = app.CreateSimpleRenderWindow(8) 
+//        let run() = win.Run()
+//        let cameraView  = DefaultCameraController.control win.Mouse win.Keyboard win.Time (CameraView.LookAt(V3d(2.5, -3.0, 1.5), V3d(2.5, 0.0, 0.0), V3d.OOI))    
+//        let frustum     = win.Sizes     |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))       
+//        let viewTrafo   = cameraView    |> Mod.map CameraView.viewTrafo :> IMod
+//        let projTrafo   = frustum       |> Mod.map Frustum.projTrafo :> IMod
+//        let win = win:> IRenderTarget
 
 
 //        let app = new VulkanVRApplicationLayered(false)
@@ -255,7 +255,7 @@ module GeometryComposition =
         let u (n : String) (m : IMod) (s : ISg) =
             Sg.UniformApplicator(n, m, s) :> ISg
 
-        win.RenderTask <-
+        let sg =
             Sg.ofList [
                 for j in 0 .. h - 1 do
                     for i in 0 .. w - 1 do
@@ -313,11 +313,18 @@ module GeometryComposition =
             ]
             |> Sg.scale 0.5
             //|> Sg.fillMode (Mod.constant FillMode.Line)
-            |> u "ViewTrafo" viewTrafo
-            |> u "ProjTrafo" projTrafo
-            |> Sg.compile app.Runtime win.FramebufferSignature
+//            |> u "ViewTrafo" viewTrafo
+//            |> u "ProjTrafo" projTrafo
+//            |> Sg.compile app.Runtime win.FramebufferSignature
 
-        run()
+        show {
+            display Display.Stereo
+            samples 8
+            backend Backend.Vulkan
+            debug false
+
+            scene sg
+        }
         System.Environment.Exit 0
         //win.Dispose()
 
