@@ -284,7 +284,7 @@ module FShadeInterop =
             if x.LayerCount > 1 then
                 effect 
                     // TODO: other topologies????
-                    |> Effect.toLayeredEffect x.LayerCount x.PerLayerUniforms InputTopology.Triangle
+                    |> Effect.toLayeredEffect x.LayerCount (x.PerLayerUniforms |> Seq.map (fun n -> n, n) |> Map.ofSeq) InputTopology.Triangle
                     |> Effect.toModule config
 
             else
