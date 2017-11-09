@@ -161,7 +161,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
         let nfImg =
             device.CreateImage(
                 V3i(info.framebufferSize * V2i(2,1), 1),
-                1, 1, samples, 
+                1, 1, 1, 
                 TextureDimension.Texture2D,
                 TextureFormat.Rgba8,
                 VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.SampledBit
@@ -209,7 +209,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
                 m_nWidth = uint32 fImg.Size.X, 
                 m_nHeight = uint32 fImg.Size.Y,
                 m_nFormat = uint32 fImg.Format,
-                m_nSampleCount = uint32 samples
+                m_nSampleCount = uint32 1
             )
 
             
@@ -217,7 +217,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
             do! Command.TransformLayout(dImg, VkImageLayout.DepthStencilAttachmentOptimal)
         }
 
-        VrTexture.Vulkan(fTex, Box2d(V2d.OO, V2d(0.5, 1.0))), VrTexture.Vulkan(fTex, Box2d(V2d(0.5, 0.0), V2d.II))
+        VrTexture.Vulkan(fTex, Box2d(V2d(0.0, 1.0), V2d(0.5, 0.0))), VrTexture.Vulkan(fTex, Box2d(V2d(0.5, 1.0), V2d(1.0, 0.0)))
 
     override x.Render() = 
 //        let view, lProj, rProj =
@@ -255,12 +255,16 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
         device.perform {
             do! Command.TransformLayout(cImg, VkImageLayout.TransferSrcOptimal)
 
-            do! Command.Blit(cImg.[ImageAspect.Color, 0, 0], srcBox, fImg.[ImageAspect.Color, 0, 0], lBox, VkFilter.Nearest)
-            do! Command.Blit(cImg.[ImageAspect.Color, 0, 1], srcBox, fImg.[ImageAspect.Color, 0, 0], rBox, VkFilter.Nearest)
+            //do! Command.Blit(cImg.[ImageAspect.Color, 0, 0], srcBox, fImg.[ImageAspect.Color, 0, 0], lBox, VkFilter.Nearest)
+            //do! Command.Blit(cImg.[ImageAspect.Color, 0, 1], srcBox, fImg.[ImageAspect.Color, 0, 0], rBox, VkFilter.Nearest)
 
-            //do! Command.Copy(cImg.[ImageAspect.Color, 0, 0], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(info.framebufferSize, 1))
-            //do! Command.Copy(cImg.[ImageAspect.Color, 0, 1], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i(info.framebufferSize.X, 0, 0), V3i(info.framebufferSize, 1))
-            
+            if samples > 1 then
+                do! Command.ResolveMultisamples(cImg.[ImageAspect.Color, 0, 0], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(info.framebufferSize, 1))
+                do! Command.ResolveMultisamples(cImg.[ImageAspect.Color, 0, 1], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i(info.framebufferSize.X, 0, 0), V3i(info.framebufferSize, 1))
+            else
+                do! Command.Copy(cImg.[ImageAspect.Color, 0, 0], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(info.framebufferSize, 1))
+                do! Command.Copy(cImg.[ImageAspect.Color, 0, 1], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i(info.framebufferSize.X, 0, 0), V3i(info.framebufferSize, 1))
+             
             do! Command.TransformLayout(fImg, VkImageLayout.TransferSrcOptimal)
         }
 
