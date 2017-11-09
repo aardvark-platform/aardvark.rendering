@@ -1,0 +1,11 @@
+type project
+id Aardvark.Application.OpenVR
+authors Aardvark Platform Team
+owners Aardvark Platform Team
+projectUrl http://github.com/aardvark-platform
+licenseUrl http://www.apache.org/licenses/LICENSE-2.0.txt
+description
+    Aardvark is an open-source platform for visual computing, real-time graphics and visualization.
+files
+    ..\..\..\bin\Release\Aardvark.Application.OpenVR.dll ==> lib\net45
+    ..\..\..\bin\Release\Aardvark.Application.OpenVR.pdb ==> lib\net45
