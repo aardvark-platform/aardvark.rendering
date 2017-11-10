@@ -203,7 +203,7 @@ module RenderCommands =
                 pgResources     = CSharpList.toList resources
             }
 
-    type TreeCommandStreamResource(owner, key, pipe : PipelineState, things : IMod<Tree<Geometry>>, resources : ResourceSet, manager : ResourceManager, renderPass : RenderPass, stats : nativeptr<V2i>) =
+    type TreeCommandStreamResource(owner, key, pipe : PipelineState, things : IMod<Tree<Geometry>>, resources : ResourceLocationSet, manager : ResourceManager, renderPass : RenderPass, stats : nativeptr<V2i>) =
         inherit AbstractResourceLocation<VKVM.CommandStream>(owner, key)
          
         let id = newId()
@@ -225,7 +225,7 @@ module RenderCommands =
             let res = manager.PrepareGeometry(preparedPipeline, g)
             for r in res.pgResources do 
                 if allResources.Add r then 
-                    resources.AddAndUpdate r
+                    resources.Add r
                     r.Update(AdaptiveToken.Top) |> ignore
 
             let stream = new VKVM.CommandStream()
@@ -369,7 +369,7 @@ module RenderCommands =
 
 
 
-module RenderTaskNew =
+module RenderTask =
 
     [<AbstractClass; Sealed; Extension>]
     type IRenderObjectExts private() =
@@ -394,7 +394,7 @@ module RenderTaskNew =
                     failf "invalid renderobject %A" o
 
     module CommandStreams = 
-        type CommandStreamResource(owner, key, o : IRenderObject, resources : ResourceSet, manager : ResourceManager, renderPass : RenderPass, stats : nativeptr<V2i>) =
+        type CommandStreamResource(owner, key, o : IRenderObject, resources : ResourceLocationSet, manager : ResourceManager, renderPass : RenderPass, stats : nativeptr<V2i>) =
             inherit AbstractResourceLocation<VKVM.CommandStream>(owner, key)
          
             let mutable stream = Unchecked.defaultof<VKVM.CommandStream>
@@ -451,12 +451,13 @@ module RenderTaskNew =
     module Compiler = 
         open CommandStreams
 
-        type RenderObjectCompiler(manager : ResourceManager, renderPass : RenderPass) =
-            inherit ResourceSet()
+        type RenderObjectCompiler(manager : ResourceManager, renderPass : RenderPass, user : IResourceUser) =
+            inherit ResourceLocationSet(user)
 
             let stats : nativeptr<V2i> = NativePtr.alloc 1
             let cache = ResourceLocationCache<VKVM.CommandStream>(manager.ResourceUser)
             let mutable version = 0
+
 
             override x.InputChanged(t ,i) =
                 base.InputChanged(t, i)
@@ -471,10 +472,10 @@ module RenderTaskNew =
             member x.Compile(o : IRenderObject) : ICommandStreamResource =
                 let call = 
                     cache.GetOrCreate([o :> obj], fun owner key ->
-                        match o with
-                            | :? RenderCommands.TreeRenderObject as o ->
-                                new RenderCommands.TreeCommandStreamResource(owner, key, o.Pipeline, o.Geometries, x, manager, renderPass, stats) :> ICommandStreamResource
-                            | _ -> 
+//                        match o with
+//                            | :? RenderCommands.TreeRenderObject as o ->
+//                                new RenderCommands.TreeCommandStreamResource(owner, key, o.Pipeline, o.Geometries, x, manager, renderPass, stats) :> ICommandStreamResource
+//                            | _ -> 
                                 new CommandStreamResource(owner, key, o, x, manager, renderPass, stats) :> ICommandStreamResource
                     )
                 call.Acquire()
@@ -489,9 +490,17 @@ module RenderTaskNew =
         type AbstractChangeableCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>) =
             inherit Mod.AbstractMod<CommandBuffer>()
 
+            let locked = ReferenceCountingSet<ILockedResource>()
+
+            let user =
+                { new IResourceUser with
+                    member x.AddLocked l = locked.Add l |> ignore
+                    member x.RemoveLocked l = locked.Remove l |> ignore
+                }
+
             let device = pool.Device
-            let compiler = RenderObjectCompiler(manager, renderPass)
-            let mutable resourceVersion = 0
+            let compiler = RenderObjectCompiler(manager, renderPass, user)
+            //let mutable resourceVersion = 0
             let mutable cmdVersion = -1
             let mutable cmdViewports = [||]
 
@@ -545,14 +554,14 @@ module RenderTaskNew =
                     d.Update(t) |> ignore
 
                 // update all resources
-                compiler.Update t |> ignore
-                resourceVersion <- compiler.CurrentVersion
+                let resourceChanged = compiler.Update t
+                //resourceVersion <- compiler.CurrentVersion
 
                 // refill the CommandBuffer (if necessary)
                 let vps = viewports.GetValue t
                 let contentChanged      = cmdVersion < 0 || dirty.Length > 0
                 let viewportChanged     = cmdViewports <> vps
-                let versionChanged      = cmdVersion >= 0 && resourceVersion <> cmdVersion
+                let versionChanged      = cmdVersion >= 0 && resourceChanged
                 let orderChanged        = x.Sort t
 
                 if contentChanged || versionChanged || viewportChanged || orderChanged then
@@ -568,7 +577,8 @@ module RenderTaskNew =
 
                     Log.line "[Vulkan] recompile commands: %s" cause
                     cmdViewports <- vps
-                    cmdVersion <- resourceVersion
+                    cmdVersion <- 1
+                    //cmdVersion <- resourceVersion
 
                     if viewportChanged then
                         first.SeekToBegin()
@@ -848,6 +858,77 @@ module RenderTaskNew =
         override x.Release() =
             reader.Dispose()
             base.Release()
+
+    type ClearTask(device : Device, renderPass : RenderPass, clearColors : Map<Symbol, IMod<C4f>>, clearDepth : IMod<Option<float>>, clearStencil : Option<IMod<uint32>>) =
+        inherit AdaptiveObject()
+        static let depthStencilFormats =
+            HashSet.ofList [
+                RenderbufferFormat.Depth24Stencil8
+                RenderbufferFormat.Depth32fStencil8
+                RenderbufferFormat.DepthStencil
+            ]
+        
+        let pool = device.GraphicsFamily.CreateCommandPool()
+        let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
+
+        let clearColors =
+            renderPass.ColorAttachments |> Map.toSeq |> Seq.choose (fun (i, (s,_)) -> 
+                match Map.tryFind s clearColors with
+                    | Some c -> Some (i,c)
+                    | None -> None
+            )
+            |> Seq.toArray
+
+        let renderPassDepthAspect =
+            match renderPass.DepthStencilAttachment with
+                | Some signature ->
+                    if depthStencilFormats.Contains signature.format then
+                        ImageAspect.DepthStencil
+                    else
+                        ImageAspect.Depth
+                | _ ->
+                    ImageAspect.None
+
+        member x.Run(caller : AdaptiveToken, t : RenderToken, outputs : OutputDescription) =
+            x.EvaluateAlways caller (fun caller ->
+                let fbo = unbox<Framebuffer> outputs.framebuffer
+                use token = device.Token
+
+                let colors = clearColors |> Array.map (fun (i,c) -> i, c.GetValue caller)
+                let depth = clearDepth.GetValue caller
+                let stencil = match clearStencil with | Some c -> c.GetValue(caller) |> Some | _ -> None
+
+
+                token.enqueue {
+                    let views = fbo.ImageViews
+                    for (index, color) in colors do
+                        let image = views.[index].Image
+                        do! Command.ClearColor(image.[ImageAspect.Color], color)
+
+                    if renderPassDepthAspect <> ImageAspect.None then
+                        let image = views.[views.Length-1].Image
+                        match depth, stencil with
+                            | Some d, Some s    -> do! Command.ClearDepthStencil(image.[renderPassDepthAspect], d, s)
+                            | Some d, None      -> do! Command.ClearDepthStencil(image.[ImageAspect.Depth], d, 0u)
+                            | None, Some s      -> do! Command.ClearDepthStencil(image.[ImageAspect.Stencil], 0.0, s)
+                            | None, None        -> ()
+                }
+                token.Sync()
+            )
+
+        interface IRenderTask with
+            member x.Update(c, t) = ()
+            member x.Run(c,t,o) = x.Run(c,t,o)
+            member x.Dispose() = 
+                cmd.Dispose()
+                pool.Dispose()
+
+            member x.FrameId = 0UL
+            member x.FramebufferSignature = Some (renderPass :> _)
+            member x.Runtime = Some device.Runtime
+            member x.Use f = lock x f
+
+
 
 
 

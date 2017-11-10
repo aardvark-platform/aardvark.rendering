@@ -326,18 +326,63 @@ type AbstractPointerResource<'a when 'a : unmanaged>(owner : IResourceCache, key
     override x.GetHandle(token : AdaptiveToken) =
         if x.OutOfDate then
             let value = x.Compute token
-
             if hasHandle then
                 let v = NativePtr.read ptr
-                x.Free v
+                x.Free v  
 
             NativePtr.write ptr value
             hasHandle <- true
             inc &version
-            { handle = NativePtr.read ptr; version = version }
+            { handle = value; version = version }
         else
             { handle = NativePtr.read ptr; version = version }
 
+[<AbstractClass>]
+type AbstractPointerResourceWithEquality<'a when 'a : unmanaged>(owner : IResourceCache, key : list<obj>) =
+    inherit AbstractResourceLocation<'a>(owner, key)
+
+    let mutable ptr = NativePtr.zero
+    let mutable version = 0
+    let mutable hasHandle = false
+
+    abstract member Compute : AdaptiveToken -> 'a
+    abstract member Free : 'a -> unit
+    default x.Free _ = ()
+
+    member x.Pointer = ptr
+
+    interface INativeResourceLocation<'a> with
+        member x.Pointer = x.Pointer
+
+    override x.Create() =
+        ptr <- NativePtr.alloc 1
+
+    override x.Destroy() =
+        if hasHandle then
+            let v = NativePtr.read ptr
+            x.Free v
+            NativePtr.free ptr
+            hasHandle <- false
+
+    override x.GetHandle(token : AdaptiveToken) =
+        if x.OutOfDate then
+            let value = x.Compute token
+            if hasHandle then
+                let v = NativePtr.read ptr
+                if Unchecked.equals v value then
+                    { handle = value; version = version }
+                else
+                    x.Free v  
+                    NativePtr.write ptr value
+                    inc &version
+                    { handle = value; version = version }
+            else
+                NativePtr.write ptr value
+                hasHandle <- true
+                inc &version
+                { handle = value; version = version }
+        else
+            { handle = NativePtr.read ptr; version = version }
 
 type ResourceLocationCache<'h>(user : IResourceUser) =
     let store = System.Collections.Concurrent.ConcurrentDictionary<list<obj>, IResourceLocation<'h>>()
@@ -497,7 +542,7 @@ module Resources =
         )
 
     type InputAssemblyStateResource(owner : IResourceCache, key : list<obj>, input : IMod<IndexedGeometryMode>, program : IResourceLocation<ShaderProgram>) =
-        inherit AbstractPointerResource<VkPipelineInputAssemblyStateCreateInfo>(owner, key)
+        inherit AbstractPointerResourceWithEquality<VkPipelineInputAssemblyStateCreateInfo>(owner, key)
 
         override x.Create() =
             base.Create()
@@ -587,7 +632,7 @@ module Resources =
 
 
     type DepthStencilStateResource(owner : IResourceCache, key : list<obj>, depthWrite : bool, depth : IMod<DepthTestMode>, stencil : IMod<StencilMode>) =
-        inherit AbstractPointerResource<VkPipelineDepthStencilStateCreateInfo>(owner, key)
+        inherit AbstractPointerResourceWithEquality<VkPipelineDepthStencilStateCreateInfo>(owner, key)
 
         override x.Compute(token) =
             let depth = depth.GetValue token
@@ -611,7 +656,7 @@ module Resources =
             )
             
     type RasterizerStateResource(owner : IResourceCache, key : list<obj>, depth : IMod<DepthTestMode>, cull : IMod<CullMode>, fill : IMod<FillMode>) =
-        inherit AbstractPointerResource<VkPipelineRasterizationStateCreateInfo>(owner, key)
+        inherit AbstractPointerResourceWithEquality<VkPipelineRasterizationStateCreateInfo>(owner, key)
 
         override x.Compute(token) =
             let depth = depth.GetValue token
@@ -635,7 +680,7 @@ module Resources =
             )
     
     type ColorBlendStateResource(owner : IResourceCache, key : list<obj>, writeMasks : bool[], blend : IMod<BlendMode>) =
-        inherit AbstractPointerResource<VkPipelineColorBlendStateCreateInfo>(owner, key)
+        inherit AbstractPointerResourceWithEquality<VkPipelineColorBlendStateCreateInfo>(owner, key)
 
         override x.Free(h : VkPipelineColorBlendStateCreateInfo) =
             NativePtr.free h.pAttachments
@@ -672,7 +717,7 @@ module Resources =
             )
     
     type DirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, calls : IMod<list<DrawCallInfo>>) =
-        inherit AbstractPointerResource<DrawCall>(owner, key)
+        inherit AbstractPointerResourceWithEquality<DrawCall>(owner, key)
         
         override x.Free(call : DrawCall) =
             call.Dispose()
@@ -687,6 +732,8 @@ module Resources =
 
         let mutable handle = None
         let mutable version = 0
+
+        let mutable state = [||]
 
         override x.Create() =
             for b in bindings do
@@ -722,7 +769,7 @@ module Resources =
             if x.OutOfDate then
                 
                 let bindings =
-                    bindings |> List.toArray |> Array.map (fun b ->
+                    bindings |> List.toArray |> Array.mapi (fun i b ->
                         match b with
                             | AdaptiveUniformBuffer(slot, b) ->
                                 UniformBuffer(slot, b.Update(AdaptiveToken.Top).handle)
@@ -740,6 +787,7 @@ module Resources =
                                 CombinedImageSampler(slot, arr)
                     )
 
+
                 let handle =
                     match handle with
                         | Some h -> h
@@ -748,8 +796,10 @@ module Resources =
                             handle <- Some h
                             h
 
-                pool.Update(handle, bindings)
-                inc &version
+                if bindings <> state then
+                    pool.Update(handle, bindings)
+                    state <- bindings
+                    inc &version
 
                 { handle = handle; version = version }
             else 
@@ -897,7 +947,7 @@ module Resources =
             VkRaw.vkDestroyPipeline(renderPass.Device.Handle, p, NativePtr.zero)
 
     type IndirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, calls : IResourceLocation<IndirectBuffer>) =
-        inherit AbstractPointerResource<DrawCall>(owner, key)
+        inherit AbstractPointerResourceWithEquality<DrawCall>(owner, key)
 
         override x.Create() =
             base.Create()
@@ -977,7 +1027,7 @@ module Resources =
             () //t.Dispose()
  
     type IndexBufferBindingResource(owner : IResourceCache, key : list<obj>, indexType : VkIndexType, index : IResourceLocation<Buffer>) =
-        inherit AbstractPointerResource<IndexBufferBinding>(owner, key)
+        inherit AbstractPointerResourceWithEquality<IndexBufferBinding>(owner, key)
 
  
         override x.Create() =
@@ -1018,21 +1068,29 @@ module Resources =
             if x.OutOfDate then
                 let image = image.Update token
 
-                match handle with
-                    | Some h -> device.Delete h
-                    | None -> ()
+                let isIdentical =
+                    match handle with
+                        | Some h -> h.Image = image.handle
+                        | None -> false
 
-                let h = device.CreateInputImageView(image.handle, samplerType, VkComponentMapping.Identity)
-                handle <- Some h
+                if isIdentical then
+                    { handle = handle.Value; version = 0 }
+                else
+                    match handle with
+                        | Some h -> device.Delete h
+                        | None -> ()
 
-                { handle = h; version = 0 }
+                    let h = device.CreateInputImageView(image.handle, samplerType, VkComponentMapping.Identity)
+                    handle <- Some h
+
+                    { handle = h; version = 0 }
             else
                 match handle with
                     | Some h -> { handle = h; version = 0 }
                     | None -> failwith "[Resource] inconsistent state"
     
     type IsActiveResource(owner : IResourceCache, key : list<obj>, input : IMod<bool>) =
-        inherit AbstractPointerResource<int>(owner, key)
+        inherit AbstractPointerResourceWithEquality<int>(owner, key)
 
         override x.Compute (token : AdaptiveToken) =
             if input.GetValue token then 1 else 0
@@ -1301,97 +1359,233 @@ type ResourceManager(user : IResourceUser, device : Device) =
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-type ResourceSet() =
+
+
+open System.Collections.Generic
+
+
+type ResourceLocationReader(resource : IResourceLocation) =
     inherit AdaptiveObject()
+
+    let mutable lastVersion = 0
     
+    let changable =
+        match resource with
+            | :? IResourceLocation<UniformBuffer> -> false
+            | _ -> true
+
+    let priority =
+        match resource with
+            | :? INativeResourceLocation<DrawCall> -> 1
+            | _ -> 0
+
+    member x.Priority = priority
+                
+
+    member x.Dispose() =
+        lock resource (fun () ->
+            resource.RemoveOutput x
+        )
+
+    member x.Update(token : AdaptiveToken) =
+        x.EvaluateIfNeeded token false (fun t ->
+            let info = resource.Update(t)
+            if info.version <> lastVersion then
+                lastVersion <- info.version
+                changable
+            else
+                false
+        )
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
+[<AutoOpen>]
+module ``Resource Reader Extensions`` =
+    type IResourceLocation with
+        member x.GetReader() = new ResourceLocationReader(x)
+
+type ResourceLocationSet(user : IResourceUser) =
+    inherit AdaptiveObject()
+
     let all = ReferenceCountingSet<IResourceLocation>()
-    let locked = ReferenceCountingSet<ILockedResource>()
-    let dirty = System.Collections.Generic.HashSet<IResourceLocation>()
-    let dirtyCalls = System.Collections.Generic.HashSet<IResourceLocation>()
+    let readers = Dict<IResourceLocation, ResourceLocationReader>()
+    let dirtyCalls = List<ResourceLocationReader>()
+    let dirty = List<HashSet<ResourceLocationReader>>()
 
-    member x.AddLocked(l : ILockedResource) =
-        lock locked (fun () -> locked.Add l |> ignore)
-        
-    member x.RemoveLocked(l : ILockedResource) =
-        lock locked (fun () -> locked.Remove l |> ignore)
+    let addDirty (r : ResourceLocationReader) =
+        let priority = r.Priority
 
-    interface IResourceUser with
-        member x.AddLocked l = x.AddLocked l
-        member x.RemoveLocked l = x.RemoveLocked l
+        lock dirty (fun () ->
+            while dirty.Count <= priority do
+                dirty.Add(HashSet())
+                        
+            dirty.[priority].Add(r) |> ignore
+        )
 
-    override x.InputChanged(_,i) =
+    let remDirty (r : ResourceLocationReader) =
+        lock dirty (fun () -> 
+            if dirty.Count > r.Priority then
+                dirty.[r.Priority].Remove r |> ignore
+        )
+
+    member private x.AddInput(r : IResourceLocation) =
+        let reader = r.GetReader()
+        readers.[r] <- reader
+        addDirty reader
+        transact (fun () -> x.MarkOutdated())
+
+    member private x.RemoveInput(r : IResourceLocation) =
+        match readers.TryRemove r with
+            | (true, reader) ->
+                remDirty reader
+                reader.Dispose()
+            | _ ->
+                ()
+
+    override x.InputChanged(t,i) =
         match i with
-            | :? INativeResourceLocation<DrawCall> as c -> lock dirty (fun () -> dirtyCalls.Add c |> ignore)
-            | :? IResourceLocation as r -> lock dirty (fun () -> dirty.Add r |> ignore)
-            | _ -> ()
+            | :? ResourceLocationReader as r ->
+                addDirty r
+            | _ ->
+                ()
 
     member x.Add(r : IResourceLocation) =
         if all.Add r then
-            lock r (fun () ->
-                r.Acquire()
-                if r.OutOfDate then
-                    x.InputChanged(null, r)
-                else
-                    r.Outputs.Add x |> ignore
-            )
-
-    member x.AddAndUpdate(r : IResourceLocation) =
-        x.EvaluateAlways AdaptiveToken.Top (fun t ->
-            if all.Add r then
-                lock r (fun () ->
-                    r.Acquire()
-                )
-            r.Update(t) |> ignore
-        )   
+            lock r r.Acquire
+            x.AddInput r
 
     member x.Remove(r : IResourceLocation) =
         if all.Remove r then
-            lock r (fun () ->
-                r.Release()
-                r.RemoveOutput x
-                lock dirty (fun () ->
-                    match r with
-                        | :? INativeResourceLocation<DrawCall> as r -> dirtyCalls.Remove r |> ignore
-                        | _ -> dirty.Remove r |> ignore
-                )
-            )
+            lock r r.Release
+            x.RemoveInput r
+
+
 
     member x.Update(token : AdaptiveToken) =
-        x.EvaluateAlways token (fun token ->
-            let rec update () =
-                x.OutOfDate <- true
-                let arr = 
-                    lock dirty (fun () -> 
-                        if dirtyCalls.Count = 0 then
-                            let arr = HashSet.toArray dirty
-                            dirty.Clear()
-                            arr
+        x.EvaluateAlways token (fun t ->
+            x.OutOfDate <- true
+
+            let rec run (changed : bool) =
+                let mine = 
+                    lock dirty (fun () ->
+                        if dirty.Count > 0 then
+                            let last = dirty.[dirty.Count - 1]
+                            dirty.RemoveAt (dirty.Count - 1)
+                            last
                         else
-                            let arr = HashSet.toArray dirtyCalls
-                            dirtyCalls.Clear()
-                            arr
+                            null
                     )
 
-                if arr.Length > 0 then
-                    let mutable changed = false
-                    for r in arr do
-                        let info = r.Update(token)
-                        changed <- changed || info.version <> -100
+                if not (isNull mine) then
+                    let mutable changed = changed
+                    for r in mine do
+                        let c = r.Update(t)
+                        changed <- changed || c
 
-                    let rest = update()
-                    changed || rest
-
+                    run changed
                 else
-                    false
+                    changed
 
-            update()
+            run false
         )
 
-    member x.Use(action : unit -> 'r) =
-        let list = lock locked (fun () -> Seq.toArray locked)
-        for l in list do l.Lock.Enter(ResourceUsage.Render, l.OnLock)
-        try 
-            action()
-        finally 
-            for l in list do l.Lock.Exit(l.OnUnlock)
-
+    interface IResourceUser with
+        member x.AddLocked l = user.AddLocked l
+        member x.RemoveLocked l = user.RemoveLocked l
+//
+//
+//type ResourceSet() =
+//    inherit AdaptiveObject()
+//    
+//    let all = ReferenceCountingSet<IResourceLocation>()
+//    let locked = ReferenceCountingSet<ILockedResource>()
+//    let dirty = System.Collections.Generic.HashSet<IResourceLocation>()
+//    let dirtyCalls = System.Collections.Generic.HashSet<IResourceLocation>()
+//
+//    member x.AddLocked(l : ILockedResource) =
+//        lock locked (fun () -> locked.Add l |> ignore)
+//        
+//    member x.RemoveLocked(l : ILockedResource) =
+//        lock locked (fun () -> locked.Remove l |> ignore)
+//
+//    interface IResourceUser with
+//        member x.AddLocked l = x.AddLocked l
+//        member x.RemoveLocked l = x.RemoveLocked l
+//
+//    override x.InputChanged(_,i) =
+//        match i with
+//            | :? INativeResourceLocation<DrawCall> as c -> lock dirty (fun () -> dirtyCalls.Add c |> ignore)
+//            | :? IResourceLocation as r -> lock dirty (fun () -> dirty.Add r |> ignore)
+//            | _ -> ()
+//
+//    member x.Add(r : IResourceLocation) =
+//        if all.Add r then
+//            lock r (fun () ->
+//                r.Acquire()
+//                if r.OutOfDate then
+//                    x.InputChanged(null, r)
+//                else
+//                    r.Outputs.Add x |> ignore
+//            )
+//
+//    member x.AddAndUpdate(r : IResourceLocation) =
+//        x.EvaluateAlways AdaptiveToken.Top (fun t ->
+//            if all.Add r then
+//                lock r (fun () ->
+//                    r.Acquire()
+//                )
+//            r.Update(t) |> ignore
+//        )   
+//
+//    member x.Remove(r : IResourceLocation) =
+//        if all.Remove r then
+//            lock r (fun () ->
+//                r.Release()
+//                r.RemoveOutput x
+//                lock dirty (fun () ->
+//                    match r with
+//                        | :? INativeResourceLocation<DrawCall> as r -> dirtyCalls.Remove r |> ignore
+//                        | _ -> dirty.Remove r |> ignore
+//                )
+//            )
+//
+//    member x.Update(token : AdaptiveToken) =
+//        x.EvaluateAlways token (fun token ->
+//            let rec update () =
+//                x.OutOfDate <- true
+//                let arr = 
+//                    lock dirty (fun () -> 
+//                        if dirtyCalls.Count = 0 then
+//                            let arr = HashSet.toArray dirty
+//                            dirty.Clear()
+//                            arr
+//                        else
+//                            let arr = HashSet.toArray dirtyCalls
+//                            dirtyCalls.Clear()
+//                            arr
+//                    )
+//
+//                if arr.Length > 0 then
+//                    let mutable changed = false
+//                    for r in arr do
+//                        let info = r.Update(token)
+//                        changed <- changed || info.version <> -100
+//
+//                    let rest = update()
+//                    changed || rest
+//
+//                else
+//                    false
+//
+//            update()
+//        )
+//
+//    member x.Use(action : unit -> 'r) =
+//        let list = lock locked (fun () -> Seq.toArray locked)
+//        for l in list do l.Lock.Enter(ResourceUsage.Render, l.OnLock)
+//        try 
+//            action()
+//        finally 
+//            for l in list do l.Lock.Exit(l.OnUnlock)
+//

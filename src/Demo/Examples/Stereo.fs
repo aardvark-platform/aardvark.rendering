@@ -287,15 +287,33 @@ module Stereo =
     let runNew() =
         let font = Font "Consolas"
 
+        let active = Mod.init true
+
+        let run =
+            async {
+                do! Async.SwitchToThreadPool()
+                while true do
+                    let res = System.Console.ReadLine()
+                    transact (fun () -> 
+                        match res with
+                            | "a" -> active.Value <- true
+                            | _ -> active.Value <- not active.Value
+                        printfn "%A" active.Value
+                    )
+            }
+
+        Async.Start run
+
         show {
-            display Display.Mono
-            samples 1
+            display Display.Stereo
+            samples 8
             backend Backend.Vulkan
             debug false
 
             scene (
                 Sg.ofList [
                     Sg.box' C4b.Red Box3d.Unit
+                        |> Sg.onOff active
 
                     Sg.unitSphere' 5 C4b.Blue 
                         |> Sg.scale 0.5

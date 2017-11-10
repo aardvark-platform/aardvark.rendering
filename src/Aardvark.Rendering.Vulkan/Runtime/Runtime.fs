@@ -206,13 +206,13 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
     member x.CompileRender (renderPass : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) =
-        new RenderTaskNew.DependentRenderTask(device, unbox renderPass, set, true, true) :> IRenderTask
+        new RenderTask.DependentRenderTask(device, unbox renderPass, set, true, true) :> IRenderTask
         //new RenderTasks.RenderTask(device, unbox renderPass, set, Mod.constant engine, shareTextures, shareBuffers) :> IRenderTask
 
     member x.CompileClear(signature : IFramebufferSignature, color : IMod<Map<Symbol, C4f>>, depth : IMod<Option<float>>) : IRenderTask =
         let pass = unbox<RenderPass> signature
         let colors = pass.ColorAttachments |> Map.toSeq |> Seq.map (fun (_,(sem,att)) -> sem, color |> Mod.map (Map.find sem)) |> Map.ofSeq
-        new RenderTasks.ClearTask(device, unbox signature, colors, depth, Some (Mod.constant 0u)) :> IRenderTask
+        new RenderTask.ClearTask(device, unbox signature, colors, depth, Some (Mod.constant 0u)) :> IRenderTask
 
 
 
