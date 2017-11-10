@@ -1291,8 +1291,8 @@ let main args =
     //Aardvark.Application.OpenVR.UnhateTest.run()
 
     //Examples.Tessellation.run()
-    Examples.GeometryComposition.run()
-    //Examples.Stereo.runNew()
+    //Examples.GeometryComposition.run()
+    Examples.Stereo.runNew()
     //Examples.ComputeShader.run()
     System.Environment.Exit 0
 

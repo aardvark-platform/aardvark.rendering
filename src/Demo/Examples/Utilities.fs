@@ -272,17 +272,19 @@ module Utilities =
                 let fbo = framebuffer.GetValue t
                 let output = OutputDescription.ofFramebuffer fbo
 
+                let r = resolved.GetValue(t)
+
                 clearTask.Run(t, RenderToken.Empty, output)
                 stereoTask.Run(t, RenderToken.Empty, output)
-                runtime.Copy(colors.GetValue(t), 0, 0, resolved.GetValue(t), 0, 0, 2, 1)
+                runtime.Copy(colors.GetValue(t), 0, 0, r, 0, 0, 2, 1)
 
-                0.0
+                r :> ITexture
             )
 
         let task =
             Sg.fullScreenQuad
-                |> Sg.uniform "Dependent" dependent
-                |> Sg.diffuseTexture (resolved |> Mod.map (fun t -> t :> ITexture))
+                |> Sg.uniform "Dependent" (Mod.constant 0.0)
+                |> Sg.diffuseTexture dependent
                 |> Sg.shader {
                     do! Shader.renderStereo
                 }
