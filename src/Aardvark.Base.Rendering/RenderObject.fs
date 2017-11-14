@@ -385,6 +385,67 @@ type MultiRenderObject(children : list<IRenderObject>) =
             | :? MultiRenderObject as o -> children.Equals(o.Children)
             | _ -> false
 
+
+type IComputeShader =
+    abstract member LocalSize : V3i
+
+
+type PipelineState =
+    {
+        depthTest           : IMod<DepthTestMode>
+        cullMode            : IMod<CullMode>
+        blendMode           : IMod<BlendMode>
+        fillMode            : IMod<FillMode>
+        stencilMode         : IMod<StencilMode>
+        multisample         : IMod<bool>
+        writeBuffers        : Option<Set<Symbol>>
+        globalUniforms      : IUniformProvider
+
+        geometryMode        : IndexedGeometryMode
+        vertexInputTypes    : Map<Symbol, Type>
+        perGeometryUniforms : Map<string, Type>
+    }
+   
+
+type Geometry =
+    {
+        vertexAttributes    : Map<Symbol, IMod<IBuffer>>
+        indices             : Option<Aardvark.Base.BufferView>
+        uniforms            : Map<string, IMod>
+        call                : IMod<list<DrawCallInfo>>
+    }
+
+[<RequireQualifiedAccess>]
+type RuntimeCommand =
+    | Empty
+    | Render of objects : aset<IRenderObject>
+
+    
+    | ViewDependent of sort : (Trafo3d -> Trafo3d -> IRenderObject[] -> IRenderObject[]) * objects : aset<IRenderObject>
+
+    | Grouped of surface : Surface * pipeline : PipelineState * geometries : aset<Geometry>
+
+    //| RenderMany of PipelineState * aset<Geometry>
+    //| RenderDynamic of PipelineState * Config * IMod<Tree<Geometry>>
+    
+    | Dispatch of shader : IComputeShader * groups : IMod<V3i> * arguments : Map<string, obj>
+    | Clear of colors : Map<Symbol, IMod<C4f>> * depth : Option<IMod<float>> * stencil : Option<IMod<uint32>>
+
+    | Ordered of commands : alist<RuntimeCommand>
+    | IfThenElse of condition : IMod<bool> * ifTrue : RuntimeCommand * ifFalse : RuntimeCommand
+
+
+    static member FancyGrouped(effects : FShade.Effect[], activeEffect : IMod<int>, pipeline : PipelineState, geometries : aset<Geometry>) =
+        let surface = 
+            Surface.FShade (fun cfg ->
+                let modules = effects |> Array.map (FShade.Effect.toModule cfg)
+                let signature = FShade.EffectInputLayout.ofModules modules
+                let modules = modules |> Array.map (FShade.EffectInputLayout.apply signature)
+
+                signature, activeEffect |> Mod.map (Array.get modules)
+            )
+        RuntimeCommand.Grouped(surface, pipeline, geometries)
+
 type IAdaptiveBufferReader =
     inherit IAdaptiveObject
     inherit IDisposable

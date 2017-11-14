@@ -90,6 +90,17 @@ module RenderObjectSemantics =
                     yield! c.RenderObjects()
             }
 
+        member x.RenderObjects(r : Sg.IndirectRenderNode) : aset<IRenderObject> =
+            let scope = Ag.getContext()
+            let rj = RenderObject.ofScope scope
+            rj.IndirectBuffer <- r.Indirect
+            rj.Mode <- r.Mode
+
+            ASet.single (rj :> IRenderObject)
+
+        member x.RenderObjects(o : Sg.RenderObjectNode) =
+            o.Objects
+
         member x.RenderObjects(r : Sg.RenderNode) : aset<IRenderObject> =
             let scope = Ag.getContext()
             let rj = RenderObject.ofScope scope

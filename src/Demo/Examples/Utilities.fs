@@ -28,6 +28,7 @@ type Display =
 type RenderConfig =
     {
         backend     : Backend
+        game        : bool
         debug       : bool
         samples     : int
         display     : Display
@@ -130,7 +131,9 @@ module Utilities =
                 | Backend.GL -> new OpenGlApplication(cfg.debug) :> IApplication
                 | Backend.Vulkan -> new VulkanApplication(cfg.debug) :> IApplication
 
-        let win = app.CreateSimpleRenderWindow(cfg.samples)
+        let win = 
+            if cfg.game && cfg.backend = Backend.GL then (unbox<OpenGlApplication> app).CreateGameWindow(cfg.samples) :> IRenderWindow
+            else app.CreateSimpleRenderWindow(cfg.samples) :> IRenderWindow
 
         let view =
             CameraView.lookAt (V3d(6,6,6)) V3d.Zero V3d.OOI
@@ -148,11 +151,27 @@ module Utilities =
             |> Sg.projTrafo proj
             |> Sg.compile win.Runtime win.FramebufferSignature
 
+        let sw = System.Diagnostics.Stopwatch()
+        let mutable cnt = 0
+
+        let task = 
+            RenderTask.ofList [
+                task
+                RenderTask.custom(fun _ ->
+                    if cnt % 50 = 0 then
+                        let t = sw.MicroTime
+                        printfn "%.2ffps" (50.0 / t.TotalSeconds)
+                        sw.Restart()
+                        
+                    cnt <- cnt + 1
+                )
+            ]
+
         win.RenderTask <- task
         win.Run()
 
         task.Dispose()
-        win.Dispose()
+        win.TryDispose() |> ignore
         app.Dispose()
 
 
@@ -336,6 +355,7 @@ module Utilities =
     let run (display : Display) (backend : Backend) (scene : ISg) =
         runConfig {
             scene = scene
+            game = false
             display = display
             backend = backend
             debug = true
@@ -349,6 +369,7 @@ module ``Render Utilities`` =
             {
                 backend = Backend.Vulkan
                 debug = true
+                game = false
                 samples = 8
                 display = Display.Mono
                 scene = Sg.empty
@@ -373,6 +394,11 @@ module ``Render Utilities`` =
         [<CustomOperation("scene")>]
         member x.Scene(state : RenderConfig, s : ISg) =
             { state with scene = s }
+
+
+        [<CustomOperation("game")>]
+        member x.Game(state : RenderConfig, game : bool) =
+            { state with game = game }
 
         member x.Run(cfg : RenderConfig) =
             Utilities.runConfig cfg
