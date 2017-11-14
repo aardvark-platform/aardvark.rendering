@@ -1292,8 +1292,9 @@ let main args =
 
     //Examples.Tessellation.run()
     //Examples.GeometryComposition.run()
-    Examples.Stereo.runNew()
+    //Examples.Stereo.runNew()
     //Examples.ComputeShader.run()
+    Examples.CommandTest.run()
     System.Environment.Exit 0
 
     //colorLockTest()

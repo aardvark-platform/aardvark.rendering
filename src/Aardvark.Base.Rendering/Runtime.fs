@@ -451,9 +451,6 @@ type IGeometryPool =
     abstract member TryGetBufferView : Symbol -> Option<BufferView>
     
 
-type IComputeShader =
-    abstract member LocalSize : V3i
-
 type IComputeShaderInputBinding =
     inherit IDisposable
     abstract member Item : string -> obj with set

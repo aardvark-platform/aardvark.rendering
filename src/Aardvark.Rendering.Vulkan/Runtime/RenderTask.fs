@@ -448,6 +448,104 @@ module RenderTask =
             override x.GetHandle _ = 
                 { handle = stream; version = 0 }   
 
+        type ClearCommandStreamResource(owner, key, pass : RenderPass, viewports : IMod<Box2i[]>, colors : Map<Symbol, IMod<C4f>>, depth : Option<IMod<float>>, stencil : Option<IMod<uint32>>) =
+            inherit AbstractResourceLocation<VKVM.CommandStream>(owner, key)
+         
+            let mutable stream : VKVM.CommandStream = Unchecked.defaultof<_>
+
+            let compile (token : AdaptiveToken) =
+                stream.Clear()
+
+                let hasDepth =
+                    Option.isSome pass.DepthStencilAttachment
+
+                let depthClear =
+                    match depth, stencil with
+                        | Some d, Some s ->
+                            let d = d.GetValue token
+                            let s = s.GetValue token
+
+                            VkClearAttachment(
+                                VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit, 
+                                0u,
+                                VkClearValue(depthStencil = VkClearDepthStencilValue(float32 d, s))
+                            ) |> Some
+
+                        | Some d, None ->   
+                            let d = d.GetValue token
+
+                            VkClearAttachment(
+                                VkImageAspectFlags.DepthBit, 
+                                0u,
+                                VkClearValue(depthStencil = VkClearDepthStencilValue(float32 d, 0u))
+                            ) |> Some
+                             
+                        | None, Some s ->
+                            let s = s.GetValue token
+
+                            VkClearAttachment(
+                                VkImageAspectFlags.StencilBit, 
+                                0u,
+                                VkClearValue(depthStencil = VkClearDepthStencilValue(1.0f, s))
+                            ) |> Some
+
+                        | None, None ->
+                            None
+
+                let colors = 
+                    pass.ColorAttachments |> Map.toSeq |> Seq.choose (fun (i,(n,_)) ->
+                        match Map.tryFind n colors with
+                            | Some value -> 
+                                let res = 
+                                    VkClearAttachment(
+                                        VkImageAspectFlags.ColorBit, 
+                                        uint32 (if hasDepth then 1 + i else i),
+                                        VkClearValue(color = VkClearColorValue(float32 = value.GetValue(token).ToV4f()))
+                                    )
+                                Some res
+                            | None ->
+                                None
+                    ) |> Seq.toArray
+
+                let clears =
+                    match depthClear with
+                        | Some c -> Array.append [|c|] colors
+                        | None -> colors
+
+                let rect =
+                    let s = viewports.GetValue(token).[0]
+                    VkClearRect(
+                        VkRect2D(VkOffset2D(s.Min.X,s.Min.Y), VkExtent2D(uint32 (1 + s.Max.X - s.Min.X) , uint32 (1 + s.Max.Y - s.Min.Y))),
+                        0u,
+                        uint32 pass.LayerCount
+                    )
+
+                stream.ClearAttachments(
+                    clears,
+                    [| rect |]
+                ) |> ignore
+
+            let id = newId()
+
+            interface ICommandStreamResource with
+                member x.Stream = stream
+                member x.Resources = Seq.empty
+                member x.GroupKey = [id :> obj]
+                member x.BoundingBox = Mod.constant Box3d.Invalid
+
+            override x.Create() =
+                stream <- new VKVM.CommandStream()
+                
+            override x.Destroy() = 
+                stream.Dispose()
+                stream <- Unchecked.defaultof<_>
+            override x.GetHandle t = 
+                compile t
+                { handle = stream; version = 0 }   
+                
+
+
+
     module Compiler = 
         open CommandStreams
 
@@ -456,6 +554,7 @@ module RenderTask =
 
             let stats : nativeptr<V2i> = NativePtr.alloc 1
             let cache = ResourceLocationCache<VKVM.CommandStream>(manager.ResourceUser)
+            let clearCache = ResourceLocationCache<VKVM.CommandStream>(manager.ResourceUser)
             let mutable version = 0
 
 
@@ -481,6 +580,15 @@ module RenderTask =
                 call.Acquire()
                 call |> unbox<ICommandStreamResource>
             
+            member x.CompileClear(pass : RenderPass, viewports : IMod<Box2i[]>, colors : Map<Symbol, IMod<C4f>>, depth : Option<IMod<float>>, stencil : Option<IMod<uint32>>) =
+                
+                let call = 
+                    clearCache.GetOrCreate([pass :> obj; viewports :> obj; colors :> obj; depth :> obj; stencil :> obj], fun owner key ->
+                        new ClearCommandStreamResource(owner, key, pass, viewports, colors, depth, stencil) :> ICommandStreamResource
+                    )
+                call.Acquire()
+                call |> unbox<ICommandStreamResource>
+
             member x.CurrentVersion = version
 
     module ChangeableCommandBuffers = 
@@ -521,6 +629,15 @@ module RenderTask =
 
             member x.Compile(o : IRenderObject) =
                 let res = compiler.Compile(o)
+                lock x (fun () ->
+                    let o = x.OutOfDate
+                    try x.EvaluateAlways AdaptiveToken.Top (fun t -> res.Update(t) |> ignore; res)
+                    finally x.OutOfDate <- o
+                )
+
+        
+            member x.Compile(o : RenderObjectCompiler -> ICommandStreamResource) =
+                let res = o compiler
                 lock x (fun () ->
                     let o = x.OutOfDate
                     try x.EvaluateAlways AdaptiveToken.Top (fun t -> res.Update(t) |> ignore; res)
@@ -593,6 +710,7 @@ module RenderTask =
 
                 cmdBuffer
             
+
         [<AbstractClass>]
         type AbstractChangeableSetCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>) =
             inherit AbstractChangeableCommandBuffer(manager, pool, renderPass, viewports)
@@ -698,6 +816,670 @@ module RenderTask =
 
 
                 true
+
+    [<AutoOpen>]
+    module ``New Ordered Command Stuff`` =
+        type PreparedPipelineState =
+            {
+                ppPipeline  : INativeResourceLocation<VkPipeline>
+                ppLayout    : PipelineLayout
+            }
+
+        type PreparedGeometry =
+            {
+                pgOriginal      : Geometry
+                pgDescriptors   : INativeResourceLocation<DescriptorSetBinding>
+                pgAttributes    : INativeResourceLocation<VertexBufferBinding>
+                pgIndex         : Option<INativeResourceLocation<IndexBufferBinding>>
+                pgCall          : INativeResourceLocation<DrawCall>
+                pgResources     : list<IResourceLocation>
+            }
+
+        type ResourceManager with
+            member x.PreparePipelineState (renderPass : RenderPass, surface : Aardvark.Base.Surface, state : PipelineState) =
+                let layout, program = x.CreateShaderProgram(renderPass, surface)
+
+                let inputs = 
+                    layout.PipelineInfo.pInputs |> List.map (fun p ->
+                        let name = Symbol.Create p.name
+                        match Map.tryFind name state.vertexInputTypes with
+                            | Some t -> (name, (false, t))
+                            | None -> failf "could not get shader input %A" name
+                    )
+                    |> Map.ofList
+
+                let inputState =
+                    x.CreateVertexInputState(layout.PipelineInfo, Mod.constant (VertexInputState.ofTypes inputs))
+
+                let inputAssembly =
+                    x.CreateInputAssemblyState(Mod.constant state.geometryMode, program)
+
+                let rasterizerState =
+                    x.CreateRasterizerState(state.depthTest, state.cullMode, state.fillMode)
+
+                let colorBlendState =
+                    x.CreateColorBlendState(renderPass, state.writeBuffers, state.blendMode)
+
+                let depthStencil =
+                    let depthWrite = 
+                        match state.writeBuffers with
+                            | None -> true
+                            | Some s -> Set.contains DefaultSemantic.Depth s
+                    x.CreateDepthStencilState(depthWrite, state.depthTest, state.stencilMode)
+
+                let pipeline = 
+                    x.CreatePipeline(
+                        program,
+                        renderPass,
+                        inputState,
+                        inputAssembly,
+                        rasterizerState,
+                        colorBlendState,
+                        depthStencil,
+                        state.writeBuffers
+                    )
+                {
+                    ppPipeline  = pipeline
+                    ppLayout    = layout
+                }
+
+            member x.PrepareGeometry(state : PreparedPipelineState, g : Geometry) : PreparedGeometry =
+                let resources = System.Collections.Generic.List<IResourceLocation>()
+
+                let layout = state.ppLayout
+
+                let descriptorSets, additionalResources = 
+                    x.CreateDescriptorSets(layout, UniformProvider.ofMap g.uniforms)
+
+                resources.AddRange additionalResources
+
+                let vertexBuffers = 
+                    layout.PipelineInfo.pInputs 
+                        |> List.sortBy (fun i -> i.location) 
+                        |> List.map (fun i ->
+                            let sem = i.semantic 
+                            match Map.tryFind sem g.vertexAttributes with
+                                | Some b ->
+                                    x.CreateBuffer(b), 0L
+                                | None ->
+                                    failf "geometry does not have buffer %A" sem
+                        )
+
+                let dsb = x.CreateDescriptorSetBinding(layout, Array.toList descriptorSets)
+                let vbb = x.CreateVertexBufferBinding(vertexBuffers)
+
+                let isIndexed, ibo =
+                    match g.indices with
+                        | Some ib ->
+                            let b = x.CreateIndexBuffer ib.Buffer
+                            let ibb = x.CreateIndexBufferBinding(b, VkIndexType.ofType ib.ElementType)
+                            resources.Add ibb
+                            true, ibb |> Some
+                        | None ->
+                            false, None
+
+                let call = x.CreateDrawCall(isIndexed, g.call)
+
+                resources.Add dsb
+                resources.Add vbb
+                resources.Add call
+
+
+
+                {
+                    pgOriginal      = g
+                    pgDescriptors   = dsb
+                    pgAttributes    = vbb
+                    pgIndex         = ibo
+                    pgCall          = call
+                    pgResources     = CSharpList.toList resources
+                }
+
+
+
+    module RuntimeCommands =
+        
+
+        [<AbstractClass>]
+        type PreparedCommand() =
+            inherit AdaptiveObject()
+
+            let stream = new VKVM.CommandStream()
+
+            let mutable prev : Option<PreparedCommand> = None
+            let mutable next : Option<PreparedCommand> = None
+
+            member x.Prev
+                with get() = prev
+                and set p = prev <- p
+
+            member x.Next 
+                with get() = next
+                and set n =
+                    next <- n
+                    match n with
+                        | Some n ->
+                            stream.Next <- Some n.Stream
+                        | None ->
+                            stream.Next <- None
+
+            interface ILinked<PreparedCommand> with
+                member x.Prev 
+                    with get() = x.Prev
+                    and set p = x.Prev <- p
+
+                member x.Next 
+                    with get() = x.Next
+                    and set n = x.Next <- n
+
+            abstract member Compile : AdaptiveToken * VKVM.CommandStream -> unit
+            abstract member Free : unit -> unit
+
+            member x.Stream = stream
+
+            member x.Update(t : AdaptiveToken) =
+                x.EvaluateIfNeeded t () (fun t ->
+                    x.Compile(t, stream)
+                ) 
+
+            member x.Dispose() =
+                x.Free()
+                stream.Dispose()
+
+            interface IDisposable with
+                member x.Dispose() = x.Dispose()
+
+        and EmptyCommand() =
+            inherit PreparedCommand()
+
+            override x.Compile(_,_) = ()
+            override x.Free() = ()
+
+        and RenderObjectCommand(compiler : Compiler, o : IRenderObject) =
+            inherit PreparedCommand()
+
+            let mutable prepared : Option<PreparedMultiRenderObject> = None
+
+            member x.GroupKey =
+                match prepared with
+                    | Some p -> [ p.First.pipeline :> obj; p.Id :> obj ]
+                    | None -> failwith "inconsistent state"
+
+            override x.Free() =
+                match prepared with
+                    | Some o -> 
+                        for o in o.Children do
+                            for r in o.resources do compiler.resources.Remove r   
+                            
+                        prepared <- None
+                    | None ->
+                        ()     
+
+            override x.Compile(_, stream) =
+                let o = compiler.manager.PrepareRenderObject(compiler.renderPass, o)
+                for o in o.Children do
+                    for r in o.resources do compiler.resources.Add r        
+
+                    stream.IndirectBindPipeline(o.pipeline.Pointer) |> ignore
+                    stream.IndirectBindDescriptorSets(o.descriptorSets.Pointer) |> ignore
+
+                    match o.indexBuffer with
+                        | Some ib ->
+                            stream.IndirectBindIndexBuffer(ib.Pointer) |> ignore
+                        | None ->
+                            ()
+
+                    stream.IndirectBindVertexBuffers(o.vertexBuffers.Pointer) |> ignore
+                    stream.IndirectDraw(compiler.stats, o.isActive.Pointer, o.drawCalls.Pointer) |> ignore
+
+                prepared <- Some o
+
+        and UnorderedRenderObjectCommand(compiler : Compiler, objects : aset<IRenderObject>) =
+            inherit PreparedCommand()
+
+            let reader = objects.GetReader()
+
+            let firstCommand =
+                { new PreparedCommand() with
+                    override x.Free() = ()
+                    override x.Compile(_,_) = ()
+                }
+
+            let trie = Trie<PreparedCommand>()
+            do trie.Add([], firstCommand)
+            
+            let cache = Dict<IRenderObject, RenderObjectCommand>()
+            let dirty = HashSet<RenderObjectCommand>()
+
+            let insert (cmd : RenderObjectCommand) =
+                trie.Add(cmd.GroupKey, cmd)
+
+            let remove (cmd : RenderObjectCommand) =
+                trie.Remove(cmd.GroupKey) |> ignore
+
+            override x.InputChanged(_,i) =
+                match i with
+                    | :? RenderObjectCommand as c ->
+                        lock dirty (fun () -> dirty.Add c |> ignore)
+                    | _ ->
+                        ()
+
+            override x.Free() =
+                for cmd in cache.Values do cmd.Dispose()
+                cache.Clear()
+                dirty.Clear()
+                firstCommand.Dispose()
+                reader.Dispose()
+                trie.Clear()
+
+            override x.Compile(token, stream) =
+                let deltas = reader.GetOperations token
+
+                for d in deltas do
+                    match d with
+                        | Add(_,o) ->
+                            let cmd = new RenderObjectCommand(compiler, o) 
+                            // insert cmd into trie (link programs)
+                            cmd.Update token
+                            insert cmd
+                            cache.[o] <- cmd
+
+
+                        | Rem(_,o) ->
+                            match cache.TryRemove(o) with
+                                | (true, cmd) ->
+                                    // unlink stuff (remove from trie)
+                                    remove cmd
+                                    lock dirty (fun () -> dirty.Remove cmd |> ignore)
+                                    cmd.Dispose()
+                                | _ ->
+                                    ()
+
+
+                let dirty = 
+                    lock dirty (fun () ->
+                        let res = HashSet.toArray dirty
+                        dirty.Clear()
+                        res
+                    )
+
+                for d in dirty do
+                    d.Update(token)
+
+                stream.Clear()
+                stream.Call(firstCommand.Stream) |> ignore
+
+        and ClearCommand(compiler : Compiler, colors : Map<Symbol, IMod<C4f>>, depth : Option<IMod<float>>, stencil : Option<IMod<uint32>>) =
+            inherit PreparedCommand()
+
+            override x.Compile(token, stream) =
+                stream.Clear()
+
+                let hasDepth =
+                    Option.isSome compiler.renderPass.DepthStencilAttachment
+
+                let depthClear =
+                    match depth, stencil with
+                        | Some d, Some s ->
+                            let d = d.GetValue token
+                            let s = s.GetValue token
+
+                            VkClearAttachment(
+                                VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit, 
+                                0u,
+                                VkClearValue(depthStencil = VkClearDepthStencilValue(float32 d, s))
+                            ) |> Some
+
+                        | Some d, None ->   
+                            let d = d.GetValue token
+
+                            VkClearAttachment(
+                                VkImageAspectFlags.DepthBit, 
+                                0u,
+                                VkClearValue(depthStencil = VkClearDepthStencilValue(float32 d, 0u))
+                            ) |> Some
+                             
+                        | None, Some s ->
+                            let s = s.GetValue token
+
+                            VkClearAttachment(
+                                VkImageAspectFlags.StencilBit, 
+                                0u,
+                                VkClearValue(depthStencil = VkClearDepthStencilValue(1.0f, s))
+                            ) |> Some
+
+                        | None, None ->
+                            None
+
+                let colors = 
+                    compiler.renderPass.ColorAttachments |> Map.toSeq |> Seq.choose (fun (i,(n,_)) ->
+                        match Map.tryFind n colors with
+                            | Some value -> 
+                                let res = 
+                                    VkClearAttachment(
+                                        VkImageAspectFlags.ColorBit, 
+                                        uint32 (if hasDepth then 1 + i else i),
+                                        VkClearValue(color = VkClearColorValue(float32 = value.GetValue(token).ToV4f()))
+                                    )
+                                Some res
+                            | None ->
+                                None
+                    ) |> Seq.toArray
+
+                let clears =
+                    match depthClear with
+                        | Some c -> Array.append [|c|] colors
+                        | None -> colors
+
+                let rect =
+                    let s = compiler.viewports.GetValue(token).[0]
+                    VkClearRect(
+                        VkRect2D(VkOffset2D(s.Min.X,s.Min.Y), VkExtent2D(uint32 (1 + s.Max.X - s.Min.X) , uint32 (1 + s.Max.Y - s.Min.Y))),
+                        0u,
+                        uint32 compiler.renderPass.LayerCount
+                    )
+
+                stream.ClearAttachments(
+                    clears,
+                    [| rect |]
+                ) |> ignore
+
+            override x.Free() =
+                ()
+
+        and OrderedCommand(compiler : Compiler, commands : alist<RuntimeCommand>) =
+            inherit PreparedCommand()
+
+            let reader = commands.GetReader()
+
+            let first = new VKVM.CommandStream()
+            let cache = SortedDictionaryExt<Index, PreparedCommand>(compare)
+            let dirty = HashSet<PreparedCommand>()
+
+            let destroy (cmd : PreparedCommand) =
+                lock dirty (fun () -> dirty.Remove cmd |> ignore)
+
+                match cmd.Prev with
+                    | Some p -> p.Next <- cmd.Next
+                    | None -> first.Next <- cmd.Next |> Option.map (fun c -> c.Stream)
+
+                match cmd.Next with
+                    | Some n -> n.Prev <- cmd.Prev
+                    | None -> ()
+
+                cmd.Dispose()
+
+            let set (token : AdaptiveToken) (index : Index) (v : RuntimeCommand) =
+                cache |> SortedDictionary.setWithNeighbours index (fun l s r ->
+                    
+                    // TODO: move causes destroy/prepare
+                    match s with
+                        | Some cmd -> destroy cmd
+                        | None -> ()
+
+                    let cmd = compiler.Compile v
+                    cmd.Update(token)
+
+                    match l with
+                        | Some(_,l) -> l.Next <- Some cmd
+                        | None -> first.Next <- Some cmd.Stream
+
+                    match r with
+                        | Some(_,r) -> 
+                            cmd.Next <- Some r
+                            r.Prev <- Some cmd
+                        | None -> 
+                            cmd.Next <- None
+
+                    cmd
+                ) |> ignore
+                
+            let remove (index : Index) =
+                match cache.TryGetValue index with
+                    | (true, cmd) ->
+                        cache.Remove index |> ignore
+                        destroy cmd
+                    | _ ->
+                        ()
+
+            override x.InputChanged(_,i) =
+                match i with
+                    | :? PreparedCommand as c ->
+                        lock dirty (fun () -> dirty.Add c |> ignore)
+                    | _ ->
+                        ()
+
+            override x.Compile(token, stream) =
+                let deltas = reader.GetOperations token
+
+                for (index, op) in PDeltaList.toSeq deltas do
+                    match op with
+                        | Set cmd ->
+                            set token index cmd
+                        | Remove ->
+                            remove index
+
+
+                let dirty = 
+                    lock dirty (fun () ->
+                        let res = HashSet.toArray dirty
+                        dirty.Clear()
+                        res
+                    )
+
+                for d in dirty do
+                    d.Update(token)
+
+                stream.Clear()
+                stream.Call(first) |> ignore
+
+            override x.Free() =
+                reader.Dispose()
+                cache |> Seq.iter (fun (KeyValue(_,v)) -> v.Dispose())
+                cache.Clear()
+                dirty.Clear()
+                first.Dispose()
+
+        and IfThenElseCommand(compiler : Compiler, condition : IMod<bool>, ifTrue : RuntimeCommand, ifFalse : RuntimeCommand) =
+            inherit PreparedCommand()
+
+            let ifTrue = compiler.Compile ifTrue
+            let ifFalse = compiler.Compile ifFalse
+
+            override x.Free() =
+                ifTrue.Dispose()
+                ifFalse.Dispose()
+
+            override x.Compile(token, stream) =
+                let cond = condition.GetValue(token)
+
+                ifTrue.Update(token)
+                ifFalse.Update(token)
+
+                stream.Clear()
+                if cond then stream.Call(ifTrue.Stream) |> ignore
+                else stream.Call(ifFalse.Stream) |> ignore
+
+        and Compiler =
+            {
+                resources       : ResourceLocationSet
+                manager         : ResourceManager
+                renderPass      : RenderPass
+                stats           : nativeptr<V2i>
+                viewports       : IMod<Box2i[]>
+            }
+
+            member x.Compile (cmd : RuntimeCommand) : PreparedCommand =
+                match cmd with
+                    | RuntimeCommand.Empty ->
+                        new EmptyCommand()
+                            :> PreparedCommand
+
+                    | RuntimeCommand.Render objects ->
+                        new UnorderedRenderObjectCommand(x, objects)
+                            :> PreparedCommand
+
+                    | RuntimeCommand.Clear(colors, depth, stencil) ->
+                        new ClearCommand(x, colors, depth, stencil)
+                            :> PreparedCommand
+
+                    | RuntimeCommand.Ordered commands ->
+                        new OrderedCommand(x, commands)
+                            :> PreparedCommand
+
+                    | RuntimeCommand.IfThenElse(c,i,e) ->
+                        new IfThenElseCommand(x, c, i, e)
+                            :> PreparedCommand
+
+                    | RuntimeCommand.Grouped(surface, state, geometries) ->
+                        
+                        let pipe = x.manager.PreparePipelineState(x.renderPass, surface, state)
+
+                        match pipe.ppLayout.PipelineInfo.pTextures with
+                            | [] -> 
+                                failwith "indirect hate"
+                            | _ -> 
+
+                                let geometries = geometries |> ASet.map (fun g -> x.manager.PrepareGeometry(pipe, g))
+
+
+
+                                failwith "[Vulkan] compute commands not implemented"
+
+                    | RuntimeCommand.Dispatch _ | RuntimeCommand.ViewDependent _ ->
+                        failwith "[Vulkan] compute commands not implemented"
+
+    type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeCommand) =
+        inherit AbstractRenderTask()
+
+        let pool = device.GraphicsFamily.CreateCommandPool()
+        let viewports = Mod.init [||]
+        
+        let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
+        let inner = pool.CreateCommandBuffer(CommandBufferLevel.Secondary)
+
+        let locks = ReferenceCountingSet<ILockedResource>()
+
+        let user =
+            { new IResourceUser with
+                member x.AddLocked l = lock locks (fun () -> locks.Add l |> ignore)
+                member x.RemoveLocked l = lock locks (fun () -> locks.Remove l |> ignore)
+            }
+
+        let stats = NativePtr.alloc 1
+        let manager = new ResourceManager(user, device)
+        let resources = ResourceLocationSet(user)
+
+        let compiler =
+            {
+                RuntimeCommands.resources       = resources
+                RuntimeCommands.manager         = manager
+                RuntimeCommands.renderPass      = renderPass
+                RuntimeCommands.stats           = stats
+                RuntimeCommands.viewports       = viewports
+            }
+
+        let compiled = compiler.Compile command
+
+        override x.Release() =
+            transact (fun () ->
+                compiled.Dispose()
+                inner.Dispose()
+                cmd.Dispose()
+                pool.Dispose()
+                manager.Dispose()
+            )
+
+        override x.FramebufferSignature = Some (renderPass :> _)
+
+        override x.Runtime = None
+
+        override x.PerformUpdate(token : AdaptiveToken, rt : RenderToken) =
+            ()
+
+        override x.Use(f : unit -> 'r) =
+            f()
+
+        override x.Perform(token : AdaptiveToken, rt : RenderToken, desc : OutputDescription) =
+            x.OutOfDate <- true
+
+            let fbo =
+                match desc.framebuffer with
+                    | :? Framebuffer as fbo -> fbo
+                    | fbo -> failwithf "unsupported framebuffer: %A" fbo
+
+
+            let vp = Array.create renderPass.AttachmentCount desc.viewport
+            let viewportChanged =
+                if viewports.Value = vp then
+                    false
+                else
+                    transact (fun () -> viewports.Value <- vp)
+                    true
+
+            use tt = device.Token
+            let commandChanged = 
+                lock compiled (fun () ->
+                    if compiled.OutOfDate then
+                        compiled.Update(token)
+                        true
+                    else
+                        false
+                )
+
+            let resourcesChanged = 
+                resources.Update(token)
+
+            if viewportChanged || commandChanged || resourcesChanged then
+                let cause =
+                    String.concat "; " [
+                        if commandChanged then yield "content"
+                        if resourcesChanged then yield "resources"
+                        if viewportChanged then yield "viewport"
+                    ]
+                    |> sprintf "{ %s }"
+
+                Log.line "[Vulkan] recompile commands: %s" cause
+
+                inner.Reset()
+                inner.Begin(renderPass, CommandBufferUsage.RenderPassContinue)
+
+                inner.enqueue {
+                    do! Command.SetViewports(vp)
+                    do! Command.SetScissors(vp)
+                }
+
+                inner.AppendCommand()
+                compiled.Stream.Run(inner.Handle)
+                
+                inner.End()
+
+
+            tt.Sync()
+
+            cmd.Reset()
+            cmd.Begin(renderPass, CommandBufferUsage.OneTimeSubmit)
+            cmd.enqueue {
+                let oldLayouts = Array.zeroCreate fbo.ImageViews.Length
+                for i in 0 .. fbo.ImageViews.Length - 1 do
+                    let img = fbo.ImageViews.[i].Image
+                    oldLayouts.[i] <- img.Layout
+                    if VkFormat.hasDepth img.Format then
+                        do! Command.TransformLayout(img, VkImageLayout.DepthStencilAttachmentOptimal)
+                    else
+                        do! Command.TransformLayout(img, VkImageLayout.ColorAttachmentOptimal)
+
+                do! Command.BeginPass(renderPass, fbo, false)
+                do! Command.Execute [inner]
+                do! Command.EndPass
+
+                for i in 0 .. fbo.ImageViews.Length - 1 do
+                    let img = fbo.ImageViews.[i].Image
+                    do! Command.TransformLayout(img, oldLayouts.[i])
+            }   
+            cmd.End()
+
+            device.GraphicsFamily.RunSynchronously cmd
 
     open ChangeableCommandBuffers
 
