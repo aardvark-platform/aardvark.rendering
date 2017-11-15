@@ -406,7 +406,7 @@ type PipelineState =
         perGeometryUniforms : Map<string, Type>
     }
    
-
+[<ReferenceEquality>]
 type Geometry =
     {
         vertexAttributes    : Map<Symbol, IMod<IBuffer>>
@@ -415,27 +415,63 @@ type Geometry =
         call                : IMod<list<DrawCallInfo>>
     }
 
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module Geometry =
+    let ofIndexedGeometry (g : IndexedGeometry) =
+        failwith ""
+//        let index = 
+//            match g.IndexArray with
+//                | null -> None
+//                | index -> 
+//                    let buffer = Mod.constant (
+
+
+
+
+
+
+
 [<RequireQualifiedAccess>]
 type RuntimeCommand =
-    | Empty
-    | Render of objects : aset<IRenderObject>
+    | EmptyCmd
+    | RenderCmd of objects : aset<IRenderObject>
 
     
-    | ViewDependent of sort : (Trafo3d -> Trafo3d -> IRenderObject[] -> IRenderObject[]) * objects : aset<IRenderObject>
+    //| ViewDependentCmd of sort : (Trafo3d -> Trafo3d -> IRenderObject[] -> IRenderObject[]) * objects : aset<IRenderObject>
 
-    | Grouped of surface : Surface * pipeline : PipelineState * geometries : aset<Geometry>
+    | GeometriesCmd of surface : Surface * pipeline : PipelineState * geometries : aset<Geometry>
 
     //| RenderMany of PipelineState * aset<Geometry>
     //| RenderDynamic of PipelineState * Config * IMod<Tree<Geometry>>
     
-    | Dispatch of shader : IComputeShader * groups : IMod<V3i> * arguments : Map<string, obj>
-    | Clear of colors : Map<Symbol, IMod<C4f>> * depth : Option<IMod<float>> * stencil : Option<IMod<uint32>>
+    | DispatchCmd of shader : IComputeShader * groups : IMod<V3i> * arguments : Map<string, obj>
+    | ClearCmd of colors : Map<Symbol, IMod<C4f>> * depth : Option<IMod<float>> * stencil : Option<IMod<uint32>>
 
-    | Ordered of commands : alist<RuntimeCommand>
-    | IfThenElse of condition : IMod<bool> * ifTrue : RuntimeCommand * ifFalse : RuntimeCommand
+    | OrderedCmd of commands : alist<RuntimeCommand>
+    | IfThenElseCmd of condition : IMod<bool> * ifTrue : RuntimeCommand * ifFalse : RuntimeCommand
 
 
-    static member FancyGrouped(effects : FShade.Effect[], activeEffect : IMod<int>, pipeline : PipelineState, geometries : aset<Geometry>) =
+    static member Empty = RuntimeCommand.EmptyCmd
+    
+    static member Render(objects : aset<IRenderObject>) =
+        RuntimeCommand.RenderCmd(objects)
+        
+    static member Dispatch(shader : IComputeShader, groups : IMod<V3i>, arguments : Map<string, obj>) =
+        RuntimeCommand.DispatchCmd(shader, groups, arguments)
+        
+    static member Clear(colors : Map<Symbol, IMod<C4f>>, depth : Option<IMod<float>>, stencil : Option<IMod<uint32>>) =
+        RuntimeCommand.ClearCmd(colors, depth, stencil)
+
+    static member Ordered(commands : alist<RuntimeCommand>) =
+        RuntimeCommand.OrderedCmd(commands)
+
+    static member IfThenElse(condition : IMod<bool>, ifTrue : RuntimeCommand, ifFalse : RuntimeCommand) =
+        RuntimeCommand.IfThenElseCmd(condition, ifTrue, ifFalse)
+
+    static member Geometries(surface : Surface, pipeline : PipelineState, geometries : aset<Geometry>) =
+        RuntimeCommand.GeometriesCmd(surface, pipeline, geometries)
+
+    static member Geometries(effects : FShade.Effect[], activeEffect : IMod<int>, pipeline : PipelineState, geometries : aset<Geometry>) =
         let surface = 
             Surface.FShade (fun cfg ->
                 let modules = effects |> Array.map (FShade.Effect.toModule cfg)
@@ -444,7 +480,7 @@ type RuntimeCommand =
 
                 signature, activeEffect |> Mod.map (Array.get modules)
             )
-        RuntimeCommand.Grouped(surface, pipeline, geometries)
+        RuntimeCommand.GeometriesCmd(surface, pipeline, geometries)
 
 type IAdaptiveBufferReader =
     inherit IAdaptiveObject

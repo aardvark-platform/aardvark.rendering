@@ -823,6 +823,7 @@ module RenderTask =
             {
                 ppPipeline  : INativeResourceLocation<VkPipeline>
                 ppLayout    : PipelineLayout
+                ppUniforms  : IUniformProvider
             }
 
         type PreparedGeometry =
@@ -881,6 +882,7 @@ module RenderTask =
                 {
                     ppPipeline  = pipeline
                     ppLayout    = layout
+                    ppUniforms  = state.globalUniforms
                 }
 
             member x.PrepareGeometry(state : PreparedPipelineState, g : Geometry) : PreparedGeometry =
@@ -889,7 +891,7 @@ module RenderTask =
                 let layout = state.ppLayout
 
                 let descriptorSets, additionalResources = 
-                    x.CreateDescriptorSets(layout, UniformProvider.ofMap g.uniforms)
+                    x.CreateDescriptorSets(layout, UniformProvider.union (UniformProvider.ofMap g.uniforms) state.ppUniforms)
 
                 resources.AddRange additionalResources
 
@@ -1300,6 +1302,124 @@ module RenderTask =
                 if cond then stream.Call(ifTrue.Stream) |> ignore
                 else stream.Call(ifFalse.Stream) |> ignore
 
+        and GeometryCommand(compiler : Compiler, pipeline : PreparedPipelineState, geometry : Geometry) =
+            inherit PreparedCommand()
+
+            static let alwaysActive =
+                let ptr = NativePtr.alloc 1
+                NativePtr.write ptr 1
+                ptr
+
+            let mutable prepared : Option<PreparedGeometry> = None
+
+            override x.Free() =
+                match prepared with
+                    | Some pg ->
+                        for r in pg.pgResources do
+                            compiler.resources.Remove r
+                        prepared <- None
+                    | None ->
+                        ()
+
+            override x.Compile(_, stream) =
+                let pg = compiler.manager.PrepareGeometry(pipeline, geometry)
+                prepared <- Some pg
+
+                for r in pg.pgResources do
+                    compiler.resources.Add r
+                
+                stream.IndirectBindDescriptorSets(pg.pgDescriptors.Pointer) |> ignore
+
+                match pg.pgIndex with
+                    | Some index ->
+                        stream.IndirectBindIndexBuffer(index.Pointer) |> ignore
+                    | None ->
+                        ()
+
+                stream.IndirectBindVertexBuffers(pg.pgAttributes.Pointer) |> ignore
+                stream.IndirectDraw(compiler.stats, alwaysActive, pg.pgCall.Pointer) |> ignore
+
+
+        and GroupedCommand(compiler : Compiler, surface : Aardvark.Base.Surface, state : PipelineState, geometries : aset<Geometry>) =
+            inherit PreparedCommand()
+            
+            let reader = geometries.GetReader()
+
+            let first = new VKVM.CommandStream()
+            let mutable last = first
+
+            let cache = Dict<Geometry, GeometryCommand>()
+
+            let mutable preparedPipeline = None
+
+            override x.Free() =
+                reader.Dispose()
+                first.Dispose()
+                match preparedPipeline with
+                    | Some p ->
+                        compiler.resources.Remove p.ppPipeline
+                        preparedPipeline <- None
+                    | None ->
+                        ()
+
+                for cmd in cache.Values do
+                    cmd.Dispose()
+
+                cache.Clear()
+                last <- Unchecked.defaultof<_>
+                ()
+
+            override x.Compile(token, stream) =
+                let pipeline = 
+                    match preparedPipeline with
+                        | None -> 
+                            let pipeline = compiler.manager.PreparePipelineState(compiler.renderPass, surface, state)
+                            compiler.resources.Add pipeline.ppPipeline
+                            first.IndirectBindPipeline(pipeline.ppPipeline.Pointer) |> ignore
+                            preparedPipeline <- Some pipeline
+
+                            stream.Clear()
+                            stream.Call(first) |> ignore
+
+                            pipeline
+                        | Some pipeline ->
+                            pipeline
+
+
+                let ops = reader.GetOperations token
+
+                for d in ops do
+                    match d with
+                        | Add(_,g) ->
+                            let cmd = new GeometryCommand(compiler, pipeline, g)
+                            cmd.Update token
+
+                            cache.[g] <- cmd
+                            
+                            let stream = cmd.Stream
+                            last.Next <- Some stream
+                            last <- stream
+
+                        | Rem(_,g) ->
+                            match cache.TryRemove g with
+                                | (true, cmd) ->
+                                    let stream = cmd.Stream
+
+                                    match stream.Prev with
+                                        | Some s -> s.Next <- stream.Next
+                                        | None -> failwith "impossible"
+
+                                    match stream.Next with
+                                        | Some n -> ()
+                                        | None -> last <- stream.Prev.Value
+
+                                    cmd.Dispose()
+
+                                | _ ->
+                                    ()
+
+
+
         and Compiler =
             {
                 resources       : ResourceLocationSet
@@ -1311,42 +1431,31 @@ module RenderTask =
 
             member x.Compile (cmd : RuntimeCommand) : PreparedCommand =
                 match cmd with
-                    | RuntimeCommand.Empty ->
+                    | RuntimeCommand.EmptyCmd ->
                         new EmptyCommand()
                             :> PreparedCommand
 
-                    | RuntimeCommand.Render objects ->
+                    | RuntimeCommand.RenderCmd objects ->
                         new UnorderedRenderObjectCommand(x, objects)
                             :> PreparedCommand
 
-                    | RuntimeCommand.Clear(colors, depth, stencil) ->
+                    | RuntimeCommand.ClearCmd(colors, depth, stencil) ->
                         new ClearCommand(x, colors, depth, stencil)
                             :> PreparedCommand
 
-                    | RuntimeCommand.Ordered commands ->
+                    | RuntimeCommand.OrderedCmd commands ->
                         new OrderedCommand(x, commands)
                             :> PreparedCommand
 
-                    | RuntimeCommand.IfThenElse(c,i,e) ->
+                    | RuntimeCommand.IfThenElseCmd(c,i,e) ->
                         new IfThenElseCommand(x, c, i, e)
                             :> PreparedCommand
 
-                    | RuntimeCommand.Grouped(surface, state, geometries) ->
-                        
-                        let pipe = x.manager.PreparePipelineState(x.renderPass, surface, state)
+                    | RuntimeCommand.GeometriesCmd(surface, state, geometries) ->
+                        new GroupedCommand(x, surface, state, geometries)
+                            :> PreparedCommand
 
-                        match pipe.ppLayout.PipelineInfo.pTextures with
-                            | [] -> 
-                                failwith "indirect hate"
-                            | _ -> 
-
-                                let geometries = geometries |> ASet.map (fun g -> x.manager.PrepareGeometry(pipe, g))
-
-
-
-                                failwith "[Vulkan] compute commands not implemented"
-
-                    | RuntimeCommand.Dispatch _ | RuntimeCommand.ViewDependent _ ->
+                    | RuntimeCommand.DispatchCmd _  ->
                         failwith "[Vulkan] compute commands not implemented"
 
     type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeCommand) =
