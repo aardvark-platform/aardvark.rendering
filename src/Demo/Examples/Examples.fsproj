@@ -87,6 +87,7 @@
     <Compile Include="GeometryComposition.fs" />
     <Compile Include="ComputeShader.fs" />
     <Compile Include="HarwareFeatures.fs" />
+    <Compile Include="Eigi.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <None Include="paket.references" />
