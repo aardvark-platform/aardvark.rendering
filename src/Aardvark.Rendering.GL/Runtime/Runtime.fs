@@ -345,6 +345,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 failwithf "unsupported streaming texture: %A" t
 
     member private x.CompileRenderInternal (fboSignature : IFramebufferSignature, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) =
+        let set = EffectDebugger.Hook set
         let eng = engine.GetValue()
         let shareTextures = eng.sharing &&& ResourceSharing.Textures <> ResourceSharing.None
         let shareBuffers = eng.sharing &&& ResourceSharing.Buffers <> ResourceSharing.None
