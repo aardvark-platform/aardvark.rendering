@@ -45,6 +45,16 @@ module Loader =
                             | "DiffuseColorTexture" -> singleValueTexture x.diffuse
                             | "SpecularColorTexture" -> singleValueTexture x.specular
                             | "NormalMapTexture" -> singleValueTexture (C4f(0.5f, 0.5f, 1.0f, 1.0f))
+
+                            | "AmbientColor" -> Mod.constant x.ambient :> IMod |> Some
+                            | "DiffuseColor" -> Mod.constant x.diffuse :> IMod |> Some
+                            | "EmissiveColor" -> Mod.constant x.emissive :> IMod |> Some
+                            | "ReflectiveColor" -> Mod.constant x.reflective :> IMod |> Some
+                            | "SpecularColor" -> Mod.constant x.specular :> IMod |> Some
+                            | "Shininess" -> Mod.constant x.shininess :> IMod |> Some
+                            | "BumpScale" -> Mod.constant x.bumpScale :> IMod |> Some
+
+
                             | _ -> None
 
             member x.Dispose() = ()
@@ -413,6 +423,9 @@ module Loader =
                                 attributes.[coordSem] <- att.MapToArray(fun v -> V2f(v.X, v.Y))
 
                             | None ->
+                                if c = 0 then
+                                    attributes.[DefaultSemantic.DiffuseColorCoordinates] <- att.MapToArray(fun v -> V2f(v.X, v.Y))
+
                                 ()
 
                     let mode =

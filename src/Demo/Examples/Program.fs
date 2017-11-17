@@ -1295,7 +1295,8 @@ let main args =
     //Examples.Stereo.runNew()
     //Examples.ComputeShader.run()
     //Examples.CommandTest.run()
-    Examples.Wobble.run()
+    //Examples.Wobble.run()
+    Examples.Eigi.run()
     System.Environment.Exit 0
 
     //colorLockTest()
