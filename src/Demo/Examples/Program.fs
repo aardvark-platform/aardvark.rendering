@@ -1294,7 +1294,8 @@ let main args =
     //Examples.GeometryComposition.run()
     //Examples.Stereo.runNew()
     //Examples.ComputeShader.run()
-    Examples.CommandTest.run()
+    //Examples.CommandTest.run()
+    Examples.Wobble.run()
     System.Environment.Exit 0
 
     //colorLockTest()

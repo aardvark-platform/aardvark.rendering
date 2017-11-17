@@ -491,6 +491,42 @@ type IAdaptiveBuffer =
     inherit IMod<IBuffer>
     abstract member GetReader : unit -> IAdaptiveBufferReader
 
+
+type EffectDebugger private() =
+    
+    static let rec hookObject (o : IRenderObject) =
+        match o with
+            | :? RenderObject as o ->
+                match o.Surface with
+                    | Surface.FShadeSimple e ->
+                        match FShade.EffectDebugger.register e with
+                            | Some (:? IMod<FShade.Effect> as e) ->
+                                e |> Mod.map (fun e -> { o with Id = newId(); Surface = Surface.FShadeSimple e } :> IRenderObject)
+                            | _ ->
+                                Mod.constant (o :> IRenderObject)
+                    | _ ->
+                        Mod.constant (o :> IRenderObject)
+
+            | :? MultiRenderObject as m ->
+                let mods = m.Children |> List.map hookObject
+
+                if mods |> List.forall (fun m -> m.IsConstant) then
+                    Mod.constant (m :> IRenderObject)
+                else
+                    mods |> Mod.mapN (fun ros -> MultiRenderObject(Seq.toList ros) :> IRenderObject)
+
+            | _ ->
+                Mod.constant o
+
+    static member Hook (o : IRenderObject) = hookObject o
+    static member Hook (set : aset<IRenderObject>) =
+        match FShade.EffectDebugger.registerFun with
+            | Some _ ->
+                set |> ASet.mapM EffectDebugger.Hook
+            | None ->
+                set
+
+
 module AttributePackingV2 =
     open System
     open System.Threading

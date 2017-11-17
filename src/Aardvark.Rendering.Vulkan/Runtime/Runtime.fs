@@ -206,6 +206,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
     member x.CompileRender (renderPass : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) =
+        let set = EffectDebugger.Hook set
         new RenderTask.DependentRenderTask(device, unbox renderPass, set, true, true) :> IRenderTask
         //new RenderTasks.RenderTask(device, unbox renderPass, set, Mod.constant engine, shareTextures, shareBuffers) :> IRenderTask
 

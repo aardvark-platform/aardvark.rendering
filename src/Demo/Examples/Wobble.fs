@@ -1,4 +1,4 @@
-﻿namespace Wobble
+﻿namespace Examples
 
 
 open System
@@ -19,6 +19,8 @@ module Wobble =
     let run() =
         use app = new VulkanApplication(false)
         let win = app.CreateSimpleRenderWindow(8)
+
+        FShade.EffectDebugger.attach()
 
         let offset = Mod.init (V3d(1000000.0, 0.0, 0.0))
         
@@ -118,8 +120,8 @@ module Wobble =
         )   
 
         Async.Start changeoffset
-        win.FormBorderStyle <- Windows.Forms.FormBorderStyle.None
-        win.WindowState <- Windows.Forms.FormWindowState.Maximized
+//        win.FormBorderStyle <- Windows.Forms.FormBorderStyle.None
+//        win.WindowState <- Windows.Forms.FormWindowState.Maximized
 
         win.RenderTask <- task
         win.Run()
