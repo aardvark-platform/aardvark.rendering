@@ -1291,12 +1291,12 @@ let main args =
     //Aardvark.Application.OpenVR.UnhateTest.run()
 
     //Examples.Tessellation.run()
-    //Examples.GeometryComposition.run()
     //Examples.Stereo.runNew()
     //Examples.ComputeShader.run()
     //Examples.CommandTest.run()
     //Examples.Wobble.run()
-    Examples.Eigi.run()
+    Examples.GeometryComposition.run()
+    //Examples.Eigi.run()
     System.Environment.Exit 0
 
     //colorLockTest()

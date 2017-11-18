@@ -36,6 +36,24 @@ type RenderConfig =
     }
 
 
+[<AutoOpen>]
+module ``FShade Extensions`` =
+    open FShade
+
+    type LightDirAttribute() = inherit FShade.SemanticAttribute("LightDirection")
+    type CamDirAttribute() = inherit FShade.SemanticAttribute("CameraDirection")
+    type SpecularColorAttribute() = inherit FShade.SemanticAttribute("SpecularColor")
+
+    type UniformScope with
+        member x.AmbientColor : V4d = x?Material?AmbientColor
+        member x.DiffuseColor : V4d = x?Material?DiffuseColor
+        member x.EmissiveColor : V4d = x?Material?EmissiveColor
+        member x.ReflectiveColor : V4d = x?Material?ReflectiveColor
+        member x.SpecularColor : V4d = x?Material?SpecularColor
+        member x.Shininess : float = x?Material?Shininess
+        member x.BumpScale : float = x?Material?BumpScale
+
+
 
 module Utilities =
     open System.Windows.Forms
