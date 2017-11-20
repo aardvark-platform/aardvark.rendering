@@ -373,14 +373,6 @@ type ContextShaderProgramExtensions private() =
             | :? BackendSurface as bs -> this |> ShaderProgram.ofBackendSurface bs
             | :? IGeneratedSurface as gs ->
                 let bs = gs.Generate(this.Runtime, signature) 
-
-                if FShade.EffectDebugger.isAttached then
-                    match gs with
-                        | :? FShadeSurface as fs ->
-                            FShade.EffectDebugger.saveCode fs.Effect bs.Code
-                        | _ ->
-                            ()
-
                 this |> ShaderProgram.ofBackendSurface bs
             | _ ->
                 failf "bad surface type: %A" surface
