@@ -1187,6 +1187,13 @@ type ResourceManager(user : IResourceUser, device : Device) =
                 device.CreateShaderProgram(signature, data)
             )
 
+        if FShade.EffectDebugger.isAttached then
+            match data with
+                | :? FShadeSurface as fs ->
+                    FShade.EffectDebugger.saveCode fs.Effect program.Surface.Code
+                | _ ->
+                    ()
+
         let resource = 
             programCache.GetOrCreate([program :> obj], fun cache key -> 
                 { new AbstractResourceLocation<ShaderProgram>(cache, key) with
