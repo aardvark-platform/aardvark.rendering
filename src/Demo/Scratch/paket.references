@@ -5,3 +5,4 @@ FShade.Core
 FSharp.Quotations.Evaluator
 FShade.GLSL
 FSharp.Core
+FSharp.Compiler.Service
