@@ -249,8 +249,8 @@ module Eigi =
             {
                 [<Position>] pos : V4d
                 [<Normal>] n : V3d
-                [<Semantic("VertexBoneIndices")>] vbi : V4i
-                [<Semantic("VertexBoneWeights")>] vbw : V4d
+                [<Semantic("VertexBoneIndices4")>] vbi : V4i
+                [<Semantic("VertexBoneWeights4")>] vbw : V4d
 
             }
 
@@ -313,7 +313,7 @@ module Eigi =
                     | null -> (Seq.head x.IndexedAttributes.Values).Length
                     | i -> i.Length
 
-        let sg (frame : IMod<int>) (relevant : Set<string>) (a : Animation) =
+        let sg (frame : IMod<int>) (a : Animation) =
 
             let getPositions (frame : int) =
                 let positions = System.Collections.Generic.List<V3d>()
@@ -324,8 +324,7 @@ module Eigi =
                         else t.trafo
                     let trafo = trafo * frameTrafo //(t.trafo * frameTrafo)
 
-                    if Set.contains t.name relevant then
-                        positions.Add (trafo.TransformPos(V3d.Zero))
+                    positions.Add (trafo.TransformPos(V3d.Zero))
 
                     for c in t.children do
                         traverse frame trafo c
@@ -338,16 +337,11 @@ module Eigi =
                 let index = ref 0
                 let rec traverse  (parent : int) (t : AnimTree) =
                     
-                    let me = 
-                        if Set.contains t.name relevant then
-                            let me = !index
-                            index := !index + 1
-                            if parent >= 0 then
-                                lines.Add(parent)
-                                lines.Add me
-                            me
-                        else
-                            -1
+                    let me = !index
+                    index := !index + 1
+                    if parent >= 0 then
+                        lines.Add(parent)
+                        lines.Add me
                     
                     for c in t.children do
                         traverse me c
@@ -449,129 +443,55 @@ module Eigi =
 //        let scene =
 //            { scene with meshes = scene.meshes |> Array.map (fun m -> m.Transformed(trafo)) }
 
-        let frame = Mod.init 0
+        let time = Mod.init 0.0
         
 
-        let relevant = scene.meshes |> Seq.collect (fun m -> m.boneNames) |> Set.ofSeq
-
+//        let relevant = scene.meshes |> Seq.collect (fun m -> m.boneNames) |> Set.ofSeq
+//      
+        let frame = 
+            time |> Mod.map (fun t -> 
+                ((t * 24.0) % 36.0) |> int
+            )
         let animScene = 
             scene.animantions 
                 |> Map.toSeq 
-                |> Seq.map (fun (name, tree) -> Animation.sg frame relevant tree) 
+                |> Seq.map (fun (name, tree) -> Animation.sg frame tree) 
                 |> Seq.tryHead
                 |> Option.defaultValue Sg.empty
 
         let animation = Mod.init "combinedAnim_0"
 
+        let getBoneTransformations (a : Loader.Animation) (time : float) =
+            let time = ((time * a.framesPerSecond) % 36.0) / a.framesPerSecond
+            Log.line "time: %.3f" time
+            a.interpolate time |> Array.map M44f.op_Explicit
 
-        // adjust the bone indices in the meshes
-        let mutable globalIndices = HMap.empty
-        let mutable currentGlobalIndex = 0
-
-        let getIndex (name : string) (offset : M44d) =
-            let key = (name, offset)
-            match HMap.tryFind key globalIndices with
-                | Some index -> 
-                    index
-                | None ->
-                    let index = currentGlobalIndex
-                    currentGlobalIndex <- index + 1
-                    globalIndices <- HMap.add key index globalIndices
-                    index
-
-        for m in scene.meshes do
-            let globalIds = Array.create m.boneNames.Length -1
-
-            let ivec4 (v : int[]) =
-                match v.Length with
-                    | 0 -> V4i(-1,-1,-1,-1)
-                    | 1 -> V4i(v.[0],-1,-1,-1)
-                    | 2 -> V4i(v.[0],v.[1],-1,-1)
-                    | 3 -> V4i(v.[0],v.[1],v.[2],-1)
-                    | _ -> V4i(v.[0],v.[1],v.[2],v.[3])
-                    
-            let vec4 (v : float32[]) =
-                match v.Length with
-                    | 0 -> V4f(0.0f, 0.0f, 0.0f, 0.0f)
-                    | 1 -> V4f(v.[0], 0.0f, 0.0f, 0.0f)
-                    | 2 -> V4f(v.[0], v.[1], 0.0f, 0.0f)
-                    | 3 -> V4f(v.[0], v.[1], v.[2], 0.0f)
-                    | _ -> V4f(v.[0], v.[1], v.[2], v.[3])
-
-            for bi in 0 .. m.boneNames.Length - 1 do
-                let name = m.boneNames.[bi]
-                let offset = m.boneOffsets.[bi]
-
-                let gid = getIndex name offset
-                globalIds.[bi] <- gid
-
-            match m.geometry.IndexedAttributes.TryGetValue Loader.Mesh.VertexBoneIndices, m.geometry.IndexedAttributes.TryGetValue Loader.Mesh.VertexBoneWeights with
-                | (true, (:? array<int[]> as indices)), (true, (:? array<float32[]> as weights)) ->
-                    let fourIndices =
-                        indices |> Array.map (fun bis ->
-                            bis |> Array.filter (fun v -> v >= 0) |> Array.map (fun i -> globalIds.[i]) |> ivec4
-                        )
-
-                    let fourWeights =
-                        weights |> Array.map (fun ws ->
-                            let r = vec4 ws
-                            r //r / r.Norm1
-                        )
-
-                    m.geometry.IndexedAttributes.[Loader.Mesh.VertexBoneIndices] <- fourIndices
-                    m.geometry.IndexedAttributes.[Loader.Mesh.VertexBoneWeights] <- fourWeights
-
-                | _ ->
-                    ()
-
-
-
-
-            
-            ()
-
-            
-
-
-            
-
-        // sample the animation at the given frame
-        let getBoneTransformations (a : Loader.Animation) (frame : int) =
-            let count = currentGlobalIndex
-            let arr = Array.create count M44f.Identity
-
-            let model, trafos = Animation.getTransformations a frame
-
-            for ((name, off), index) in HMap.toSeq globalIndices do
-
-                let current =
-                    match trafos.TryGetValue name with
-                        | (true, current) -> current
-                        | _ -> M44d.Identity
-
-                let model = 
-                    match model.TryGetValue name with
-                        | (true, m) -> m
-                        | _ -> M44d.Identity
-
-                let overall = current * off
-                arr.[index] <- M44f.op_Explicit overall
-
-            arr
+        let distanceToLine (p0 : V3d) (p1 : V3d) (v : V3d) =
+            let dir = p1 - p0
+            sqrt ( Vec.lengthSquared (Vec.cross dir (v - p0)) / Vec.lengthSquared dir )
 
         let boneTrafos =
             adaptive {
                 let! anim = animation
                 match Map.tryFind anim scene.animantions with
                     | Some a ->
-                        return! frame |> Mod.map (getBoneTransformations a)
+                        return! time |> Mod.map (getBoneTransformations a)
                     | None ->
                         return [||]
             }
+
+        let rec removeTrafos (n : Loader.Node) =
+            match n with
+                | Loader.Empty -> Loader.Empty
+                | Loader.Group ns -> Loader.Group (List.map removeTrafos ns)
+                | Loader.Leaf _ -> n
+                | Loader.Material(m,n) -> Loader.Material(m, removeTrafos n)
+                | Loader.Trafo(_,n) -> removeTrafos n
         
+        //let scene = { scene with root = removeTrafos scene.root }
 
         let sg = 
-            scene 
+            Sg.empty 
                 |> Sg.adapter
                 |> Sg.uniform "Bones" boneTrafos
 
@@ -591,13 +511,56 @@ module Eigi =
                     //do! Shader.lighting
                 }
 
+        let trafos =
+            let s = 20
+            [|
+                for x in -s .. s do
+                    for y in -s .. s do
+                        for z in -s .. s do
+                            yield Trafo3d.Translation(float x, float y, float z)
+            |]
+
+
+
+        let sg =
+            Sg.ofList [
+                //Sg.sphere' 5 C4b.Red 0.5
+                Sg.cylinder' 16 C4b.Red 0.04 0.8
+                    |> Sg.transform (Trafo3d.FromBasis(V3d.OIO, V3d.OOI, V3d.IOO, V3d.Zero))
+
+                Sg.cylinder' 16 C4b.Green 0.04 0.8
+                    |> Sg.transform (Trafo3d.FromBasis(V3d.OOI, V3d.IOO, V3d.OIO, V3d.Zero))
+
+                Sg.cylinder' 16 C4b.Blue 0.04 0.8
+                    |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OIO, V3d.OOI, V3d.Zero))
+
+                Sg.cone' 16 C4b.Blue 0.08 0.2
+                    |> Sg.translate 0.0 0.0 0.8
+
+                Sg.cone' 16 C4b.Red 0.08 0.2
+                    |> Sg.translate 0.0 0.0 0.8
+                    |> Sg.transform (Trafo3d.FromBasis(V3d.OIO, V3d.OOI, V3d.IOO, V3d.Zero))
+
+                Sg.cone' 16 C4b.Green 0.08 0.2
+                    |> Sg.translate 0.0 0.0 0.8
+                    |> Sg.transform (Trafo3d.FromBasis(V3d.OOI, V3d.IOO, V3d.OIO, V3d.Zero))
+            ]
+            |> Sg.scale 0.3
+            |> Sg.instanced (Mod.constant trafos)
+            |> Sg.shader  {
+                do! DefaultSurfaces.trafo
+                do! DefaultSurfaces.simpleLighting
+            }
+
+
+        let sw = System.Diagnostics.Stopwatch.StartNew()
 
         let tick =
             async {
                 while true do
                     do! Async.Sleep 30
-                    transact (fun () -> frame.Value <- (frame.Value + 1) % 36)
-                    Log.line "frame: %A" frame.Value
+                    let t = sw.Elapsed.TotalSeconds
+                    transact (fun () -> time.Value <- t)
             }
 
         Async.Start tick
