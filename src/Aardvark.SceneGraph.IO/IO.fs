@@ -61,13 +61,15 @@ module Loader =
 
     let private VertexBoneWeights = Symbol.Create "VertexBoneWeights"
     let private VertexBoneIndices = Symbol.Create "VertexBoneIndices"
+    
+    let private VertexBoneWeights4 = Symbol.Create "VertexBoneWeights4"
+    let private VertexBoneIndices4 = Symbol.Create "VertexBoneIndices4"
 
     type Mesh =
         {
+            index       : int
             geometry    : IndexedGeometry
             boneWeights : int
-            boneOffsets : M44d[]
-            boneNames   : string[]
             bounds      : Box3d
         }
 
@@ -85,6 +87,9 @@ module Loader =
 
         static member VertexBoneWeights = VertexBoneWeights
         static member VertexBoneIndices = VertexBoneIndices
+        
+        static member VertexBoneWeights4 = VertexBoneWeights4
+        static member VertexBoneIndices4 = VertexBoneIndices4
 
     type Node =
         | Trafo     of Trafo3d * Node
@@ -95,7 +100,7 @@ module Loader =
 
 
     type AnimTree = { name : string; trafo : M44d; frames : M44d[]; children : list<AnimTree> }
-    type Animation = { name : string; root : AnimTree; frames : int; framesPerSecond : float }
+    type Animation = { name : string; root : AnimTree; frames : int; framesPerSecond : float; interpolate : float -> M44d[] }
 
     type Scene = 
         {
@@ -103,7 +108,63 @@ module Loader =
             animantions : Map<string, Animation>
             bounds      : Box3d 
             root        : Node 
+            rootTrafo   : Trafo3d
         }
+
+        member x.SubstituteMaterial (mapping : Material -> Option<Material>) =
+            let rec traverse (n : Node) =
+                match n with
+                    | Empty -> 
+                        Empty
+                    | Group es ->
+                        Node.Group (List.map traverse es)
+
+                    | Leaf m ->
+                        Node.Leaf m
+
+                    | Material(m, n) ->
+                        let newMat =
+                            match mapping m with
+                                | Some m -> m
+                                | None -> m
+
+                        Material(newMat, traverse n)
+
+                    | Trafo(t, n) ->
+                        Trafo(t, traverse n)
+
+            { x with root = traverse x.root }
+
+        member x.SubstituteMesh (mapping : Mesh -> Option<Mesh>) =
+            let mapping o =
+                match mapping o with    
+                    | Some m -> { m with index = o.index }
+                    | None -> o
+
+            let newMeshes = x.meshes |> Array.map mapping
+
+            let rec replaceMeshes (n : Node) =
+                match n with
+                    | Empty -> 
+                        Empty
+                    | Leaf m ->
+                        Leaf newMeshes.[m.index]
+                    | Material(m,n) ->
+                        Material(m, replaceMeshes n)
+                    | Trafo(t, n) ->
+                        Trafo(t, replaceMeshes n)
+                    | Group es ->
+                        Group (List.map replaceMeshes es)
+                
+
+            { x with 
+                meshes = newMeshes
+                root = replaceMeshes x.root
+            }
+
+
+
+
 
     module SgSems =
         open Aardvark.Base.Ag
@@ -223,7 +284,6 @@ module Loader =
                     | Leaf mesh ->
                         Mod.constant mesh.bounds
                             
-
             member x.GlobalBoundingBox(s : Scene) =
                 s.ModelTrafo |> Mod.map (fun t -> s.bounds.Transformed t)
 
@@ -413,7 +473,23 @@ module Loader =
             let toRot3d (v : Assimp.Quaternion) =
                 Rot3d(float v.W, float v.X, float v.Y, float v.Z)
 
-            let toMesh (materials : Material[]) (m : Assimp.Mesh) : Mesh =
+            let private toV4i (arr : int[]) =
+                match arr.Length with
+                    | 0 -> V4i(-1,-1,-1,-1)
+                    | 1 -> V4i(arr.[0], -1, -1, -1)
+                    | 2 -> V4i(arr.[0], arr.[1], -1, -1)
+                    | 3 -> V4i(arr.[0], arr.[1], arr.[2], -1)
+                    | _ -> V4i(arr.[0], arr.[1], arr.[2], arr.[3])
+                    
+            let private toV4f (arr : float32[]) =
+                match arr.Length with
+                    | 0 -> V4f(0.0f, 0.0f, 0.0f, 0.0f)
+                    | 1 -> V4f(1.0f, 0.0f, 0.0f, 0.0f)
+                    | 2 -> V4f(arr.[0], arr.[1], 0.0f, 0.0f) / (arr.[0] + arr.[1])
+                    | 3 -> V4f(arr.[0], arr.[1], arr.[2], 0.0f) / (arr.[0] + arr.[1] + arr.[2])
+                    | _ -> V4f(arr.[0], arr.[1], arr.[2], arr.[3]) / (arr.[0] + arr.[1] + arr.[2] + arr.[3])
+
+            let toMesh (index : int) (boneIndices : Dict<M44d * string, int>) (materials : Material[]) (m : Assimp.Mesh) : Mesh =
                 let mat = materials.[m.MaterialIndex]
 
                 let attributes = SymDict.empty
@@ -422,6 +498,11 @@ module Loader =
                         Mode = IndexedGeometryMode.TriangleList,
                         IndexedAttributes = attributes
                     )
+
+                let getBoneIndex (offset : M44d) (name : string) = 
+                    let key = offset, name
+                    let id = boneIndices.Count
+                    boneIndices.GetOrCreate(key, fun _-> id)
 
 
                 if m.HasFaces then
@@ -436,20 +517,17 @@ module Loader =
                         attributes.[DefaultSemantic.DiffuseColorUTangents] <- m.Tangents.MapToArray(fun v -> V3f(v.X, v.Y, v.Z))
                         attributes.[DefaultSemantic.DiffuseColorVTangents] <- m.BiTangents.MapToArray(fun v -> V3f(v.X, v.Y, v.Z))
 
-                    let mutable offsetMatrices = [||]
-                    let mutable boneNames = [||]
                     let mutable maxBoneWeightCount = 0
 
                     if m.HasBones then
                         let weights = Array.create m.VertexCount [||]
                         let indices = Array.create m.VertexCount [||]
-                        offsetMatrices <- Array.create m.BoneCount M44d.Identity
-                        boneNames <- Array.create m.BoneCount ""
 
                         for bi in 0 .. m.BoneCount - 1 do
                             let bone = m.Bones.[bi]
-                            boneNames.[bi] <- bone.Name
-                            offsetMatrices.[bi] <- toM44d bone.OffsetMatrix
+                            let off = toM44d bone.OffsetMatrix
+
+                            let bi = getBoneIndex off bone.Name
                             for v in bone.VertexWeights do
                                 let w = v.Weight
                                 let vi = v.VertexID
@@ -465,6 +543,9 @@ module Loader =
 
                         attributes.[Mesh.VertexBoneIndices] <- indices
                         attributes.[Mesh.VertexBoneWeights] <- weights
+                        
+                        attributes.[Mesh.VertexBoneIndices4] <- Array.map toV4i indices
+                        attributes.[Mesh.VertexBoneWeights4] <- Array.map toV4f weights
 
 
 
@@ -503,7 +584,7 @@ module Loader =
                         res.IndexArray <- indices
 
 
-                    { geometry = res; bounds = bounds; boneWeights = maxBoneWeightCount; boneOffsets = offsetMatrices; boneNames = boneNames }
+                    { geometry = res; bounds = bounds; boneWeights = maxBoneWeightCount; index = index }
                 else
                     failwith "[Assimp] mesh has no faces"
 
@@ -639,6 +720,17 @@ module Loader =
             //printfn "%A" textureTable
             let materials = scene.Materials.MapToArray(fun m -> toMaterial textureTable m)
 
+            let boneIndices = Dict()
+
+            let state =
+                {
+                    trafo = Trafo3d.Identity
+                    materials = materials
+                    meshMaterials = scene.Meshes.MapToArray(fun m -> m.MaterialIndex)
+                    meshes = scene.Meshes.ToArray() |> Array.mapi (fun i m -> toMesh i boneIndices materials m)
+                    bounds = ref Box3d.Invalid
+                }
+
             let animations = List<Animation>()
 
             for a in scene.Animations do
@@ -722,37 +814,80 @@ module Loader =
                         Array.init frames (fun i ->
                             let t = float i / fps
                             let p = position t
-                            let r : M44d = rotation t |> Rot3d.op_Explicit
+                            let rot = rotation t
+
+                            let r : M44d = rot |> Rot3d.op_Explicit
                             let s = scale t
                             M44d.Translation(p) * r * M44d.Scale(s) 
                         )
 
                     keyFrames.[na.NodeName] <- matrices
 
-
                 let animTree = toAnimTree keyFrames scene.RootNode
+
+                let offsets = Dict<string, List<M44d * int>>()
+                for (KeyValue((off, name), i)) in boneIndices do
+                    let l = offsets.GetOrCreate(name, fun _ -> List())
+                    l.Add((off, i))
+
+                let interpolate (t : float) =
+                    let t = (duration + (t % duration)) % duration
+
+                    let frame = t * fps
+                    let f0 = int (floor frame)
+                    let f1 = (f0 + 1) % frames
+                    let t = (frame - float f0)
+
+                    let rec traverse (result : M44d[]) (bindTrafo : M44d) (currentTrafo : M44d) (f0 : int) (f1 : int) (t : float) (tree : AnimTree) =
+                        let targets =
+                            match offsets.TryGetValue tree.name with
+                                | (true, targets) -> targets :> seq<_>
+                                | _ -> Seq.empty
+
+                        let frameTrafo = 
+                            if f0 < tree.frames.Length && f1 < tree.frames.Length then 
+                                let t0 = tree.frames.[f0]
+                                let t1 = tree.frames.[f1]
+                                if t < 0.5 then t0
+                                else t1
+//                                let frame = t0 * (1.0 - t) + t1 * t
+//                                frame
+                            else 
+                                M44d.Identity
+                                //tree.trafo
+
+                        let currentTrafo = currentTrafo * frameTrafo
+                        let bindTrafo = bindTrafo * tree.trafo
+
+                        for (off, index) in targets do
+                            let off = off.Inverse //.Transposed
+                            //result.[index] <- off * (bindTrafo.Inverse * currentTrafo) * off.Inverse
+                            result.[index] <- (*bindTrafo.Inverse * off.Inverse * *) off.Inverse * bindTrafo.Inverse * currentTrafo * off
+                        
+
+                        for c in tree.children do
+                            traverse result bindTrafo currentTrafo f0 f1 t c
+                    
+                    let result = Array.create boneIndices.Count M44d.Identity
+                    traverse result M44d.Identity M44d.Identity f0 f1 t animTree
+                    result
 
                 animations.Add {
                     name = name
                     frames = frames
                     root = animTree
                     framesPerSecond = fps
-                }
-
-            let state =
-                {
-                    trafo = Trafo3d.Identity
-                    materials = materials
-                    meshMaterials = scene.Meshes.MapToArray(fun m -> m.MaterialIndex)
-                    meshes = scene.Meshes.MapToArray(fun m -> toMesh materials m)
-                    bounds = ref Box3d.Invalid
+                    interpolate = interpolate
                 }
 
             let root = traverse state scene.RootNode
-            
+            let rootTrafo = 
+                let m = toM44d scene.RootNode.Transform
+                Trafo3d(m, m.Inverse)
 
             {
                 root = root
+                rootTrafo = rootTrafo
                 bounds = !state.bounds
                 meshes = state.meshes
                 animantions = animations |> Seq.map (fun a -> a.name, a) |> Map.ofSeq
