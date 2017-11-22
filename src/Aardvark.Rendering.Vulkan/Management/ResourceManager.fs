@@ -432,18 +432,28 @@ module Resources =
     type AdaptiveDescriptor =
         | AdaptiveUniformBuffer of int * IResourceLocation<UniformBuffer>
         | AdaptiveCombinedImageSampler of int * array<Option<IResourceLocation<ImageView> * IResourceLocation<Sampler>>>
-
+        | AdaptiveStorageBuffer of int * IResourceLocation<Buffer>
 
     type BufferResource(owner : IResourceCache, key : list<obj>, device : Device, usage : VkBufferUsageFlags, input : IMod<IBuffer>) =
-        inherit ImmutableResourceLocation<IBuffer, Buffer>(
+        inherit MutableResourceLocation<IBuffer, Buffer>(
             owner, key, 
             input,
             {
-                icreate = fun (b : IBuffer) -> device.CreateBuffer(usage, b)
-                idestroy = fun b -> device.Delete b
-                ieagerDestroy = true
+                mcreate          = fun (b : IBuffer) -> device.CreateBuffer(usage, b)
+                mdestroy         = fun b -> device.Delete b
+                mtryUpdate       = fun (b : Buffer) (v : IBuffer) -> Buffer.tryUpdate v b
             }
         )
+        
+//        inherit ImmutableResourceLocation<IBuffer, Buffer>(
+//            owner, key, 
+//            input,
+//            {
+//                icreate = fun (b : IBuffer) -> device.CreateBuffer(usage, b)
+//                idestroy = fun b -> device.Delete b
+//                ieagerDestroy = true
+//            }
+//        )
 
     type IndirectBufferResource(owner : IResourceCache, key : list<obj>, device : Device, indexed : bool, input : IMod<IIndirectBuffer>) =
         inherit ImmutableResourceLocation<IIndirectBuffer, IndirectBuffer>(
@@ -743,6 +753,9 @@ module Resources =
                             match a with
                                 | Some (i,s) -> i.Acquire(); s.Acquire()
                                 | None -> ()
+
+                    | AdaptiveStorageBuffer(_,b) ->
+                        b.Acquire()
                     | AdaptiveUniformBuffer(_,b) ->
                         b.Acquire()
 
@@ -756,6 +769,8 @@ module Resources =
                             match a with
                                 | Some (i,s) -> i.Release(); s.Release()
                                 | None -> ()
+                    | AdaptiveStorageBuffer(_,b) ->
+                        b.Release()
                     | AdaptiveUniformBuffer(_,b) ->
                         b.Release()
 
@@ -773,6 +788,10 @@ module Resources =
                         match b with
                             | AdaptiveUniformBuffer(slot, b) ->
                                 UniformBuffer(slot, b.Update(AdaptiveToken.Top).handle)
+                                
+                            | AdaptiveStorageBuffer(slot, b) ->
+                                let buffer = b.Update(token).handle
+                                StorageBuffer(slot, buffer, 0L, buffer.Size)
 
                             | AdaptiveCombinedImageSampler(slot, arr) ->
                                 let arr =
@@ -968,6 +987,7 @@ module Resources =
     type BufferBindingResource(owner : IResourceCache, key : list<obj>, buffers : list<IResourceLocation<Buffer> * int64>) =
         inherit AbstractPointerResource<VertexBufferBinding>(owner, key)
 
+        let mutable last = []
 
         override x.Create() =
             base.Create()
@@ -979,6 +999,10 @@ module Resources =
 
         override x.Compute(token : AdaptiveToken) =
             let calls = buffers |> List.map (fun (b,o) -> b.Update(token).handle.Handle, o) //calls.Update token
+
+            if calls <> last then last <- calls
+            else x.NoChange()
+
             let call = new VertexBufferBinding(0, List.toArray calls)
             call
 
@@ -1261,15 +1285,31 @@ type ResourceManager(user : IResourceUser, device : Device) =
                                     | _ -> failwithf "[Vulkan] could not get uniform: %A" f
             )
 
-        let writers = 
-            values |> List.map (fun (target, m) ->
-                match m.GetType() with
-                    | ModOf tSource -> m, UniformWriters.getWriter target.offset target.fieldType tSource
-                    | t -> failwithf "[UniformBuffer] unexpected input-type %A" t
-            )
+        match layout.size, layout.fields with
+            | Dynamic, [field] ->
+                let usage = VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.StorageBufferBit
 
-        let key = (layout :> obj) :: (values |> List.map (fun (_,v) -> v :> obj))
-        uniformBufferCache.GetOrCreate(key, fun cache key -> UniformBufferResource(cache, key, device, layout, writers))
+                bufferCache.GetOrCreate([usage :> obj; values :> obj], fun cache key ->
+                    let _,value = values |> List.head
+                    let buffer =
+                        Mod.custom (fun t ->
+                            match value.GetValue t with
+                            | :? Array as a -> ArrayBuffer(a) :> IBuffer
+                            | _ -> failwith ""
+                        )
+                    new BufferResource(cache, key, device, usage, buffer)
+                ) |> Choice1Of2
+
+            | _ -> 
+                let writers = 
+                    values |> List.map (fun (target, m) ->
+                        match m.GetType() with
+                            | ModOf tSource -> m, UniformWriters.getWriter target.offset target.fieldType tSource
+                            | t -> failwithf "[UniformBuffer] unexpected input-type %A" t
+                    )
+
+                let key = (layout :> obj) :: (values |> List.map (fun (_,v) -> v :> obj))
+                uniformBufferCache.GetOrCreate(key, fun cache key -> UniformBufferResource(cache, key, device, layout, writers)) |> Choice2Of2
 
     member x.CreateDescriptorSet(layout : DescriptorSetLayout, bindings : list<AdaptiveDescriptor>) =
         descriptorSetCache.GetOrCreate([layout :> obj; bindings :> obj], fun cache key -> new DescriptorSetResource(cache, key, descriptorPool, layout, bindings))

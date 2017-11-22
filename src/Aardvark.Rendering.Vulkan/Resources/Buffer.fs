@@ -395,6 +395,7 @@ module Buffer =
 
             let deviceAlignedSize = Alignment.next align (int64 size)
             let buffer = device |> alloc flags deviceAlignedSize
+            buffer.Size <- int64 size
             let deviceMem = buffer.Memory
         
             let hostPtr = device.HostMemory.Alloc(align, deviceAlignedSize)
@@ -489,6 +490,7 @@ module Buffer =
 
             | _ ->
                 failf "unsupported buffer type %A" buffer
+  
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

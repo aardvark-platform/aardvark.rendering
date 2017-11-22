@@ -109,8 +109,13 @@ type DevicePreparedRenderObjectExtensions private() =
                         match b.Parameter with
                             | UniformBlockParameter block ->
                                 let buffer = this.CreateUniformBuffer(ro.AttributeScope, block.layout, ro.Uniforms, SymDict.empty)
-                                resources.Add buffer
-                                AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
+                                match buffer with
+                                    | Choice2Of2 buffer ->
+                                        resources.Add buffer
+                                        AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
+
+                                    | Choice1Of2 storage ->
+                                        AdaptiveDescriptor.AdaptiveStorageBuffer (i, storage) |> Some
 
                             | ImageParameter img ->
                                 match img.description with
@@ -266,8 +271,12 @@ type DevicePreparedRenderObjectExtensions private() =
                         match b.Parameter with
                             | UniformBlockParameter block ->
                                 let buffer = this.CreateUniformBuffer(Ag.emptyScope, block.layout, uniforms, SymDict.empty)
-                                resources.Add buffer
-                                AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
+                                match buffer with
+                                    | Choice2Of2 buffer -> 
+                                        resources.Add buffer
+                                        AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
+                                    | Choice1Of2 buffer -> 
+                                        AdaptiveDescriptor.AdaptiveStorageBuffer (i, buffer) |> Some
 
                             | ImageParameter img ->
                                 match img.description with
