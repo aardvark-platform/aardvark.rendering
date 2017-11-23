@@ -2,20 +2,62 @@
 
 open System
 open System.Runtime.CompilerServices
-open Aardvark.Application
 open System.Windows.Forms
+open Aardvark.Application
 open Aardvark.Base
+open Aardvark.Base.Incremental
 
-type SimpleRenderWindow() =
+type SimpleRenderWindow() as this =
     inherit Form()
 
     let ctrl = new RenderControl()
+
+    
 
     do
         base.ClientSize <- System.Drawing.Size(1024, 768)
         ctrl.Dock <- DockStyle.Fill
         base.Controls.Add ctrl
         base.Text <- "Aardvark rocks \\o/"
+
+        let alt = ctrl.Keyboard.IsDown(Keys.LeftAlt)
+        let shift = ctrl.Keyboard.IsDown(Keys.LeftShift)
+        ctrl.Keyboard.KeyDown(Keys.Enter).Values.Add (fun () ->
+            if Mod.force alt && Mod.force shift then
+                this.ToggleFullScreen()
+        )
+
+    let mutable lastBorderStyle = FormBorderStyle.None
+    let mutable lastState = FormWindowState.Normal
+
+    member private x.ToggleFullScreen() : unit =
+        x.Invoke (new System.Action (fun () -> 
+            x.SuspendLayout()
+            match x.FormBorderStyle with
+                | FormBorderStyle.None ->
+                    x.FormBorderStyle <- lastBorderStyle
+                    x.WindowState <- lastState
+                | _ ->
+                    lastBorderStyle <- x.FormBorderStyle
+                    lastState <- x.WindowState
+                    x.FormBorderStyle <- FormBorderStyle.None
+
+                    // hack: does not react when already maximized otherwise
+                    if lastState = FormWindowState.Maximized then
+                        x.WindowState <- FormWindowState.Normal
+
+                    x.WindowState <- FormWindowState.Maximized
+            x.ResumeLayout()
+        )) |> ignore
+
+    member x.Fullscreen
+        with get() = 
+            x.WindowState = FormWindowState.Maximized && x.FormBorderStyle = FormBorderStyle.None
+
+        and set (v : bool) =
+            if x.Fullscreen <> v then
+                x.ToggleFullScreen()
+                    
 
     member x.Control = ctrl
 
