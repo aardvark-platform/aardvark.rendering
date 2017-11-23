@@ -538,13 +538,13 @@ type AbstractRenderTask() =
 
  
     let runtimeValueCache = Dict.empty
-    let currentOutput = lazy (Mod.init { framebuffer = Unchecked.defaultof<_>; images = Map.empty; overrides = Map.empty; viewport = Box2i(V2i.OO, V2i.II) })
+    let currentOutput = Mod.init { framebuffer = Unchecked.defaultof<_>; images = Map.empty; overrides = Map.empty; viewport = Box2i(V2i.OO, V2i.II) }
     let tryGetRuntimeValue (name : string) =
         runtimeValueCache.GetOrCreate(name, fun name ->
             // TODO: different runtime-types
             match Map.tryFind name runtimeUniforms with
                 | Some f -> 
-                    currentOutput.Value |> Mod.map f :> IMod |> Some
+                    currentOutput |> Mod.map f :> IMod |> Some
                 | None -> 
                     None
         )
@@ -584,8 +584,7 @@ type AbstractRenderTask() =
     member private x.UseValues (token : AdaptiveToken, output : OutputDescription, f : AdaptiveToken -> 'a) =
         let toReset = List()
         transact (fun () -> 
-            if currentOutput.IsValueCreated then
-                currentOutput.Value.Value <- output
+            currentOutput.Value <- output
 
             for (name, value) in Map.toSeq output.overrides do
                 match hooks.TryGetValue(name) with
