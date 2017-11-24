@@ -69,7 +69,7 @@ module Loader =
         {
             index       : int
             geometry    : IndexedGeometry
-            boneWeights : int
+            meshTrafoId : int
             bounds      : Box3d
         }
 
@@ -99,8 +99,11 @@ module Loader =
         | Empty
 
 
-    type AnimTree = { name : string; trafo : M44d; frames : M44d[]; children : list<AnimTree> }
+    type AnimTree = { name : string; trafo : M44d; frames : M44d[]; children : list<AnimTree>; meshNames : string[] }
     type Animation = { name : string; root : AnimTree; frames : int; framesPerSecond : float; interpolate : float -> M44d[] }
+
+
+    
 
     type Scene = 
         {
@@ -241,6 +244,14 @@ module Loader =
                         ro.VertexAttributes <- mesh
                         ro.Mode <- Mod.constant mesh.geometry.Mode
                         ro.DrawCallInfos <- Mod.constant [call]
+
+                        let uniforms =
+                            UniformProvider.ofList [
+                                "MeshTrafoBone", Mod.constant mesh.meshTrafoId :> IMod
+                            ]
+
+                        ro.Uniforms <- UniformProvider.union uniforms ro.Uniforms
+
                         if indexed then 
                             let index = mesh.geometry.IndexArray
                             let t = index.GetType().GetElementType()
@@ -489,7 +500,7 @@ module Loader =
                     | 3 -> V4f(arr.[0], arr.[1], arr.[2], 0.0f) / (arr.[0] + arr.[1] + arr.[2])
                     | _ -> V4f(arr.[0], arr.[1], arr.[2], arr.[3]) / (arr.[0] + arr.[1] + arr.[2] + arr.[3])
 
-            let toMesh (index : int) (boneIndices : Dict<M44d * string, int>) (materials : Material[]) (m : Assimp.Mesh) : Mesh =
+            let toMesh (index : int) (boneIndices : Dict<string * string, M44d * int>) (materials : Material[]) (m : Assimp.Mesh) : Mesh =
                 let mat = materials.[m.MaterialIndex]
 
                 let attributes = SymDict.empty
@@ -499,16 +510,22 @@ module Loader =
                         IndexedAttributes = attributes
                     )
 
-                let getBoneIndex (offset : M44d) (name : string) = 
-                    let key = offset, name
-                    let id = boneIndices.Count
-                    boneIndices.GetOrCreate(key, fun _-> id)
 
 
                 if m.HasFaces then
+                    
                     let mutable bounds = Box3d.Invalid
                     if m.HasVertices then
                         attributes.[DefaultSemantic.Positions] <- m.Vertices.MapToArray(fun v -> bounds.ExtendBy(V3d(v.X, v.Y, v.Z)); V3f(v.X, v.Y, v.Z))
+                    
+                    let getBoneIndex (meshName : string) (boneName : string) (off : M44d) = 
+                        let key = meshName, boneName
+                        let id = boneIndices.Count
+                        boneIndices.GetOrCreate(key, fun _-> off, id) |> snd
+
+                    let meshTrafoId = getBoneIndex m.Name "" M44d.Identity
+                    let mesh = { geometry = res; bounds = bounds; index = index; meshTrafoId = meshTrafoId }
+
 
                     if m.HasNormals then
                         attributes.[DefaultSemantic.Normals] <- m.Normals.MapToArray(fun v -> V3f(v.X, v.Y, v.Z))
@@ -517,36 +534,47 @@ module Loader =
                         attributes.[DefaultSemantic.DiffuseColorUTangents] <- m.Tangents.MapToArray(fun v -> V3f(v.X, v.Y, v.Z))
                         attributes.[DefaultSemantic.DiffuseColorVTangents] <- m.BiTangents.MapToArray(fun v -> V3f(v.X, v.Y, v.Z))
 
-                    let mutable maxBoneWeightCount = 0
+
+                    let mutable boneNames = [||]
+
 
                     if m.HasBones then
                         let weights = Array.create m.VertexCount [||]
                         let indices = Array.create m.VertexCount [||]
+                        
+
+                        boneNames <- Array.create m.BoneCount ""
 
                         for bi in 0 .. m.BoneCount - 1 do
                             let bone = m.Bones.[bi]
+                            
+                            // mesh -> bone
                             let off = toM44d bone.OffsetMatrix
+                            let bi = getBoneIndex m.Name bone.Name off
 
-                            let bi = getBoneIndex off bone.Name
                             for v in bone.VertexWeights do
                                 let w = v.Weight
                                 let vi = v.VertexID
-
                                 weights.[vi] <- Array.append weights.[vi] [|w|]
                                 indices.[vi] <- Array.append indices.[vi] [|bi|]
 
                         for i in 0 .. m.VertexCount - 1 do
                             let id = weights.[i].CreatePermutationQuickSortDescending()
-                            maxBoneWeightCount <- max maxBoneWeightCount id.Length
                             weights.[i] <- id |> Array.map (Array.get weights.[i])
                             indices.[i] <- id |> Array.map (Array.get indices.[i])
 
                         attributes.[Mesh.VertexBoneIndices] <- indices
                         attributes.[Mesh.VertexBoneWeights] <- weights
-                        
                         attributes.[Mesh.VertexBoneIndices4] <- Array.map toV4i indices
                         attributes.[Mesh.VertexBoneWeights4] <- Array.map toV4f weights
 
+                    else
+                        ()
+//                    else
+//                        attributes.[Mesh.VertexBoneIndices] <- 
+//                        attributes.[Mesh.VertexBoneWeights] <- weights
+//                        attributes.[Mesh.VertexBoneIndices4] <- Array.map toV4i indices
+//                        attributes.[Mesh.VertexBoneWeights4] <- Array.map toV4f weights
 
 
                     let semantics = mat.textures |> Map.toSeq |> Seq.map (fun (k,v) -> v.coordIndex, k) |> Map.ofSeq
@@ -583,8 +611,9 @@ module Loader =
                     if not identity then
                         res.IndexArray <- indices
 
-
-                    { geometry = res; bounds = bounds; boneWeights = maxBoneWeightCount; index = index }
+                    
+                    
+                    mesh
                 else
                     failwith "[Assimp] mesh has no faces"
 
@@ -669,7 +698,7 @@ module Loader =
 
             node
             
-        let rec toAnimTree (keyFrames : Dict<string, array<M44d>>) (n : Assimp.Node) =
+        let rec toAnimTree (meshes : Assimp.Mesh[]) (keyFrames : Dict<string, array<M44d>>) (n : Assimp.Node) =
             let name = n.Name
 
             let frames =
@@ -678,9 +707,11 @@ module Loader =
                     | _ -> [||]
 
             let children =
-                n.Children |> Seq.map (toAnimTree keyFrames) |> Seq.toList
+                n.Children |> Seq.map (toAnimTree meshes keyFrames) |> Seq.toList
 
-            { name = name; trafo = toM44d n.Transform; frames = frames; children = children }
+            let meshNames = n.MeshIndices.MapToArray (fun i -> meshes.[i].Name)
+
+            { name = name; trafo = toM44d n.Transform; frames = frames; children = children; meshNames = meshNames }
                         
 
 
@@ -730,6 +761,21 @@ module Loader =
                     meshes = scene.Meshes.ToArray() |> Array.mapi (fun i m -> toMesh i boneIndices materials m)
                     bounds = ref Box3d.Invalid
                 }
+
+            let initialTrafosInv = 
+                let store = Dict<string, M44d>()
+                let rec trafos (currentTrafo : M44d) (tree : Assimp.Node) =
+                    let own = toM44d tree.Transform
+                    let currentTrafo = currentTrafo * own
+
+                    for mi in tree.MeshIndices do
+                        store.[scene.Meshes.[mi].Name] <- currentTrafo.Inverse
+
+                    for c in tree.Children do
+                        trafos currentTrafo c
+
+                trafos M44d.Identity scene.RootNode
+                store
 
             let animations = List<Animation>()
 
@@ -823,12 +869,21 @@ module Loader =
 
                     keyFrames.[na.NodeName] <- matrices
 
-                let animTree = toAnimTree keyFrames scene.RootNode
+                let animTree = toAnimTree (Seq.toArray scene.Meshes) keyFrames scene.RootNode
 
-                let offsets = Dict<string, List<M44d * int>>()
-                for (KeyValue((off, name), i)) in boneIndices do
-                    let l = offsets.GetOrCreate(name, fun _ -> List())
-                    l.Add((off, i))
+
+
+                let offsets = Dict<string, List<M44d * M44d * int>>()
+                for (KeyValue((meshName, boneName), (off, i))) in boneIndices do
+                    let l = offsets.GetOrCreate(boneName, fun _ -> List())
+
+                    let meshTrafoInv =
+                        match initialTrafosInv.TryGetValue meshName with
+                            | (true, initial) -> initial
+                            | _ -> M44d.Identity
+
+                    l.Add((meshTrafoInv, off, i))
+
 
                 let interpolate (t : float) =
                     let t = (duration + (t % duration)) % duration
@@ -838,7 +893,8 @@ module Loader =
                     let f1 = (f0 + 1) % frames
                     let t = (frame - float f0)
 
-                    let rec traverse (result : M44d[]) (bindTrafo : M44d) (currentTrafo : M44d) (f0 : int) (f1 : int) (t : float) (tree : AnimTree) =
+                    let rec traverse (result : M44d[]) (currentTrafo : M44d) (f0 : int) (f1 : int) (t : float) (tree : AnimTree) =
+
                         let targets =
                             match offsets.TryGetValue tree.name with
                                 | (true, targets) -> targets :> seq<_>
@@ -848,28 +904,33 @@ module Loader =
                             if f0 < tree.frames.Length && f1 < tree.frames.Length then 
                                 let t0 = tree.frames.[f0]
                                 let t1 = tree.frames.[f1]
-                                if t < 0.5 then t0
-                                else t1
-//                                let frame = t0 * (1.0 - t) + t1 * t
-//                                frame
+                                let frame = t0 * (1.0 - t) + t1 * t
+                                frame
                             else 
-                                M44d.Identity
-                                //tree.trafo
+                                tree.trafo
 
                         let currentTrafo = currentTrafo * frameTrafo
-                        let bindTrafo = bindTrafo * tree.trafo
 
-                        for (off, index) in targets do
-                            let off = off.Inverse //.Transposed
-                            //result.[index] <- off * (bindTrafo.Inverse * currentTrafo) * off.Inverse
-                            result.[index] <- (*bindTrafo.Inverse * off.Inverse * *) off.Inverse * bindTrafo.Inverse * currentTrafo * off
+                        for meshName in tree.meshNames do
+                            match boneIndices.TryGetValue((meshName, "")) with
+                                | (true, (_,i)) ->
+                                    let meshTrafoInv =
+                                        match initialTrafosInv.TryGetValue meshName with
+                                            | (true, initial) -> initial
+                                            | _ -> M44d.Identity
+                                    result.[i] <- meshTrafoInv * currentTrafo
+
+                                | _ ->
+                                    ()
+
+                        for (meshTrafoInv, off, index) in targets do
+                            result.[index] <- meshTrafoInv * currentTrafo * off
                         
-
                         for c in tree.children do
-                            traverse result bindTrafo currentTrafo f0 f1 t c
+                            traverse result currentTrafo f0 f1 t c
                     
                     let result = Array.create boneIndices.Count M44d.Identity
-                    traverse result M44d.Identity M44d.Identity f0 f1 t animTree
+                    traverse result M44d.Identity f0 f1 t animTree
                     result
 
                 animations.Add {
