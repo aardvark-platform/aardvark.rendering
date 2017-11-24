@@ -21,6 +21,7 @@ type BiNormalAttribute() = inherit SemanticAttribute(DefaultSemantic.DiffuseColo
 type TangentAttribute() = inherit SemanticAttribute(DefaultSemantic.DiffuseColorVTangents.ToString())
 type ColorAttribute() = inherit SemanticAttribute(DefaultSemantic.Colors.ToString())
 type InstanceTrafoAttribute() = inherit SemanticAttribute(DefaultSemantic.InstanceTrafo.ToString())
+type InstanceTrafoInvAttribute() = inherit SemanticAttribute(DefaultSemantic.InstanceTrafoInv.ToString())
 
 type FShadeEffect = Effect
 

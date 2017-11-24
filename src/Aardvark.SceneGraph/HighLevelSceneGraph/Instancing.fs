@@ -36,9 +36,6 @@ module Instancing =
     module Effect =
         open FShade
         open FShade.Imperative
-        
-        [<GLSLIntrinsic("mat3({0})")>]
-        let conv (m : M44d) : M33d = failwith ""
 
         let private cache = System.Runtime.CompilerServices.ConditionalWeakTable<Effect, Effect>()
 
@@ -64,15 +61,15 @@ module Instancing =
                                             | "ModelViewTrafoInv"
                                             | "ModelViewProjTrafoInv" ->
                                                 let o : Expr<M44d> = Expr.ReadInput(ParameterKind.Uniform, typ, name) |> Expr.Cast
-                                                let n : Expr<M44d> = Expr.ReadInput(ParameterKind.Input, typ, string DefaultSemantic.InstanceTrafo) |> Expr.Cast
+                                                let n : Expr<M44d> = Expr.ReadInput(ParameterKind.Input, typ, string DefaultSemantic.InstanceTrafoInv) |> Expr.Cast
 
-                                                Some <@@  (%n).Inverse * %o @@>
+                                                Some <@@  %n * %o @@>
 
                                             | "NormalMatrix" ->
                                                 let o : Expr<M33d> = Expr.ReadInput(ParameterKind.Uniform, typ, name) |> Expr.Cast
-                                                let n : Expr<M44d> = Expr.ReadInput(ParameterKind.Input, typ, string DefaultSemantic.InstanceTrafo) |> Expr.Cast
+                                                let n : Expr<M44d> = Expr.ReadInput(ParameterKind.Input, typ, string DefaultSemantic.InstanceTrafoInv) |> Expr.Cast
                                                     
-                                                Some <@@  %o * conv %n @@>
+                                                Some <@@ %o * (m33d %n).Transposed @@>
                                             | _ ->
                                                 None
                                     | _ ->
@@ -85,7 +82,7 @@ module Instancing =
     [<Semantic>]
     type InstancingSem() =
 
-        static let merge (inner : Trafo3d) (instances : M44f[]) =
+        static let mergeFW (inner : Trafo3d) (instances : M44f[]) =
             instances 
             |> Array.map (fun i ->
                 M44d.op_Explicit i * inner.Forward |> M44f.op_Explicit
@@ -93,10 +90,19 @@ module Instancing =
             |> ArrayBuffer 
             :> IBuffer
 
+        static let mergeBW (inner : Trafo3d) (instances : M44f[]) =
+            instances 
+            |> Array.map (fun i ->
+                inner.Backward * (M44d.op_Explicit i).Inverse |> M44f.op_Explicit
+            ) 
+            |> ArrayBuffer 
+            :> IBuffer
+
         static let instanceTrafoCache = 
-            Cache2<IMod<Trafo3d>, IMod<M44f[]>, BufferView>(Ag.emptyScope, fun inner instances ->
-                let data = Mod.map2 merge inner instances
-                BufferView(data, typeof<M44f>)
+            Cache2<IMod<Trafo3d>, IMod<M44f[]>, BufferView * BufferView>(Ag.emptyScope, fun inner instances ->
+                let fw = Mod.map2 mergeFW inner instances
+                let bw = Mod.map2 mergeBW inner instances
+                BufferView(fw, typeof<M44f>), BufferView(bw, typeof<M44f>)
             )
 
         static let rec applyTrafos (model : IMod<Trafo3d>) (m : IMod<M44f[]>) (o : IRenderObject) =
@@ -136,13 +142,14 @@ module Instancing =
                             | _ -> Mod.constant Trafo3d.Identity
 
                     //let buffer = m |> Mod.map2 (fun v -> ArrayBuffer(v) :> IBuffer) 
-                    let view = instanceTrafoCache.Invoke(objectModel, m) //BufferView(buffer, typeof<M44f>)
+                    let forward, backward = instanceTrafoCache.Invoke(objectModel, m) //BufferView(buffer, typeof<M44f>)
 
                     let att =
                         { new IAttributeProvider with
                             member x.Dispose() = o.InstanceAttributes.Dispose()
                             member x.TryGetAttribute sem =
-                                if sem = DefaultSemantic.InstanceTrafo then Some view
+                                if sem = DefaultSemantic.InstanceTrafo then Some forward
+                                elif sem = DefaultSemantic.InstanceTrafoInv then Some backward
                                 else o.InstanceAttributes.TryGetAttribute sem
                             member x.All = Seq.empty
                         }
@@ -151,7 +158,7 @@ module Instancing =
                         { new IAttributeProvider with
                             member x.Dispose() = o.VertexAttributes.Dispose()
                             member x.TryGetAttribute sem =
-                                if sem = DefaultSemantic.InstanceTrafo then None
+                                if sem = DefaultSemantic.InstanceTrafo || sem = DefaultSemantic.InstanceTrafoInv then None
                                 else o.VertexAttributes.TryGetAttribute sem
                             member x.All = Seq.empty
                         }

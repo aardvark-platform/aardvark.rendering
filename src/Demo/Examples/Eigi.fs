@@ -166,16 +166,14 @@ module Eigi =
         // transform a vertex with all its attributes
         let transform (v : Vertex) =
             vertex {
-                let nm = uniform.ModelViewTrafoInv.Transposed
-                
                 let light = uniform.LightLocation
                 let wp = uniform.ModelTrafo.TransformPos(v.pos.XYZ)
 
                 return {
                     pos = uniform.ModelViewProjTrafo * v.pos
-                    n = nm.TransformDir v.n
-                    b = nm.TransformDir v.b
-                    t = nm.TransformDir v.t
+                    n = uniform.ModelViewTrafoInv.TransposedTransformDir v.n
+                    b = uniform.ModelViewTrafo.TransformDir v.b
+                    t = uniform.ModelViewTrafo.TransformDir v.t
                     tc = v.tc
                     sp = v.sp
 
@@ -293,7 +291,15 @@ module Eigi =
                 let model = uniform.Bones.[uniform.MeshTrafoBone]
                 let skin = getBoneTransform v.vbi v.vbw
                 let mat = model * skin
-                return { v with pos = mat * v.pos; n = mat.TransformDir(v.n); b = mat.TransformDir(v.b); t = mat.TransformDir(v.t) }
+
+                return { 
+                    pos = mat * v.pos
+                    n = mat.TransformDir(v.n)
+                    b = mat.TransformDir(v.b)
+                    t = mat.TransformDir(v.t) 
+                    vbi = V4i(-1,-1,-1,-1)
+                    vbw = V4d.Zero
+                }
             }
                 
 
@@ -495,7 +501,7 @@ module Eigi =
         let getBoneTransformations (a : Loader.Animation) (range : Range1d) (time : float) =
             let frame = (time * a.framesPerSecond) % (range.Max - range.Min) + range.Min
             let time = frame / a.framesPerSecond
-            Log.line "time: %.3f" time
+            //Log.line "time: %.3f" time
             a.interpolate time |> Array.map M44f.op_Explicit
 
         let distanceToLine (p0 : V3d) (p1 : V3d) (v : V3d) =
