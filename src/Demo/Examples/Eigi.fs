@@ -223,8 +223,8 @@ module Eigi =
                 let spec        = Vec.dot (Vec.reflect l n) (-c) |> clamp 0.0 1.0
 
                 let diff    = v.color
-                let specc   = V3d.III
-                let shine   = 32.0
+                let specc   = v.spec.XYZ
+                let shine   = uniform.Shininess
 
 
                 let color = diff.XYZ * diffuse  +  specc * pow spec shine
@@ -247,8 +247,11 @@ module Eigi =
 
         type Vertex =
             {
-                [<Position>] pos : V4d
-                [<Normal>] n : V3d
+                [<Position>]    pos : V4d
+                [<Normal>]      n : V3d
+                [<BiNormal>]    b : V3d
+                [<Tangent>]     t : V3d
+
                 [<Semantic("VertexBoneIndices4")>] vbi : V4i
                 [<Semantic("VertexBoneWeights4")>] vbw : V4d
 
@@ -256,36 +259,41 @@ module Eigi =
 
         type UniformScope with
             member x.Bones : M44d[] = x?StorageBuffer?Bones
+            member x.MeshTrafoBone : int = x?MeshTrafoBone
 
-        [<ReflectedDefinition; Inline>]
-        let boneTrafo (i : int) (w : float) (v : V4d) =
-            if i < 0 then v
-            else w * (uniform.Bones.[i] * v)
-                
         [<ReflectedDefinition>]
-        let boneTransform (i : V4i) (w : V4d) (vec : V4d) =
-            let mutable res = V4d.Zero
+        let getBoneTransform (i : V4i) (w : V4d) =
+            let mutable res = M44d.Zero
+            let mutable wSum = 0.0
 
             if i.X >= 0 then 
-                res <- res + w.X * (uniform.Bones.[i.X] * vec)
+                res <- res + w.X * uniform.Bones.[i.X]
+                wSum <- wSum + w.X
 
             if i.Y >= 0 then 
-                res <- res + w.Y * (uniform.Bones.[i.Y] * vec)
+                res <- res + w.Y * uniform.Bones.[i.Y]
+                wSum <- wSum + w.Y
 
             if i.Z >= 0 then 
-                res <- res + w.Z * (uniform.Bones.[i.Z] * vec)
+                res <- res + w.Z * uniform.Bones.[i.Z]
+                wSum <- wSum + w.Z
 
             if i.W >= 0 then 
-                res <- res + w.W * (uniform.Bones.[i.W] * vec)
+                res <- res + w.W * uniform.Bones.[i.W]
+                wSum <- wSum + w.W
 
-            res
+
+            let id = M44d.Identity
+            if wSum >= 1.0 then res
+            elif wSum <= 0.0 then id
+            else (1.0 - wSum) * id + wSum * res
 
         let skinning (v : Vertex) =
             vertex {
-                let m = boneTransform v.vbi v.vbw v.pos
-                //let n = boneTransform v.vbi v.vbw (V4d(v.n, 0.0)) |> Vec.xyz
-                return { v with pos = m }
-
+                let model = uniform.Bones.[uniform.MeshTrafoBone]
+                let skin = getBoneTransform v.vbi v.vbw
+                let mat = model * skin
+                return { v with pos = mat * v.pos; n = mat.TransformDir(v.n); b = mat.TransformDir(v.b); t = mat.TransformDir(v.t) }
             }
                 
 
@@ -448,10 +456,35 @@ module Eigi =
 
 //        let relevant = scene.meshes |> Seq.collect (fun m -> m.boneNames) |> Set.ofSeq
 //      
+
+     
+
+        let idle    = Range1d(50.0, 100.0)
+        let walk    = Range1d(0.0, 36.0)
+        let attack  = Range1d(150.0, 180.0)
+        let die     = Range1d(200.0, 230.0)
+
+        let arr = [| idle; walk; attack; die |] //; walk; attack; die |]
+        let mutable index = 0
+
+        let animation = Mod.init ("combinedAnim_0", arr.[index])
+
+
+        let nextAnimation() =
+            index <- (index + 1) % arr.Length
+            let range = arr.[index]
+            transact (fun () -> animation.Value <- ("combinedAnim_0", range))
+
         let frame = 
-            time |> Mod.map (fun t -> 
-                ((t * 24.0) % 36.0) |> int
-            )
+            Mod.map2 (fun time (name : string, range : Range1d) -> 
+                match Map.tryFind name scene.animantions with
+                    | Some a ->
+                        let frame = (time * a.framesPerSecond) % (range.Max - range.Min) + range.Min
+                        int frame
+                    | None ->
+                        0
+            ) time animation
+
         let animScene = 
             scene.animantions 
                 |> Map.toSeq 
@@ -459,10 +492,9 @@ module Eigi =
                 |> Seq.tryHead
                 |> Option.defaultValue Sg.empty
 
-        let animation = Mod.init "combinedAnim_0"
-
-        let getBoneTransformations (a : Loader.Animation) (time : float) =
-            let time = ((time * a.framesPerSecond) % 36.0) / a.framesPerSecond
+        let getBoneTransformations (a : Loader.Animation) (range : Range1d) (time : float) =
+            let frame = (time * a.framesPerSecond) % (range.Max - range.Min) + range.Min
+            let time = frame / a.framesPerSecond
             Log.line "time: %.3f" time
             a.interpolate time |> Array.map M44f.op_Explicit
 
@@ -472,10 +504,10 @@ module Eigi =
 
         let boneTrafos =
             adaptive {
-                let! anim = animation
-                match Map.tryFind anim scene.animantions with
+                let! (name, range) = animation
+                match Map.tryFind name scene.animantions with
                     | Some a ->
-                        return! time |> Mod.map (getBoneTransformations a)
+                        return! time |> Mod.map (getBoneTransformations a range)
                     | None ->
                         return [||]
             }
@@ -490,70 +522,72 @@ module Eigi =
         
         //let scene = { scene with root = removeTrafos scene.root }
 
+        let trafos =
+            let s = V2i(12, 50)
+            [|
+                for x in -s.X .. s.X do
+                    for y in -s.Y .. s.Y do
+                            yield Trafo3d.Translation(float x, float y, 0.0)
+            |]
+
         let sg = 
-            Sg.empty 
+            scene 
                 |> Sg.adapter
                 |> Sg.uniform "Bones" boneTrafos
 
-                |> Sg.andAlso (Sg.translate 0.0 0.0 0.05 animScene)
+                //|> Sg.andAlso (Sg.translate 0.0 0.0 0.05 animScene)
                 // transform the model (has Y up GL style coords)
 
                 |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero) * Trafo3d.Scale 20.0)
-
+                |> Sg.instanced (Mod.constant trafos)
                 // apply all shaders we have
                 |> Sg.shader {
                     do! Skinning.skinning
                     do! Shader.transform
                     do! Shader.diffuseTexture
                     do! Shader.alphaTest
-                    //do! Shader.specularTexture
-                    //do! Shader.normalMapping
-                    //do! Shader.lighting
+                    do! Shader.specularTexture
+                    do! Shader.normalMapping
+                    do! Shader.lighting
                 }
-
-        let trafos =
-            let s = 20
-            [|
-                for x in -s .. s do
-                    for y in -s .. s do
-                        for z in -s .. s do
-                            yield Trafo3d.Translation(float x, float y, float z)
-            |]
-
-
-
-        let sg =
-            Sg.ofList [
-                //Sg.sphere' 5 C4b.Red 0.5
-                Sg.cylinder' 16 C4b.Red 0.04 0.8
-                    |> Sg.transform (Trafo3d.FromBasis(V3d.OIO, V3d.OOI, V3d.IOO, V3d.Zero))
-
-                Sg.cylinder' 16 C4b.Green 0.04 0.8
-                    |> Sg.transform (Trafo3d.FromBasis(V3d.OOI, V3d.IOO, V3d.OIO, V3d.Zero))
-
-                Sg.cylinder' 16 C4b.Blue 0.04 0.8
-                    |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OIO, V3d.OOI, V3d.Zero))
-
-                Sg.cone' 16 C4b.Blue 0.08 0.2
-                    |> Sg.translate 0.0 0.0 0.8
-
-                Sg.cone' 16 C4b.Red 0.08 0.2
-                    |> Sg.translate 0.0 0.0 0.8
-                    |> Sg.transform (Trafo3d.FromBasis(V3d.OIO, V3d.OOI, V3d.IOO, V3d.Zero))
-
-                Sg.cone' 16 C4b.Green 0.08 0.2
-                    |> Sg.translate 0.0 0.0 0.8
-                    |> Sg.transform (Trafo3d.FromBasis(V3d.OOI, V3d.IOO, V3d.OIO, V3d.Zero))
-            ]
-            |> Sg.scale 0.3
-            |> Sg.instanced (Mod.constant trafos)
-            |> Sg.shader  {
-                do! DefaultSurfaces.trafo
-                do! DefaultSurfaces.simpleLighting
-            }
+//
+//
+//
+//
+//        let sg =
+//            Sg.ofList [
+//                //Sg.sphere' 5 C4b.Red 0.5
+//                Sg.cylinder' 16 C4b.Red 0.04 0.8
+//                    |> Sg.transform (Trafo3d.FromBasis(V3d.OIO, V3d.OOI, V3d.IOO, V3d.Zero))
+//
+//                Sg.cylinder' 16 C4b.Green 0.04 0.8
+//                    |> Sg.transform (Trafo3d.FromBasis(V3d.OOI, V3d.IOO, V3d.OIO, V3d.Zero))
+//
+//                Sg.cylinder' 16 C4b.Blue 0.04 0.8
+//                    |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OIO, V3d.OOI, V3d.Zero))
+//
+//                Sg.cone' 16 C4b.Blue 0.08 0.2
+//                    |> Sg.translate 0.0 0.0 0.8
+//
+//                Sg.cone' 16 C4b.Red 0.08 0.2
+//                    |> Sg.translate 0.0 0.0 0.8
+//                    |> Sg.transform (Trafo3d.FromBasis(V3d.OIO, V3d.OOI, V3d.IOO, V3d.Zero))
+//
+//                Sg.cone' 16 C4b.Green 0.08 0.2
+//                    |> Sg.translate 0.0 0.0 0.8
+//                    |> Sg.transform (Trafo3d.FromBasis(V3d.OOI, V3d.IOO, V3d.OIO, V3d.Zero))
+//            ]
+//            |> Sg.scale 0.3
+//            |> Sg.instanced (Mod.constant trafos)
+//            |> Sg.shader  {
+//                do! DefaultSurfaces.trafo
+//                do! DefaultSurfaces.simpleLighting
+//            }
 
 
         let sw = System.Diagnostics.Stopwatch.StartNew()
+
+        
 
         let tick =
             async {
@@ -561,6 +595,10 @@ module Eigi =
                     do! Async.Sleep 30
                     let t = sw.Elapsed.TotalSeconds
                     transact (fun () -> time.Value <- t)
+
+                    if t > 15.0 then
+                        nextAnimation()
+                        sw.Restart()
             }
 
         Async.Start tick

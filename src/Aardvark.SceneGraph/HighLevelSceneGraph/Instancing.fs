@@ -30,6 +30,58 @@ open Aardvark.SceneGraph
 
 
 module Instancing = 
+    open Microsoft.FSharp.Quotations
+
+
+    module Effect =
+        open FShade
+        open FShade.Imperative
+        
+        [<GLSLIntrinsic("mat3({0})")>]
+        let conv (m : M44d) : M33d = failwith ""
+
+        let private cache = System.Runtime.CompilerServices.ConditionalWeakTable<Effect, Effect>()
+
+        let inlineTrafo (e : Effect) =
+            lock cache (fun () ->
+                match cache.TryGetValue e with
+                    | (true, e) -> e
+                    | _ ->
+                        let res = 
+                            e |> Effect.substituteUniforms (fun name typ index ->
+                                match index with
+                                    | None ->
+                                        match name with
+                                            | "ModelTrafo"
+                                            | "ModelViewTrafo"
+                                            | "ModelViewProjTrafo" ->
+                                                let o : Expr<M44d> = Expr.ReadInput(ParameterKind.Uniform, typ, name) |> Expr.Cast
+                                                let n : Expr<M44d> = Expr.ReadInput(ParameterKind.Input, typ, string DefaultSemantic.InstanceTrafo) |> Expr.Cast
+
+                                                Some <@@  %o * %n @@>
+                                                
+                                            | "ModelTrafoInv"
+                                            | "ModelViewTrafoInv"
+                                            | "ModelViewProjTrafoInv" ->
+                                                let o : Expr<M44d> = Expr.ReadInput(ParameterKind.Uniform, typ, name) |> Expr.Cast
+                                                let n : Expr<M44d> = Expr.ReadInput(ParameterKind.Input, typ, string DefaultSemantic.InstanceTrafo) |> Expr.Cast
+
+                                                Some <@@  (%n).Inverse * %o @@>
+
+                                            | "NormalMatrix" ->
+                                                let o : Expr<M33d> = Expr.ReadInput(ParameterKind.Uniform, typ, name) |> Expr.Cast
+                                                let n : Expr<M44d> = Expr.ReadInput(ParameterKind.Input, typ, string DefaultSemantic.InstanceTrafo) |> Expr.Cast
+                                                    
+                                                Some <@@  %o * conv %n @@>
+                                            | _ ->
+                                                None
+                                    | _ ->
+                                        None
+                            )
+                        cache.Add(e, res)
+                        res
+            )
+
     [<Semantic>]
     type InstancingSem() =
 
@@ -53,10 +105,7 @@ module Instancing =
                     let newSurface = 
                         match o.Surface with
                             | Surface.FShadeSimple e ->
-                                FShade.Effect.compose [
-                                    FShade.Effect.ofFunction DefaultSurfaces.instanceTrafo
-                                    e
-                                ]
+                                Effect.inlineTrafo e
                             | s ->
                                 failwithf "[Sg] cannot instance object with surface: %A" s
 
@@ -98,6 +147,15 @@ module Instancing =
                             member x.All = Seq.empty
                         }
 
+                    let vatt =
+                        { new IAttributeProvider with
+                            member x.Dispose() = o.VertexAttributes.Dispose()
+                            member x.TryGetAttribute sem =
+                                if sem = DefaultSemantic.InstanceTrafo then None
+                                else o.VertexAttributes.TryGetAttribute sem
+                            member x.All = Seq.empty
+                        }
+
                     let newUniforms =
                         UniformProvider.ofList [
                             "ModelTrafo", model :> IMod
@@ -107,6 +165,7 @@ module Instancing =
                         Id = newId()
                         Surface = Surface.FShadeSimple newSurface
                         InstanceAttributes = att  
+                        VertexAttributes = vatt  
                         DrawCallInfos = newCall
                         Uniforms = UniformProvider.union newUniforms o.Uniforms
                     } :> IRenderObject
