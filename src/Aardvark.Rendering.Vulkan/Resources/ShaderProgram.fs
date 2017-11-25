@@ -196,6 +196,8 @@ module ShaderProgram =
 
                 sprintf "layout(set = %s, binding = %s, std140)\r\nuniform %s\r\n{" set binding name
             )
+
+        let code = code.Replace("gl_InstanceID", "gl_InstanceIndex").Replace("gl_VertexID", "gl_VertexIndex")
         
         let code = 
             versionRx.Replace(code, "#version 450 core")
