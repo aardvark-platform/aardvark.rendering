@@ -143,6 +143,48 @@ module Utilities =
             }
 
 
+
+    let private hookSg (win : IRenderControl) (sg : ISg) =
+        let fillMode = Mod.init FillMode.Fill
+        let cullMode = Mod.init CullMode.None
+
+        let status = Mod.init ""
+
+        let alt = win.Keyboard.IsDown(Aardvark.Application.Keys.LeftAlt)
+        win.Keyboard.KeyDown(Aardvark.Application.Keys.X).Values.Add (fun () ->
+            if Mod.force alt then
+                transact (fun () ->
+                    let newFillMode = 
+                        match fillMode.Value with
+                            | FillMode.Fill -> FillMode.Line
+                            | _ -> FillMode.Fill
+
+                    status.Value <- sprintf "fill: %A" newFillMode
+                    fillMode.Value <- newFillMode
+                )
+            ()
+        )
+
+        win.Keyboard.KeyDown(Aardvark.Application.Keys.Y).Values.Add (fun () ->
+            if Mod.force alt then
+                transact (fun () ->
+                    let newCull = 
+                        match cullMode.Value with
+                            | CullMode.None -> CullMode.Clockwise
+                            | CullMode.Clockwise -> CullMode.CounterClockwise
+                            | _ -> CullMode.None
+                    status.Value <- sprintf "cull: %A" newCull
+                    cullMode.Value <- newCull
+                )
+            ()
+        )
+
+
+
+
+        sg |> Sg.fillMode fillMode |> Sg.cullMode cullMode
+
+
     let private runMonoScreen (cfg : RenderConfig) =
         let app =
             match cfg.backend with
@@ -165,6 +207,7 @@ module Utilities =
 
         let task =
             cfg.scene
+            |> hookSg win
             |> Sg.viewTrafo view
             |> Sg.projTrafo proj
             |> Sg.compile win.Runtime win.FramebufferSignature
@@ -294,6 +337,7 @@ module Utilities =
 
         let stereoTask =
             cfg.scene
+            |> hookSg win
             |> Sg.uniform "ViewTrafo" views
             |> Sg.uniform "ProjTrafo" projs
             |> Sg.viewTrafo view

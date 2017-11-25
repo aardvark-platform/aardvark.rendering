@@ -88,6 +88,7 @@
     <Compile Include="ComputeShader.fs" />
     <Compile Include="HarwareFeatures.fs" />
     <Compile Include="Eigi.fs" />
+    <Compile Include="Terrain.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <None Include="paket.references" />

@@ -258,6 +258,11 @@ module Eigi =
         type UniformScope with
             member x.Bones : M44d[] = x?StorageBuffer?Bones
             member x.MeshTrafoBone : int = x?MeshTrafoBone
+            member x.NumFrames : int = x?NumFrames
+            member x.NumBones : int = x?NumBones
+            member x.Framerate : float = x?Framerate
+            member x.Time : float = x?Time
+            member x.FrameRange : V2d = x?FrameRange
 
         [<ReflectedDefinition>]
         let getBoneTransform (i : V4i) (w : V4d) =
@@ -285,12 +290,57 @@ module Eigi =
             if wSum >= 1.0 then res
             elif wSum <= 0.0 then id
             else (1.0 - wSum) * id + wSum * res
+            
+        [<ReflectedDefinition>]
+        let lerp (i : int) (f0 : int) (f1 : int) (t : float) =
+            uniform.Bones.[f0 + i] * (1.0 - t) + uniform.Bones.[f1 + i] * t
+
+        [<ReflectedDefinition>]
+        let getBoneTransformFrame (i : V4i) (w : V4d) =
+            let mutable res = M44d.Zero
+            let mutable wSum = 0.0
+
+            let iid = FShade.Imperative.ExpressionExtensions.ShaderIO.ReadInput<int>(Imperative.ParameterKind.Input, FShade.Intrinsics.InstanceId)
+
+            let frame = (uniform.Time + (float iid) / 100.0) * uniform.Framerate
+            let range = uniform.FrameRange
+            let l = range.Y - range.X
+            let frame = (l + (frame % l)) % l + range.X
+
+            let f0 = int (floor frame)
+            let f1 = ((f0 + 1) % uniform.NumFrames)
+            let t = frame - float f0
+            let b0 = f0 * uniform.NumBones
+            let b1 = f1 * uniform.NumBones
+
+
+            if i.X >= 0 then 
+                res <- res + w.X * lerp i.X b0 b1 t
+                wSum <- wSum + w.X
+
+            if i.Y >= 0 then 
+                res <- res + w.Y * lerp i.Y b0 b1 t
+                wSum <- wSum + w.Y
+
+            if i.Z >= 0 then 
+                res <- res + w.Z * lerp i.Z b0 b1 t
+                wSum <- wSum + w.Z
+
+            if i.W >= 0 then 
+                res <- res + w.W * lerp i.W b0 b1 t
+                wSum <- wSum + w.W
+
+            let meshTrafo =
+                uniform.Bones.[b0 + uniform.MeshTrafoBone] * (1.0 - t) + uniform.Bones.[b1 + uniform.MeshTrafoBone] * t
+
+            if wSum <= 0.0 then meshTrafo
+            else meshTrafo * res
 
         let skinning (v : Vertex) =
             vertex {
-                let model = uniform.Bones.[uniform.MeshTrafoBone]
-                let skin = getBoneTransform v.vbi v.vbw
-                let mat = model * skin
+                //let model = uniform.Bones.[uniform.MeshTrafoBone]
+                let mat = getBoneTransformFrame v.vbi v.vbw
+                //let mat = model * skin
 
                 return { 
                     pos = mat * v.pos
@@ -481,14 +531,32 @@ module Eigi =
             let range = arr.[index]
             transact (fun () -> animation.Value <- ("combinedAnim_0", range))
 
+        let animation = 
+            animation |> Mod.map (fun (name,r) ->
+                Map.find name scene.animantions, r
+            )
+
+        let allBones =
+            animation |> Mod.map (fun (a,r) ->
+                [|
+                    let dt = 1.0 / a.framesPerSecond
+                    let mutable t = 0.0
+                    for f in 0 .. a.frames - 1 do
+                        let trafos = a.interpolate t
+                        yield! trafos |> Array.map M44f.op_Explicit
+                        t <- t + dt
+                |]
+            )
+
+        let numFrames = animation |> Mod.map (fun (a,_) -> a.frames)
+        let numBones = animation |> Mod.map (fun (a,_) -> a.interpolate 0.0 |> Array.length)
+        let fps = animation |> Mod.map (fun (a,_) -> a.framesPerSecond)
+        let frameRange = animation |> Mod.map (fun (_,r) -> V2d(r.Min, r.Max))
+
         let frame = 
-            Mod.map2 (fun time (name : string, range : Range1d) -> 
-                match Map.tryFind name scene.animantions with
-                    | Some a ->
-                        let frame = (time * a.framesPerSecond) % (range.Max - range.Min) + range.Min
-                        int frame
-                    | None ->
-                        0
+            Mod.map2 (fun time (a : Loader.Animation, range : Range1d) -> 
+                let frame = (time * a.framesPerSecond) % (range.Max - range.Min) + range.Min
+                int frame
             ) time animation
 
         let animScene = 
@@ -510,12 +578,8 @@ module Eigi =
 
         let boneTrafos =
             adaptive {
-                let! (name, range) = animation
-                match Map.tryFind name scene.animantions with
-                    | Some a ->
-                        return! time |> Mod.map (getBoneTransformations a range)
-                    | None ->
-                        return [||]
+                let! (a, range) = animation
+                return! time |> Mod.map (getBoneTransformations a range)
             }
 
         let rec removeTrafos (n : Loader.Node) =
@@ -529,7 +593,7 @@ module Eigi =
         //let scene = { scene with root = removeTrafos scene.root }
 
         let trafos =
-            let s = V2i(12, 50)
+            let s = V2i(5, 5)
             [|
                 for x in -s.X .. s.X do
                     for y in -s.Y .. s.Y do
@@ -539,7 +603,12 @@ module Eigi =
         let sg = 
             scene 
                 |> Sg.adapter
-                |> Sg.uniform "Bones" boneTrafos
+                |> Sg.uniform "Bones" allBones
+                |> Sg.uniform "NumFrames" numFrames
+                |> Sg.uniform "NumBones" numBones
+                |> Sg.uniform "Framerate" fps
+                |> Sg.uniform "Time" time
+                |> Sg.uniform "FrameRange" frameRange
 
                 //|> Sg.andAlso (Sg.translate 0.0 0.0 0.05 animScene)
                 // transform the model (has Y up GL style coords)
@@ -551,11 +620,14 @@ module Eigi =
                     do! Skinning.skinning
                     do! Shader.transform
                     do! Shader.diffuseTexture
-                    do! Shader.alphaTest
+                    //do! Shader.alphaTest
+
+
                     do! Shader.specularTexture
                     do! Shader.normalMapping
                     do! Shader.lighting
                 }
+                |> Sg.blendMode (Mod.constant BlendMode.Blend)
 //
 //
 //
