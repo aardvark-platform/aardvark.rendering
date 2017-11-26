@@ -59,6 +59,7 @@ module Utilities =
     open System.Windows.Forms
 
 
+
     [<AbstractClass>]
     type OutputMod<'a, 'b>(inputs : list<IOutputMod>) =
         inherit AbstractOutputMod<'b>()
@@ -143,6 +144,65 @@ module Utilities =
             }
 
 
+    type ISimpleRenderWindow =
+        inherit IDisposable
+
+        abstract member Runtime : IRuntime
+        abstract member Sizes : IMod<V2i>
+        abstract member Samples : int
+        abstract member Time : IMod<DateTime>
+        abstract member Keyboard : IKeyboard
+        abstract member Mouse : IMouse
+
+        abstract member Scene : ISg with get, set
+        abstract member Run : unit -> unit
+
+    [<AbstractClass>]
+    type private SimpleRenderWindow(win : IRenderWindow) =
+        let mutable scene = Sg.empty
+
+
+        abstract member Compile : IRenderWindow * ISg -> IRenderTask
+        abstract member Release : unit -> unit
+        default x.Release() = ()
+
+        member x.Dispose() =
+            x.Release()
+            win.TryDispose() |> ignore
+
+        member x.Runtime = win.Runtime
+        member x.Sizes = win.Sizes
+        member x.Samples = win.Samples
+        member x.Time = win.Time
+        member x.Keyboard = win.Keyboard
+        member x.Mouse = win.Mouse
+
+        member x.Run() = 
+            win.Run()
+            x.Dispose()
+
+        member x.Scene
+            with get() = scene
+            and set sg = 
+                scene <- sg
+                let task = x.Compile(win, sg)
+                win.RenderTask <- task
+        
+        interface ISimpleRenderWindow with
+            member x.Runtime = x.Runtime
+            member x.Sizes = x.Sizes
+            member x.Samples = x.Samples
+            member x.Time = x.Time
+            member x.Keyboard = x.Keyboard
+            member x.Mouse = x.Mouse
+            member x.Run() = x.Run()
+            
+            member x.Scene
+                with get() = x.Scene
+                and set sg = x.Scene <- sg
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
 
     let private hookSg (win : IRenderControl) (sg : ISg) =
         let fillMode = Mod.init FillMode.Fill
@@ -184,8 +244,7 @@ module Utilities =
 
         sg |> Sg.fillMode fillMode |> Sg.cullMode cullMode
 
-
-    let private runMonoScreen (cfg : RenderConfig) =
+    let private createMonoScreen (cfg : RenderConfig) =
         let app =
             match cfg.backend with
                 | Backend.GL -> new OpenGlApplication(cfg.debug) :> IApplication
@@ -205,38 +264,20 @@ module Utilities =
                 |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
                 |> Mod.map Frustum.projTrafo
 
-        let task =
-            cfg.scene
-            |> hookSg win
-            |> Sg.viewTrafo view
-            |> Sg.projTrafo proj
-            |> Sg.compile win.Runtime win.FramebufferSignature
+        { new SimpleRenderWindow(win) with
+            override x.Compile(win, sg) =
+                sg
+                |> hookSg win
+                |> Sg.viewTrafo view
+                |> Sg.projTrafo proj
+                |> Sg.compile win.Runtime win.FramebufferSignature
 
-        let sw = System.Diagnostics.Stopwatch()
-        let mutable cnt = 0
+            override x.Release() =
+                app.Dispose()
 
-        let task = 
-            RenderTask.ofList [
-                task
-                RenderTask.custom(fun _ ->
-                    if cnt % 50 = 0 then
-                        let t = sw.MicroTime
-                        printfn "%.2ffps" (50.0 / t.TotalSeconds)
-                        sw.Restart()
-                        
-                    cnt <- cnt + 1
-                )
-            ]
+        } :> ISimpleRenderWindow
 
-        win.RenderTask <- task
-        win.Run()
-
-        task.Dispose()
-        win.TryDispose() |> ignore
-        app.Dispose()
-
-
-    let private runStereoScreen (cfg : RenderConfig) =
+    let private createStereoScreen (cfg : RenderConfig) =
         let app =
             match cfg.backend with
                 | Backend.GL -> new OpenGlApplication(cfg.debug) :> IApplication
@@ -335,84 +376,112 @@ module Utilities =
                 |]
             )
 
-        let stereoTask =
-            cfg.scene
-            |> hookSg win
-            |> Sg.uniform "ViewTrafo" views
-            |> Sg.uniform "ProjTrafo" projs
-            |> Sg.viewTrafo view
-            |> Sg.uniform "CameraLocation" (view |> Mod.map (fun t -> t.Backward.C3.XYZ))
-            |> Sg.uniform "LightLocation" (view |> Mod.map (fun t -> t.Backward.C3.XYZ))
-            |> Sg.compile runtime signature
+        let compile (sg : ISg) =
 
-        let clearTask =
-            runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
+            framebuffer.Acquire()
+            resolved.Acquire()
 
-        let dependent =
-            Mod.custom (fun t ->
-                let fbo = framebuffer.GetValue t
-                let output = OutputDescription.ofFramebuffer fbo
+            let stereoTask =
+                sg
+                |> hookSg win
+                |> Sg.uniform "ViewTrafo" views
+                |> Sg.uniform "ProjTrafo" projs
+                |> Sg.viewTrafo view
+                |> Sg.uniform "CameraLocation" (view |> Mod.map (fun t -> t.Backward.C3.XYZ))
+                |> Sg.uniform "LightLocation" (view |> Mod.map (fun t -> t.Backward.C3.XYZ))
+                |> Sg.compile runtime signature
 
-                let r = resolved.GetValue(t)
+            let clearTask =
+                runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
 
-                clearTask.Run(t, RenderToken.Empty, output)
-                stereoTask.Run(t, RenderToken.Empty, output)
-                runtime.Copy(colors.GetValue(t), 0, 0, r, 0, 0, 2, 1)
+            let dependent =
+                Mod.custom (fun t ->
+                    let fbo = framebuffer.GetValue t
+                    let output = OutputDescription.ofFramebuffer fbo
 
-                r :> ITexture
-            )
+                    let r = resolved.GetValue(t)
 
-        let task =
-            Sg.fullScreenQuad
-                |> Sg.uniform "Dependent" (Mod.constant 0.0)
-                |> Sg.diffuseTexture dependent
-                |> Sg.shader {
-                    do! Shader.renderStereo
+                    clearTask.Run(t, RenderToken.Empty, output)
+                    stereoTask.Run(t, RenderToken.Empty, output)
+                    runtime.Copy(colors.GetValue(t), 0, 0, r, 0, 0, 2, 1)
+
+                    r :> ITexture
+                )
+
+            let task =
+                Sg.fullScreenQuad
+                    |> Sg.uniform "Dependent" (Mod.constant 0.0)
+                    |> Sg.diffuseTexture dependent
+                    |> Sg.shader {
+                        do! Shader.renderStereo
+                    }
+                    |> Sg.compile runtime win.FramebufferSignature
+
+            let dummy =
+                { new AbstractRenderTask() with
+                    member x.FramebufferSignature = Some win.FramebufferSignature
+                    member x.Runtime = Some win.Runtime
+                    member x.PerformUpdate (_,_) = ()
+                    member x.Perform (_,_,_) = ()
+                    member x.Release() =
+                        stereoTask.Dispose()
+                        clearTask.Dispose()
+                        framebuffer.Release()
+                        resolved.Release()
+                    member x.Use f = f()
                 }
-                |> Sg.compile runtime win.FramebufferSignature
 
-        win.RenderTask <- task
-        framebuffer.Acquire()
-        resolved.Acquire()
+            RenderTask.ofList [dummy; task]
 
-        win.Run()
 
-        framebuffer.Release()
-        resolved.Release()
+        let res =
+            { new SimpleRenderWindow(win) with
+                override x.Compile(win, sg) =
+                    compile sg
 
-        task.Dispose()
-        clearTask.Dispose()
-        stereoTask.Dispose()
-
-        win.Dispose()
-        runtime.DeleteFramebufferSignature signature
+                override x.Release() =
+                    win.Dispose()
+                    runtime.DeleteFramebufferSignature signature
         
-        app.Dispose()
+                    app.Dispose()
+        
 
-    let private runOpenVR (cfg : RenderConfig) =
+            } :> ISimpleRenderWindow
+
+        res
+
+    let private createOpenVR (cfg : RenderConfig) =
         match cfg.backend with
             | Backend.Vulkan ->
                 let app = VulkanVRApplicationLayered(cfg.samples, cfg.debug)
 
                 let hmdLocation = app.Hmd.MotionState.Pose |> Mod.map (fun t -> t.Forward.C3.XYZ)
 
-                let sg =
-                    cfg.scene
-                    |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
-                    |> Sg.uniform "ProjTrafo" app.Info.projTrafos
-                    |> Sg.uniform "CameraLocation" hmdLocation
-                    |> Sg.uniform "LightLocation" hmdLocation
 
-                app.RenderTask <- app.Runtime.CompileRender(app.FramebufferSignature, sg)
-                app.Run()
+                { new SimpleRenderWindow(app) with
+                    override x.Compile(win, sg) =
+                        cfg.scene
+                        |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
+                        |> Sg.uniform "ProjTrafo" app.Info.projTrafos
+                        |> Sg.uniform "CameraLocation" hmdLocation
+                        |> Sg.uniform "LightLocation" hmdLocation
+                        |> Sg.compile app.Runtime app.FramebufferSignature
+                } :> ISimpleRenderWindow
+
             | Backend.GL -> 
                 failwith "no OpenGL OpenVR backend atm."
 
-    let runConfig (cfg : RenderConfig) =
+
+    let createWindow (cfg : RenderConfig) =
         match cfg.display with
-            | Display.Mono -> runMonoScreen cfg
-            | Display.Stereo -> runStereoScreen cfg
-            | Display.OpenVR -> runOpenVR cfg
+            | Display.Mono -> createMonoScreen cfg
+            | Display.Stereo -> createStereoScreen cfg
+            | Display.OpenVR -> createOpenVR cfg
+
+    let runConfig (cfg : RenderConfig) =
+        let win = createWindow cfg
+        win.Scene <- cfg.scene
+        win.Run()
 
     let run (display : Display) (backend : Backend) (scene : ISg) =
         runConfig {
@@ -465,4 +534,39 @@ module ``Render Utilities`` =
         member x.Run(cfg : RenderConfig) =
             Utilities.runConfig cfg
 
+    type WindowBuilder() =
+        member x.Yield(()) =
+            {
+                backend = Backend.Vulkan
+                debug = true
+                game = false
+                samples = 8
+                display = Display.Mono
+                scene = Sg.empty
+            }
+
+        [<CustomOperation("backend")>]
+        member x.Backend(s : RenderConfig, b : Backend) =
+            { s with backend = b }
+
+        [<CustomOperation("debug")>]
+        member x.Debug(s : RenderConfig, d : bool) =
+            { s with debug = d }
+
+        [<CustomOperation("samples")>]
+        member x.Samples(state : RenderConfig, s : int) =
+            { state with samples = s }
+
+        [<CustomOperation("display")>]
+        member x.Display(s : RenderConfig, d : Display) =
+            { s with display = d }
+
+        [<CustomOperation("game")>]
+        member x.Game(state : RenderConfig, game : bool) =
+            { state with game = game }
+
+        member x.Run(cfg : RenderConfig) =
+            Utilities.createWindow cfg
+            
+    let window = WindowBuilder()
     let show = ShowBuilder()

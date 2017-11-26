@@ -11,15 +11,15 @@ module Instancing =
         let private convert (t : Trafo3d[]) =
             t |> Array.map (fun t -> M44f.op_Explicit t.Forward)
 
-        type InstancingNode(trafos : IMod<M44f[]>, child : IMod<ISg>) =
+        type InstancingNode(trafos : IMod<M44f[]>, uniforms : Map<string, BufferView>, child : IMod<ISg>) =
             interface ISg
 
             member x.Trafos = trafos
             member x.Child = child
-
+            member x.Uniforms = uniforms
 
         let instanced (trafos : IMod<Trafo3d[]>) (sg : ISg) : ISg =
-            InstancingNode(Mod.map convert trafos, Mod.constant sg) :> ISg
+            InstancingNode(Mod.map convert trafos, Map.empty, Mod.constant sg) :> ISg
 
 namespace Aardvark.SceneGraph.Semantics
 open Aardvark.Base
@@ -39,7 +39,7 @@ module Instancing =
 
         let private cache = System.Runtime.CompilerServices.ConditionalWeakTable<Effect, Effect>()
 
-        let inlineTrafo (e : Effect) =
+        let inlineTrafo (uniforms : Map<string, _>) (e : Effect) =
             lock cache (fun () ->
                 match cache.TryGetValue e with
                     | (true, e) -> e
@@ -70,8 +70,14 @@ module Instancing =
                                                 let n : Expr<M44d> = Expr.ReadInput(ParameterKind.Input, typ, string DefaultSemantic.InstanceTrafoInv) |> Expr.Cast
                                                     
                                                 Some <@@ %o * (m33d %n).Transposed @@>
+
+
                                             | _ ->
-                                                None
+                                                if Map.containsKey name uniforms then
+                                                    let e = Expr.ReadInput(ParameterKind.Input, typ, name)
+                                                    Some e
+                                                else
+                                                    None
                                     | _ ->
                                         None
                             )
@@ -105,13 +111,13 @@ module Instancing =
                 BufferView(fw, typeof<M44f>), BufferView(bw, typeof<M44f>)
             )
 
-        static let rec applyTrafos (model : IMod<Trafo3d>) (m : IMod<M44f[]>) (o : IRenderObject) =
+        static let rec applyTrafos (uniforms : Map<string,BufferView>) (model : IMod<Trafo3d>) (m : IMod<M44f[]>) (o : IRenderObject) =
             match o with
                 | :? RenderObject as o ->
                     let newSurface = 
                         match o.Surface with
                             | Surface.FShadeSimple e ->
-                                Effect.inlineTrafo e
+                                Effect.inlineTrafo uniforms e
                             | s ->
                                 failwithf "[Sg] cannot instance object with surface: %A" s
 
@@ -150,7 +156,10 @@ module Instancing =
                             member x.TryGetAttribute sem =
                                 if sem = DefaultSemantic.InstanceTrafo then Some forward
                                 elif sem = DefaultSemantic.InstanceTrafoInv then Some backward
-                                else o.InstanceAttributes.TryGetAttribute sem
+                                else 
+                                    match Map.tryFind (string sem) uniforms with
+                                        | Some v -> Some v
+                                        | _ -> o.InstanceAttributes.TryGetAttribute sem
                             member x.All = Seq.empty
                         }
 
@@ -159,6 +168,7 @@ module Instancing =
                             member x.Dispose() = o.VertexAttributes.Dispose()
                             member x.TryGetAttribute sem =
                                 if sem = DefaultSemantic.InstanceTrafo || sem = DefaultSemantic.InstanceTrafoInv then None
+                                elif Map.containsKey (string sem) uniforms then None
                                 else o.VertexAttributes.TryGetAttribute sem
                             member x.All = Seq.empty
                         }
@@ -178,7 +188,7 @@ module Instancing =
                     } :> IRenderObject
 
                 | :? MultiRenderObject as o ->
-                    o.Children |> List.map (applyTrafos model m) |> MultiRenderObject :> IRenderObject
+                    o.Children |> List.map (applyTrafos uniforms model m) |> MultiRenderObject :> IRenderObject
 
                 | o ->
                     failwithf "[Sg] cannot instance object: %A" o
@@ -190,7 +200,7 @@ module Instancing =
             n.Child |> ASet.bind (fun c ->
                 let objects : aset<IRenderObject> = c?RenderObjects()
                 objects |> ASet.map (fun ro ->
-                    applyTrafos model n.Trafos ro 
+                    applyTrafos n.Uniforms model n.Trafos ro 
                 )
             )
 

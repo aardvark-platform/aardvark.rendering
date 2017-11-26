@@ -1296,8 +1296,8 @@ let main args =
     //Examples.CommandTest.run()
     //Examples.Wobble.run()
     //Examples.GeometryComposition.run()
-    //Examples.Eigi.run()
-    Examples.Terrain.run()
+    Examples.Eigi.run()
+    //Examples.Terrain.run()
     System.Environment.Exit 0
 
     //colorLockTest()
