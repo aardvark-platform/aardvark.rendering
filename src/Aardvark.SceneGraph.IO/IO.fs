@@ -65,6 +65,19 @@ module Loader =
     let private VertexBoneWeights4 = Symbol.Create "VertexBoneWeights4"
     let private VertexBoneIndices4 = Symbol.Create "VertexBoneIndices4"
 
+    open System.Runtime.InteropServices
+    open Microsoft.FSharp.NativeInterop
+
+    let private bitsToV4f(v : obj) =
+        let mutable res = V4f.Zero
+        let gc = GCHandle.Alloc(v, GCHandleType.Pinned)
+        try
+            let size = min (Marshal.SizeOf v) sizeof<V4f>
+            Marshal.Copy (gc.AddrOfPinnedObject(), NativePtr.toNativeInt &&res, size)
+            res
+        finally
+            gc.Free()
+
     type Mesh =
         {
             index       : int
@@ -80,7 +93,13 @@ module Loader =
                         let b = arr |> ArrayBuffer :> IBuffer |> Mod.constant
                         Some (BufferView(b, arr.GetType().GetElementType()))
                     | _ ->
-                        Some (BufferView(SingleValueBuffer(Mod.constant V4f.Zero), typeof<V4f>))
+                        match x.geometry.SingleAttributes.TryGetValue sem with
+                            | (true, value) ->
+                                let v = bitsToV4f value
+                                Some (BufferView(SingleValueBuffer(Mod.constant v), value.GetType()))
+
+                            | _ -> 
+                                Some (BufferView(SingleValueBuffer(Mod.constant V4f.Zero), typeof<V4f>))
 
             member x.All = Seq.empty
             member x.Dispose() = ()
@@ -504,11 +523,14 @@ module Loader =
                 let mat = materials.[m.MaterialIndex]
 
                 let attributes = SymDict.empty
+                let single = SymDict.empty
                 let res =
                     IndexedGeometry(
                         Mode = IndexedGeometryMode.TriangleList,
-                        IndexedAttributes = attributes
+                        IndexedAttributes = attributes,
+                        SingleAttributes = single
                     )
+
 
 
 
@@ -567,9 +589,10 @@ module Loader =
                         attributes.[Mesh.VertexBoneWeights] <- weights
                         attributes.[Mesh.VertexBoneIndices4] <- Array.map toV4i indices
                         attributes.[Mesh.VertexBoneWeights4] <- Array.map toV4f weights
-
                     else
-                        ()
+                        single.[Mesh.VertexBoneIndices4] <- V4i(-1,-1,-1,-1)
+                        single.[Mesh.VertexBoneWeights4] <- V4f.Zero
+
 //                    else
 //                        attributes.[Mesh.VertexBoneIndices] <- 
 //                        attributes.[Mesh.VertexBoneWeights] <- weights
