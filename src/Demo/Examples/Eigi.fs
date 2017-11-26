@@ -263,7 +263,7 @@ module Eigi =
             member x.Framerate : float = x?Framerate
             member x.Time : float = x?Time
             member x.FrameRange : V2d = x?FrameRange
-
+            member x.TimeOffset : float = x?TimeOffset
         [<ReflectedDefinition>]
         let getBoneTransform (i : V4i) (w : V4d) =
             let mutable res = M44d.Zero
@@ -302,7 +302,7 @@ module Eigi =
 
             let iid = FShade.Imperative.ExpressionExtensions.ShaderIO.ReadInput<int>(Imperative.ParameterKind.Input, FShade.Intrinsics.InstanceId)
 
-            let frame = (uniform.Time + (float iid) / 100.0) * uniform.Framerate
+            let frame = (uniform.Time + uniform.TimeOffset) * uniform.Framerate
             let range = uniform.FrameRange
             let l = range.Y - range.X
             let frame = (l + (frame % l)) % l + range.X
@@ -353,167 +353,23 @@ module Eigi =
             }
                 
 
-    module Animation =
-        open Loader
-
-        module Shader =
-            open FShade
-
-            type Vertex =
-                {
-                    [<Position>] pos : V4d
-                    [<Semantic("InstanceOffset")>] off : V3d
-                }
-
-            let instanceOffset (scale : float) (v : Vertex) =
-                vertex {
-                    return { v with pos = V4d(scale * v.pos.XYZ, v.pos.W) + V4d(v.off, 0.0) }
-                }
-
-
-        type IndexedGeometry with
-            member x.FaceVertexCount =
-                match x.IndexArray with
-                    | null -> (Seq.head x.IndexedAttributes.Values).Length
-                    | i -> i.Length
-
-        let sg (frame : IMod<int>) (a : Animation) =
-
-            let getPositions (frame : int) =
-                let positions = System.Collections.Generic.List<V3d>()
-                
-                let rec traverse (frame : int) (trafo : M44d) (t : AnimTree) =
-                    let frameTrafo =
-                        if frame < t.frames.Length then t.frames.[frame]
-                        else t.trafo
-                    let trafo = trafo * frameTrafo //(t.trafo * frameTrafo)
-
-                    positions.Add (trafo.TransformPos(V3d.Zero))
-
-                    for c in t.children do
-                        traverse frame trafo c
-
-                traverse frame M44d.Identity a.root
-                positions.MapToArray(fun v -> V3f v)
-
-            let lineIndices =
-                let lines = System.Collections.Generic.List<int>()
-                let index = ref 0
-                let rec traverse  (parent : int) (t : AnimTree) =
-                    
-                    let me = !index
-                    index := !index + 1
-                    if parent >= 0 then
-                        lines.Add(parent)
-                        lines.Add me
-                    
-                    for c in t.children do
-                        traverse me c
-
-                traverse -1 a.root
-                lines.ToArray()
-
-            let positions = 
-                frame |> Mod.map (fun frame ->
-                    frame |> getPositions |> ArrayBuffer :> IBuffer
-                )
-
-            let pos0 = getPositions 0
-            if lineIndices.Max() >= pos0.Length then
-                failwith "index problem"
-
-            let count = pos0.Length 
-
-            let sphere = Primitives.unitSphere 5
-            let call = DrawCallInfo(FaceVertexCount = sphere.FaceVertexCount, InstanceCount = count)
-
-            let joints = 
-                Sg.render IndexedGeometryMode.TriangleList call
-                    |> Sg.vertexArray DefaultSemantic.Positions sphere.IndexedAttributes.[DefaultSemantic.Positions]
-                    |> Sg.vertexArray DefaultSemantic.Normals sphere.IndexedAttributes.[DefaultSemantic.Normals]
-                    |> Sg.vertexBufferValue DefaultSemantic.Colors (Mod.constant V4f.IOOI)
-                    |> Sg.instanceBuffer (Symbol.Create "InstanceOffset") (BufferView(positions, typeof<V3f>))
-                    |> Sg.shader {
-                        do! Shader.instanceOffset 0.0005
-                        do! DefaultSurfaces.trafo
-                        do! DefaultSurfaces.simpleLighting
-                    }
-
-            let call = DrawCallInfo(FaceVertexCount = lineIndices.Length, InstanceCount = 1)
-            let lines =
-                Sg.render IndexedGeometryMode.LineList call
-                    |> Sg.vertexBuffer DefaultSemantic.Positions (BufferView(positions, typeof<V3f>))
-                    |> Sg.index' lineIndices
-                    |> Sg.shader {
-                        do! DefaultSurfaces.trafo
-                        do! DefaultSurfaces.constantColor C4f.Green
-                    }
-
-            Sg.ofList [ joints; lines ]
-             
-        let getTransformations (a : Animation) (frame : int) =
-            let transformations = System.Collections.Generic.Dictionary<string, M44d>()
-            let modelTrafos = System.Collections.Generic.Dictionary<string, M44d>()
-            let rec traverse (frame : int) (model : M44d) (trafo : M44d) (t : AnimTree) =
-                let model = model * t.trafo //(t.trafo * frameTrafo)
-
-                let frameTrafo =
-                    if frame < t.frames.Length then t.frames.[frame]
-                    else M44d.Identity
-
-                let trafo = trafo *  frameTrafo //(t.trafo * frameTrafo)
-
-                transformations.[t.name] <- trafo
-                modelTrafos.[t.name] <- model
-
-                for c in t.children do
-                    traverse frame model trafo c
-
-            traverse frame M44d.Identity M44d.Identity a.root
-            modelTrafos, transformations
-
-
-    type Loader.Mesh with
-        member x.Transformed(trafo : Trafo3d) =
-            let g = x.geometry
-            let res = IndexedGeometry()
-
-            res.Mode <- g.Mode
-            res.IndexArray <- g.IndexArray
-            res.IndexedAttributes <- 
-                res.IndexedAttributes |> SymDict.map (fun name value ->
-                    if name = DefaultSemantic.Positions then
-                        value |> unbox<V3f[]> |> Array.map (fun v -> trafo.Forward.TransformPos (V3d v) |> V3f) :> Array
-                    elif name = DefaultSemantic.Normals || name = DefaultSemantic.DiffuseColorUTangents || name = DefaultSemantic.DiffuseColorVTangents then
-                        let m = trafo.Backward.Transposed
-                        value |> unbox<V3f[]> |> Array.map (fun v -> m.TransformDir (V3d v) |> V3f) :> Array
-                    else
-                        value
-                )
-
-            { x with geometry = res }
-    
-
-
     // shows the model using a composed shader
     let run() =
+
+        let win = 
+            window {
+                display Display.Mono
+                samples 8
+                backend Backend.Vulkan
+                debug true
+            }
+
         // load the model
         let scene = Loader.Assimp.loadFrom @"C:\Users\Schorsch\Desktop\raptor\test2.dae" (Loader.Assimp.defaultFlags ||| Assimp.PostProcessSteps.FlipUVs)
-//
-//        let trafo =
-//            Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero) *
-//            Trafo3d.Scale 20.0
-//
-//        let scene =
-//            { scene with meshes = scene.meshes |> Array.map (fun m -> m.Transformed(trafo)) }
 
-        let time = Mod.init 0.0
-        
-
-//        let relevant = scene.meshes |> Seq.collect (fun m -> m.boneNames) |> Set.ofSeq
-//      
-
-     
+        let sw = System.Diagnostics.Stopwatch()
+        sw.Start()
+        let time = win.Time |> Mod.map (fun _ -> sw.Elapsed.TotalSeconds) //Mod.init 0.0
 
         let idle    = Range1d(50.0, 100.0)
         let walk    = Range1d(0.0, 36.0)
@@ -521,76 +377,22 @@ module Eigi =
         let die     = Range1d(200.0, 230.0)
 
         let arr = [| idle; walk; attack; die |] //; walk; attack; die |]
-        let mutable index = 0
 
-        let animation = Mod.init ("combinedAnim_0", arr.[index])
-
-
-        let nextAnimation() =
-            index <- (index + 1) % arr.Length
-            let range = arr.[index]
-            transact (fun () -> animation.Value <- ("combinedAnim_0", range))
-
-        let animation = 
-            animation |> Mod.map (fun (name,r) ->
-                Map.find name scene.animantions, r
-            )
+        let animation = scene.animantions |> Map.toSeq |> Seq.head |> snd
 
         let allBones =
-            animation |> Mod.map (fun (a,r) ->
-                [|
-                    let dt = 1.0 / a.framesPerSecond
-                    let mutable t = 0.0
-                    for f in 0 .. a.frames - 1 do
-                        let trafos = a.interpolate t
-                        yield! trafos |> Array.map M44f.op_Explicit
-                        t <- t + dt
-                |]
-            )
+            [|
+                let dt = 1.0 / animation.framesPerSecond
+                let mutable t = 0.0
+                for f in 0 .. animation.frames - 1 do
+                    let trafos = animation.interpolate t
+                    yield! trafos |> Array.map M44f.op_Explicit
+                    t <- t + dt
+            |]
 
-        let numFrames = animation |> Mod.map (fun (a,_) -> a.frames)
-        let numBones = animation |> Mod.map (fun (a,_) -> a.interpolate 0.0 |> Array.length)
-        let fps = animation |> Mod.map (fun (a,_) -> a.framesPerSecond)
-        let frameRange = animation |> Mod.map (fun (_,r) -> V2d(r.Min, r.Max))
-
-        let frame = 
-            Mod.map2 (fun time (a : Loader.Animation, range : Range1d) -> 
-                let frame = (time * a.framesPerSecond) % (range.Max - range.Min) + range.Min
-                int frame
-            ) time animation
-
-        let animScene = 
-            scene.animantions 
-                |> Map.toSeq 
-                |> Seq.map (fun (name, tree) -> Animation.sg frame tree) 
-                |> Seq.tryHead
-                |> Option.defaultValue Sg.empty
-
-        let getBoneTransformations (a : Loader.Animation) (range : Range1d) (time : float) =
-            let frame = (time * a.framesPerSecond) % (range.Max - range.Min) + range.Min
-            let time = frame / a.framesPerSecond
-            //Log.line "time: %.3f" time
-            a.interpolate time |> Array.map M44f.op_Explicit
-
-        let distanceToLine (p0 : V3d) (p1 : V3d) (v : V3d) =
-            let dir = p1 - p0
-            sqrt ( Vec.lengthSquared (Vec.cross dir (v - p0)) / Vec.lengthSquared dir )
-
-        let boneTrafos =
-            adaptive {
-                let! (a, range) = animation
-                return! time |> Mod.map (getBoneTransformations a range)
-            }
-
-        let rec removeTrafos (n : Loader.Node) =
-            match n with
-                | Loader.Empty -> Loader.Empty
-                | Loader.Group ns -> Loader.Group (List.map removeTrafos ns)
-                | Loader.Leaf _ -> n
-                | Loader.Material(m,n) -> Loader.Material(m, removeTrafos n)
-                | Loader.Trafo(_,n) -> removeTrafos n
-        
-        //let scene = { scene with root = removeTrafos scene.root }
+        let numFrames = animation.frames // |> Mod.map (fun (a,_) -> a.frames)
+        let numBones = animation.interpolate 0.0 |> Array.length // |> Mod.map (fun (a,_) -> a.interpolate 0.0 |> Array.length)
+        let fps = animation.framesPerSecond // |> Mod.map (fun (a,_) -> a.framesPerSecond)
 
         let trafos =
             let s = V2i(5, 5)
@@ -600,94 +402,78 @@ module Eigi =
                             yield Trafo3d.Translation(float x, float y, 0.0)
             |]
 
+        let timeOffsets =
+            let rand = RandomSystem()
+            let buffer = Array.init trafos.Length (fun i -> rand.UniformFloat() * 3.0f) |> ArrayBuffer :> IBuffer |> Mod.constant
+            BufferView(buffer, typeof<float32>)
+            
+        let frameRanges =
+            let rand = RandomSystem()
+            let buffer = 
+                Array.init trafos.Length (fun i -> 
+                    let range = arr.[rand.UniformInt(arr.Length)]
+                    V2f(float32 range.Min, float32 range.Max)
+                ) |> ArrayBuffer :> IBuffer |> Mod.constant
+            BufferView(buffer, typeof<V2f>)
+
+        let instanced (trafos : IMod<Trafo3d[]>) (sg : ISg) =
+            let trafos = trafos |> Mod.map (Array.map (fun t -> M44f.op_Explicit t.Forward))
+            Sg.InstancingNode(trafos, Map.ofList ["TimeOffset", timeOffsets; "FrameRange", frameRanges], Mod.constant sg) :> ISg
+
         let sg = 
             scene 
                 |> Sg.adapter
-                |> Sg.uniform "Bones" allBones
-                |> Sg.uniform "NumFrames" numFrames
-                |> Sg.uniform "NumBones" numBones
-                |> Sg.uniform "Framerate" fps
+                |> Sg.uniform "Bones" ~~allBones
+                |> Sg.uniform "NumFrames" ~~numFrames
+                |> Sg.uniform "NumBones" ~~numBones
+                |> Sg.uniform "Framerate" ~~fps
                 |> Sg.uniform "Time" time
-                |> Sg.uniform "FrameRange" frameRange
-
-                //|> Sg.andAlso (Sg.translate 0.0 0.0 0.05 animScene)
-                // transform the model (has Y up GL style coords)
+                |> Sg.uniform "FrameRange" ~~(V2d(0.0, 36.0))
+                |> Sg.uniform "TimeOffset" ~~0.0
 
                 |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero) * Trafo3d.Scale 20.0)
-                |> Sg.instanced (Mod.constant trafos)
+
+                |> instanced (Mod.constant trafos)
+
                 // apply all shaders we have
                 |> Sg.shader {
                     do! Skinning.skinning
                     do! Shader.transform
                     do! Shader.diffuseTexture
-                    //do! Shader.alphaTest
+                    do! Shader.alphaTest
 
 
                     do! Shader.specularTexture
                     do! Shader.normalMapping
                     do! Shader.lighting
                 }
-                |> Sg.blendMode (Mod.constant BlendMode.Blend)
-//
-//
-//
-//
-//        let sg =
-//            Sg.ofList [
-//                //Sg.sphere' 5 C4b.Red 0.5
-//                Sg.cylinder' 16 C4b.Red 0.04 0.8
-//                    |> Sg.transform (Trafo3d.FromBasis(V3d.OIO, V3d.OOI, V3d.IOO, V3d.Zero))
-//
-//                Sg.cylinder' 16 C4b.Green 0.04 0.8
-//                    |> Sg.transform (Trafo3d.FromBasis(V3d.OOI, V3d.IOO, V3d.OIO, V3d.Zero))
-//
-//                Sg.cylinder' 16 C4b.Blue 0.04 0.8
-//                    |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OIO, V3d.OOI, V3d.Zero))
-//
-//                Sg.cone' 16 C4b.Blue 0.08 0.2
-//                    |> Sg.translate 0.0 0.0 0.8
-//
-//                Sg.cone' 16 C4b.Red 0.08 0.2
-//                    |> Sg.translate 0.0 0.0 0.8
-//                    |> Sg.transform (Trafo3d.FromBasis(V3d.OIO, V3d.OOI, V3d.IOO, V3d.Zero))
-//
-//                Sg.cone' 16 C4b.Green 0.08 0.2
-//                    |> Sg.translate 0.0 0.0 0.8
-//                    |> Sg.transform (Trafo3d.FromBasis(V3d.OOI, V3d.IOO, V3d.OIO, V3d.Zero))
-//            ]
-//            |> Sg.scale 0.3
-//            |> Sg.instanced (Mod.constant trafos)
-//            |> Sg.shader  {
-//                do! DefaultSurfaces.trafo
-//                do! DefaultSurfaces.simpleLighting
-//            }
-
-
-        let sw = System.Diagnostics.Stopwatch.StartNew()
-
+ 
         
 
-        let tick =
-            async {
-                while true do
-                    do! Async.Sleep 30
-                    let t = sw.Elapsed.TotalSeconds
-                    transact (fun () -> time.Value <- t)
 
-                    if t > 15.0 then
-                        nextAnimation()
-                        sw.Restart()
-            }
+        win.Scene <- sg
+        win.Run()
 
-        Async.Start tick
-
-
-        // run a window showing the scene
-        show {
-            display Display.Mono
-            samples 8
-            backend Backend.Vulkan
-            debug false
-            scene sg
-        }
+//
+//        let sw = System.Diagnostics.Stopwatch.StartNew()
+//
+//        let tick =
+//            async {
+//                while true do
+//                    do! Async.Sleep 30
+//                    let t = sw.Elapsed.TotalSeconds
+//                    transact (fun () -> time.Value <- t)
+//            }
+//
+//        Async.Start tick
+//
+//
+//        // run a window showing the scene
+//        show {
+//            display Display.Mono
+//            samples 8
+//            backend Backend.Vulkan
+//            debug false
+//            scene sg
+//        }
 

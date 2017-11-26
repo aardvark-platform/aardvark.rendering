@@ -76,6 +76,9 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
     let tex = Mod.custom (fun _ -> fImg :> ITexture)
 
 
+    let keyboard = new EventKeyboard()
+    let mouse = new EventMouse(false)
+
     new(samples) = VulkanVRApplicationLayered(samples, false)
     new(debug) = VulkanVRApplicationLayered(1, debug)
     new() = VulkanVRApplicationLayered(1, false)
@@ -295,3 +298,10 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
             with get() = x.RenderTask
             and set t = x.RenderTask <- t
         member x.Time = time
+
+    interface IRenderControl with
+        member x.Keyboard = keyboard :> IKeyboard
+        member x.Mouse = mouse :> IMouse
+
+    interface IRenderWindow with
+        member x.Run() = x.Run()
