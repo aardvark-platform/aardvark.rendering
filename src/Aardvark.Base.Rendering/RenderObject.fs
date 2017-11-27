@@ -417,15 +417,49 @@ type Geometry =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Geometry =
-    let ofIndexedGeometry (g : IndexedGeometry) =
-        failwith ""
-//        let index = 
-//            match g.IndexArray with
-//                | null -> None
-//                | index -> 
-//                    let buffer = Mod.constant (
+    let ofIndexedGeometry (uniforms : Map<string, IMod>) (g : IndexedGeometry) =
+        let index, fvc = 
+            match g.IndexArray with
+                | null -> 
+                    let anyAtt = g.IndexedAttributes.Values |> Seq.head
+                    None, anyAtt.Length
+                | index -> 
+                    let buffer = Mod.constant (ArrayBuffer(index) :> IBuffer)
+                    let view = BufferView(buffer, index.GetType().GetElementType())
 
+                    Some view, index.Length
 
+        let attributes = 
+            g.IndexedAttributes |> SymDict.toMap |> Map.map (fun name att ->
+                let buffer = Mod.constant (ArrayBuffer(att) :> IBuffer)
+                buffer
+            )
+
+        let gUniforms =
+            if isNull g.SingleAttributes then
+                Map.empty
+            else
+                let tc = typedefof<ConstantMod<_>>
+                g.SingleAttributes |> SymDict.toSeq |> Seq.choose (fun (name, value) ->
+                    try
+                        let vt = value.GetType()
+                        let t = tc.MakeGenericType(vt)
+                        let ctor = t.GetConstructor [| vt |]
+                        Some (name.ToString(), ctor.Invoke([| value |]) |> unbox<IMod>)
+                    with _ ->
+                        None
+                )
+                |> Map.ofSeq
+
+        let call =
+            DrawCallInfo(FaceVertexCount = fvc, InstanceCount = 1)
+            
+        {
+            vertexAttributes    = attributes
+            indices             = index
+            uniforms            = Map.union gUniforms uniforms
+            call                = Mod.constant [call]
+        }
 
 
 

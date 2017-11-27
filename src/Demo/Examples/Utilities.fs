@@ -154,11 +154,14 @@ module Utilities =
         abstract member Keyboard : IKeyboard
         abstract member Mouse : IMouse
 
+        abstract member View : IMod<Trafo3d[]>
+        abstract member Proj : IMod<Trafo3d[]>
+
         abstract member Scene : ISg with get, set
         abstract member Run : unit -> unit
 
     [<AbstractClass>]
-    type private SimpleRenderWindow(win : IRenderWindow) =
+    type private SimpleRenderWindow(win : IRenderWindow, view : IMod<Trafo3d[]>, proj : IMod<Trafo3d[]>) =
         let mutable scene = Sg.empty
 
 
@@ -197,6 +200,9 @@ module Utilities =
             member x.Mouse = x.Mouse
             member x.Run() = x.Run()
             
+            member x.View = view
+            member x.Proj = proj
+
             member x.Scene
                 with get() = x.Scene
                 and set sg = x.Scene <- sg
@@ -264,7 +270,7 @@ module Utilities =
                 |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
                 |> Mod.map Frustum.projTrafo
 
-        { new SimpleRenderWindow(win) with
+        { new SimpleRenderWindow(win, view |> Mod.map Array.singleton, proj |> Mod.map Array.singleton) with
             override x.Compile(win, sg) =
                 sg
                 |> hookSg win
@@ -435,7 +441,7 @@ module Utilities =
 
 
         let res =
-            { new SimpleRenderWindow(win) with
+            { new SimpleRenderWindow(win, views, projs) with
                 override x.Compile(win, sg) =
                     compile sg
 
@@ -458,7 +464,7 @@ module Utilities =
                 let hmdLocation = app.Hmd.MotionState.Pose |> Mod.map (fun t -> t.Forward.C3.XYZ)
 
 
-                { new SimpleRenderWindow(app) with
+                { new SimpleRenderWindow(app, app.Info.viewTrafos, app.Info.projTrafos) with
                     override x.Compile(win, sg) =
                         cfg.scene
                         |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
