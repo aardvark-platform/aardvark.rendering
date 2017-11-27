@@ -358,7 +358,7 @@ module Eigi =
 
         let win = 
             window {
-                display Display.Mono
+                display Display.Stereo
                 samples 8
                 backend Backend.Vulkan
                 debug true
@@ -447,33 +447,8 @@ module Eigi =
                     do! Shader.normalMapping
                     do! Shader.lighting
                 }
- 
-        
-
 
         win.Scene <- sg
         win.Run()
 
-//
-//        let sw = System.Diagnostics.Stopwatch.StartNew()
-//
-//        let tick =
-//            async {
-//                while true do
-//                    do! Async.Sleep 30
-//                    let t = sw.Elapsed.TotalSeconds
-//                    transact (fun () -> time.Value <- t)
-//            }
-//
-//        Async.Start tick
-//
-//
-//        // run a window showing the scene
-//        show {
-//            display Display.Mono
-//            samples 8
-//            backend Backend.Vulkan
-//            debug false
-//            scene sg
-//        }
 
