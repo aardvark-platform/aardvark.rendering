@@ -288,29 +288,43 @@ module LodTreeLoader =
             let rec delta (state : PrepareTraveral<'b>) (o : Option<PreparedTree<'b>>) (n : Option<PreparedTree<'b>>) =
                 match o, n with
                     | None, None -> 
-                        ()
+                        false
 
                     | Some o, None ->
                         o.pvalue |> Option.iter state.revoke
-                        o.pchildren |> MapExt.iter (fun _ c -> delta state (Some c) None)
+                        o.pchildren |> MapExt.iter (fun _ c -> delta state (Some c) None |> ignore)
+                        true
                 
                     | None, Some n ->
                         n.pvalue |> Option.iter state.invoke
-                        n.pchildren |> MapExt.iter (fun _ c -> delta state None (Some c))
+                        n.pchildren |> MapExt.iter (fun _ c -> delta state None (Some c) |> ignore)
+                        true
 
                     | Some o, Some n ->
-                        match o.pvalue, n.pvalue with
-                            | Some o, Some n when not (Unchecked.equals o n) ->
-                                state.revoke o
-                                state.invoke n
-                            | None, Some n ->
-                                state.invoke n
-                            | Some o, None ->
-                                state.revoke o
-                            | _ ->
-                                ()
+                        let selfChanged = 
+                            match o.pvalue, n.pvalue with
+                                | Some o, Some n when not (Unchecked.equals o n) ->
+                                    state.revoke o
+                                    state.invoke n
+                                    true
+                                | None, Some n ->
+                                    state.invoke n
+                                    true
+                                | Some o, None ->
+                                    state.revoke o
+                                    true
+                                | _ ->
+                                    false
 
-                        MapExt.choose2 (fun _ o n -> delta state o n; None) o.pchildren n.pchildren |> ignore
+                        let mutable changed = selfChanged
+
+                        let merge _ o n =
+                            let c = delta state o n
+                            changed <- changed || c
+                            None
+
+                        MapExt.choose2 merge o.pchildren n.pchildren |> ignore
+                        changed
 
         type Loader<'s, 'a, 'b when 's :> LodTreeNode<'s, 'a> and 's : not struct>(tree : LodTreeView<'s, 'a>, config : LodTreeLoaderConfig<'a, 'b>) =
 
@@ -335,10 +349,11 @@ module LodTreeLoader =
 
 
                         let n = PreparedTree.snapshot tree.showInner v
-                        PreparedTree.delta prep current n
+                        let changed = PreparedTree.delta prep current n
                         current <- n
 
-                        config.flush()
+                        if changed then
+                            config.flush()
 
                         loaded.KillUnused()
                     with e ->
