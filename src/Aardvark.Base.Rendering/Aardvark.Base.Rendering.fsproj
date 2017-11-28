@@ -76,6 +76,7 @@
     <Compile Include="DrawCallInfo.fs" />
     <Compile Include="Buffers.fs" />
     <Compile Include="Textures.fs" />
+    <Compile Include="LodTree.fs" />
     <Compile Include="RenderObject.fs" />
     <Compile Include="Framebuffers.fs" />
     <Compile Include="Config.fs" />

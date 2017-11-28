@@ -1405,19 +1405,115 @@ module RenderTask =
                                 | (true, cmd) ->
                                     let stream = cmd.Stream
 
+                                    match stream.Next with
+                                        | Some n -> ()
+                                        | None -> last <- stream.Prev.Value
+
                                     match stream.Prev with
                                         | Some s -> s.Next <- stream.Next
                                         | None -> failwith "impossible"
 
-                                    match stream.Next with
-                                        | Some n -> ()
-                                        | None -> last <- stream.Prev.Value
 
                                     cmd.Dispose()
 
                                 | _ ->
                                     ()
 
+        and LodTreeCommand(compiler : Compiler, surface : Aardvark.Base.Surface, state : PipelineState, loader : LodTreeLoader<Geometry>) as this =
+            inherit PreparedCommand()
+
+            let mutable preparedPipeline : Option<PreparedPipelineState> = None
+            
+            let first = new VKVM.CommandStream()
+            let mutable last = first
+
+            let mutable thread = { new IDisposable with member x.Dispose() = () }
+
+            let toDelete = System.Collections.Generic.List<GeometryCommand>()
+
+
+//            let innerCompiler =
+//                let user = 
+//                    { new IResourceUser with 
+//                        member x.AddLocked(_) = () 
+//                        member x.RemoveLocked(_) = ()
+//                    }
+//                { compiler with resources = ResourceLocationSet user }
+
+            let prepare pipeline (g : Geometry) =
+                use t = compiler.manager.Device.Token
+                let cmd = new GeometryCommand(compiler, pipeline, g)
+                cmd.Update(AdaptiveToken.Top)
+                cmd
+
+            let delete (cmd : GeometryCommand) =
+                lock toDelete (fun () -> toDelete.Add cmd)
+
+            let activate (cmd : GeometryCommand) =
+                lock first (fun () ->
+                    let s = cmd.Stream
+                    s.Next <- None
+                    last.Next <- Some s
+                    last <- s
+                )
+
+            let deactivate (cmd : GeometryCommand) =
+                lock first (fun () ->
+                    let s = cmd.Stream
+                    let prev = s.Prev.Value
+
+                    match s.Next with
+                        | Some n ->
+                            prev.Next <- Some n
+                        | None ->
+                            last <- prev
+                            prev.Next <- None
+
+                )
+
+            let flush() =
+                Log.line "flush"
+                transact (fun () -> this.MarkOutdated())
+
+            let config pipeline =
+                {
+                    prepare     = prepare pipeline
+                    delete      = delete
+                    activate    = activate
+                    deactivate  = deactivate
+                    flush       = flush
+                }
+
+            override x.Free() =
+                ()
+
+            override x.Compile(token, stream) =
+                Log.line "update"
+                match preparedPipeline with
+                    | None -> 
+                        let pipeline = compiler.manager.PreparePipelineState(compiler.renderPass, surface, state)
+                        compiler.resources.Add pipeline.ppPipeline
+                        first.IndirectBindPipeline(pipeline.ppPipeline.Pointer) |> ignore
+                        preparedPipeline <- Some pipeline
+
+                        stream.Clear()
+                        stream.Call(first) |> ignore
+                        thread <- loader.Start (config pipeline)
+
+                        ()
+                    | Some _ ->
+                        ()
+                            
+                let dead =
+                    lock toDelete (fun () -> 
+                        let arr = CSharpList.toArray toDelete
+                        toDelete.Clear()
+                        arr
+                    )
+                for d in dead do d.Dispose()
+
+                //innerCompiler.resources.Update(token) |> ignore
+                ()
 
 
         and Compiler =
@@ -1454,6 +1550,11 @@ module RenderTask =
                     | RuntimeCommand.GeometriesCmd(surface, state, geometries) ->
                         new GroupedCommand(x, surface, state, geometries)
                             :> PreparedCommand
+
+                    | RuntimeCommand.LodTreeCmd(surface, state, geometries) ->
+                        new LodTreeCommand(x, surface, state, geometries)
+                            :> PreparedCommand
+                        
 
                     | RuntimeCommand.DispatchCmd _  ->
                         failwith "[Vulkan] compute commands not implemented"

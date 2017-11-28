@@ -4,6 +4,9 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
 
+#nowarn "9"
+#nowarn "51"
+
 module Loader =
     open System
     open System.IO
