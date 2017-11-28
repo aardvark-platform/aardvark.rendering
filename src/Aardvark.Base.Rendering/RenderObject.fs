@@ -474,6 +474,7 @@ type RuntimeCommand =
     //| ViewDependentCmd of sort : (Trafo3d -> Trafo3d -> IRenderObject[] -> IRenderObject[]) * objects : aset<IRenderObject>
 
     | GeometriesCmd of surface : Surface * pipeline : PipelineState * geometries : aset<Geometry>
+    | LodTreeCmd of surface : Surface * pipeline : PipelineState * geometries : LodTreeLoader<Geometry>
 
     //| RenderMany of PipelineState * aset<Geometry>
     //| RenderDynamic of PipelineState * Config * IMod<Tree<Geometry>>
@@ -483,6 +484,7 @@ type RuntimeCommand =
 
     | OrderedCmd of commands : alist<RuntimeCommand>
     | IfThenElseCmd of condition : IMod<bool> * ifTrue : RuntimeCommand * ifFalse : RuntimeCommand
+
 
 
     static member Empty = RuntimeCommand.EmptyCmd
@@ -515,6 +517,9 @@ type RuntimeCommand =
                 signature, activeEffect |> Mod.map (Array.get modules)
             )
         RuntimeCommand.GeometriesCmd(surface, pipeline, geometries)
+
+    static member LodTree(surface : Surface, pipeline : PipelineState, geometries : LodTreeLoader<Geometry>) =
+        RuntimeCommand.LodTreeCmd(surface, pipeline, geometries)
 
 type IAdaptiveBufferReader =
     inherit IAdaptiveObject

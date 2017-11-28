@@ -1478,12 +1478,12 @@ type ResourceLocationSet(user : IResourceUser) =
 
     member private x.AddInput(r : IResourceLocation) =
         let reader = r.GetReader()
-        readers.[r] <- reader
+        lock readers (fun () -> readers.[r] <- reader)
         addDirty reader
         transact (fun () -> x.MarkOutdated())
 
     member private x.RemoveInput(r : IResourceLocation) =
-        match readers.TryRemove r with
+        match lock readers (fun () -> readers.TryRemove r) with
             | (true, reader) ->
                 remDirty reader
                 reader.Dispose()
@@ -1498,12 +1498,12 @@ type ResourceLocationSet(user : IResourceUser) =
                 ()
 
     member x.Add(r : IResourceLocation) =
-        if all.Add r then
+        if lock all (fun () -> all.Add r) then
             lock r r.Acquire
             x.AddInput r
 
     member x.Remove(r : IResourceLocation) =
-        if all.Remove r then
+        if lock all (fun () -> all.Remove r) then
             lock r r.Release
             x.RemoveInput r
 
