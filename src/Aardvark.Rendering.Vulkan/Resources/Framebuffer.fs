@@ -48,6 +48,7 @@ module Framebuffer =
                     colors
 
         let mutable minSize = V2i(Int32.MaxValue, Int32.MaxValue)
+        let mutable minLayers = Int32.MaxValue
         let attachments = 
             attachmentSems
                 |> Map.toArray
@@ -56,6 +57,7 @@ module Framebuffer =
                         | Some view -> 
                             let s = view.Image.Size.XY
                             minSize <- V2i(min minSize.X s.X, min minSize.Y s.Y)
+                            minLayers <- min minLayers (1 + view.ArrayRange.Max - view.ArrayRange.Min)
                             view
                         | _ -> failf "missing framebuffer attachment %A/%A" idx sem
                 )
@@ -69,7 +71,7 @@ module Framebuffer =
                     uint32 attachments.Length, pAttachments,
                     uint32 minSize.X,
                     uint32 minSize.Y,
-                    1u
+                    uint32 minLayers
                 )
 
             let mutable handle = VkFramebuffer.Null

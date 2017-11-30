@@ -12,9 +12,9 @@ module Trafo =
             return {
                 pos = uniform.ViewProjTrafo * wp
                 wp = wp
-                n = uniform.NormalMatrix * v.n
-                b = uniform.NormalMatrix * v.b
-                t = uniform.NormalMatrix * v.t
+                n = uniform.ModelTrafoInv.TransposedTransformDir v.n
+                b = uniform.ModelTrafo.TransformDir v.b
+                t = uniform.ModelTrafo.TransformDir v.t
                 c = v.c
                 tc = v.tc
             }

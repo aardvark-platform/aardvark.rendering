@@ -21,6 +21,8 @@ type RenderPass =
         val mutable public ColorAttachmentCount : int
         val mutable public ColorAttachments : Map<int, Symbol * AttachmentSignature>
         val mutable public DepthStencilAttachment : Option<AttachmentSignature>
+        val mutable public LayerCount : int
+        val mutable public PerLayerUniforms : Set<string>
 
         member x.AttachmentCount =
             match x.DepthStencilAttachment with
@@ -45,19 +47,22 @@ type RenderPass =
                     | _ ->
                         false
 
-        new(device : Device, handle : VkRenderPass, colorCount : int, colors : Map<int, Symbol * AttachmentSignature>, depth : Option<AttachmentSignature>) = 
+            member x.LayerCount = x.LayerCount
+            member x.PerLayerUniforms = x.PerLayerUniforms
+
+        new(device : Device, handle : VkRenderPass, colorCount : int, colors : Map<int, Symbol * AttachmentSignature>, depth : Option<AttachmentSignature>, layers : int, perLayer : Set<string>) = 
             let semantics = colors |> Map.toSeq |> Seq.map (fun (_,(sem,_)) -> sem) |> Set.ofSeq
             let semantics = 
                 match depth with
                     | Some _ -> Set.add DefaultSemantic.Depth semantics
                     | _ -> semantics
-            { inherit Resource<_>(device, handle); Semantics = semantics; ColorAttachmentCount = colorCount; ColorAttachments = colors; DepthStencilAttachment = depth }
+            { inherit Resource<_>(device, handle); Semantics = semantics; ColorAttachmentCount = colorCount; ColorAttachments = colors; DepthStencilAttachment = depth; LayerCount = layers; PerLayerUniforms = perLayer }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RenderPass =
     
-    let create (attachments : Map<Symbol, AttachmentSignature>) (device : Device) =
+    let create (attachments : Map<Symbol, AttachmentSignature>) (layers : int) (perLayer : Set<string>) (device : Device) =
         let depthAtt        = attachments |> Map.tryFind DefaultSemantic.Depth
         let attachments     = attachments |> Map.remove DefaultSemantic.Depth
         let colorAtt        = attachments |> Map.toSeq |> Seq.mapi (fun i (s,a) -> i,s,a) |> Seq.toArray
@@ -176,7 +181,7 @@ module RenderPass =
 
                 let colorMap = colorAtt |> Array.map (fun (i,s,v) -> i,(s,v)) |> Map.ofArray
 
-                RenderPass(device, handle, colorAtt.Length, colorMap, depthAtt |> Option.map snd)
+                RenderPass(device, handle, colorAtt.Length, colorMap, depthAtt |> Option.map snd, layers, perLayer)
             )
         )
 
@@ -190,8 +195,8 @@ module RenderPass =
 [<AbstractClass; Sealed; Extension>]
 type ContextRenderPassExtensions private() =
     [<Extension>]
-    static member inline CreateRenderPass(this : Device, attachments : Map<Symbol, AttachmentSignature>) =
-        this |> RenderPass.create attachments
+    static member inline CreateRenderPass(this : Device, attachments : Map<Symbol, AttachmentSignature>, layers : int, perLayer : Set<string>) =
+        this |> RenderPass.create attachments layers perLayer
         
     [<Extension>]
     static member inline Delete(this : Device, pass : RenderPass) =

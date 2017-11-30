@@ -769,13 +769,14 @@ and DeviceCommandPool internal(device : Device, index : int, queueFamily : Devic
 //        match bag.TryTake() with
 //            | (true, cmd) -> cmd
 //            | _ -> 
-        { new CommandBuffer(device, pool, queueFamily, level) with
-            override x.Dispose() =
-                x.Cleanup()
-                let mutable handle = x.Handle
-                VkRaw.vkFreeCommandBuffers(device.Handle, pool, 1u, &&handle)
-
-        }
+        new CommandBuffer(device, pool, queueFamily, level)
+//        { new CommandBuffer(device, pool, queueFamily, level) with
+//            override x.Dispose() =
+//                x.Cleanup()
+//                let mutable handle = x.Handle
+//                VkRaw.vkFreeCommandBuffers(device.Handle, pool, 1u, &&handle)
+//
+//        }
 
 
     member x.Dispose() =
@@ -948,8 +949,8 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
     member x.ClearCompensation() =
         cleanupTasks.Clear()
 
-    abstract member Dispose : unit -> unit
-    default x.Dispose() =
+    //abstract member Dispose : unit -> unit
+    member x.Dispose() =
         if handle <> 0n && device.Handle <> 0n then
             cleanup()
             VkRaw.vkFreeCommandBuffers(device.Handle, pool, 1u, &&handle)

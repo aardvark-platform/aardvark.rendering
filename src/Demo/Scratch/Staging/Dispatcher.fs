@@ -9,8 +9,6 @@ open Microsoft.FSharp.Quotations
 open Microsoft.FSharp.Quotations.Patterns
 open Microsoft.FSharp.Quotations.ExprShape
 open Aardvark.Base
-open QuotationCompiler
-
 
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
@@ -62,8 +60,6 @@ module ``Reflection Extensions`` =
 
     let private idRx = System.Text.RegularExpressions.Regex @"[a-zA-Z_][a-zA-Z_0-9]*"
 
-
-    open Yaaf.FSharp.Scripting
 
     let rec private getPrettyNameInternal (t : Type) =
         let res = 

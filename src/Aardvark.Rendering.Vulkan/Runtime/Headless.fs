@@ -2,9 +2,17 @@
 
 open System
 
-type HeadlessVulkanApplication(debug : bool) =
+type HeadlessVulkanApplication(debug : bool, instanceExtensions : list<string>, deviceExtensions : PhysicalDevice -> list<string>) =
     let requestedExtensions =
         [
+            yield Instance.Extensions.Surface
+            yield Instance.Extensions.SwapChain
+            yield Instance.Extensions.Win32Surface
+            yield Instance.Extensions.XcbSurface
+            yield Instance.Extensions.XlibSurface
+
+            yield! instanceExtensions
+
             yield "VK_EXT_shader_subgroup_ballot"
             yield "VK_EXT_shader_subgroup_vote"
             if debug then
@@ -60,7 +68,9 @@ type HeadlessVulkanApplication(debug : bool) =
         let availableLayers =
             physicalDevice.AvailableLayers |> Seq.map (fun l -> l.name) |> Set.ofSeq
 
-        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions) |> Set.ofList
+        let devExt = deviceExtensions physicalDevice
+
+        let enabledExtensions = Set.union (Set.ofList requestedExtensions) (Set.ofList devExt) |> Set.toList |> List.filter (fun r -> Set.contains r availableExtensions) |> Set.ofList
         let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers) |> Set.ofList
         
         physicalDevice.CreateDevice(enabledLayers, enabledExtensions)
@@ -78,7 +88,8 @@ type HeadlessVulkanApplication(debug : bool) =
     member x.Device = device
     member x.Runtime = runtime
 
-    new() = new HeadlessVulkanApplication(false)
+    new() = new HeadlessVulkanApplication(false, [], fun _ -> [])
+    new(debug) = new HeadlessVulkanApplication(debug, [], fun _ -> [])
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

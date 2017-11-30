@@ -67,9 +67,24 @@ module TrafoOperators =
         let normalMatrix : IMod<Trafo3d> -> IMod<M33d> = 
             UnaryCache<IMod<Trafo3d>, IMod<M33d>>(Mod.map (fun t -> t.Backward.Transposed.UpperLeftM33())).Invoke
 
+        let inverseArr : IMod<Trafo3d[]> -> IMod<Trafo3d[]> = 
+            UnaryCache<IMod<Trafo3d[]>, IMod<Trafo3d[]>>(Mod.map (Array.map (fun t -> t.Inverse))).Invoke 
+
+        let normalMatrixArr : IMod<Trafo3d[]> -> IMod<M33d[]> = 
+            UnaryCache<IMod<Trafo3d[]>, IMod<M33d[]>>(Mod.map (Array.map (fun t -> t.Backward.Transposed.UpperLeftM33()))).Invoke
+
     let (<*>) : IMod<Trafo3d> -> IMod<Trafo3d> -> IMod<Trafo3d> = 
         BinaryCache<IMod<Trafo3d>, IMod<Trafo3d>, IMod<Trafo3d>>(Mod.map2 (*)).Invoke
-
+        
+    let (<.*.>) : IMod<Trafo3d[]> -> IMod<Trafo3d[]> -> IMod<Trafo3d[]> = 
+        BinaryCache<IMod<Trafo3d[]>, IMod<Trafo3d[]>, IMod<Trafo3d[]>>(Mod.map2 (Array.map2 (*))).Invoke
+        
+    let (<*.>) : IMod<Trafo3d> -> IMod<Trafo3d[]> -> IMod<Trafo3d[]> = 
+        BinaryCache<IMod<Trafo3d>, IMod<Trafo3d[]>, IMod<Trafo3d[]>>(Mod.map2 (fun l r -> r |> Array.map (fun r -> l * r ))).Invoke
+        
+    let (<.*>) : IMod<Trafo3d[]> -> IMod<Trafo3d> -> IMod<Trafo3d[]> = 
+        BinaryCache<IMod<Trafo3d[]>, IMod<Trafo3d>, IMod<Trafo3d[]>>(Mod.map2 (fun l r -> l |> Array.map (fun l -> l * r ))).Invoke
+        
 [<AbstractClass>]
 type DefaultingModTable() =
     abstract member Hook : IMod -> IMod
@@ -111,34 +126,62 @@ type DefaultingModTable<'a>() =
 
 module Uniforms =
     open TrafoOperators
+    open Aardvark.Base.ShaderReflection
 
     [<AutoOpen>]
     module private Helpers = 
         exception NotFoundException of string
 
-        let inline (?) (p : IUniformProvider) (name : string) : IMod<'a> =
+        type Trafo =
+            | Single of IMod<Trafo3d>
+            | Layered of IMod<Trafo3d[]>
+
+            member x.Inverse =
+                match x with
+                    | Single v -> Trafo3d.inverse v |> Single
+                    | Layered v -> Trafo3d.inverseArr v |> Layered
+                    
+            member x.Value =
+                match x with
+                    | Single v -> v :> IMod
+                    | Layered v -> v :> IMod
+                
+            member x.NormalMatrix =
+                match x with
+                    | Single v -> Trafo3d.normalMatrix v :> IMod
+                    | Layered v -> Trafo3d.normalMatrixArr v :> IMod
+
+
+        let (<*>) (l : Trafo) (r : Trafo) : Trafo =
+            match l, r with
+                | Single l, Single r -> l <*> r |> Single
+                | Layered l, Single r -> l <.*> r |> Layered
+                | Single l, Layered r -> l <*.> r |> Layered
+                | Layered l, Layered r -> l <.*.> r |> Layered
+
+
+        let inline (?) (p : IUniformProvider) (name : string) : Trafo =
             match p.TryGetUniform(Ag.emptyScope, Symbol.Create name) with
-                | Some (:? IMod<'a> as m) -> m
+                | Some (:? IMod<Trafo3d> as m) -> Single m
+                | Some (:? IMod<Trafo3d[]> as m) -> Layered m
                 | _ -> raise <| NotFoundException name
 
     let private table : Dictionary<string, IUniformProvider -> IMod> =
         let emptyViewport = Mod.init V2i.II
         Dictionary.ofList [
-            "ModelTrafoInv",            fun u -> u?ModelTrafo |> Trafo3d.inverse :> IMod
-            "ViewTrafoInv",             fun u -> u?ViewTrafo |> Trafo3d.inverse :> IMod
-            "ProjTrafoInv",             fun u -> u?ProjTrafo |> Trafo3d.inverse :> IMod
+            "ModelTrafoInv",            fun u -> u?ModelTrafo.Inverse.Value
+            "ViewTrafoInv",             fun u -> u?ViewTrafo.Inverse.Value
+            "ProjTrafoInv",             fun u -> u?ProjTrafo.Inverse.Value
 
-            "ModelViewTrafo",           fun u -> u?ModelTrafo <*> u?ViewTrafo :> IMod
-            "ViewProjTrafo",            fun u -> u?ViewTrafo <*> u?ProjTrafo :> IMod
-            "ModelViewProjTrafo",       fun u -> u?ModelTrafo <*> u?ViewTrafo <*> u?ProjTrafo :> IMod
+            "ModelViewTrafo",           fun u -> (u?ModelTrafo <*> u?ViewTrafo).Value
+            "ViewProjTrafo",            fun u -> (u?ViewTrafo <*> u?ProjTrafo).Value
+            "ModelViewProjTrafo",       fun u -> (u?ModelTrafo <*> u?ViewTrafo <*> u?ProjTrafo).Value
 
-            "ModelViewTrafoInv",        fun u -> u?ModelTrafo <*> u?ViewTrafo |> Trafo3d.inverse :> IMod
-            "ViewProjTrafoInv",         fun u -> u?ViewTrafo <*> u?ProjTrafo |> Trafo3d.inverse :> IMod
-            "ModelViewProjTrafoInv",    fun u -> u?ModelTrafo <*> u?ViewTrafo <*> u?ProjTrafo |> Trafo3d.inverse :> IMod
+            "ModelViewTrafoInv",        fun u -> (u?ModelTrafo <*> u?ViewTrafo).Inverse.Value
+            "ViewProjTrafoInv",         fun u -> (u?ViewTrafo <*> u?ProjTrafo).Inverse.Value 
+            "ModelViewProjTrafoInv",    fun u -> (u?ModelTrafo <*> u?ViewTrafo <*> u?ProjTrafo).Inverse.Value
 
-            "NormalMatrix",             fun u -> u?ModelTrafo |> Trafo3d.normalMatrix :> IMod
-
-        
+            "NormalMatrix",             fun u -> u?ModelTrafo.NormalMatrix
         ]
 
     let tryGetDerivedUniform (name : string) (p : IUniformProvider) =

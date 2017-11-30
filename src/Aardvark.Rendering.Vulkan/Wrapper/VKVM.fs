@@ -802,7 +802,7 @@ module VKVM =
         let mutable prev : Option<CommandStream> = None
         let mutable next : Option<CommandStream> = None
 
-        let handle = 
+        let mutable handle = 
             let handle = NativePtr.alloc 1
             NativePtr.write handle (CommandFragment(0u, 0n, NativePtr.zero))
             handle
@@ -901,8 +901,12 @@ module VKVM =
                 )
 
         member x.Dispose() =
-            x.Clear()
-            NativePtr.free handle
+            if NativePtr.isNull handle then
+                Log.warn "double free"
+            else
+                x.Clear()
+                NativePtr.free handle
+                handle <- NativePtr.zero
 
         member x.BindPipeline(pipelineBindPoint : VkPipelineBindPoint, pipeline : VkPipeline) =
             let mutable cmd = 

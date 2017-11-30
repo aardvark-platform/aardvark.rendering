@@ -93,6 +93,19 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     let manager = new ResourceManager(noUser, device)
 
+    let allPools = System.Collections.Generic.List<DescriptorPool>()
+    let threadedPools =
+        new ThreadLocal<DescriptorPool>(fun _ ->
+            let p = device.CreateDescriptorPool(1 <<< 18, 1 <<< 18)
+            lock allPools (fun () -> allPools.Add p)
+            p
+        )
+
+    do device.OnDispose.Add (fun _ -> 
+        allPools |> Seq.iter device.Delete
+        allPools.Clear()
+    )
+
     static let shaderStages =
         LookupTable.lookupTable [
             FShade.ShaderStage.Vertex, Aardvark.Base.ShaderStage.Vertex
@@ -193,19 +206,20 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
     member x.CompileRender (renderPass : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) =
-        new RenderTaskNew.DependentRenderTask(device, unbox renderPass, set, true, true) :> IRenderTask
+        let set = EffectDebugger.Hook set
+        new RenderTask.DependentRenderTask(device, unbox renderPass, set, true, true) :> IRenderTask
         //new RenderTasks.RenderTask(device, unbox renderPass, set, Mod.constant engine, shareTextures, shareBuffers) :> IRenderTask
 
     member x.CompileClear(signature : IFramebufferSignature, color : IMod<Map<Symbol, C4f>>, depth : IMod<Option<float>>) : IRenderTask =
         let pass = unbox<RenderPass> signature
         let colors = pass.ColorAttachments |> Map.toSeq |> Seq.map (fun (_,(sem,att)) -> sem, color |> Mod.map (Map.find sem)) |> Map.ofSeq
-        new RenderTasks.ClearTask(device, unbox signature, colors, depth, Some (Mod.constant 0u)) :> IRenderTask
+        new RenderTask.ClearTask(device, unbox signature, colors, depth, Some (Mod.constant 0u)) :> IRenderTask
 
 
 
-    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>) =
+    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>, layers : int, perLayer : Set<string>) =
         let attachments = attachments |> SymDict.toMap
-        device.CreateRenderPass(attachments) :> IFramebufferSignature
+        device.CreateRenderPass(attachments, layers, perLayer) :> IFramebufferSignature
 
     member x.DeleteFramebufferSignature(signature : IFramebufferSignature) =
         device.Delete(unbox<RenderPass> signature)
@@ -216,7 +230,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                 match o with
                     | :? IBackendTextureOutputView as view ->
                         let img = unbox<Image> view.texture
-                        device.CreateOutputImageView(img, view.level, 1, view.slice, 1)
+                        let slices = 1 + view.slices.Max - view.slices.Min
+                        device.CreateOutputImageView(img, view.level, 1, view.slices.Min, slices)
 
                     | :? Image as img ->
                         device.CreateOutputImageView(img, 0, 1, 0, 1)
@@ -358,16 +373,16 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                 | :? IBackendTextureOutputView as view ->
                     let image = unbox<Image> view.texture
                     let flags = VkFormat.toAspect image.Format
-                    image.[unbox (int flags), view.level, view.slice]
+                    image.[unbox (int flags), view.level, view.slices.Min .. view.slices.Max]
                 | :? Image as img ->
                     let flags = VkFormat.toAspect img.Format
-                    img.[unbox (int flags), 0, 0]
+                    img.[unbox (int flags), 0, 0 .. 0]
                 | _ ->
                     failf "invalid input for blit: %A" source
 
         let dst = 
             let img = unbox<Image> target
-            img.[src.Aspect, 0, 0]
+            img.[src.Aspect, 0, 0 .. src.SliceCount - 1]
 
         token.Enqueue (Command.ResolveMultisamples(src, dst))
 
@@ -380,6 +395,59 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     interface IDisposable with
         member x.Dispose() = x.Dispose() 
 
+    member x.CreateBuffer(size : nativeint) =
+        let usage =
+            VkBufferUsageFlags.TransferSrcBit ||| 
+            VkBufferUsageFlags.TransferDstBit ||| 
+            VkBufferUsageFlags.StorageBufferBit ||| 
+            VkBufferUsageFlags.VertexBufferBit |||
+            VkBufferUsageFlags.IndexBufferBit ||| 
+            VkBufferUsageFlags.IndirectBufferBit 
+
+        device.CreateBuffer(usage, int64 size)
+
+    member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
+        let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit (int64 size)
+        let dst = unbox<Buffer> dst
+
+        temp.Memory.Mapped(fun ptr -> Marshal.Copy(src, ptr, size))
+        device.perform {
+            do! Command.Copy(temp, 0L, dst, int64 dstOffset, int64 size)
+        }
+        device.Delete temp
+
+    member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
+        let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 size)
+        let src = unbox<Buffer> src
+
+        device.perform {
+            do! Command.Copy(src, int64 srcOffset, temp, 0L, int64 size)
+        }
+
+        temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, size))
+        device.Delete temp
+
+    member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = 
+        let src = unbox<Image> src
+        let dst = unbox<Image> dst
+
+        device.perform {
+            if src.Samples = dst.Samples then
+                do! Command.Copy(
+                        src.[ImageAspect.Color, srcBaseLevel .. srcBaseLevel + levels - 1, srcBaseSlice .. srcBaseSlice + slices - 1],
+                        dst.[ImageAspect.Color, dstBaseLevel .. dstBaseLevel + levels - 1, dstBaseSlice .. dstBaseSlice + slices - 1]
+                    )
+            else
+                for l in 0 .. levels - 1 do
+                    let srcLevel = srcBaseLevel + l
+                    let dstLevel = dstBaseLevel + l
+                    do! Command.ResolveMultisamples(
+                            src.[ImageAspect.Color, srcLevel, srcBaseSlice .. srcBaseSlice + slices - 1],
+                            dst.[ImageAspect.Color, dstLevel, dstBaseSlice .. dstBaseSlice + slices - 1]
+                        )
+        }
+
+
     interface IRuntime with
         member x.OnDispose = onDispose.Publish
         member x.AssembleEffect (effect : FShade.Effect, signature : IFramebufferSignature) =
@@ -387,7 +455,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.ResourceManager = failf "not implemented"
 
-        member x.CreateFramebufferSignature(a,b) = x.CreateFramebufferSignature(a,b)
+        member x.CreateFramebufferSignature(a,b,c,d) = x.CreateFramebufferSignature(a,b,c,d)
         member x.DeleteFramebufferSignature(s) = x.DeleteFramebufferSignature(s)
 
         member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = x.Download(t, level, slice, target)
@@ -418,6 +486,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.CreateSparseTexture<'a when 'a : unmanaged> (size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'a> =
             x.CreateSparseTexture<'a>(size, levels, slices, dim, format, brickSize, maxMemory)
+        member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = x.Copy(src, srcBaseSlice, srcBaseLevel, dst, dstBaseSlice, dstBaseLevel, slices, levels)
 
 
         member x.CreateFramebuffer(signature, bindings) = x.CreateFramebuffer(signature, bindings)
@@ -428,3 +497,33 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.CreateMappedBuffer() = x.CreateMappedBuffer()
         member x.CreateMappedIndirectBuffer(indexed) = x.CreateMappedIndirectBuffer(indexed)
         member x.CreateGeometryPool(types) = new GeometryPoolUtilities.GeometryPool(device, types) :> IGeometryPool
+
+
+
+        member x.CreateBuffer(size : nativeint) = x.CreateBuffer(size) :> IBackendBuffer
+
+        member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
+            x.Copy(src, dst, dstOffset, size)
+
+        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
+            x.Copy(src, srcOffset, dst, size)
+
+        member x.MaxLocalSize = device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize
+
+        member x.Compile (c : FShade.ComputeShader) =
+            ComputeShader.ofFShade c device :> IComputeShader
+
+        member x.NewInputBinding(c : IComputeShader) =
+            ComputeShader.newInputBinding (unbox c) threadedPools.Value :> IComputeShaderInputBinding
+
+        member x.Delete (shader : IComputeShader) =
+            ComputeShader.delete (unbox shader)
+
+        member x.Invoke(shader : IComputeShader, groupCount : V3i, inputs : IComputeShaderInputBinding) =
+            let shader = unbox<Aardvark.Rendering.Vulkan.ComputeShader> shader
+            let inputs = unbox<InputBinding> inputs
+            device.perform {
+                do! Command.Bind shader
+                do! inputs.Bind
+                do! Command.Dispatch(groupCount)
+            }

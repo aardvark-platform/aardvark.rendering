@@ -53,7 +53,9 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
             Map.ofList [0, (DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples })],
             Map.empty,
             depthStencilSignature,
-            None
+            None,
+            1,
+            Set.empty
         )
 
     let mutable contextHandle : ContextHandle = null 

@@ -215,6 +215,17 @@ module SgFSharp =
         let vertexBuffer (s : Symbol) (view : BufferView) (sg : ISg) =
             Sg.VertexAttributeApplicator(s, view, sg) :> ISg
 
+        let vertexArray (s : Symbol) (value : System.Array) (sg : ISg) =
+            let view = BufferView(Mod.constant (ArrayBuffer value :> IBuffer), value.GetType().GetElementType())
+            Sg.VertexAttributeApplicator(Map.ofList [s, view], Mod.constant sg) :> ISg
+
+        let instanceBuffer (s : Symbol) (view : BufferView) (sg : ISg) =
+            Sg.InstanceAttributeApplicator(s, view, sg) :> ISg
+
+        let instanceArray (s : Symbol) (value : System.Array) (sg : ISg) =
+            let view = BufferView(Mod.constant (ArrayBuffer value :> IBuffer), value.GetType().GetElementType())
+            Sg.InstanceAttributeApplicator(s, view, sg) :> ISg
+
         let vertexBufferValue (s : Symbol) (value : IMod<V4f>) (sg : ISg) =
             let view = BufferView(SingleValueBuffer(value), typeof<V4f>)
             Sg.VertexAttributeApplicator(s, view, sg) :> ISg
@@ -232,7 +243,10 @@ module SgFSharp =
             ) :> ISg
 
         let render (mode : IndexedGeometryMode) (call : DrawCallInfo) =
-            Sg.RenderNode(call,mode)
+            Sg.RenderNode(call,mode) 
+            
+        let indirect (mode : IndexedGeometryMode) (buffer : IMod<IIndirectBuffer>) =
+            Sg.IndirectRenderNode(buffer, Mod.constant mode) :> ISg
 
         let ofIndexedGeometry (g : IndexedGeometry) =
             let attributes = 

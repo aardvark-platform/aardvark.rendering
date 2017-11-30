@@ -1289,6 +1289,19 @@ let main args =
     Ag.initialize()
     Aardvark.Init()
 
+    //Aardvark.Application.OpenVR.UnhateTest.run()
+
+    //Examples.Tessellation.run()
+    //Examples.Stereo.runNew()
+    //Examples.ComputeShader.run()
+    //Examples.CommandTest.run()
+    //Examples.Wobble.run()
+    //Examples.GeometryComposition.run()
+    //Examples.Eigi.run()
+    Examples.LevelOfDetail.run()
+    //Examples.Terrain.run()
+    System.Environment.Exit 0
+
     //colorLockTest()
     let app,win =
         if useVulkan then
@@ -1322,7 +1335,8 @@ let main args =
     Interactive.Renderer <- Vulkan
     
     Aardvark.Rendering.GL.RuntimeConfig.SupressSparseBuffers <- false
-    Examples.PostProcessing.run()
+    //Examples.PostProcessing.run()
+
     //Examples.CommandTest.run()
     //Examples.LoD.run()
     //Examples.Shadows.run()

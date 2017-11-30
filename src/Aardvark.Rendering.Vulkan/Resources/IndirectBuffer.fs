@@ -52,7 +52,7 @@ module IndirectBuffer =
         if indexed then copyIndexed src dst cnt
         else copyNonIndexed src dst cnt
 
-    let create (indexed : bool) (b : IIndirectBuffer) (device : Device) =
+    let rec create (indexed : bool) (b : IIndirectBuffer) (device : Device) =
         match b with
             | :? IndirectBuffer as b ->
                 b.AddReference()
