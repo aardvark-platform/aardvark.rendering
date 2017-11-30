@@ -466,7 +466,7 @@ module Utilities =
 
                 { new SimpleRenderWindow(app, app.Info.viewTrafos, app.Info.projTrafos) with
                     override x.Compile(win, sg) =
-                        cfg.scene
+                        sg
                         |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
                         |> Sg.uniform "ProjTrafo" app.Info.projTrafos
                         |> Sg.uniform "CameraLocation" hmdLocation
