@@ -100,6 +100,10 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
     member x.FragmentFlags = fragInfo.flags
     member x.SampleShading = fragInfo.sampleShading
     member x.ShaderCreateInfos = createInfos
+    member x.TessellationPatchSize = 
+        match tessInfo with
+            | Some i -> i.outputVertices
+            | None -> 0
 
     override x.Destroy() =
         for s in shaders do device.Delete(s.Module)
@@ -192,6 +196,8 @@ module ShaderProgram =
 
                 sprintf "layout(set = %s, binding = %s, std140)\r\nuniform %s\r\n{" set binding name
             )
+
+        let code = code.Replace("gl_InstanceID", "gl_InstanceIndex").Replace("gl_VertexID", "gl_VertexIndex")
         
         let code = 
             versionRx.Replace(code, "#version 450 core")
@@ -246,7 +252,7 @@ module ShaderProgram =
         let layout = 
             match layout with
                 | Some l -> l.AddRef(); l
-                | None -> device.CreatePipelineLayout(shaders)
+                | None -> device.CreatePipelineLayout(shaders, 1, Set.empty)
 
         new ShaderProgram(device, shaders, layout, surface)
 
@@ -343,7 +349,7 @@ module ShaderProgram =
             program
         )
 
-    let ofModule  (layout : PipelineLayout) (effect : FShade.Imperative.Module) (device : Device) =
+    let ofModule (layout : PipelineLayout) (effect : FShade.Imperative.Module) (device : Device) =
         device.GetCached(effectSurfaceCache, (layout, effect), fun (layout, effect) ->
             let (program, data) = FShadeStuff.ofModule layout effect device
             program.CacheName <- effectSurfaceCache

@@ -25,16 +25,8 @@ module SimpleLighting =
         [<BiNormal>]                b       : V3d
         [<Tangent>]                 t       : V3d
         [<Color>]                   c       : V4d
-        [<TexCoord>]                tc      : V2d
         [<Semantic("LightDir")>]    ldir    : V3d
     }
-
-    [<ReflectedDefinition>]
-    let transformNormal (n : V3d) =
-        uniform.ModelViewTrafoInv.Transposed * V4d(n, 0.0) 
-            |> Vec.xyz 
-            |> Vec.normalize
-
 
     let stableTrafo (v : Vertex) =
         vertex {
@@ -42,12 +34,11 @@ module SimpleLighting =
 
             return {
                 pos = uniform.ProjTrafo * vp
-                n = transformNormal v.n
-                b = transformNormal v.b
-                t = transformNormal v.t
+                n = uniform.ModelViewTrafoInv.TransposedTransformDir v.n |> Vec.normalize
+                b = uniform.ModelViewTrafo.TransformDir v.b |> Vec.normalize
+                t = uniform.ModelViewTrafo.TransformDir v.t |> Vec.normalize
                 c = v.c
-                tc = v.tc
-                ldir = V3d.Zero - vp.XYZ |> Vec.normalize
+                ldir = -vp.XYZ |> Vec.normalize
             }
         }
 

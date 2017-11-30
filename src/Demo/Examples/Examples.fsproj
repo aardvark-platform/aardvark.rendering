@@ -1,5 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="..\..\..\packages\FSharp.Compiler.Tools\build\FSharp.Compiler.Tools.props" Condition="Exists('..\..\..\packages\FSharp.Compiler.Tools\build\FSharp.Compiler.Tools.props')" Label="Paket" />
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
@@ -78,6 +79,17 @@
     <Compile Include="Commands.fs" />
     <Compile Include="Trie.fs" />
     <Compile Include="CullingTest.fs" />
+    <Compile Include="Utilities.fs" />
+    <Compile Include="Stereo.fs" />
+    <Compile Include="Wobble.fs" />
+    <Compile Include="Tessellation.fs" />
+    <Compile Include="TessellatedSphere.fs" />
+    <Compile Include="GeometryComposition.fs" />
+    <Compile Include="ComputeShader.fs" />
+    <Compile Include="HarwareFeatures.fs" />
+    <Compile Include="Eigi.fs" />
+    <Compile Include="Terrain.fs" />
+    <Compile Include="LevelOfDetail.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <None Include="paket.references" />
@@ -106,6 +118,11 @@
       <Project>{054df582-d549-4da0-b74b-762ab2585d3f}</Project>
       <Private>True</Private>
     </ProjectReference>
+    <ProjectReference Include="..\..\Aardvark.Rendering.Text\Aardvark.Rendering.Text.fsproj">
+      <Name>Aardvark.Rendering.Text</Name>
+      <Project>{fb0c63a7-519a-4fcc-9a4b-841aee5b8c97}</Project>
+      <Private>True</Private>
+    </ProjectReference>
     <ProjectReference Include="..\..\Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj">
       <Name>Aardvark.Rendering.Vulkan</Name>
       <Project>{8bbc1ef6-9c85-4baf-a732-fc46dca64ec3}</Project>
@@ -119,6 +136,16 @@
     <ProjectReference Include="..\..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj">
       <Name>Aardvark.SceneGraph</Name>
       <Project>{b9ef48e4-7e73-4ddf-805a-d7324d907cb8}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Application\Aardvark.Application.OpenVR.Vulkan\Aardvark.Application.OpenVR.Vulkan.fsproj">
+      <Name>Aardvark.Application.OpenVR.Vulkan</Name>
+      <Project>{fb047d5e-d49a-462e-baa0-b058ce06cfc9}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Application\Aardvark.Application.OpenVR\Aardvark.Application.OpenVR.fsproj">
+      <Name>Aardvark.Application.OpenVR</Name>
+      <Project>{7aaac578-443f-4120-ba74-3732cce920e8}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj">
@@ -253,6 +280,17 @@
   <Choose>
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
       <ItemGroup>
+        <Reference Include="FShade.Debug">
+          <HintPath>..\..\..\packages\FShade.Debug\lib\net45\FShade.Debug.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+      </ItemGroup>
+    </When>
+  </Choose>
+  <Choose>
+    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
+      <ItemGroup>
         <Reference Include="FShade.GLSL">
           <HintPath>..\..\..\packages\FShade.GLSL\lib\net45\FShade.GLSL.dll</HintPath>
           <Private>True</Private>
@@ -266,6 +304,22 @@
       <ItemGroup>
         <Reference Include="FShade.Imperative">
           <HintPath>..\..\..\packages\FShade.Imperative\lib\net45\FShade.Imperative.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+      </ItemGroup>
+    </When>
+  </Choose>
+  <Choose>
+    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
+      <ItemGroup>
+        <Reference Include="FSharp.Compiler.Service">
+          <HintPath>..\..\..\packages\FSharp.Compiler.Service\lib\net45\FSharp.Compiler.Service.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+        <Reference Include="FSharp.Compiler.Service.MSBuild.v12">
+          <HintPath>..\..\..\packages\FSharp.Compiler.Service\lib\net45\FSharp.Compiler.Service.MSBuild.v12.dll</HintPath>
           <Private>True</Private>
           <Paket>True</Paket>
         </Reference>
@@ -347,6 +401,17 @@
   <Choose>
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
       <ItemGroup>
+        <Reference Include="System.Reflection.Metadata">
+          <HintPath>..\..\..\packages\System.Reflection.Metadata\lib\netstandard1.1\System.Reflection.Metadata.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+      </ItemGroup>
+    </When>
+  </Choose>
+  <Choose>
+    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
+      <ItemGroup>
         <Reference Include="System.Runtime.InteropServices.RuntimeInformation">
           <HintPath>..\..\..\packages\System.Runtime.InteropServices.RuntimeInformation\lib\net45\System.Runtime.InteropServices.RuntimeInformation.dll</HintPath>
           <Private>True</Private>
@@ -360,6 +425,17 @@
       <ItemGroup>
         <Reference Include="AssimpNet">
           <HintPath>..\..\..\packages\Unofficial.AssimpNet\lib\net45\AssimpNet.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+      </ItemGroup>
+    </When>
+  </Choose>
+  <Choose>
+    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
+      <ItemGroup>
+        <Reference Include="OpenVR">
+          <HintPath>..\..\..\packages\Unofficial.OpenVR\lib\net45\OpenVR.dll</HintPath>
           <Private>True</Private>
           <Paket>True</Paket>
         </Reference>

@@ -536,6 +536,7 @@ type AbstractRenderTask() =
 
     let mutable frameId = 0UL
 
+    let mutable disposed = 0
  
     let runtimeValueCache = Dict.empty
     let currentOutput = Mod.init { framebuffer = Unchecked.defaultof<_>; images = Map.empty; overrides = Map.empty; viewport = Box2i(V2i.OO, V2i.II) }
@@ -618,9 +619,13 @@ type AbstractRenderTask() =
     abstract member Runtime : Option<IRuntime>
     abstract member PerformUpdate : AdaptiveToken * RenderToken -> unit
     abstract member Perform : AdaptiveToken * RenderToken * OutputDescription -> unit
-    abstract member Dispose : unit -> unit
+    abstract member Release : unit -> unit
     abstract member Use : (unit -> 'a) -> 'a
     
+    member x.Dispose() =
+        if Interlocked.Exchange(&disposed, 1) = 0 then
+            x.Release()
+
 
     member x.FrameId = frameId
     member x.Run(token : AdaptiveToken, t : RenderToken, out : OutputDescription) =
@@ -697,7 +702,7 @@ module RenderTask =
                 run 0
             )
 
-        override x.Dispose() =
+        override x.Release() =
             for t in tasks do t.Dispose()
 
         override x.PerformUpdate(token : AdaptiveToken, rt : RenderToken) =
@@ -754,7 +759,7 @@ module RenderTask =
             let ni = updateInner t token
             ni.Run(token, t, fbo)
 
-        override x.Dispose() =
+        override x.Release() =
             input.RemoveOutput x
             match inner with
                 | Some i -> 
@@ -851,7 +856,7 @@ module RenderTask =
                 t.Run(token, rt, fbo)
 
 
-        override x.Dispose() =
+        override x.Release() =
             reader.RemoveOutput this
             reader.Dispose()
 
@@ -868,7 +873,7 @@ module RenderTask =
 
         override x.FramebufferSignature = None
         override x.Perform(token, t, fbo) = f.Evaluate (token,(x :> IRenderTask,t,fbo))
-        override x.Dispose() = f.RemoveOutput this 
+        override x.Release() = f.RemoveOutput this 
         override x.PerformUpdate(token, t) = ()
         override x.Runtime = None
         override x.Use f = lock x f
@@ -892,7 +897,7 @@ module RenderTask =
                 inner.Use f
             )
 
-        override x.Dispose() = x.Dispose true
+        override x.Release() = x.Dispose true
         override x.Perform(token, t, fbo) = inner.Run(token, t, fbo)
         override x.PerformUpdate(token, t) = inner.Update(token, t)
         override x.FramebufferSignature = inner.FramebufferSignature
@@ -925,7 +930,7 @@ module RenderTask =
 
             res
 
-        override x.Dispose() = inner.Dispose()
+        override x.Release() = inner.Dispose()
         override x.Runtime = inner.Runtime
 
 

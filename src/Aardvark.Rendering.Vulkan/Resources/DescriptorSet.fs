@@ -15,7 +15,7 @@ open Microsoft.FSharp.NativeInterop
 
 type Descriptor =
     | UniformBuffer of int * UniformBuffer
-    | StorageBuffer of int * Buffer
+    | StorageBuffer of int * Buffer * offset : int64 * size : int64
     | CombinedImageSampler of int * array<Option<ImageView * Sampler>>
     | StorageImage of int * ImageView
 
@@ -74,12 +74,12 @@ module DescriptorSet =
             descriptors
                 |> Array.collect (fun desc ->
                     match desc with
-                        | StorageBuffer (binding, b) ->
+                        | StorageBuffer (binding, b, offset, size) ->
                             let info = 
                                 VkDescriptorBufferInfo(
                                     b.Handle, 
-                                    0UL, 
-                                    uint64 b.Size
+                                    uint64 offset, 
+                                    uint64 size
                                 )
 
                             NativePtr.write bufferInfos info

@@ -402,6 +402,32 @@ let picking() =
 
     App.Runtime.CompileRender(App.FramebufferSignature, objs)
 
+[<Demo("Frustum Merge")>]
+let frustumMerge() =
+
+    let lProj = { left = -0.2; right = 0.3; top = 0.25; bottom = -0.25; near = 1.0; far = 10.0 }
+    let rProj = { left = -0.3; right = 0.2; top = 0.25; bottom = -0.25; near = 1.0; far = 10.0 }
+
+    let lViewProj = Trafo3d.Translation(0.7, 0.0, 0.0) * Frustum.projTrafo lProj
+    let rViewProj = Trafo3d.Translation(-0.7, 0.0, 0.0) * Frustum.projTrafo rProj
+
+    let merged = ViewProjection.mergeStereo lViewProj rViewProj
+
+    let frustum (color : C4b) (viewProj : Trafo3d) =
+        Sg.wireBox' color (Box3d(-V3d.III, V3d.III))
+            |> Sg.transform (viewProj.Inverse)
+
+    Sg.ofList [
+        frustum C4b.Green lViewProj
+        frustum C4b.Red rViewProj
+        frustum C4b.Yellow merged
+    ]
+    |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, V3d.OIO, V3d.Zero))
+    |> Sg.shader {
+        do! DefaultSurfaces.trafo
+        do! DefaultSurfaces.vertexColor
+    }
+
 
 
 [<Demo>]
@@ -829,6 +855,7 @@ let main argv =
 //    printfn ""
 //
 //    System.Environment.Exit 0
+
 
 
 

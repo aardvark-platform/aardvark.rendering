@@ -104,12 +104,17 @@ module FramebufferExtensions =
                     GL.Check "could not attach renderbuffer"
 
 
-                | :? BackendTextureOutputView as r ->
-                    let { texture = o; level = level; slice = slice } = r
-                    let o = unbox<Texture> o
+                | :? IBackendTextureOutputView as r ->
+                    let o = unbox<Texture> r.texture
 
-                    if slice < 0 then
+                    let baseSlice = r.slices.Min
+                    let slices = 1 + r.slices.Max - baseSlice
+                    let level = r.level
 
+                    if slices > 1 then
+                        if baseSlice <> 0 || slices <> o.Count then
+                            failwith "sub-layers not supported atm."
+  
                         GL.FramebufferTexture(FramebufferTarget.Framebuffer, attachment, o.Handle, level)
                         GL.Check "could not attach texture"
 
@@ -117,7 +122,7 @@ module FramebufferExtensions =
 
                         match o.Dimension with
                             | TextureDimension.TextureCube ->
-                                let (_,target) = TextureExtensions.cubeSides.[slice]
+                                let (_,target) = TextureExtensions.cubeSides.[baseSlice]
                                 if o.Count > 1 then
                                     failwith "cubemaparray currently not implemented"
                                 else
@@ -125,10 +130,37 @@ module FramebufferExtensions =
                                 GL.Check "could not attach texture"
                             | _ ->
                                 if o.Count > 1 then
-                                    GL.FramebufferTextureLayer(FramebufferTarget.Framebuffer, attachment, o.Handle, level, slice)
+                                    GL.FramebufferTextureLayer(FramebufferTarget.Framebuffer, attachment, o.Handle, level, baseSlice)
                                 else
                                     GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, (if o.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), o.Handle, level)
                                 GL.Check "could not attach texture"
+
+        
+//                | :? BackendTextureOutputView as r ->
+//                    let { texture = o; level = level; slice = slice } = r
+//                    let o = unbox<Texture> o
+//
+//                    if slice < 0 then
+//
+//                        GL.FramebufferTexture(FramebufferTarget.Framebuffer, attachment, o.Handle, level)
+//                        GL.Check "could not attach texture"
+//
+//                    else
+//
+//                        match o.Dimension with
+//                            | TextureDimension.TextureCube ->
+//                                let (_,target) = TextureExtensions.cubeSides.[slice]
+//                                if o.Count > 1 then
+//                                    failwith "cubemaparray currently not implemented"
+//                                else
+//                                    GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, target, o.Handle, level)
+//                                GL.Check "could not attach texture"
+//                            | _ ->
+//                                if o.Count > 1 then
+//                                    GL.FramebufferTextureLayer(FramebufferTarget.Framebuffer, attachment, o.Handle, level, slice)
+//                                else
+//                                    GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, (if o.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), o.Handle, level)
+//                                GL.Check "could not attach texture"
 
         
                 | _ ->

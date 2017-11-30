@@ -379,6 +379,147 @@ type MultiRenderObject(children : list<IRenderObject>) =
         member x.RenderPass = first.Value.RenderPass
         member x.AttributeScope = first.Value.AttributeScope
 
+    override x.GetHashCode() = children.GetHashCode()
+    override x.Equals o =
+        match o with
+            | :? MultiRenderObject as o -> children.Equals(o.Children)
+            | _ -> false
+
+
+type IComputeShader =
+    abstract member LocalSize : V3i
+
+
+type PipelineState =
+    {
+        depthTest           : IMod<DepthTestMode>
+        cullMode            : IMod<CullMode>
+        blendMode           : IMod<BlendMode>
+        fillMode            : IMod<FillMode>
+        stencilMode         : IMod<StencilMode>
+        multisample         : IMod<bool>
+        writeBuffers        : Option<Set<Symbol>>
+        globalUniforms      : IUniformProvider
+
+        geometryMode        : IndexedGeometryMode
+        vertexInputTypes    : Map<Symbol, Type>
+        perGeometryUniforms : Map<string, Type>
+    }
+   
+[<ReferenceEquality>]
+type Geometry =
+    {
+        vertexAttributes    : Map<Symbol, IMod<IBuffer>>
+        indices             : Option<Aardvark.Base.BufferView>
+        uniforms            : Map<string, IMod>
+        call                : IMod<list<DrawCallInfo>>
+    }
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module Geometry =
+    let ofIndexedGeometry (uniforms : Map<string, IMod>) (g : IndexedGeometry) =
+        let index, fvc = 
+            match g.IndexArray with
+                | null -> 
+                    let anyAtt = g.IndexedAttributes.Values |> Seq.head
+                    None, anyAtt.Length
+                | index -> 
+                    let buffer = Mod.constant (ArrayBuffer(index) :> IBuffer)
+                    let view = BufferView(buffer, index.GetType().GetElementType())
+
+                    Some view, index.Length
+
+        let attributes = 
+            g.IndexedAttributes |> SymDict.toMap |> Map.map (fun name att ->
+                let buffer = Mod.constant (ArrayBuffer(att) :> IBuffer)
+                buffer
+            )
+
+        let gUniforms =
+            if isNull g.SingleAttributes then
+                Map.empty
+            else
+                let tc = typedefof<ConstantMod<_>>
+                g.SingleAttributes |> SymDict.toSeq |> Seq.choose (fun (name, value) ->
+                    try
+                        let vt = value.GetType()
+                        let t = tc.MakeGenericType(vt)
+                        let ctor = t.GetConstructor [| vt |]
+                        Some (name.ToString(), ctor.Invoke([| value |]) |> unbox<IMod>)
+                    with _ ->
+                        None
+                )
+                |> Map.ofSeq
+
+        let call =
+            DrawCallInfo(FaceVertexCount = fvc, InstanceCount = 1)
+            
+        {
+            vertexAttributes    = attributes
+            indices             = index
+            uniforms            = Map.union gUniforms uniforms
+            call                = Mod.constant [call]
+        }
+
+
+
+
+
+[<RequireQualifiedAccess>]
+type RuntimeCommand =
+    | EmptyCmd
+    | RenderCmd of objects : aset<IRenderObject>
+
+    
+    //| ViewDependentCmd of sort : (Trafo3d -> Trafo3d -> IRenderObject[] -> IRenderObject[]) * objects : aset<IRenderObject>
+
+    | GeometriesCmd of surface : Surface * pipeline : PipelineState * geometries : aset<Geometry>
+    | LodTreeCmd of surface : Surface * pipeline : PipelineState * geometries : LodTreeLoader<Geometry>
+
+    //| RenderMany of PipelineState * aset<Geometry>
+    //| RenderDynamic of PipelineState * Config * IMod<Tree<Geometry>>
+    
+    | DispatchCmd of shader : IComputeShader * groups : IMod<V3i> * arguments : Map<string, obj>
+    | ClearCmd of colors : Map<Symbol, IMod<C4f>> * depth : Option<IMod<float>> * stencil : Option<IMod<uint32>>
+
+    | OrderedCmd of commands : alist<RuntimeCommand>
+    | IfThenElseCmd of condition : IMod<bool> * ifTrue : RuntimeCommand * ifFalse : RuntimeCommand
+
+
+
+    static member Empty = RuntimeCommand.EmptyCmd
+    
+    static member Render(objects : aset<IRenderObject>) =
+        RuntimeCommand.RenderCmd(objects)
+        
+    static member Dispatch(shader : IComputeShader, groups : IMod<V3i>, arguments : Map<string, obj>) =
+        RuntimeCommand.DispatchCmd(shader, groups, arguments)
+        
+    static member Clear(colors : Map<Symbol, IMod<C4f>>, depth : Option<IMod<float>>, stencil : Option<IMod<uint32>>) =
+        RuntimeCommand.ClearCmd(colors, depth, stencil)
+
+    static member Ordered(commands : alist<RuntimeCommand>) =
+        RuntimeCommand.OrderedCmd(commands)
+
+    static member IfThenElse(condition : IMod<bool>, ifTrue : RuntimeCommand, ifFalse : RuntimeCommand) =
+        RuntimeCommand.IfThenElseCmd(condition, ifTrue, ifFalse)
+
+    static member Geometries(surface : Surface, pipeline : PipelineState, geometries : aset<Geometry>) =
+        RuntimeCommand.GeometriesCmd(surface, pipeline, geometries)
+
+    static member Geometries(effects : FShade.Effect[], activeEffect : IMod<int>, pipeline : PipelineState, geometries : aset<Geometry>) =
+        let surface = 
+            Surface.FShade (fun cfg ->
+                let modules = effects |> Array.map (FShade.Effect.toModule cfg)
+                let signature = FShade.EffectInputLayout.ofModules modules
+                let modules = modules |> Array.map (FShade.EffectInputLayout.apply signature)
+
+                signature, activeEffect |> Mod.map (Array.get modules)
+            )
+        RuntimeCommand.GeometriesCmd(surface, pipeline, geometries)
+
+    static member LodTree(surface : Surface, pipeline : PipelineState, geometries : LodTreeLoader<Geometry>) =
+        RuntimeCommand.LodTreeCmd(surface, pipeline, geometries)
 
 type IAdaptiveBufferReader =
     inherit IAdaptiveObject
@@ -388,6 +529,42 @@ type IAdaptiveBufferReader =
 type IAdaptiveBuffer =
     inherit IMod<IBuffer>
     abstract member GetReader : unit -> IAdaptiveBufferReader
+
+
+type EffectDebugger private() =
+    
+    static let rec hookObject (o : IRenderObject) =
+        match o with
+            | :? RenderObject as o ->
+                match o.Surface with
+                    | Surface.FShadeSimple e ->
+                        match FShade.EffectDebugger.register e with
+                            | Some (:? IMod<FShade.Effect> as e) ->
+                                e |> Mod.map (fun e -> { o with Id = newId(); Surface = Surface.FShadeSimple e } :> IRenderObject)
+                            | _ ->
+                                Mod.constant (o :> IRenderObject)
+                    | _ ->
+                        Mod.constant (o :> IRenderObject)
+
+            | :? MultiRenderObject as m ->
+                let mods = m.Children |> List.map hookObject
+
+                if mods |> List.forall (fun m -> m.IsConstant) then
+                    Mod.constant (m :> IRenderObject)
+                else
+                    mods |> Mod.mapN (fun ros -> MultiRenderObject(Seq.toList ros) :> IRenderObject)
+
+            | _ ->
+                Mod.constant o
+
+    static member Hook (o : IRenderObject) = hookObject o
+    static member Hook (set : aset<IRenderObject>) =
+        match FShade.EffectDebugger.registerFun with
+            | Some _ ->
+                set |> ASet.mapM EffectDebugger.Hook
+            | None ->
+                set
+
 
 module AttributePackingV2 =
     open System

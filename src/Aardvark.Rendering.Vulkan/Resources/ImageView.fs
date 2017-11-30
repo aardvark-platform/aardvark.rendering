@@ -23,7 +23,7 @@ type ImageView =
         interface IBackendTextureOutputView with
             member x.texture = x.Image :> IBackendTexture
             member x.level = x.MipLevelRange.Min
-            member x.slice = x.ArrayRange.Min
+            member x.slices = x.ArrayRange
 
         interface IFramebufferOutput with
             member x.Format = VkFormat.toTextureFormat x.Image.Format |> TextureFormat.toRenderbufferFormat

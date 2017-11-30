@@ -56,6 +56,10 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Vulkan",
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WinForms.Vulkan", "Application\Aardvark.Application.WinForms.Vulkan\Aardvark.Application.WinForms.Vulkan.fsproj", "{99DD80B4-B1B8-4042-BEEA-B3A7FD617242}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.OpenVR", "Application\Aardvark.Application.OpenVR\Aardvark.Application.OpenVR.fsproj", "{7AAAC578-443F-4120-BA74-3732CCE920E8}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.OpenVR.Vulkan", "Application\Aardvark.Application.OpenVR.Vulkan\Aardvark.Application.OpenVR.Vulkan.fsproj", "{FB047D5E-D49A-462E-BAA0-B058CE06CFC9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -146,6 +150,14 @@ Global
 		{99DD80B4-B1B8-4042-BEEA-B3A7FD617242}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{99DD80B4-B1B8-4042-BEEA-B3A7FD617242}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{99DD80B4-B1B8-4042-BEEA-B3A7FD617242}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7AAAC578-443F-4120-BA74-3732CCE920E8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7AAAC578-443F-4120-BA74-3732CCE920E8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7AAAC578-443F-4120-BA74-3732CCE920E8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7AAAC578-443F-4120-BA74-3732CCE920E8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FB047D5E-D49A-462E-BAA0-B058CE06CFC9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FB047D5E-D49A-462E-BAA0-B058CE06CFC9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FB047D5E-D49A-462E-BAA0-B058CE06CFC9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FB047D5E-D49A-462E-BAA0-B058CE06CFC9}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -165,5 +177,7 @@ Global
 		{79D48400-F885-461A-B747-E3675A7EF2EF} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 		{346185F9-AB7F-4973-8B80-24CEB113E4B5} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 		{99DD80B4-B1B8-4042-BEEA-B3A7FD617242} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
+		{7AAAC578-443F-4120-BA74-3732CCE920E8} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
+		{FB047D5E-D49A-462E-BAA0-B058CE06CFC9} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 	EndGlobalSection
 EndGlobal

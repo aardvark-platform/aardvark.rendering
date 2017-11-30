@@ -1,5 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="..\..\packages\FSharp.Compiler.Tools\build\FSharp.Compiler.Tools.props" Condition="Exists('..\..\packages\FSharp.Compiler.Tools\build\FSharp.Compiler.Tools.props')" Label="Paket" />
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -75,12 +76,14 @@
     <Compile Include="DrawCallInfo.fs" />
     <Compile Include="Buffers.fs" />
     <Compile Include="Textures.fs" />
+    <Compile Include="LodTree.fs" />
     <Compile Include="RenderObject.fs" />
     <Compile Include="Framebuffers.fs" />
     <Compile Include="Config.fs" />
     <Compile Include="ResourceManagement.fs" />
     <Compile Include="Runtime.fs" />
     <Compile Include="RuntimeExtensions.fs" />
+    <Compile Include="ShaderInterface.fs" />
     <Compile Include="Uniforms.fs" />
     <Compile Include="RenderTask.fs" />
     <Compile Include="Camera.fs" />
@@ -112,7 +115,6 @@
     <Compile Include="GridCell.fs" />
     <Compile Include="ImageTrafo.fs" />
     <Compile Include="PixImageCube.fs" />
-    <Compile Include="ShaderInterface.fs" />
     <Compile Include="Ordered.fs" />
     <Compile Include="Trie.fs" />
   </ItemGroup>

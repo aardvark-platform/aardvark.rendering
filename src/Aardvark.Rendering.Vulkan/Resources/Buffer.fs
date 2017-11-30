@@ -27,6 +27,7 @@ type Buffer =
             member x.Handle = x.Handle :> obj
             member x.SizeInBytes = nativeint x.Memory.Size
 
+
         member x.AddReference() = Interlocked.Increment(&x.RefCount) |> ignore
 
         new(device, handle, memory, size) = { inherit Resource<_>(device, handle); Memory = memory; Size = size; RefCount = 1 }
@@ -394,6 +395,7 @@ module Buffer =
 
             let deviceAlignedSize = Alignment.next align (int64 size)
             let buffer = device |> alloc flags deviceAlignedSize
+            buffer.Size <- int64 size
             let deviceMem = buffer.Memory
         
             let hostPtr = device.HostMemory.Alloc(align, deviceAlignedSize)
@@ -430,7 +432,7 @@ module Buffer =
                 buffer.Handle <- VkBuffer.Null
                 buffer.Memory.Dispose()
 
-    let tryUpdate (data : IBuffer) (buffer : Buffer) =
+    let rec tryUpdate (data : IBuffer) (buffer : Buffer) =
         match data with 
             | :? ArrayBuffer as ab ->
                 let size = ab.Data.LongLength * int64 (Marshal.SizeOf ab.ElementType)
@@ -449,10 +451,15 @@ module Buffer =
                     true
                 else
                     false
+                
+            | :? IBufferView as bv ->
+                let handle = bv.Buffer.Handle
+                tryUpdate handle buffer
+
             | _ ->
                 false
 
-    let ofBuffer (flags : VkBufferUsageFlags) (buffer : IBuffer) (device : Device) =
+    let rec ofBuffer (flags : VkBufferUsageFlags) (buffer : IBuffer) (device : Device) =
         match buffer with
             | :? ArrayBuffer as ab ->
                 if ab.Data.Length <> 0 then
@@ -477,8 +484,13 @@ module Buffer =
                 b.AddReference()
                 b
 
+            | :? IBufferView as bv ->
+                let handle = bv.Buffer.Handle
+                ofBuffer flags handle device
+
             | _ ->
                 failf "unsupported buffer type %A" buffer
+  
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

@@ -10,7 +10,7 @@ open OpenTK.Graphics.OpenGL4
 open Aardvark.Base.Incremental
 open FShade
 
-type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * AttachmentSignature>, images : Map<int, Symbol>, depth : Option<AttachmentSignature>, stencil : Option<AttachmentSignature>) =
+type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * AttachmentSignature>, images : Map<int, Symbol>, depth : Option<AttachmentSignature>, stencil : Option<AttachmentSignature>, layers : int, perLayer : Set<string>) =
    
     let signatureAssignableFrom (mine : AttachmentSignature) (other : AttachmentSignature) =
         let myCol = RenderbufferFormat.toColFormat mine.format
@@ -37,12 +37,18 @@ type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * Attachm
     member x.DepthAttachment = depth
     member x.StencilAttachment = depth
     member x.Images = images
+
+    member x.LayerCount = layers
+    member x.PerLayerUniforms = perLayer
+
     member x.IsAssignableFrom (other : IFramebufferSignature) =
         if x.Equals other then 
             true
         else
             match other with
                 | :? FramebufferSignature as other ->
+                    layers = other.LayerCount &&
+                    perLayer = other.PerLayerUniforms &&
                     runtime = other.Runtime &&
                     colorsAssignableFrom colors other.ColorAttachments
                     // TODO: check depth and stencil (cumbersome for combined DepthStencil attachments)
@@ -59,6 +65,8 @@ type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * Attachm
         member x.StencilAttachment = stencil
         member x.IsAssignableFrom other = x.IsAssignableFrom other
         member x.Images = images
+        member x.LayerCount = layers
+        member x.PerLayerUniforms = perLayer
 
 type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     static let aardStage =
@@ -146,8 +154,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
         member x.ResourceManager = manager :> IResourceManager
 
-        member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>) =
-            x.CreateFramebufferSignature(attachments, images) :> IFramebufferSignature
+        member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>, layers : int, perLayer : Set<string>) =
+            x.CreateFramebufferSignature(attachments, images, layers, perLayer) :> IFramebufferSignature
 
         member x.DeleteFramebufferSignature(signature : IFramebufferSignature) =
             ()
@@ -164,8 +172,10 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CompileClear(signature, color, depth) = x.CompileClear(signature, color, depth)
       
             
-
-
+        member x.CreateBuffer(size : nativeint) = x.CreateBuffer(size) :> IBackendBuffer
+        member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = x.Upload(src, dst, dstOffset, size)
+        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) = x.Download(src, srcOffset, dst, size)
+        member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = x.Copy(src, srcBaseSlice, srcBaseLevel, dst, dstBaseSlice, dstBaseLevel, slices, levels)
         member x.PrepareSurface (signature, s : ISurface) = x.PrepareSurface(signature, s) :> IBackendSurface
         member x.DeleteSurface (s : IBackendSurface) = 
             match s with
@@ -227,9 +237,52 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
         member x.CreateMappedIndirectBuffer(indexed)  =
             x.CreateMappedIndirectBuffer (indexed)
+            
+        member x.Compile (c : FShade.ComputeShader) = failwith ""
+        member x.Invoke(shader, groupCount, input) = failwith ""
+        member x.NewInputBinding(shader) = failwith ""
+        member x.Delete(shader : IComputeShader) = failwith ""
+        member x.MaxLocalSize = failwith ""
+
+    
+    member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) =
+        let src = unbox<Texture> src
+        let dst = unbox<Texture> dst
+        
+        let mutable size = src.GetSize srcBaseLevel
+        for l in 0 .. levels - 1 do
+            let srcLevel = srcBaseLevel + l
+            let dstLevel = dstBaseLevel + l
+            for s in 0 .. slices - 1 do
+                if src.Multisamples = dst.Multisamples then
+                    ctx.Copy(src, srcLevel, srcBaseSlice + s, V2i.Zero, dst, dstLevel, dstBaseSlice + s, V2i.Zero, size)
+                else
+                    ctx.Blit(src, srcLevel, srcBaseSlice + s, Box2i(V2i.Zero, size - V2i.II), dst, dstLevel, dstBaseSlice + s, Box2i(V2i.Zero, size - V2i.II), false)
+            size <- size / 2
 
 
-    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>) =
+    member x.CreateBuffer(size : nativeint) =
+        use __ = ctx.ResourceLock
+        let handle = GL.GenBuffer()
+        GL.Check "could not create buffer"
+        GL.NamedBufferData(handle, size, 0n, BufferUsageHint.StaticDraw)
+        GL.Check "could not allocate buffer"
+        Buffer(ctx, size, handle)
+
+    member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
+        use __ = ctx.ResourceLock
+        GL.NamedBufferSubData(unbox dst.Handle, dstOffset, size, src)
+        GL.Check "could not upload buffer data"
+        GL.Sync()
+
+    member x.Download(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
+        use __ = ctx.ResourceLock
+        GL.GetNamedBufferSubData(unbox src.Handle, srcOffset, size, dst)
+        GL.Check "could not download buffer data"
+        GL.Sync()
+
+
+    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>, layers : int, perLayer : Set<string>) =
         let attachments = Map.ofSeq (SymDict.toSeq attachments)
 
         let depth =
@@ -254,7 +307,10 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
         let images = images |> Seq.mapi (fun i s -> (i,s)) |> Map.ofSeq
 
-        FramebufferSignature(x, indexedColors, images, depth, stencil)
+        FramebufferSignature(x, indexedColors, images, depth, stencil, layers, perLayer)
+        
+    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>) =
+        x.CreateFramebufferSignature(attachments, images, 1, Set.empty)
 
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)
@@ -289,6 +345,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 failwithf "unsupported streaming texture: %A" t
 
     member private x.CompileRenderInternal (fboSignature : IFramebufferSignature, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) =
+        let set = EffectDebugger.Hook set
         let eng = engine.GetValue()
         let shareTextures = eng.sharing &&& ResourceSharing.Textures <> ResourceSharing.None
         let shareBuffers = eng.sharing &&& ResourceSharing.Buffers <> ResourceSharing.None

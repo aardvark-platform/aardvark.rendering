@@ -50,6 +50,16 @@ module Sg =
                                                                                             BaseVertex = 0
                                                                                 )) count , Mod.constant mode)
     
+    type RenderObjectNode(objects : aset<IRenderObject>) =
+        interface ISg
+        member x.Objects = objects
+
+    type IndirectRenderNode(buffer : IMod<IIndirectBuffer>, mode : IMod<IndexedGeometryMode>) =
+        interface ISg
+
+        member x.Mode = mode
+        member x.Indirect = buffer
+
     type VertexAttributeApplicator(values : Map<Symbol, BufferView>, child : IMod<ISg>) =
         inherit AbstractApplicator(child)
 

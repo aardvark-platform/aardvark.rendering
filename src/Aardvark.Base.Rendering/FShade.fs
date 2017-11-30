@@ -21,6 +21,7 @@ type BiNormalAttribute() = inherit SemanticAttribute(DefaultSemantic.DiffuseColo
 type TangentAttribute() = inherit SemanticAttribute(DefaultSemantic.DiffuseColorVTangents.ToString())
 type ColorAttribute() = inherit SemanticAttribute(DefaultSemantic.Colors.ToString())
 type InstanceTrafoAttribute() = inherit SemanticAttribute(DefaultSemantic.InstanceTrafo.ToString())
+type InstanceTrafoInvAttribute() = inherit SemanticAttribute(DefaultSemantic.InstanceTrafoInv.ToString())
 
 type FShadeEffect = Effect
 
@@ -281,7 +282,14 @@ module FShadeInterop =
                     flipHandedness = flip
                 }
 
-            effect |> Effect.toModule config
+            if x.LayerCount > 1 then
+                effect 
+                    // TODO: other topologies????
+                    |> Effect.toLayeredEffect x.LayerCount (x.PerLayerUniforms |> Seq.map (fun n -> n, n) |> Map.ofSeq) InputTopology.Triangle
+                    |> Effect.toModule config
+
+            else
+                effect |> Effect.toModule config
 
         member x.ExtractSemantics() =
             let colors = x.ColorAttachments |> Map.toSeq |> Seq.map (fun (k,(i,s)) -> (k,i)) |> Seq.toList

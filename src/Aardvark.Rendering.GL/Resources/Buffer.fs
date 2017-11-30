@@ -49,6 +49,7 @@ type Buffer =
             member x.Handle = x.Handle :> obj
             member x.SizeInBytes = x.SizeInBytes
 
+
         new(ctx : Context, size : nativeint, handle : int) = { Context = ctx; SizeInBytes = size; Handle = handle}
     end
 
@@ -169,6 +170,10 @@ module BufferExtensions =
                 | :? INativeBuffer as nb ->
                     nb.Use (fun ptr -> x.CreateBuffer(ptr, nb.SizeInBytes, Static))
 
+                | :? IBufferView as bv ->
+                    let handle = bv.Buffer.Handle
+                    x.CreateBuffer handle
+
                 | _ -> 
                     failwith "unsupported buffer-type"
 
@@ -184,6 +189,12 @@ module BufferExtensions =
 
                 | :? INativeBuffer as n ->
                     n.Use (fun ptr -> x.Upload(b, ptr, nativeint n.SizeInBytes, useNamed))
+
+                
+                | :? IBufferView as bv ->
+                    let handle = bv.Buffer.Handle
+                    x.Upload(b, handle, useNamed)
+
                 | _ ->
                     failwithf "unsupported buffer-data-type: %A" data
 

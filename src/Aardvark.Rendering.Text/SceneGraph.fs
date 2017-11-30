@@ -132,7 +132,9 @@ module Sg =
             shapes.IndirectBuffer <- indirectAndOffsets |> Mod.map (fun (i,_,_) -> i)
             shapes.InstanceAttributes <- instanceAttributes
             shapes.Mode <- Mod.constant IndexedGeometryMode.TriangleList
-            shapes.Surface <- Surface.Backend cache.Surface
+            shapes.Surface <- Surface.FShadeSimple cache.Effect
+
+
             //shapes.WriteBuffers <- Some (Set.ofList [DefaultSemantic.Colors])
 
             let boundary = RenderObject.create()
@@ -183,7 +185,7 @@ module Sg =
                     member x.Dispose() =
                         old.Dispose()
                 }
-            boundary.Surface <- Surface.Backend cache.BoundarySurface
+            boundary.Surface <- Surface.FShadeSimple cache.BoundaryEffect
 
 
             let writeStencil =
