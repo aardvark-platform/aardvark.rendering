@@ -4,6 +4,7 @@ open Aardvark.Base
 open System.Runtime.InteropServices
 open Microsoft.FSharp.Quotations
 open System.Runtime.CompilerServices
+open Aardvark.Rendering.Vulkan
 
 type Buffer<'a when 'a : unmanaged>(device : Device, handle : VkBuffer, mem : DevicePtr, count : int64) =
     inherit Buffer(device, handle, mem, int64 sizeof<'a> * count)
@@ -142,7 +143,7 @@ type DeviceTypedBufferExtensions private() =
     [<Extension>]
     static member CreateBuffer<'a when 'a : unmanaged>(device : Device, count : int64) =
         let b = device.CreateBuffer(usage, int64 sizeof<'a> * count)
-        Buffer<'a>(b.Device, b.Handle, b.Memory, count)
+        new Buffer<'a>(b.Device, b.Handle, b.Memory, count)
             
     [<Extension>]
     static member CreateBuffer<'a when 'a : unmanaged>(device : Device, data : 'a[]) =
@@ -152,4 +153,4 @@ type DeviceTypedBufferExtensions private() =
 
     [<Extension>]
     static member Coerce<'a when 'a : unmanaged>(buffer : Buffer) =
-        Buffer<'a>(buffer.Device, buffer.Handle, buffer.Memory, buffer.Size / int64 sizeof<'a>)
+        new Buffer<'a>(buffer.Device, buffer.Handle, buffer.Memory, buffer.Size / int64 sizeof<'a>)

@@ -52,7 +52,7 @@ type private MappedIndirectBuffer private(device : Device, indexed : bool, store
         else
             c
 
-    new(device : Device, indexed : bool, store : ResizeBuffer) = new MappedIndirectBuffer(device, indexed, store, IndirectBuffer(device, store.Handle, Unchecked.defaultof<_>, 0))
+    new(device : Device, indexed : bool, store : ResizeBuffer) = new MappedIndirectBuffer(device, indexed, store, new IndirectBuffer(device, store.Handle, Unchecked.defaultof<_>, 0))
 
     interface IDisposable with
         member x.Dispose() = 
@@ -427,6 +427,14 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, size))
         device.Delete temp
 
+    member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
+        let src = unbox<Buffer> src
+        let dst = unbox<Buffer> dst
+
+        device.perform {
+            do! Command.Copy(src, int64 srcOffset, dst, int64 dstOffset, int64 size)
+        }
+
     member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = 
         let src = unbox<Image> src
         let dst = unbox<Image> dst
@@ -507,6 +515,9 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
             x.Copy(src, srcOffset, dst, size)
+
+        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = 
+            x.Copy(src, srcOffset, dst, dstOffset, size)
 
         member x.MaxLocalSize = device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize
 

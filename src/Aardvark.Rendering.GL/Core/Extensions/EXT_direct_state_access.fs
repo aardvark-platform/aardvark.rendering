@@ -44,6 +44,14 @@ module EXT_direct_state_access =
                     GL.GetBufferSubData(t, offset, size, data)
                 )
 
+        static member CopyNamedBufferSubData(src : int, srcOffset : nativeint, dst : int, dstOffset : nativeint, size : nativeint) =
+            if supported then
+                GL.Ext.NamedCopyBufferSubData(src, dst, srcOffset, dstOffset, size)
+            else
+                bindBuffers src dst (fun tSrc tDst ->
+                    GL.CopyBufferSubData(tSrc, tDst, srcOffset, dstOffset, size)
+                )
+
 
         static member NamedBufferStorage(buffer: int, size : nativeint, data : nativeint, flags: BufferStorageFlags) =
             if supported then

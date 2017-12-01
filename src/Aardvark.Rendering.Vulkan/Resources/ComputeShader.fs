@@ -164,7 +164,7 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
                                 let buffer = device.CreateBuffer(VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.StorageBufferBit, b)
                                 buffer, 0L, buffer.Size, Some { new IDisposable with member x.Dispose() = device.Delete buffer }
 
-                            | :? IBufferView as b ->
+                            | :? IBufferRange as b ->
                                 let buffer = b.Buffer.Handle |> unbox<Buffer>
                                 buffer, int64 b.Offset, int64 b.Size, None
 
