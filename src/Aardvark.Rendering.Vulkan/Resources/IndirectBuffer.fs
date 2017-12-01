@@ -83,7 +83,7 @@ module IndirectBuffer =
                         | _ ->
                             failf "unsupported indirect buffer type %A" b.Buffer
 
-                IndirectBuffer(device, buffer.Handle, buffer.Memory, b.Count)
+                new IndirectBuffer(device, buffer.Handle, buffer.Memory, b.Count)
             
             | _ -> failf "bad indirect buffer: %A" b
 

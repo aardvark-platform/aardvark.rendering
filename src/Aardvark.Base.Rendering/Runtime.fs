@@ -480,6 +480,8 @@ type IResourceManager =
     abstract member CreateTexture : texture : IMod<ITexture> -> IResource<IBackendTexture>
 
 and IRuntime =
+    inherit IBufferRuntime
+
     abstract member OnDispose : Microsoft.FSharp.Control.IEvent<unit>
     abstract member ResourceManager : IResourceManager
     abstract member ContextLock : IDisposable
@@ -489,7 +491,6 @@ and IRuntime =
 
     abstract member AssembleEffect : FShade.Effect * IFramebufferSignature -> BackendSurface
 
-    abstract member PrepareBuffer : IBuffer -> IBackendBuffer
     abstract member PrepareTexture : ITexture -> IBackendTexture
     abstract member PrepareSurface : IFramebufferSignature * ISurface -> IBackendSurface
     abstract member PrepareRenderObject : IFramebufferSignature * IRenderObject -> IPreparedRenderObject
@@ -501,14 +502,15 @@ and IRuntime =
     abstract member NewInputBinding : IComputeShader -> IComputeShaderInputBinding
     abstract member Invoke : shader : IComputeShader * groupCount : V3i * input : IComputeShaderInputBinding -> unit
 
-    abstract member DeleteBuffer : IBackendBuffer -> unit
     abstract member DeleteTexture : IBackendTexture -> unit
     abstract member DeleteSurface : IBackendSurface -> unit
 
 
-    abstract member CreateBuffer : size : nativeint -> IBackendBuffer
-    abstract member Copy : srcData : nativeint * dst : IBackendBuffer * dstOffset : nativeint * size : nativeint -> unit
-    abstract member Copy : srcBuffer : IBackendBuffer * srcOffset : nativeint * dstData : nativeint * size : nativeint -> unit
+//    abstract member PrepareBuffer : IBuffer -> IBackendBuffer
+//    abstract member DeleteBuffer : IBackendBuffer -> unit
+//    abstract member CreateBuffer : size : nativeint -> IBackendBuffer
+//    abstract member Copy : srcData : nativeint * dst : IBackendBuffer * dstOffset : nativeint * size : nativeint -> unit
+//    abstract member Copy : srcBuffer : IBackendBuffer * srcOffset : nativeint * dstData : nativeint * size : nativeint -> unit
 
 
 
@@ -675,55 +677,6 @@ type BinarySurface(shaders : Map<ShaderStage, BinaryShader>) =
     new() = BinarySurface(Map.empty)
 
 
-//type RenderToFramebufferMod(task : IRenderTask, fbo : IMod<OutputDescription>) =
-//    inherit Mod.AbstractMod<OutputDescription * FrameStatistics>()
-//
-//    member x.Task = task
-//    member x.Framebuffer = fbo
-//
-//    override x.Inputs =
-//        seq {
-//            yield task :> _
-//            yield fbo :> _
-//        }
-//
-//    override x.Compute() =
-//        let handle = fbo.GetValue x
-//        let stats = task.Run(x, handle)
-//        handle, stats
-//
-//type RenderingResultMod(res : RenderToFramebufferMod, semantic : Symbol) =
-//    inherit Mod.AbstractMod<ITexture>()
-//    let mutable lastStats = FrameStatistics.Zero
-//
-//    member x.LastStatistics = lastStats
-//    member x.Task = res.Task
-//    member x.Framebuffer = res.Framebuffer
-//    member x.Semantic = semantic
-//    member x.Inner = res
-//
-//    override x.Inputs = Seq.singleton (res :> _)
-//
-//    override x.Compute() =
-//        lock res (fun () ->
-//            let wasOutDated = res.OutOfDate
-//            let (output, stats) = res.GetValue x
-//            if wasOutDated then
-//                lastStats <- stats
-//            else
-//                lastStats <- FrameStatistics.Zero
-//                    
-//            match Map.tryFind semantic output.framebuffer.Attachments with
-//                | Some o ->
-//                    match o with
-//                        | :? BackendTextureOutputView as o ->
-//                            o.texture :> ITexture
-//                        | _ ->
-//                            failwithf "unexpected output: %A" o
-//                | None ->
-//                    failwithf "could not get output: %A" semantic
-//        )
-//
 
 
 [<AutoOpen>]
@@ -742,103 +695,11 @@ module NullResources =
                     not <| isNullResource (m.GetValue s)
               ) 
 
-
-    type BackendBuffer(runtime : IRuntime, real : IBackendBuffer) =
-        member x.Handle = real
-
-        member x.Dispose() = runtime.DeleteBuffer real
-
-        member x.Upload(offset : nativeint, data : nativeint, size : nativeint) =
-            runtime.Copy(data, real, offset, size)
-
-        member x.Download(offset : nativeint, data : nativeint, size : nativeint) =
-            runtime.Copy(real, offset, data, size)
-
-        interface IDisposable with
-            member x.Dispose() = x.Dispose()
-
-type IBufferView =
-    abstract member Buffer : BackendBuffer
-    abstract member Offset : nativeint
-    abstract member Size : nativeint
-
-type IBufferView<'a when 'a : unmanaged> =
-    inherit IBufferView
-    abstract member Count : int
-    
-type IBuffer<'a when 'a : unmanaged> =
-    inherit IBuffer
-    inherit IBufferView<'a>
-    inherit IDisposable
-
-type private BackendBufferView<'a when 'a : unmanaged>(buffer : BackendBuffer, offset : nativeint, count : int) =
-
-    member x.Buffer = buffer
-    member x.Offset = offset
-    member x.Count = count
-
-    interface IBufferView<'a> with
-        member x.Buffer = buffer
-        member x.Offset = offset
-        member x.Count = count        
-        member x.Size = nativeint count * nativeint sizeof<'a>
-
-type private BackendBuffer<'a when 'a : unmanaged>(buffer : BackendBuffer) =
-    inherit BackendBufferView<'a>(buffer, 0n, int (buffer.Handle.SizeInBytes / nativeint sizeof<'a>))
-    interface IBuffer<'a> with
-        member x.Dispose() = buffer.Dispose()
-
 [<AutoOpen>]
 module TypedBufferExtensions =
     open System.Runtime.InteropServices
 
-    let private nsa<'a when 'a : unmanaged> = nativeint sizeof<'a>
-        
-    type IBufferView<'a when 'a : unmanaged> with
-        member x.Upload(src : 'a[], srcIndex : int, dstIndex : int, count : int) =
-            let gc = GCHandle.Alloc(src, GCHandleType.Pinned)
-            try
-                let ptr = gc.AddrOfPinnedObject()
-                x.Buffer.Upload(nativeint dstIndex * nsa<'a>, ptr + nsa<'a> * nativeint srcIndex, nsa<'a> * nativeint count)
-            finally
-                gc.Free()
-                
-        member x.Download(srcIndex : int, dst : 'a[], dstIndex : int, count : int) =
-            let gc = GCHandle.Alloc(dst, GCHandleType.Pinned)
-            try
-                let ptr = gc.AddrOfPinnedObject()
-                x.Buffer.Download(nativeint srcIndex * nsa<'a>, ptr + nsa<'a> * nativeint dstIndex, nsa<'a> * nativeint count)
-            finally
-                gc.Free()
-
-        member x.Upload(src : 'a[], dstIndex : int, count : int) = x.Upload(src, 0, dstIndex, count)
-        member x.Upload(src : 'a[], count : int) = x.Upload(src, 0, 0, count)
-        member x.Upload(src : 'a[]) = x.Upload(src, 0, 0, src.Length)
-
-            
-        member x.Download(srcIndex : int, dst : 'a[], count : int) = x.Download(srcIndex, dst, 0, count)
-        member x.Download(dst : 'a[], count : int) = x.Download(0, dst, 0, count)
-        member x.Download(dst : 'a[]) = x.Download(0, dst, 0, dst.Length)
-        member x.Download() = 
-            let dst = Array.zeroCreate x.Count 
-            x.Download(0, dst, 0, dst.Length)
-            dst
-
-        member x.GetSlice(min : Option<int>, max : Option<int>) =
-            let min = defaultArg min 0
-            let max = defaultArg max (x.Count - min)
-            BackendBufferView<'a>(x.Buffer, x.Offset + nativeint min * nsa<'a>, 1 + max - min) :> IBufferView<_>
-
     type IRuntime with
-        member x.CreateBuffer<'a when 'a : unmanaged>(count : int) =
-            let buffer = new BackendBuffer(x, x.CreateBuffer(nsa<'a> * nativeint count))
-            new BackendBuffer<'a>(buffer) :> IBuffer<'a>
-
-        member x.CreateBuffer<'a when 'a : unmanaged>(data : 'a[]) =
-            let buffer = new BackendBuffer(x, x.CreateBuffer(nsa<'a> * nativeint data.Length))
-            let res = new BackendBuffer<'a>(buffer) :> IBuffer<'a>
-            res.Upload(data)
-            res
 
         member x.CompileCompute (shader : 'a -> 'b) =
             let sh = FShade.ComputeShader.ofFunction x.MaxLocalSize shader

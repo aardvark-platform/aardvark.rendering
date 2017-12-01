@@ -175,6 +175,10 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateBuffer(size : nativeint) = x.CreateBuffer(size) :> IBackendBuffer
         member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = x.Upload(src, dst, dstOffset, size)
         member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) = x.Download(src, srcOffset, dst, size)
+        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = 
+            x.Copy(src, srcOffset, dst, dstOffset, size)
+
+
         member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = x.Copy(src, srcBaseSlice, srcBaseLevel, dst, dstBaseSlice, dstBaseLevel, slices, levels)
         member x.PrepareSurface (signature, s : ISurface) = x.PrepareSurface(signature, s) :> IBackendSurface
         member x.DeleteSurface (s : IBackendSurface) = 
@@ -267,7 +271,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         GL.Check "could not create buffer"
         GL.NamedBufferData(handle, size, 0n, BufferUsageHint.StaticDraw)
         GL.Check "could not allocate buffer"
-        Buffer(ctx, size, handle)
+        new Aardvark.Rendering.GL.Buffer(ctx, size, handle)
 
     member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
         use __ = ctx.ResourceLock
@@ -281,6 +285,11 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         GL.Check "could not download buffer data"
         GL.Sync()
 
+    member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
+        use __ = ctx.ResourceLock
+        GL.CopyNamedBufferSubData(unbox src.Handle, srcOffset, unbox dst.Handle, dstOffset, size)
+        GL.Check "could not copy buffer data"
+        GL.Sync()
 
     member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>, layers : int, perLayer : Set<string>) =
         let attachments = Map.ofSeq (SymDict.toSeq attachments)

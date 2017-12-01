@@ -325,10 +325,10 @@ module ResizeBufferImplementation =
                 )
                 GL.Check "could not allocate sparse storage"
 
-                SparseMemoryResizeBuffer(x, pageSize, buffer) :> AbstractResizeBuffer
+                new SparseMemoryResizeBuffer(x, pageSize, buffer) :> AbstractResizeBuffer
             else
                 let buffer = GL.GenBuffer()
-                CopyResizeBuffer(x, buffer) :> AbstractResizeBuffer
+                new CopyResizeBuffer(x, buffer) :> AbstractResizeBuffer
 
 module ManagedBufferImplementation =
     
@@ -479,7 +479,7 @@ module ManagedBufferImplementation =
                     if d then GL.Disable(EnableCap.DebugOutput)
                     let b = alloc(&virtualCapacity)
                     if d then GL.Enable(EnableCap.DebugOutput)
-                    SparseGeometryPoolBuffer(ctx, b, nativeint virtualCapacity, nativeint pageSize, this), t, nativeint s
+                    new SparseGeometryPoolBuffer(ctx, b, nativeint virtualCapacity, nativeint pageSize, this), t, nativeint s
                 )
 
             nativeint pageSize, handles
@@ -682,7 +682,7 @@ module ManagedBufferImplementation =
                 let s = nativeint t.GLSize
                 let b = GL.GenBuffer()
                 GL.Check "could not generate buffer"
-                ResizeGeometryPoolBuffer(this, ctx, b, rw, 0n), s, t
+                new ResizeGeometryPoolBuffer(this, ctx, b, rw, 0n), s, t
             )
 
         let manager = MemoryManager.createNop()

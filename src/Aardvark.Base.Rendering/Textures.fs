@@ -4,6 +4,11 @@ open System
 open Aardvark.Base.Incremental
 open System.Runtime.InteropServices
 
+type TextureAspect =
+    | Color
+    | Depth
+    | Stencil
+
 [<AllowNullLiteral>]
 type ITexture = 
     abstract member WantMipMaps : bool
@@ -31,20 +36,181 @@ type ISparseTexture<'a when 'a : unmanaged> =
     abstract member UploadBrick : level : int * slice : int * index : V3i * data : NativeTensor4<'a> -> IDisposable
 
 
-type TextureParams =
-    {
-        wantMipMaps : bool
-        wantSrgb : bool
-        wantCompressed : bool
-    }
+ 
+type IFramebufferOutput =
+    abstract member Format : RenderbufferFormat
+    abstract member Samples : int
+    abstract member Size : V2i
 
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module TextureParams =
+type IBackendTexture =
+    inherit ITexture
+    abstract member Dimension : TextureDimension
+    abstract member Format : TextureFormat
+    abstract member Samples : int
+    abstract member Count : int
+    abstract member MipMapLevels : int
+    abstract member Size : V3i
+    abstract member Handle : obj
+
+type IRenderbuffer =
+    inherit IFramebufferOutput
+    abstract member Handle : obj
+
+
+[<AutoOpen>]
+module private TextureRanges =
     
-    let empty = { wantMipMaps = false; wantSrgb = false; wantCompressed = false}
-    let compressed = { wantMipMaps = false; wantSrgb = false; wantCompressed = true }
-    let mipmapped = { wantMipMaps = true; wantSrgb = false; wantCompressed = false }
-    let mipmappedCompressed = { wantMipMaps = true; wantSrgb = false; wantCompressed = true }
+    type ITextureRange =
+        abstract member Texture : IBackendTexture
+        abstract member Aspect : TextureAspect
+        abstract member Levels : Range1i
+        abstract member Slices : Range1i
+
+    type ITextureSlice =
+        inherit ITextureRange
+        abstract member Slice : int
+
+    type ITextureLevel =
+        inherit ITextureRange
+        abstract member Level : int
+        abstract member Size : V3i
+        
+    type ISubTexture =
+        inherit ITextureSlice
+        inherit ITextureLevel
+
+    [<AutoOpen>]
+    module Extensions = 
+        type private TextureRange(aspect : TextureAspect, tex : IBackendTexture, levels : Range1i, slices : Range1i) =
+            interface ITextureRange with
+                member x.Texture = tex
+                member x.Aspect = aspect
+                member x.Levels = levels
+                member x.Slices = slices
+
+        type private TextureLevel(aspect : TextureAspect, tex : IBackendTexture, level : int, slices : Range1i) =
+            interface ITextureRange with
+                member x.Texture = tex
+                member x.Aspect = aspect
+                member x.Levels = Range1i(level, level)
+                member x.Slices = slices
+
+            interface ITextureLevel with
+                member x.Level = level
+                member x.Size = 
+                    let v = tex.Size / (1 <<< level)
+                    V3i(max 1 v.X, max 1 v.Y, max 1 v.Z)
+
+        type private TextureSlice(aspect : TextureAspect, tex : IBackendTexture, levels : Range1i, slice : int) =
+            interface ITextureRange with
+                member x.Texture = tex
+                member x.Aspect = aspect
+                member x.Levels = levels
+                member x.Slices = Range1i(slice, slice)
+
+            interface ITextureSlice with
+                member x.Slice = slice
+
+        type private SubTexture(aspect : TextureAspect, tex : IBackendTexture, level : int, slice : int) =
+            interface ITextureRange with
+                member x.Texture = tex
+                member x.Aspect = aspect
+                member x.Levels = Range1i(level, level)
+                member x.Slices = Range1i(slice, slice)
+
+            interface ISubTexture with
+                member x.Slice = slice
+                member x.Level = level
+                member x.Size = 
+                    let v = tex.Size / (1 <<< level)
+                    V3i(max 1 v.X, max 1 v.Y, max 1 v.Z)
+
+
+        type Range1i with
+            member x.SubRange(min : Option<int>, max : Option<int>) =
+                let cnt = 1 + x.Max - x.Min
+                let min = defaultArg min 0
+                let max = defaultArg max (cnt - 1)
+                Range1i(x.Min + min, x.Min + max)
+
+        type IBackendTexture with
+        
+            member x.GetSlice(aspect : TextureAspect, minLevel : Option<int>, maxLevel : Option<int>, minSlice : Option<int>, maxSlice : Option<int>) =
+                let level = Range1i(defaultArg minLevel 0, defaultArg maxLevel (x.MipMapLevels - 1))
+                let slice = Range1i(defaultArg minSlice 0, defaultArg maxSlice (x.Count - 1))
+                TextureRange(aspect, x, level, slice) :> ITextureRange
+
+            member x.GetSlice(aspect : TextureAspect, minLevel : Option<int>, maxLevel : Option<int>, slice : int) =
+                let level = Range1i(defaultArg minLevel 0, defaultArg maxLevel (x.MipMapLevels - 1))
+                TextureSlice(aspect, x, level, slice) :> ITextureSlice
+
+            member x.GetSlice(aspect : TextureAspect, level : int, minSlice : Option<int>, maxSlice : Option<int>) =
+                let slice = Range1i(defaultArg minSlice 0, defaultArg maxSlice (x.Count - 1))
+                TextureLevel(aspect, x, level, slice) :> ITextureLevel
+
+            member x.Item
+                with get(aspect : TextureAspect, level : int, slice : int) = SubTexture(aspect, x, level, slice) :> ISubTexture
+
+            member x.Item
+                with get(aspect : TextureAspect, level : int) = TextureLevel(aspect, x, level, Range1i(0, x.Count - 1)) :> ITextureLevel
+
+            member x.Item
+                with get(aspect : TextureAspect) = TextureRange(aspect, x, Range1i(0, x.MipMapLevels - 1), Range1i(0, x.Count - 1)) :> ITextureRange
+
+        type ITextureRange with
+            member x.GetSlice(minLevel : Option<int>, maxLevel : Option<int>, minSlice : Option<int>, maxSlice : Option<int>) =
+                let level = x.Levels.SubRange(minLevel, maxLevel)
+                let slice = x.Slices.SubRange(minSlice, maxSlice)
+                TextureRange(x.Aspect, x.Texture, level, slice) :> ITextureRange
+            
+            member x.GetSlice(minLevel : Option<int>, maxLevel : Option<int>, slice : int) =
+                let level = x.Levels.SubRange(minLevel, maxLevel)
+                let slice = x.Slices.Min + slice
+                TextureSlice(x.Aspect, x.Texture, level, slice) :> ITextureSlice    
+
+            member x.GetSlice(level : int, minSlice : Option<int>, maxSlice : Option<int>) =
+                let level = x.Levels.Min + level
+                let slice = x.Slices.SubRange(minSlice, maxSlice)
+                TextureLevel(x.Aspect, x.Texture, level, slice) :> ITextureLevel
+            
+            member x.Item
+                with get(level : int, slice : int) = SubTexture(x.Aspect, x.Texture, x.Levels.Min + level, x.Slices.Min + slice) :> ISubTexture
+
+            member x.Item
+                with get(level : int) = TextureLevel(x.Aspect, x.Texture, x.Levels.Min + level, x.Slices) :> ITextureLevel
+ 
+        type ITextureLevel with
+            member x.GetSlice(minSlice : Option<int>, maxSlice : Option<int>) =
+                let slice = x.Slices.SubRange(minSlice, maxSlice)
+                TextureLevel(x.Aspect, x.Texture, x.Level, slice) :> ITextureRange
+            
+            member x.Item
+                with get(slice : int) = SubTexture(x.Aspect, x.Texture,x.Level, x.Slices.Min + slice) :> ISubTexture
+
+        type ITextureSlice with
+            member x.GetSlice(minLevel : Option<int>, maxLevel : Option<int>) =
+                let levels = x.Levels.SubRange(minLevel, maxLevel)
+                TextureSlice(x.Aspect, x.Texture, levels, x.Slice) :> ITextureRange
+            
+            member x.Item
+                with get(level : int) = SubTexture(x.Aspect, x.Texture, x.Levels.Min + level, x.Slice) :> ISubTexture
+          
+    let test (t : IBackendTexture) =
+        
+        let a = t.[Color,*,*]
+        let a = t.[Color]
+
+        let a = t.[Color, 1, *]
+        let a = t.[Color, *, 1]
+        let a = t.[Color, 3, 1]
+        
+        
+        let b = a.[*,*]
+
+
+        ()
+
+
 
 type BitmapTexture(bmp : System.Drawing.Bitmap, textureParams : TextureParams) =
     [<Obsolete("use texture params instead")>]
@@ -65,7 +231,6 @@ type BitmapTexture(bmp : System.Drawing.Bitmap, textureParams : TextureParams) =
                 false
     new(bmp : System.Drawing.Bitmap, wantMipMaps : bool) = 
         BitmapTexture(bmp, { TextureParams.empty with wantMipMaps = wantMipMaps}  )
-
 
 type FileTexture(fileName : string, textureParams : TextureParams) =
     do if System.IO.File.Exists fileName |> not then failwithf "File does not exist: %s" fileName
@@ -159,7 +324,6 @@ type PixTexture3d(data : PixVolume, textureParams : TextureParams) =
                 false
     new(data : PixVolume, wantMipMaps : bool) = 
         PixTexture3d(data, { TextureParams.empty with wantMipMaps = wantMipMaps}  )
-
 
 module DefaultTextures =
 

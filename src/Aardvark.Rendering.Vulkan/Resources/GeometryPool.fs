@@ -316,7 +316,7 @@ module GeometryPoolUtilities =
             VkRaw.vkMapMemory(device.Handle, hm.Handle, 0UL, uint64 hm.Size, VkMemoryMapFlags.MinValue, &&ptr)
                 |> check "could not map memory"
             
-            hm, Buffer(device, handle, hm, size)
+            hm, new Buffer(device, handle, hm, size)
 
         let mutable isEmpty = true
 
