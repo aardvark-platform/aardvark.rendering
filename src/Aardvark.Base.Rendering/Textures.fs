@@ -163,60 +163,70 @@ type ITextureRuntimeExtensions private() =
 
 
     [<Extension>]
-    static member Copy<'a when 'a : unmanaged>(this : ITextureRuntime, img : PixImage<'a>, dst : ITextureSubResource, dstOffset : V2i, size : V2i) =
-        NativeVolume.using img.Volume (fun pImg ->
-            let info = pImg.Info
+    static member Copy(this : ITextureRuntime, img : PixImage, dst : ITextureSubResource, dstOffset : V2i, size : V2i) =
+        img.Visit
+            { new PixImageVisitor<int>() with
+                member x.Visit(img : PixImage<'a>, _) =
+                    NativeVolume.using img.Volume (fun pImg ->
+                        let info = pImg.Info
             
-            let tensor4 = 
-                NativeTensor4<'a>(
-                    pImg.Pointer, 
-                    Tensor4Info(
-                        info.Origin,
-                        V4l(info.SX, info.SY, 1L, info.SZ),
-                        V4l(info.DX, info.DY, info.DY * info.SY, info.DZ)
-                    )
-                )
+                        let tensor4 = 
+                            NativeTensor4<'a>(
+                                pImg.Pointer, 
+                                Tensor4Info(
+                                    info.Origin,
+                                    V4l(info.SX, info.SY, 1L, info.SZ),
+                                    V4l(info.DX, info.DY, info.DY * info.SY, info.DZ)
+                                )
+                            )
 
-            this.Copy(tensor4, img.Format, dst, V3i(dstOffset, 0), V3i(size, 1))
-        )
+                        this.Copy(tensor4, img.Format, dst, V3i(dstOffset, 0), V3i(size, 1))
+                    )
+                    0
+            } |> ignore
 
     [<Extension>]
-    static member Copy<'a when 'a : unmanaged>(this : ITextureRuntime, src : ITextureSubResource, srcOffset : V2i, dst : PixImage<'a>, size : V2i) =
-        NativeVolume.using dst.Volume (fun pImg ->
-            let info = pImg.Info
+    static member Copy(this : ITextureRuntime, src : ITextureSubResource, srcOffset : V2i, dst : PixImage, size : V2i) =
+        dst.Visit
+            { new PixImageVisitor<int>() with
+                member x.Visit(dst : PixImage<'a>, _) =
+                    NativeVolume.using dst.Volume (fun pImg ->
+                        let info = pImg.Info
             
-            let tensor4 = 
-                NativeTensor4<'a>(
-                    pImg.Pointer, 
-                    Tensor4Info(
-                        info.Origin,
-                        V4l(info.SX, info.SY, 1L, info.SZ),
-                        V4l(info.DX, info.DY, info.DY * info.SY, info.DZ)
-                    )
-                )
+                        let tensor4 = 
+                            NativeTensor4<'a>(
+                                pImg.Pointer, 
+                                Tensor4Info(
+                                    info.Origin,
+                                    V4l(info.SX, info.SY, 1L, info.SZ),
+                                    V4l(info.DX, info.DY, info.DY * info.SY, info.DZ)
+                                )
+                            )
 
-            this.Copy(src, V3i(srcOffset,0), tensor4, dst.Format, V3i(size,1))
-        )
+                        this.Copy(src, V3i(srcOffset,0), tensor4, dst.Format, V3i(size,1))
+                    )
+                    0
+            } |> ignore
         
     [<Extension>]
-    static member Copy<'a when 'a : unmanaged>(this : ITextureRuntime, img : PixImage<'a>, dst : ITextureSubResource) =
+    static member Copy(this : ITextureRuntime, img : PixImage, dst : ITextureSubResource) =
         ITextureRuntimeExtensions.Copy(this, img, dst, V2i.Zero, img.Size)
         
     [<Extension>]
-    static member Copy<'a when 'a : unmanaged>(this : ITextureRuntime, src : ITextureSubResource, dst : PixImage<'a>) =
+    static member Copy(this : ITextureRuntime, src : ITextureSubResource, dst : PixImage) =
         ITextureRuntimeExtensions.Copy(this, src, V2i.Zero, dst, dst.Size)
         
     [<Extension>]
-    static member SetSlice(this : ITextureSubResource, minC : Option<V2i>, maxC : Option<V2i>, value : PixImage<'a>) =
+    static member SetSlice(this : ITextureSubResource, minC : Option<V2i>, maxC : Option<V2i>, value : PixImage) =
         let minC = defaultArg minC V2i.Zero
         let maxC = defaultArg maxC (this.Size.XY - V2i.II)
         let size = V2i.II + maxC - minC
         let imgSize = value.Size
         let size = V2i(min size.X imgSize.X, min size.Y imgSize.Y)
-        this.Texture.Runtime.Copy(value, this, minC, size)
+        ITextureRuntimeExtensions.Copy(this.Texture.Runtime, value, this, minC, size)
 
     [<Extension>]
-    static member SetSlice(this : ITextureSubResource, minX : Option<int>, maxX : Option<int>, minY : Option<int>, maxY : Option<int>, value : PixImage<'a>) =
+    static member SetSlice(this : ITextureSubResource, minX : Option<int>, maxX : Option<int>, minY : Option<int>, maxY : Option<int>, value : PixImage) =
         let minX = defaultArg minX 0
         let maxX = defaultArg maxX (this.Size.X - 1)
         let minY = defaultArg minY 0
@@ -227,16 +237,7 @@ type ITextureRuntimeExtensions private() =
         let size = V2i.II + maxC - minC
         let imgSize = value.Size
         let size = V2i(min size.X imgSize.X, min size.Y imgSize.Y)
-        this.Texture.Runtime.Copy(value, this, minC, size)
-
-    [<Extension>]
-    static member SetSlice(this : ITextureSubResource, minX : Option<int>, maxX : Option<int>, minY : Option<int>, maxY : Option<int>, value : PixImage) =
-        value.Visit {
-            new PixImageVisitor<int>() with
-                member x.Visit (img : PixImage<'a>, def : 'a) =
-                    ITextureRuntimeExtensions.SetSlice(this, minX, maxX, minY, maxY, img)
-                    1
-        } |> ignore
+        ITextureRuntimeExtensions.Copy(this.Texture.Runtime, value, this, minC, size)
 
 
 
