@@ -30,6 +30,7 @@ type Renderbuffer =
             member x.Samples = x.Samples
 
         interface IRenderbuffer with
+            member x.Runtime = x.Context.Runtime :> ITextureRuntime
             member x.Handle = x.Handle :> obj
 
         new (ctx : Context, handle : int, size : V2i, format : RenderbufferFormat, samples : int, sizeInBytes : int64) =

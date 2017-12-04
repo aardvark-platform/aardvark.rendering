@@ -269,6 +269,45 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.DeleteBuffer(t : IBackendBuffer) =
         device.Delete(unbox<Buffer> t)
 
+
+
+    member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) : IBackendTexture =
+        let isDepth =
+            match format with
+                | TextureFormat.Depth24Stencil8 -> true
+                | TextureFormat.Depth32fStencil8 -> true
+                | TextureFormat.DepthComponent -> true
+                | TextureFormat.DepthComponent16 -> true
+                | TextureFormat.DepthComponent24 -> true
+                | TextureFormat.DepthComponent32 -> true
+                | TextureFormat.DepthComponent32f -> true
+                | TextureFormat.DepthStencil -> true
+                | _ -> false
+
+        let layout =
+            if isDepth then VkImageLayout.ShaderReadOnlyOptimal
+            else VkImageLayout.ShaderReadOnlyOptimal
+
+        let usage =
+            if isDepth then 
+                VkImageUsageFlags.DepthStencilAttachmentBit ||| 
+                VkImageUsageFlags.TransferSrcBit ||| 
+                VkImageUsageFlags.TransferDstBit |||
+                VkImageUsageFlags.SampledBit
+            else 
+                VkImageUsageFlags.ColorAttachmentBit ||| 
+                VkImageUsageFlags.TransferSrcBit ||| 
+                VkImageUsageFlags.TransferDstBit |||
+                VkImageUsageFlags.SampledBit
+
+        let slices = max 1 slices
+
+        let img = device.CreateImage(size, levels, slices, samples, dim, format, usage) 
+        device.GraphicsFamily.run {
+            do! Command.TransformLayout(img, layout)
+        }
+        img :> IBackendTexture
+
     member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) : IBackendTexture =
         let isDepth =
             match format with
@@ -456,6 +495,75 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         }
 
 
+    // upload
+    member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, dst : ITextureSubResource, dstOffset : V3i) =
+        let sizeInBytes = src.Size.X * src.Size.Y * src.Size.Z * src.Size.W * int64 sizeof<'a>
+        let buffer = device.HostMemory |> Buffer.create (VkBufferUsageFlags.TransferSrcBit) sizeInBytes
+        buffer.Memory.MappedTensor4(V4i src.Size, fun dst -> NativeTensor4.copy src dst)
+
+        let aspect =
+            match dst.Aspect with
+                | TextureAspect.Color -> ImageAspect.Color
+                | TextureAspect.Depth -> ImageAspect.Depth
+                | TextureAspect.Stencil -> ImageAspect.Stencil
+
+        let dstImage = dst.Texture |> unbox<Image>
+        let dst = dstImage.[aspect, dst.Level, dst.Slice]
+
+        device.perform {
+            do! Command.Copy(buffer, 0L, V2i.Zero, dst, dstOffset, V3i src.Size.XYZ)
+        }
+
+        device |> Buffer.delete buffer
+        
+    // download
+    member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>) =
+        let sizeInBytes = dst.Size.X * dst.Size.Y * dst.Size.Z * dst.Size.W * int64 sizeof<'a>
+        let buffer = device.HostMemory |> Buffer.create (VkBufferUsageFlags.TransferSrcBit) sizeInBytes
+
+        let aspect =
+            match src.Aspect with
+                | TextureAspect.Color -> ImageAspect.Color
+                | TextureAspect.Depth -> ImageAspect.Depth
+                | TextureAspect.Stencil -> ImageAspect.Stencil
+
+        let srcImage = src.Texture |> unbox<Image>
+        let src = srcImage.[aspect, src.Level, src.Slice]
+
+        device.perform {
+            do! Command.Copy(src, srcOffset, buffer, 0L, V2i.Zero, V3i dst.Size.XYZ)
+        }
+
+        buffer.Memory.MappedTensor4(V4i src.Size, fun src -> NativeTensor4.copy src dst)
+        device |> Buffer.delete buffer
+
+    // copy
+    member x.Copy(src : ITextureLevel, srcOffset : V3i, dst : ITextureLevel, dstOffset : V3i, size : V3i) =
+
+        let srcAspect =
+            match src.Aspect with
+                | TextureAspect.Color -> ImageAspect.Color
+                | TextureAspect.Depth -> ImageAspect.Depth
+                | TextureAspect.Stencil -> ImageAspect.Stencil
+
+        let srcImage = src.Texture |> unbox<Image>
+        let src = srcImage.[srcAspect, src.Level, src.Slices.Min .. src.Slices.Max]
+
+        
+        let dstAspect =
+            match dst.Aspect with
+                | TextureAspect.Color -> ImageAspect.Color
+                | TextureAspect.Depth -> ImageAspect.Depth
+                | TextureAspect.Stencil -> ImageAspect.Stencil
+
+        let dstImage = dst.Texture |> unbox<Image>
+        let dst = dstImage.[srcAspect, dst.Level, dst.Slices.Min .. dst.Slices.Max]
+
+        device.perform {
+            do! Command.Copy(src, srcOffset, dst, dstOffset, size)
+        }
+
+
     interface IRuntime with
         member x.OnDispose = onDispose.Publish
         member x.AssembleEffect (effect : FShade.Effect, signature : IFramebufferSignature) =
@@ -491,7 +599,6 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.CreateStreamingTexture(mipMap) = x.CreateStreamingTexture(mipMap)
         member x.DeleteStreamingTexture(t) = x.DeleteStreamingTexture(t)
 
-
         member x.CreateSparseTexture<'a when 'a : unmanaged> (size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'a> =
             x.CreateSparseTexture<'a>(size, levels, slices, dim, format, brickSize, maxMemory)
         member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = x.Copy(src, srcBaseSlice, srcBaseLevel, dst, dstBaseSlice, dstBaseLevel, slices, levels)
@@ -501,6 +608,10 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.CreateTexture(size, format, levels, samples) = x.CreateTexture(size, format, levels, samples, 1)
         member x.CreateTextureArray(size, format, levels, samples, count) = x.CreateTexture(size, format, levels, samples, count)
         member x.CreateTextureCube(size, format, levels, samples) = x.CreateTextureCube(size, format, levels, samples)
+
+        member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) = x.CreateTexture(size, dim, format, slices, levels, samples)
+
+
         member x.CreateRenderbuffer(size, format, samples) = x.CreateRenderbuffer(size, format, samples)
         member x.CreateMappedBuffer() = x.CreateMappedBuffer()
         member x.CreateMappedIndirectBuffer(indexed) = x.CreateMappedIndirectBuffer(indexed)
