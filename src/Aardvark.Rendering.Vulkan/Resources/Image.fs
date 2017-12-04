@@ -1525,6 +1525,7 @@ type Image =
             member x.WantMipMaps = x.MipMapLevels > 1
 
         interface IBackendTexture with
+            member x.Runtime = x.Device.Runtime :> ITextureRuntime
             member x.Handle = x.Handle :> obj
             member x.Count = x.Count
             member x.Dimension = x.Dimension
@@ -1534,6 +1535,7 @@ type Image =
             member x.Size = x.Size
 
         interface IRenderbuffer with
+            member x.Runtime = x.Device.Runtime :> ITextureRuntime
             member x.Size = x.Size.XY
             member x.Samples = x.Samples
             member x.Format = VkFormat.toTextureFormat x.Format |> TextureFormat.toRenderbufferFormat

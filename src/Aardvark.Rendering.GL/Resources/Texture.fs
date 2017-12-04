@@ -42,6 +42,7 @@ type Texture =
             member x.Handle = x.Handle
 
         interface IBackendTexture with
+            member x.Runtime = x.Context.Runtime :> ITextureRuntime
             member x.WantMipMaps = x.MipMapLevels > 1
             member x.Dimension = x.Dimension
             member x.MipMapLevels = x.MipMapLevels
@@ -134,6 +135,119 @@ module TextureTarget =
 [<AutoOpen>]
 module TextureCreationExtensions =
     type Context with 
+
+        member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) =
+            using x.ResourceLock (fun _ ->
+                let h = GL.GenTexture()
+                GL.Check "could not create texture"
+
+                let count =
+                    if slices = 0 then None
+                    else Some slices
+
+                addTexture x 0L
+                let tex = Texture(x, h, TextureDimension.Texture1D, levels, 1, V3i.Zero, count, format, 0L, false)
+                x.UpdateTexture(tex, size, dim, format, slices, levels, samples)
+
+                tex
+            )
+
+        member x.UpdateTexture(tex : Texture, size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) =
+            using x.ResourceLock (fun _ ->
+                if tex.ImmutableFormat then
+                    failwith "cannot update format/size for immutable texture"
+
+                let inline bind (t : TextureTarget) (f : unit -> unit) =
+                    GL.BindTexture(t, tex.Handle)
+                    GL.Check "could not bind texture"
+                    f()
+                    GL.Check "could not allocate texture"
+                    GL.BindTexture(t, 0)
+                    GL.Check "could not unbind texture"
+
+                    
+                let isArray = slices > 0
+                let isMS = samples > 1
+                
+                if isMS && levels > 1 then failwith "[GL] MS textures cannot have mipmaps"
+
+                match dim, isArray, isMS with
+                    | TextureDimension.Texture1D, false, false ->
+                        bind TextureTarget.Texture1D (fun () ->
+                            GL.TexStorage1D(TextureTarget1d.Texture1D, levels, unbox (int format), size.X)
+                        )
+
+                    | TextureDimension.Texture1D, true, false ->
+                        bind TextureTarget.Texture1DArray (fun () ->
+                            GL.TexStorage2D(TextureTarget2d.Texture1DArray, levels, unbox (int format), size.X, slices)
+                        )
+
+                    | TextureDimension.Texture1D, _, true ->
+                        failwith "[GL] 1D textures cannot have multisamples"
+
+
+                    | TextureDimension.Texture2D, false, false ->
+                        bind TextureTarget.Texture2D (fun () ->
+                            GL.TexStorage2D(TextureTarget2d.Texture2D, levels, unbox (int format), size.X, size.Y)
+                        )
+                        
+                    | TextureDimension.Texture2D, false, true ->
+                        bind TextureTarget.Texture2DMultisample (fun () ->
+                            GL.TexStorage2DMultisample(TextureTargetMultisample2d.Texture2DMultisample, samples, unbox (int format), size.X, size.Y, false)
+                        )
+
+                    | TextureDimension.Texture2D, true, false ->
+                        bind TextureTarget.Texture2DArray (fun () ->
+                            GL.TexStorage3D(TextureTarget3d.Texture2DArray, levels, unbox (int format), size.X, size.Y, slices)
+                        )
+
+                    | TextureDimension.Texture2D, true, true ->
+                        bind TextureTarget.Texture2DMultisampleArray (fun () ->
+                            GL.TexStorage3DMultisample(TextureTargetMultisample3d.Texture2DMultisampleArray, samples, unbox (int format), size.X, size.Y, slices, false)
+                        )
+
+                    | TextureDimension.TextureCube, false, false ->
+                        bind TextureTarget.TextureCubeMap (fun () ->
+                            GL.TexStorage2D(TextureTarget2d.TextureCubeMap, levels, unbox (int format), size.X, size.Y)
+                        )
+
+                    | TextureDimension.TextureCube, true, false ->
+                        bind TextureTarget.TextureCubeMapArray (fun () ->
+                            GL.TexStorage3D(unbox (int TextureTarget.TextureCubeMapArray), levels, unbox (int format), size.X, size.Y, 6 * slices)
+                        )
+
+                    | TextureDimension.TextureCube, _, _ ->
+                        failwithf "[GL] ms/array cubemaps not implemented"
+                        
+                    | TextureDimension.Texture3D, false, false ->
+                        bind TextureTarget.Texture3D (fun () ->
+                            GL.TexStorage3D(TextureTarget3d.Texture3D, levels, unbox (int format), size.X, size.Y, size.Z)
+                        )
+                    | TextureDimension.Texture3D, true, _ ->
+                        failwithf "[GL] 3D texture arrays not supported"
+
+                    | TextureDimension.Texture3D, false, true ->
+                        failwithf "[GL] 3D texture ms not supported"
+
+                    | dim, isArr, isMS ->
+                        failwithf "[GL] unexpected texture layout: { dim = %A; arr = %A; ms = %A }" dim isArr isMS
+                
+                
+                let sizeInBytes = texSizeInBytes(size, format, samples)
+                updateTexture tex.Context tex.SizeInBytes sizeInBytes
+
+                tex.SizeInBytes <- sizeInBytes
+                tex.MipMapLevels <- levels
+                tex.Dimension <- dim
+                tex.Size <- size
+                tex.Format <- format
+                tex.IsArray <- isArray
+                tex.Multisamples <- samples
+                tex.Count <- slices
+                tex.ImmutableFormat <- true
+            )
+
+
         member x.CreateTexture1D(size : int, mipMapLevels : int, t : TextureFormat) =
             using x.ResourceLock (fun _ ->
                 let h = GL.GenTexture()

@@ -157,6 +157,10 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>, layers : int, perLayer : Set<string>) =
             x.CreateFramebufferSignature(attachments, images, layers, perLayer) :> IFramebufferSignature
 
+            
+        member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) =
+            x.CreateTexture(size, dim, format, slices, levels, samples) :> IBackendTexture
+
         member x.DeleteFramebufferSignature(signature : IFramebufferSignature) =
             ()
 
@@ -220,6 +224,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
         member x.CreateFramebuffer(signature : IFramebufferSignature, bindings : Map<Symbol, IFramebufferOutput>) : IFramebuffer =
             x.CreateFramebuffer(signature, bindings) :> _
+
 
         member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int) : IBackendTexture =
             ctx.CreateTexture2D(size, levels, format, samples) :> _
@@ -540,6 +545,12 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         match count with
             | 1 -> ctx.CreateTexture2D(size, levels, format, samples)
             | _ -> ctx.CreateTexture2DArray(size, count, levels, format, samples)
+
+
+
+    member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) =
+        ctx.CreateTexture(size, dim, format, slices, levels, samples)
+
 
     member x.CreateTextureCube(size : V2i, format : TextureFormat, levels : int, samples : int) : Texture =
         ctx.CreateTextureCube(size, levels, format, samples)

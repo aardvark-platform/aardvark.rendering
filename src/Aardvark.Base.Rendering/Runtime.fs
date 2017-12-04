@@ -481,6 +481,7 @@ type IResourceManager =
 
 and IRuntime =
     inherit IBufferRuntime
+    inherit ITextureRuntime
 
     abstract member OnDispose : Microsoft.FSharp.Control.IEvent<unit>
     abstract member ResourceManager : IResourceManager
@@ -491,7 +492,6 @@ and IRuntime =
 
     abstract member AssembleEffect : FShade.Effect * IFramebufferSignature -> BackendSurface
 
-    abstract member PrepareTexture : ITexture -> IBackendTexture
     abstract member PrepareSurface : IFramebufferSignature * ISurface -> IBackendSurface
     abstract member PrepareRenderObject : IFramebufferSignature * IRenderObject -> IPreparedRenderObject
 
@@ -502,7 +502,6 @@ and IRuntime =
     abstract member NewInputBinding : IComputeShader -> IComputeShaderInputBinding
     abstract member Invoke : shader : IComputeShader * groupCount : V3i * input : IComputeShaderInputBinding -> unit
 
-    abstract member DeleteTexture : IBackendTexture -> unit
     abstract member DeleteSurface : IBackendSurface -> unit
 
 
@@ -513,18 +512,28 @@ and IRuntime =
 //    abstract member Copy : srcBuffer : IBackendBuffer * srcOffset : nativeint * dstData : nativeint * size : nativeint -> unit
 
 
-
+//    abstract member PrepareTexture : ITexture -> IBackendTexture
+//    abstract member CreateTexture : size : V3i * dim : TextureDimension * format : TextureFormat * slices : int * levels : int * samples : int -> IBackendTexture
+//    abstract member CreateRenderbuffer : size : V2i * format : RenderbufferFormat * samples : int -> IRenderbuffer
+//    abstract member DeleteTexture : IBackendTexture -> unit
+    
+//    abstract member CreateTexture : size : V2i * format : TextureFormat * levels : int * samples : int -> IBackendTexture
+//    abstract member CreateTextureArray : size : V2i * format : TextureFormat * levels : int * samples : int * count : int -> IBackendTexture
+//    abstract member CreateTextureCube : size : V2i * format : TextureFormat * levels : int * samples : int -> IBackendTexture
+   
+//    abstract member GenerateMipMaps : IBackendTexture -> unit
+//    abstract member ResolveMultisamples : src : IFramebufferOutput * target : IBackendTexture * imgTrafo : ImageTrafo -> unit
+//    abstract member Upload : texture : IBackendTexture * level : int * slice : int * source : PixImage -> unit
+//    abstract member Download : texture : IBackendTexture * level : int * slice : int * target : PixImage -> unit
+//    abstract member DownloadStencil : texture : IBackendTexture * level : int * slice : int * target : Matrix<int> -> unit
+//    abstract member DownloadDepth : texture : IBackendTexture * level : int * slice : int * target : Matrix<float32> -> unit
+//    abstract member Copy : src : IBackendTexture * srcBaseSlice : int * srcBaseLevel : int * dst : IBackendTexture * dstBaseSlice : int * dstBaseLevel : int * slices : int * levels : int -> unit
+//
 
 
     abstract member CreateStreamingTexture : mipMaps : bool -> IStreamingTexture
     abstract member CreateSparseTexture<'a when 'a : unmanaged> : size : V3i * levels : int * slices : int * dim : TextureDimension * format : Col.Format * brickSize : V3i * maxMemory : int64 -> ISparseTexture<'a>
-
-
-    abstract member CreateTexture : size : V2i * format : TextureFormat * levels : int * samples : int -> IBackendTexture
-    abstract member CreateTextureArray : size : V2i * format : TextureFormat * levels : int * samples : int * count : int -> IBackendTexture
-    abstract member CreateTextureCube : size : V2i * format : TextureFormat * levels : int * samples : int -> IBackendTexture
-    //abstract member CreateTextureCubeArray : size : V2i * format : TextureFormat * levels : int * samples : int -> IBackendTexture
-    abstract member CreateRenderbuffer : size : V2i * format : RenderbufferFormat * samples : int -> IRenderbuffer
+    
     abstract member CreateFramebuffer : signature : IFramebufferSignature * attachments : Map<Symbol, IFramebufferOutput> -> IFramebuffer
     abstract member CreateMappedBuffer : unit -> IMappedBuffer
     abstract member CreateMappedIndirectBuffer : indexed : bool -> IMappedIndirectBuffer
@@ -538,14 +547,7 @@ and IRuntime =
     abstract member CompileClear : fboSignature : IFramebufferSignature * clearColors : IMod<Map<Symbol, C4f>> * clearDepth : IMod<Option<double>> -> IRenderTask
     abstract member CompileRender : fboSignature : IFramebufferSignature * BackendConfiguration * aset<IRenderObject> -> IRenderTask
     
-    abstract member GenerateMipMaps : IBackendTexture -> unit
-    abstract member ResolveMultisamples : src : IFramebufferOutput * target : IBackendTexture * imgTrafo : ImageTrafo -> unit
-    abstract member Upload : texture : IBackendTexture * level : int * slice : int * source : PixImage -> unit
-    abstract member Download : texture : IBackendTexture * level : int * slice : int * target : PixImage -> unit
-    abstract member DownloadStencil : texture : IBackendTexture * level : int * slice : int * target : Matrix<int> -> unit
-    abstract member DownloadDepth : texture : IBackendTexture * level : int * slice : int * target : Matrix<float32> -> unit
 
-    abstract member Copy : src : IBackendTexture * srcBaseSlice : int * srcBaseLevel : int * dst : IBackendTexture * dstBaseSlice : int * dstBaseLevel : int * slices : int * levels : int -> unit
 
 and IRenderTask =
     inherit IDisposable
@@ -700,6 +702,7 @@ module TypedBufferExtensions =
     open System.Runtime.InteropServices
 
     type IRuntime with
+
 
         member x.CompileCompute (shader : 'a -> 'b) =
             let sh = FShade.ComputeShader.ofFunction x.MaxLocalSize shader
