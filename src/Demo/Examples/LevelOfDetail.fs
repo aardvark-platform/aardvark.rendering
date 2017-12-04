@@ -159,11 +159,76 @@ module LevelOfDetail =
             member x.Children = children.Value
         
 
+    open System.Runtime.CompilerServices
+
     let run() =
 
         let app = new VulkanApplication(true)
 
         let win = app.CreateSimpleRenderWindow(8) 
+
+        let runtime = app.Runtime :> IRuntime
+
+
+        let tex = runtime.CreateTexture(V3i(1024, 1024, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 0, 1, 1)
+        let level0 = tex.[Color, 0, 0]
+
+        let rand = RandomSystem()
+        let img = PixImage<byte>(Col.Format.RGBA, V2i(1024, 1024))
+        img.GetMatrix<C4b>().SetByCoord (fun (c : V2l) ->
+            let c = V2d c / V2d(1024, 1024)
+            C4f(float32 c.X, float32 c.Y, 1.0f, 1.0f).ToC4b()
+        ) |> ignore
+
+        runtime.Copy(img, level0)
+        
+        let test = PixImage<byte>(Col.Format.RGBA, V2i(1024, 1024))
+        runtime.Copy(level0, test)
+
+        let equal = img.Volume.InnerProduct(test.Volume, (=), true, (&&))
+        printfn "%A" equal
+
+
+        
+        let img = PixImage<byte>(Col.Format.RGBA, V2i(512, 512))
+        img.GetMatrix<C4b>().SetByCoord (fun (c : V2l) ->
+            let c = V2d c / V2d(512, 512)
+            C4f(float32 c.X, float32 c.Y, 1.0f, 1.0f).ToC4b()
+        ) |> ignore
+
+        runtime.Copy(img, level0, V2i(512, 512), V2i(512, 512))
+        
+
+
+        let img = PixImage.Create @"C:\Users\Schorsch\Development\WorkDirectory\cliffs_color.jpg"
+        level0.[800.., 323..] <- img.Transformed(ImageTrafo.MirrorY) 
+
+
+
+        //runtime.Copy(img, tex.[Color, 0, 0], V2i(0, 0), img.Size)
+        
+        let test = PixImage<byte>(Col.Format.RGBA, V2i(1024, 1024))
+        runtime.Copy(level0, test)
+        test.SaveAsImage @"C:\Users\schorsch\Desktop\bla.png"
+
+
+
+        let sg =
+            Sg.fullScreenQuad
+                |> Sg.diffuseTexture (Mod.constant (tex :> ITexture))
+                |> Sg.shader {
+                    do! DefaultSurfaces.diffuseTexture
+                }
+
+        win.RenderTask <- runtime.CompileRender(win.FramebufferSignature, sg)
+        win.Run()
+
+        Environment.Exit 0
+
+
+
+
+
 
         let view =
             CameraView.lookAt (V3d(6,6,6)) V3d.Zero V3d.OOI

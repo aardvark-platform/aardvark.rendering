@@ -289,7 +289,16 @@ module TextureFormat =
     let ofRenderbufferFormat (fmt : RenderbufferFormat) =
         convertEnum<_, TextureFormat> fmt
 
+    let private srgbFormats = 
+        HashSet.ofList [
+            TextureFormat.Srgb
+            TextureFormat.SrgbAlpha
+            TextureFormat.Srgb8
+            TextureFormat.Srgb8Alpha8
+        ]
 
+    let isSrgb (fmt : TextureFormat) =
+        srgbFormats.Contains fmt
 
     let ofPixFormat = 
         
