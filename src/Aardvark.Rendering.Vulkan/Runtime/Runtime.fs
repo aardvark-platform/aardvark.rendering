@@ -496,10 +496,21 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
     // upload
-    member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, dst : ITextureSubResource, dstOffset : V3i) =
-        let sizeInBytes = src.Size.X * src.Size.Y * src.Size.Z * src.Size.W * int64 sizeof<'a>
-        let buffer = device.HostMemory |> Buffer.create (VkBufferUsageFlags.TransferSrcBit) sizeInBytes
-        buffer.Memory.MappedTensor4(V4i src.Size, fun dst -> NativeTensor4.copy src dst)
+    member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) =
+        let srgb = TextureFormat.isSrgb (unbox (int dst.Format))
+        let temp = device |> TensorImage.create<'a> size fmt srgb
+
+        let src = 
+            src.SubTensor4(
+                V4l(0L, int64 size.Y - 1L, 0L, 0L),
+                V4l(V3l size, src.Size.W),
+                V4l(src.DX, -src.DY, src.DZ, src.DW)
+            )
+        temp.Write src
+
+        let dstOffset = 
+            V3i(dstOffset.X, dst.Size.Y - (dstOffset.Y + size.Y), dstOffset.Z)
+
 
         let aspect =
             match dst.Aspect with
@@ -510,16 +521,19 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         let dstImage = dst.Texture |> unbox<Image>
         let dst = dstImage.[aspect, dst.Level, dst.Slice]
 
+        let oldLayout = dstImage.Layout
         device.perform {
-            do! Command.Copy(buffer, 0L, V2i.Zero, dst, dstOffset, V3i src.Size.XYZ)
+            do! Command.TransformLayout(dstImage, VkImageLayout.TransferDstOptimal)
+            do! Command.Copy(temp, dst, dstOffset, size)
+            do! Command.TransformLayout(dstImage, oldLayout)
         }
 
-        device |> Buffer.delete buffer
+        device.Delete temp
         
     // download
-    member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>) =
-        let sizeInBytes = dst.Size.X * dst.Size.Y * dst.Size.Z * dst.Size.W * int64 sizeof<'a>
-        let buffer = device.HostMemory |> Buffer.create (VkBufferUsageFlags.TransferSrcBit) sizeInBytes
+    member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) =
+        let srgb = TextureFormat.isSrgb (unbox (int src.Format))
+        let temp = device |> TensorImage.create<'a> size fmt srgb
 
         let aspect =
             match src.Aspect with
@@ -529,13 +543,25 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         let srcImage = src.Texture |> unbox<Image>
         let src = srcImage.[aspect, src.Level, src.Slice]
-
+        
+        let oldLayout = srcImage.Layout
         device.perform {
-            do! Command.Copy(src, srcOffset, buffer, 0L, V2i.Zero, V3i dst.Size.XYZ)
+            do! Command.TransformLayout(srcImage, VkImageLayout.TransferSrcOptimal)
+            do! Command.Copy(src, srcOffset, temp, size)
+            do! Command.TransformLayout(srcImage, oldLayout)
         }
 
-        buffer.Memory.MappedTensor4(V4i src.Size, fun src -> NativeTensor4.copy src dst)
-        device |> Buffer.delete buffer
+
+        
+        let dst = 
+            dst.SubTensor4(
+                V4l(0L, int64 size.Y - 1L, 0L, 0L),
+                V4l(V3l size, dst.Size.W),
+                V4l(dst.DX, -dst.DY, dst.DZ, dst.DW)
+            )
+
+        temp.Read(dst)
+        device.Delete temp
 
     // copy
     member x.Copy(src : ITextureLevel, srcOffset : V3i, dst : ITextureLevel, dstOffset : V3i, size : V3i) =
@@ -565,6 +591,12 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
     interface IRuntime with
+        member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) =
+            x.Copy(src, fmt, dst, dstOffset, size)
+
+        member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) =
+            x.Copy(src, srcOffset, dst, fmt, size)
+
         member x.OnDispose = onDispose.Publish
         member x.AssembleEffect (effect : FShade.Effect, signature : IFramebufferSignature) =
             BackendSurface.ofEffectSimple signature effect

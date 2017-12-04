@@ -114,6 +114,14 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.Dispose() = x.Dispose() 
 
     interface IRuntime with
+    
+        member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) : unit =
+            failwith ""
+
+        member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) : unit =
+            failwith ""
+
+
         member x.OnDispose = onDispose.Publish
         member x.AssembleEffect (effect : Effect, signature : IFramebufferSignature) =
             let key = effect.Id, signature.ExtractSemantics()

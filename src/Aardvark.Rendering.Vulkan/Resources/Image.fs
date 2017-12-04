@@ -2322,7 +2322,7 @@ type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4
             let src = unbox<NativeTensor4<'a>> t
 
             // copy all available channels
-            let dst = tensor.[*,*,*,0L..src.SZ-1L]
+            let dst = tensor.[*,*,*,0L..src.SW-1L]
             dst.CopyFrom src
             
             // set the missing channels to default

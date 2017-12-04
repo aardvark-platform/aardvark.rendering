@@ -254,7 +254,7 @@ type IBuffer<'a when 'a : unmanaged> =
     inherit IDisposable
   
 [<AutoOpen>]
-module RuntimeBufferImplementation =
+module private RuntimeBufferImplementation =
     type RuntimeBufferRange<'a when 'a : unmanaged>(buffer : IBackendBuffer, offset : nativeint, count : int) =
 
         member x.Buffer = buffer
