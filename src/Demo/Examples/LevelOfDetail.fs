@@ -200,8 +200,8 @@ module LevelOfDetail =
         
 
 
-        let img = PixImage.Create @"C:\Users\Schorsch\Development\WorkDirectory\cliffs_color.jpg"
-        level0.[800.., 323..] <- img.Transformed(ImageTrafo.MirrorY) 
+        let img = PixImage.Create @"C:\Users\Schorsch\Desktop\cliffs_color.jpg"
+        level0.[0.., 0..] <- img.Transformed(ImageTrafo.Rot180) 
 
 
 
