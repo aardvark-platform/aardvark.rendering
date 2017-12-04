@@ -171,7 +171,7 @@ type ITextureRuntimeExtensions private() =
                 NativeTensor4<'a>(
                     pImg.Pointer, 
                     Tensor4Info(
-                        0L,
+                        info.Origin,
                         V4l(info.SX, info.SY, 1L, info.SZ),
                         V4l(info.DX, info.DY, info.DY * info.SY, info.DZ)
                     )
@@ -189,7 +189,7 @@ type ITextureRuntimeExtensions private() =
                 NativeTensor4<'a>(
                     pImg.Pointer, 
                     Tensor4Info(
-                        0L,
+                        info.Origin,
                         V4l(info.SX, info.SY, 1L, info.SZ),
                         V4l(info.DX, info.DY, info.DY * info.SY, info.DZ)
                     )

@@ -502,10 +502,18 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         let src = 
             src.SubTensor4(
-                V4l(0L, int64 size.Y - 1L, 0L, 0L),
-                V4l(V3l size, src.Size.W),
-                V4l(src.DX, -src.DY, src.DZ, src.DW)
+                V4l.Zero, 
+                V4l(int64 size.X, int64 size.Y, int64 size.Z, src.SW)
             )
+
+
+        let src = 
+            src.SubTensor4(
+                V4l(0L, int64 src.Size.Y - 1L, 0L, 0L),
+                src.Size,
+                V4l(src.DX, -src.DY, -src.DZ, src.DW)
+            )
+
         temp.Write src
 
         let dstOffset = 
