@@ -699,8 +699,8 @@ module RenderTask =
 
                     if viewportChanged then
                         first.SeekToBegin()
-                        first.SetViewport(0u, vps |> Array.map (fun b -> VkViewport(float32 b.Min.X, float32 b.Min.X, float32 (1 + b.SizeX), float32 (1 + b.SizeY), 0.0f, 1.0f))) |> ignore
-                        first.SetScissor(0u, vps |> Array.map (fun b -> VkRect2D(VkOffset2D(b.Min.X, b.Min.X), VkExtent2D(1 + b.SizeX, 1 + b.SizeY)))) |> ignore
+                        first.SetViewport(0u, vps |> Array.map (fun b -> VkViewport(float32 b.Min.X, float32 b.Min.Y, float32 b.SizeX, float32 b.SizeY, 0.0f, 1.0f))) |> ignore
+                        first.SetScissor(0u, vps |> Array.map (fun b -> VkRect2D(VkOffset2D(b.Min.X, b.Min.Y), VkExtent2D(b.SizeX, b.SizeY)))) |> ignore
 
                     cmdBuffer.Reset()
                     cmdBuffer.Begin(renderPass, CommandBufferUsage.RenderPassContinue)

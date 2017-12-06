@@ -58,6 +58,7 @@
     <Compile Include="RenderControl.fs" />
     <Compile Include="SimpleRenderWindow.fs" />
     <Compile Include="MessageLoop.fs" />
+    <Compile Include="MultiApplication.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />

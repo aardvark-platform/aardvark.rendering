@@ -20,6 +20,10 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
        base.SetStyle(ControlStyles.AllPaintingInWmPaint, true)
        base.SetStyle(ControlStyles.Opaque, true)
        base.SetStyle(ControlStyles.ResizeRedraw, true)
+       base.Padding <- Padding(0,0,0,0)
+       base.Margin <- Padding(0,0,0,0)
+       base.BorderStyle <- BorderStyle.None
+        
 
     let mutable surface : Surface = Unchecked.defaultof<_>
     let mutable swapchainDescription : SwapchainDescription = Unchecked.defaultof<_>

@@ -181,7 +181,7 @@ module GeometryComposition =
     open Aardvark.Application.OpenVR
 
     let run() =
-        FShade.EffectDebugger.attach()
+        //FShade.EffectDebugger.attach()
 //        use app = new VulkanApplication(false)
 //        let win = app.CreateSimpleRenderWindow(8) 
 //        let run() = win.Run()
@@ -223,8 +223,8 @@ module GeometryComposition =
                 "divide", toEffect Shader.divide
                 "shrink", toEffect Shader.shrink 
                 "extrude", toEffect Shader.extrude
-                "invert", toEffect Shader.invert
-                "tricolor", toEffect Shader.tricolor
+//                "invert", toEffect Shader.invert
+//                "tricolor", toEffect Shader.tricolor
             ]
 
         let combinations = 
@@ -322,7 +322,7 @@ module GeometryComposition =
         show {
             display Display.Mono
             samples 8
-            backend Backend.Vulkan
+            backend Backend.Both
             debug false
 
             scene sg

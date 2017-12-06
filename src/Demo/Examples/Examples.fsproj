@@ -90,6 +90,7 @@
     <Compile Include="Eigi.fs" />
     <Compile Include="Terrain.fs" />
     <Compile Include="LevelOfDetail.fs" />
+    <Compile Include="Sponza.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <None Include="paket.references" />

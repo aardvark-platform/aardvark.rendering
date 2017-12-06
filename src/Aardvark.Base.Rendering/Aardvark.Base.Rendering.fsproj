@@ -69,6 +69,7 @@
     <Compile Include="Utilities\PrimitiveValueConverter.fs" />
     <None Include="Utilities\NativeTensorGenerator.fsx" />
     <Compile Include="Utilities\NativeTensorGenerated.fs" />
+    <Compile Include="Utilities\NativeTensorExtensions.fs" />
     <Compile Include="Utilities\GPUVendor.fs" />
     <Compile Include="Utilities\ArrayVisitor.fs" />
     <Compile Include="Utilities\LockedResource.fs" />
