@@ -505,19 +505,10 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                 V4l.Zero, 
                 V4l(int64 size.X, int64 size.Y, int64 size.Z, src.SW)
             )
-
-
-        let src = 
-            src.SubTensor4(
-                V4l(0L, int64 src.Size.Y - 1L, 0L, 0L),
-                src.Size,
-                V4l(src.DX, -src.DY, -src.DZ, src.DW)
-            )
-
+        let src = src.MirrorY()
         temp.Write src
 
-        let dstOffset = 
-            V3i(dstOffset.X, dst.Size.Y - (dstOffset.Y + size.Y), dstOffset.Z)
+        let dstOffset = V3i(dstOffset.X, dst.Size.Y - (dstOffset.Y + size.Y), dstOffset.Z)
 
 
         let aspect =
@@ -549,9 +540,9 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                 | TextureAspect.Depth -> ImageAspect.Depth
                 | TextureAspect.Stencil -> ImageAspect.Stencil
 
+        let srcOffset = V3i(srcOffset.X, src.Size.Y - (srcOffset.Y + size.Y), srcOffset.Z)
         let srcImage = src.Texture |> unbox<Image>
         let src = srcImage.[aspect, src.Level, src.Slice]
-        
         let oldLayout = srcImage.Layout
         device.perform {
             do! Command.TransformLayout(srcImage, VkImageLayout.TransferSrcOptimal)
@@ -559,14 +550,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             do! Command.TransformLayout(srcImage, oldLayout)
         }
 
-
-        
-        let dst = 
-            dst.SubTensor4(
-                V4l(0L, int64 size.Y - 1L, 0L, 0L),
-                V4l(V3l size, dst.Size.W),
-                V4l(dst.DX, -dst.DY, dst.DZ, dst.DW)
-            )
+        let dst = dst.MirrorY()
 
         temp.Read(dst)
         device.Delete temp

@@ -18,6 +18,7 @@ open Aardvark.Application.OpenVR
 type Backend =
     | GL 
     | Vulkan 
+    | Both
     
 [<RequireQualifiedAccess>]
 type Display =
@@ -255,6 +256,7 @@ module Utilities =
             match cfg.backend with
                 | Backend.GL -> new OpenGlApplication(cfg.debug) :> IApplication
                 | Backend.Vulkan -> new VulkanApplication(cfg.debug) :> IApplication
+                | Backend.Both -> new MultiApplication([|new OpenGlApplication(cfg.debug) :> IApplication; new VulkanApplication(cfg.debug) :> IApplication|]) :> IApplication
 
         let win = 
             if cfg.game && cfg.backend = Backend.GL then (unbox<OpenGlApplication> app).CreateGameWindow(cfg.samples) :> IRenderWindow
@@ -288,6 +290,7 @@ module Utilities =
             match cfg.backend with
                 | Backend.GL -> new OpenGlApplication(cfg.debug) :> IApplication
                 | Backend.Vulkan -> new VulkanApplication(cfg.debug) :> IApplication
+                | Backend.Both -> failwith "not implemented"
 
         let win = app.CreateSimpleRenderWindow(1)
         let runtime = app.Runtime
@@ -475,6 +478,9 @@ module Utilities =
                 } :> ISimpleRenderWindow
 
             | Backend.GL -> 
+                failwith "no OpenGL OpenVR backend atm."
+
+            | Backend.Both -> 
                 failwith "no OpenGL OpenVR backend atm."
 
 

@@ -1298,7 +1298,8 @@ let main args =
     //Examples.Wobble.run()
     //Examples.GeometryComposition.run()
     //Examples.Eigi.run()
-    Examples.LevelOfDetail.run()
+    Examples.Sponza.run()
+    //Examples.LevelOfDetail.run()
     //Examples.Terrain.run()
     System.Environment.Exit 0
 

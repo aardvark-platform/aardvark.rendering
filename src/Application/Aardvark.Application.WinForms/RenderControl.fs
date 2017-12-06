@@ -53,8 +53,16 @@ type RenderControl() as this =
         c.Dock <- DockStyle.Fill
         self.Controls.Add c
 
-        keyboard.SetControl c
-        mouse.SetControl c
+        match cr with
+            | :? IRenderControl as cr -> 
+                keyboard.Use cr.Keyboard |> ignore
+                mouse.Use cr.Mouse |> ignore
+
+            | _ ->
+                keyboard.SetControl c
+                mouse.SetControl c
+
+
         match renderTask with
             | Some task -> cr.RenderTask <- task
             | None -> ()

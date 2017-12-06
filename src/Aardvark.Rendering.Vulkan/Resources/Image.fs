@@ -2501,14 +2501,28 @@ module ``Devil Loader`` =
                     let height      = IL.GetInteger(IntName.ImageHeight)
                     let channelType = IL.GetDataType()
                     let format      = IL.GetFormat()
+                    let format =
+                        match format with
+                            | ChannelFormat.BGR ->
+                                IL.ConvertImage(ChannelFormat.RGBA, channelType) |> checkf "could not convert image"
+                                ChannelFormat.RGBA
+                            | ChannelFormat.BGRA ->
+                                IL.ConvertImage(ChannelFormat.RGBA, channelType) |> checkf "could not convert image"
+                                ChannelFormat.RGBA
+                            | _ ->
+                                format
+                                
+
                     let data        = IL.GetData()
                     let pixFormat   = PixFormat.ofDevil format channelType
                     
                     let bytesPerPixel = IL.GetInteger(IntName.ImageBytesPerPixel)
                     let rowSize = nativeint bytesPerPixel * nativeint width
                     
+
+
                     let target = device |> TensorImage.createUntyped (V3i(width, height, 1)) pixFormat srgb
-                    target.Write(data, rowSize, pixFormat.Format, ImageTrafo.Rot0)
+                    target.Write(data, rowSize, pixFormat.Format, ImageTrafo.MirrorY)
 
                     target
                 finally
@@ -2901,12 +2915,31 @@ module ``Image Command Extensions`` =
                     let dstLayout = dst.Image.Layout
 
                     let mutable srcOffsets = VkOffset3D_2()
+
+                    let inline extend (b : Box3i) =
+                        let mutable min = b.Min
+                        let mutable max = b.Max
+
+                        if max.X >= min.X then max.X <- 1 + max.X
+                        else min.X <- min.X + 1
+
+                        if max.Y >= min.Y then max.Y <- 1 + max.Y
+                        else min.Y <- min.Y + 1
+
+                        if max.Z >= min.Z then max.Z <- 1 + max.Z
+                        else min.Z <- min.Z + 1
+
+                        Box3i(min, max)
+                         
+                    let srcRange = extend srcRange
+                    let dstRange = extend dstRange
+
                     srcOffsets.[0] <- VkOffset3D(srcRange.Min.X, srcRange.Min.Y, srcRange.Min.Z)
-                    srcOffsets.[1] <- VkOffset3D(1 + srcRange.Max.X, 1 + srcRange.Max.Y, 1 + srcRange.Max.Z)
+                    srcOffsets.[1] <- VkOffset3D(srcRange.Max.X, srcRange.Max.Y, srcRange.Max.Z)
 
                     let mutable dstOffsets = VkOffset3D_2()
                     dstOffsets.[0] <- VkOffset3D(dstRange.Min.X, dstRange.Min.Y, dstRange.Min.Z)
-                    dstOffsets.[1] <- VkOffset3D(1 + dstRange.Max.X, 1 + dstRange.Max.Y, 1 + dstRange.Max.Z)
+                    dstOffsets.[1] <- VkOffset3D(dstRange.Max.X, dstRange.Max.Y, dstRange.Max.Z)
 
 
                     let mutable blit =
