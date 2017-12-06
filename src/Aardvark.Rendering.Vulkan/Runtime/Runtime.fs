@@ -506,7 +506,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                 V4l(int64 size.X, int64 size.Y, int64 size.Z, src.SW)
             )
         let src = src.MirrorY()
-        temp.Write src
+        temp.Write(fmt, src)
 
         let dstOffset = V3i(dstOffset.X, dst.Size.Y - (dstOffset.Y + size.Y), dstOffset.Z)
 
@@ -552,7 +552,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         let dst = dst.MirrorY()
 
-        temp.Read(dst)
+        temp.Read(fmt, dst)
         device.Delete temp
 
     // copy
