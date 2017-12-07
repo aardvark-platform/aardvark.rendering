@@ -2227,48 +2227,23 @@ type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4
 
     static let sa = sizeof<'a> |> int64
 
-    static let channelMapping =
-        LookupTable.lookupTable [
-            (Col.Format.Alpha,     Col.Format.Gray),      [0]
-            (Col.Format.Gray,      Col.Format.Gray),      [0]
-            (Col.Format.NormalUV,  Col.Format.Gray),      [0]
-            (Col.Format.RGB,       Col.Format.Gray),      [0]
-            (Col.Format.BGR,       Col.Format.Gray),      [2]
-            (Col.Format.RGBA,      Col.Format.Gray),      [0]
-            (Col.Format.BGRA,      Col.Format.Gray),      [2]
-            (Col.Format.Alpha,     Col.Format.Alpha),     [0]
-            (Col.Format.Gray,      Col.Format.Alpha),     [0]
-            (Col.Format.NormalUV,  Col.Format.Alpha),     [0]
-            (Col.Format.RGB,       Col.Format.Alpha),     [0]
-            (Col.Format.BGR,       Col.Format.Alpha),     [2]
-            (Col.Format.RGBA,      Col.Format.Alpha),     [0]
-            (Col.Format.BGRA,      Col.Format.Alpha),     [2]
-
-
-            (Col.Format.NormalUV,  Col.Format.NormalUV),  [0;1]
-            (Col.Format.NormalUV,  Col.Format.RGB),       [0;1;-1]
-            (Col.Format.NormalUV,  Col.Format.RGBA),      [0;1;-1;-1]
-
-            (Col.Format.BGR,       Col.Format.BGR),       [0;1;2]
-            (Col.Format.BGR,       Col.Format.BGRA),      [0;1;2;-1]
-            (Col.Format.BGR,       Col.Format.RGB),       [2;1;0]
-            (Col.Format.BGR,       Col.Format.RGBA),      [2;1;0;-1]
-
-            (Col.Format.RGB,       Col.Format.BGR),       [2;1;0]
-            (Col.Format.RGB,       Col.Format.BGRA),      [2;1;0;-1]
-            (Col.Format.RGB,       Col.Format.RGB),       [0;1;2]
-            (Col.Format.RGB,       Col.Format.RGBA),      [0;1;2;-1]
-
-            (Col.Format.BGRA,      Col.Format.BGRA),      [0;1;2;3]
-            (Col.Format.BGRP,      Col.Format.BGRA),      [0;1;2;3]
-            (Col.Format.BGRA,      Col.Format.RGBA),      [2;1;0;3]
-            (Col.Format.BGRP,      Col.Format.RGBA),      [2;1;0;3]
-            
-            (Col.Format.RGBA,      Col.Format.RGBA),      [0;1;2;3]
-            (Col.Format.RGBP,      Col.Format.RGBA),      [0;1;2;3]
-            (Col.Format.RGBA,      Col.Format.BGRA),      [2;1;0;3]
-            (Col.Format.RGBP,      Col.Format.BGRA),      [2;1;0;3]
+    static let rgbFormats =
+        HashSet.ofList [
+            Col.Format.RGB
+            Col.Format.RGBA
+            Col.Format.RGBP
         ]
+
+    static let bgrFormats =
+        HashSet.ofList [
+            Col.Format.BGR
+            Col.Format.BGRA
+            Col.Format.BGRP
+        ]
+
+    static let reverseRGB (srcFormat : Col.Format) (dstFormat : Col.Format) =
+        (rgbFormats.Contains srcFormat && bgrFormats.Contains dstFormat) ||
+        (rgbFormats.Contains dstFormat && bgrFormats.Contains srcFormat)
 
 
     let tensor = DeviceTensor4<'a>(buffer.Memory, info)
@@ -2286,6 +2261,35 @@ type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4
             | TypeInfo.Patterns.Float32 -> 1.0f |> unbox<'a>
             | TypeInfo.Patterns.Float64 -> 1.0 |> unbox<'a>
             | _ -> failf "unsupported channel-type: %A" typeof<'a>
+
+    static let copy (src : NativeTensor4<'a>) (srcFormat : Col.Format) (dst : NativeTensor4<'a>) (dstFormat : Col.Format) =
+        let channels = min src.SW dst.SW
+
+        let mutable src = src
+        let mutable dst = dst
+
+        if src.Size.XYZ <> dst.Size.XYZ then
+            let s = V3l(min src.SX dst.SX, min src.SY dst.SY, min src.SZ dst.SZ)
+            src <- src.SubTensor4(V4l.Zero, V4l(s, src.SW))
+            dst <- dst.SubTensor4(V4l.Zero, V4l(s, dst.SW))
+
+        if reverseRGB srcFormat dstFormat then
+            let src3 = src.[*,*,*,0..2].MirrorW()
+            let dst3 = dst.[*,*,*,0..2]
+            NativeTensor4.copy src3 dst3
+
+            if channels > 3L then
+                 NativeTensor4.copy src.[*,*,*,3..] dst.[*,*,*,3..]
+
+            if dst.SW > channels then
+                NativeTensor4.set defaultValue dst.[*,*,*,channels..]
+        else
+            // copy all available channels
+            NativeTensor4.copy src dst.[*,*,*,0L..channels-1L]
+            
+            // set the missing channels to default
+            if dst.SW > channels then
+                NativeTensor4.set defaultValue dst.[*,*,*,channels..]
 
     override x.Write(data : nativeint, rowSize : nativeint, format : Col.Format, trafo : ImageTrafo) =
         let rowSize = int64 rowSize
@@ -2344,52 +2348,20 @@ type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4
     override x.Write(fmt : Col.Format, volume : NativeVolume<'x>) =
         if typeof<'a> = typeof<'x> then
             let src = unbox<NativeVolume<'a>> volume
-            if fmt = format then
-                // copy all available channels
-                let dst = tensor.[*,*,0L,0L..src.SZ-1L]
-                dst.CopyFrom src
             
-                // set the missing channels to default
-                if src.Size.Z < tensor.Size.W then
-                    let missingChannels = tensor.[*,*,0L,src.Size.Z..]
-                    missingChannels.Set defaultValue
-
-                // set the remaining tensor to default
-                let rest = tensor.[*,*,1..,*]
-                rest.Set defaultValue
-            else
-                let channels = channelMapping(fmt, format)
-                let dst = tensor.[*,*,0L,*]
-                channels |> List.iteri (fun i c ->
-                    if i < int dst.Info.SZ then
-                        if c >= 0 then dst.[*,*,i].CopyFrom src.[*,*,c]
-                        else dst.[*,*,i].Set defaultValue
-                )
-                
-
+            let srcTensor = src.ToXYWTensor4()
+            tensor.Mapped (fun dst ->
+                copy srcTensor fmt dst format
+            )
         else
             failf "mismatching types is upload"
 
     override x.Write(fmt : Col.Format, t : NativeTensor4<'x>) =
         if typeof<'a> = typeof<'x> then
             let src = unbox<NativeTensor4<'a>> t
-            if fmt = format then
-                // copy all available channels
-                let dst = tensor.[*,*,*,0L..src.SW-1L]
-                dst.CopyFrom src
-            
-                // set the missing channels to default
-                if src.Size.W < tensor.Size.W then
-                    let missingChannels = tensor.[*,*,*,src.Size.W..]
-                    missingChannels.Set defaultValue
-            else
-                let channels = channelMapping(fmt, format)
-                let dst = tensor
-                channels |> List.iteri (fun i c ->
-                    if i < int dst.Info.SW then
-                        if c >= 0 then dst.[*,*,*,i].CopyFrom src.[*,*,*,c]
-                        else dst.[*,*,*,i].Set defaultValue
-                )
+            tensor.Mapped (fun dst ->
+                copy src fmt dst format
+            )
 
         else
             failf "mismatching types is upload"
@@ -2405,34 +2377,20 @@ type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4
     override x.Read(fmt : Col.Format, dst : NativeVolume<'x>) : unit =
         if typeof<'a> = typeof<'x> then
             let dst = unbox<NativeVolume<'a>> dst
-            if fmt = format then
-                let src = tensor.[*,*,0,0 .. int dst.SZ]
-                src.CopyTo dst
-            else
-                let channels = channelMapping(format, fmt)
-                channels |> List.iteri (fun i c ->
-                    if i < int dst.Info.SZ then
-                        if c >= 0 then 
-                            tensor.SubXYMatrix(0L, int64 c).CopyTo dst.[*,*,i]
-                )
+            let dstTensor = dst.ToXYWTensor4()
+            tensor.Mapped (fun src ->
+                copy src format dstTensor fmt
+            )
 
-                
         else
             failf "mismatching types is download"
 
     override x.Read(fmt : Col.Format, dst : NativeTensor4<'x>) : unit =
         if typeof<'a> = typeof<'x> then
             let dst = unbox<NativeTensor4<'a>> dst
-            if fmt = format then
-                let src = tensor
-                src.CopyTo dst
-            else
-                let channels = channelMapping(format, fmt)
-                channels |> List.iteri (fun i c ->
-                    if i < int dst.Info.SZ then
-                        if c >= 0 then 
-                            tensor.SubXYZVolume(int64 c).CopyTo dst.[*,*,*,i]
-                )
+            tensor.Mapped (fun src ->
+                copy src format dst fmt
+            )
         else
             failf "mismatching types is download"
 
@@ -2567,6 +2525,8 @@ module ``Devil Loader`` =
 
     module TensorImage =
         let ofFile (file : string) (srgb : bool) (device : Device) =
+            // let img = PixImage.Create file
+            // TensorImage.ofPixImage img srgb device
             lock devilLock (fun () ->
                 PixImage.InitDevil()
 
@@ -2580,26 +2540,12 @@ module ``Devil Loader`` =
                     let height      = IL.GetInteger(IntName.ImageHeight)
                     let channelType = IL.GetDataType()
                     let format      = IL.GetFormat()
-//                    let format =
-//                        match format with
-//                            | ChannelFormat.BGR ->
-//                                IL.ConvertImage(ChannelFormat.RGBA, channelType) |> checkf "could not convert image"
-//                                ChannelFormat.RGBA
-//                            | ChannelFormat.BGRA ->
-//                                IL.ConvertImage(ChannelFormat.RGBA, channelType) |> checkf "could not convert image"
-//                                ChannelFormat.RGBA
-//                            | _ ->
-//                                format
-//                                
-
                     let data        = IL.GetData()
                     let pixFormat   = PixFormat.ofDevil format channelType
                     
                     let bytesPerPixel = IL.GetInteger(IntName.ImageBytesPerPixel)
                     let rowSize = nativeint bytesPerPixel * nativeint width
                     
-
-
                     let target = device |> TensorImage.createUntyped (V3i(width, height, 1)) pixFormat srgb
                     target.Write(data, rowSize, pixFormat.Format, ImageTrafo.MirrorY)
 
@@ -3557,3 +3503,38 @@ type ContextImageExtensions private() =
     [<Extension>]
     static member inline DownloadLevel(this : Device, src : ImageSubresource, dst : PixImage) =
         this |> Image.downloadLevel src dst
+
+[<AutoOpen>]
+module private ImageRanges =
+    
+    module ImageAspect =
+        let ofTextureAspect =
+            LookupTable.lookupTable [
+                TextureAspect.Color, ImageAspect.Color
+                TextureAspect.Depth, ImageAspect.Depth
+                TextureAspect.Stencil, ImageAspect.Stencil
+            ]
+            
+    module ImageSubresource =
+        let ofTextureSubResource (src : ITextureSubResource) =
+            let srcAspect = ImageAspect.ofTextureAspect src.Aspect
+            let srcImage = src.Texture |> unbox<Image>
+            srcImage.[srcAspect, src.Level, src.Slice]
+            
+    module ImageSubresourceLayers =
+        let ofFramebufferOutput (src : IFramebufferOutput) =
+            match src with
+                | :? Image as img ->
+                    if VkFormat.hasDepth img.Format then
+                        img.[ImageAspect.Depth, 0, *]
+                    else
+                        img.[ImageAspect.Color, 0, *]
+
+                | :? ITextureLevel as src ->
+                    let srcAspect = ImageAspect.ofTextureAspect src.Aspect
+                    let srcImage = src.Texture |> unbox<Image>
+                    srcImage.[srcAspect, src.Level, src.Slices.Min .. src.Slices.Max]
+
+                | _ ->
+                    failf "unexpected IFramebufferOutput: %A" src
+        

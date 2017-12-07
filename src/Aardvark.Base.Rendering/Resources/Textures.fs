@@ -38,11 +38,6 @@ type ISparseTexture<'a when 'a : unmanaged> =
 
 
  
-type IFramebufferOutput =
-    abstract member Format : RenderbufferFormat
-    abstract member Samples : int
-    abstract member Size : V2i
-
 type IBackendTexture =
     inherit ITexture
     abstract member Runtime : ITextureRuntime
@@ -55,6 +50,12 @@ type IBackendTexture =
     abstract member Handle : obj
 
     
+and IFramebufferOutput =
+    abstract member Runtime : ITextureRuntime
+    abstract member Format : RenderbufferFormat
+    abstract member Samples : int
+    abstract member Size : V2i
+
 and ITextureRange =
     abstract member Texture : IBackendTexture
     abstract member Aspect : TextureAspect
@@ -77,11 +78,7 @@ and ITextureSubResource =
 
 and IRenderbuffer =
     inherit IFramebufferOutput
-    abstract member Runtime : ITextureRuntime
     abstract member Handle : obj
-
-
-
 
 and ITextureRuntime =
     inherit IBufferRuntime
@@ -89,12 +86,13 @@ and ITextureRuntime =
     abstract member CreateTexture : size : V3i * dim : TextureDimension * format : TextureFormat * slices : int * levels : int * samples : int -> IBackendTexture
     abstract member PrepareTexture : ITexture -> IBackendTexture
 
-
-//    abstract member Copy : src : ITextureLevel * srcOffset : V3i * dst : ITextureLevel * dstOffset : V3i * size : V3i -> unit
 //    abstract member Blit : src : ITextureLevel * srcRange : Box3i * dst : ITextureLevel * dstRange : Box3i * linear : bool -> unit
+//    abstract member Resolve : src : ITextureLevel * srcOffset : Box3i * dst : ITextureLevel * dstOffset : Box3i * size : V3i -> unit
+
     abstract member Copy : src : NativeTensor4<'a> * srcFormat : Col.Format * dst : ITextureSubResource * dstOffset : V3i * size : V3i -> unit
     abstract member Copy : src : ITextureSubResource * srcOffset : V3i * dst : NativeTensor4<'a> * dstFormat : Col.Format * size : V3i -> unit
-    //    member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) =
+    abstract member Copy : src : IFramebufferOutput * srcOffset : V3i * dst : IFramebufferOutput * dstOffset : V3i * size : V3i -> unit
+
 
 
 
@@ -116,54 +114,116 @@ and ITextureRuntime =
     abstract member CreateTextureCube : size : V2i * format : TextureFormat * levels : int * samples : int -> IBackendTexture
 
 
+[<AutoOpen>]
+module private PixVisitors =
+    [<AbstractClass>]
+    type PixImageVisitor<'r>() =
+        static let table =
+            LookupTable.lookupTable [
+                typeof<int8>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<int8>(unbox img, 127y))
+                typeof<uint8>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<uint8>(unbox img, 255uy))
+                typeof<int16>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<int16>(unbox img, Int16.MaxValue))
+                typeof<uint16>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<uint16>(unbox img, UInt16.MaxValue))
+                typeof<int32>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<int32>(unbox img, Int32.MaxValue))
+                typeof<uint32>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<uint32>(unbox img, UInt32.MaxValue))
+                typeof<int64>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<int64>(unbox img, Int64.MaxValue))
+                typeof<uint64>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<uint64>(unbox img, UInt64.MaxValue))
+                typeof<float16>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<float16>(unbox img, float16(Float32 = 1.0f)))
+                typeof<float32>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<float32>(unbox img, 1.0f))
+                typeof<float>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<float>(unbox img, 1.0))
+            ]
+        abstract member Visit<'a when 'a : unmanaged> : PixImage<'a> * 'a -> 'r
 
-[<AbstractClass>]
-type private PixImageVisitor<'r>() =
-    static let table =
-        LookupTable.lookupTable [
-            typeof<int8>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<int8>(unbox img, 127y))
-            typeof<uint8>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<uint8>(unbox img, 255uy))
-            typeof<int16>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<int16>(unbox img, Int16.MaxValue))
-            typeof<uint16>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<uint16>(unbox img, UInt16.MaxValue))
-            typeof<int32>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<int32>(unbox img, Int32.MaxValue))
-            typeof<uint32>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<uint32>(unbox img, UInt32.MaxValue))
-            typeof<int64>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<int64>(unbox img, Int64.MaxValue))
-            typeof<uint64>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<uint64>(unbox img, UInt64.MaxValue))
-            typeof<float16>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<float16>(unbox img, float16(Float32 = 1.0f)))
-            typeof<float32>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<float32>(unbox img, 1.0f))
-            typeof<float>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<float>(unbox img, 1.0))
-        ]
-    abstract member Visit<'a when 'a : unmanaged> : PixImage<'a> * 'a -> 'r
+        interface IPixImageVisitor<'r> with
+            member x.Visit<'a>(img : PixImage<'a>) =
+                table (typeof<'a>) (x, img)
 
-        
+    [<AbstractClass>]
+    type PixVolumeVisitor<'r>() =
+        static let table =
+            LookupTable.lookupTable [
+                typeof<int8>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<int8>(unbox img, 127y))
+                typeof<uint8>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<uint8>(unbox img, 255uy))
+                typeof<int16>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<int16>(unbox img, Int16.MaxValue))
+                typeof<uint16>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<uint16>(unbox img, UInt16.MaxValue))
+                typeof<int32>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<int32>(unbox img, Int32.MaxValue))
+                typeof<uint32>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<uint32>(unbox img, UInt32.MaxValue))
+                typeof<int64>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<int64>(unbox img, Int64.MaxValue))
+                typeof<uint64>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<uint64>(unbox img, UInt64.MaxValue))
+                typeof<float16>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<float16>(unbox img, float16(Float32 = 1.0f)))
+                typeof<float32>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<float32>(unbox img, 1.0f))
+                typeof<float>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<float>(unbox img, 1.0))
+            ]
 
+        abstract member Visit<'a when 'a : unmanaged> : PixVolume<'a> * 'a -> 'r
 
-    interface IPixImageVisitor<'r> with
-        member x.Visit<'a>(img : PixImage<'a>) =
-            table (typeof<'a>) (x, img)
+        interface IPixVolumeVisitor<'r> with
+            member x.Visit<'a>(img : PixVolume<'a>) =
+                table (typeof<'a>) (x, img)
 
 
 [<AbstractClass; Sealed; Extension>]
 type ITextureRuntimeExtensions private() =
-//
-//    [<Extension>]
-//    static member CreateTexture(this : ITextureRuntime, size : V2i, format : TextureFormat, levels : int, samples : int) =
-//        this.CreateTexture(V3i(size, 1), TextureDimension.Texture2D, format, 1, levels, samples)
-//
-//    [<Extension;>]
-//    static member CreateTextureArray(this : ITextureRuntime, size : V2i, format : TextureFormat, levels : int, samples : int, count : int) =
-//        this.CreateTexture(V3i(size, 1), TextureDimension.Texture2D, format, count, levels, samples)
-//
-//    [<Extension>]
-//    static member CreateTextureCube(this : ITextureRuntime, size : V2i, format : TextureFormat, levels : int, samples : int) =
-//        this.CreateTexture(V3i(size, 1), TextureDimension.TextureCube, format, 1, levels, samples)
-//
-
-    
-
+    // PixVolume
+    [<Extension>]
+    static member Copy(this : ITextureRuntime, img : PixVolume, dst : ITextureSubResource, dstOffset : V3i, size : V3i) =
+        img.Visit
+            { new PixVolumeVisitor<int>() with
+                member x.Visit(img : PixVolume<'a>, _) =
+                    NativeTensor4.using img.Tensor4 (fun pImg ->
+                        this.Copy(pImg, img.Format, dst, dstOffset, size)
+                    )
+                    0
+            } |> ignore
 
     [<Extension>]
-    static member Copy(this : ITextureRuntime, img : PixImage, dst : ITextureSubResource, dstOffset : V2i, size : V2i) =
+    static member Copy(this : ITextureRuntime, src : ITextureSubResource, srcOffset : V3i, dst : PixVolume, size : V3i) =
+        dst.Visit
+            { new PixVolumeVisitor<int>() with
+                member x.Visit(dst : PixVolume<'a>, _) =
+                    NativeTensor4.using dst.Tensor4 (fun pImg ->
+                        this.Copy(src, srcOffset, pImg, dst.Format, size)
+                    )
+                    0
+            } |> ignore
+
+    [<Extension>]
+    static member Copy(this : ITextureRuntime, img : PixVolume, dst : ITextureSubResource) =
+        ITextureRuntimeExtensions.Copy(this, img, dst, V3i.Zero, img.Size)
+        
+    [<Extension>]
+    static member Copy(this : ITextureRuntime, src : ITextureSubResource, dst : PixVolume) =
+        ITextureRuntimeExtensions.Copy(this, src, V3i.Zero, dst, dst.Size)
+ 
+    [<Extension>]
+    static member SetSlice(this : ITextureSubResource, minC : Option<V3i>, maxC : Option<V3i>, value : PixVolume) =
+        let minC = defaultArg minC V3i.Zero
+        let maxC = defaultArg maxC (this.Size - V3i.III)
+        let size = V3i.III + maxC - minC
+        let imgSize = value.Size
+        let size = V3i(min size.X imgSize.X, min size.Y imgSize.Y, min size.Z imgSize.Z)
+        ITextureRuntimeExtensions.Copy(this.Texture.Runtime, value, this, minC, size)
+
+    [<Extension>]
+    static member SetSlice(this : ITextureSubResource, minX : Option<int>, maxX : Option<int>, minY : Option<int>, maxY : Option<int>, minZ : Option<int>, maxZ : Option<int>, value : PixVolume) =
+        let minX = defaultArg minX 0
+        let maxX = defaultArg maxX (this.Size.X - 1)
+        let minY = defaultArg minY 0
+        let maxY = defaultArg maxY (this.Size.Y - 1)
+        let minZ = defaultArg minZ 0
+        let maxZ = defaultArg maxZ (this.Size.Z - 1)
+        let minC = V3i(minX, minY, minZ)
+        let maxC = V3i(maxX, maxY, maxZ)
+        let size = V3i.III + maxC - minC
+        let imgSize = value.Size
+        let size = V3i(min size.X imgSize.X, min size.Y imgSize.Y, min size.Z imgSize.Z)
+        ITextureRuntimeExtensions.Copy(this.Texture.Runtime, value, this, minC, size)
+
+
+    
+    // PixImage
+    [<Extension>]
+    static member Copy(this : ITextureRuntime, img : PixImage, dst : ITextureSubResource, dstOffset : V3i, size : V2i) =
         img.Visit
             { new PixImageVisitor<int>() with
                 member x.Visit(img : PixImage<'a>, _) =
@@ -180,13 +240,17 @@ type ITextureRuntimeExtensions private() =
                                 )
                             )
 
-                        this.Copy(tensor4, img.Format, dst, V3i(dstOffset, 0), V3i(size, 1))
+                        this.Copy(tensor4, img.Format, dst, dstOffset, V3i(size, 1))
                     )
                     0
             } |> ignore
 
     [<Extension>]
-    static member Copy(this : ITextureRuntime, src : ITextureSubResource, srcOffset : V2i, dst : PixImage, size : V2i) =
+    static member Copy(this : ITextureRuntime, img : PixImage, dst : ITextureSubResource, dstOffset : V2i, size : V2i) =
+        ITextureRuntimeExtensions.Copy(this, img, dst, V3i(dstOffset, 0), size)
+
+    [<Extension>]
+    static member Copy(this : ITextureRuntime, src : ITextureSubResource, srcOffset : V3i, dst : PixImage, size : V2i) =
         dst.Visit
             { new PixImageVisitor<int>() with
                 member x.Visit(dst : PixImage<'a>, _) =
@@ -203,30 +267,34 @@ type ITextureRuntimeExtensions private() =
                                 )
                             )
 
-                        this.Copy(src, V3i(srcOffset,0), tensor4, dst.Format, V3i(size,1))
+                        this.Copy(src, srcOffset, tensor4, dst.Format, V3i(size,1))
                     )
                     0
             } |> ignore
         
     [<Extension>]
+    static member Copy(this : ITextureRuntime, src : ITextureSubResource, srcOffset : V2i, dst : PixImage, size : V2i) =
+        ITextureRuntimeExtensions.Copy(this, src, V3i(srcOffset, 0), dst, size)
+
+    [<Extension>]
     static member Copy(this : ITextureRuntime, img : PixImage, dst : ITextureSubResource) =
-        ITextureRuntimeExtensions.Copy(this, img, dst, V2i.Zero, img.Size)
+        ITextureRuntimeExtensions.Copy(this, img, dst, V3i.Zero, img.Size)
         
     [<Extension>]
     static member Copy(this : ITextureRuntime, src : ITextureSubResource, dst : PixImage) =
-        ITextureRuntimeExtensions.Copy(this, src, V2i.Zero, dst, dst.Size)
-        
+        ITextureRuntimeExtensions.Copy(this, src, V3i.Zero, dst, dst.Size)
+
     [<Extension>]
-    static member SetSlice(this : ITextureSubResource, minC : Option<V2i>, maxC : Option<V2i>, value : PixImage) =
+    static member SetSlice(this : ITextureSubResource, minC : Option<V2i>, maxC : Option<V2i>, z : int, value : PixImage) =
         let minC = defaultArg minC V2i.Zero
         let maxC = defaultArg maxC (this.Size.XY - V2i.II)
         let size = V2i.II + maxC - minC
         let imgSize = value.Size
         let size = V2i(min size.X imgSize.X, min size.Y imgSize.Y)
-        ITextureRuntimeExtensions.Copy(this.Texture.Runtime, value, this, minC, size)
+        ITextureRuntimeExtensions.Copy(this.Texture.Runtime, value, this, V3i(minC, z), size)
 
     [<Extension>]
-    static member SetSlice(this : ITextureSubResource, minX : Option<int>, maxX : Option<int>, minY : Option<int>, maxY : Option<int>, value : PixImage) =
+    static member SetSlice(this : ITextureSubResource, minX : Option<int>, maxX : Option<int>, minY : Option<int>, maxY : Option<int>, z : int, value : PixImage) =
         let minX = defaultArg minX 0
         let maxX = defaultArg maxX (this.Size.X - 1)
         let minY = defaultArg minY 0
@@ -237,12 +305,58 @@ type ITextureRuntimeExtensions private() =
         let size = V2i.II + maxC - minC
         let imgSize = value.Size
         let size = V2i(min size.X imgSize.X, min size.Y imgSize.Y)
-        ITextureRuntimeExtensions.Copy(this.Texture.Runtime, value, this, minC, size)
+        ITextureRuntimeExtensions.Copy(this.Texture.Runtime, value, this, V3i(minC, z), size)
+        
+    [<Extension>]
+    static member SetSlice(this : ITextureSubResource, minX : Option<int>, maxX : Option<int>, minY : Option<int>, maxY : Option<int>, value : PixImage) =
+        ITextureRuntimeExtensions.SetSlice(this, minX, maxX, minY, maxY, 0, value)
+
+    [<Extension>]
+    static member SetSlice(this : ITextureSubResource, minC : Option<V2i>, maxC : Option<V2i>, value : PixImage) =
+        ITextureRuntimeExtensions.SetSlice(this, minC, maxC, 0, value)
+
+    // Copies
+    [<Extension>]
+    static member Copy(this : ITextureRuntime, src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V2i) =
+        this.Copy(src, srcOffset, dst, dstOffset, V3i(size, 1))
+
+    [<Extension>]
+    static member Copy(this : ITextureRuntime, src : IFramebufferOutput, srcOffset : V2i, dst : IFramebufferOutput, dstOffset : V2i, size : V2i) =
+        this.Copy(src, V3i(srcOffset, 0), dst, V3i(dstOffset, 0), V3i(size, 1))
+
+    [<Extension>]
+    static member Copy(this : ITextureRuntime, src : IFramebufferOutput, dst : IFramebufferOutput, size : V3i) =
+        this.Copy(src, V3i.Zero, dst, V3i.Zero, size)
+        
+    [<Extension>]
+    static member Copy(this : ITextureRuntime, src : IFramebufferOutput, dst : IFramebufferOutput, size : V2i) =
+        this.Copy(src, V3i.Zero, dst, V3i.Zero, V3i(size, 1))
+        
+    [<Extension>]
+    static member Copy(this : ITextureRuntime, src : IFramebufferOutput, dst : IFramebufferOutput) =
+        let size =
+            match src with
+                | :? ITextureLevel as l -> l.Size
+                | _ -> V3i(src.Size, 1)
+
+        this.Copy(src, V3i.Zero, dst, V3i.Zero, size)
 
 
+    // CopyTo
+    [<Extension>]
+    static member CopyTo(src : ITextureSubResource, dst : PixImage) =
+        ITextureRuntimeExtensions.Copy(src.Texture.Runtime, src, dst)
+        
+    [<Extension>]
+    static member CopyTo(src : ITextureSubResource, dst : PixVolume) =
+        ITextureRuntimeExtensions.Copy(src.Texture.Runtime, src, dst)
+        
+    [<Extension>]
+    static member CopyTo(src : IFramebufferOutput, dst : IFramebufferOutput) =
+        ITextureRuntimeExtensions.Copy(src.Runtime, src, dst)
 
 [<AutoOpen>]
-module Extensions = 
+module ``IBackendTexture Slicing Extensions`` = 
     type private TextureRange(aspect : TextureAspect, tex : IBackendTexture, levels : Range1i, slices : Range1i) =
         interface ITextureRange with
             member x.Texture = tex
@@ -262,15 +376,14 @@ module Extensions =
             member x.Slices = slices
 
         interface IFramebufferOutput with
+            member x.Runtime = tex.Runtime
             member x.Size = x.Size.XY
             member x.Format = unbox (int tex.Format)
             member x.Samples = tex.Samples
 
         interface ITextureLevel with
             member x.Level = level
-            member x.Size = 
-                let v = tex.Size / (1 <<< level)
-                V3i(max 1 v.X, max 1 v.Y, max 1 v.Z)
+            member x.Size = x.Size
 
     type private TextureSlice(aspect : TextureAspect, tex : IBackendTexture, levels : Range1i, slice : int) =
         interface ITextureRange with
@@ -300,6 +413,7 @@ module Extensions =
             member x.Size = x.Size
 
         interface IFramebufferOutput with
+            member x.Runtime = tex.Runtime
             member x.Format = unbox (int tex.Format)
             member x.Samples = tex.Samples
             member x.Size = x.Size.XY

@@ -244,8 +244,17 @@ type IBufferRange =
     abstract member Offset : nativeint
     abstract member Size : nativeint
 
+    
+    
+type IBufferVector<'a when 'a : unmanaged> =
+    abstract member Buffer : IBackendBuffer
+    abstract member Origin : int
+    abstract member Delta : int
+    abstract member Count : int
+
 type IBufferRange<'a when 'a : unmanaged> =
     inherit IBufferRange
+    inherit IBufferVector<'a>
     abstract member Count : int
 
 type IBuffer<'a when 'a : unmanaged> =
@@ -255,11 +264,26 @@ type IBuffer<'a when 'a : unmanaged> =
   
 [<AutoOpen>]
 module private RuntimeBufferImplementation =
+
+    type RuntimeBufferVector<'a when 'a : unmanaged>(buffer : IBackendBuffer, origin : int, delta : int, count : int) =
+        interface IBufferVector<'a> with
+            member x.Buffer = buffer
+            member x.Origin = origin
+            member x.Delta = delta
+            member x.Count = count
+
+
     type RuntimeBufferRange<'a when 'a : unmanaged>(buffer : IBackendBuffer, offset : nativeint, count : int) =
 
         member x.Buffer = buffer
         member x.Offset = offset
         member x.Count = count
+
+        interface IBufferVector<'a> with
+            member x.Buffer = buffer
+            member x.Origin = 0
+            member x.Delta = 1
+            member x.Count = count
 
         interface IBufferRange<'a> with
             member x.Buffer = buffer
@@ -267,8 +291,8 @@ module private RuntimeBufferImplementation =
             member x.Count = count        
             member x.Size = nativeint count * nativeint sizeof<'a>
 
-    type RuntimeBuffer<'a when 'a : unmanaged>(buffer : IBackendBuffer) =
-        inherit RuntimeBufferRange<'a>(buffer, 0n, int (buffer.SizeInBytes / nativeint sizeof<'a>))
+    type RuntimeBuffer<'a when 'a : unmanaged>(buffer : IBackendBuffer, count : int) =
+        inherit RuntimeBufferRange<'a>(buffer, 0n, count)
         interface IBuffer<'a> with
             member x.Dispose() = buffer.Runtime.DeleteBuffer buffer
 
@@ -287,8 +311,48 @@ type IBufferRuntimeExtensions private() =
         if min < 0 then failwithf "[BufferRange] invalid offset %A" min
         if max < min then failwithf "[BufferRange] invalid range [%A, %A]" min max
         if max >= b.Count then failwithf "[BufferRange] range out of bounds { min = %A; max = %A } (count: %A)" min max b.Count
+        
+    [<Extension>]
+    static member SubVector(this : IBufferVector<'a>, offset : int, delta : int, count : int) =
+        if offset < 0 then failwithf "[Buffer] invalid negative offset: %A" offset
+        if offset > this.Count then failwithf "[Buffer] offset out of bounds: %A (count: %A)" offset this.Count
 
+        if count < 0 then failwithf "[Buffer] invalid negative count: %A" offset
+        if offset + count > this.Count then failwithf "[Buffer] range out of bounds: (%A, %A) (count: %A)" offset count this.Count
 
+        let origin = this.Origin + offset * this.Delta
+        let delta = this.Delta * delta
+
+        let sa = nativeint sizeof<'a>
+        let firstByte = sa * nativeint origin
+        let lastByte = sa * (nativeint origin + nativeint delta * nativeint (count - 1))
+        if firstByte < 0n || firstByte >= this.Buffer.SizeInBytes then failwithf "[Buffer] range out of bounds"
+        if lastByte < 0n || lastByte >= this.Buffer.SizeInBytes then failwithf "[Buffer] range out of bounds"
+
+        RuntimeBufferVector<'a>(
+            this.Buffer,
+            origin,
+            delta,
+            count
+        ) :> IBufferVector<_>
+        
+    [<Extension>]
+    static member SubVector(this : IBufferVector<'a>, offset : int, count : int) =
+        IBufferRuntimeExtensions.SubVector(this, offset, 1, count)
+           
+    [<Extension>]
+    static member Skip(this : IBufferVector<'a>, n : int) =
+        let n = min (this.Count - 1) n
+        IBufferRuntimeExtensions.SubVector(this, n, 1, max 0 (this.Count - n))
+
+    [<Extension>]
+    static member Take(this : IBufferVector<'a>, n : int) =
+        IBufferRuntimeExtensions.SubVector(this, 0, 1, n)
+
+    [<Extension>]
+    static member Strided(this : IBufferVector<'a>, d : int) =
+        let n = 1 + (this.Count - 1) / d
+        IBufferRuntimeExtensions.SubVector(this, 0, d, n)
 
     [<Extension>]
     static member Upload(this : IBackendBuffer, offset : nativeint, data : nativeint, size : nativeint) =
@@ -391,12 +455,12 @@ type IBufferRuntimeExtensions private() =
     [<Extension>]
     static member CreateBuffer<'a when 'a : unmanaged>(this : IBufferRuntime, count : int) =
         let buffer = this.CreateBuffer(nsa<'a> * nativeint count)
-        new RuntimeBuffer<'a>(buffer) :> IBuffer<'a>
+        new RuntimeBuffer<'a>(buffer, count) :> IBuffer<'a>
         
     [<Extension>]
     static member CreateBuffer<'a when 'a : unmanaged>(this : IBufferRuntime, data : 'a[]) =
         let buffer = this.CreateBuffer(nsa<'a> * nativeint data.Length)
-        let res = new RuntimeBuffer<'a>(buffer) :> IBuffer<'a>
+        let res = new RuntimeBuffer<'a>(buffer, data.Length) :> IBuffer<'a>
         IBufferRuntimeExtensions.Upload(res, data)
         res
 

@@ -104,6 +104,11 @@
       <Project>{f8233648-55ce-4795-9151-e512390d86e7}</Project>
       <Private>True</Private>
     </ProjectReference>
+    <ProjectReference Include="..\..\Aardvark.GPGPU\Aardvark.GPGPU.fsproj">
+      <Name>Aardvark.GPGPU</Name>
+      <Project>{68e3b876-eb23-4d61-a71f-ef35a146f276}</Project>
+      <Private>True</Private>
+    </ProjectReference>
     <ProjectReference Include="..\..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj">
       <Name>Aardvark.Rendering.GL</Name>
       <Project>{88b586f5-a5e2-4321-bd5d-27d296da0fdd}</Project>

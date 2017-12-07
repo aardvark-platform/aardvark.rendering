@@ -120,3 +120,19 @@ type NativeTensorExtensions private() =
                 V4l(this.DX, this.DY, this.DZ, -this.DW)
             )
         )
+
+
+
+    [<Extension>]
+    static member ToXYWTensor4(this : NativeVolume<'a>) =
+        let info = this.Info
+        let li = 1L + Vec.dot info.Delta (info.S - V3l.III)
+        
+        NativeTensor4<'a>(
+            this.Pointer,
+            Tensor4Info(
+                info.Origin,
+                V4l(info.SX, info.SY, 1L, info.SZ),
+                V4l(info.DX, info.DY, li, info.DZ)
+            )
+        )

@@ -81,6 +81,8 @@ type private MappedIndirectBuffer private(device : Device, indexed : bool, store
                 store.UseWrite(int64 i * drawCallSize, drawCallSize, fun ptr -> NativeInt.write ptr v)
 
 
+
+
 type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug : bool) as this =
     let instance = device.Instance
     do device.Runtime <- this
@@ -500,25 +502,14 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         let srgb = TextureFormat.isSrgb (unbox (int dst.Format))
         let temp = device |> TensorImage.create<'a> size fmt srgb
 
-        let src = 
-            src.SubTensor4(
-                V4l.Zero, 
-                V4l(int64 size.X, int64 size.Y, int64 size.Z, src.SW)
-            )
-        let src = src.MirrorY()
+        let src = src.SubTensor4(V4l.Zero, V4l(int64 size.X, int64 size.Y, int64 size.Z, src.SW)).MirrorY()
         temp.Write(fmt, src)
 
         let dstOffset = V3i(dstOffset.X, dst.Size.Y - (dstOffset.Y + size.Y), dstOffset.Z)
 
-
-        let aspect =
-            match dst.Aspect with
-                | TextureAspect.Color -> ImageAspect.Color
-                | TextureAspect.Depth -> ImageAspect.Depth
-                | TextureAspect.Stencil -> ImageAspect.Stencil
-
-        let dstImage = dst.Texture |> unbox<Image>
-        let dst = dstImage.[aspect, dst.Level, dst.Slice]
+        
+        let dst = ImageSubresource.ofTextureSubResource dst
+        let dstImage = dst.Image
 
         let oldLayout = dstImage.Layout
         device.perform {
@@ -534,15 +525,10 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         let srgb = TextureFormat.isSrgb (unbox (int src.Format))
         let temp = device |> TensorImage.create<'a> size fmt srgb
 
-        let aspect =
-            match src.Aspect with
-                | TextureAspect.Color -> ImageAspect.Color
-                | TextureAspect.Depth -> ImageAspect.Depth
-                | TextureAspect.Stencil -> ImageAspect.Stencil
-
         let srcOffset = V3i(srcOffset.X, src.Size.Y - (srcOffset.Y + size.Y), srcOffset.Z)
-        let srcImage = src.Texture |> unbox<Image>
-        let src = srcImage.[aspect, src.Level, src.Slice]
+        let src = ImageSubresource.ofTextureSubResource src
+        let srcImage = src.Image
+
         let oldLayout = srcImage.Layout
         device.perform {
             do! Command.TransformLayout(srcImage, VkImageLayout.TransferSrcOptimal)
@@ -550,44 +536,56 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             do! Command.TransformLayout(srcImage, oldLayout)
         }
 
-        let dst = dst.MirrorY()
-
+        let dst = dst.SubTensor4(V4l.Zero, V4l(int64 size.X, int64 size.Y, int64 size.Z, dst.SW)).MirrorY()
         temp.Read(fmt, dst)
         device.Delete temp
 
     // copy
-    member x.Copy(src : ITextureLevel, srcOffset : V3i, dst : ITextureLevel, dstOffset : V3i, size : V3i) =
-
-        let srcAspect =
-            match src.Aspect with
-                | TextureAspect.Color -> ImageAspect.Color
-                | TextureAspect.Depth -> ImageAspect.Depth
-                | TextureAspect.Stencil -> ImageAspect.Stencil
-
-        let srcImage = src.Texture |> unbox<Image>
-        let src = srcImage.[srcAspect, src.Level, src.Slices.Min .. src.Slices.Max]
-
+    member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) =
+        let src = ImageSubresourceLayers.ofFramebufferOutput src
+        let dst = ImageSubresourceLayers.ofFramebufferOutput dst
         
-        let dstAspect =
-            match dst.Aspect with
-                | TextureAspect.Color -> ImageAspect.Color
-                | TextureAspect.Depth -> ImageAspect.Depth
-                | TextureAspect.Stencil -> ImageAspect.Stencil
+        let srcOffset = V3i(srcOffset.X, src.Size.Y - (srcOffset.Y + size.Y), srcOffset.Z)
+        let dstOffset = V3i(dstOffset.X, dst.Size.Y - (dstOffset.Y + size.Y), dstOffset.Z)
 
-        let dstImage = dst.Texture |> unbox<Image>
-        let dst = dstImage.[srcAspect, dst.Level, dst.Slices.Min .. dst.Slices.Max]
+        let srcLayout = src.Image.Layout
+        let dstLayout = dst.Image.Layout
 
         device.perform {
+            do! Command.TransformLayout(src.Image, VkImageLayout.TransferSrcOptimal)
+            do! Command.TransformLayout(dst.Image, VkImageLayout.TransferDstOptimal)
             do! Command.Copy(src, srcOffset, dst, dstOffset, size)
+            do! Command.TransformLayout(src.Image, srcLayout)
+            do! Command.TransformLayout(dst.Image, dstLayout)
         }
 
 
     interface IRuntime with
+        member x.MaxLocalSize = device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize
+
+        member x.CreateComputeShader (c : FShade.ComputeShader) =
+            ComputeShader.ofFShade c device :> IComputeShader
+
+        member x.NewInputBinding(c : IComputeShader) =
+            ComputeShader.newInputBinding (unbox c) threadedPools.Value :> IComputeShaderInputBinding
+
+        member x.DeleteComputeShader (shader : IComputeShader) =
+            ComputeShader.delete (unbox shader)
+
+        member x.Run (commands : list<ComputeCommand>) =
+            ComputeCommand.run commands device
+
+        member x.Compile (commands : list<ComputeCommand>) =
+            ComputeCommand.compile commands device
+
         member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) =
             x.Copy(src, fmt, dst, dstOffset, size)
 
         member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) =
             x.Copy(src, srcOffset, dst, fmt, size)
+            
+        member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) =
+            x.Copy(src, srcOffset, dst, dstOffset, size)
 
         member x.OnDispose = onDispose.Publish
         member x.AssembleEffect (effect : FShade.Effect, signature : IFramebufferSignature) =
@@ -653,23 +651,3 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = 
             x.Copy(src, srcOffset, dst, dstOffset, size)
-
-        member x.MaxLocalSize = device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize
-
-        member x.Compile (c : FShade.ComputeShader) =
-            ComputeShader.ofFShade c device :> IComputeShader
-
-        member x.NewInputBinding(c : IComputeShader) =
-            ComputeShader.newInputBinding (unbox c) threadedPools.Value :> IComputeShaderInputBinding
-
-        member x.Delete (shader : IComputeShader) =
-            ComputeShader.delete (unbox shader)
-
-        member x.Invoke(shader : IComputeShader, groupCount : V3i, inputs : IComputeShaderInputBinding) =
-            let shader = unbox<Aardvark.Rendering.Vulkan.ComputeShader> shader
-            let inputs = unbox<InputBinding> inputs
-            device.perform {
-                do! Command.Bind shader
-                do! inputs.Bind
-                do! Command.Dispatch(groupCount)
-            }

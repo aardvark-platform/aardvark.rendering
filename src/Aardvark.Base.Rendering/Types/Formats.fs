@@ -300,6 +300,24 @@ module TextureFormat =
     let isSrgb (fmt : TextureFormat) =
         srgbFormats.Contains fmt
 
+    let private depthFormats =
+        HashSet.ofList [
+            TextureFormat.DepthStencil
+            TextureFormat.Depth24Stencil8
+            TextureFormat.Depth32fStencil8
+            TextureFormat.DepthComponent
+            TextureFormat.DepthComponent16
+            TextureFormat.DepthComponent16Sgix
+            TextureFormat.DepthComponent24
+            TextureFormat.DepthComponent24Sgix
+            TextureFormat.DepthComponent32
+            TextureFormat.DepthComponent32Sgix
+            TextureFormat.DepthComponent32f
+        ]
+
+    let hasDepth (fmt : TextureFormat) =
+        depthFormats.Contains fmt
+
     let ofPixFormat = 
         
         let buildLookup = fun (norm, snorm) ->

@@ -27,6 +27,7 @@ type ComputeShader =
         val mutable public GroupSize : V3i
 
         interface IComputeShader with
+            member x.Runtime = x.Device.Runtime :> IComputeRuntime
             member x.LocalSize = x.GroupSize
 
 
@@ -74,6 +75,8 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
     let mutable dirtyBuffers = HSet.empty
     let mutable pendingWrites = MapExt.empty
 
+    let changed = Event<unit>()
+
     let setHandles = NativePtr.alloc sets.Length
     do for i in 0 .. sets.Length - 1 do NativePtr.set setHandles i sets.[i].Handle
 
@@ -88,6 +91,7 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
 
 
     let update (set : int) (binding : int) (d : Descriptor) =
+        changed.Trigger()
         pendingWrites <-
             pendingWrites |> MapExt.alter set (fun o ->
                 match o with
@@ -233,7 +237,13 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
 
     override x.ToString() = x.AsString
 
+    member x.Changed = changed.Publish
     member x.Dispose() = release()
+
+    member x.Layout = shader.Layout
+    member x.Sets = sets
+    member x.SetHandles = setHandles
+                    
 
    
 
@@ -285,6 +295,7 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
         member x.Dispose() = x.Dispose()
 
     interface IComputeShaderInputBinding with
+        member x.Shader = shader :> IComputeShader
         member x.Item 
             with set (name : string) (value : obj) = x.[name] <- value
 
@@ -340,6 +351,452 @@ module ``Compute Commands`` =
 
         static member Dispatch (sizeX : int, sizeY : int, sizeZ : int) = Command.Dispatch(V3i(sizeX, sizeY, sizeZ))
         static member Dispatch (sizeX : int, sizeY : int) = Command.Dispatch(V3i(sizeX, sizeY, 1))
+         
+    module TextureLayout = 
+        let toImageLayout =
+            LookupTable.lookupTable [
+                TextureLayout.Sample, VkImageLayout.ShaderReadOnlyOptimal
+                TextureLayout.ShaderRead, VkImageLayout.ShaderReadOnlyOptimal
+                TextureLayout.ShaderReadWrite, VkImageLayout.General
+                TextureLayout.ShaderWrite, VkImageLayout.General
+                TextureLayout.TransferRead, VkImageLayout.TransferSrcOptimal
+                TextureLayout.TransferWrite, VkImageLayout.TransferDstOptimal
+            ]
+
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module ComputeCommand =
+        open Aardvark.Base.Monads.State
+
+
+        let toCommand (cmd : ComputeCommand) (device : Device) =
+            match cmd with
+                | ComputeCommand.BindCmd shader ->
+                    Command.Bind (unbox shader)
+
+                | ComputeCommand.SetInputCmd input ->
+                    Command.SetInputs (unbox input)
+
+                | ComputeCommand.DispatchCmd groups ->
+                    Command.Dispatch groups
+
+                | ComputeCommand.CopyBufferCmd(src, dst) ->
+                    let srcBuffer = src.Buffer |> unbox<Buffer>
+                    let dstBuffer = dst.Buffer |> unbox<Buffer>
+                    Command.Copy(srcBuffer, int64 src.Offset, dstBuffer, int64 dst.Offset, min (int64 src.Size) (int64 dst.Size))
+
+                | ComputeCommand.DownloadBufferCmd(src, dst) ->
+                    let srcBuffer = src.Buffer |> unbox<Buffer>
+                    match dst with
+                        | HostMemory.Unmanaged dst ->
+                            command {
+                                let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 src.Size)
+                                try 
+                                    do! Command.Copy(srcBuffer, int64 src.Offset, temp, 0L, temp.Size)
+                                finally
+                                    temp.Memory.Mapped (fun src -> Marshal.Copy(src, dst, temp.Size))
+                                    device.Delete temp
+                            }
+                        | HostMemory.Managed(dst, dstOffset) ->
+                            let elementSize = dst.GetType().GetElementType() |> Marshal.SizeOf |> nativeint
+                            command {
+                                let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 src.Size)
+                                try 
+                                    do! Command.Copy(srcBuffer, int64 src.Offset, temp, 0L, temp.Size)
+                                finally
+                                    temp.Memory.Mapped (fun src -> 
+                                        let gc = GCHandle.Alloc(dst, GCHandleType.Pinned)
+                                        try 
+                                            let dst = gc.AddrOfPinnedObject() + (nativeint dstOffset * elementSize)
+                                            Marshal.Copy(src, dst, temp.Size)
+                                        finally 
+                                            gc.Free()
+                                    )
+                                    device.Delete temp
+                            }
+                            
+                | ComputeCommand.UploadBufferCmd(src, dst) ->
+                    command {
+                        let size = int64 dst.Size
+                        let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit size
+                        try
+                            temp.Memory.Mapped (fun dst ->
+                                match src with
+                                    | HostMemory.Unmanaged src -> 
+                                        Marshal.Copy(src, dst, size)
+                                    | HostMemory.Managed(src, srcOffset) ->
+                                        let elementSize = src.GetType().GetElementType() |> Marshal.SizeOf |> nativeint
+                                        let gc = GCHandle.Alloc(src, GCHandleType.Pinned)
+                                        try
+                                            let src = gc.AddrOfPinnedObject() + (nativeint srcOffset * elementSize)
+                                            Marshal.Copy(src, dst, size)
+                                        finally
+                                            gc.Free()
+                            )      
+                        finally
+                            device.Delete temp
+                    }
+
+                | ComputeCommand.CopyImageCmd(src, srcOffset, dst, dstOffset, size) ->
+                    let src = ImageSubresourceLayers.ofFramebufferOutput src
+                    let dst = ImageSubresourceLayers.ofFramebufferOutput dst
+                    Command.Copy(src, srcOffset, dst, dstOffset, size)
+
+                | ComputeCommand.TransformLayoutCmd(tex, layout) ->
+                    let tex = unbox<Image> tex
+                    let layout = TextureLayout.toImageLayout layout
+                    Command.TransformLayout(tex, layout)
+
+                | ComputeCommand.SyncBufferCmd b ->
+                    Command.Sync(unbox b, VkAccessFlags.ShaderWriteBit, VkAccessFlags.ShaderReadBit)
+
+                | ComputeCommand.DownloadImageCmd _ | ComputeCommand.UploadImageCmd _ ->
+                    failf "not implemented: %A" cmd
+
+        [<AutoOpen>]
+        module private Compiler = 
+            type CompilerState =
+                {
+                    device          : Device
+                    downloads       : list<Buffer * HostMemory>
+                    uploads         : list<HostMemory * Buffer>
+                    inputs          : hset<InputBinding>
+                    initialLayouts  : hmap<Image, VkImageLayout>
+                    imageLayouts    : hmap<Image, VkImageLayout>
+                }
+
+            [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+            module CompilerState =
+                let device = State.get |> State.map (fun s -> s.device)
+
+                let addInput (i : InputBinding) : State<CompilerState, unit> =
+                    State.modify (fun s -> { s with inputs = HSet.add i s.inputs })
+
+                let download (stream : VKVM.CommandStream) (src : Buffer) (srcOffset : nativeint) (dst : HostMemory) (size : nativeint) =
+                    state {
+                        let! device = device
+                        let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 size)
+                        stream.CopyBuffer(src.Handle, temp.Handle, [| VkBufferCopy(uint64 srcOffset, 0UL, uint64 size) |]) |> ignore
+                        do! State.modify (fun s -> { s with downloads = (temp, dst) :: s.downloads })
+                    } 
+
+                let upload (stream : VKVM.CommandStream) (src : HostMemory) (dst : Buffer) (dstOffset : nativeint) (size : nativeint) =
+                    state {
+                        let! device = device
+                        let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 size)
+                        stream.CopyBuffer(temp.Handle, dst.Handle, [| VkBufferCopy(0UL, uint64 dstOffset, uint64 size) |]) |> ignore
+                        do! State.modify (fun s -> { s with uploads = (src, temp) :: s.uploads })
+                    }
+
+                let transformLayout (image : Image) (newLayout : VkImageLayout) =
+                    State.custom (fun s ->
+                        match HMap.tryFind image s.imageLayouts with
+                            | Some o ->
+                                let s = { s with imageLayouts = HMap.add image newLayout s.imageLayouts }
+                                s, o
+                            | None ->
+                                let o = image.Layout
+                                let s = { s with imageLayouts = HMap.add image newLayout s.imageLayouts; initialLayouts = HMap.add image o s.initialLayouts }
+                                s, o
+                    )
+
+            type VKVM.CommandStream with
+                member x.TransformLayout(img : Image, source : VkImageLayout, target : VkImageLayout) =
+
+                    let src =
+                        if source = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
+                        elif source = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
+                        elif source = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
+                        elif source = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
+                        elif source = VkImageLayout.Preinitialized then VkAccessFlags.HostWriteBit
+                        elif source = VkImageLayout.TransferSrcOptimal then VkAccessFlags.TransferReadBit
+                        elif source = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit // ||| VkAccessFlags.InputAttachmentReadBit
+                        else VkAccessFlags.None
+
+                    let dst =
+                        if target = VkImageLayout.TransferSrcOptimal then VkAccessFlags.TransferReadBit
+                        elif target = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
+                        elif target = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
+                        elif target = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
+                        elif target = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit // ||| VkAccessFlags.InputAttachmentReadBit
+                        elif target = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
+                        elif target = VkImageLayout.General then VkAccessFlags.None
+                        else VkAccessFlags.None
+
+                    let srcMask =
+                        if source = VkImageLayout.ColorAttachmentOptimal then VkPipelineStageFlags.ColorAttachmentOutputBit
+                        elif source = VkImageLayout.DepthStencilAttachmentOptimal then VkPipelineStageFlags.LateFragmentTestsBit
+                        elif source = VkImageLayout.TransferDstOptimal then VkPipelineStageFlags.TransferBit
+                        elif source = VkImageLayout.PresentSrcKhr then VkPipelineStageFlags.TransferBit
+                        elif source = VkImageLayout.Preinitialized then VkPipelineStageFlags.HostBit
+                        elif source = VkImageLayout.TransferSrcOptimal then VkPipelineStageFlags.TransferBit
+                        elif source = VkImageLayout.ShaderReadOnlyOptimal then VkPipelineStageFlags.ComputeShaderBit
+                        elif source = VkImageLayout.Undefined then VkPipelineStageFlags.HostBit // VK_PIPELINE_STAGE_FLAGS_HOST_BIT
+                        elif source = VkImageLayout.General then VkPipelineStageFlags.HostBit
+                        else VkPipelineStageFlags.None
+
+                    let dstMask =
+                        if target = VkImageLayout.TransferSrcOptimal then VkPipelineStageFlags.TransferBit
+                        elif target = VkImageLayout.TransferDstOptimal then VkPipelineStageFlags.TransferBit
+                        elif target = VkImageLayout.ColorAttachmentOptimal then VkPipelineStageFlags.ColorAttachmentOutputBit
+                        elif target = VkImageLayout.DepthStencilAttachmentOptimal then VkPipelineStageFlags.EarlyFragmentTestsBit
+                        elif target = VkImageLayout.ShaderReadOnlyOptimal then VkPipelineStageFlags.ComputeShaderBit
+                        elif target = VkImageLayout.PresentSrcKhr then VkPipelineStageFlags.TransferBit
+                        elif target = VkImageLayout.General then VkPipelineStageFlags.HostBit
+
+
+                        else VkPipelineStageFlags.None
+
+
+                    let range =
+                        if VkFormat.hasDepth img.Format then img.[ImageAspect.Depth]
+                        else img.[ImageAspect.Color]
+
+                    let barrier =
+                        VkImageMemoryBarrier(
+                            VkStructureType.ImageMemoryBarrier, 0n, 
+                            src,
+                            dst,
+                            source,
+                            target,
+                            VK_QUEUE_FAMILY_IGNORED,
+                            VK_QUEUE_FAMILY_IGNORED,
+                            img.Handle,
+                            range.VkImageSubresourceRange
+                        )
+                    x.PipelineBarrier(
+                        srcMask,
+                        dstMask,
+                        [||],
+                        [||],
+                        [| barrier |]    
+                    )
+
+                member x.Sync(b : Buffer) =
+                    let src = VkAccessFlags.ShaderWriteBit
+                    let dst = VkAccessFlags.ShaderReadBit
+
+                    let barrier =
+                        VkBufferMemoryBarrier(
+                            VkStructureType.BufferMemoryBarrier, 0n,
+                            src,
+                            dst,
+                            VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+                            b.Handle,
+                            0UL,
+                            uint64 b.Size
+                        )
+
+                    let srcStage =
+                        match src with
+                            | VkAccessFlags.HostReadBit -> VkPipelineStageFlags.HostBit
+                            | VkAccessFlags.HostWriteBit -> VkPipelineStageFlags.HostBit
+                            | VkAccessFlags.IndexReadBit -> VkPipelineStageFlags.VertexInputBit
+                            | VkAccessFlags.IndirectCommandReadBit -> VkPipelineStageFlags.DrawIndirectBit
+                            | VkAccessFlags.ShaderReadBit -> VkPipelineStageFlags.ComputeShaderBit
+                            | VkAccessFlags.ShaderWriteBit -> VkPipelineStageFlags.ComputeShaderBit
+                            | VkAccessFlags.TransferReadBit -> VkPipelineStageFlags.TransferBit
+                            | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
+                            | VkAccessFlags.UniformReadBit -> VkPipelineStageFlags.ComputeShaderBit
+                            | VkAccessFlags.VertexAttributeReadBit -> VkPipelineStageFlags.VertexInputBit
+                            | _ -> VkPipelineStageFlags.None
+                            
+                    let dstStage =
+                        match dst with
+                            | VkAccessFlags.HostReadBit -> VkPipelineStageFlags.HostBit
+                            | VkAccessFlags.HostWriteBit -> VkPipelineStageFlags.HostBit
+                            | VkAccessFlags.IndexReadBit -> VkPipelineStageFlags.VertexInputBit
+                            | VkAccessFlags.IndirectCommandReadBit -> VkPipelineStageFlags.DrawIndirectBit
+                            | VkAccessFlags.ShaderReadBit -> VkPipelineStageFlags.VertexShaderBit
+                            | VkAccessFlags.ShaderWriteBit -> VkPipelineStageFlags.VertexShaderBit
+                            | VkAccessFlags.TransferReadBit -> VkPipelineStageFlags.TransferBit
+                            | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
+                            | VkAccessFlags.UniformReadBit -> VkPipelineStageFlags.VertexShaderBit
+                            | VkAccessFlags.VertexAttributeReadBit -> VkPipelineStageFlags.VertexInputBit
+                            | _ -> VkPipelineStageFlags.None
+
+
+                    x.PipelineBarrier(
+                        srcStage,
+                        dstStage,
+                        [||],
+                        [| barrier |],
+                        [||]
+                    )
+
+            let compileS (cmd : ComputeCommand) (stream : VKVM.CommandStream) =
+                state {
+                    match cmd with
+                        | ComputeCommand.BindCmd shader ->
+                            let shader = unbox<ComputeShader> shader
+                            stream.BindPipeline(VkPipelineBindPoint.Compute, shader.Handle) |> ignore
+
+                        | ComputeCommand.SetInputCmd input ->
+                            let input = unbox<InputBinding> input
+                            do! CompilerState.addInput input
+                            stream.BindDescriptorSets(VkPipelineBindPoint.Compute, input.Layout.Handle, 0u, input.Sets |> Array.map (fun s -> s.Handle), [||]) |> ignore
+
+                        | ComputeCommand.DispatchCmd groups ->
+                            stream.Dispatch(uint32 groups.X, uint32 groups.Y, uint32 groups.Z) |> ignore
+
+                        | ComputeCommand.CopyBufferCmd(src, dst) ->
+                            let srcBuffer = src.Buffer |> unbox<Buffer>
+                            let dstBuffer = dst.Buffer |> unbox<Buffer>
+
+                            let regions =
+                                [|
+                                    VkBufferCopy(
+                                        uint64 src.Offset,
+                                        uint64 dst.Offset,
+                                        uint64 (min src.Size dst.Size)   
+                                    )
+                                |]
+
+                            stream.CopyBuffer(srcBuffer.Handle, dstBuffer.Handle, regions) |> ignore
+
+                        | ComputeCommand.DownloadBufferCmd(src, dst) ->
+                            let srcBuffer = src.Buffer |> unbox<Buffer>
+                            do! CompilerState.download stream srcBuffer src.Offset dst src.Size
+                        
+                        | ComputeCommand.UploadBufferCmd(src, dst) ->
+                            let dstBuffer = dst.Buffer |> unbox<Buffer>
+                            do! CompilerState.upload stream src dstBuffer dst.Offset dst.Size
+
+                        | ComputeCommand.CopyImageCmd(src, srcOffset, dst, dstOffset, size) ->
+                            let src = ImageSubresourceLayers.ofFramebufferOutput src
+                            let dst = ImageSubresourceLayers.ofFramebufferOutput dst
+
+                            stream.CopyImage(
+                                src.Image.Handle, VkImageLayout.TransferSrcOptimal, 
+                                dst.Image.Handle, VkImageLayout.TransferDstOptimal, 
+                                [|
+                                    VkImageCopy(
+                                        src.VkImageSubresourceLayers,
+                                        VkOffset3D(srcOffset.X, srcOffset.Y, srcOffset.Z),
+                                        dst.VkImageSubresourceLayers,
+                                        VkOffset3D(dstOffset.X, dstOffset.Y, dstOffset.Z),
+                                        VkExtent3D(size.X, size.Y, size.Z)
+                                    )
+                                |]
+                            ) |> ignore
+
+                        | ComputeCommand.TransformLayoutCmd(tex, layout) ->
+                            let tex = unbox<Image> tex
+                            let newLayout = TextureLayout.toImageLayout layout
+                            let! oldLayout = CompilerState.transformLayout tex newLayout
+                            if oldLayout <> newLayout then
+                                stream.TransformLayout(tex, oldLayout, newLayout) |> ignore
+            
+                        | ComputeCommand.SyncBufferCmd b ->
+                            stream.Sync (unbox b) |> ignore
+
+                        | ComputeCommand.DownloadImageCmd _ | ComputeCommand.UploadImageCmd _ ->
+                            failf "not implemented: %A" cmd
+                }
+
+            type ComputeProgram(stream : VKVM.CommandStream, state : CompilerState) =
+                static let commandPools =
+                    System.Collections.Concurrent.ConcurrentDictionary<Device, ThreadLocal<CommandPool>>()
+
+                static let getPool (device : Device) =
+                    let threadLocal = 
+                        commandPools.GetOrAdd(device, fun device ->
+                            new ThreadLocal<CommandPool>(fun () ->
+                                let pool = device.GraphicsFamily.CreateCommandPool()
+                                device.OnDispose.Add (fun () -> pool.Dispose())
+                                pool
+                            )
+                        )
+                    threadLocal.Value
+            
+            
+                let device = state.device
+
+                let mutable dirty = 1
+                let changed () = Interlocked.Exchange(&dirty, 1) |> ignore
+
+                let subscriptions =
+                    state.inputs |> HSet.toList |> List.map (fun i -> i.Changed.Subscribe changed)
+
+                let uploads =
+                    state.uploads |> List.map (fun (src, dst) ->
+                        match src with
+                            | HostMemory.Unmanaged pSrc ->
+                                fun () -> dst.Memory.Mapped (fun pDst -> Marshal.Copy(pSrc, pDst, dst.Size))
+                            | HostMemory.Managed (src, srcOffset) ->
+                                let srcOffset = nativeint srcOffset * nativeint (Marshal.SizeOf (src.GetType().GetElementType()))
+                                fun () -> 
+                                    dst.Memory.Mapped (fun pDst ->
+                                        let gc = GCHandle.Alloc(src, GCHandleType.Pinned)
+                                        try 
+                                            Marshal.Copy(gc.AddrOfPinnedObject() + srcOffset, pDst, dst.Size)
+                                        finally
+                                            gc.Free()
+                                    )
+                    )
+
+                let downloads =
+                    state.downloads |> List.map (fun (src, dst) ->
+                        match dst with
+                            | HostMemory.Unmanaged pDst ->
+                                fun () -> src.Memory.Mapped (fun pSrc -> Marshal.Copy(pSrc, pDst, src.Size))
+                            | HostMemory.Managed(dst, dstOffset) ->
+                                let dstOffset = nativeint dstOffset * nativeint (Marshal.SizeOf (dst.GetType().GetElementType()))
+                                fun () -> 
+                                    src.Memory.Mapped (fun pSrc ->
+                                        let gc = GCHandle.Alloc(dst, GCHandleType.Pinned)
+                                        try 
+                                            Marshal.Copy(pSrc, gc.AddrOfPinnedObject() + dstOffset, src.Size)
+                                        finally
+                                            gc.Free()
+                                    )
+                    )
+
+                do  for (image, init) in HMap.toSeq state.initialLayouts do
+                        match HMap.tryFind image state.imageLayouts with
+                            | Some current when current<> init ->
+                                stream.TransformLayout(image, current, init) |> ignore
+                            | _ ->
+                                ()
+
+                member x.Dispose() =
+                    for (_,b) in state.uploads do device.Delete b
+                    for (b,_) in state.downloads do device.Delete b
+                    stream.Dispose()
+
+                member x.Run() =
+                    let isChanged = Interlocked.Exchange(&dirty, 0) = 1
+
+                    for u in uploads do u()
+                
+                    let pool = getPool device
+                    use cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
+                    cmd.Begin(CommandBufferUsage.OneTimeSubmit)
+                    cmd.AppendCommand()
+                    stream.Run(cmd.Handle)
+                    cmd.End()
+                    device.GraphicsFamily.RunSynchronously cmd
+
+                    for d in downloads do d()
+
+                interface IDisposable with
+                    member x.Dispose() = x.Dispose()
+
+                interface IComputeProgram with
+                    member x.Run() = x.Run()
+
+        let compile (cmds : list<ComputeCommand>) (device : Device) =
+            let stream = new VKVM.CommandStream()
+            
+            let mutable state = { device = device; uploads = []; downloads = []; inputs = HSet.empty; imageLayouts = HMap.empty; initialLayouts = HMap.empty }
+            for cmd in cmds do
+                (compileS cmd stream).Run(&state)
+
+            new ComputeProgram(stream, state) :> IComputeProgram
+    
+        let run (cmds : list<ComputeCommand>) (device : Device) =
+            device.perform {
+                for cmd in cmds do do! toCommand cmd device
+            }
             
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ComputeShader =  

@@ -132,7 +132,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             let slice = dst.Slice
             let level = dst.Level
             let dst = dst.Texture |> unbox<Texture>
-            let dstSize = dst.Size / (1 <<< level)
+            let dstSize = dst.GetSize level
             let dstOffset = V3i(dstOffset.X, dstSize.Y - (dstOffset.Y + size.Y), dstOffset.Z)
 
             if dst.Multisamples > 1 then
@@ -240,12 +240,10 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) : unit =
             use __ = ctx.ResourceLock
 
-
-
             let slice = src.Slice
             let level = src.Level
             let src = src.Texture |> unbox<Texture>
-            let srcSize = src.Size / (1 <<< level)
+            let srcSize = src.GetSize level
             let srcOffset = V3i(srcOffset.X, srcSize.Y - (srcOffset.Y + size.Y), srcOffset.Z)
 
             if src.Multisamples > 1 then
@@ -317,6 +315,45 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             GL.UnmapBuffer(BufferTarget.PixelPackBuffer) |> ignore
             GL.BindBuffer(BufferTarget.PixelPackBuffer,0)
             GL.DeleteBuffer(temp)
+
+        member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) : unit =
+            use __ = ctx.ResourceLock
+
+            let args (t : IFramebufferOutput) =
+                match t with
+                    | :? Renderbuffer as rb ->
+                        rb.Handle, ImageTarget.Renderbuffer, 0, false
+
+                    | :? ITextureLevel as tl ->
+                        let t = tl.Texture |> unbox<Texture>
+                        let target = TextureTarget.ofTexture t
+
+                        let cnt = max t.Count 1
+                        if tl.Slices.Min <> 0 || tl.Slices.Max <> cnt - 1 then
+                            let v = GL.GenTexture()
+                            GL.TextureView(v, target, t.Handle, unbox (int t.Format), tl.Level, 1, tl.Slices.Min, 1 + tl.Slices.Max - tl.Slices.Min)
+                            v, unbox (int target), 0, true
+
+                        else
+                            t.Handle, unbox (int target), tl.Level, false
+                    | _ ->
+                        failwithf "[GL] invalid FramebufferOutput: %A" t
+
+            let srcHandle, srcTarget, srcLevel, srcTemp = args src
+            let dstHandle, dstTarget, dstLevel, dstTemp = args dst
+            
+            let srcOffset = V3i(srcOffset.X, src.Size.Y - (srcOffset.Y + size.Y), srcOffset.Z)
+            let dstOffset = V3i(dstOffset.X, dst.Size.Y - (dstOffset.Y + size.Y), dstOffset.Z)
+
+            GL.CopyImageSubData(
+                srcHandle, srcTarget, srcLevel, srcOffset.X, srcOffset.Y, srcOffset.Z,
+                dstHandle, dstTarget, dstLevel, dstOffset.X, dstOffset.Y, dstOffset.Z,
+                size.X, size.Y, size.Z
+            )
+
+            if srcTemp then GL.DeleteTexture srcHandle
+            if dstTemp then GL.DeleteTexture dstHandle
+
 
 
 
@@ -453,11 +490,12 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateMappedIndirectBuffer(indexed)  =
             x.CreateMappedIndirectBuffer (indexed)
             
-        member x.Compile (c : FShade.ComputeShader) = failwith ""
-        member x.Invoke(shader, groupCount, input) = failwith ""
-        member x.NewInputBinding(shader) = failwith ""
-        member x.Delete(shader : IComputeShader) = failwith ""
         member x.MaxLocalSize = failwith ""
+        member x.CreateComputeShader (c : FShade.ComputeShader) = failwith ""
+        member x.NewInputBinding(c : IComputeShader) = failwith ""
+        member x.DeleteComputeShader (shader : IComputeShader) = failwith ""
+        member x.Run (commands : list<ComputeCommand>) = failwith ""
+        member x.Compile (commands : list<ComputeCommand>) = failwith ""
 
     
     member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) =
@@ -470,9 +508,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             let dstLevel = dstBaseLevel + l
             for s in 0 .. slices - 1 do
                 if src.Multisamples = dst.Multisamples then
-                    ctx.Copy(src, srcLevel, srcBaseSlice + s, V2i.Zero, dst, dstLevel, dstBaseSlice + s, V2i.Zero, size)
+                    ctx.Copy(src, srcLevel, srcBaseSlice + s, V2i.Zero, dst, dstLevel, dstBaseSlice + s, V2i.Zero, size.XY)
                 else
-                    ctx.Blit(src, srcLevel, srcBaseSlice + s, Box2i(V2i.Zero, size - V2i.II), dst, dstLevel, dstBaseSlice + s, Box2i(V2i.Zero, size - V2i.II), false)
+                    ctx.Blit(src, srcLevel, srcBaseSlice + s, Box2i(V2i.Zero, size.XY - V2i.II), dst, dstLevel, dstBaseSlice + s, Box2i(V2i.Zero, size.XY - V2i.II), false)
             size <- size / 2
 
 

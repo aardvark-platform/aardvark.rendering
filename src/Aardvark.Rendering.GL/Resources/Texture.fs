@@ -53,11 +53,12 @@ type Texture =
             member x.Samples = x.Multisamples
 
         member x.GetSize (level : int)  =
-            if level = 0 then x.Size2D
+            if level = 0 then 
+                x.Size
             else 
                 let level = Fun.Clamp(level, 0, x.MipMapLevels-1)
                 let factor = 1 <<< level
-                x.Size2D / factor
+                V3i(max 1 (x.Size.X / factor), max 1 (x.Size.Y / factor), max 1 (x.Size.Z / factor))
 
         new(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int, size : V3i, count : Option<int>, format : TextureFormat, sizeInBytes : int64, immutable : bool) =
             let cnt, isArray =
@@ -2949,8 +2950,8 @@ module TextureExtensions =
 
         member x.Upload(t : Texture, level : int, slice : int, offset : V2i, source : PixImage) =
             using x.ResourceLock (fun _ ->
-                let levelSize = t.Size2D / (1 <<< level)
-                if offset = V2i.Zero && source.Size = levelSize then
+                let levelSize = t.GetSize level
+                if offset = V2i.Zero && source.Size = levelSize.XY then
                     x.Upload(t, level, slice, source)
                 else
                     let temp = x.CreateTexture2D(source.Size, 1, t.Format, 1)
@@ -3002,15 +3003,15 @@ module TextureExtensions =
 
         member x.Download(t : Texture, level : int, slice : int, offset : V2i, target : PixImage) =
             using x.ResourceLock (fun _ ->
-                let levelSize = t.Size2D / (1 <<< level)
+                let levelSize = t.GetSize level
                 let offset = V2i(offset.X, levelSize.Y - offset.Y - target.Size.Y) // flip y-offset
-                if offset = V2i.Zero && target.Size = levelSize then
+                if offset = V2i.Zero && target.Size = levelSize.XY then
                     x.Download(t, level, slice, target)
                 else
                     let temp = x.CreateTexture2D(target.Size, 1, t.Format, 1)
                     
                     if t.IsMultisampled then // resolve multisamples
-                        x.Blit(t, level, slice, Box2i.FromMinAndSize(offset, levelSize), temp, 0, 0, Box2i(V2i.Zero, target.Size), true)
+                        x.Blit(t, level, slice, Box2i.FromMinAndSize(offset, levelSize.XY), temp, 0, 0, Box2i(V2i.Zero, target.Size), true)
                     else
                         x.Copy(t, level, slice, offset, temp, 0, 0, V2i.Zero, target.Size)                        
                     
@@ -3065,7 +3066,7 @@ module TextureExtensions =
 
         member x.Download(t : Texture, level : int, slice : int) : PixImage =
             let fmt = TextureFormat.toDownloadFormat t.Format
-            let levelSize = t.Size2D / (1 <<< level)
+            let levelSize = t.GetSize level
             let img = PixImage.Create(fmt, int64 levelSize.X, int64 levelSize.Y)
             x.Download(t, level, slice, img)
             img
@@ -3118,7 +3119,7 @@ module Texture =
         tex.Context.Upload(tex, data)
 
     let read (format : PixFormat) (level : int) (tex : Texture) : PixImage[] =
-        let size = V2i(max 1 (tex.Size.X / (1 <<< level)), max 1 (tex.Size.Y / (1 <<< level)))
+        let size = tex.GetSize level
 
         let pi = PixImage.Create(format, int64 size.Y, int64 size.Y)
         tex.Context.Download(tex, level, 0, pi)

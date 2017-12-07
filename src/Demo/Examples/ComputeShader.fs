@@ -131,38 +131,56 @@ module ComputeShader =
     open Aardvark.Application.OpenVR
 
     let run() =
-//        use app = new VulkanApplication(false)
-//        let runtime = app.Runtime :> IRuntime
-//        let win = app.CreateSimpleRenderWindow(8) 
-//        let run() = win.Run()
-//        let view = 
-//            CameraView.lookAt (V3d(4,4,4)) V3d.Zero V3d.OOI
-//                |> DefaultCameraController.control win.Mouse win.Keyboard win.Time 
-//                |> Mod.map CameraView.viewTrafo
-//                :> IMod
-//        let proj =
-//            win.Sizes 
-//                |> Mod.map (fun s -> Frustum.perspective 60.0 0.05 1000.0 (float s.X / float s.Y))
-//                |> Mod.map Frustum.projTrafo
-//                :> IMod
-//        let win = win :> IRenderTarget
-//        let subscribe (f : unit -> unit) = ()
-
-        let app = new VulkanVRApplicationLayered(false)
+        use app = new VulkanApplication(false)
         let runtime = app.Runtime :> IRuntime
-        let win = app :> IRenderTarget
-        let view = app.Info.viewTrafos
-        let proj = app.Info.projTrafos :> IMod
-        let run () = app.Run()
-        let subscribe (f : unit -> unit) =
-            app.Controllers |> Array.iter (fun c ->
-                c.Axis |> Array.iter (fun a -> 
-                    a.Press.Add (f)
-                )
-            )
+        let win = app.CreateSimpleRenderWindow(8) 
+        let run() = win.Run()
+        let view = 
+            CameraView.lookAt (V3d(4,4,4)) V3d.Zero V3d.OOI
+                |> DefaultCameraController.control win.Mouse win.Keyboard win.Time 
+                |> Mod.map CameraView.viewTrafo
+        let proj =
+            win.Sizes 
+                |> Mod.map (fun s -> Frustum.perspective 60.0 0.05 1000.0 (float s.X / float s.Y))
+                |> Mod.map Frustum.projTrafo
+                :> IMod
+        let win = win :> IRenderTarget
+        let subscribe (f : unit -> unit) = ()
 
-        let update = runtime.CompileCompute Shaders.updateAcceleration
-        let step = runtime.CompileCompute Shaders.step
+
+        let ba = runtime.CreateBuffer<int>(Array.create 3421 1)
+        let bb = runtime.CreateBuffer<int> 3421
+
+        let scan = Scan<int>(runtime, <@ (+) @>)
+        let scanab = scan.Compile(ba, bb)
+        scanab.Run()
+
+
+        let data = bb.Download()
+        let expected = Array.init data.Length (fun i -> 1 + i)
+        if data <> expected then
+            printfn "bad"
+        else
+            printfn "good"
+            printfn "%A" data
+        Environment.Exit 0
+
+
+//        let app = new VulkanVRApplicationLayered(false)
+//        let runtime = app.Runtime :> IRuntime
+//        let win = app :> IRenderTarget
+//        let view = app.Info.viewTrafos
+//        let proj = app.Info.projTrafos :> IMod
+//        let run () = app.Run()
+//        let subscribe (f : unit -> unit) =
+//            app.Controllers |> Array.iter (fun c ->
+//                c.Axis |> Array.iter (fun a -> 
+//                    a.Press.Add (f)
+//                )
+//            )
+
+        let update = runtime.CreateComputeShader Shaders.updateAcceleration
+        let step = runtime.CreateComputeShader Shaders.step
 
         let rand = RandomSystem()
         let particeCount = 1000
@@ -199,14 +217,31 @@ module ComputeShader =
         stepInputs.["dt"] <- 0.0
         stepInputs.Flush()
 
+        let groupSize = 
+            if particeCount % update.LocalSize.X = 0 then 
+                particeCount / update.LocalSize.X
+            else
+                1 + particeCount / update.LocalSize.X
+
+        let compiled = false
+
+        let commands =
+            [
+                ComputeCommand.Bind update
+                ComputeCommand.SetInput updateInputs
+                ComputeCommand.Dispatch groupSize
+
+                ComputeCommand.Bind step
+                ComputeCommand.SetInput stepInputs
+                ComputeCommand.Dispatch groupSize
+            ]
+
+
+        let program =
+            runtime.Compile commands
+
         let magic =
             let sw = System.Diagnostics.Stopwatch()
-            let groupSize = 
-                if particeCount % update.LocalSize.X = 0 then 
-                    particeCount / update.LocalSize.X
-                else
-                    1 + particeCount / update.LocalSize.X
-
 
             win.Time |> Mod.map (fun _ ->
                 let dt = sw.Elapsed.TotalSeconds
@@ -219,9 +254,10 @@ module ComputeShader =
                         let rdt = min maxStep (dt - t)
                         stepInputs.["dt"] <-rdt
                         stepInputs.Flush()
-
-                        runtime.Invoke(update, groupSize, updateInputs)
-                        runtime.Invoke(step, groupSize, stepInputs)
+                        if compiled then
+                            program.Run()
+                        else
+                            runtime.Run commands
                         t <- t + rdt
                 
                 else
@@ -261,7 +297,7 @@ module ComputeShader =
                 }
                 |> u "ViewTrafo" view
                 |> u "ProjTrafo" proj
-                |> Sg.viewTrafo (view |> Mod.map (Array.item 0))
+                |> Sg.viewTrafo view //(view |> Mod.map (Array.item 0))
                 |> Sg.uniform "Scale" (Mod.constant 0.05)
                 |> Sg.uniform "Magic" magic
                 |> Sg.compile runtime win.FramebufferSignature
@@ -272,6 +308,6 @@ module ComputeShader =
         velocities.Dispose()
         updateInputs.Dispose()
         stepInputs.Dispose()
-        runtime.Delete update
-        runtime.Delete step
+        runtime.DeleteComputeShader update
+        runtime.DeleteComputeShader step
 
