@@ -174,7 +174,7 @@ module LevelOfDetail =
     open System.Windows.Forms
 
 
-    let run() =
+    let runView() =
         let vk = new VulkanApplication(true)
         let gl = new OpenGlApplication(true)
         
@@ -207,7 +207,7 @@ module LevelOfDetail =
         ()
 
 
-    let runOld() =
+    let run() =
 
         let vk = new VulkanApplication(true)
         let gl = new OpenGlApplication(true)
@@ -259,6 +259,25 @@ module LevelOfDetail =
         testImage.SaveAsImage @"C:\Users\schorsch\Desktop\vulkan.png"
 
         ref.SaveAsImage @"C:\Users\schorsch\Desktop\ref.png"
+
+
+        let fgl = rgl.CreateTexture(V3i(640, 640, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 0, 1, 1)
+        let fvk = rvk.CreateTexture(V3i(640, 640, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 0, 1, 1)
+        rgl.Copy(lgl, V3i(15, 37, 0), fgl.[TextureAspect.Color, 0, 0], V3i.Zero, fgl.Size)
+        rvk.Copy(lvk, V3i(15, 37, 0), fvk.[TextureAspect.Color, 0, 0], V3i.Zero, fvk.Size)
+
+        
+        let testImage = PixImage<byte>(Col.Format.RGBA, V2i(640, 640))
+        rgl.Copy(fgl.[TextureAspect.Color, 0, 0], testImage)
+        testImage.SaveAsImage @"C:\Users\schorsch\Desktop\gl2.png"
+
+        rvk.Copy(fvk.[TextureAspect.Color, 0, 0], testImage)
+        testImage.SaveAsImage @"C:\Users\schorsch\Desktop\vulkan2.png"
+
+        ref.SubImage(V2i(15, 37), V2i(640, 640)).Copy().SaveAsImage @"C:\Users\schorsch\Desktop\ref2.png"
+
+
+
 
 
         let cgl = new RenderControl(Width = 1024, Height = 1024)

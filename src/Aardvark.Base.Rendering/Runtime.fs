@@ -449,13 +449,6 @@ type IGeometryPool =
     abstract member Alloc : int * IndexedGeometry -> Management.Block<unit>
     abstract member Free : Management.Block<unit> -> unit
     abstract member TryGetBufferView : Symbol -> Option<BufferView>
-    
-
-type IComputeShaderInputBinding =
-    inherit IDisposable
-    abstract member Item : string -> obj with set
-    abstract member Flush : unit -> unit
-
 
 
 [<AbstractClass; Sealed; Extension>]
@@ -482,6 +475,7 @@ type IResourceManager =
 and IRuntime =
     inherit IBufferRuntime
     inherit ITextureRuntime
+    inherit IComputeRuntime
 
     abstract member OnDispose : Microsoft.FSharp.Control.IEvent<unit>
     abstract member ResourceManager : IResourceManager
@@ -495,12 +489,11 @@ and IRuntime =
     abstract member PrepareSurface : IFramebufferSignature * ISurface -> IBackendSurface
     abstract member PrepareRenderObject : IFramebufferSignature * IRenderObject -> IPreparedRenderObject
 
-    abstract member MaxLocalSize : V3i
-    abstract member Compile : FShade.ComputeShader -> IComputeShader
-    abstract member Delete : IComputeShader -> unit
-
-    abstract member NewInputBinding : IComputeShader -> IComputeShaderInputBinding
-    abstract member Invoke : shader : IComputeShader * groupCount : V3i * input : IComputeShaderInputBinding -> unit
+//    abstract member MaxLocalSize : V3i
+//    abstract member Compile : FShade.ComputeShader -> IComputeShader
+//    abstract member Delete : IComputeShader -> unit
+//    abstract member NewInputBinding : IComputeShader -> IComputeShaderInputBinding
+//    abstract member Invoke : shader : IComputeShader * groupCount : V3i * input : IComputeShaderInputBinding -> unit
 
     abstract member DeleteSurface : IBackendSurface -> unit
 
@@ -696,35 +689,3 @@ module NullResources =
               [m :> IAdaptiveObject] |> Mod.mapCustom (fun s ->
                     not <| isNullResource (m.GetValue s)
               ) 
-
-[<AutoOpen>]
-module TypedBufferExtensions =
-    open System.Runtime.InteropServices
-
-    type IRuntime with
-
-
-        member x.CompileCompute (shader : 'a -> 'b) =
-            let sh = FShade.ComputeShader.ofFunction x.MaxLocalSize shader
-            x.Compile(sh)
-            
-        member x.Invoke(cShader : IComputeShader, groupCount : V2i, input : IComputeShaderInputBinding) =
-            x.Invoke(cShader, V3i(groupCount, 1), input)
-            
-        member x.Invoke(cShader : IComputeShader, groupCount : int, input : IComputeShaderInputBinding) =
-            x.Invoke(cShader, V3i(groupCount, 1, 1), input)
-
-        member x.Invoke(cShader : IComputeShader, groupCount : V3i, values : seq<string * obj>) =
-            use i = x.NewInputBinding cShader
-            for (name, value) in values do
-                i.[name] <- value
-            i.Flush()
-            x.Invoke(cShader, groupCount, i)
-
-        member x.Invoke(cShader : IComputeShader, groupCount : V2i, values : seq<string * obj>) =
-            x.Invoke(cShader, V3i(groupCount, 1), values)
-
-        member x.Invoke(cShader : IComputeShader, groupCount : int, values : seq<string * obj>) =
-            x.Invoke(cShader, V3i(groupCount, 1, 1), values)
-            
-            

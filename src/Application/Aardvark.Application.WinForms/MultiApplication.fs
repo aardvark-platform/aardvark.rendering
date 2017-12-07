@@ -222,6 +222,9 @@ type MultiRuntime(runtimes : IRuntime[]) =
 
         member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) : unit =
             failwith "not implemented"
+            
+        member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) : unit =
+            failwith "not implemented"
 
         member x.OnDispose = disp.Publish
 
@@ -315,19 +318,13 @@ type MultiRuntime(runtimes : IRuntime[]) =
         member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) : unit = 
             failwith ""
 
+
         member x.MaxLocalSize = failwith ""
-
-        member x.Compile (c : FShade.ComputeShader) =
-            failwith ""
-
-        member x.NewInputBinding(c : IComputeShader) =
-            failwith ""
-
-        member x.Delete (shader : IComputeShader) =
-            failwith ""
-
-        member x.Invoke(shader : IComputeShader, groupCount : V3i, inputs : IComputeShaderInputBinding) =
-            failwith ""
+        member x.CreateComputeShader (c : FShade.ComputeShader) = failwith ""
+        member x.NewInputBinding(c : IComputeShader) = failwith ""
+        member x.DeleteComputeShader (shader : IComputeShader) = failwith ""
+        member x.Run (commands : list<ComputeCommand>) = failwith ""
+        member x.Compile (commands : list<ComputeCommand>) = failwith ""
 
 type MultiApplication(apps : IApplication[]) =
     

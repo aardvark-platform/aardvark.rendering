@@ -386,10 +386,6 @@ type MultiRenderObject(children : list<IRenderObject>) =
             | _ -> false
 
 
-type IComputeShader =
-    abstract member LocalSize : V3i
-
-
 type PipelineState =
     {
         depthTest           : IMod<DepthTestMode>

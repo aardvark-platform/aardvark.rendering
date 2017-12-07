@@ -81,9 +81,9 @@
     <Compile Include="Types\Camera.fs" />
     <Compile Include="Types\Formats.fs" />
     <Compile Include="Resources\Buffers.fs" />
-    <Compile Include="Textures.fs" />
-    <Compile Include="LodTree.fs" />
+    <Compile Include="Resources\Textures.fs" />
     <Compile Include="Compute.fs" />
+    <Compile Include="LodTree.fs" />
     <Compile Include="RenderObject.fs" />
     <Compile Include="BackendConfiguration.fs" />
     <Compile Include="Framebuffers.fs" />

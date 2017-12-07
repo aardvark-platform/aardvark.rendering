@@ -19,7 +19,8 @@ type SparseTexture(ctx : Context, handle : int, dimension : TextureDimension, mi
         if level < 0 || level >= x.MipMapLevels then
             V3i.Zero
         else
-            x.Size / (1 <<< level)
+            let d = 1 <<< level
+            V3i(max 1 (x.Size.X / d), max 1 (x.Size.Y / d), max 1 (x.Size.Z / d))
 
 
 [<AutoOpen>]

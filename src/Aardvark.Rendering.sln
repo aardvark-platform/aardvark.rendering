@@ -60,6 +60,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.OpenVR
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.OpenVR.Vulkan", "Application\Aardvark.Application.OpenVR.Vulkan\Aardvark.Application.OpenVR.Vulkan.fsproj", "{FB047D5E-D49A-462E-BAA0-B058CE06CFC9}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.GPGPU", "Aardvark.GPGPU\Aardvark.GPGPU.fsproj", "{68E3B876-EB23-4D61-A71F-EF35A146F276}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -158,6 +160,10 @@ Global
 		{FB047D5E-D49A-462E-BAA0-B058CE06CFC9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FB047D5E-D49A-462E-BAA0-B058CE06CFC9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FB047D5E-D49A-462E-BAA0-B058CE06CFC9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{68E3B876-EB23-4D61-A71F-EF35A146F276}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{68E3B876-EB23-4D61-A71F-EF35A146F276}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{68E3B876-EB23-4D61-A71F-EF35A146F276}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{68E3B876-EB23-4D61-A71F-EF35A146F276}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
