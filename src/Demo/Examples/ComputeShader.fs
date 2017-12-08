@@ -130,6 +130,52 @@ module ComputeShader =
 
     open Aardvark.Application.OpenVR
 
+
+    let benchmark (iter : int) (alternatives : list<string * (unit -> 'a)>) =
+        let alternatives = Map.ofList alternatives
+        let results = alternatives |> Map.map (fun _ _ -> Array.zeroCreate iter)
+
+        for (name, run) in Map.toSeq alternatives do
+            let res = results.[name]
+            
+            for i in 0 .. min (iter - 1) 10 do
+                res.[i] <- run()
+
+            let sw = System.Diagnostics.Stopwatch()
+            sw.Start() 
+            for i in 0 .. iter - 1 do
+                res.[i] <- run()
+            sw.Stop()
+            Log.line "%s: %A" name (sw.MicroTime / iter)
+
+        let res = results |> Map.toSeq |> Seq.map snd |> Seq.toArray
+        let cnt = res.Length
+
+        let mutable errorIndex = -1
+        for i in 0 .. iter - 1 do
+            let v = res.[0].[i]
+            for j in 1 .. cnt - 1 do
+                if res.[j].[i] <> v then errorIndex <- i
+
+        if errorIndex >= 0 then
+            let values = results |> Map.map (fun _ a -> a.[errorIndex])
+            Log.warn "ERROR"
+            for (name, value) in Map.toSeq values do
+                Log.warn "%s: %A" name value
+        else
+            Log.line "OK"
+
+
+                    
+                
+
+
+
+
+
+
+
+
     let run() =
         use app = new VulkanApplication(false)
         let runtime = app.Runtime :> IRuntime
@@ -147,22 +193,42 @@ module ComputeShader =
         let win = win :> IRenderTarget
         let subscribe (f : unit -> unit) = ()
 
+        let cnt = 1 <<< 22
+        let aa = Array.create cnt 1
+        let ba = runtime.CreateBuffer<int>(aa)
+        let bb = runtime.CreateBuffer<int> cnt
 
-        let ba = runtime.CreateBuffer<int>(Array.create 3421 1)
-        let bb = runtime.CreateBuffer<int> 3421
+        let par = ParallelPrimitives(runtime)
 
-        let scan = Scan<int>(runtime, <@ (+) @>)
-        let scanab = scan.Compile(ba, bb)
-        scanab.Run()
+        let suma = par.CompileMapReduce(<@ fun i a -> i + a @>, <@ (+) @>, ba)
+        //let suma = par.CompileReduce(<@ (+) @>, ba)
+
+        let reference () =
+            let mutable sum = 0
+            for i in 0 .. aa.Length - 1 do
+                sum <- sum + (i + aa.[i])
+            sum
+            
+        let map = <@ fun i a -> i + a @>
+        let add = <@ (+) @>
+        benchmark 100 [
+            "cpu", reference
+            "gpu", suma.Run
+            "gpui", fun () -> par.MapReduce(map, add, ba)
+        ]
 
 
-        let data = bb.Download()
-        let expected = Array.init data.Length (fun i -> 1 + i)
-        if data <> expected then
-            printfn "bad"
-        else
-            printfn "good"
-            printfn "%A" data
+
+//        let scanab = par.CompileScan(<@ (+) @>, ba, bb)
+//        scanab.Run()
+//
+//        let data = bb.Download()
+//        let expected = Array.init data.Length (fun i -> 1 + i)
+//        if data <> expected then
+//            printfn "bad"
+//        else
+//            printfn "good"
+//            printfn "%A" data
         Environment.Exit 0
 
 

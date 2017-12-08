@@ -37,11 +37,19 @@ and IComputeRuntime =
     abstract member DeleteComputeShader : IComputeShader -> unit
     abstract member NewInputBinding : IComputeShader -> IComputeShaderInputBinding
     abstract member Run : list<ComputeCommand> -> unit
-    abstract member Compile : list<ComputeCommand> -> IComputeProgram
+    abstract member Compile : list<ComputeCommand> -> ComputeProgram<unit>
 
-and IComputeProgram =
-    inherit IDisposable
-    abstract member Run : unit -> unit
+and [<AbstractClass>]
+    ComputeProgram<'r>() =
+    abstract member Run : unit -> 'r
+    abstract member RunUnit : unit -> unit
+    abstract member Dispose : unit -> unit
+
+    default x.Run() = x.RunUnit(); Unchecked.defaultof<'r>
+    default x.RunUnit() = x.Run() |> ignore
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 and [<RequireQualifiedAccess>]
     HostMemory =
@@ -56,13 +64,19 @@ and [<RequireQualifiedAccess>]
     | CopyBufferCmd of src : IBufferRange * dst : IBufferRange
     | DownloadBufferCmd of src : IBufferRange * dst : HostMemory
     | UploadBufferCmd of src : HostMemory * dst : IBufferRange
-    | SyncBufferCmd of buffer : IBackendBuffer
 
+    | SyncBufferCmd of buffer : IBackendBuffer
     | TransformLayoutCmd of tex : IBackendTexture * layout : TextureLayout
+
+    | ExecuteCmd of ComputeProgram<unit>
+
 
     | CopyImageCmd of src : ITextureLevel * srcOffset : V3i * dst : ITextureLevel * dstOffset : V3i * size : V3i
     | DownloadImageCmd of src : ITextureSubResource * srcOffset : V3i * dst : PixVolume
     | UploadImageCmd of src : PixVolume * dst : ITextureSubResource * dstOffset : V3i
+
+    static member Execute (other : ComputeProgram<unit>) =
+        ComputeCommand.ExecuteCmd other
 
     static member Sync b = SyncBufferCmd b
 
