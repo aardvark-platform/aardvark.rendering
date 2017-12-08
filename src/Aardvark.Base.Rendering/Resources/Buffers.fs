@@ -464,6 +464,10 @@ type IBufferRuntimeExtensions private() =
         IBufferRuntimeExtensions.Upload(res, data)
         res
 
+    [<Extension>] 
+    static member Coerce<'a when 'a : unmanaged>(this : IBackendBuffer) =
+        new RuntimeBuffer<'a>(this, int (this.SizeInBytes / nativeint sizeof<'a>)) :> IBuffer<'a>
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module BufferRange =
     let inline upload (data : 'a[]) (range : IBufferRange<'a>) = range.Upload(data)
