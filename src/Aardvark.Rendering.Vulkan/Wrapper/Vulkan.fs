@@ -68,6 +68,29 @@ type VkExternalMemoryHandleTypeFlagsNV = uint32
 type VkExternalMemoryFeatureFlagsNV = uint32
 type VkIndirectCommandsLayoutUsageFlagsNVX = uint32
 type VkObjectEntryUsageFlagsNVX = uint32
+
+type VkDescriptorUpdateTemplateCreateFlagsKHR = uint32
+type VkDeviceGroupPresentModeFlagsKHX = uint32
+type VkExternalFenceHandleTypeFlagsKHR = uint32
+type VkExternalMemoryHandleTypeFlagsKHR = uint32
+type VkExternalSemaphoreHandleTypeFlagsKHR = uint32
+type VkExternalMemoryFeatureFlagsKHR = uint32
+type VkExternalFenceFeatureFlagsKHR = uint32
+type VkExternalSemaphoreFeatureFlagsKHR = uint32
+type VkIOSSurfaceCreateFlagsMVK = uint32
+type VkFenceImportFlagsKHR = uint32
+type VkSemaphoreImportFlagsKHR = uint32
+type VkMacOSSurfaceCreateFlagsMVK = uint32
+type VkMemoryAllocateFlagsKHX = uint32
+type VkPipelineCoverageModulationStateCreateFlagsNV = uint32
+type VkPipelineCoverageToColorStateCreateFlagsNV = uint32
+type VkPipelineDiscardRectangleStateCreateFlagsEXT = uint32
+type VkPipelineViewportSwizzleStateCreateFlagsNV = uint32
+type VkSurfaceCounterFlagsEXT = uint32
+type VkValidationCacheCreateFlagsEXT = uint32
+type VkViSurfaceCreateFlagsNN = uint32
+type VkPeerMemoryFeatureFlagsKHX = uint32
+type VkCommandPoolTrimFlagsKHR = uint32
 type VkInstance = nativeint
 type VkPhysicalDevice = nativeint
 type VkDevice = nativeint
@@ -289,6 +312,36 @@ type VkIndirectCommandsLayoutNVX =
         val mutable public Handle : int64
         new(h) = { Handle = h }
         static member Null = VkIndirectCommandsLayoutNVX(0L)
+        member x.IsNull = x.Handle = 0L
+        member x.IsValid = x.Handle <> 0L
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDescriptorUpdateTemplateKHR = 
+    struct
+        val mutable public Handle : int64
+        new(h) = { Handle = h }
+        static member Null = VkDescriptorUpdateTemplateKHR(0L)
+        member x.IsNull = x.Handle = 0L
+        member x.IsValid = x.Handle <> 0L
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkSamplerYcbcrConversionKHR = 
+    struct
+        val mutable public Handle : int64
+        new(h) = { Handle = h }
+        static member Null = VkSamplerYcbcrConversionKHR(0L)
+        member x.IsNull = x.Handle = 0L
+        member x.IsValid = x.Handle <> 0L
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkValidationCacheEXT = 
+    struct
+        val mutable public Handle : int64
+        new(h) = { Handle = h }
+        static member Null = VkValidationCacheEXT(0L)
         member x.IsNull = x.Handle = 0L
         member x.IsValid = x.Handle <> 0L
     end
@@ -843,6 +896,38 @@ type VkDynamicState =
     | StencilWriteMask = 7
     | StencilReference = 8
 
+type VkDescriptorUpdateTemplateTypeKHR = 
+    | VkDescriptorUpdateTemplateTypeDescriptorSetKhr = 0
+    | VkDescriptorUpdateTemplateTypePushDescriptorsKhr = 1
+
+type VkObjectType = 
+    | Unknown = 0
+    | Instance = 1
+    | PhysicalDevice = 2
+    | Device = 3
+    | Queue = 4
+    | Semaphore = 5
+    | CommandBuffer = 6
+    | Fence = 7
+    | DeviceMemory = 8
+    | Buffer = 9
+    | Image = 10
+    | Event = 11
+    | QueryPool = 12
+    | BufferView = 13
+    | ImageView = 14
+    | ShaderModule = 15
+    | PipelineCache = 16
+    | PipelineLayout = 17
+    | RenderPass = 18
+    | Pipeline = 19
+    | DescriptorSetLayout = 20
+    | Sampler = 21
+    | DescriptorPool = 22
+    | DescriptorSet = 23
+    | Framebuffer = 24
+    | CommandPool = 25
+
 [<Flags>]
 type VkQueueFlags = 
     | None = 0
@@ -1177,11 +1262,12 @@ type VkDebugReportObjectTypeEXT =
     | VkDebugReportObjectTypeCommandPoolExt = 25
     | VkDebugReportObjectTypeSurfaceKhrExt = 26
     | VkDebugReportObjectTypeSwapchainKhrExt = 27
-    | VkDebugReportObjectTypeDebugReportExt = 28
-
-type VkDebugReportErrorEXT = 
-    | VkDebugReportErrorNoneExt = 0
-    | VkDebugReportErrorCallbackRefExt = 1
+    | VkDebugReportObjectTypeDebugReportCallbackExtExt = 28
+    | VkDebugReportObjectTypeDisplayKhrExt = 29
+    | VkDebugReportObjectTypeDisplayModeKhrExt = 30
+    | VkDebugReportObjectTypeObjectTableNvxExt = 31
+    | VkDebugReportObjectTypeIndirectCommandsLayoutNvxExt = 32
+    | VkDebugReportObjectTypeValidationCacheExt = 33
 
 type VkRasterizationOrderAMD = 
     | VkRasterizationOrderStrictAmd = 0
@@ -1204,6 +1290,7 @@ type VkExternalMemoryFeatureFlagBitsNV =
 
 type VkValidationCheckEXT = 
     | VkValidationCheckAllExt = 0
+    | VkValidationCheckShadersExt = 1
 
 [<Flags>]
 type VkIndirectCommandsLayoutUsageFlagBitsNVX = 
@@ -1220,21 +1307,261 @@ type VkObjectEntryUsageFlagBitsNVX =
     | VkObjectEntryUsageComputeBitNvx = 0x00000002
 
 type VkIndirectCommandsTokenTypeNVX = 
-    | VkIndirectCommandsTokenPipelineNvx = 0
-    | VkIndirectCommandsTokenDescriptorSetNvx = 1
-    | VkIndirectCommandsTokenIndexBufferNvx = 2
-    | VkIndirectCommandsTokenVertexBufferNvx = 3
-    | VkIndirectCommandsTokenPushConstantNvx = 4
-    | VkIndirectCommandsTokenDrawIndexedNvx = 5
-    | VkIndirectCommandsTokenDrawNvx = 6
-    | VkIndirectCommandsTokenDispatchNvx = 7
+    | VkIndirectCommandsTokenTypePipelineNvx = 0
+    | VkIndirectCommandsTokenTypeDescriptorSetNvx = 1
+    | VkIndirectCommandsTokenTypeIndexBufferNvx = 2
+    | VkIndirectCommandsTokenTypeVertexBufferNvx = 3
+    | VkIndirectCommandsTokenTypePushConstantNvx = 4
+    | VkIndirectCommandsTokenTypeDrawIndexedNvx = 5
+    | VkIndirectCommandsTokenTypeDrawNvx = 6
+    | VkIndirectCommandsTokenTypeDispatchNvx = 7
 
 type VkObjectEntryTypeNVX = 
-    | VkObjectEntryDescriptorSetNvx = 0
-    | VkObjectEntryPipelineNvx = 1
-    | VkObjectEntryIndexBufferNvx = 2
-    | VkObjectEntryVertexBufferNvx = 3
-    | VkObjectEntryPushConstantNvx = 4
+    | VkObjectEntryTypeDescriptorSetNvx = 0
+    | VkObjectEntryTypePipelineNvx = 1
+    | VkObjectEntryTypeIndexBufferNvx = 2
+    | VkObjectEntryTypeVertexBufferNvx = 3
+    | VkObjectEntryTypePushConstantNvx = 4
+
+[<Flags>]
+type VkExternalMemoryHandleTypeFlagBitsKHR = 
+    | None = 0
+    | VkExternalMemoryHandleTypeOpaqueFdBitKhr = 0x00000001
+    | VkExternalMemoryHandleTypeOpaqueWin32BitKhr = 0x00000002
+    | VkExternalMemoryHandleTypeOpaqueWin32KmtBitKhr = 0x00000004
+    | VkExternalMemoryHandleTypeD3d11TextureBitKhr = 0x00000008
+    | VkExternalMemoryHandleTypeD3d11TextureKmtBitKhr = 0x00000010
+    | VkExternalMemoryHandleTypeD3d12HeapBitKhr = 0x00000020
+    | VkExternalMemoryHandleTypeD3d12ResourceBitKhr = 0x00000040
+
+[<Flags>]
+type VkExternalMemoryFeatureFlagBitsKHR = 
+    | None = 0
+    | VkExternalMemoryFeatureDedicatedOnlyBitKhr = 0x00000001
+    | VkExternalMemoryFeatureExportableBitKhr = 0x00000002
+    | VkExternalMemoryFeatureImportableBitKhr = 0x00000004
+
+[<Flags>]
+type VkExternalSemaphoreHandleTypeFlagBitsKHR = 
+    | None = 0
+    | VkExternalSemaphoreHandleTypeOpaqueFdBitKhr = 0x00000001
+    | VkExternalSemaphoreHandleTypeOpaqueWin32BitKhr = 0x00000002
+    | VkExternalSemaphoreHandleTypeOpaqueWin32KmtBitKhr = 0x00000004
+    | VkExternalSemaphoreHandleTypeD3d12FenceBitKhr = 0x00000008
+    | VkExternalSemaphoreHandleTypeSyncFdBitKhr = 0x00000010
+
+[<Flags>]
+type VkExternalSemaphoreFeatureFlagBitsKHR = 
+    | None = 0
+    | VkExternalSemaphoreFeatureExportableBitKhr = 0x00000001
+    | VkExternalSemaphoreFeatureImportableBitKhr = 0x00000002
+
+[<Flags>]
+type VkSemaphoreImportFlagBitsKHR = 
+    | None = 0
+    | VkSemaphoreImportTemporaryBitKhr = 0x00000001
+
+[<Flags>]
+type VkExternalFenceHandleTypeFlagBitsKHR = 
+    | None = 0
+    | VkExternalFenceHandleTypeOpaqueFdBitKhr = 0x00000001
+    | VkExternalFenceHandleTypeOpaqueWin32BitKhr = 0x00000002
+    | VkExternalFenceHandleTypeOpaqueWin32KmtBitKhr = 0x00000004
+    | VkExternalFenceHandleTypeSyncFdBitKhr = 0x00000008
+
+[<Flags>]
+type VkExternalFenceFeatureFlagBitsKHR = 
+    | None = 0
+    | VkExternalFenceFeatureExportableBitKhr = 0x00000001
+    | VkExternalFenceFeatureImportableBitKhr = 0x00000002
+
+[<Flags>]
+type VkFenceImportFlagBitsKHR = 
+    | None = 0
+    | VkFenceImportTemporaryBitKhr = 0x00000001
+
+[<Flags>]
+type VkSurfaceCounterFlagBitsEXT = 
+    | None = 0
+    | VkSurfaceCounterVblankExt = 0x00000001
+
+type VkDisplayPowerStateEXT = 
+    | VkDisplayPowerStateOffExt = 0
+    | VkDisplayPowerStateSuspendExt = 1
+    | VkDisplayPowerStateOnExt = 2
+
+type VkDeviceEventTypeEXT = 
+    | VkDeviceEventTypeDisplayHotplugExt = 0
+
+type VkDisplayEventTypeEXT = 
+    | VkDisplayEventTypeFirstPixelOutExt = 0
+
+[<Flags>]
+type VkPeerMemoryFeatureFlagBitsKHX = 
+    | None = 0
+    | VkPeerMemoryFeatureCopySrcBitKhx = 0x00000001
+    | VkPeerMemoryFeatureCopyDstBitKhx = 0x00000002
+    | VkPeerMemoryFeatureGenericSrcBitKhx = 0x00000004
+    | VkPeerMemoryFeatureGenericDstBitKhx = 0x00000008
+
+[<Flags>]
+type VkMemoryAllocateFlagBitsKHX = 
+    | None = 0
+    | VkMemoryAllocateDeviceMaskBitKhx = 0x00000001
+
+[<Flags>]
+type VkDeviceGroupPresentModeFlagBitsKHX = 
+    | None = 0
+    | VkDeviceGroupPresentModeLocalBitKhx = 0x00000001
+    | VkDeviceGroupPresentModeRemoteBitKhx = 0x00000002
+    | VkDeviceGroupPresentModeSumBitKhx = 0x00000004
+    | VkDeviceGroupPresentModeLocalMultiDeviceBitKhx = 0x00000008
+
+type VkViewportCoordinateSwizzleNV = 
+    | VkViewportCoordinateSwizzlePositiveXNv = 0
+    | VkViewportCoordinateSwizzleNegativeXNv = 1
+    | VkViewportCoordinateSwizzlePositiveYNv = 2
+    | VkViewportCoordinateSwizzleNegativeYNv = 3
+    | VkViewportCoordinateSwizzlePositiveZNv = 4
+    | VkViewportCoordinateSwizzleNegativeZNv = 5
+    | VkViewportCoordinateSwizzlePositiveWNv = 6
+    | VkViewportCoordinateSwizzleNegativeWNv = 7
+
+type VkDiscardRectangleModeEXT = 
+    | VkDiscardRectangleModeInclusiveExt = 0
+    | VkDiscardRectangleModeExclusiveExt = 1
+
+type VkPointClippingBehaviorKHR = 
+    | VkPointClippingBehaviorAllClipPlanesKhr = 0
+    | VkPointClippingBehaviorUserClipPlanesOnlyKhr = 1
+
+type VkSamplerReductionModeEXT = 
+    | VkSamplerReductionModeWeightedAverageExt = 0
+    | VkSamplerReductionModeMinExt = 1
+    | VkSamplerReductionModeMaxExt = 2
+
+type VkTessellationDomainOriginKHR = 
+    | VkTessellationDomainOriginUpperLeftKhr = 0
+    | VkTessellationDomainOriginLowerLeftKhr = 1
+
+type VkSamplerYcbcrModelConversionKHR = 
+    | VkSamplerYcbcrModelConversionRgbIdentityKhr = 0
+    | VkSamplerYcbcrModelConversionYcbcrIdentityKhr = 1
+    | VkSamplerYcbcrModelConversionYcbcr709Khr = 2
+    | VkSamplerYcbcrModelConversionYcbcr601Khr = 3
+    | VkSamplerYcbcrModelConversionYcbcr2020Khr = 4
+
+type VkSamplerYcbcrRangeKHR = 
+    | VkSamplerYcbcrRangeItuFullKhr = 0
+    | VkSamplerYcbcrRangeItuNarrowKhr = 1
+
+type VkChromaLocationKHR = 
+    | VkChromaLocationCositedEvenKhr = 0
+    | VkChromaLocationMidpointKhr = 1
+
+type VkBlendOverlapEXT = 
+    | VkBlendOverlapUncorrelatedExt = 0
+    | VkBlendOverlapDisjointExt = 1
+    | VkBlendOverlapConjointExt = 2
+
+type VkCoverageModulationModeNV = 
+    | VkCoverageModulationModeNoneNv = 0
+    | VkCoverageModulationModeRgbNv = 1
+    | VkCoverageModulationModeAlphaNv = 2
+    | VkCoverageModulationModeRgbaNv = 3
+
+type VkValidationCacheHeaderVersionEXT = 
+    | VkValidationCacheHeaderVersionOneExt = 1
+
+type VkShaderInfoTypeAMD = 
+    | VkShaderInfoTypeStatisticsAmd = 0
+    | VkShaderInfoTypeBinaryAmd = 1
+    | VkShaderInfoTypeDisassemblyAmd = 2
+
+type VkQueueGlobalPriorityEXT = 
+    | VkQueueGlobalPriorityLowExt = 128
+    | VkQueueGlobalPriorityMediumExt = 256
+    | VkQueueGlobalPriorityHighExt = 512
+    | VkQueueGlobalPriorityRealtimeExt = 1024
+
+[<StructLayout(LayoutKind.Explicit, Size = 128)>]
+type uint32_32 =
+    struct
+        member x.Item
+            with get (i : int) : uint32 =
+                if i < 0 || i > 31 then raise <| IndexOutOfRangeException()
+                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
+                NativePtr.get ptr i
+            and set (i : int) (value : uint32) =
+                if i < 0 || i > 31 then raise <| IndexOutOfRangeException()
+                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
+                NativePtr.set ptr i value
+
+        member x.Length = 32
+
+        interface System.Collections.IEnumerable with
+            member x.GetEnumerator() = let x = x in (Seq.init 32 (fun i -> x.[i])).GetEnumerator() :> System.Collections.IEnumerator
+        interface System.Collections.Generic.IEnumerable<uint32> with
+            member x.GetEnumerator() = let x = x in (Seq.init 32 (fun i -> x.[i])).GetEnumerator()
+    end
+
+[<StructLayout(LayoutKind.Explicit, Size = 8)>]
+type byte_8 =
+    struct
+        member x.Item
+            with get (i : int) : byte =
+                if i < 0 || i > 7 then raise <| IndexOutOfRangeException()
+                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
+                NativePtr.get ptr i
+            and set (i : int) (value : byte) =
+                if i < 0 || i > 7 then raise <| IndexOutOfRangeException()
+                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
+                NativePtr.set ptr i value
+
+        member x.Length = 8
+
+        interface System.Collections.IEnumerable with
+            member x.GetEnumerator() = let x = x in (Seq.init 8 (fun i -> x.[i])).GetEnumerator() :> System.Collections.IEnumerator
+        interface System.Collections.Generic.IEnumerable<byte> with
+            member x.GetEnumerator() = let x = x in (Seq.init 8 (fun i -> x.[i])).GetEnumerator()
+    end
+
+[<StructLayout(LayoutKind.Explicit, Size = 256)>]
+type VkPhysicalDevice_32 =
+    struct
+        member x.Item
+            with get (i : int) : VkPhysicalDevice =
+                if i < 0 || i > 31 then raise <| IndexOutOfRangeException()
+                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
+                NativePtr.get ptr i
+            and set (i : int) (value : VkPhysicalDevice) =
+                if i < 0 || i > 31 then raise <| IndexOutOfRangeException()
+                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
+                NativePtr.set ptr i value
+
+        member x.Length = 32
+
+        interface System.Collections.IEnumerable with
+            member x.GetEnumerator() = let x = x in (Seq.init 32 (fun i -> x.[i])).GetEnumerator() :> System.Collections.IEnumerator
+        interface System.Collections.Generic.IEnumerable<VkPhysicalDevice> with
+            member x.GetEnumerator() = let x = x in (Seq.init 32 (fun i -> x.[i])).GetEnumerator()
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkAcquireNextImageInfoKHX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public swapchain : VkSwapchainKHR
+        val mutable public timeout : uint64
+        val mutable public semaphore : VkSemaphore
+        val mutable public fence : VkFence
+        val mutable public deviceMask : uint32
+
+        new(sType : VkStructureType, pNext : nativeint, swapchain : VkSwapchainKHR, timeout : uint64, semaphore : VkSemaphore, fence : VkFence, deviceMask : uint32) = { sType = sType; pNext = pNext; swapchain = swapchain; timeout = timeout; semaphore = semaphore; fence = fence; deviceMask = deviceMask }
+        override x.ToString() =
+            sprintf "VkAcquireNextImageInfoKHX { sType = %A; pNext = %A; swapchain = %A; timeout = %A; semaphore = %A; fence = %A; deviceMask = %A }" x.sType x.pNext x.swapchain x.timeout x.semaphore x.fence x.deviceMask
+    end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkAllocationCallbacks = 
@@ -1307,6 +1634,158 @@ type VkAttachmentReference =
         new(attachment : uint32, layout : VkImageLayout) = { attachment = attachment; layout = layout }
         override x.ToString() =
             sprintf "VkAttachmentReference { attachment = %A; layout = %A }" x.attachment x.layout
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkExtent2D = 
+    struct
+        val mutable public width : uint32
+        val mutable public height : uint32
+
+        new(width : uint32, height : uint32) = { width = width; height = height }
+        new(w : int, h : int) = VkExtent2D(uint32 w,uint32 h)
+        override x.ToString() =
+            sprintf "VkExtent2D { width = %A; height = %A }" x.width x.height
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkSampleLocationEXT = 
+    struct
+        val mutable public x : float32
+        val mutable public y : float32
+
+        new(x : float32, y : float32) = { x = x; y = y }
+        override x.ToString() =
+            sprintf "VkSampleLocationEXT { x = %A; y = %A }" x.x x.y
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkSampleLocationsInfoEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public sampleLocationsPerPixel : VkSampleCountFlags
+        val mutable public sampleLocationGridSize : VkExtent2D
+        val mutable public sampleLocationsCount : uint32
+        val mutable public pSampleLocations : nativeptr<VkSampleLocationEXT>
+
+        new(sType : VkStructureType, pNext : nativeint, sampleLocationsPerPixel : VkSampleCountFlags, sampleLocationGridSize : VkExtent2D, sampleLocationsCount : uint32, pSampleLocations : nativeptr<VkSampleLocationEXT>) = { sType = sType; pNext = pNext; sampleLocationsPerPixel = sampleLocationsPerPixel; sampleLocationGridSize = sampleLocationGridSize; sampleLocationsCount = sampleLocationsCount; pSampleLocations = pSampleLocations }
+        override x.ToString() =
+            sprintf "VkSampleLocationsInfoEXT { sType = %A; pNext = %A; sampleLocationsPerPixel = %A; sampleLocationGridSize = %A; sampleLocationsCount = %A; pSampleLocations = %A }" x.sType x.pNext x.sampleLocationsPerPixel x.sampleLocationGridSize x.sampleLocationsCount x.pSampleLocations
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkAttachmentSampleLocationsEXT = 
+    struct
+        val mutable public attachmentIndex : uint32
+        val mutable public sampleLocationsInfo : VkSampleLocationsInfoEXT
+
+        new(attachmentIndex : uint32, sampleLocationsInfo : VkSampleLocationsInfoEXT) = { attachmentIndex = attachmentIndex; sampleLocationsInfo = sampleLocationsInfo }
+        override x.ToString() =
+            sprintf "VkAttachmentSampleLocationsEXT { attachmentIndex = %A; sampleLocationsInfo = %A }" x.attachmentIndex x.sampleLocationsInfo
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkBindBufferMemoryDeviceGroupInfoKHX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public deviceIndexCount : uint32
+        val mutable public pDeviceIndices : nativeptr<uint32>
+
+        new(sType : VkStructureType, pNext : nativeint, deviceIndexCount : uint32, pDeviceIndices : nativeptr<uint32>) = { sType = sType; pNext = pNext; deviceIndexCount = deviceIndexCount; pDeviceIndices = pDeviceIndices }
+        override x.ToString() =
+            sprintf "VkBindBufferMemoryDeviceGroupInfoKHX { sType = %A; pNext = %A; deviceIndexCount = %A; pDeviceIndices = %A }" x.sType x.pNext x.deviceIndexCount x.pDeviceIndices
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkBindBufferMemoryInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public buffer : VkBuffer
+        val mutable public memory : VkDeviceMemory
+        val mutable public memoryOffset : VkDeviceSize
+
+        new(sType : VkStructureType, pNext : nativeint, buffer : VkBuffer, memory : VkDeviceMemory, memoryOffset : VkDeviceSize) = { sType = sType; pNext = pNext; buffer = buffer; memory = memory; memoryOffset = memoryOffset }
+        override x.ToString() =
+            sprintf "VkBindBufferMemoryInfoKHR { sType = %A; pNext = %A; buffer = %A; memory = %A; memoryOffset = %A }" x.sType x.pNext x.buffer x.memory x.memoryOffset
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkOffset2D = 
+    struct
+        val mutable public x : int
+        val mutable public y : int
+
+        new(x : int, y : int) = { x = x; y = y }
+        override x.ToString() =
+            sprintf "VkOffset2D { x = %A; y = %A }" x.x x.y
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkRect2D = 
+    struct
+        val mutable public offset : VkOffset2D
+        val mutable public extent : VkExtent2D
+
+        new(offset : VkOffset2D, extent : VkExtent2D) = { offset = offset; extent = extent }
+        override x.ToString() =
+            sprintf "VkRect2D { offset = %A; extent = %A }" x.offset x.extent
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkBindImageMemoryDeviceGroupInfoKHX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public deviceIndexCount : uint32
+        val mutable public pDeviceIndices : nativeptr<uint32>
+        val mutable public _SFRRectCount : uint32
+        val mutable public pSFRRects : nativeptr<VkRect2D>
+
+        new(sType : VkStructureType, pNext : nativeint, deviceIndexCount : uint32, pDeviceIndices : nativeptr<uint32>, _SFRRectCount : uint32, pSFRRects : nativeptr<VkRect2D>) = { sType = sType; pNext = pNext; deviceIndexCount = deviceIndexCount; pDeviceIndices = pDeviceIndices; _SFRRectCount = _SFRRectCount; pSFRRects = pSFRRects }
+        override x.ToString() =
+            sprintf "VkBindImageMemoryDeviceGroupInfoKHX { sType = %A; pNext = %A; deviceIndexCount = %A; pDeviceIndices = %A; _SFRRectCount = %A; pSFRRects = %A }" x.sType x.pNext x.deviceIndexCount x.pDeviceIndices x._SFRRectCount x.pSFRRects
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkBindImageMemoryInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public image : VkImage
+        val mutable public memory : VkDeviceMemory
+        val mutable public memoryOffset : VkDeviceSize
+
+        new(sType : VkStructureType, pNext : nativeint, image : VkImage, memory : VkDeviceMemory, memoryOffset : VkDeviceSize) = { sType = sType; pNext = pNext; image = image; memory = memory; memoryOffset = memoryOffset }
+        override x.ToString() =
+            sprintf "VkBindImageMemoryInfoKHR { sType = %A; pNext = %A; image = %A; memory = %A; memoryOffset = %A }" x.sType x.pNext x.image x.memory x.memoryOffset
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkBindImageMemorySwapchainInfoKHX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public swapchain : VkSwapchainKHR
+        val mutable public imageIndex : uint32
+
+        new(sType : VkStructureType, pNext : nativeint, swapchain : VkSwapchainKHR, imageIndex : uint32) = { sType = sType; pNext = pNext; swapchain = swapchain; imageIndex = imageIndex }
+        override x.ToString() =
+            sprintf "VkBindImageMemorySwapchainInfoKHX { sType = %A; pNext = %A; swapchain = %A; imageIndex = %A }" x.sType x.pNext x.swapchain x.imageIndex
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkBindImagePlaneMemoryInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public planeAspect : VkImageAspectFlags
+
+        new(sType : VkStructureType, pNext : nativeint, planeAspect : VkImageAspectFlags) = { sType = sType; pNext = pNext; planeAspect = planeAspect }
+        override x.ToString() =
+            sprintf "VkBindImagePlaneMemoryInfoKHR { sType = %A; pNext = %A; planeAspect = %A }" x.sType x.pNext x.planeAspect
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -1529,6 +2008,18 @@ type VkBufferMemoryBarrier =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkBufferMemoryRequirementsInfo2KHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public buffer : VkBuffer
+
+        new(sType : VkStructureType, pNext : nativeint, buffer : VkBuffer) = { sType = sType; pNext = pNext; buffer = buffer }
+        override x.ToString() =
+            sprintf "VkBufferMemoryRequirementsInfo2KHR { sType = %A; pNext = %A; buffer = %A }" x.sType x.pNext x.buffer
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkBufferViewCreateInfo = 
     struct
         val mutable public sType : VkStructureType
@@ -1589,40 +2080,6 @@ type VkClearAttachment =
         new(aspectMask : VkImageAspectFlags, colorAttachment : uint32, clearValue : VkClearValue) = { aspectMask = aspectMask; colorAttachment = colorAttachment; clearValue = clearValue }
         override x.ToString() =
             sprintf "VkClearAttachment { aspectMask = %A; colorAttachment = %A; clearValue = %A }" x.aspectMask x.colorAttachment x.clearValue
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
-type VkOffset2D = 
-    struct
-        val mutable public x : int
-        val mutable public y : int
-
-        new(x : int, y : int) = { x = x; y = y }
-        override x.ToString() =
-            sprintf "VkOffset2D { x = %A; y = %A }" x.x x.y
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
-type VkExtent2D = 
-    struct
-        val mutable public width : uint32
-        val mutable public height : uint32
-
-        new(width : uint32, height : uint32) = { width = width; height = height }
-        new(w : int, h : int) = VkExtent2D(uint32 w,uint32 h)
-        override x.ToString() =
-            sprintf "VkExtent2D { width = %A; height = %A }" x.width x.height
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
-type VkRect2D = 
-    struct
-        val mutable public offset : VkOffset2D
-        val mutable public extent : VkExtent2D
-
-        new(offset : VkOffset2D, extent : VkExtent2D) = { offset = offset; extent = extent }
-        override x.ToString() =
-            sprintf "VkRect2D { offset = %A; extent = %A }" x.offset x.extent
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -1830,6 +2287,21 @@ type VkCopyDescriptorSet =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkD3D12FenceSubmitInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public waitSemaphoreValuesCount : uint32
+        val mutable public pWaitSemaphoreValues : nativeptr<uint64>
+        val mutable public signalSemaphoreValuesCount : uint32
+        val mutable public pSignalSemaphoreValues : nativeptr<uint64>
+
+        new(sType : VkStructureType, pNext : nativeint, waitSemaphoreValuesCount : uint32, pWaitSemaphoreValues : nativeptr<uint64>, signalSemaphoreValuesCount : uint32, pSignalSemaphoreValues : nativeptr<uint64>) = { sType = sType; pNext = pNext; waitSemaphoreValuesCount = waitSemaphoreValuesCount; pWaitSemaphoreValues = pWaitSemaphoreValues; signalSemaphoreValuesCount = signalSemaphoreValuesCount; pSignalSemaphoreValues = pSignalSemaphoreValues }
+        override x.ToString() =
+            sprintf "VkD3D12FenceSubmitInfoKHR { sType = %A; pNext = %A; waitSemaphoreValuesCount = %A; pWaitSemaphoreValues = %A; signalSemaphoreValuesCount = %A; pSignalSemaphoreValues = %A }" x.sType x.pNext x.waitSemaphoreValuesCount x.pWaitSemaphoreValues x.signalSemaphoreValuesCount x.pSignalSemaphoreValues
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkDebugMarkerMarkerInfoEXT = 
     struct
         val mutable public sType : VkStructureType
@@ -2016,6 +2488,40 @@ type VkDescriptorSetLayoutCreateInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkDescriptorUpdateTemplateEntryKHR = 
+    struct
+        val mutable public dstBinding : uint32
+        val mutable public dstArrayElement : uint32
+        val mutable public descriptorCount : uint32
+        val mutable public descriptorType : VkDescriptorType
+        val mutable public offset : uint64
+        val mutable public stride : uint64
+
+        new(dstBinding : uint32, dstArrayElement : uint32, descriptorCount : uint32, descriptorType : VkDescriptorType, offset : uint64, stride : uint64) = { dstBinding = dstBinding; dstArrayElement = dstArrayElement; descriptorCount = descriptorCount; descriptorType = descriptorType; offset = offset; stride = stride }
+        override x.ToString() =
+            sprintf "VkDescriptorUpdateTemplateEntryKHR { dstBinding = %A; dstArrayElement = %A; descriptorCount = %A; descriptorType = %A; offset = %A; stride = %A }" x.dstBinding x.dstArrayElement x.descriptorCount x.descriptorType x.offset x.stride
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDescriptorUpdateTemplateCreateInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public flags : VkDescriptorUpdateTemplateCreateFlagsKHR
+        val mutable public descriptorUpdateEntryCount : uint32
+        val mutable public pDescriptorUpdateEntries : nativeptr<VkDescriptorUpdateTemplateEntryKHR>
+        val mutable public templateType : VkDescriptorUpdateTemplateTypeKHR
+        val mutable public descriptorSetLayout : VkDescriptorSetLayout
+        val mutable public pipelineBindPoint : VkPipelineBindPoint
+        val mutable public pipelineLayout : VkPipelineLayout
+        val mutable public set : uint32
+
+        new(sType : VkStructureType, pNext : nativeint, flags : VkDescriptorUpdateTemplateCreateFlagsKHR, descriptorUpdateEntryCount : uint32, pDescriptorUpdateEntries : nativeptr<VkDescriptorUpdateTemplateEntryKHR>, templateType : VkDescriptorUpdateTemplateTypeKHR, descriptorSetLayout : VkDescriptorSetLayout, pipelineBindPoint : VkPipelineBindPoint, pipelineLayout : VkPipelineLayout, set : uint32) = { sType = sType; pNext = pNext; flags = flags; descriptorUpdateEntryCount = descriptorUpdateEntryCount; pDescriptorUpdateEntries = pDescriptorUpdateEntries; templateType = templateType; descriptorSetLayout = descriptorSetLayout; pipelineBindPoint = pipelineBindPoint; pipelineLayout = pipelineLayout; set = set }
+        override x.ToString() =
+            sprintf "VkDescriptorUpdateTemplateCreateInfoKHR { sType = %A; pNext = %A; flags = %A; descriptorUpdateEntryCount = %A; pDescriptorUpdateEntries = %A; templateType = %A; descriptorSetLayout = %A; pipelineBindPoint = %A; pipelineLayout = %A; set = %A }" x.sType x.pNext x.flags x.descriptorUpdateEntryCount x.pDescriptorUpdateEntries x.templateType x.descriptorSetLayout x.pipelineBindPoint x.pipelineLayout x.set
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkDeviceQueueCreateInfo = 
     struct
         val mutable public sType : VkStructureType
@@ -2114,6 +2620,18 @@ type VkDeviceCreateInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkDeviceEventInfoEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public deviceEvent : VkDeviceEventTypeEXT
+
+        new(sType : VkStructureType, pNext : nativeint, deviceEvent : VkDeviceEventTypeEXT) = { sType = sType; pNext = pNext; deviceEvent = deviceEvent }
+        override x.ToString() =
+            sprintf "VkDeviceEventInfoEXT { sType = %A; pNext = %A; deviceEvent = %A }" x.sType x.pNext x.deviceEvent
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkDeviceGeneratedCommandsFeaturesNVX = 
     struct
         val mutable public sType : VkStructureType
@@ -2142,6 +2660,126 @@ type VkDeviceGeneratedCommandsLimitsNVX =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkDeviceGroupBindSparseInfoKHX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public resourceDeviceIndex : uint32
+        val mutable public memoryDeviceIndex : uint32
+
+        new(sType : VkStructureType, pNext : nativeint, resourceDeviceIndex : uint32, memoryDeviceIndex : uint32) = { sType = sType; pNext = pNext; resourceDeviceIndex = resourceDeviceIndex; memoryDeviceIndex = memoryDeviceIndex }
+        override x.ToString() =
+            sprintf "VkDeviceGroupBindSparseInfoKHX { sType = %A; pNext = %A; resourceDeviceIndex = %A; memoryDeviceIndex = %A }" x.sType x.pNext x.resourceDeviceIndex x.memoryDeviceIndex
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDeviceGroupCommandBufferBeginInfoKHX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public deviceMask : uint32
+
+        new(sType : VkStructureType, pNext : nativeint, deviceMask : uint32) = { sType = sType; pNext = pNext; deviceMask = deviceMask }
+        override x.ToString() =
+            sprintf "VkDeviceGroupCommandBufferBeginInfoKHX { sType = %A; pNext = %A; deviceMask = %A }" x.sType x.pNext x.deviceMask
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDeviceGroupDeviceCreateInfoKHX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public physicalDeviceCount : uint32
+        val mutable public pPhysicalDevices : nativeptr<VkPhysicalDevice>
+
+        new(sType : VkStructureType, pNext : nativeint, physicalDeviceCount : uint32, pPhysicalDevices : nativeptr<VkPhysicalDevice>) = { sType = sType; pNext = pNext; physicalDeviceCount = physicalDeviceCount; pPhysicalDevices = pPhysicalDevices }
+        override x.ToString() =
+            sprintf "VkDeviceGroupDeviceCreateInfoKHX { sType = %A; pNext = %A; physicalDeviceCount = %A; pPhysicalDevices = %A }" x.sType x.pNext x.physicalDeviceCount x.pPhysicalDevices
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDeviceGroupPresentCapabilitiesKHX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public presentMask : uint32_32
+        val mutable public modes : VkDeviceGroupPresentModeFlagsKHX
+
+        new(sType : VkStructureType, pNext : nativeint, presentMask : uint32_32, modes : VkDeviceGroupPresentModeFlagsKHX) = { sType = sType; pNext = pNext; presentMask = presentMask; modes = modes }
+        override x.ToString() =
+            sprintf "VkDeviceGroupPresentCapabilitiesKHX { sType = %A; pNext = %A; presentMask = %A; modes = %A }" x.sType x.pNext x.presentMask x.modes
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDeviceGroupPresentInfoKHX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public swapchainCount : uint32
+        val mutable public pDeviceMasks : nativeptr<uint32>
+        val mutable public mode : VkDeviceGroupPresentModeFlagBitsKHX
+
+        new(sType : VkStructureType, pNext : nativeint, swapchainCount : uint32, pDeviceMasks : nativeptr<uint32>, mode : VkDeviceGroupPresentModeFlagBitsKHX) = { sType = sType; pNext = pNext; swapchainCount = swapchainCount; pDeviceMasks = pDeviceMasks; mode = mode }
+        override x.ToString() =
+            sprintf "VkDeviceGroupPresentInfoKHX { sType = %A; pNext = %A; swapchainCount = %A; pDeviceMasks = %A; mode = %A }" x.sType x.pNext x.swapchainCount x.pDeviceMasks x.mode
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDeviceGroupRenderPassBeginInfoKHX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public deviceMask : uint32
+        val mutable public deviceRenderAreaCount : uint32
+        val mutable public pDeviceRenderAreas : nativeptr<VkRect2D>
+
+        new(sType : VkStructureType, pNext : nativeint, deviceMask : uint32, deviceRenderAreaCount : uint32, pDeviceRenderAreas : nativeptr<VkRect2D>) = { sType = sType; pNext = pNext; deviceMask = deviceMask; deviceRenderAreaCount = deviceRenderAreaCount; pDeviceRenderAreas = pDeviceRenderAreas }
+        override x.ToString() =
+            sprintf "VkDeviceGroupRenderPassBeginInfoKHX { sType = %A; pNext = %A; deviceMask = %A; deviceRenderAreaCount = %A; pDeviceRenderAreas = %A }" x.sType x.pNext x.deviceMask x.deviceRenderAreaCount x.pDeviceRenderAreas
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDeviceGroupSubmitInfoKHX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public waitSemaphoreCount : uint32
+        val mutable public pWaitSemaphoreDeviceIndices : nativeptr<uint32>
+        val mutable public commandBufferCount : uint32
+        val mutable public pCommandBufferDeviceMasks : nativeptr<uint32>
+        val mutable public signalSemaphoreCount : uint32
+        val mutable public pSignalSemaphoreDeviceIndices : nativeptr<uint32>
+
+        new(sType : VkStructureType, pNext : nativeint, waitSemaphoreCount : uint32, pWaitSemaphoreDeviceIndices : nativeptr<uint32>, commandBufferCount : uint32, pCommandBufferDeviceMasks : nativeptr<uint32>, signalSemaphoreCount : uint32, pSignalSemaphoreDeviceIndices : nativeptr<uint32>) = { sType = sType; pNext = pNext; waitSemaphoreCount = waitSemaphoreCount; pWaitSemaphoreDeviceIndices = pWaitSemaphoreDeviceIndices; commandBufferCount = commandBufferCount; pCommandBufferDeviceMasks = pCommandBufferDeviceMasks; signalSemaphoreCount = signalSemaphoreCount; pSignalSemaphoreDeviceIndices = pSignalSemaphoreDeviceIndices }
+        override x.ToString() =
+            sprintf "VkDeviceGroupSubmitInfoKHX { sType = %A; pNext = %A; waitSemaphoreCount = %A; pWaitSemaphoreDeviceIndices = %A; commandBufferCount = %A; pCommandBufferDeviceMasks = %A; signalSemaphoreCount = %A; pSignalSemaphoreDeviceIndices = %A }" x.sType x.pNext x.waitSemaphoreCount x.pWaitSemaphoreDeviceIndices x.commandBufferCount x.pCommandBufferDeviceMasks x.signalSemaphoreCount x.pSignalSemaphoreDeviceIndices
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDeviceGroupSwapchainCreateInfoKHX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public modes : VkDeviceGroupPresentModeFlagsKHX
+
+        new(sType : VkStructureType, pNext : nativeint, modes : VkDeviceGroupPresentModeFlagsKHX) = { sType = sType; pNext = pNext; modes = modes }
+        override x.ToString() =
+            sprintf "VkDeviceGroupSwapchainCreateInfoKHX { sType = %A; pNext = %A; modes = %A }" x.sType x.pNext x.modes
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDeviceQueueGlobalPriorityCreateInfoEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public globalPriority : VkQueueGlobalPriorityEXT
+
+        new(sType : VkStructureType, pNext : nativeint, globalPriority : VkQueueGlobalPriorityEXT) = { sType = sType; pNext = pNext; globalPriority = globalPriority }
+        override x.ToString() =
+            sprintf "VkDeviceQueueGlobalPriorityCreateInfoEXT { sType = %A; pNext = %A; globalPriority = %A }" x.sType x.pNext x.globalPriority
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkDispatchIndirectCommand = 
     struct
         val mutable public x : uint32
@@ -2151,6 +2789,18 @@ type VkDispatchIndirectCommand =
         new(x : uint32, y : uint32, z : uint32) = { x = x; y = y; z = z }
         override x.ToString() =
             sprintf "VkDispatchIndirectCommand { x = %A; y = %A; z = %A }" x.x x.y x.z
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDisplayEventInfoEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public displayEvent : VkDisplayEventTypeEXT
+
+        new(sType : VkStructureType, pNext : nativeint, displayEvent : VkDisplayEventTypeEXT) = { sType = sType; pNext = pNext; displayEvent = displayEvent }
+        override x.ToString() =
+            sprintf "VkDisplayEventInfoEXT { sType = %A; pNext = %A; displayEvent = %A }" x.sType x.pNext x.displayEvent
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -2215,6 +2865,18 @@ type VkDisplayPlanePropertiesKHR =
         new(currentDisplay : VkDisplayKHR, currentStackIndex : uint32) = { currentDisplay = currentDisplay; currentStackIndex = currentStackIndex }
         override x.ToString() =
             sprintf "VkDisplayPlanePropertiesKHR { currentDisplay = %A; currentStackIndex = %A }" x.currentDisplay x.currentStackIndex
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDisplayPowerInfoEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public powerState : VkDisplayPowerStateEXT
+
+        new(sType : VkStructureType, pNext : nativeint, powerState : VkDisplayPowerStateEXT) = { sType = sType; pNext = pNext; powerState = powerState }
+        override x.ToString() =
+            sprintf "VkDisplayPowerInfoEXT { sType = %A; pNext = %A; powerState = %A }" x.sType x.pNext x.powerState
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -2306,6 +2968,44 @@ type VkEventCreateInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkExportFenceCreateInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public handleTypes : VkExternalFenceHandleTypeFlagsKHR
+
+        new(sType : VkStructureType, pNext : nativeint, handleTypes : VkExternalFenceHandleTypeFlagsKHR) = { sType = sType; pNext = pNext; handleTypes = handleTypes }
+        override x.ToString() =
+            sprintf "VkExportFenceCreateInfoKHR { sType = %A; pNext = %A; handleTypes = %A }" x.sType x.pNext x.handleTypes
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkExportFenceWin32HandleInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public pAttributes : nativeptr<nativeint>
+        val mutable public dwAccess : uint32
+        val mutable public name : cstr
+
+        new(sType : VkStructureType, pNext : nativeint, pAttributes : nativeptr<nativeint>, dwAccess : uint32, name : cstr) = { sType = sType; pNext = pNext; pAttributes = pAttributes; dwAccess = dwAccess; name = name }
+        override x.ToString() =
+            sprintf "VkExportFenceWin32HandleInfoKHR { sType = %A; pNext = %A; pAttributes = %A; dwAccess = %A; name = %A }" x.sType x.pNext x.pAttributes x.dwAccess x.name
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkExportMemoryAllocateInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public handleTypes : VkExternalMemoryHandleTypeFlagsKHR
+
+        new(sType : VkStructureType, pNext : nativeint, handleTypes : VkExternalMemoryHandleTypeFlagsKHR) = { sType = sType; pNext = pNext; handleTypes = handleTypes }
+        override x.ToString() =
+            sprintf "VkExportMemoryAllocateInfoKHR { sType = %A; pNext = %A; handleTypes = %A }" x.sType x.pNext x.handleTypes
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkExportMemoryAllocateInfoNV = 
     struct
         val mutable public sType : VkStructureType
@@ -2315,6 +3015,20 @@ type VkExportMemoryAllocateInfoNV =
         new(sType : VkStructureType, pNext : nativeint, handleTypes : VkExternalMemoryHandleTypeFlagsNV) = { sType = sType; pNext = pNext; handleTypes = handleTypes }
         override x.ToString() =
             sprintf "VkExportMemoryAllocateInfoNV { sType = %A; pNext = %A; handleTypes = %A }" x.sType x.pNext x.handleTypes
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkExportMemoryWin32HandleInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public pAttributes : nativeptr<nativeint>
+        val mutable public dwAccess : uint32
+        val mutable public name : cstr
+
+        new(sType : VkStructureType, pNext : nativeint, pAttributes : nativeptr<nativeint>, dwAccess : uint32, name : cstr) = { sType = sType; pNext = pNext; pAttributes = pAttributes; dwAccess = dwAccess; name = name }
+        override x.ToString() =
+            sprintf "VkExportMemoryWin32HandleInfoKHR { sType = %A; pNext = %A; pAttributes = %A; dwAccess = %A; name = %A }" x.sType x.pNext x.pAttributes x.dwAccess x.name
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -2331,6 +3045,32 @@ type VkExportMemoryWin32HandleInfoNV =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkExportSemaphoreCreateInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public handleTypes : VkExternalSemaphoreHandleTypeFlagsKHR
+
+        new(sType : VkStructureType, pNext : nativeint, handleTypes : VkExternalSemaphoreHandleTypeFlagsKHR) = { sType = sType; pNext = pNext; handleTypes = handleTypes }
+        override x.ToString() =
+            sprintf "VkExportSemaphoreCreateInfoKHR { sType = %A; pNext = %A; handleTypes = %A }" x.sType x.pNext x.handleTypes
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkExportSemaphoreWin32HandleInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public pAttributes : nativeptr<nativeint>
+        val mutable public dwAccess : uint32
+        val mutable public name : cstr
+
+        new(sType : VkStructureType, pNext : nativeint, pAttributes : nativeptr<nativeint>, dwAccess : uint32, name : cstr) = { sType = sType; pNext = pNext; pAttributes = pAttributes; dwAccess = dwAccess; name = name }
+        override x.ToString() =
+            sprintf "VkExportSemaphoreWin32HandleInfoKHR { sType = %A; pNext = %A; pAttributes = %A; dwAccess = %A; name = %A }" x.sType x.pNext x.pAttributes x.dwAccess x.name
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkExtensionProperties = 
     struct
         val mutable public extensionName : String256
@@ -2339,6 +3079,56 @@ type VkExtensionProperties =
         new(extensionName : String256, specVersion : uint32) = { extensionName = extensionName; specVersion = specVersion }
         override x.ToString() =
             sprintf "VkExtensionProperties { extensionName = %A; specVersion = %A }" x.extensionName x.specVersion
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkExternalMemoryPropertiesKHR = 
+    struct
+        val mutable public externalMemoryFeatures : VkExternalMemoryFeatureFlagsKHR
+        val mutable public exportFromImportedHandleTypes : VkExternalMemoryHandleTypeFlagsKHR
+        val mutable public compatibleHandleTypes : VkExternalMemoryHandleTypeFlagsKHR
+
+        new(externalMemoryFeatures : VkExternalMemoryFeatureFlagsKHR, exportFromImportedHandleTypes : VkExternalMemoryHandleTypeFlagsKHR, compatibleHandleTypes : VkExternalMemoryHandleTypeFlagsKHR) = { externalMemoryFeatures = externalMemoryFeatures; exportFromImportedHandleTypes = exportFromImportedHandleTypes; compatibleHandleTypes = compatibleHandleTypes }
+        override x.ToString() =
+            sprintf "VkExternalMemoryPropertiesKHR { externalMemoryFeatures = %A; exportFromImportedHandleTypes = %A; compatibleHandleTypes = %A }" x.externalMemoryFeatures x.exportFromImportedHandleTypes x.compatibleHandleTypes
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkExternalBufferPropertiesKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public externalMemoryProperties : VkExternalMemoryPropertiesKHR
+
+        new(sType : VkStructureType, pNext : nativeint, externalMemoryProperties : VkExternalMemoryPropertiesKHR) = { sType = sType; pNext = pNext; externalMemoryProperties = externalMemoryProperties }
+        override x.ToString() =
+            sprintf "VkExternalBufferPropertiesKHR { sType = %A; pNext = %A; externalMemoryProperties = %A }" x.sType x.pNext x.externalMemoryProperties
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkExternalFencePropertiesKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public exportFromImportedHandleTypes : VkExternalFenceHandleTypeFlagsKHR
+        val mutable public compatibleHandleTypes : VkExternalFenceHandleTypeFlagsKHR
+        val mutable public externalFenceFeatures : VkExternalFenceFeatureFlagsKHR
+
+        new(sType : VkStructureType, pNext : nativeint, exportFromImportedHandleTypes : VkExternalFenceHandleTypeFlagsKHR, compatibleHandleTypes : VkExternalFenceHandleTypeFlagsKHR, externalFenceFeatures : VkExternalFenceFeatureFlagsKHR) = { sType = sType; pNext = pNext; exportFromImportedHandleTypes = exportFromImportedHandleTypes; compatibleHandleTypes = compatibleHandleTypes; externalFenceFeatures = externalFenceFeatures }
+        override x.ToString() =
+            sprintf "VkExternalFencePropertiesKHR { sType = %A; pNext = %A; exportFromImportedHandleTypes = %A; compatibleHandleTypes = %A; externalFenceFeatures = %A }" x.sType x.pNext x.exportFromImportedHandleTypes x.compatibleHandleTypes x.externalFenceFeatures
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkExternalImageFormatPropertiesKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public externalMemoryProperties : VkExternalMemoryPropertiesKHR
+
+        new(sType : VkStructureType, pNext : nativeint, externalMemoryProperties : VkExternalMemoryPropertiesKHR) = { sType = sType; pNext = pNext; externalMemoryProperties = externalMemoryProperties }
+        override x.ToString() =
+            sprintf "VkExternalImageFormatPropertiesKHR { sType = %A; pNext = %A; externalMemoryProperties = %A }" x.sType x.pNext x.externalMemoryProperties
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -2369,6 +3159,30 @@ type VkExternalImageFormatPropertiesNV =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkExternalMemoryBufferCreateInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public handleTypes : VkExternalMemoryHandleTypeFlagsKHR
+
+        new(sType : VkStructureType, pNext : nativeint, handleTypes : VkExternalMemoryHandleTypeFlagsKHR) = { sType = sType; pNext = pNext; handleTypes = handleTypes }
+        override x.ToString() =
+            sprintf "VkExternalMemoryBufferCreateInfoKHR { sType = %A; pNext = %A; handleTypes = %A }" x.sType x.pNext x.handleTypes
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkExternalMemoryImageCreateInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public handleTypes : VkExternalMemoryHandleTypeFlagsKHR
+
+        new(sType : VkStructureType, pNext : nativeint, handleTypes : VkExternalMemoryHandleTypeFlagsKHR) = { sType = sType; pNext = pNext; handleTypes = handleTypes }
+        override x.ToString() =
+            sprintf "VkExternalMemoryImageCreateInfoKHR { sType = %A; pNext = %A; handleTypes = %A }" x.sType x.pNext x.handleTypes
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkExternalMemoryImageCreateInfoNV = 
     struct
         val mutable public sType : VkStructureType
@@ -2378,6 +3192,20 @@ type VkExternalMemoryImageCreateInfoNV =
         new(sType : VkStructureType, pNext : nativeint, handleTypes : VkExternalMemoryHandleTypeFlagsNV) = { sType = sType; pNext = pNext; handleTypes = handleTypes }
         override x.ToString() =
             sprintf "VkExternalMemoryImageCreateInfoNV { sType = %A; pNext = %A; handleTypes = %A }" x.sType x.pNext x.handleTypes
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkExternalSemaphorePropertiesKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public exportFromImportedHandleTypes : VkExternalSemaphoreHandleTypeFlagsKHR
+        val mutable public compatibleHandleTypes : VkExternalSemaphoreHandleTypeFlagsKHR
+        val mutable public externalSemaphoreFeatures : VkExternalSemaphoreFeatureFlagsKHR
+
+        new(sType : VkStructureType, pNext : nativeint, exportFromImportedHandleTypes : VkExternalSemaphoreHandleTypeFlagsKHR, compatibleHandleTypes : VkExternalSemaphoreHandleTypeFlagsKHR, externalSemaphoreFeatures : VkExternalSemaphoreFeatureFlagsKHR) = { sType = sType; pNext = pNext; exportFromImportedHandleTypes = exportFromImportedHandleTypes; compatibleHandleTypes = compatibleHandleTypes; externalSemaphoreFeatures = externalSemaphoreFeatures }
+        override x.ToString() =
+            sprintf "VkExternalSemaphorePropertiesKHR { sType = %A; pNext = %A; exportFromImportedHandleTypes = %A; compatibleHandleTypes = %A; externalSemaphoreFeatures = %A }" x.sType x.pNext x.exportFromImportedHandleTypes x.compatibleHandleTypes x.externalSemaphoreFeatures
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -2393,6 +3221,32 @@ type VkFenceCreateInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkFenceGetFdInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public fence : VkFence
+        val mutable public handleType : VkExternalFenceHandleTypeFlagBitsKHR
+
+        new(sType : VkStructureType, pNext : nativeint, fence : VkFence, handleType : VkExternalFenceHandleTypeFlagBitsKHR) = { sType = sType; pNext = pNext; fence = fence; handleType = handleType }
+        override x.ToString() =
+            sprintf "VkFenceGetFdInfoKHR { sType = %A; pNext = %A; fence = %A; handleType = %A }" x.sType x.pNext x.fence x.handleType
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkFenceGetWin32HandleInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public fence : VkFence
+        val mutable public handleType : VkExternalFenceHandleTypeFlagBitsKHR
+
+        new(sType : VkStructureType, pNext : nativeint, fence : VkFence, handleType : VkExternalFenceHandleTypeFlagBitsKHR) = { sType = sType; pNext = pNext; fence = fence; handleType = handleType }
+        override x.ToString() =
+            sprintf "VkFenceGetWin32HandleInfoKHR { sType = %A; pNext = %A; fence = %A; handleType = %A }" x.sType x.pNext x.fence x.handleType
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkFormatProperties = 
     struct
         val mutable public linearTilingFeatures : VkFormatFeatureFlags
@@ -2402,6 +3256,18 @@ type VkFormatProperties =
         new(linearTilingFeatures : VkFormatFeatureFlags, optimalTilingFeatures : VkFormatFeatureFlags, bufferFeatures : VkFormatFeatureFlags) = { linearTilingFeatures = linearTilingFeatures; optimalTilingFeatures = optimalTilingFeatures; bufferFeatures = bufferFeatures }
         override x.ToString() =
             sprintf "VkFormatProperties { linearTilingFeatures = %A; optimalTilingFeatures = %A; bufferFeatures = %A }" x.linearTilingFeatures x.optimalTilingFeatures x.bufferFeatures
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkFormatProperties2KHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public formatProperties : VkFormatProperties
+
+        new(sType : VkStructureType, pNext : nativeint, formatProperties : VkFormatProperties) = { sType = sType; pNext = pNext; formatProperties = formatProperties }
+        override x.ToString() =
+            sprintf "VkFormatProperties2KHR { sType = %A; pNext = %A; formatProperties = %A }" x.sType x.pNext x.formatProperties
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -2675,6 +3541,49 @@ type VkGraphicsPipelineCreateInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkXYColorEXT = 
+    struct
+        val mutable public x : float32
+        val mutable public y : float32
+
+        new(x : float32, y : float32) = { x = x; y = y }
+        override x.ToString() =
+            sprintf "VkXYColorEXT { x = %A; y = %A }" x.x x.y
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkHdrMetadataEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public displayPrimaryRed : VkXYColorEXT
+        val mutable public displayPrimaryGreen : VkXYColorEXT
+        val mutable public displayPrimaryBlue : VkXYColorEXT
+        val mutable public whitePoint : VkXYColorEXT
+        val mutable public maxLuminance : float32
+        val mutable public minLuminance : float32
+        val mutable public maxContentLightLevel : float32
+        val mutable public maxFrameAverageLightLevel : float32
+
+        new(sType : VkStructureType, pNext : nativeint, displayPrimaryRed : VkXYColorEXT, displayPrimaryGreen : VkXYColorEXT, displayPrimaryBlue : VkXYColorEXT, whitePoint : VkXYColorEXT, maxLuminance : float32, minLuminance : float32, maxContentLightLevel : float32, maxFrameAverageLightLevel : float32) = { sType = sType; pNext = pNext; displayPrimaryRed = displayPrimaryRed; displayPrimaryGreen = displayPrimaryGreen; displayPrimaryBlue = displayPrimaryBlue; whitePoint = whitePoint; maxLuminance = maxLuminance; minLuminance = minLuminance; maxContentLightLevel = maxContentLightLevel; maxFrameAverageLightLevel = maxFrameAverageLightLevel }
+        override x.ToString() =
+            sprintf "VkHdrMetadataEXT { sType = %A; pNext = %A; displayPrimaryRed = %A; displayPrimaryGreen = %A; displayPrimaryBlue = %A; whitePoint = %A; maxLuminance = %A; minLuminance = %A; maxContentLightLevel = %A; maxFrameAverageLightLevel = %A }" x.sType x.pNext x.displayPrimaryRed x.displayPrimaryGreen x.displayPrimaryBlue x.whitePoint x.maxLuminance x.minLuminance x.maxContentLightLevel x.maxFrameAverageLightLevel
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkIOSSurfaceCreateInfoMVK = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public flags : VkIOSSurfaceCreateFlagsMVK
+        val mutable public pView : nativeint
+
+        new(sType : VkStructureType, pNext : nativeint, flags : VkIOSSurfaceCreateFlagsMVK, pView : nativeint) = { sType = sType; pNext = pNext; flags = flags; pView = pView }
+        override x.ToString() =
+            sprintf "VkIOSSurfaceCreateInfoMVK { sType = %A; pNext = %A; flags = %A; pView = %A }" x.sType x.pNext x.flags x.pView
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkImageBlit = 
     struct
         val mutable public srcSubresource : VkImageSubresourceLayers
@@ -2726,6 +3635,31 @@ type VkImageCreateInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkImageFormatListCreateInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public viewFormatCount : uint32
+        val mutable public pViewFormats : nativeptr<VkFormat>
+
+        new(sType : VkStructureType, pNext : nativeint, viewFormatCount : uint32, pViewFormats : nativeptr<VkFormat>) = { sType = sType; pNext = pNext; viewFormatCount = viewFormatCount; pViewFormats = pViewFormats }
+        override x.ToString() =
+            sprintf "VkImageFormatListCreateInfoKHR { sType = %A; pNext = %A; viewFormatCount = %A; pViewFormats = %A }" x.sType x.pNext x.viewFormatCount x.pViewFormats
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkImageFormatProperties2KHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public imageFormatProperties : VkImageFormatProperties
+
+        new(sType : VkStructureType, pNext : nativeint, imageFormatProperties : VkImageFormatProperties) = { sType = sType; pNext = pNext; imageFormatProperties = imageFormatProperties }
+        override x.ToString() =
+            sprintf "VkImageFormatProperties2KHR { sType = %A; pNext = %A; imageFormatProperties = %A }" x.sType x.pNext x.imageFormatProperties
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkImageSubresourceRange = 
     struct
         val mutable public aspectMask : VkImageAspectFlags
@@ -2759,6 +3693,30 @@ type VkImageMemoryBarrier =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkImageMemoryRequirementsInfo2KHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public image : VkImage
+
+        new(sType : VkStructureType, pNext : nativeint, image : VkImage) = { sType = sType; pNext = pNext; image = image }
+        override x.ToString() =
+            sprintf "VkImageMemoryRequirementsInfo2KHR { sType = %A; pNext = %A; image = %A }" x.sType x.pNext x.image
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkImagePlaneMemoryRequirementsInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public planeAspect : VkImageAspectFlags
+
+        new(sType : VkStructureType, pNext : nativeint, planeAspect : VkImageAspectFlags) = { sType = sType; pNext = pNext; planeAspect = planeAspect }
+        override x.ToString() =
+            sprintf "VkImagePlaneMemoryRequirementsInfoKHR { sType = %A; pNext = %A; planeAspect = %A }" x.sType x.pNext x.planeAspect
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkImageResolve = 
     struct
         val mutable public srcSubresource : VkImageSubresourceLayers
@@ -2770,6 +3728,30 @@ type VkImageResolve =
         new(srcSubresource : VkImageSubresourceLayers, srcOffset : VkOffset3D, dstSubresource : VkImageSubresourceLayers, dstOffset : VkOffset3D, extent : VkExtent3D) = { srcSubresource = srcSubresource; srcOffset = srcOffset; dstSubresource = dstSubresource; dstOffset = dstOffset; extent = extent }
         override x.ToString() =
             sprintf "VkImageResolve { srcSubresource = %A; srcOffset = %A; dstSubresource = %A; dstOffset = %A; extent = %A }" x.srcSubresource x.srcOffset x.dstSubresource x.dstOffset x.extent
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkImageSparseMemoryRequirementsInfo2KHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public image : VkImage
+
+        new(sType : VkStructureType, pNext : nativeint, image : VkImage) = { sType = sType; pNext = pNext; image = image }
+        override x.ToString() =
+            sprintf "VkImageSparseMemoryRequirementsInfo2KHR { sType = %A; pNext = %A; image = %A }" x.sType x.pNext x.image
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkImageSwapchainCreateInfoKHX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public swapchain : VkSwapchainKHR
+
+        new(sType : VkStructureType, pNext : nativeint, swapchain : VkSwapchainKHR) = { sType = sType; pNext = pNext; swapchain = swapchain }
+        override x.ToString() =
+            sprintf "VkImageSwapchainCreateInfoKHX { sType = %A; pNext = %A; swapchain = %A }" x.sType x.pNext x.swapchain
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -2790,6 +3772,89 @@ type VkImageViewCreateInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkImageViewUsageCreateInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public usage : VkImageUsageFlags
+
+        new(sType : VkStructureType, pNext : nativeint, usage : VkImageUsageFlags) = { sType = sType; pNext = pNext; usage = usage }
+        override x.ToString() =
+            sprintf "VkImageViewUsageCreateInfoKHR { sType = %A; pNext = %A; usage = %A }" x.sType x.pNext x.usage
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkImportFenceFdInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public fence : VkFence
+        val mutable public flags : VkFenceImportFlagsKHR
+        val mutable public handleType : VkExternalFenceHandleTypeFlagBitsKHR
+        val mutable public fd : int
+
+        new(sType : VkStructureType, pNext : nativeint, fence : VkFence, flags : VkFenceImportFlagsKHR, handleType : VkExternalFenceHandleTypeFlagBitsKHR, fd : int) = { sType = sType; pNext = pNext; fence = fence; flags = flags; handleType = handleType; fd = fd }
+        override x.ToString() =
+            sprintf "VkImportFenceFdInfoKHR { sType = %A; pNext = %A; fence = %A; flags = %A; handleType = %A; fd = %A }" x.sType x.pNext x.fence x.flags x.handleType x.fd
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkImportFenceWin32HandleInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public fence : VkFence
+        val mutable public flags : VkFenceImportFlagsKHR
+        val mutable public handleType : VkExternalFenceHandleTypeFlagBitsKHR
+        val mutable public handle : nativeint
+        val mutable public name : cstr
+
+        new(sType : VkStructureType, pNext : nativeint, fence : VkFence, flags : VkFenceImportFlagsKHR, handleType : VkExternalFenceHandleTypeFlagBitsKHR, handle : nativeint, name : cstr) = { sType = sType; pNext = pNext; fence = fence; flags = flags; handleType = handleType; handle = handle; name = name }
+        override x.ToString() =
+            sprintf "VkImportFenceWin32HandleInfoKHR { sType = %A; pNext = %A; fence = %A; flags = %A; handleType = %A; handle = %A; name = %A }" x.sType x.pNext x.fence x.flags x.handleType x.handle x.name
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkImportMemoryFdInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public handleType : VkExternalMemoryHandleTypeFlagBitsKHR
+        val mutable public fd : int
+
+        new(sType : VkStructureType, pNext : nativeint, handleType : VkExternalMemoryHandleTypeFlagBitsKHR, fd : int) = { sType = sType; pNext = pNext; handleType = handleType; fd = fd }
+        override x.ToString() =
+            sprintf "VkImportMemoryFdInfoKHR { sType = %A; pNext = %A; handleType = %A; fd = %A }" x.sType x.pNext x.handleType x.fd
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkImportMemoryHostPointerInfoEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public handleType : VkExternalMemoryHandleTypeFlagBitsKHR
+        val mutable public pHostPointer : nativeint
+
+        new(sType : VkStructureType, pNext : nativeint, handleType : VkExternalMemoryHandleTypeFlagBitsKHR, pHostPointer : nativeint) = { sType = sType; pNext = pNext; handleType = handleType; pHostPointer = pHostPointer }
+        override x.ToString() =
+            sprintf "VkImportMemoryHostPointerInfoEXT { sType = %A; pNext = %A; handleType = %A; pHostPointer = %A }" x.sType x.pNext x.handleType x.pHostPointer
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkImportMemoryWin32HandleInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public handleType : VkExternalMemoryHandleTypeFlagBitsKHR
+        val mutable public handle : nativeint
+        val mutable public name : cstr
+
+        new(sType : VkStructureType, pNext : nativeint, handleType : VkExternalMemoryHandleTypeFlagBitsKHR, handle : nativeint, name : cstr) = { sType = sType; pNext = pNext; handleType = handleType; handle = handle; name = name }
+        override x.ToString() =
+            sprintf "VkImportMemoryWin32HandleInfoKHR { sType = %A; pNext = %A; handleType = %A; handle = %A; name = %A }" x.sType x.pNext x.handleType x.handle x.name
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkImportMemoryWin32HandleInfoNV = 
     struct
         val mutable public sType : VkStructureType
@@ -2800,6 +3865,37 @@ type VkImportMemoryWin32HandleInfoNV =
         new(sType : VkStructureType, pNext : nativeint, handleType : VkExternalMemoryHandleTypeFlagsNV, handle : nativeint) = { sType = sType; pNext = pNext; handleType = handleType; handle = handle }
         override x.ToString() =
             sprintf "VkImportMemoryWin32HandleInfoNV { sType = %A; pNext = %A; handleType = %A; handle = %A }" x.sType x.pNext x.handleType x.handle
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkImportSemaphoreFdInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public semaphore : VkSemaphore
+        val mutable public flags : VkSemaphoreImportFlagsKHR
+        val mutable public handleType : VkExternalSemaphoreHandleTypeFlagBitsKHR
+        val mutable public fd : int
+
+        new(sType : VkStructureType, pNext : nativeint, semaphore : VkSemaphore, flags : VkSemaphoreImportFlagsKHR, handleType : VkExternalSemaphoreHandleTypeFlagBitsKHR, fd : int) = { sType = sType; pNext = pNext; semaphore = semaphore; flags = flags; handleType = handleType; fd = fd }
+        override x.ToString() =
+            sprintf "VkImportSemaphoreFdInfoKHR { sType = %A; pNext = %A; semaphore = %A; flags = %A; handleType = %A; fd = %A }" x.sType x.pNext x.semaphore x.flags x.handleType x.fd
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkImportSemaphoreWin32HandleInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public semaphore : VkSemaphore
+        val mutable public flags : VkSemaphoreImportFlagsKHR
+        val mutable public handleType : VkExternalSemaphoreHandleTypeFlagBitsKHR
+        val mutable public handle : nativeint
+        val mutable public name : cstr
+
+        new(sType : VkStructureType, pNext : nativeint, semaphore : VkSemaphore, flags : VkSemaphoreImportFlagsKHR, handleType : VkExternalSemaphoreHandleTypeFlagBitsKHR, handle : nativeint, name : cstr) = { sType = sType; pNext = pNext; semaphore = semaphore; flags = flags; handleType = handleType; handle = handle; name = name }
+        override x.ToString() =
+            sprintf "VkImportSemaphoreWin32HandleInfoKHR { sType = %A; pNext = %A; semaphore = %A; flags = %A; handleType = %A; handle = %A; name = %A }" x.sType x.pNext x.semaphore x.flags x.handleType x.handle x.name
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -2828,6 +3924,18 @@ type VkIndirectCommandsLayoutCreateInfoNVX =
         new(sType : VkStructureType, pNext : nativeint, pipelineBindPoint : VkPipelineBindPoint, flags : VkIndirectCommandsLayoutUsageFlagsNVX, tokenCount : uint32, pTokens : nativeptr<VkIndirectCommandsLayoutTokenNVX>) = { sType = sType; pNext = pNext; pipelineBindPoint = pipelineBindPoint; flags = flags; tokenCount = tokenCount; pTokens = pTokens }
         override x.ToString() =
             sprintf "VkIndirectCommandsLayoutCreateInfoNVX { sType = %A; pNext = %A; pipelineBindPoint = %A; flags = %A; tokenCount = %A; pTokens = %A }" x.sType x.pNext x.pipelineBindPoint x.flags x.tokenCount x.pTokens
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkInputAttachmentAspectReferenceKHR = 
+    struct
+        val mutable public subpass : uint32
+        val mutable public inputAttachmentIndex : uint32
+        val mutable public aspectMask : VkImageAspectFlags
+
+        new(subpass : uint32, inputAttachmentIndex : uint32, aspectMask : VkImageAspectFlags) = { subpass = subpass; inputAttachmentIndex = inputAttachmentIndex; aspectMask = aspectMask }
+        override x.ToString() =
+            sprintf "VkInputAttachmentAspectReferenceKHR { subpass = %A; inputAttachmentIndex = %A; aspectMask = %A }" x.subpass x.inputAttachmentIndex x.aspectMask
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -2861,6 +3969,19 @@ type VkLayerProperties =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkMacOSSurfaceCreateInfoMVK = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public flags : VkMacOSSurfaceCreateFlagsMVK
+        val mutable public pView : nativeint
+
+        new(sType : VkStructureType, pNext : nativeint, flags : VkMacOSSurfaceCreateFlagsMVK, pView : nativeint) = { sType = sType; pNext = pNext; flags = flags; pView = pView }
+        override x.ToString() =
+            sprintf "VkMacOSSurfaceCreateInfoMVK { sType = %A; pNext = %A; flags = %A; pView = %A }" x.sType x.pNext x.flags x.pView
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkMappedMemoryRange = 
     struct
         val mutable public sType : VkStructureType
@@ -2872,6 +3993,19 @@ type VkMappedMemoryRange =
         new(sType : VkStructureType, pNext : nativeint, memory : VkDeviceMemory, offset : VkDeviceSize, size : VkDeviceSize) = { sType = sType; pNext = pNext; memory = memory; offset = offset; size = size }
         override x.ToString() =
             sprintf "VkMappedMemoryRange { sType = %A; pNext = %A; memory = %A; offset = %A; size = %A }" x.sType x.pNext x.memory x.offset x.size
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkMemoryAllocateFlagsInfoKHX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public flags : VkMemoryAllocateFlagsKHX
+        val mutable public deviceMask : uint32
+
+        new(sType : VkStructureType, pNext : nativeint, flags : VkMemoryAllocateFlagsKHX, deviceMask : uint32) = { sType = sType; pNext = pNext; flags = flags; deviceMask = deviceMask }
+        override x.ToString() =
+            sprintf "VkMemoryAllocateFlagsInfoKHX { sType = %A; pNext = %A; flags = %A; deviceMask = %A }" x.sType x.pNext x.flags x.deviceMask
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -2898,6 +4032,70 @@ type VkMemoryBarrier =
         new(sType : VkStructureType, pNext : nativeint, srcAccessMask : VkAccessFlags, dstAccessMask : VkAccessFlags) = { sType = sType; pNext = pNext; srcAccessMask = srcAccessMask; dstAccessMask = dstAccessMask }
         override x.ToString() =
             sprintf "VkMemoryBarrier { sType = %A; pNext = %A; srcAccessMask = %A; dstAccessMask = %A }" x.sType x.pNext x.srcAccessMask x.dstAccessMask
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkMemoryDedicatedAllocateInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public image : VkImage
+        val mutable public buffer : VkBuffer
+
+        new(sType : VkStructureType, pNext : nativeint, image : VkImage, buffer : VkBuffer) = { sType = sType; pNext = pNext; image = image; buffer = buffer }
+        override x.ToString() =
+            sprintf "VkMemoryDedicatedAllocateInfoKHR { sType = %A; pNext = %A; image = %A; buffer = %A }" x.sType x.pNext x.image x.buffer
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkMemoryDedicatedRequirementsKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public prefersDedicatedAllocation : VkBool32
+        val mutable public requiresDedicatedAllocation : VkBool32
+
+        new(sType : VkStructureType, pNext : nativeint, prefersDedicatedAllocation : VkBool32, requiresDedicatedAllocation : VkBool32) = { sType = sType; pNext = pNext; prefersDedicatedAllocation = prefersDedicatedAllocation; requiresDedicatedAllocation = requiresDedicatedAllocation }
+        override x.ToString() =
+            sprintf "VkMemoryDedicatedRequirementsKHR { sType = %A; pNext = %A; prefersDedicatedAllocation = %A; requiresDedicatedAllocation = %A }" x.sType x.pNext x.prefersDedicatedAllocation x.requiresDedicatedAllocation
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkMemoryFdPropertiesKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public memoryTypeBits : uint32
+
+        new(sType : VkStructureType, pNext : nativeint, memoryTypeBits : uint32) = { sType = sType; pNext = pNext; memoryTypeBits = memoryTypeBits }
+        override x.ToString() =
+            sprintf "VkMemoryFdPropertiesKHR { sType = %A; pNext = %A; memoryTypeBits = %A }" x.sType x.pNext x.memoryTypeBits
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkMemoryGetFdInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public memory : VkDeviceMemory
+        val mutable public handleType : VkExternalMemoryHandleTypeFlagBitsKHR
+
+        new(sType : VkStructureType, pNext : nativeint, memory : VkDeviceMemory, handleType : VkExternalMemoryHandleTypeFlagBitsKHR) = { sType = sType; pNext = pNext; memory = memory; handleType = handleType }
+        override x.ToString() =
+            sprintf "VkMemoryGetFdInfoKHR { sType = %A; pNext = %A; memory = %A; handleType = %A }" x.sType x.pNext x.memory x.handleType
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkMemoryGetWin32HandleInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public memory : VkDeviceMemory
+        val mutable public handleType : VkExternalMemoryHandleTypeFlagBitsKHR
+
+        new(sType : VkStructureType, pNext : nativeint, memory : VkDeviceMemory, handleType : VkExternalMemoryHandleTypeFlagBitsKHR) = { sType = sType; pNext = pNext; memory = memory; handleType = handleType }
+        override x.ToString() =
+            sprintf "VkMemoryGetWin32HandleInfoKHR { sType = %A; pNext = %A; memory = %A; handleType = %A }" x.sType x.pNext x.memory x.handleType
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -2933,6 +4131,18 @@ type VkMemoryHeap_16 =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkMemoryHostPointerPropertiesEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public memoryTypeBits : uint32
+
+        new(sType : VkStructureType, pNext : nativeint, memoryTypeBits : uint32) = { sType = sType; pNext = pNext; memoryTypeBits = memoryTypeBits }
+        override x.ToString() =
+            sprintf "VkMemoryHostPointerPropertiesEXT { sType = %A; pNext = %A; memoryTypeBits = %A }" x.sType x.pNext x.memoryTypeBits
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkMemoryRequirements = 
     struct
         val mutable public size : VkDeviceSize
@@ -2942,6 +4152,18 @@ type VkMemoryRequirements =
         new(size : VkDeviceSize, alignment : VkDeviceSize, memoryTypeBits : uint32) = { size = size; alignment = alignment; memoryTypeBits = memoryTypeBits }
         override x.ToString() =
             sprintf "VkMemoryRequirements { size = %A; alignment = %A; memoryTypeBits = %A }" x.size x.alignment x.memoryTypeBits
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkMemoryRequirements2KHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public memoryRequirements : VkMemoryRequirements
+
+        new(sType : VkStructureType, pNext : nativeint, memoryRequirements : VkMemoryRequirements) = { sType = sType; pNext = pNext; memoryRequirements = memoryRequirements }
+        override x.ToString() =
+            sprintf "VkMemoryRequirements2KHR { sType = %A; pNext = %A; memoryRequirements = %A }" x.sType x.pNext x.memoryRequirements
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -2977,6 +4199,18 @@ type VkMemoryType_32 =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkMemoryWin32HandlePropertiesKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public memoryTypeBits : uint32
+
+        new(sType : VkStructureType, pNext : nativeint, memoryTypeBits : uint32) = { sType = sType; pNext = pNext; memoryTypeBits = memoryTypeBits }
+        override x.ToString() =
+            sprintf "VkMemoryWin32HandlePropertiesKHR { sType = %A; pNext = %A; memoryTypeBits = %A }" x.sType x.pNext x.memoryTypeBits
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkMirSurfaceCreateInfoKHR = 
     struct
         val mutable public sType : VkStructureType
@@ -2988,6 +4222,33 @@ type VkMirSurfaceCreateInfoKHR =
         new(sType : VkStructureType, pNext : nativeint, flags : VkMirSurfaceCreateFlagsKHR, connection : nativeptr<nativeint>, mirSurface : nativeptr<nativeint>) = { sType = sType; pNext = pNext; flags = flags; connection = connection; mirSurface = mirSurface }
         override x.ToString() =
             sprintf "VkMirSurfaceCreateInfoKHR { sType = %A; pNext = %A; flags = %A; connection = %A; mirSurface = %A }" x.sType x.pNext x.flags x.connection x.mirSurface
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkMultisamplePropertiesEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public maxSampleLocationGridSize : VkExtent2D
+
+        new(sType : VkStructureType, pNext : nativeint, maxSampleLocationGridSize : VkExtent2D) = { sType = sType; pNext = pNext; maxSampleLocationGridSize = maxSampleLocationGridSize }
+        override x.ToString() =
+            sprintf "VkMultisamplePropertiesEXT { sType = %A; pNext = %A; maxSampleLocationGridSize = %A }" x.sType x.pNext x.maxSampleLocationGridSize
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkNativeBufferANDROID = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public handle : nativeint
+        val mutable public stride : int
+        val mutable public format : int
+        val mutable public usage : int
+
+        new(sType : VkStructureType, pNext : nativeint, handle : nativeint, stride : int, format : int, usage : int) = { sType = sType; pNext = pNext; handle = handle; stride = stride; format = format; usage = usage }
+        override x.ToString() =
+            sprintf "VkNativeBufferANDROID { sType = %A; pNext = %A; handle = %A; stride = %A; format = %A; usage = %A }" x.sType x.pNext x.handle x.stride x.format x.usage
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -3040,10 +4301,11 @@ type VkObjectTableIndexBufferEntryNVX =
         val mutable public _type : VkObjectEntryTypeNVX
         val mutable public flags : VkObjectEntryUsageFlagsNVX
         val mutable public buffer : VkBuffer
+        val mutable public indexType : VkIndexType
 
-        new(_type : VkObjectEntryTypeNVX, flags : VkObjectEntryUsageFlagsNVX, buffer : VkBuffer) = { _type = _type; flags = flags; buffer = buffer }
+        new(_type : VkObjectEntryTypeNVX, flags : VkObjectEntryUsageFlagsNVX, buffer : VkBuffer, indexType : VkIndexType) = { _type = _type; flags = flags; buffer = buffer; indexType = indexType }
         override x.ToString() =
-            sprintf "VkObjectTableIndexBufferEntryNVX { _type = %A; flags = %A; buffer = %A }" x._type x.flags x.buffer
+            sprintf "VkObjectTableIndexBufferEntryNVX { _type = %A; flags = %A; buffer = %A; indexType = %A }" x._type x.flags x.buffer x.indexType
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -3081,6 +4343,196 @@ type VkObjectTableVertexBufferEntryNVX =
         new(_type : VkObjectEntryTypeNVX, flags : VkObjectEntryUsageFlagsNVX, buffer : VkBuffer) = { _type = _type; flags = flags; buffer = buffer }
         override x.ToString() =
             sprintf "VkObjectTableVertexBufferEntryNVX { _type = %A; flags = %A; buffer = %A }" x._type x.flags x.buffer
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPastPresentationTimingGOOGLE = 
+    struct
+        val mutable public presentID : uint32
+        val mutable public desiredPresentTime : uint64
+        val mutable public actualPresentTime : uint64
+        val mutable public earliestPresentTime : uint64
+        val mutable public presentMargin : uint64
+
+        new(presentID : uint32, desiredPresentTime : uint64, actualPresentTime : uint64, earliestPresentTime : uint64, presentMargin : uint64) = { presentID = presentID; desiredPresentTime = desiredPresentTime; actualPresentTime = actualPresentTime; earliestPresentTime = earliestPresentTime; presentMargin = presentMargin }
+        override x.ToString() =
+            sprintf "VkPastPresentationTimingGOOGLE { presentID = %A; desiredPresentTime = %A; actualPresentTime = %A; earliestPresentTime = %A; presentMargin = %A }" x.presentID x.desiredPresentTime x.actualPresentTime x.earliestPresentTime x.presentMargin
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDevice16BitStorageFeaturesKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public storageBuffer16BitAccess : VkBool32
+        val mutable public uniformAndStorageBuffer16BitAccess : VkBool32
+        val mutable public storagePushConstant16 : VkBool32
+        val mutable public storageInputOutput16 : VkBool32
+
+        new(sType : VkStructureType, pNext : nativeint, storageBuffer16BitAccess : VkBool32, uniformAndStorageBuffer16BitAccess : VkBool32, storagePushConstant16 : VkBool32, storageInputOutput16 : VkBool32) = { sType = sType; pNext = pNext; storageBuffer16BitAccess = storageBuffer16BitAccess; uniformAndStorageBuffer16BitAccess = uniformAndStorageBuffer16BitAccess; storagePushConstant16 = storagePushConstant16; storageInputOutput16 = storageInputOutput16 }
+        override x.ToString() =
+            sprintf "VkPhysicalDevice16BitStorageFeaturesKHR { sType = %A; pNext = %A; storageBuffer16BitAccess = %A; uniformAndStorageBuffer16BitAccess = %A; storagePushConstant16 = %A; storageInputOutput16 = %A }" x.sType x.pNext x.storageBuffer16BitAccess x.uniformAndStorageBuffer16BitAccess x.storagePushConstant16 x.storageInputOutput16
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public advancedBlendCoherentOperations : VkBool32
+
+        new(sType : VkStructureType, pNext : nativeint, advancedBlendCoherentOperations : VkBool32) = { sType = sType; pNext = pNext; advancedBlendCoherentOperations = advancedBlendCoherentOperations }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT { sType = %A; pNext = %A; advancedBlendCoherentOperations = %A }" x.sType x.pNext x.advancedBlendCoherentOperations
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public advancedBlendMaxColorAttachments : uint32
+        val mutable public advancedBlendIndependentBlend : VkBool32
+        val mutable public advancedBlendNonPremultipliedSrcColor : VkBool32
+        val mutable public advancedBlendNonPremultipliedDstColor : VkBool32
+        val mutable public advancedBlendCorrelatedOverlap : VkBool32
+        val mutable public advancedBlendAllOperations : VkBool32
+
+        new(sType : VkStructureType, pNext : nativeint, advancedBlendMaxColorAttachments : uint32, advancedBlendIndependentBlend : VkBool32, advancedBlendNonPremultipliedSrcColor : VkBool32, advancedBlendNonPremultipliedDstColor : VkBool32, advancedBlendCorrelatedOverlap : VkBool32, advancedBlendAllOperations : VkBool32) = { sType = sType; pNext = pNext; advancedBlendMaxColorAttachments = advancedBlendMaxColorAttachments; advancedBlendIndependentBlend = advancedBlendIndependentBlend; advancedBlendNonPremultipliedSrcColor = advancedBlendNonPremultipliedSrcColor; advancedBlendNonPremultipliedDstColor = advancedBlendNonPremultipliedDstColor; advancedBlendCorrelatedOverlap = advancedBlendCorrelatedOverlap; advancedBlendAllOperations = advancedBlendAllOperations }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT { sType = %A; pNext = %A; advancedBlendMaxColorAttachments = %A; advancedBlendIndependentBlend = %A; advancedBlendNonPremultipliedSrcColor = %A; advancedBlendNonPremultipliedDstColor = %A; advancedBlendCorrelatedOverlap = %A; advancedBlendAllOperations = %A }" x.sType x.pNext x.advancedBlendMaxColorAttachments x.advancedBlendIndependentBlend x.advancedBlendNonPremultipliedSrcColor x.advancedBlendNonPremultipliedDstColor x.advancedBlendCorrelatedOverlap x.advancedBlendAllOperations
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceDiscardRectanglePropertiesEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public maxDiscardRectangles : uint32
+
+        new(sType : VkStructureType, pNext : nativeint, maxDiscardRectangles : uint32) = { sType = sType; pNext = pNext; maxDiscardRectangles = maxDiscardRectangles }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceDiscardRectanglePropertiesEXT { sType = %A; pNext = %A; maxDiscardRectangles = %A }" x.sType x.pNext x.maxDiscardRectangles
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceExternalBufferInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public flags : VkBufferCreateFlags
+        val mutable public usage : VkBufferUsageFlags
+        val mutable public handleType : VkExternalMemoryHandleTypeFlagBitsKHR
+
+        new(sType : VkStructureType, pNext : nativeint, flags : VkBufferCreateFlags, usage : VkBufferUsageFlags, handleType : VkExternalMemoryHandleTypeFlagBitsKHR) = { sType = sType; pNext = pNext; flags = flags; usage = usage; handleType = handleType }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceExternalBufferInfoKHR { sType = %A; pNext = %A; flags = %A; usage = %A; handleType = %A }" x.sType x.pNext x.flags x.usage x.handleType
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceExternalFenceInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public handleType : VkExternalFenceHandleTypeFlagBitsKHR
+
+        new(sType : VkStructureType, pNext : nativeint, handleType : VkExternalFenceHandleTypeFlagBitsKHR) = { sType = sType; pNext = pNext; handleType = handleType }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceExternalFenceInfoKHR { sType = %A; pNext = %A; handleType = %A }" x.sType x.pNext x.handleType
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceExternalImageFormatInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public handleType : VkExternalMemoryHandleTypeFlagBitsKHR
+
+        new(sType : VkStructureType, pNext : nativeint, handleType : VkExternalMemoryHandleTypeFlagBitsKHR) = { sType = sType; pNext = pNext; handleType = handleType }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceExternalImageFormatInfoKHR { sType = %A; pNext = %A; handleType = %A }" x.sType x.pNext x.handleType
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceExternalMemoryHostPropertiesEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public minImportedHostPointerAlignment : VkDeviceSize
+
+        new(sType : VkStructureType, pNext : nativeint, minImportedHostPointerAlignment : VkDeviceSize) = { sType = sType; pNext = pNext; minImportedHostPointerAlignment = minImportedHostPointerAlignment }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceExternalMemoryHostPropertiesEXT { sType = %A; pNext = %A; minImportedHostPointerAlignment = %A }" x.sType x.pNext x.minImportedHostPointerAlignment
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceExternalSemaphoreInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public handleType : VkExternalSemaphoreHandleTypeFlagBitsKHR
+
+        new(sType : VkStructureType, pNext : nativeint, handleType : VkExternalSemaphoreHandleTypeFlagBitsKHR) = { sType = sType; pNext = pNext; handleType = handleType }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceExternalSemaphoreInfoKHR { sType = %A; pNext = %A; handleType = %A }" x.sType x.pNext x.handleType
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceFeatures2KHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public features : VkPhysicalDeviceFeatures
+
+        new(sType : VkStructureType, pNext : nativeint, features : VkPhysicalDeviceFeatures) = { sType = sType; pNext = pNext; features = features }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceFeatures2KHR { sType = %A; pNext = %A; features = %A }" x.sType x.pNext x.features
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceGroupPropertiesKHX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public physicalDeviceCount : uint32
+        val mutable public physicalDevices : VkPhysicalDevice_32
+        val mutable public subsetAllocation : VkBool32
+
+        new(sType : VkStructureType, pNext : nativeint, physicalDeviceCount : uint32, physicalDevices : VkPhysicalDevice_32, subsetAllocation : VkBool32) = { sType = sType; pNext = pNext; physicalDeviceCount = physicalDeviceCount; physicalDevices = physicalDevices; subsetAllocation = subsetAllocation }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceGroupPropertiesKHX { sType = %A; pNext = %A; physicalDeviceCount = %A; physicalDevices = %A; subsetAllocation = %A }" x.sType x.pNext x.physicalDeviceCount x.physicalDevices x.subsetAllocation
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceIDPropertiesKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public deviceUUID : Guid
+        val mutable public driverUUID : Guid
+        val mutable public deviceLUID : byte_8
+        val mutable public deviceNodeMask : uint32
+        val mutable public deviceLUIDValid : VkBool32
+
+        new(sType : VkStructureType, pNext : nativeint, deviceUUID : Guid, driverUUID : Guid, deviceLUID : byte_8, deviceNodeMask : uint32, deviceLUIDValid : VkBool32) = { sType = sType; pNext = pNext; deviceUUID = deviceUUID; driverUUID = driverUUID; deviceLUID = deviceLUID; deviceNodeMask = deviceNodeMask; deviceLUIDValid = deviceLUIDValid }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceIDPropertiesKHR { sType = %A; pNext = %A; deviceUUID = %A; driverUUID = %A; deviceLUID = %A; deviceNodeMask = %A; deviceLUIDValid = %A }" x.sType x.pNext x.deviceUUID x.driverUUID x.deviceLUID x.deviceNodeMask x.deviceLUIDValid
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceImageFormatInfo2KHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public format : VkFormat
+        val mutable public _type : VkImageType
+        val mutable public tiling : VkImageTiling
+        val mutable public usage : VkImageUsageFlags
+        val mutable public flags : VkImageCreateFlags
+
+        new(sType : VkStructureType, pNext : nativeint, format : VkFormat, _type : VkImageType, tiling : VkImageTiling, usage : VkImageUsageFlags, flags : VkImageCreateFlags) = { sType = sType; pNext = pNext; format = format; _type = _type; tiling = tiling; usage = usage; flags = flags }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceImageFormatInfo2KHR { sType = %A; pNext = %A; format = %A; _type = %A; tiling = %A; usage = %A; flags = %A }" x.sType x.pNext x.format x._type x.tiling x.usage x.flags
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -3212,6 +4664,69 @@ type VkPhysicalDeviceMemoryProperties =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceMemoryProperties2KHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public memoryProperties : VkPhysicalDeviceMemoryProperties
+
+        new(sType : VkStructureType, pNext : nativeint, memoryProperties : VkPhysicalDeviceMemoryProperties) = { sType = sType; pNext = pNext; memoryProperties = memoryProperties }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceMemoryProperties2KHR { sType = %A; pNext = %A; memoryProperties = %A }" x.sType x.pNext x.memoryProperties
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceMultiviewFeaturesKHX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public multiview : VkBool32
+        val mutable public multiviewGeometryShader : VkBool32
+        val mutable public multiviewTessellationShader : VkBool32
+
+        new(sType : VkStructureType, pNext : nativeint, multiview : VkBool32, multiviewGeometryShader : VkBool32, multiviewTessellationShader : VkBool32) = { sType = sType; pNext = pNext; multiview = multiview; multiviewGeometryShader = multiviewGeometryShader; multiviewTessellationShader = multiviewTessellationShader }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceMultiviewFeaturesKHX { sType = %A; pNext = %A; multiview = %A; multiviewGeometryShader = %A; multiviewTessellationShader = %A }" x.sType x.pNext x.multiview x.multiviewGeometryShader x.multiviewTessellationShader
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceMultiviewPerViewAttributesPropertiesNVX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public perViewPositionAllComponents : VkBool32
+
+        new(sType : VkStructureType, pNext : nativeint, perViewPositionAllComponents : VkBool32) = { sType = sType; pNext = pNext; perViewPositionAllComponents = perViewPositionAllComponents }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceMultiviewPerViewAttributesPropertiesNVX { sType = %A; pNext = %A; perViewPositionAllComponents = %A }" x.sType x.pNext x.perViewPositionAllComponents
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceMultiviewPropertiesKHX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public maxMultiviewViewCount : uint32
+        val mutable public maxMultiviewInstanceIndex : uint32
+
+        new(sType : VkStructureType, pNext : nativeint, maxMultiviewViewCount : uint32, maxMultiviewInstanceIndex : uint32) = { sType = sType; pNext = pNext; maxMultiviewViewCount = maxMultiviewViewCount; maxMultiviewInstanceIndex = maxMultiviewInstanceIndex }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceMultiviewPropertiesKHX { sType = %A; pNext = %A; maxMultiviewViewCount = %A; maxMultiviewInstanceIndex = %A }" x.sType x.pNext x.maxMultiviewViewCount x.maxMultiviewInstanceIndex
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDevicePointClippingPropertiesKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public pointClippingBehavior : VkPointClippingBehaviorKHR
+
+        new(sType : VkStructureType, pNext : nativeint, pointClippingBehavior : VkPointClippingBehaviorKHR) = { sType = sType; pNext = pNext; pointClippingBehavior = pointClippingBehavior }
+        override x.ToString() =
+            sprintf "VkPhysicalDevicePointClippingPropertiesKHR { sType = %A; pNext = %A; pointClippingBehavior = %A }" x.sType x.pNext x.pointClippingBehavior
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkPhysicalDeviceSparseProperties = 
     struct
         val mutable public residencyStandard2DBlockShape : VkBool32
@@ -3244,6 +4759,112 @@ type VkPhysicalDeviceProperties =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceProperties2KHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public properties : VkPhysicalDeviceProperties
+
+        new(sType : VkStructureType, pNext : nativeint, properties : VkPhysicalDeviceProperties) = { sType = sType; pNext = pNext; properties = properties }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceProperties2KHR { sType = %A; pNext = %A; properties = %A }" x.sType x.pNext x.properties
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDevicePushDescriptorPropertiesKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public maxPushDescriptors : uint32
+
+        new(sType : VkStructureType, pNext : nativeint, maxPushDescriptors : uint32) = { sType = sType; pNext = pNext; maxPushDescriptors = maxPushDescriptors }
+        override x.ToString() =
+            sprintf "VkPhysicalDevicePushDescriptorPropertiesKHR { sType = %A; pNext = %A; maxPushDescriptors = %A }" x.sType x.pNext x.maxPushDescriptors
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceSampleLocationsPropertiesEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public sampleLocationSampleCounts : VkSampleCountFlags
+        val mutable public maxSampleLocationGridSize : VkExtent2D
+        val mutable public sampleLocationCoordinateRange : V2f
+        val mutable public sampleLocationSubPixelBits : uint32
+        val mutable public variableSampleLocations : VkBool32
+
+        new(sType : VkStructureType, pNext : nativeint, sampleLocationSampleCounts : VkSampleCountFlags, maxSampleLocationGridSize : VkExtent2D, sampleLocationCoordinateRange : V2f, sampleLocationSubPixelBits : uint32, variableSampleLocations : VkBool32) = { sType = sType; pNext = pNext; sampleLocationSampleCounts = sampleLocationSampleCounts; maxSampleLocationGridSize = maxSampleLocationGridSize; sampleLocationCoordinateRange = sampleLocationCoordinateRange; sampleLocationSubPixelBits = sampleLocationSubPixelBits; variableSampleLocations = variableSampleLocations }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceSampleLocationsPropertiesEXT { sType = %A; pNext = %A; sampleLocationSampleCounts = %A; maxSampleLocationGridSize = %A; sampleLocationCoordinateRange = %A; sampleLocationSubPixelBits = %A; variableSampleLocations = %A }" x.sType x.pNext x.sampleLocationSampleCounts x.maxSampleLocationGridSize x.sampleLocationCoordinateRange x.sampleLocationSubPixelBits x.variableSampleLocations
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public filterMinmaxSingleComponentFormats : VkBool32
+        val mutable public filterMinmaxImageComponentMapping : VkBool32
+
+        new(sType : VkStructureType, pNext : nativeint, filterMinmaxSingleComponentFormats : VkBool32, filterMinmaxImageComponentMapping : VkBool32) = { sType = sType; pNext = pNext; filterMinmaxSingleComponentFormats = filterMinmaxSingleComponentFormats; filterMinmaxImageComponentMapping = filterMinmaxImageComponentMapping }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT { sType = %A; pNext = %A; filterMinmaxSingleComponentFormats = %A; filterMinmaxImageComponentMapping = %A }" x.sType x.pNext x.filterMinmaxSingleComponentFormats x.filterMinmaxImageComponentMapping
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceSamplerYcbcrConversionFeaturesKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public samplerYcbcrConversion : VkBool32
+
+        new(sType : VkStructureType, pNext : nativeint, samplerYcbcrConversion : VkBool32) = { sType = sType; pNext = pNext; samplerYcbcrConversion = samplerYcbcrConversion }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceSamplerYcbcrConversionFeaturesKHR { sType = %A; pNext = %A; samplerYcbcrConversion = %A }" x.sType x.pNext x.samplerYcbcrConversion
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceSparseImageFormatInfo2KHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public format : VkFormat
+        val mutable public _type : VkImageType
+        val mutable public samples : VkSampleCountFlags
+        val mutable public usage : VkImageUsageFlags
+        val mutable public tiling : VkImageTiling
+
+        new(sType : VkStructureType, pNext : nativeint, format : VkFormat, _type : VkImageType, samples : VkSampleCountFlags, usage : VkImageUsageFlags, tiling : VkImageTiling) = { sType = sType; pNext = pNext; format = format; _type = _type; samples = samples; usage = usage; tiling = tiling }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceSparseImageFormatInfo2KHR { sType = %A; pNext = %A; format = %A; _type = %A; samples = %A; usage = %A; tiling = %A }" x.sType x.pNext x.format x._type x.samples x.usage x.tiling
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceSurfaceInfo2KHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public surface : VkSurfaceKHR
+
+        new(sType : VkStructureType, pNext : nativeint, surface : VkSurfaceKHR) = { sType = sType; pNext = pNext; surface = surface }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceSurfaceInfo2KHR { sType = %A; pNext = %A; surface = %A }" x.sType x.pNext x.surface
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceVariablePointerFeaturesKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public variablePointersStorageBuffer : VkBool32
+        val mutable public variablePointers : VkBool32
+
+        new(sType : VkStructureType, pNext : nativeint, variablePointersStorageBuffer : VkBool32, variablePointers : VkBool32) = { sType = sType; pNext = pNext; variablePointersStorageBuffer = variablePointersStorageBuffer; variablePointers = variablePointers }
+        override x.ToString() =
+            sprintf "VkPhysicalDeviceVariablePointerFeaturesKHR { sType = %A; pNext = %A; variablePointersStorageBuffer = %A; variablePointers = %A }" x.sType x.pNext x.variablePointersStorageBuffer x.variablePointers
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkPipelineCacheCreateInfo = 
     struct
         val mutable public sType : VkStructureType
@@ -3255,6 +4876,65 @@ type VkPipelineCacheCreateInfo =
         new(sType : VkStructureType, pNext : nativeint, flags : VkPipelineCacheCreateFlags, initialDataSize : uint64, pInitialData : nativeint) = { sType = sType; pNext = pNext; flags = flags; initialDataSize = initialDataSize; pInitialData = pInitialData }
         override x.ToString() =
             sprintf "VkPipelineCacheCreateInfo { sType = %A; pNext = %A; flags = %A; initialDataSize = %A; pInitialData = %A }" x.sType x.pNext x.flags x.initialDataSize x.pInitialData
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPipelineColorBlendAdvancedStateCreateInfoEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public srcPremultiplied : VkBool32
+        val mutable public dstPremultiplied : VkBool32
+        val mutable public blendOverlap : VkBlendOverlapEXT
+
+        new(sType : VkStructureType, pNext : nativeint, srcPremultiplied : VkBool32, dstPremultiplied : VkBool32, blendOverlap : VkBlendOverlapEXT) = { sType = sType; pNext = pNext; srcPremultiplied = srcPremultiplied; dstPremultiplied = dstPremultiplied; blendOverlap = blendOverlap }
+        override x.ToString() =
+            sprintf "VkPipelineColorBlendAdvancedStateCreateInfoEXT { sType = %A; pNext = %A; srcPremultiplied = %A; dstPremultiplied = %A; blendOverlap = %A }" x.sType x.pNext x.srcPremultiplied x.dstPremultiplied x.blendOverlap
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPipelineCoverageModulationStateCreateInfoNV = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public flags : VkPipelineCoverageModulationStateCreateFlagsNV
+        val mutable public coverageModulationMode : VkCoverageModulationModeNV
+        val mutable public coverageModulationTableEnable : VkBool32
+        val mutable public coverageModulationTableCount : uint32
+        val mutable public pCoverageModulationTable : nativeptr<float32>
+
+        new(sType : VkStructureType, pNext : nativeint, flags : VkPipelineCoverageModulationStateCreateFlagsNV, coverageModulationMode : VkCoverageModulationModeNV, coverageModulationTableEnable : VkBool32, coverageModulationTableCount : uint32, pCoverageModulationTable : nativeptr<float32>) = { sType = sType; pNext = pNext; flags = flags; coverageModulationMode = coverageModulationMode; coverageModulationTableEnable = coverageModulationTableEnable; coverageModulationTableCount = coverageModulationTableCount; pCoverageModulationTable = pCoverageModulationTable }
+        override x.ToString() =
+            sprintf "VkPipelineCoverageModulationStateCreateInfoNV { sType = %A; pNext = %A; flags = %A; coverageModulationMode = %A; coverageModulationTableEnable = %A; coverageModulationTableCount = %A; pCoverageModulationTable = %A }" x.sType x.pNext x.flags x.coverageModulationMode x.coverageModulationTableEnable x.coverageModulationTableCount x.pCoverageModulationTable
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPipelineCoverageToColorStateCreateInfoNV = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public flags : VkPipelineCoverageToColorStateCreateFlagsNV
+        val mutable public coverageToColorEnable : VkBool32
+        val mutable public coverageToColorLocation : uint32
+
+        new(sType : VkStructureType, pNext : nativeint, flags : VkPipelineCoverageToColorStateCreateFlagsNV, coverageToColorEnable : VkBool32, coverageToColorLocation : uint32) = { sType = sType; pNext = pNext; flags = flags; coverageToColorEnable = coverageToColorEnable; coverageToColorLocation = coverageToColorLocation }
+        override x.ToString() =
+            sprintf "VkPipelineCoverageToColorStateCreateInfoNV { sType = %A; pNext = %A; flags = %A; coverageToColorEnable = %A; coverageToColorLocation = %A }" x.sType x.pNext x.flags x.coverageToColorEnable x.coverageToColorLocation
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPipelineDiscardRectangleStateCreateInfoEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public flags : VkPipelineDiscardRectangleStateCreateFlagsEXT
+        val mutable public discardRectangleMode : VkDiscardRectangleModeEXT
+        val mutable public discardRectangleCount : uint32
+        val mutable public pDiscardRectangles : nativeptr<VkRect2D>
+
+        new(sType : VkStructureType, pNext : nativeint, flags : VkPipelineDiscardRectangleStateCreateFlagsEXT, discardRectangleMode : VkDiscardRectangleModeEXT, discardRectangleCount : uint32, pDiscardRectangles : nativeptr<VkRect2D>) = { sType = sType; pNext = pNext; flags = flags; discardRectangleMode = discardRectangleMode; discardRectangleCount = discardRectangleCount; pDiscardRectangles = pDiscardRectangles }
+        override x.ToString() =
+            sprintf "VkPipelineDiscardRectangleStateCreateInfoEXT { sType = %A; pNext = %A; flags = %A; discardRectangleMode = %A; discardRectangleCount = %A; pDiscardRectangles = %A }" x.sType x.pNext x.flags x.discardRectangleMode x.discardRectangleCount x.pDiscardRectangles
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -3298,6 +4978,83 @@ type VkPipelineRasterizationStateRasterizationOrderAMD =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkPipelineSampleLocationsStateCreateInfoEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public sampleLocationsEnable : VkBool32
+        val mutable public sampleLocationsInfo : VkSampleLocationsInfoEXT
+
+        new(sType : VkStructureType, pNext : nativeint, sampleLocationsEnable : VkBool32, sampleLocationsInfo : VkSampleLocationsInfoEXT) = { sType = sType; pNext = pNext; sampleLocationsEnable = sampleLocationsEnable; sampleLocationsInfo = sampleLocationsInfo }
+        override x.ToString() =
+            sprintf "VkPipelineSampleLocationsStateCreateInfoEXT { sType = %A; pNext = %A; sampleLocationsEnable = %A; sampleLocationsInfo = %A }" x.sType x.pNext x.sampleLocationsEnable x.sampleLocationsInfo
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPipelineTessellationDomainOriginStateCreateInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public domainOrigin : VkTessellationDomainOriginKHR
+
+        new(sType : VkStructureType, pNext : nativeint, domainOrigin : VkTessellationDomainOriginKHR) = { sType = sType; pNext = pNext; domainOrigin = domainOrigin }
+        override x.ToString() =
+            sprintf "VkPipelineTessellationDomainOriginStateCreateInfoKHR { sType = %A; pNext = %A; domainOrigin = %A }" x.sType x.pNext x.domainOrigin
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkViewportSwizzleNV = 
+    struct
+        val mutable public x : VkViewportCoordinateSwizzleNV
+        val mutable public y : VkViewportCoordinateSwizzleNV
+        val mutable public z : VkViewportCoordinateSwizzleNV
+        val mutable public w : VkViewportCoordinateSwizzleNV
+
+        new(x : VkViewportCoordinateSwizzleNV, y : VkViewportCoordinateSwizzleNV, z : VkViewportCoordinateSwizzleNV, w : VkViewportCoordinateSwizzleNV) = { x = x; y = y; z = z; w = w }
+        override x.ToString() =
+            sprintf "VkViewportSwizzleNV { x = %A; y = %A; z = %A; w = %A }" x.x x.y x.z x.w
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPipelineViewportSwizzleStateCreateInfoNV = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public flags : VkPipelineViewportSwizzleStateCreateFlagsNV
+        val mutable public viewportCount : uint32
+        val mutable public pViewportSwizzles : nativeptr<VkViewportSwizzleNV>
+
+        new(sType : VkStructureType, pNext : nativeint, flags : VkPipelineViewportSwizzleStateCreateFlagsNV, viewportCount : uint32, pViewportSwizzles : nativeptr<VkViewportSwizzleNV>) = { sType = sType; pNext = pNext; flags = flags; viewportCount = viewportCount; pViewportSwizzles = pViewportSwizzles }
+        override x.ToString() =
+            sprintf "VkPipelineViewportSwizzleStateCreateInfoNV { sType = %A; pNext = %A; flags = %A; viewportCount = %A; pViewportSwizzles = %A }" x.sType x.pNext x.flags x.viewportCount x.pViewportSwizzles
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkViewportWScalingNV = 
+    struct
+        val mutable public xcoeff : float32
+        val mutable public ycoeff : float32
+
+        new(xcoeff : float32, ycoeff : float32) = { xcoeff = xcoeff; ycoeff = ycoeff }
+        override x.ToString() =
+            sprintf "VkViewportWScalingNV { xcoeff = %A; ycoeff = %A }" x.xcoeff x.ycoeff
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPipelineViewportWScalingStateCreateInfoNV = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public viewportWScalingEnable : VkBool32
+        val mutable public viewportCount : uint32
+        val mutable public pViewportWScalings : nativeptr<VkViewportWScalingNV>
+
+        new(sType : VkStructureType, pNext : nativeint, viewportWScalingEnable : VkBool32, viewportCount : uint32, pViewportWScalings : nativeptr<VkViewportWScalingNV>) = { sType = sType; pNext = pNext; viewportWScalingEnable = viewportWScalingEnable; viewportCount = viewportCount; pViewportWScalings = pViewportWScalings }
+        override x.ToString() =
+            sprintf "VkPipelineViewportWScalingStateCreateInfoNV { sType = %A; pNext = %A; viewportWScalingEnable = %A; viewportCount = %A; pViewportWScalings = %A }" x.sType x.pNext x.viewportWScalingEnable x.viewportCount x.pViewportWScalings
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkPresentInfoKHR = 
     struct
         val mutable public sType : VkStructureType
@@ -3312,6 +5069,66 @@ type VkPresentInfoKHR =
         new(sType : VkStructureType, pNext : nativeint, waitSemaphoreCount : uint32, pWaitSemaphores : nativeptr<VkSemaphore>, swapchainCount : uint32, pSwapchains : nativeptr<VkSwapchainKHR>, pImageIndices : nativeptr<uint32>, pResults : nativeptr<VkResult>) = { sType = sType; pNext = pNext; waitSemaphoreCount = waitSemaphoreCount; pWaitSemaphores = pWaitSemaphores; swapchainCount = swapchainCount; pSwapchains = pSwapchains; pImageIndices = pImageIndices; pResults = pResults }
         override x.ToString() =
             sprintf "VkPresentInfoKHR { sType = %A; pNext = %A; waitSemaphoreCount = %A; pWaitSemaphores = %A; swapchainCount = %A; pSwapchains = %A; pImageIndices = %A; pResults = %A }" x.sType x.pNext x.waitSemaphoreCount x.pWaitSemaphores x.swapchainCount x.pSwapchains x.pImageIndices x.pResults
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkRectLayerKHR = 
+    struct
+        val mutable public offset : VkOffset2D
+        val mutable public extent : VkExtent2D
+        val mutable public layer : uint32
+
+        new(offset : VkOffset2D, extent : VkExtent2D, layer : uint32) = { offset = offset; extent = extent; layer = layer }
+        override x.ToString() =
+            sprintf "VkRectLayerKHR { offset = %A; extent = %A; layer = %A }" x.offset x.extent x.layer
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPresentRegionKHR = 
+    struct
+        val mutable public rectangleCount : uint32
+        val mutable public pRectangles : nativeptr<VkRectLayerKHR>
+
+        new(rectangleCount : uint32, pRectangles : nativeptr<VkRectLayerKHR>) = { rectangleCount = rectangleCount; pRectangles = pRectangles }
+        override x.ToString() =
+            sprintf "VkPresentRegionKHR { rectangleCount = %A; pRectangles = %A }" x.rectangleCount x.pRectangles
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPresentRegionsKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public swapchainCount : uint32
+        val mutable public pRegions : nativeptr<VkPresentRegionKHR>
+
+        new(sType : VkStructureType, pNext : nativeint, swapchainCount : uint32, pRegions : nativeptr<VkPresentRegionKHR>) = { sType = sType; pNext = pNext; swapchainCount = swapchainCount; pRegions = pRegions }
+        override x.ToString() =
+            sprintf "VkPresentRegionsKHR { sType = %A; pNext = %A; swapchainCount = %A; pRegions = %A }" x.sType x.pNext x.swapchainCount x.pRegions
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPresentTimeGOOGLE = 
+    struct
+        val mutable public presentID : uint32
+        val mutable public desiredPresentTime : uint64
+
+        new(presentID : uint32, desiredPresentTime : uint64) = { presentID = presentID; desiredPresentTime = desiredPresentTime }
+        override x.ToString() =
+            sprintf "VkPresentTimeGOOGLE { presentID = %A; desiredPresentTime = %A }" x.presentID x.desiredPresentTime
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPresentTimesInfoGOOGLE = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public swapchainCount : uint32
+        val mutable public pTimes : nativeptr<VkPresentTimeGOOGLE>
+
+        new(sType : VkStructureType, pNext : nativeint, swapchainCount : uint32, pTimes : nativeptr<VkPresentTimeGOOGLE>) = { sType = sType; pNext = pNext; swapchainCount = swapchainCount; pTimes = pTimes }
+        override x.ToString() =
+            sprintf "VkPresentTimesInfoGOOGLE { sType = %A; pNext = %A; swapchainCount = %A; pTimes = %A }" x.sType x.pNext x.swapchainCount x.pTimes
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -3343,14 +5160,25 @@ type VkQueueFamilyProperties =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
-type VkRect3D = 
+type VkQueueFamilyProperties2KHR = 
     struct
-        val mutable public offset : VkOffset3D
-        val mutable public extent : VkExtent3D
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public queueFamilyProperties : VkQueueFamilyProperties
 
-        new(offset : VkOffset3D, extent : VkExtent3D) = { offset = offset; extent = extent }
+        new(sType : VkStructureType, pNext : nativeint, queueFamilyProperties : VkQueueFamilyProperties) = { sType = sType; pNext = pNext; queueFamilyProperties = queueFamilyProperties }
         override x.ToString() =
-            sprintf "VkRect3D { offset = %A; extent = %A }" x.offset x.extent
+            sprintf "VkQueueFamilyProperties2KHR { sType = %A; pNext = %A; queueFamilyProperties = %A }" x.sType x.pNext x.queueFamilyProperties
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkRefreshCycleDurationGOOGLE = 
+    struct
+        val mutable public refreshDuration : uint64
+
+        new(refreshDuration : uint64) = { refreshDuration = refreshDuration }
+        override x.ToString() =
+            sprintf "VkRefreshCycleDurationGOOGLE { refreshDuration = %A }" x.refreshDuration
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -3423,6 +5251,62 @@ type VkRenderPassCreateInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkRenderPassInputAttachmentAspectCreateInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public aspectReferenceCount : uint32
+        val mutable public pAspectReferences : nativeptr<VkInputAttachmentAspectReferenceKHR>
+
+        new(sType : VkStructureType, pNext : nativeint, aspectReferenceCount : uint32, pAspectReferences : nativeptr<VkInputAttachmentAspectReferenceKHR>) = { sType = sType; pNext = pNext; aspectReferenceCount = aspectReferenceCount; pAspectReferences = pAspectReferences }
+        override x.ToString() =
+            sprintf "VkRenderPassInputAttachmentAspectCreateInfoKHR { sType = %A; pNext = %A; aspectReferenceCount = %A; pAspectReferences = %A }" x.sType x.pNext x.aspectReferenceCount x.pAspectReferences
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkRenderPassMultiviewCreateInfoKHX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public subpassCount : uint32
+        val mutable public pViewMasks : nativeptr<uint32>
+        val mutable public dependencyCount : uint32
+        val mutable public pViewOffsets : nativeptr<int>
+        val mutable public correlationMaskCount : uint32
+        val mutable public pCorrelationMasks : nativeptr<uint32>
+
+        new(sType : VkStructureType, pNext : nativeint, subpassCount : uint32, pViewMasks : nativeptr<uint32>, dependencyCount : uint32, pViewOffsets : nativeptr<int>, correlationMaskCount : uint32, pCorrelationMasks : nativeptr<uint32>) = { sType = sType; pNext = pNext; subpassCount = subpassCount; pViewMasks = pViewMasks; dependencyCount = dependencyCount; pViewOffsets = pViewOffsets; correlationMaskCount = correlationMaskCount; pCorrelationMasks = pCorrelationMasks }
+        override x.ToString() =
+            sprintf "VkRenderPassMultiviewCreateInfoKHX { sType = %A; pNext = %A; subpassCount = %A; pViewMasks = %A; dependencyCount = %A; pViewOffsets = %A; correlationMaskCount = %A; pCorrelationMasks = %A }" x.sType x.pNext x.subpassCount x.pViewMasks x.dependencyCount x.pViewOffsets x.correlationMaskCount x.pCorrelationMasks
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkSubpassSampleLocationsEXT = 
+    struct
+        val mutable public subpassIndex : uint32
+        val mutable public sampleLocationsInfo : VkSampleLocationsInfoEXT
+
+        new(subpassIndex : uint32, sampleLocationsInfo : VkSampleLocationsInfoEXT) = { subpassIndex = subpassIndex; sampleLocationsInfo = sampleLocationsInfo }
+        override x.ToString() =
+            sprintf "VkSubpassSampleLocationsEXT { subpassIndex = %A; sampleLocationsInfo = %A }" x.subpassIndex x.sampleLocationsInfo
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkRenderPassSampleLocationsBeginInfoEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public attachmentInitialSampleLocationsCount : uint32
+        val mutable public pAttachmentInitialSampleLocations : nativeptr<VkAttachmentSampleLocationsEXT>
+        val mutable public postSubpassSampleLocationsCount : uint32
+        val mutable public pPostSubpassSampleLocations : nativeptr<VkSubpassSampleLocationsEXT>
+
+        new(sType : VkStructureType, pNext : nativeint, attachmentInitialSampleLocationsCount : uint32, pAttachmentInitialSampleLocations : nativeptr<VkAttachmentSampleLocationsEXT>, postSubpassSampleLocationsCount : uint32, pPostSubpassSampleLocations : nativeptr<VkSubpassSampleLocationsEXT>) = { sType = sType; pNext = pNext; attachmentInitialSampleLocationsCount = attachmentInitialSampleLocationsCount; pAttachmentInitialSampleLocations = pAttachmentInitialSampleLocations; postSubpassSampleLocationsCount = postSubpassSampleLocationsCount; pPostSubpassSampleLocations = pPostSubpassSampleLocations }
+        override x.ToString() =
+            sprintf "VkRenderPassSampleLocationsBeginInfoEXT { sType = %A; pNext = %A; attachmentInitialSampleLocationsCount = %A; pAttachmentInitialSampleLocations = %A; postSubpassSampleLocationsCount = %A; pPostSubpassSampleLocations = %A }" x.sType x.pNext x.attachmentInitialSampleLocationsCount x.pAttachmentInitialSampleLocations x.postSubpassSampleLocationsCount x.pPostSubpassSampleLocations
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkSamplerCreateInfo = 
     struct
         val mutable public sType : VkStructureType
@@ -3450,6 +5334,61 @@ type VkSamplerCreateInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkSamplerReductionModeCreateInfoEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public reductionMode : VkSamplerReductionModeEXT
+
+        new(sType : VkStructureType, pNext : nativeint, reductionMode : VkSamplerReductionModeEXT) = { sType = sType; pNext = pNext; reductionMode = reductionMode }
+        override x.ToString() =
+            sprintf "VkSamplerReductionModeCreateInfoEXT { sType = %A; pNext = %A; reductionMode = %A }" x.sType x.pNext x.reductionMode
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkSamplerYcbcrConversionCreateInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public format : VkFormat
+        val mutable public ycbcrModel : VkSamplerYcbcrModelConversionKHR
+        val mutable public ycbcrRange : VkSamplerYcbcrRangeKHR
+        val mutable public components : VkComponentMapping
+        val mutable public xChromaOffset : VkChromaLocationKHR
+        val mutable public yChromaOffset : VkChromaLocationKHR
+        val mutable public chromaFilter : VkFilter
+        val mutable public forceExplicitReconstruction : VkBool32
+
+        new(sType : VkStructureType, pNext : nativeint, format : VkFormat, ycbcrModel : VkSamplerYcbcrModelConversionKHR, ycbcrRange : VkSamplerYcbcrRangeKHR, components : VkComponentMapping, xChromaOffset : VkChromaLocationKHR, yChromaOffset : VkChromaLocationKHR, chromaFilter : VkFilter, forceExplicitReconstruction : VkBool32) = { sType = sType; pNext = pNext; format = format; ycbcrModel = ycbcrModel; ycbcrRange = ycbcrRange; components = components; xChromaOffset = xChromaOffset; yChromaOffset = yChromaOffset; chromaFilter = chromaFilter; forceExplicitReconstruction = forceExplicitReconstruction }
+        override x.ToString() =
+            sprintf "VkSamplerYcbcrConversionCreateInfoKHR { sType = %A; pNext = %A; format = %A; ycbcrModel = %A; ycbcrRange = %A; components = %A; xChromaOffset = %A; yChromaOffset = %A; chromaFilter = %A; forceExplicitReconstruction = %A }" x.sType x.pNext x.format x.ycbcrModel x.ycbcrRange x.components x.xChromaOffset x.yChromaOffset x.chromaFilter x.forceExplicitReconstruction
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkSamplerYcbcrConversionImageFormatPropertiesKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public combinedImageSamplerDescriptorCount : uint32
+
+        new(sType : VkStructureType, pNext : nativeint, combinedImageSamplerDescriptorCount : uint32) = { sType = sType; pNext = pNext; combinedImageSamplerDescriptorCount = combinedImageSamplerDescriptorCount }
+        override x.ToString() =
+            sprintf "VkSamplerYcbcrConversionImageFormatPropertiesKHR { sType = %A; pNext = %A; combinedImageSamplerDescriptorCount = %A }" x.sType x.pNext x.combinedImageSamplerDescriptorCount
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkSamplerYcbcrConversionInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public conversion : VkSamplerYcbcrConversionKHR
+
+        new(sType : VkStructureType, pNext : nativeint, conversion : VkSamplerYcbcrConversionKHR) = { sType = sType; pNext = pNext; conversion = conversion }
+        override x.ToString() =
+            sprintf "VkSamplerYcbcrConversionInfoKHR { sType = %A; pNext = %A; conversion = %A }" x.sType x.pNext x.conversion
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkSemaphoreCreateInfo = 
     struct
         val mutable public sType : VkStructureType
@@ -3459,6 +5398,32 @@ type VkSemaphoreCreateInfo =
         new(sType : VkStructureType, pNext : nativeint, flags : VkSemaphoreCreateFlags) = { sType = sType; pNext = pNext; flags = flags }
         override x.ToString() =
             sprintf "VkSemaphoreCreateInfo { sType = %A; pNext = %A; flags = %A }" x.sType x.pNext x.flags
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkSemaphoreGetFdInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public semaphore : VkSemaphore
+        val mutable public handleType : VkExternalSemaphoreHandleTypeFlagBitsKHR
+
+        new(sType : VkStructureType, pNext : nativeint, semaphore : VkSemaphore, handleType : VkExternalSemaphoreHandleTypeFlagBitsKHR) = { sType = sType; pNext = pNext; semaphore = semaphore; handleType = handleType }
+        override x.ToString() =
+            sprintf "VkSemaphoreGetFdInfoKHR { sType = %A; pNext = %A; semaphore = %A; handleType = %A }" x.sType x.pNext x.semaphore x.handleType
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkSemaphoreGetWin32HandleInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public semaphore : VkSemaphore
+        val mutable public handleType : VkExternalSemaphoreHandleTypeFlagBitsKHR
+
+        new(sType : VkStructureType, pNext : nativeint, semaphore : VkSemaphore, handleType : VkExternalSemaphoreHandleTypeFlagBitsKHR) = { sType = sType; pNext = pNext; semaphore = semaphore; handleType = handleType }
+        override x.ToString() =
+            sprintf "VkSemaphoreGetWin32HandleInfoKHR { sType = %A; pNext = %A; semaphore = %A; handleType = %A }" x.sType x.pNext x.semaphore x.handleType
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -3476,6 +5441,60 @@ type VkShaderModuleCreateInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkShaderModuleValidationCacheCreateInfoEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public validationCache : VkValidationCacheEXT
+
+        new(sType : VkStructureType, pNext : nativeint, validationCache : VkValidationCacheEXT) = { sType = sType; pNext = pNext; validationCache = validationCache }
+        override x.ToString() =
+            sprintf "VkShaderModuleValidationCacheCreateInfoEXT { sType = %A; pNext = %A; validationCache = %A }" x.sType x.pNext x.validationCache
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkShaderResourceUsageAMD = 
+    struct
+        val mutable public numUsedVgprs : uint32
+        val mutable public numUsedSgprs : uint32
+        val mutable public ldsSizePerLocalWorkGroup : uint32
+        val mutable public ldsUsageSizeInBytes : uint64
+        val mutable public scratchMemUsageInBytes : uint64
+
+        new(numUsedVgprs : uint32, numUsedSgprs : uint32, ldsSizePerLocalWorkGroup : uint32, ldsUsageSizeInBytes : uint64, scratchMemUsageInBytes : uint64) = { numUsedVgprs = numUsedVgprs; numUsedSgprs = numUsedSgprs; ldsSizePerLocalWorkGroup = ldsSizePerLocalWorkGroup; ldsUsageSizeInBytes = ldsUsageSizeInBytes; scratchMemUsageInBytes = scratchMemUsageInBytes }
+        override x.ToString() =
+            sprintf "VkShaderResourceUsageAMD { numUsedVgprs = %A; numUsedSgprs = %A; ldsSizePerLocalWorkGroup = %A; ldsUsageSizeInBytes = %A; scratchMemUsageInBytes = %A }" x.numUsedVgprs x.numUsedSgprs x.ldsSizePerLocalWorkGroup x.ldsUsageSizeInBytes x.scratchMemUsageInBytes
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkShaderStatisticsInfoAMD = 
+    struct
+        val mutable public shaderStageMask : VkShaderStageFlags
+        val mutable public resourceUsage : VkShaderResourceUsageAMD
+        val mutable public numPhysicalVgprs : uint32
+        val mutable public numPhysicalSgprs : uint32
+        val mutable public numAvailableVgprs : uint32
+        val mutable public numAvailableSgprs : uint32
+        val mutable public computeWorkGroupSize : V3ui
+
+        new(shaderStageMask : VkShaderStageFlags, resourceUsage : VkShaderResourceUsageAMD, numPhysicalVgprs : uint32, numPhysicalSgprs : uint32, numAvailableVgprs : uint32, numAvailableSgprs : uint32, computeWorkGroupSize : V3ui) = { shaderStageMask = shaderStageMask; resourceUsage = resourceUsage; numPhysicalVgprs = numPhysicalVgprs; numPhysicalSgprs = numPhysicalSgprs; numAvailableVgprs = numAvailableVgprs; numAvailableSgprs = numAvailableSgprs; computeWorkGroupSize = computeWorkGroupSize }
+        override x.ToString() =
+            sprintf "VkShaderStatisticsInfoAMD { shaderStageMask = %A; resourceUsage = %A; numPhysicalVgprs = %A; numPhysicalSgprs = %A; numAvailableVgprs = %A; numAvailableSgprs = %A; computeWorkGroupSize = %A }" x.shaderStageMask x.resourceUsage x.numPhysicalVgprs x.numPhysicalSgprs x.numAvailableVgprs x.numAvailableSgprs x.computeWorkGroupSize
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkSharedPresentSurfaceCapabilitiesKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public sharedPresentSupportedUsageFlags : VkImageUsageFlags
+
+        new(sType : VkStructureType, pNext : nativeint, sharedPresentSupportedUsageFlags : VkImageUsageFlags) = { sType = sType; pNext = pNext; sharedPresentSupportedUsageFlags = sharedPresentSupportedUsageFlags }
+        override x.ToString() =
+            sprintf "VkSharedPresentSurfaceCapabilitiesKHR { sType = %A; pNext = %A; sharedPresentSupportedUsageFlags = %A }" x.sType x.pNext x.sharedPresentSupportedUsageFlags
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkSparseImageFormatProperties = 
     struct
         val mutable public aspectMask : VkImageAspectFlags
@@ -3485,6 +5504,18 @@ type VkSparseImageFormatProperties =
         new(aspectMask : VkImageAspectFlags, imageGranularity : VkExtent3D, flags : VkSparseImageFormatFlags) = { aspectMask = aspectMask; imageGranularity = imageGranularity; flags = flags }
         override x.ToString() =
             sprintf "VkSparseImageFormatProperties { aspectMask = %A; imageGranularity = %A; flags = %A }" x.aspectMask x.imageGranularity x.flags
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkSparseImageFormatProperties2KHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public properties : VkSparseImageFormatProperties
+
+        new(sType : VkStructureType, pNext : nativeint, properties : VkSparseImageFormatProperties) = { sType = sType; pNext = pNext; properties = properties }
+        override x.ToString() =
+            sprintf "VkSparseImageFormatProperties2KHR { sType = %A; pNext = %A; properties = %A }" x.sType x.pNext x.properties
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -3499,6 +5530,18 @@ type VkSparseImageMemoryRequirements =
         new(formatProperties : VkSparseImageFormatProperties, imageMipTailFirstLod : uint32, imageMipTailSize : VkDeviceSize, imageMipTailOffset : VkDeviceSize, imageMipTailStride : VkDeviceSize) = { formatProperties = formatProperties; imageMipTailFirstLod = imageMipTailFirstLod; imageMipTailSize = imageMipTailSize; imageMipTailOffset = imageMipTailOffset; imageMipTailStride = imageMipTailStride }
         override x.ToString() =
             sprintf "VkSparseImageMemoryRequirements { formatProperties = %A; imageMipTailFirstLod = %A; imageMipTailSize = %A; imageMipTailOffset = %A; imageMipTailStride = %A }" x.formatProperties x.imageMipTailFirstLod x.imageMipTailSize x.imageMipTailOffset x.imageMipTailStride
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkSparseImageMemoryRequirements2KHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public memoryRequirements : VkSparseImageMemoryRequirements
+
+        new(sType : VkStructureType, pNext : nativeint, memoryRequirements : VkSparseImageMemoryRequirements) = { sType = sType; pNext = pNext; memoryRequirements = memoryRequirements }
+        override x.ToString() =
+            sprintf "VkSparseImageMemoryRequirements2KHR { sType = %A; pNext = %A; memoryRequirements = %A }" x.sType x.pNext x.memoryRequirements
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -3534,6 +5577,28 @@ type VkSubresourceLayout =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkSurfaceCapabilities2EXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public minImageCount : uint32
+        val mutable public maxImageCount : uint32
+        val mutable public currentExtent : VkExtent2D
+        val mutable public minImageExtent : VkExtent2D
+        val mutable public maxImageExtent : VkExtent2D
+        val mutable public maxImageArrayLayers : uint32
+        val mutable public supportedTransforms : VkSurfaceTransformFlagsKHR
+        val mutable public currentTransform : VkSurfaceTransformFlagBitsKHR
+        val mutable public supportedCompositeAlpha : VkCompositeAlphaFlagsKHR
+        val mutable public supportedUsageFlags : VkImageUsageFlags
+        val mutable public supportedSurfaceCounters : VkSurfaceCounterFlagsEXT
+
+        new(sType : VkStructureType, pNext : nativeint, minImageCount : uint32, maxImageCount : uint32, currentExtent : VkExtent2D, minImageExtent : VkExtent2D, maxImageExtent : VkExtent2D, maxImageArrayLayers : uint32, supportedTransforms : VkSurfaceTransformFlagsKHR, currentTransform : VkSurfaceTransformFlagBitsKHR, supportedCompositeAlpha : VkCompositeAlphaFlagsKHR, supportedUsageFlags : VkImageUsageFlags, supportedSurfaceCounters : VkSurfaceCounterFlagsEXT) = { sType = sType; pNext = pNext; minImageCount = minImageCount; maxImageCount = maxImageCount; currentExtent = currentExtent; minImageExtent = minImageExtent; maxImageExtent = maxImageExtent; maxImageArrayLayers = maxImageArrayLayers; supportedTransforms = supportedTransforms; currentTransform = currentTransform; supportedCompositeAlpha = supportedCompositeAlpha; supportedUsageFlags = supportedUsageFlags; supportedSurfaceCounters = supportedSurfaceCounters }
+        override x.ToString() =
+            sprintf "VkSurfaceCapabilities2EXT { sType = %A; pNext = %A; minImageCount = %A; maxImageCount = %A; currentExtent = %A; minImageExtent = %A; maxImageExtent = %A; maxImageArrayLayers = %A; supportedTransforms = %A; currentTransform = %A; supportedCompositeAlpha = %A; supportedUsageFlags = %A; supportedSurfaceCounters = %A }" x.sType x.pNext x.minImageCount x.maxImageCount x.currentExtent x.minImageExtent x.maxImageExtent x.maxImageArrayLayers x.supportedTransforms x.currentTransform x.supportedCompositeAlpha x.supportedUsageFlags x.supportedSurfaceCounters
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkSurfaceCapabilitiesKHR = 
     struct
         val mutable public minImageCount : uint32
@@ -3553,6 +5618,18 @@ type VkSurfaceCapabilitiesKHR =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkSurfaceCapabilities2KHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public surfaceCapabilities : VkSurfaceCapabilitiesKHR
+
+        new(sType : VkStructureType, pNext : nativeint, surfaceCapabilities : VkSurfaceCapabilitiesKHR) = { sType = sType; pNext = pNext; surfaceCapabilities = surfaceCapabilities }
+        override x.ToString() =
+            sprintf "VkSurfaceCapabilities2KHR { sType = %A; pNext = %A; surfaceCapabilities = %A }" x.sType x.pNext x.surfaceCapabilities
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkSurfaceFormatKHR = 
     struct
         val mutable public format : VkFormat
@@ -3561,6 +5638,30 @@ type VkSurfaceFormatKHR =
         new(format : VkFormat, colorSpace : VkColorSpaceKHR) = { format = format; colorSpace = colorSpace }
         override x.ToString() =
             sprintf "VkSurfaceFormatKHR { format = %A; colorSpace = %A }" x.format x.colorSpace
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkSurfaceFormat2KHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public surfaceFormat : VkSurfaceFormatKHR
+
+        new(sType : VkStructureType, pNext : nativeint, surfaceFormat : VkSurfaceFormatKHR) = { sType = sType; pNext = pNext; surfaceFormat = surfaceFormat }
+        override x.ToString() =
+            sprintf "VkSurfaceFormat2KHR { sType = %A; pNext = %A; surfaceFormat = %A }" x.sType x.pNext x.surfaceFormat
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkSwapchainCounterCreateInfoEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public surfaceCounters : VkSurfaceCounterFlagsEXT
+
+        new(sType : VkStructureType, pNext : nativeint, surfaceCounters : VkSurfaceCounterFlagsEXT) = { sType = sType; pNext = pNext; surfaceCounters = surfaceCounters }
+        override x.ToString() =
+            sprintf "VkSwapchainCounterCreateInfoEXT { sType = %A; pNext = %A; surfaceCounters = %A }" x.sType x.pNext x.surfaceCounters
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -3591,6 +5692,32 @@ type VkSwapchainCreateInfoKHR =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkTextureLODGatherFormatPropertiesAMD = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public supportsTextureGatherLODBiasAMD : VkBool32
+
+        new(sType : VkStructureType, pNext : nativeint, supportsTextureGatherLODBiasAMD : VkBool32) = { sType = sType; pNext = pNext; supportsTextureGatherLODBiasAMD = supportsTextureGatherLODBiasAMD }
+        override x.ToString() =
+            sprintf "VkTextureLODGatherFormatPropertiesAMD { sType = %A; pNext = %A; supportsTextureGatherLODBiasAMD = %A }" x.sType x.pNext x.supportsTextureGatherLODBiasAMD
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkValidationCacheCreateInfoEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public flags : VkValidationCacheCreateFlagsEXT
+        val mutable public initialDataSize : uint64
+        val mutable public pInitialData : nativeint
+
+        new(sType : VkStructureType, pNext : nativeint, flags : VkValidationCacheCreateFlagsEXT, initialDataSize : uint64, pInitialData : nativeint) = { sType = sType; pNext = pNext; flags = flags; initialDataSize = initialDataSize; pInitialData = pInitialData }
+        override x.ToString() =
+            sprintf "VkValidationCacheCreateInfoEXT { sType = %A; pNext = %A; flags = %A; initialDataSize = %A; pInitialData = %A }" x.sType x.pNext x.flags x.initialDataSize x.pInitialData
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkValidationFlagsEXT = 
     struct
         val mutable public sType : VkStructureType
@@ -3601,6 +5728,19 @@ type VkValidationFlagsEXT =
         new(sType : VkStructureType, pNext : nativeint, disabledValidationCheckCount : uint32, pDisabledValidationChecks : nativeptr<VkValidationCheckEXT>) = { sType = sType; pNext = pNext; disabledValidationCheckCount = disabledValidationCheckCount; pDisabledValidationChecks = pDisabledValidationChecks }
         override x.ToString() =
             sprintf "VkValidationFlagsEXT { sType = %A; pNext = %A; disabledValidationCheckCount = %A; pDisabledValidationChecks = %A }" x.sType x.pNext x.disabledValidationCheckCount x.pDisabledValidationChecks
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkViSurfaceCreateInfoNN = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public flags : VkViSurfaceCreateFlagsNN
+        val mutable public window : nativeint
+
+        new(sType : VkStructureType, pNext : nativeint, flags : VkViSurfaceCreateFlagsNN, window : nativeint) = { sType = sType; pNext = pNext; flags = flags; window = window }
+        override x.ToString() =
+            sprintf "VkViSurfaceCreateInfoNN { sType = %A; pNext = %A; flags = %A; window = %A }" x.sType x.pNext x.flags x.window
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -3615,6 +5755,24 @@ type VkWaylandSurfaceCreateInfoKHR =
         new(sType : VkStructureType, pNext : nativeint, flags : VkWaylandSurfaceCreateFlagsKHR, display : nativeptr<nativeint>, surface : nativeptr<nativeint>) = { sType = sType; pNext = pNext; flags = flags; display = display; surface = surface }
         override x.ToString() =
             sprintf "VkWaylandSurfaceCreateInfoKHR { sType = %A; pNext = %A; flags = %A; display = %A; surface = %A }" x.sType x.pNext x.flags x.display x.surface
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkWin32KeyedMutexAcquireReleaseInfoKHR = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public acquireCount : uint32
+        val mutable public pAcquireSyncs : nativeptr<VkDeviceMemory>
+        val mutable public pAcquireKeys : nativeptr<uint64>
+        val mutable public pAcquireTimeouts : nativeptr<uint32>
+        val mutable public releaseCount : uint32
+        val mutable public pReleaseSyncs : nativeptr<VkDeviceMemory>
+        val mutable public pReleaseKeys : nativeptr<uint64>
+
+        new(sType : VkStructureType, pNext : nativeint, acquireCount : uint32, pAcquireSyncs : nativeptr<VkDeviceMemory>, pAcquireKeys : nativeptr<uint64>, pAcquireTimeouts : nativeptr<uint32>, releaseCount : uint32, pReleaseSyncs : nativeptr<VkDeviceMemory>, pReleaseKeys : nativeptr<uint64>) = { sType = sType; pNext = pNext; acquireCount = acquireCount; pAcquireSyncs = pAcquireSyncs; pAcquireKeys = pAcquireKeys; pAcquireTimeouts = pAcquireTimeouts; releaseCount = releaseCount; pReleaseSyncs = pReleaseSyncs; pReleaseKeys = pReleaseKeys }
+        override x.ToString() =
+            sprintf "VkWin32KeyedMutexAcquireReleaseInfoKHR { sType = %A; pNext = %A; acquireCount = %A; pAcquireSyncs = %A; pAcquireKeys = %A; pAcquireTimeouts = %A; releaseCount = %A; pReleaseSyncs = %A; pReleaseKeys = %A }" x.sType x.pNext x.acquireCount x.pAcquireSyncs x.pAcquireKeys x.pAcquireTimeouts x.releaseCount x.pReleaseSyncs x.pReleaseKeys
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -3930,7 +6088,7 @@ module VkRaw =
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdDrawIndexedIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, uint32 drawCount, uint32 stride)
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
-    extern void vkCmdDispatch(VkCommandBuffer commandBuffer, uint32 x, uint32 y, uint32 z)
+    extern void vkCmdDispatch(VkCommandBuffer commandBuffer, uint32 groupCountX, uint32 groupCountY, uint32 groupCountZ)
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset)
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
@@ -4026,6 +6184,8 @@ module VkRaw =
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkQueuePresentKHR(VkQueue queue, VkPresentInfoKHR* pPresentInfo)
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkCreateViSurfaceNN(VkInstance instance, VkViSurfaceCreateInfoNN* pCreateInfo, VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateWaylandSurfaceKHR(VkInstance instance, VkWaylandSurfaceCreateInfoKHR* pCreateInfo, VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface)
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkBool32 vkGetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32 queueFamilyIndex, nativeint* display)
@@ -4083,3 +6243,147 @@ module VkRaw =
     extern VkResult vkUnregisterObjectsNVX(VkDevice device, VkObjectTableNVX objectTable, uint32 objectCount, VkObjectEntryTypeNVX* pObjectEntryTypes, uint32* pObjectIndices)
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkGetPhysicalDeviceGeneratedCommandsPropertiesNVX(VkPhysicalDevice physicalDevice, VkDeviceGeneratedCommandsFeaturesNVX* pFeatures, VkDeviceGeneratedCommandsLimitsNVX* pLimits)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2KHR* pFeatures)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkGetPhysicalDeviceProperties2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2KHR* pProperties)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkGetPhysicalDeviceFormatProperties2KHR(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties2KHR* pFormatProperties)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetPhysicalDeviceImageFormatProperties2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceImageFormatInfo2KHR* pImageFormatInfo, VkImageFormatProperties2KHR* pImageFormatProperties)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkGetPhysicalDeviceQueueFamilyProperties2KHR(VkPhysicalDevice physicalDevice, uint32* pQueueFamilyPropertyCount, VkQueueFamilyProperties2KHR* pQueueFamilyProperties)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkGetPhysicalDeviceMemoryProperties2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties2KHR* pMemoryProperties)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkGetPhysicalDeviceSparseImageFormatProperties2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceSparseImageFormatInfo2KHR* pFormatInfo, uint32* pPropertyCount, VkSparseImageFormatProperties2KHR* pProperties)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkCmdPushDescriptorSetKHR(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32 set, uint32 descriptorWriteCount, VkWriteDescriptorSet* pDescriptorWrites)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkTrimCommandPoolKHR(VkDevice device, VkCommandPool commandPool, VkCommandPoolTrimFlagsKHR flags)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkGetPhysicalDeviceExternalBufferPropertiesKHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceExternalBufferInfoKHR* pExternalBufferInfo, VkExternalBufferPropertiesKHR* pExternalBufferProperties)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetMemoryWin32HandleKHR(VkDevice device, VkMemoryGetWin32HandleInfoKHR* pGetWin32HandleInfo, nativeint* pHandle)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetMemoryWin32HandlePropertiesKHR(VkDevice device, VkExternalMemoryHandleTypeFlagBitsKHR handleType, nativeint handle, VkMemoryWin32HandlePropertiesKHR* pMemoryWin32HandleProperties)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetMemoryFdKHR(VkDevice device, VkMemoryGetFdInfoKHR* pGetFdInfo, int* pFd)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetMemoryFdPropertiesKHR(VkDevice device, VkExternalMemoryHandleTypeFlagBitsKHR handleType, int fd, VkMemoryFdPropertiesKHR* pMemoryFdProperties)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkGetPhysicalDeviceExternalSemaphorePropertiesKHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceExternalSemaphoreInfoKHR* pExternalSemaphoreInfo, VkExternalSemaphorePropertiesKHR* pExternalSemaphoreProperties)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetSemaphoreWin32HandleKHR(VkDevice device, VkSemaphoreGetWin32HandleInfoKHR* pGetWin32HandleInfo, nativeint* pHandle)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkImportSemaphoreWin32HandleKHR(VkDevice device, VkImportSemaphoreWin32HandleInfoKHR* pImportSemaphoreWin32HandleInfo)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetSemaphoreFdKHR(VkDevice device, VkSemaphoreGetFdInfoKHR* pGetFdInfo, int* pFd)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkImportSemaphoreFdKHR(VkDevice device, VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkGetPhysicalDeviceExternalFencePropertiesKHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceExternalFenceInfoKHR* pExternalFenceInfo, VkExternalFencePropertiesKHR* pExternalFenceProperties)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetFenceWin32HandleKHR(VkDevice device, VkFenceGetWin32HandleInfoKHR* pGetWin32HandleInfo, nativeint* pHandle)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkImportFenceWin32HandleKHR(VkDevice device, VkImportFenceWin32HandleInfoKHR* pImportFenceWin32HandleInfo)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetFenceFdKHR(VkDevice device, VkFenceGetFdInfoKHR* pGetFdInfo, int* pFd)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkImportFenceFdKHR(VkDevice device, VkImportFenceFdInfoKHR* pImportFenceFdInfo)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkReleaseDisplayEXT(VkPhysicalDevice physicalDevice, VkDisplayKHR display)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkAcquireXlibDisplayEXT(VkPhysicalDevice physicalDevice, nativeint* dpy, VkDisplayKHR display)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetRandROutputDisplayEXT(VkPhysicalDevice physicalDevice, nativeint* dpy, nativeint rrOutput, VkDisplayKHR* pDisplay)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkDisplayPowerControlEXT(VkDevice device, VkDisplayKHR display, VkDisplayPowerInfoEXT* pDisplayPowerInfo)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkRegisterDeviceEventEXT(VkDevice device, VkDeviceEventInfoEXT* pDeviceEventInfo, VkAllocationCallbacks* pAllocator, VkFence* pFence)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkRegisterDisplayEventEXT(VkDevice device, VkDisplayKHR display, VkDisplayEventInfoEXT* pDisplayEventInfo, VkAllocationCallbacks* pAllocator, VkFence* pFence)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetSwapchainCounterEXT(VkDevice device, VkSwapchainKHR swapchain, VkSurfaceCounterFlagBitsEXT counter, uint64* pCounterValue)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetPhysicalDeviceSurfaceCapabilities2EXT(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkSurfaceCapabilities2EXT* pSurfaceCapabilities)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkEnumeratePhysicalDeviceGroupsKHX(VkInstance instance, uint32* pPhysicalDeviceGroupCount, VkPhysicalDeviceGroupPropertiesKHX* pPhysicalDeviceGroupProperties)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkGetDeviceGroupPeerMemoryFeaturesKHX(VkDevice device, uint32 heapIndex, uint32 localDeviceIndex, uint32 remoteDeviceIndex, VkPeerMemoryFeatureFlagsKHX* pPeerMemoryFeatures)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkBindBufferMemory2KHR(VkDevice device, uint32 bindInfoCount, VkBindBufferMemoryInfoKHR* pBindInfos)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkBindImageMemory2KHR(VkDevice device, uint32 bindInfoCount, VkBindImageMemoryInfoKHR* pBindInfos)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkCmdSetDeviceMaskKHX(VkCommandBuffer commandBuffer, uint32 deviceMask)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetDeviceGroupPresentCapabilitiesKHX(VkDevice device, VkDeviceGroupPresentCapabilitiesKHX* pDeviceGroupPresentCapabilities)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetDeviceGroupSurfacePresentModesKHX(VkDevice device, VkSurfaceKHR surface, VkDeviceGroupPresentModeFlagsKHX* pModes)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkAcquireNextImage2KHX(VkDevice device, VkAcquireNextImageInfoKHX* pAcquireInfo, uint32* pImageIndex)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkCmdDispatchBaseKHX(VkCommandBuffer commandBuffer, uint32 baseGroupX, uint32 baseGroupY, uint32 baseGroupZ, uint32 groupCountX, uint32 groupCountY, uint32 groupCountZ)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetPhysicalDevicePresentRectanglesKHX(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint32* pRectCount, VkRect2D* pRects)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkCreateDescriptorUpdateTemplateKHR(VkDevice device, VkDescriptorUpdateTemplateCreateInfoKHR* pCreateInfo, VkAllocationCallbacks* pAllocator, VkDescriptorUpdateTemplateKHR* pDescriptorUpdateTemplate)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkDestroyDescriptorUpdateTemplateKHR(VkDevice device, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, VkAllocationCallbacks* pAllocator)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkUpdateDescriptorSetWithTemplateKHR(VkDevice device, VkDescriptorSet descriptorSet, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, nativeint pData)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkCmdPushDescriptorSetWithTemplateKHR(VkCommandBuffer commandBuffer, VkDescriptorUpdateTemplateKHR descriptorUpdateTemplate, VkPipelineLayout layout, uint32 set, nativeint pData)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkSetHdrMetadataEXT(VkDevice device, uint32 swapchainCount, VkSwapchainKHR* pSwapchains, VkHdrMetadataEXT* pMetadata)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetSwapchainStatusKHR(VkDevice device, VkSwapchainKHR swapchain)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetRefreshCycleDurationGOOGLE(VkDevice device, VkSwapchainKHR swapchain, VkRefreshCycleDurationGOOGLE* pDisplayTimingProperties)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetPastPresentationTimingGOOGLE(VkDevice device, VkSwapchainKHR swapchain, uint32* pPresentationTimingCount, VkPastPresentationTimingGOOGLE* pPresentationTimings)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkCreateIOSSurfaceMVK(VkInstance instance, VkIOSSurfaceCreateInfoMVK* pCreateInfo, VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkCreateMacOSSurfaceMVK(VkInstance instance, VkMacOSSurfaceCreateInfoMVK* pCreateInfo, VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkCmdSetViewportWScalingNV(VkCommandBuffer commandBuffer, uint32 firstViewport, uint32 viewportCount, VkViewportWScalingNV* pViewportWScalings)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkCmdSetDiscardRectangleEXT(VkCommandBuffer commandBuffer, uint32 firstDiscardRectangle, uint32 discardRectangleCount, VkRect2D* pDiscardRectangles)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkCmdSetSampleLocationsEXT(VkCommandBuffer commandBuffer, VkSampleLocationsInfoEXT* pSampleLocationsInfo)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkGetPhysicalDeviceMultisamplePropertiesEXT(VkPhysicalDevice physicalDevice, VkSampleCountFlags samples, VkMultisamplePropertiesEXT* pMultisampleProperties)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetPhysicalDeviceSurfaceCapabilities2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceSurfaceInfo2KHR* pSurfaceInfo, VkSurfaceCapabilities2KHR* pSurfaceCapabilities)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetPhysicalDeviceSurfaceFormats2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceSurfaceInfo2KHR* pSurfaceInfo, uint32* pSurfaceFormatCount, VkSurfaceFormat2KHR* pSurfaceFormats)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkGetBufferMemoryRequirements2KHR(VkDevice device, VkBufferMemoryRequirementsInfo2KHR* pInfo, VkMemoryRequirements2KHR* pMemoryRequirements)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkGetImageMemoryRequirements2KHR(VkDevice device, VkImageMemoryRequirementsInfo2KHR* pInfo, VkMemoryRequirements2KHR* pMemoryRequirements)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkGetImageSparseMemoryRequirements2KHR(VkDevice device, VkImageSparseMemoryRequirementsInfo2KHR* pInfo, uint32* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2KHR* pSparseMemoryRequirements)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkCreateSamplerYcbcrConversionKHR(VkDevice device, VkSamplerYcbcrConversionCreateInfoKHR* pCreateInfo, VkAllocationCallbacks* pAllocator, VkSamplerYcbcrConversionKHR* pYcbcrConversion)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkDestroySamplerYcbcrConversionKHR(VkDevice device, VkSamplerYcbcrConversionKHR ycbcrConversion, VkAllocationCallbacks* pAllocator)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkCreateValidationCacheEXT(VkDevice device, VkValidationCacheCreateInfoEXT* pCreateInfo, VkAllocationCallbacks* pAllocator, VkValidationCacheEXT* pValidationCache)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkDestroyValidationCacheEXT(VkDevice device, VkValidationCacheEXT validationCache, VkAllocationCallbacks* pAllocator)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetValidationCacheDataEXT(VkDevice device, VkValidationCacheEXT validationCache, uint64* pDataSize, nativeint pData)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkMergeValidationCachesEXT(VkDevice device, VkValidationCacheEXT dstCache, uint32 srcCacheCount, VkValidationCacheEXT* pSrcCaches)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetSwapchainGrallocUsageANDROID(VkDevice device, VkFormat format, VkImageUsageFlags imageUsage, int* grallocUsage)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkAcquireImageANDROID(VkDevice device, VkImage image, int nativeFenceFd, VkSemaphore semaphore, VkFence fence)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkQueueSignalReleaseImageANDROID(VkQueue queue, uint32 waitSemaphoreCount, VkSemaphore* pWaitSemaphores, VkImage image, int* pNativeFenceFd)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetShaderInfoAMD(VkDevice device, VkPipeline pipeline, VkShaderStageFlags shaderStage, VkShaderInfoTypeAMD infoType, uint64* pInfoSize, nativeint pInfo)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetMemoryHostPointerPropertiesEXT(VkDevice device, VkExternalMemoryHandleTypeFlagBitsKHR handleType, nativeint pHostPointer, VkMemoryHostPointerPropertiesEXT* pMemoryHostPointerProperties)
