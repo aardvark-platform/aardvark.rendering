@@ -106,8 +106,6 @@ module Type =
         let cleaned = cleanRx.Replace(strangeType, "")
         let m = typeRx.Match cleaned
 
-
-
         if m.Success then
             let id = m.Groups.["name"].Value
             let ptr = m.Groups.["ptr"].Length
@@ -149,6 +147,7 @@ module Type =
 
     let readXmlTypeAndName (defined : Map<string, string>) (e : XElement) =
         let strangeName = e.Element(xname "name").Value
+        e.Elements(xname "comment").Remove()
         let strangeType = 
             let v = e.Value.Trim()
             let id = v.LastIndexOf(strangeName)
@@ -178,8 +177,11 @@ module Enum =
                                 | _ -> failwithf "invalid enum-value: %A" kv         
                            )
                         |> Seq.toList
-
-                Some { name = name; alternatives = alternatives }
+                match alternatives with
+                    | [] -> 
+                        None
+                    | _ -> 
+                        Some { name = name; alternatives = alternatives }
             | None -> None
 
 
@@ -194,6 +196,8 @@ module Struct =
                 let fields = 
                     e.Descendants (xname "member")
                         |> Seq.map (fun m ->
+                            m.Elements(xname "comment").Remove()
+
                             let name = m.Element(xname "name").Value
                             let t = 
                                 let v = m.Value.Trim()
@@ -288,7 +292,6 @@ module XmlReader =
             |> Seq.filter (fun e -> attrib e "name" <> Some "API Constants") 
             |> Seq.choose Enum.tryRead
             |> Seq.toList
-
     let structs (defines : Map<string, string>) (vk : XElement) =
         vk.Descendants(xname "types")
             |> Seq.collect (fun tc -> tc.Descendants (xname "type"))
@@ -445,6 +448,30 @@ module FSharpWriter =
         printfn "type VkExternalMemoryFeatureFlagsNV = uint32"
         printfn "type VkIndirectCommandsLayoutUsageFlagsNVX = uint32"
         printfn "type VkObjectEntryUsageFlagsNVX = uint32"
+        printfn ""
+        printfn "type VkDescriptorUpdateTemplateCreateFlagsKHR = uint32"
+        printfn "type VkDeviceGroupPresentModeFlagsKHX = uint32"
+        printfn "type VkExternalFenceHandleTypeFlagsKHR = uint32"
+        printfn "type VkExternalMemoryHandleTypeFlagsKHR = uint32"
+        printfn "type VkExternalSemaphoreHandleTypeFlagsKHR = uint32"
+        printfn "type VkExternalMemoryFeatureFlagsKHR = uint32"
+        printfn "type VkExternalFenceFeatureFlagsKHR = uint32"
+        printfn "type VkExternalSemaphoreFeatureFlagsKHR = uint32"
+        printfn "type VkIOSSurfaceCreateFlagsMVK = uint32"
+        printfn "type VkFenceImportFlagsKHR = uint32"
+        printfn "type VkSemaphoreImportFlagsKHR = uint32"
+        printfn "type VkMacOSSurfaceCreateFlagsMVK = uint32"
+        printfn "type VkMemoryAllocateFlagsKHX = uint32"
+        printfn "type VkPipelineCoverageModulationStateCreateFlagsNV = uint32"
+        printfn "type VkPipelineCoverageToColorStateCreateFlagsNV = uint32"
+        printfn "type VkPipelineDiscardRectangleStateCreateFlagsEXT = uint32"
+        printfn "type VkPipelineViewportSwizzleStateCreateFlagsNV = uint32"
+        printfn "type VkSurfaceCounterFlagsEXT = uint32"
+        printfn "type VkValidationCacheCreateFlagsEXT = uint32"
+        printfn "type VkViSurfaceCreateFlagsNN = uint32"
+        printfn "type VkPeerMemoryFeatureFlagsKHX = uint32"
+        printfn "type VkCommandPoolTrimFlagsKHR = uint32"
+
     let extendedEnums() =
         printfn "[<AutoOpen>]"
         printfn "module WSIEnums = "
@@ -501,6 +528,7 @@ module FSharpWriter =
         Map.ofList [
             "uint32_t", "uint32"
             "int32_t", "int"
+            "int", "int"
             "float", "float32"
             "uint64_t", "uint64"
             "uint64_t", "uint64"
@@ -511,9 +539,28 @@ module FSharpWriter =
             // for extern stuff only
             "void", "void"
 
+            "HANDLE", "nativeint"
+            "HINSTANCE", "nativeint"
+            "HWND", "nativeint"
+            "Display", "nativeint"
+            "Window", "nativeint"
+            "VisualID", "nativeint"
+            "ANativeWindow", "nativeint"
+            "xcb_connection_t", "nativeint"
+            "xcb_window_t", "nativeint"
+            "xcb_visualid_t", "nativeint"
+            "SECURITY_ATTRIBUTES", "nativeint"
+            "xcb_connection_t", "nativeint"
+            "RROutput", "nativeint"
+
+
+            "DWORD", "uint32"
+            "LPCWSTR", "cstr"
+
+
         ]
 
-    let reservedKeywords = Set.ofList ["module"; "type"; "object"]
+    let reservedKeywords = Set.ofList ["module"; "type"; "object"; "SFRRectCount"]
 
     let fsharpName (n : string) =
         if Set.contains n reservedKeywords then sprintf "_%s" n
@@ -543,10 +590,8 @@ module FSharpWriter =
                         | Some n -> n
                         | None -> 
                             if n.StartsWith "Vk" || n.StartsWith "PFN" then n
-                            elif n = "HANDLE" || n = "ANativeWindow" || n = "HINSTANCE" || n = "HWND" || n = "Display" || n = "Window" || n = "VisualID" || n = "xcb_connection_t"  || n = "xcb_window_t"  || n = "xcb_visualid_t" || n = "SECURITY_ATTRIBUTES" then "nativeint"
-                            elif n = "DWORD" then "uint32"
                             elif n.StartsWith "Mir" || n.StartsWith "struct" then "nativeint"
-                            else failwithf "strange type: %A" n
+                            else "nativeint" //failwithf "strange type: %A" n
             | Ptr t ->
                 sprintf "nativeptr<%s>" (typeName t)
             | FixedArray(t, s) ->
@@ -578,6 +623,10 @@ module FSharpWriter =
         printfn ""
 
     let structs (structs : list<Struct>) =
+        inlineArray "uint32" 4 32
+        inlineArray "byte" 1 8
+        inlineArray "VkPhysicalDevice" 8 32
+
         for s in structs do
             if s.isUnion then printfn "[<StructLayout(LayoutKind.Explicit)>]"
             else printfn "[<StructLayout(LayoutKind.Sequential)>]"
@@ -671,10 +720,8 @@ module FSharpWriter =
                         | Some n -> n
                         | None -> 
                             if n.StartsWith "Vk" || n.StartsWith "PFN" then n
-                            elif n = "HANDLE" || n = "ANativeWindow" || n = "HINSTANCE" || n = "HWND" || n = "Display" || n = "Window" || n = "VisualID" || n = "xcb_connection_t"  || n = "xcb_window_t"  || n = "xcb_visualid_t" || n = "SECURITY_ATTRIBUTES" then "nativeint"
-                            elif n = "DWORD" then "uint32"
                             elif n.StartsWith "Mir" || n.StartsWith "struct" then "nativeint"
-                            else failwithf "strange type: %A" n
+                            else "nativeint" //failwithf "strange type: %A" n
             | Ptr (Ptr t) -> "nativeint*"
             | Ptr t ->
                 sprintf "%s*" (externTypeName t)
@@ -695,7 +742,7 @@ module FSharpWriter =
 
 
 let run () = 
-    let vk = XElement.Load(@"C:\VulkanSDK\1.0.30.0\vk.xml")
+    let vk = XElement.Load(@"C:\VulkanSDK\1.0.65.0\vk.xml")
     
     let defines = XmlReader.defines vk
     let enums = XmlReader.enums vk
