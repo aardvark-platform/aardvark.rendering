@@ -7,12 +7,17 @@ open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
+open System.Reflection
+open VK_KHX_device_group_creation
 
 #nowarn "9"
 #nowarn "51"
+#nowarn "1337"
 
 type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<string>) as this =   
     inherit VulkanObject()
+
+    let extensions = extensions |> Set.add "VK_KHX_device_group_creation" //|> Set.add "VK_KHX_device_group"
 
     static let availableLayers =
         let mutable count = 0u
@@ -111,6 +116,8 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
             VkRaw.vkCreateInstance(&&info, NativePtr.zero, &&instance)
                 |> check "could not create instance"
 
+            VkRaw.activeInstance <- instance
+
             instance
         finally
             ()
@@ -128,6 +135,24 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
 
         devices |> Array.mapi (fun i d -> PhysicalDevice(this, d, i))
 
+    let groups =    
+        if Set.contains VK_KHX_device_group_creation.Name extensions then
+            let mutable groupCount = 0u
+
+            VkRaw.vkEnumeratePhysicalDeviceGroupsKHX(instance, &&groupCount, NativePtr.zero)
+                |> check "could not get physical device groups"
+
+
+            let groups = Array.zeroCreate (int groupCount)
+            groups |> NativePtr.withA (fun ptr ->
+                VkRaw.vkEnumeratePhysicalDeviceGroupsKHX(instance, &&groupCount, ptr)
+                    |> check "could not get physical device groups"
+            )
+
+            groups |> Array.mapi (fun i d -> PhysicalDeviceGroup(this, d, i))
+        else
+            [||]
+
     
     static member AvailableLayers = availableLayers
     static member GlobalExtensions = globalExtensions
@@ -142,6 +167,7 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
     member x.Handle = instance
 
     member x.Devices = devices
+    member x.DeviceGroups = groups
 
     member x.PrintInfo(l : ILogger, chosenDevice : int) =
         let caps = 
@@ -234,6 +260,26 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
 
         )
 
+and PhysicalDeviceGroup(instance : Instance, handle : VkPhysicalDeviceGroupPropertiesKHX, index : int) =
+    let devices =
+        Array.init (int handle.physicalDeviceCount) (fun i ->
+            PhysicalDevice(instance, handle.physicalDevices.[i], i)
+        )
+
+    let subAllocation = handle.subsetAllocation = 1u
+
+    let availableLayers =
+        devices |> Array.map (fun d -> Set.ofArray d.AvailableLayers) |> Set.intersectMany |> Set.toArray
+
+    let globalExtensions =
+        devices |> Array.map (fun d -> Set.ofArray d.GlobalExtensions) |> Set.intersectMany |> Set.toArray
+        
+    member x.AvailableLayers = availableLayers
+    member x.GlobalExtensions : ExtensionInfo[] = globalExtensions
+
+    member x.Devices = devices
+    member x.SubAllocation = subAllocation
+    member x.Index = index
 
 and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, index : int) =
     static let allFormats = Enum.GetValues(typeof<VkFormat>) |> unbox<VkFormat[]>

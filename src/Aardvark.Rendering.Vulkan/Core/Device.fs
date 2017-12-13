@@ -8,6 +8,7 @@ open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
+open VK_KHX_device_group_creation
 
 #nowarn "9"
 #nowarn "51"
@@ -100,7 +101,8 @@ type private QueueFamilyPool(allFamilies : array<QueueFamilyInfo>) =
                         Some (allFamilies.[fam.index], fam.count)
 
 
-type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, wantedExtensions : Set<string>) as this =
+type Device internal(isGroup : bool, deviceGroup : PhysicalDevice[], wantedLayers : Set<string>, wantedExtensions : Set<string>) as this =
+    let physical = deviceGroup.[0]
     let pool = QueueFamilyPool(physical.QueueFamilies)
     let graphicsQueues  = pool.TryTakeSingleFamily(QueueFlags.Graphics, 4)
     let computeQueues   = pool.TryTakeExplicit(QueueFlags.Compute, 2)
@@ -177,21 +179,36 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
             let mutable features = VkPhysicalDeviceFeatures()
             VkRaw.vkGetPhysicalDeviceFeatures(physical.Handle, &&features)
 
-            let mutable info =
-                VkDeviceCreateInfo(
-                    VkStructureType.DeviceCreateInfo, 0n,
-                    0u,
-                    uint32 queueInfos.Length, ptr,
-                    uint32 layers.Length, pLayers,
-                    uint32 extensions.Length, pExtensions,
-                    &&features
-                )
 
-            let mutable device = VkDevice.Zero
-            VkRaw.vkCreateDevice(physical.Handle, &&info, NativePtr.zero, &&device)
-                |> check "could not create device"
+            let deviceHandles = deviceGroup |> Array.map (fun d -> d.Handle)
 
-            device
+            deviceHandles |> NativePtr.withA(fun pDevices ->
+                let mutable groupInfo =
+                    VkDeviceGroupDeviceCreateInfoKHX(
+                        VkStructureType.DeviceGroupDeviceCreateInfoKhx,
+                        0n,
+                        uint32 deviceGroup.Length,
+                        pDevices
+                    )
+
+                let next = if isGroup then NativePtr.toNativeInt &&groupInfo else 0n
+
+                let mutable info =
+                    VkDeviceCreateInfo(
+                        VkStructureType.DeviceCreateInfo, next,
+                        0u,
+                        uint32 queueInfos.Length, ptr,
+                        uint32 layers.Length, pLayers,
+                        uint32 extensions.Length, pExtensions,
+                        &&features
+                    )
+
+                let mutable device = VkDevice.Zero
+                VkRaw.vkCreateDevice(physical.Handle, &&info, NativePtr.zero, &&device)
+                    |> check "could not create device"
+
+                device
+            )
         )
 
     let graphicsFamily, computeFamily, transferFamily =
@@ -1873,7 +1890,11 @@ type DeviceExtensions private() =
 
     [<Extension>]
     static member CreateDevice(this : PhysicalDevice, wantedLayers : Set<string>, wantedExtensions : Set<string>) =
-        new Device(this, wantedLayers, wantedExtensions)
+        new Device(false, [|this|], wantedLayers, wantedExtensions)
+        
+    [<Extension>]
+    static member CreateDevice(this : PhysicalDeviceGroup, wantedLayers : Set<string>, wantedExtensions : Set<string>) =
+        new Device(true, this.Devices, wantedLayers, wantedExtensions)
 
     [<Extension>]
     static member GetMemory(this : Device, bits : uint32, preferDevice : bool) =

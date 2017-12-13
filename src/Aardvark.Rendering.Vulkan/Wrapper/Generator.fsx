@@ -223,7 +223,7 @@ module Struct =
           node :: visited
       in explore [] visited start_node
 
-    let private toposort graph = 
+    let toposort graph = 
       List.fold (fun visited (node,_) -> dfs graph visited node) [] (Map.toList graph)
 
     let topologicalSort (s : list<Struct>) : list<Struct> =
@@ -273,6 +273,18 @@ module Command =
 
         Some { returnType = returnType; name = name; parameters = parameters }
 
+type Extension =
+    {
+        name            : string
+        number          : int
+        requires        : list<string>
+        enumExtensions  : Map<string, list<string * int>>
+        enums           : list<Enum>
+        structs         : list<Struct>
+        commands        : list<Command>
+    }
+
+
 module XmlReader =
     let defines (d : XElement) =
         d.Descendants(xname "enums") 
@@ -286,6 +298,148 @@ module XmlReader =
                   )
               )
             |> Map.ofSeq
+
+    let extensions (vk : XElement) (commands : list<Command>) (enums : list<Enum>) (structs : list<Struct>) =
+        let mutable commands = commands
+        let mutable enums = enums
+        let mutable structs = structs
+
+        let removeCmd (name : string) =
+            let mutable result = None
+
+            commands <-
+                commands |> List.filter(fun cmd ->
+                    if cmd.name = name then
+                        result <- Some cmd
+                        false
+                    else
+                        true
+                )
+
+            result
+
+        let removeStruct (name : string) =
+            let mutable result = None
+
+            structs <-
+                structs |> List.filter(fun cmd ->
+                    if cmd.name = name then
+                        result <- Some cmd
+                        false
+                    else
+                        true
+                )
+
+            result
+
+        let removeEnum (name : string) =
+            let mutable result = None
+
+            enums <-
+                enums |> List.filter(fun cmd ->
+                    if cmd.name = name then
+                        result <- Some cmd
+                        false
+                    else
+                        true
+                )
+
+            result
+
+        let extensionEnumValue (dir : Option<string>) (e : int) (offset : int) =
+            match dir with
+                | Some "-" -> 
+                    -(1000000000 + (e - 1) * 1000 + offset)
+                | _ ->
+                    1000000000 + (e - 1) * 1000 + offset
+
+        let extensions =
+            [
+                for e in vk.Descendants(xname "extensions").Descendants(xname "extension") do
+                    let require = e.Descendants(xname "require") |> Seq.tryHead
+                    let name = attrib e "name"
+                    let number = attrib e "number"
+                    match require, name, number with
+                        | Some r, Some name, Some number ->
+                            let number = System.Int32.Parse number
+
+
+                            let fixedDeps =
+                                if name <> "VK_EXT_debug_report" then ["VK_EXT_debug_report"]
+                                else []
+
+
+                            let requires = 
+                                match attrib e "requires" with
+                                    | Some v -> fixedDeps @ (v.Split(',') |> Array.toList)
+                                    | None -> fixedDeps
+
+
+
+                            let enumExtensions =
+                                r.Descendants(xname "enum") |> Seq.toList |> List.choose (fun e -> 
+                                    match attrib e "extends", attrib e "offset", attrib e "name" with
+                                        | Some baseType, Some offset, Some name ->
+                                            let value = extensionEnumValue (attrib e "dir") number (System.Int32.Parse offset)
+                                            Some (baseType, name, value)    
+                                        | _ ->
+                                            None
+                                )
+
+
+                            let types = 
+                                r.Descendants(xname "type") 
+                                    |> Seq.toList
+                                    |> List.choose (fun t ->
+                                        match attrib t "name" with  
+                                            | Some name -> 
+                                                match removeEnum name with
+                                                    | Some e -> Some (Choice1Of2 e)
+                                                    | None ->
+                                                        match removeStruct name with
+                                                            | Some s -> Some (Choice2Of2 s)
+                                                            | None -> None
+                                            | None ->
+                                                None
+                                    )
+
+                            let commands =
+                                r.Descendants(xname "command")
+                                    |> Seq.toList
+                                    |> List.choose (fun c ->
+                                        match attrib c "name" with 
+                                            | Some name -> removeCmd name
+                                            | None -> None
+                                    )
+
+                            let enums = types |> List.choose (function Choice1Of2 e -> Some e | _ -> None)
+                            let structs = types |> List.choose (function Choice2Of2 e -> Some e | _ -> None)
+
+
+
+                    
+                            let groups = 
+                                enumExtensions |> List.groupBy (fun (b,_,_) -> b) |> List.map (fun (g,l) -> g, l |> List.map (fun (_,a,b) -> a, b)) |> Map.ofList
+
+
+                            yield {
+                                name            = name
+                                requires        = requires
+                                number          = number
+                                enumExtensions  = groups
+                                enums           = enums
+                                structs         = structs
+                                commands        = commands
+                            }
+
+                        | _ ->
+                            ()
+                ]
+            
+        extensions, commands, enums, structs
+        
+        
+
 
     let enums (vk : XElement) =
         vk.Descendants(xname "enums")
@@ -370,6 +524,8 @@ module FSharpWriter =
 
     let header() =
         printfn "namespace Aardvark.Rendering.Vulkan"
+        printfn ""
+        printfn "#nowarn \"1337\""
         printfn ""
         printfn "open System"
         printfn "open System.Runtime.InteropServices"
@@ -496,11 +652,26 @@ module FSharpWriter =
             printfn "    let %s = %s" n v
         printfn ""
 
-    let enums (enums : list<Enum>) =
+    let cleanEnumName (e : string) =
+        if e.EndsWith "FlagBits" then e.Substring(0, e.Length - 8) + "Flags"
+        else e
+
+    let enumExtensions (name : string) (exts : list<string * int>) =
+        let name = cleanEnumName name
+        
+        let prefix =
+            if name.EndsWith "Flags" then name.Substring(0,name.Length-5)
+            else name
+
+        let exts = exts |> List.map (fun (n,v) -> (capsToCamelCase prefix n, v))
+
+        printfn "    type %s with" name
+        for (n,v) in exts do
+            printfn "         static member inline %s = unbox<%s> %d" n name v
+
+    let enums (indent : string) (enums : list<Enum>) =
         for e in enums do
-            let name =
-                if e.name.EndsWith "FlagBits" then e.name.Substring(0, e.name.Length - 8) + "Flags"
-                else e.name
+            let name = cleanEnumName e.name
 
             let prefix =
                 if name.EndsWith "Flags" then name.Substring(0,name.Length-5)
@@ -514,15 +685,15 @@ module FSharpWriter =
                 else alternatives
 
             if isFlag then
-                printfn "[<Flags>]"
-            printfn "type %s = " name
+                printfn "%s[<Flags>]" indent
+            printfn "%stype %s = " indent name
 
 
             for (n,v) in alternatives do
                 match v with
-                    | EnumValue v   -> printfn "    | %s = %d" n v
-                    | EnumBit b     -> printfn "    | %s = 0x%08X" n (1 <<< b)
-            printfn ""
+                    | EnumValue v   -> printfn "%s    | %s = %d" indent n v 
+                    | EnumBit b     -> printfn "%s    | %s = 0x%08X" indent n (1 <<< b)
+            printfn "%s" indent
 
     let knownTypes =
         Map.ofList [
@@ -603,6 +774,9 @@ module FSharpWriter =
         printfn "[<StructLayout(LayoutKind.Explicit, Size = %d)>]" totalSize
         printfn "type %s_%d =" baseType size
         printfn "    struct"
+        printfn "        [<FieldOffset(0)>]"
+        printfn "        val mutable public First : %s" baseType
+        printfn "        "
         printfn "        member x.Item"
         printfn "            with get (i : int) : %s =" baseType
         printfn "                if i < 0 || i > %d then raise <| IndexOutOfRangeException()" (size - 1)
@@ -622,10 +796,12 @@ module FSharpWriter =
         printfn "    end"
         printfn ""
 
-    let structs (structs : list<Struct>) =
-        inlineArray "uint32" 4 32
-        inlineArray "byte" 1 8
-        inlineArray "VkPhysicalDevice" 8 32
+    let structs (indent : string) (structs : list<Struct>) =
+
+        let printfn fmt =
+            Printf.kprintf (fun str -> 
+                printfn "%s%s" indent str
+            ) fmt
 
         for s in structs do
             if s.isUnion then printfn "[<StructLayout(LayoutKind.Explicit)>]"
@@ -672,6 +848,12 @@ module FSharpWriter =
                 inlineArray "VkMemoryType" 8 32
             elif s.name = "VkOffset3D" then
                 inlineArray "VkOffset3D" 12 2
+
+    let globalStructs (s : list<Struct>) =
+        inlineArray "uint32" 4 32
+        inlineArray "byte" 1 8
+        inlineArray "VkPhysicalDevice" 8 32
+        structs "" s
 
     let aliases (l : list<Alias>) =
         for a in l do
@@ -731,6 +913,10 @@ module FSharpWriter =
 
     let commands (l : list<Command>) =
         printfn "module VkRaw = "
+
+        printfn "    [<CompilerMessage(\"activeInstance is for internal use only\", 1337, IsError=false, IsHidden=true)>]"
+        printfn "    let mutable activeInstance : VkInstance = 0n"
+
         printfn "    [<Literal>]"
         printfn "    let lib = \"vulkan-1.dll\""
         printfn ""
@@ -739,26 +925,117 @@ module FSharpWriter =
             printfn "    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]"
             printfn "    extern %s %s(%s)" (externTypeName c.returnType) c.name args
 
+    let topoExtensions (s : list<Extension>) : list<Extension> =
+        let typeMap = s |> List.map (fun s -> s.name, s) |> Map.ofList
+        let graph =
+            s |> List.map (fun s -> 
+                    let usedTypes = 
+                        s.requires 
+                            |> List.choose (fun m -> Map.tryFind m typeMap)
+
+                    s, usedTypes
+
+                    )
+                |> Map.ofList
+
+        Struct.toposort graph |> List.rev
+
+        
+    let extensions (extensions : list<Extension>) =
+        let mapping = extensions |> List.map (fun e -> e.name, e.requires) |> Map.ofList
+
+        let rec requires (name : string) =
+            match Map.tryFind name mapping with
+                | Some r -> 
+                    r @ (r |> List.collect requires)
+                | None ->
+                    []
+
+        for e in topoExtensions extensions do
+            printfn "module %s =" e.name
+
+            printfn "    let Name = \"%s\"" e.name
+
+            for r in requires e.name |> Set.ofList do
+                printfn "    open %s" r
+            printfn "    "
+
+            enums "    " e.enums
+            printfn "    "
+
+            structs "    " (Struct.topologicalSort e.structs)
+            printfn "    "
+            for (name, values) in Map.toSeq e.enumExtensions do
+                enumExtensions name values
+            printfn "    "
+
+
+            match e.commands with
+                | [] -> ()
+                | _ -> 
+                    printfn "    module VkRaw ="
+                    for c in e.commands do
+                        let delegateName = c.name.Substring(0,1).ToUpper() + c.name.Substring(1) + "Del"
+                        let targs = c.parameters |> List.map (fun (t,n) -> (typeName t)) |> String.concat " * "
+                        let ret = 
+                            match typeName c.returnType with
+                                | "void" -> "unit"
+                                | n -> n
+
+                        let tDel = sprintf "%s -> %s" targs ret
+                        printfn "        [<SuppressUnmanagedCodeSecurity>]"
+                        printfn "        type %s = delegate of %s" delegateName tDel
+
+                    for c in e.commands do
+                        let delegateName = c.name.Substring(0,1).ToUpper() + c.name.Substring(1) + "Del"
+                        printfn "        let private %sDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, \"%s\"), typeof<%s>) |> unbox<%s>)" c.name c.name delegateName delegateName
+                        
+                    for c in e.commands do
+                        let argDef = c.parameters |> List.map (fun (t,n) -> sprintf "%s : %s" (fsharpName n) (typeName t)) |> String.concat ", "
+                        let argUse = c.parameters |> List.map (fun (_,n) -> (fsharpName n)) |> String.concat ", "
+
+                        printfn "        let %s(%s) = %sDel.Value.Invoke(%s)" c.name argDef c.name argUse
+
+
+
+//
+//                    let args = c.parameters |> List.map (fun (t,n) -> sprintf "%s %s" (externTypeName t) (fsharpName n)) |> String.concat ", "
+//                    printfn "    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]"
+//                    printfn "    extern %s %s(%s)" (externTypeName c.returnType) c.name args
+
+                
+
 
 
 let run () = 
-    let vk = XElement.Load(@"C:\VulkanSDK\1.0.65.0\vk.xml")
-    
+    let vk = XElement.Load(@"C:\VulkanSDK\1.0.65.1\vk.xml")
     let defines = XmlReader.defines vk
-    let enums = XmlReader.enums vk
-    let structs = XmlReader.structs defines vk
     let aliases = XmlReader.aliases defines vk
     let handles = XmlReader.handles vk
+    let enums = XmlReader.enums vk
+    let structs = XmlReader.structs defines vk
     let commands = XmlReader.commands defines vk
+    let exts, commands, enums, structs = XmlReader.extensions vk commands enums structs
+
+
+
+
 
     FSharpWriter.header()
     FSharpWriter.missing()
     FSharpWriter.handles handles
     FSharpWriter.aliases aliases
-    FSharpWriter.enums enums
-    FSharpWriter.structs (Struct.topologicalSort structs)
+    FSharpWriter.enums "" enums
+    FSharpWriter.globalStructs (Struct.topologicalSort structs)
     FSharpWriter.extendedEnums()
     FSharpWriter.commands commands
+    FSharpWriter.extensions exts
+
+    
+
+
+
+
     let str = FSharpWriter.builder.ToString()
 
 

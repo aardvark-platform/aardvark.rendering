@@ -10,6 +10,8 @@ open System.Runtime.CompilerServices
 open System.Reflection
 open Microsoft.FSharp.NativeInterop
 
+open VK_KHR_swapchain
+
 #nowarn "9"
 #nowarn "51"
 

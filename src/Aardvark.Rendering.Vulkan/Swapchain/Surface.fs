@@ -9,6 +9,14 @@ open System.Runtime.CompilerServices
 open System.Reflection
 open Microsoft.FSharp.NativeInterop
 
+open VK_KHR_surface
+open VK_KHR_win32_surface
+open VK_KHR_xlib_surface
+open VK_KHR_mir_surface
+open VK_KHR_android_surface
+open VK_KHR_xcb_surface
+open VK_KHR_wayland_surface
+
 #nowarn "9"
 #nowarn "51"
 
