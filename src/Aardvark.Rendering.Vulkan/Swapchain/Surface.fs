@@ -9,13 +9,13 @@ open System.Runtime.CompilerServices
 open System.Reflection
 open Microsoft.FSharp.NativeInterop
 
-open VK_KHR_surface
-open VK_KHR_win32_surface
-open VK_KHR_xlib_surface
-open VK_KHR_mir_surface
-open VK_KHR_android_surface
-open VK_KHR_xcb_surface
-open VK_KHR_wayland_surface
+open KHRSurface
+open KHRWin32Surface
+open KHRXlibSurface
+open KHRMirSurface
+open KHRAndroidSurface
+open KHRXcbSurface
+open KHRWaylandSurface
 
 #nowarn "9"
 #nowarn "51"
@@ -197,7 +197,7 @@ module Surface =
             | XLib info ->
                 let mutable info = 
                     VkXlibSurfaceCreateInfoKHR(
-                        VkStructureType.XLibSurfaceCreateInfo, 0n,
+                        VkStructureType.XlibSurfaceCreateInfoKhr, 0n,
                         VkXlibSurfaceCreateFlagsKHR.MinValue,
                         info.dpy,
                         info.window
@@ -209,7 +209,7 @@ module Surface =
             | Xcb info ->
                 let mutable info =
                     VkXcbSurfaceCreateInfoKHR(
-                        VkStructureType.XcbSurfaceCreateInfo, 0n,
+                        VkStructureType.XcbSurfaceCreateInfoKhr, 0n,
                         VkXcbSurfaceCreateFlagsKHR.MinValue,
                         info.connection,
                         info.window
@@ -220,7 +220,7 @@ module Surface =
             | Wayland info ->
                 let mutable info =
                     VkWaylandSurfaceCreateInfoKHR(
-                        VkStructureType.WaylandSurfaceCreateInfo, 0n,
+                        VkStructureType.WaylandSurfaceCreateInfoKhr, 0n,
                         VkWaylandSurfaceCreateFlagsKHR.MinValue,
                         info.display,
                         info.surface
@@ -231,7 +231,7 @@ module Surface =
             | Mir info ->
                 let mutable info =
                     VkMirSurfaceCreateInfoKHR(
-                        VkStructureType.MirSurfaceCreateInfo, 0n,
+                        VkStructureType.MirSurfaceCreateInfoKhr, 0n,
                         VkMirSurfaceCreateFlagsKHR.MinValue,
                         info.connection,
                         info.mirSurface
@@ -242,7 +242,7 @@ module Surface =
             | Android info ->
                 let mutable info =
                     VkAndroidSurfaceCreateInfoKHR(
-                        VkStructureType.AndroidSurfaceCreateInfo, 0n,
+                        VkStructureType.AndroidSurfaceCreateInfoKhr, 0n,
                         VkAndroidSurfaceCreateFlagsKHR.MinValue,
                         info.window
                     )
@@ -252,7 +252,7 @@ module Surface =
             | Win32 info ->
                 let mutable info =
                     VkWin32SurfaceCreateInfoKHR(
-                        VkStructureType.Win32SurfaceCreateInfo, 0n, 
+                        VkStructureType.Win32SurfaceCreateInfoKhr, 0n, 
                         VkWin32SurfaceCreateFlagsKHR.MinValue,
                         info.hinstance,
                         info.hwnd

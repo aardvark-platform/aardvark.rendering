@@ -9,7 +9,7 @@ open System.Runtime.CompilerServices
 open System.Threading
 open System.Collections.Concurrent
 open Aardvark.Base
-open VK_EXT_debug_report
+open EXTDebugReport
 
 type MessageSeverity =
     | Information           = 0x00000001

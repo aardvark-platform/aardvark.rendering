@@ -276,6 +276,7 @@ module Command =
 type Extension =
     {
         name            : string
+        extName         : string
         number          : int
         requires        : list<string>
         enumExtensions  : Map<string, list<string * int>>
@@ -284,6 +285,12 @@ type Extension =
         commands        : list<Command>
     }
 
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module Extension =
+    let private dummyRx = System.Text.RegularExpressions.Regex @"VK_[A-Za-z]+_extension_([0-9]+)"
+    
+    let isEmpty (e : Extension) =
+        dummyRx.IsMatch e.name && Map.isEmpty e.enumExtensions && List.isEmpty e.enums && List.isEmpty e.structs && List.isEmpty e.commands
 
 module XmlReader =
     let defines (d : XElement) =
@@ -363,16 +370,10 @@ module XmlReader =
                         | Some r, Some name, Some number ->
                             let number = System.Int32.Parse number
 
-
-                            let fixedDeps =
-                                if name <> "VK_EXT_debug_report" then ["VK_EXT_debug_report"]
-                                else []
-
-
                             let requires = 
                                 match attrib e "requires" with
-                                    | Some v -> fixedDeps @ (v.Split(',') |> Array.toList)
-                                    | None -> fixedDeps
+                                    | Some v -> v.Split(',') |> Array.toList
+                                    | None -> []
 
 
 
@@ -424,6 +425,7 @@ module XmlReader =
 
                             yield {
                                 name            = name
+                                extName         = name
                                 requires        = requires
                                 number          = number
                                 enumExtensions  = groups
@@ -436,6 +438,8 @@ module XmlReader =
                             ()
                 ]
             
+        
+
         extensions, commands, enums, structs
         
         
@@ -628,22 +632,22 @@ module FSharpWriter =
         printfn "type VkPeerMemoryFeatureFlagsKHX = uint32"
         printfn "type VkCommandPoolTrimFlagsKHR = uint32"
 
-    let extendedEnums() =
-        printfn "[<AutoOpen>]"
-        printfn "module WSIEnums = "
-        printfn "    type VkStructureType with"
-        printfn "        static member XLibSurfaceCreateInfo = unbox<VkStructureType> 1000004000"
-        printfn "        static member XcbSurfaceCreateInfo = unbox<VkStructureType> 1000005000"
-        printfn "        static member WaylandSurfaceCreateInfo = unbox<VkStructureType> 1000006000"
-        printfn "        static member MirSurfaceCreateInfo = unbox<VkStructureType> 1000007000"
-        printfn "        static member AndroidSurfaceCreateInfo = unbox<VkStructureType> 1000008000"
-        printfn "        static member Win32SurfaceCreateInfo = unbox<VkStructureType> 1000009000"
-//        VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR = 1000004000,
-//        VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR = 1000005000,
-//        VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR = 1000006000,
-//        VK_STRUCTURE_TYPE_MIR_SURFACE_CREATE_INFO_KHR = 1000007000,
-//        VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR = 1000008000,
-//        VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR = 1000009000,
+//    let extendedEnums() =
+//        printfn "[<AutoOpen>]"
+//        printfn "module WSIEnums = "
+//        printfn "    type VkStructureType with"
+//        printfn "        static member XLibSurfaceCreateInfo = unbox<VkStructureType> 1000004000"
+//        printfn "        static member XcbSurfaceCreateInfo = unbox<VkStructureType> 1000005000"
+//        printfn "        static member WaylandSurfaceCreateInfo = unbox<VkStructureType> 1000006000"
+//        printfn "        static member MirSurfaceCreateInfo = unbox<VkStructureType> 1000007000"
+//        printfn "        static member AndroidSurfaceCreateInfo = unbox<VkStructureType> 1000008000"
+//        printfn "        static member Win32SurfaceCreateInfo = unbox<VkStructureType> 1000009000"
+////        VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR = 1000004000,
+////        VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR = 1000005000,
+////        VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR = 1000006000,
+////        VK_STRUCTURE_TYPE_MIR_SURFACE_CREATE_INFO_KHR = 1000007000,
+////        VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR = 1000008000,
+////        VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR = 1000009000,
     let defines (map : Map<string, string>) =
         printfn "module Defines = "
         for (n,v) in Map.toSeq map do
@@ -915,23 +919,61 @@ module FSharpWriter =
         printfn "module VkRaw = "
 
         printfn "    [<CompilerMessage(\"activeInstance is for internal use only\", 1337, IsError=false, IsHidden=true)>]"
-        printfn "    let mutable activeInstance : VkInstance = 0n"
+        printfn "    let mutable internal activeInstance : VkInstance = 0n"
+
 
         printfn "    [<Literal>]"
         printfn "    let lib = \"vulkan-1.dll\""
         printfn ""
         for c in l do
-            let args = c.parameters |> List.map (fun (t,n) -> sprintf "%s %s" (externTypeName t) (fsharpName n)) |> String.concat ", "
-            printfn "    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]"
-            printfn "    extern %s %s(%s)" (externTypeName c.returnType) c.name args
+            if c.name = "vkCreateInstance" then
+                let args = c.parameters |> List.map (fun (t,n) -> sprintf "%s %s" (externTypeName t) (fsharpName n)) |> String.concat ", "                
+                printfn "    [<DllImport(lib, EntryPoint=\"%s\");SuppressUnmanagedCodeSecurity>]" c.name
+                printfn "    extern %s private _%s(%s)" (externTypeName c.returnType) c.name args
+                
+
+
+                let argDef = c.parameters |> List.map (fun (t,n) -> sprintf "%s : %s" (fsharpName n) (typeName t)) |> String.concat ", "
+                let argUse = c.parameters |> List.map (fun (t,n) -> fsharpName n) |> String.concat ", "
+                let instanceArgName = c.parameters |> List.pick (fun (t,n) -> match t with | Ptr(Literal "VkInstance") -> Some n | _ -> None)
+
+                printfn "    let vkCreateInstance(%s) = " argDef
+                printfn "        let res = _vkCreateInstance(%s)" argUse 
+                printfn "        if res = VkResult.VkSuccess then"
+                printfn "            activeInstance <- NativePtr.read %s" instanceArgName
+                printfn "        res"
+                printfn "    "
+            else
+                let args = c.parameters |> List.map (fun (t,n) -> sprintf "%s %s" (externTypeName t) (fsharpName n)) |> String.concat ", "
+                printfn "    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]"
+                printfn "    extern %s %s(%s)" (externTypeName c.returnType) c.name args
+
+                
+        printfn "    "
+        printfn "    [<CompilerMessage(\"activeInstance is for internal use only\", 1337, IsError=false, IsHidden=true)>]"
+        printfn "    let importDelegate<'a>(name : string) = "
+        printfn "        let ptr = vkGetInstanceProcAddr(activeInstance, name)"
+        printfn "        if ptr = 0n then"
+        printfn "            Log.warn \"[Vulkan] could not load extension: %%s\" name"
+        printfn "            Unchecked.defaultof<'a>"
+        printfn "        else"
+        printfn "            Marshal.GetDelegateForFunctionPointer(ptr, typeof<'a>) |> unbox<'a>"
+
+
+
 
     let topoExtensions (s : list<Extension>) : list<Extension> =
         let typeMap = s |> List.map (fun s -> s.name, s) |> Map.ofList
         let graph =
             s |> List.map (fun s -> 
                     let usedTypes = 
-                        s.requires 
-                            |> List.choose (fun m -> Map.tryFind m typeMap)
+                        (s.requires |> List.choose (fun m -> Map.tryFind m typeMap))
+
+                    let usedTypes = 
+                        if s.name <> "EXTDebugReport" then
+                            Map.find "EXTDebugReport" typeMap :: usedTypes
+                        else 
+                            usedTypes
 
                     s, usedTypes
 
@@ -941,8 +983,54 @@ module FSharpWriter =
         Struct.toposort graph |> List.rev
 
         
+
+
+    let extRx = System.Text.RegularExpressions.Regex @"^VK_(?<kind>[A-Z]+)_(?<name>.*)$"
+
+    let camelCase (str : string) =
+        let parts = System.Collections.Generic.List<string>()
+        
+        let mutable str = str
+        let mutable fi = str.IndexOf '_'
+        while fi >= 0 do
+            parts.Add (str.Substring(0, fi))
+            str <- str.Substring(fi + 1)
+            fi <- str.IndexOf '_'
+
+        if str.Length > 0 then
+            parts.Add str
+        let parts = Seq.toList parts
+
+        parts |> List.map (fun p -> p.Substring(0,1).ToUpper() + p.Substring(1).ToLower()) |> String.concat ""
+
+
     let extensions (extensions : list<Extension>) =
+
+        let extensions = extensions |> List.filter (not << Extension.isEmpty)
+
+        let kindAndName (e : string) =
+            let m = extRx.Match e
+            let kind = m.Groups.["kind"].Value
+            let name = m.Groups.["name"].Value
+            kind, camelCase name
+
+        let fullName (e : string) =
+            let k,n = kindAndName e
+            let res = sprintf "%s%s" k n
+            res
+
+        let extensions = 
+            extensions |> List.map (fun e ->
+                { e with name = fullName e.name; requires = e.requires |> List.map fullName }
+            )
+        
+
+
+
+
         let mapping = extensions |> List.map (fun e -> e.name, e.requires) |> Map.ofList
+        let mapping = mapping |> Map.map (fun _ req -> List.filter (fun e -> Map.containsKey e mapping) req)
+
 
         let rec requires (name : string) =
             match Map.tryFind name mapping with
@@ -952,13 +1040,24 @@ module FSharpWriter =
                     []
 
         for e in topoExtensions extensions do
+            printfn ""
             printfn "module %s =" e.name
 
-            printfn "    let Name = \"%s\"" e.name
-
-            for r in requires e.name |> Set.ofList do
-                printfn "    open %s" r
+            printfn "    let Name = \"%s\"" e.extName
+            printfn "    let Number = %d" e.number
             printfn "    "
+
+            let required = requires e.name |> Set.ofList
+
+            if not (Set.isEmpty required) then
+                let exts = required |> Seq.map (sprintf "%s.Name") |> String.concat "; " |> sprintf "[ %s ]"
+                printfn "    let Required = %s" exts
+                for r in required do
+                    printfn "    open %s" r
+                
+            if e.name <> "EXTDebugReport" then
+                printfn "    open EXTDebugReport"
+                printfn "    "
 
             enums "    " e.enums
             printfn "    "
@@ -973,6 +1072,7 @@ module FSharpWriter =
             match e.commands with
                 | [] -> ()
                 | _ -> 
+                    printfn "    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]"
                     printfn "    module VkRaw ="
                     for c in e.commands do
                         let delegateName = c.name.Substring(0,1).ToUpper() + c.name.Substring(1) + "Del"
@@ -985,16 +1085,29 @@ module FSharpWriter =
                         let tDel = sprintf "%s -> %s" targs ret
                         printfn "        [<SuppressUnmanagedCodeSecurity>]"
                         printfn "        type %s = delegate of %s" delegateName tDel
-
+                        
+                    printfn "        "
+                    printfn "        [<AbstractClass; Sealed>]"
+                    printfn "        type private Loader<'d> private() ="
+                    printfn "            static do Log.line \"[Vulkan] loading %s\"" e.extName
                     for c in e.commands do
                         let delegateName = c.name.Substring(0,1).ToUpper() + c.name.Substring(1) + "Del"
-                        printfn "        let private %sDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, \"%s\"), typeof<%s>) |> unbox<%s>)" c.name c.name delegateName delegateName
+                        printfn "            static let s_%sDel = VkRaw.importDelegate<%s> \"%s\"" c.name delegateName c.name
                         
+                    for c in e.commands do
+                        printfn "            static member %s = s_%sDel" c.name c.name
+                     
+
+//
+//                    for c in e.commands do
+//                        let delegateName = c.name.Substring(0,1).ToUpper() + c.name.Substring(1) + "Del"
+//                        printfn "        let private %sDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, \"%s\"), typeof<%s>) |> unbox<%s>)" c.name c.name delegateName delegateName
+//                        
                     for c in e.commands do
                         let argDef = c.parameters |> List.map (fun (t,n) -> sprintf "%s : %s" (fsharpName n) (typeName t)) |> String.concat ", "
                         let argUse = c.parameters |> List.map (fun (_,n) -> (fsharpName n)) |> String.concat ", "
 
-                        printfn "        let %s(%s) = %sDel.Value.Invoke(%s)" c.name argDef c.name argUse
+                        printfn "        let %s(%s) = Loader<unit>.%s.Invoke(%s)" c.name argDef c.name argUse
 
 
 
@@ -1008,6 +1121,14 @@ module FSharpWriter =
 
 
 let run () = 
+//    
+//    let dir = Path.GetTempPath()
+//    let file = Path.Combine(dir, "vk.xml")
+//    
+//    let request = System.Net.HttpWebRequest.Create("https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/1.0/src/spec/vk.xml")
+//    let response = request.GetResponse()
+//    let s = response.GetResponseStream()
+
     let vk = XElement.Load(@"C:\VulkanSDK\1.0.65.1\vk.xml")
     let defines = XmlReader.defines vk
     let aliases = XmlReader.aliases defines vk
@@ -1027,7 +1148,6 @@ let run () =
     FSharpWriter.aliases aliases
     FSharpWriter.enums "" enums
     FSharpWriter.globalStructs (Struct.topologicalSort structs)
-    FSharpWriter.extendedEnums()
     FSharpWriter.commands commands
     FSharpWriter.extensions exts
 

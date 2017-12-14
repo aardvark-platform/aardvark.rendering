@@ -8,7 +8,7 @@ open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
-open VK_KHX_device_group_creation
+open KHXDeviceGroupCreation
 
 #nowarn "9"
 #nowarn "51"
