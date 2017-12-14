@@ -950,13 +950,14 @@ module FSharpWriter =
 
                 
         printfn "    "
-        printfn "    [<CompilerMessage(\"activeInstance is for internal use only\", 1337, IsError=false, IsHidden=true)>]"
-        printfn "    let importDelegate<'a>(name : string) = "
+        printfn "    [<CompilerMessage(\"vkImportInstanceDelegate is for internal use only\", 1337, IsError=false, IsHidden=true)>]"
+        printfn "    let vkImportInstanceDelegate<'a>(name : string) = "
         printfn "        let ptr = vkGetInstanceProcAddr(activeInstance, name)"
         printfn "        if ptr = 0n then"
-        printfn "            Log.warn \"[Vulkan] could not load extension: %%s\" name"
+        printfn "            Log.warn \"could not load function: %%s\" name"
         printfn "            Unchecked.defaultof<'a>"
         printfn "        else"
+        printfn "            Report.Line(3, sprintf \"loaded function %%s (0x%%08X)\" name ptr)"
         printfn "            Marshal.GetDelegateForFunctionPointer(ptr, typeof<'a>) |> unbox<'a>"
 
 
@@ -1089,11 +1090,11 @@ module FSharpWriter =
                     printfn "        "
                     printfn "        [<AbstractClass; Sealed>]"
                     printfn "        type private Loader<'d> private() ="
-                    printfn "            static do Log.line \"[Vulkan] loading %s\"" e.extName
+                    printfn "            static do Report.Begin(3, \"[Vulkan] loading %s\")" e.extName
                     for c in e.commands do
                         let delegateName = c.name.Substring(0,1).ToUpper() + c.name.Substring(1) + "Del"
-                        printfn "            static let s_%sDel = VkRaw.importDelegate<%s> \"%s\"" c.name delegateName c.name
-                        
+                        printfn "            static let s_%sDel = VkRaw.vkImportInstanceDelegate<%s> \"%s\"" c.name delegateName c.name
+                    printfn "            static do Report.End(3) |> ignore"
                     for c in e.commands do
                         printfn "            static member %s = s_%sDel" c.name c.name
                      
