@@ -3591,13 +3591,14 @@ module VkRaw =
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetPhysicalDevicePresentRectanglesKHX(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint32* pRectCount, VkRect2D* pRects)
     
-    [<CompilerMessage("activeInstance is for internal use only", 1337, IsError=false, IsHidden=true)>]
-    let importDelegate<'a>(name : string) = 
+    [<CompilerMessage("vkImportInstanceDelegate is for internal use only", 1337, IsError=false, IsHidden=true)>]
+    let vkImportInstanceDelegate<'a>(name : string) = 
         let ptr = vkGetInstanceProcAddr(activeInstance, name)
         if ptr = 0n then
-            Log.warn "[Vulkan] could not load extension: %s" name
+            Log.warn "could not load function: %s" name
             Unchecked.defaultof<'a>
         else
+            Report.Line(3, sprintf "loaded function %s (0x%08X)" name ptr)
             Marshal.GetDelegateForFunctionPointer(ptr, typeof<'a>) |> unbox<'a>
 
 module EXTDebugReport =
@@ -3674,10 +3675,11 @@ module EXTDebugReport =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_EXT_debug_report"
-            static let s_vkCreateDebugReportCallbackEXTDel = VkRaw.importDelegate<VkCreateDebugReportCallbackEXTDel> "vkCreateDebugReportCallbackEXT"
-            static let s_vkDestroyDebugReportCallbackEXTDel = VkRaw.importDelegate<VkDestroyDebugReportCallbackEXTDel> "vkDestroyDebugReportCallbackEXT"
-            static let s_vkDebugReportMessageEXTDel = VkRaw.importDelegate<VkDebugReportMessageEXTDel> "vkDebugReportMessageEXT"
+            static do Report.Begin(3, "[Vulkan] loading VK_EXT_debug_report")
+            static let s_vkCreateDebugReportCallbackEXTDel = VkRaw.vkImportInstanceDelegate<VkCreateDebugReportCallbackEXTDel> "vkCreateDebugReportCallbackEXT"
+            static let s_vkDestroyDebugReportCallbackEXTDel = VkRaw.vkImportInstanceDelegate<VkDestroyDebugReportCallbackEXTDel> "vkDestroyDebugReportCallbackEXT"
+            static let s_vkDebugReportMessageEXTDel = VkRaw.vkImportInstanceDelegate<VkDebugReportMessageEXTDel> "vkDebugReportMessageEXT"
+            static do Report.End(3) |> ignore
             static member vkCreateDebugReportCallbackEXT = s_vkCreateDebugReportCallbackEXTDel
             static member vkDestroyDebugReportCallbackEXT = s_vkDestroyDebugReportCallbackEXTDel
             static member vkDebugReportMessageEXT = s_vkDebugReportMessageEXTDel
@@ -3703,9 +3705,10 @@ module AMDDrawIndirectCount =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_AMD_draw_indirect_count"
-            static let s_vkCmdDrawIndirectCountAMDDel = VkRaw.importDelegate<VkCmdDrawIndirectCountAMDDel> "vkCmdDrawIndirectCountAMD"
-            static let s_vkCmdDrawIndexedIndirectCountAMDDel = VkRaw.importDelegate<VkCmdDrawIndexedIndirectCountAMDDel> "vkCmdDrawIndexedIndirectCountAMD"
+            static do Report.Begin(3, "[Vulkan] loading VK_AMD_draw_indirect_count")
+            static let s_vkCmdDrawIndirectCountAMDDel = VkRaw.vkImportInstanceDelegate<VkCmdDrawIndirectCountAMDDel> "vkCmdDrawIndirectCountAMD"
+            static let s_vkCmdDrawIndexedIndirectCountAMDDel = VkRaw.vkImportInstanceDelegate<VkCmdDrawIndexedIndirectCountAMDDel> "vkCmdDrawIndexedIndirectCountAMD"
+            static do Report.End(3) |> ignore
             static member vkCmdDrawIndirectCountAMD = s_vkCmdDrawIndirectCountAMDDel
             static member vkCmdDrawIndexedIndirectCountAMD = s_vkCmdDrawIndexedIndirectCountAMDDel
         let vkCmdDrawIndirectCountAMD(commandBuffer : VkCommandBuffer, buffer : VkBuffer, offset : VkDeviceSize, countBuffer : VkBuffer, countBufferOffset : VkDeviceSize, maxDrawCount : uint32, stride : uint32) = Loader<unit>.vkCmdDrawIndirectCountAMD.Invoke(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride)
@@ -3880,8 +3883,9 @@ module AMDShaderInfo =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_AMD_shader_info"
-            static let s_vkGetShaderInfoAMDDel = VkRaw.importDelegate<VkGetShaderInfoAMDDel> "vkGetShaderInfoAMD"
+            static do Report.Begin(3, "[Vulkan] loading VK_AMD_shader_info")
+            static let s_vkGetShaderInfoAMDDel = VkRaw.vkImportInstanceDelegate<VkGetShaderInfoAMDDel> "vkGetShaderInfoAMD"
+            static do Report.End(3) |> ignore
             static member vkGetShaderInfoAMD = s_vkGetShaderInfoAMDDel
         let vkGetShaderInfoAMD(device : VkDevice, pipeline : VkPipeline, shaderStage : VkShaderStageFlags, infoType : VkShaderInfoTypeAMD, pInfoSize : nativeptr<uint64>, pInfo : nativeint) = Loader<unit>.vkGetShaderInfoAMD.Invoke(device, pipeline, shaderStage, infoType, pInfoSize, pInfo)
 
@@ -4049,14 +4053,15 @@ module KHRGetPhysicalDeviceProperties2 =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_get_physical_device_properties2"
-            static let s_vkGetPhysicalDeviceFeatures2KHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceFeatures2KHRDel> "vkGetPhysicalDeviceFeatures2KHR"
-            static let s_vkGetPhysicalDeviceProperties2KHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceProperties2KHRDel> "vkGetPhysicalDeviceProperties2KHR"
-            static let s_vkGetPhysicalDeviceFormatProperties2KHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceFormatProperties2KHRDel> "vkGetPhysicalDeviceFormatProperties2KHR"
-            static let s_vkGetPhysicalDeviceImageFormatProperties2KHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceImageFormatProperties2KHRDel> "vkGetPhysicalDeviceImageFormatProperties2KHR"
-            static let s_vkGetPhysicalDeviceQueueFamilyProperties2KHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceQueueFamilyProperties2KHRDel> "vkGetPhysicalDeviceQueueFamilyProperties2KHR"
-            static let s_vkGetPhysicalDeviceMemoryProperties2KHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceMemoryProperties2KHRDel> "vkGetPhysicalDeviceMemoryProperties2KHR"
-            static let s_vkGetPhysicalDeviceSparseImageFormatProperties2KHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceSparseImageFormatProperties2KHRDel> "vkGetPhysicalDeviceSparseImageFormatProperties2KHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_get_physical_device_properties2")
+            static let s_vkGetPhysicalDeviceFeatures2KHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceFeatures2KHRDel> "vkGetPhysicalDeviceFeatures2KHR"
+            static let s_vkGetPhysicalDeviceProperties2KHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceProperties2KHRDel> "vkGetPhysicalDeviceProperties2KHR"
+            static let s_vkGetPhysicalDeviceFormatProperties2KHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceFormatProperties2KHRDel> "vkGetPhysicalDeviceFormatProperties2KHR"
+            static let s_vkGetPhysicalDeviceImageFormatProperties2KHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceImageFormatProperties2KHRDel> "vkGetPhysicalDeviceImageFormatProperties2KHR"
+            static let s_vkGetPhysicalDeviceQueueFamilyProperties2KHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceQueueFamilyProperties2KHRDel> "vkGetPhysicalDeviceQueueFamilyProperties2KHR"
+            static let s_vkGetPhysicalDeviceMemoryProperties2KHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceMemoryProperties2KHRDel> "vkGetPhysicalDeviceMemoryProperties2KHR"
+            static let s_vkGetPhysicalDeviceSparseImageFormatProperties2KHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceSparseImageFormatProperties2KHRDel> "vkGetPhysicalDeviceSparseImageFormatProperties2KHR"
+            static do Report.End(3) |> ignore
             static member vkGetPhysicalDeviceFeatures2KHR = s_vkGetPhysicalDeviceFeatures2KHRDel
             static member vkGetPhysicalDeviceProperties2KHR = s_vkGetPhysicalDeviceProperties2KHRDel
             static member vkGetPhysicalDeviceFormatProperties2KHR = s_vkGetPhysicalDeviceFormatProperties2KHRDel
@@ -4135,10 +4140,11 @@ module ANDROIDNativeBuffer =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_ANDROID_native_buffer"
-            static let s_vkGetSwapchainGrallocUsageANDROIDDel = VkRaw.importDelegate<VkGetSwapchainGrallocUsageANDROIDDel> "vkGetSwapchainGrallocUsageANDROID"
-            static let s_vkAcquireImageANDROIDDel = VkRaw.importDelegate<VkAcquireImageANDROIDDel> "vkAcquireImageANDROID"
-            static let s_vkQueueSignalReleaseImageANDROIDDel = VkRaw.importDelegate<VkQueueSignalReleaseImageANDROIDDel> "vkQueueSignalReleaseImageANDROID"
+            static do Report.Begin(3, "[Vulkan] loading VK_ANDROID_native_buffer")
+            static let s_vkGetSwapchainGrallocUsageANDROIDDel = VkRaw.vkImportInstanceDelegate<VkGetSwapchainGrallocUsageANDROIDDel> "vkGetSwapchainGrallocUsageANDROID"
+            static let s_vkAcquireImageANDROIDDel = VkRaw.vkImportInstanceDelegate<VkAcquireImageANDROIDDel> "vkAcquireImageANDROID"
+            static let s_vkQueueSignalReleaseImageANDROIDDel = VkRaw.vkImportInstanceDelegate<VkQueueSignalReleaseImageANDROIDDel> "vkQueueSignalReleaseImageANDROID"
+            static do Report.End(3) |> ignore
             static member vkGetSwapchainGrallocUsageANDROID = s_vkGetSwapchainGrallocUsageANDROIDDel
             static member vkAcquireImageANDROID = s_vkAcquireImageANDROIDDel
             static member vkQueueSignalReleaseImageANDROID = s_vkQueueSignalReleaseImageANDROIDDel
@@ -4175,12 +4181,13 @@ module KHRSurface =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_surface"
-            static let s_vkDestroySurfaceKHRDel = VkRaw.importDelegate<VkDestroySurfaceKHRDel> "vkDestroySurfaceKHR"
-            static let s_vkGetPhysicalDeviceSurfaceSupportKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceSurfaceSupportKHRDel> "vkGetPhysicalDeviceSurfaceSupportKHR"
-            static let s_vkGetPhysicalDeviceSurfaceCapabilitiesKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceSurfaceCapabilitiesKHRDel> "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"
-            static let s_vkGetPhysicalDeviceSurfaceFormatsKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceSurfaceFormatsKHRDel> "vkGetPhysicalDeviceSurfaceFormatsKHR"
-            static let s_vkGetPhysicalDeviceSurfacePresentModesKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceSurfacePresentModesKHRDel> "vkGetPhysicalDeviceSurfacePresentModesKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_surface")
+            static let s_vkDestroySurfaceKHRDel = VkRaw.vkImportInstanceDelegate<VkDestroySurfaceKHRDel> "vkDestroySurfaceKHR"
+            static let s_vkGetPhysicalDeviceSurfaceSupportKHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceSurfaceSupportKHRDel> "vkGetPhysicalDeviceSurfaceSupportKHR"
+            static let s_vkGetPhysicalDeviceSurfaceCapabilitiesKHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceSurfaceCapabilitiesKHRDel> "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"
+            static let s_vkGetPhysicalDeviceSurfaceFormatsKHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceSurfaceFormatsKHRDel> "vkGetPhysicalDeviceSurfaceFormatsKHR"
+            static let s_vkGetPhysicalDeviceSurfacePresentModesKHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceSurfacePresentModesKHRDel> "vkGetPhysicalDeviceSurfacePresentModesKHR"
+            static do Report.End(3) |> ignore
             static member vkDestroySurfaceKHR = s_vkDestroySurfaceKHRDel
             static member vkGetPhysicalDeviceSurfaceSupportKHR = s_vkGetPhysicalDeviceSurfaceSupportKHRDel
             static member vkGetPhysicalDeviceSurfaceCapabilitiesKHR = s_vkGetPhysicalDeviceSurfaceCapabilitiesKHRDel
@@ -4335,14 +4342,15 @@ module KHRDisplay =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_display"
-            static let s_vkGetPhysicalDeviceDisplayPropertiesKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceDisplayPropertiesKHRDel> "vkGetPhysicalDeviceDisplayPropertiesKHR"
-            static let s_vkGetPhysicalDeviceDisplayPlanePropertiesKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceDisplayPlanePropertiesKHRDel> "vkGetPhysicalDeviceDisplayPlanePropertiesKHR"
-            static let s_vkGetDisplayPlaneSupportedDisplaysKHRDel = VkRaw.importDelegate<VkGetDisplayPlaneSupportedDisplaysKHRDel> "vkGetDisplayPlaneSupportedDisplaysKHR"
-            static let s_vkGetDisplayModePropertiesKHRDel = VkRaw.importDelegate<VkGetDisplayModePropertiesKHRDel> "vkGetDisplayModePropertiesKHR"
-            static let s_vkCreateDisplayModeKHRDel = VkRaw.importDelegate<VkCreateDisplayModeKHRDel> "vkCreateDisplayModeKHR"
-            static let s_vkGetDisplayPlaneCapabilitiesKHRDel = VkRaw.importDelegate<VkGetDisplayPlaneCapabilitiesKHRDel> "vkGetDisplayPlaneCapabilitiesKHR"
-            static let s_vkCreateDisplayPlaneSurfaceKHRDel = VkRaw.importDelegate<VkCreateDisplayPlaneSurfaceKHRDel> "vkCreateDisplayPlaneSurfaceKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_display")
+            static let s_vkGetPhysicalDeviceDisplayPropertiesKHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceDisplayPropertiesKHRDel> "vkGetPhysicalDeviceDisplayPropertiesKHR"
+            static let s_vkGetPhysicalDeviceDisplayPlanePropertiesKHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceDisplayPlanePropertiesKHRDel> "vkGetPhysicalDeviceDisplayPlanePropertiesKHR"
+            static let s_vkGetDisplayPlaneSupportedDisplaysKHRDel = VkRaw.vkImportInstanceDelegate<VkGetDisplayPlaneSupportedDisplaysKHRDel> "vkGetDisplayPlaneSupportedDisplaysKHR"
+            static let s_vkGetDisplayModePropertiesKHRDel = VkRaw.vkImportInstanceDelegate<VkGetDisplayModePropertiesKHRDel> "vkGetDisplayModePropertiesKHR"
+            static let s_vkCreateDisplayModeKHRDel = VkRaw.vkImportInstanceDelegate<VkCreateDisplayModeKHRDel> "vkCreateDisplayModeKHR"
+            static let s_vkGetDisplayPlaneCapabilitiesKHRDel = VkRaw.vkImportInstanceDelegate<VkGetDisplayPlaneCapabilitiesKHRDel> "vkGetDisplayPlaneCapabilitiesKHR"
+            static let s_vkCreateDisplayPlaneSurfaceKHRDel = VkRaw.vkImportInstanceDelegate<VkCreateDisplayPlaneSurfaceKHRDel> "vkCreateDisplayPlaneSurfaceKHR"
+            static do Report.End(3) |> ignore
             static member vkGetPhysicalDeviceDisplayPropertiesKHR = s_vkGetPhysicalDeviceDisplayPropertiesKHRDel
             static member vkGetPhysicalDeviceDisplayPlanePropertiesKHR = s_vkGetPhysicalDeviceDisplayPlanePropertiesKHRDel
             static member vkGetDisplayPlaneSupportedDisplaysKHR = s_vkGetDisplayPlaneSupportedDisplaysKHRDel
@@ -4377,8 +4385,9 @@ module EXTDirectModeDisplay =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_EXT_direct_mode_display"
-            static let s_vkReleaseDisplayEXTDel = VkRaw.importDelegate<VkReleaseDisplayEXTDel> "vkReleaseDisplayEXT"
+            static do Report.Begin(3, "[Vulkan] loading VK_EXT_direct_mode_display")
+            static let s_vkReleaseDisplayEXTDel = VkRaw.vkImportInstanceDelegate<VkReleaseDisplayEXTDel> "vkReleaseDisplayEXT"
+            static do Report.End(3) |> ignore
             static member vkReleaseDisplayEXT = s_vkReleaseDisplayEXTDel
         let vkReleaseDisplayEXT(physicalDevice : VkPhysicalDevice, display : VkDisplayKHR) = Loader<unit>.vkReleaseDisplayEXT.Invoke(physicalDevice, display)
 
@@ -4404,9 +4413,10 @@ module EXTAcquireXlibDisplay =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_EXT_acquire_xlib_display"
-            static let s_vkAcquireXlibDisplayEXTDel = VkRaw.importDelegate<VkAcquireXlibDisplayEXTDel> "vkAcquireXlibDisplayEXT"
-            static let s_vkGetRandROutputDisplayEXTDel = VkRaw.importDelegate<VkGetRandROutputDisplayEXTDel> "vkGetRandROutputDisplayEXT"
+            static do Report.Begin(3, "[Vulkan] loading VK_EXT_acquire_xlib_display")
+            static let s_vkAcquireXlibDisplayEXTDel = VkRaw.vkImportInstanceDelegate<VkAcquireXlibDisplayEXTDel> "vkAcquireXlibDisplayEXT"
+            static let s_vkGetRandROutputDisplayEXTDel = VkRaw.vkImportInstanceDelegate<VkGetRandROutputDisplayEXTDel> "vkGetRandROutputDisplayEXT"
+            static do Report.End(3) |> ignore
             static member vkAcquireXlibDisplayEXT = s_vkAcquireXlibDisplayEXTDel
             static member vkGetRandROutputDisplayEXT = s_vkGetRandROutputDisplayEXTDel
         let vkAcquireXlibDisplayEXT(physicalDevice : VkPhysicalDevice, dpy : nativeptr<nativeint>, display : VkDisplayKHR) = Loader<unit>.vkAcquireXlibDisplayEXT.Invoke(physicalDevice, dpy, display)
@@ -4594,12 +4604,13 @@ module EXTDebugMarker =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_EXT_debug_marker"
-            static let s_vkDebugMarkerSetObjectTagEXTDel = VkRaw.importDelegate<VkDebugMarkerSetObjectTagEXTDel> "vkDebugMarkerSetObjectTagEXT"
-            static let s_vkDebugMarkerSetObjectNameEXTDel = VkRaw.importDelegate<VkDebugMarkerSetObjectNameEXTDel> "vkDebugMarkerSetObjectNameEXT"
-            static let s_vkCmdDebugMarkerBeginEXTDel = VkRaw.importDelegate<VkCmdDebugMarkerBeginEXTDel> "vkCmdDebugMarkerBeginEXT"
-            static let s_vkCmdDebugMarkerEndEXTDel = VkRaw.importDelegate<VkCmdDebugMarkerEndEXTDel> "vkCmdDebugMarkerEndEXT"
-            static let s_vkCmdDebugMarkerInsertEXTDel = VkRaw.importDelegate<VkCmdDebugMarkerInsertEXTDel> "vkCmdDebugMarkerInsertEXT"
+            static do Report.Begin(3, "[Vulkan] loading VK_EXT_debug_marker")
+            static let s_vkDebugMarkerSetObjectTagEXTDel = VkRaw.vkImportInstanceDelegate<VkDebugMarkerSetObjectTagEXTDel> "vkDebugMarkerSetObjectTagEXT"
+            static let s_vkDebugMarkerSetObjectNameEXTDel = VkRaw.vkImportInstanceDelegate<VkDebugMarkerSetObjectNameEXTDel> "vkDebugMarkerSetObjectNameEXT"
+            static let s_vkCmdDebugMarkerBeginEXTDel = VkRaw.vkImportInstanceDelegate<VkCmdDebugMarkerBeginEXTDel> "vkCmdDebugMarkerBeginEXT"
+            static let s_vkCmdDebugMarkerEndEXTDel = VkRaw.vkImportInstanceDelegate<VkCmdDebugMarkerEndEXTDel> "vkCmdDebugMarkerEndEXT"
+            static let s_vkCmdDebugMarkerInsertEXTDel = VkRaw.vkImportInstanceDelegate<VkCmdDebugMarkerInsertEXTDel> "vkCmdDebugMarkerInsertEXT"
+            static do Report.End(3) |> ignore
             static member vkDebugMarkerSetObjectTagEXT = s_vkDebugMarkerSetObjectTagEXTDel
             static member vkDebugMarkerSetObjectNameEXT = s_vkDebugMarkerSetObjectNameEXTDel
             static member vkCmdDebugMarkerBeginEXT = s_vkCmdDebugMarkerBeginEXTDel
@@ -4675,8 +4686,9 @@ module EXTDiscardRectangles =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_EXT_discard_rectangles"
-            static let s_vkCmdSetDiscardRectangleEXTDel = VkRaw.importDelegate<VkCmdSetDiscardRectangleEXTDel> "vkCmdSetDiscardRectangleEXT"
+            static do Report.Begin(3, "[Vulkan] loading VK_EXT_discard_rectangles")
+            static let s_vkCmdSetDiscardRectangleEXTDel = VkRaw.vkImportInstanceDelegate<VkCmdSetDiscardRectangleEXTDel> "vkCmdSetDiscardRectangleEXT"
+            static do Report.End(3) |> ignore
             static member vkCmdSetDiscardRectangleEXT = s_vkCmdSetDiscardRectangleEXTDel
         let vkCmdSetDiscardRectangleEXT(commandBuffer : VkCommandBuffer, firstDiscardRectangle : uint32, discardRectangleCount : uint32, pDiscardRectangles : nativeptr<VkRect2D>) = Loader<unit>.vkCmdSetDiscardRectangleEXT.Invoke(commandBuffer, firstDiscardRectangle, discardRectangleCount, pDiscardRectangles)
 
@@ -4728,8 +4740,9 @@ module EXTDisplaySurfaceCounter =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_EXT_display_surface_counter"
-            static let s_vkGetPhysicalDeviceSurfaceCapabilities2EXTDel = VkRaw.importDelegate<VkGetPhysicalDeviceSurfaceCapabilities2EXTDel> "vkGetPhysicalDeviceSurfaceCapabilities2EXT"
+            static do Report.Begin(3, "[Vulkan] loading VK_EXT_display_surface_counter")
+            static let s_vkGetPhysicalDeviceSurfaceCapabilities2EXTDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceSurfaceCapabilities2EXTDel> "vkGetPhysicalDeviceSurfaceCapabilities2EXT"
+            static do Report.End(3) |> ignore
             static member vkGetPhysicalDeviceSurfaceCapabilities2EXT = s_vkGetPhysicalDeviceSurfaceCapabilities2EXTDel
         let vkGetPhysicalDeviceSurfaceCapabilities2EXT(physicalDevice : VkPhysicalDevice, surface : VkSurfaceKHR, pSurfaceCapabilities : nativeptr<VkSurfaceCapabilities2EXT>) = Loader<unit>.vkGetPhysicalDeviceSurfaceCapabilities2EXT.Invoke(physicalDevice, surface, pSurfaceCapabilities)
 
@@ -4769,12 +4782,13 @@ module KHRSwapchain =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_swapchain"
-            static let s_vkCreateSwapchainKHRDel = VkRaw.importDelegate<VkCreateSwapchainKHRDel> "vkCreateSwapchainKHR"
-            static let s_vkDestroySwapchainKHRDel = VkRaw.importDelegate<VkDestroySwapchainKHRDel> "vkDestroySwapchainKHR"
-            static let s_vkGetSwapchainImagesKHRDel = VkRaw.importDelegate<VkGetSwapchainImagesKHRDel> "vkGetSwapchainImagesKHR"
-            static let s_vkAcquireNextImageKHRDel = VkRaw.importDelegate<VkAcquireNextImageKHRDel> "vkAcquireNextImageKHR"
-            static let s_vkQueuePresentKHRDel = VkRaw.importDelegate<VkQueuePresentKHRDel> "vkQueuePresentKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_swapchain")
+            static let s_vkCreateSwapchainKHRDel = VkRaw.vkImportInstanceDelegate<VkCreateSwapchainKHRDel> "vkCreateSwapchainKHR"
+            static let s_vkDestroySwapchainKHRDel = VkRaw.vkImportInstanceDelegate<VkDestroySwapchainKHRDel> "vkDestroySwapchainKHR"
+            static let s_vkGetSwapchainImagesKHRDel = VkRaw.vkImportInstanceDelegate<VkGetSwapchainImagesKHRDel> "vkGetSwapchainImagesKHR"
+            static let s_vkAcquireNextImageKHRDel = VkRaw.vkImportInstanceDelegate<VkAcquireNextImageKHRDel> "vkAcquireNextImageKHR"
+            static let s_vkQueuePresentKHRDel = VkRaw.vkImportInstanceDelegate<VkQueuePresentKHRDel> "vkQueuePresentKHR"
+            static do Report.End(3) |> ignore
             static member vkCreateSwapchainKHR = s_vkCreateSwapchainKHRDel
             static member vkDestroySwapchainKHR = s_vkDestroySwapchainKHRDel
             static member vkGetSwapchainImagesKHR = s_vkGetSwapchainImagesKHRDel
@@ -4877,11 +4891,12 @@ module EXTDisplayControl =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_EXT_display_control"
-            static let s_vkDisplayPowerControlEXTDel = VkRaw.importDelegate<VkDisplayPowerControlEXTDel> "vkDisplayPowerControlEXT"
-            static let s_vkRegisterDeviceEventEXTDel = VkRaw.importDelegate<VkRegisterDeviceEventEXTDel> "vkRegisterDeviceEventEXT"
-            static let s_vkRegisterDisplayEventEXTDel = VkRaw.importDelegate<VkRegisterDisplayEventEXTDel> "vkRegisterDisplayEventEXT"
-            static let s_vkGetSwapchainCounterEXTDel = VkRaw.importDelegate<VkGetSwapchainCounterEXTDel> "vkGetSwapchainCounterEXT"
+            static do Report.Begin(3, "[Vulkan] loading VK_EXT_display_control")
+            static let s_vkDisplayPowerControlEXTDel = VkRaw.vkImportInstanceDelegate<VkDisplayPowerControlEXTDel> "vkDisplayPowerControlEXT"
+            static let s_vkRegisterDeviceEventEXTDel = VkRaw.vkImportInstanceDelegate<VkRegisterDeviceEventEXTDel> "vkRegisterDeviceEventEXT"
+            static let s_vkRegisterDisplayEventEXTDel = VkRaw.vkImportInstanceDelegate<VkRegisterDisplayEventEXTDel> "vkRegisterDisplayEventEXT"
+            static let s_vkGetSwapchainCounterEXTDel = VkRaw.vkImportInstanceDelegate<VkGetSwapchainCounterEXTDel> "vkGetSwapchainCounterEXT"
+            static do Report.End(3) |> ignore
             static member vkDisplayPowerControlEXT = s_vkDisplayPowerControlEXTDel
             static member vkRegisterDeviceEventEXT = s_vkRegisterDeviceEventEXTDel
             static member vkRegisterDisplayEventEXT = s_vkRegisterDisplayEventEXTDel
@@ -5011,8 +5026,9 @@ module KHRExternalMemoryCapabilities =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_external_memory_capabilities"
-            static let s_vkGetPhysicalDeviceExternalBufferPropertiesKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceExternalBufferPropertiesKHRDel> "vkGetPhysicalDeviceExternalBufferPropertiesKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_external_memory_capabilities")
+            static let s_vkGetPhysicalDeviceExternalBufferPropertiesKHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceExternalBufferPropertiesKHRDel> "vkGetPhysicalDeviceExternalBufferPropertiesKHR"
+            static do Report.End(3) |> ignore
             static member vkGetPhysicalDeviceExternalBufferPropertiesKHR = s_vkGetPhysicalDeviceExternalBufferPropertiesKHRDel
         let vkGetPhysicalDeviceExternalBufferPropertiesKHR(physicalDevice : VkPhysicalDevice, pExternalBufferInfo : nativeptr<VkPhysicalDeviceExternalBufferInfoKHR>, pExternalBufferProperties : nativeptr<VkExternalBufferPropertiesKHR>) = Loader<unit>.vkGetPhysicalDeviceExternalBufferPropertiesKHR.Invoke(physicalDevice, pExternalBufferInfo, pExternalBufferProperties)
 
@@ -5135,9 +5151,10 @@ module KHRExternalMemoryFd =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_external_memory_fd"
-            static let s_vkGetMemoryFdKHRDel = VkRaw.importDelegate<VkGetMemoryFdKHRDel> "vkGetMemoryFdKHR"
-            static let s_vkGetMemoryFdPropertiesKHRDel = VkRaw.importDelegate<VkGetMemoryFdPropertiesKHRDel> "vkGetMemoryFdPropertiesKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_external_memory_fd")
+            static let s_vkGetMemoryFdKHRDel = VkRaw.vkImportInstanceDelegate<VkGetMemoryFdKHRDel> "vkGetMemoryFdKHR"
+            static let s_vkGetMemoryFdPropertiesKHRDel = VkRaw.vkImportInstanceDelegate<VkGetMemoryFdPropertiesKHRDel> "vkGetMemoryFdPropertiesKHR"
+            static do Report.End(3) |> ignore
             static member vkGetMemoryFdKHR = s_vkGetMemoryFdKHRDel
             static member vkGetMemoryFdPropertiesKHR = s_vkGetMemoryFdPropertiesKHRDel
         let vkGetMemoryFdKHR(device : VkDevice, pGetFdInfo : nativeptr<VkMemoryGetFdInfoKHR>, pFd : nativeptr<int>) = Loader<unit>.vkGetMemoryFdKHR.Invoke(device, pGetFdInfo, pFd)
@@ -5219,8 +5236,9 @@ module EXTExternalMemoryHost =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_EXT_external_memory_host"
-            static let s_vkGetMemoryHostPointerPropertiesEXTDel = VkRaw.importDelegate<VkGetMemoryHostPointerPropertiesEXTDel> "vkGetMemoryHostPointerPropertiesEXT"
+            static do Report.Begin(3, "[Vulkan] loading VK_EXT_external_memory_host")
+            static let s_vkGetMemoryHostPointerPropertiesEXTDel = VkRaw.vkImportInstanceDelegate<VkGetMemoryHostPointerPropertiesEXTDel> "vkGetMemoryHostPointerPropertiesEXT"
+            static do Report.End(3) |> ignore
             static member vkGetMemoryHostPointerPropertiesEXT = s_vkGetMemoryHostPointerPropertiesEXTDel
         let vkGetMemoryHostPointerPropertiesEXT(device : VkDevice, handleType : VkExternalMemoryHandleTypeFlagBitsKHR, pHostPointer : nativeint, pMemoryHostPointerProperties : nativeptr<VkMemoryHostPointerPropertiesEXT>) = Loader<unit>.vkGetMemoryHostPointerPropertiesEXT.Invoke(device, handleType, pHostPointer, pMemoryHostPointerProperties)
 
@@ -5307,8 +5325,9 @@ module EXTHdrMetadata =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_EXT_hdr_metadata"
-            static let s_vkSetHdrMetadataEXTDel = VkRaw.importDelegate<VkSetHdrMetadataEXTDel> "vkSetHdrMetadataEXT"
+            static do Report.Begin(3, "[Vulkan] loading VK_EXT_hdr_metadata")
+            static let s_vkSetHdrMetadataEXTDel = VkRaw.vkImportInstanceDelegate<VkSetHdrMetadataEXTDel> "vkSetHdrMetadataEXT"
+            static do Report.End(3) |> ignore
             static member vkSetHdrMetadataEXT = s_vkSetHdrMetadataEXTDel
         let vkSetHdrMetadataEXT(device : VkDevice, swapchainCount : uint32, pSwapchains : nativeptr<VkSwapchainKHR>, pMetadata : nativeptr<VkHdrMetadataEXT>) = Loader<unit>.vkSetHdrMetadataEXT.Invoke(device, swapchainCount, pSwapchains, pMetadata)
 
@@ -5466,9 +5485,10 @@ module EXTSampleLocations =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_EXT_sample_locations"
-            static let s_vkCmdSetSampleLocationsEXTDel = VkRaw.importDelegate<VkCmdSetSampleLocationsEXTDel> "vkCmdSetSampleLocationsEXT"
-            static let s_vkGetPhysicalDeviceMultisamplePropertiesEXTDel = VkRaw.importDelegate<VkGetPhysicalDeviceMultisamplePropertiesEXTDel> "vkGetPhysicalDeviceMultisamplePropertiesEXT"
+            static do Report.Begin(3, "[Vulkan] loading VK_EXT_sample_locations")
+            static let s_vkCmdSetSampleLocationsEXTDel = VkRaw.vkImportInstanceDelegate<VkCmdSetSampleLocationsEXTDel> "vkCmdSetSampleLocationsEXT"
+            static let s_vkGetPhysicalDeviceMultisamplePropertiesEXTDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceMultisamplePropertiesEXTDel> "vkGetPhysicalDeviceMultisamplePropertiesEXT"
+            static do Report.End(3) |> ignore
             static member vkCmdSetSampleLocationsEXT = s_vkCmdSetSampleLocationsEXTDel
             static member vkGetPhysicalDeviceMultisamplePropertiesEXT = s_vkGetPhysicalDeviceMultisamplePropertiesEXTDel
         let vkCmdSetSampleLocationsEXT(commandBuffer : VkCommandBuffer, pSampleLocationsInfo : nativeptr<VkSampleLocationsInfoEXT>) = Loader<unit>.vkCmdSetSampleLocationsEXT.Invoke(commandBuffer, pSampleLocationsInfo)
@@ -5642,11 +5662,12 @@ module EXTValidationCache =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_EXT_validation_cache"
-            static let s_vkCreateValidationCacheEXTDel = VkRaw.importDelegate<VkCreateValidationCacheEXTDel> "vkCreateValidationCacheEXT"
-            static let s_vkDestroyValidationCacheEXTDel = VkRaw.importDelegate<VkDestroyValidationCacheEXTDel> "vkDestroyValidationCacheEXT"
-            static let s_vkMergeValidationCachesEXTDel = VkRaw.importDelegate<VkMergeValidationCachesEXTDel> "vkMergeValidationCachesEXT"
-            static let s_vkGetValidationCacheDataEXTDel = VkRaw.importDelegate<VkGetValidationCacheDataEXTDel> "vkGetValidationCacheDataEXT"
+            static do Report.Begin(3, "[Vulkan] loading VK_EXT_validation_cache")
+            static let s_vkCreateValidationCacheEXTDel = VkRaw.vkImportInstanceDelegate<VkCreateValidationCacheEXTDel> "vkCreateValidationCacheEXT"
+            static let s_vkDestroyValidationCacheEXTDel = VkRaw.vkImportInstanceDelegate<VkDestroyValidationCacheEXTDel> "vkDestroyValidationCacheEXT"
+            static let s_vkMergeValidationCachesEXTDel = VkRaw.vkImportInstanceDelegate<VkMergeValidationCachesEXTDel> "vkMergeValidationCachesEXT"
+            static let s_vkGetValidationCacheDataEXTDel = VkRaw.vkImportInstanceDelegate<VkGetValidationCacheDataEXTDel> "vkGetValidationCacheDataEXT"
+            static do Report.End(3) |> ignore
             static member vkCreateValidationCacheEXT = s_vkCreateValidationCacheEXTDel
             static member vkDestroyValidationCacheEXT = s_vkDestroyValidationCacheEXTDel
             static member vkMergeValidationCachesEXT = s_vkMergeValidationCachesEXTDel
@@ -5752,9 +5773,10 @@ module GOOGLEDisplayTiming =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_GOOGLE_display_timing"
-            static let s_vkGetRefreshCycleDurationGOOGLEDel = VkRaw.importDelegate<VkGetRefreshCycleDurationGOOGLEDel> "vkGetRefreshCycleDurationGOOGLE"
-            static let s_vkGetPastPresentationTimingGOOGLEDel = VkRaw.importDelegate<VkGetPastPresentationTimingGOOGLEDel> "vkGetPastPresentationTimingGOOGLE"
+            static do Report.Begin(3, "[Vulkan] loading VK_GOOGLE_display_timing")
+            static let s_vkGetRefreshCycleDurationGOOGLEDel = VkRaw.vkImportInstanceDelegate<VkGetRefreshCycleDurationGOOGLEDel> "vkGetRefreshCycleDurationGOOGLE"
+            static let s_vkGetPastPresentationTimingGOOGLEDel = VkRaw.vkImportInstanceDelegate<VkGetPastPresentationTimingGOOGLEDel> "vkGetPastPresentationTimingGOOGLE"
+            static do Report.End(3) |> ignore
             static member vkGetRefreshCycleDurationGOOGLE = s_vkGetRefreshCycleDurationGOOGLEDel
             static member vkGetPastPresentationTimingGOOGLE = s_vkGetPastPresentationTimingGOOGLEDel
         let vkGetRefreshCycleDurationGOOGLE(device : VkDevice, swapchain : VkSwapchainKHR, pDisplayTimingProperties : nativeptr<VkRefreshCycleDurationGOOGLE>) = Loader<unit>.vkGetRefreshCycleDurationGOOGLE.Invoke(device, swapchain, pDisplayTimingProperties)
@@ -5864,8 +5886,9 @@ module KHRAndroidSurface =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_android_surface"
-            static let s_vkCreateAndroidSurfaceKHRDel = VkRaw.importDelegate<VkCreateAndroidSurfaceKHRDel> "vkCreateAndroidSurfaceKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_android_surface")
+            static let s_vkCreateAndroidSurfaceKHRDel = VkRaw.vkImportInstanceDelegate<VkCreateAndroidSurfaceKHRDel> "vkCreateAndroidSurfaceKHR"
+            static do Report.End(3) |> ignore
             static member vkCreateAndroidSurfaceKHR = s_vkCreateAndroidSurfaceKHRDel
         let vkCreateAndroidSurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkAndroidSurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateAndroidSurfaceKHR.Invoke(instance, pCreateInfo, pAllocator, pSurface)
 
@@ -5918,9 +5941,10 @@ module KHRBindMemory2 =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_bind_memory2"
-            static let s_vkBindBufferMemory2KHRDel = VkRaw.importDelegate<VkBindBufferMemory2KHRDel> "vkBindBufferMemory2KHR"
-            static let s_vkBindImageMemory2KHRDel = VkRaw.importDelegate<VkBindImageMemory2KHRDel> "vkBindImageMemory2KHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_bind_memory2")
+            static let s_vkBindBufferMemory2KHRDel = VkRaw.vkImportInstanceDelegate<VkBindBufferMemory2KHRDel> "vkBindBufferMemory2KHR"
+            static let s_vkBindImageMemory2KHRDel = VkRaw.vkImportInstanceDelegate<VkBindImageMemory2KHRDel> "vkBindImageMemory2KHR"
+            static do Report.End(3) |> ignore
             static member vkBindBufferMemory2KHR = s_vkBindBufferMemory2KHRDel
             static member vkBindImageMemory2KHR = s_vkBindImageMemory2KHRDel
         let vkBindBufferMemory2KHR(device : VkDevice, bindInfoCount : uint32, pBindInfos : nativeptr<VkBindBufferMemoryInfoKHR>) = Loader<unit>.vkBindBufferMemory2KHR.Invoke(device, bindInfoCount, pBindInfos)
@@ -6012,10 +6036,11 @@ module KHRGetMemoryRequirements2 =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_get_memory_requirements2"
-            static let s_vkGetImageMemoryRequirements2KHRDel = VkRaw.importDelegate<VkGetImageMemoryRequirements2KHRDel> "vkGetImageMemoryRequirements2KHR"
-            static let s_vkGetBufferMemoryRequirements2KHRDel = VkRaw.importDelegate<VkGetBufferMemoryRequirements2KHRDel> "vkGetBufferMemoryRequirements2KHR"
-            static let s_vkGetImageSparseMemoryRequirements2KHRDel = VkRaw.importDelegate<VkGetImageSparseMemoryRequirements2KHRDel> "vkGetImageSparseMemoryRequirements2KHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_get_memory_requirements2")
+            static let s_vkGetImageMemoryRequirements2KHRDel = VkRaw.vkImportInstanceDelegate<VkGetImageMemoryRequirements2KHRDel> "vkGetImageMemoryRequirements2KHR"
+            static let s_vkGetBufferMemoryRequirements2KHRDel = VkRaw.vkImportInstanceDelegate<VkGetBufferMemoryRequirements2KHRDel> "vkGetBufferMemoryRequirements2KHR"
+            static let s_vkGetImageSparseMemoryRequirements2KHRDel = VkRaw.vkImportInstanceDelegate<VkGetImageSparseMemoryRequirements2KHRDel> "vkGetImageSparseMemoryRequirements2KHR"
+            static do Report.End(3) |> ignore
             static member vkGetImageMemoryRequirements2KHR = s_vkGetImageMemoryRequirements2KHRDel
             static member vkGetBufferMemoryRequirements2KHR = s_vkGetBufferMemoryRequirements2KHRDel
             static member vkGetImageSparseMemoryRequirements2KHR = s_vkGetImageSparseMemoryRequirements2KHRDel
@@ -6130,11 +6155,12 @@ module KHRDescriptorUpdateTemplate =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_descriptor_update_template"
-            static let s_vkCreateDescriptorUpdateTemplateKHRDel = VkRaw.importDelegate<VkCreateDescriptorUpdateTemplateKHRDel> "vkCreateDescriptorUpdateTemplateKHR"
-            static let s_vkDestroyDescriptorUpdateTemplateKHRDel = VkRaw.importDelegate<VkDestroyDescriptorUpdateTemplateKHRDel> "vkDestroyDescriptorUpdateTemplateKHR"
-            static let s_vkUpdateDescriptorSetWithTemplateKHRDel = VkRaw.importDelegate<VkUpdateDescriptorSetWithTemplateKHRDel> "vkUpdateDescriptorSetWithTemplateKHR"
-            static let s_vkCmdPushDescriptorSetWithTemplateKHRDel = VkRaw.importDelegate<VkCmdPushDescriptorSetWithTemplateKHRDel> "vkCmdPushDescriptorSetWithTemplateKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_descriptor_update_template")
+            static let s_vkCreateDescriptorUpdateTemplateKHRDel = VkRaw.vkImportInstanceDelegate<VkCreateDescriptorUpdateTemplateKHRDel> "vkCreateDescriptorUpdateTemplateKHR"
+            static let s_vkDestroyDescriptorUpdateTemplateKHRDel = VkRaw.vkImportInstanceDelegate<VkDestroyDescriptorUpdateTemplateKHRDel> "vkDestroyDescriptorUpdateTemplateKHR"
+            static let s_vkUpdateDescriptorSetWithTemplateKHRDel = VkRaw.vkImportInstanceDelegate<VkUpdateDescriptorSetWithTemplateKHRDel> "vkUpdateDescriptorSetWithTemplateKHR"
+            static let s_vkCmdPushDescriptorSetWithTemplateKHRDel = VkRaw.vkImportInstanceDelegate<VkCmdPushDescriptorSetWithTemplateKHRDel> "vkCmdPushDescriptorSetWithTemplateKHR"
+            static do Report.End(3) |> ignore
             static member vkCreateDescriptorUpdateTemplateKHR = s_vkCreateDescriptorUpdateTemplateKHRDel
             static member vkDestroyDescriptorUpdateTemplateKHR = s_vkDestroyDescriptorUpdateTemplateKHRDel
             static member vkUpdateDescriptorSetWithTemplateKHR = s_vkUpdateDescriptorSetWithTemplateKHRDel
@@ -6182,8 +6208,9 @@ module KHRDisplaySwapchain =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_display_swapchain"
-            static let s_vkCreateSharedSwapchainsKHRDel = VkRaw.importDelegate<VkCreateSharedSwapchainsKHRDel> "vkCreateSharedSwapchainsKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_display_swapchain")
+            static let s_vkCreateSharedSwapchainsKHRDel = VkRaw.vkImportInstanceDelegate<VkCreateSharedSwapchainsKHRDel> "vkCreateSharedSwapchainsKHR"
+            static do Report.End(3) |> ignore
             static member vkCreateSharedSwapchainsKHR = s_vkCreateSharedSwapchainsKHRDel
         let vkCreateSharedSwapchainsKHR(device : VkDevice, swapchainCount : uint32, pCreateInfos : nativeptr<VkSwapchainCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSwapchains : nativeptr<VkSwapchainKHR>) = Loader<unit>.vkCreateSharedSwapchainsKHR.Invoke(device, swapchainCount, pCreateInfos, pAllocator, pSwapchains)
 
@@ -6248,8 +6275,9 @@ module KHRExternalFenceCapabilities =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_external_fence_capabilities"
-            static let s_vkGetPhysicalDeviceExternalFencePropertiesKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceExternalFencePropertiesKHRDel> "vkGetPhysicalDeviceExternalFencePropertiesKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_external_fence_capabilities")
+            static let s_vkGetPhysicalDeviceExternalFencePropertiesKHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceExternalFencePropertiesKHRDel> "vkGetPhysicalDeviceExternalFencePropertiesKHR"
+            static do Report.End(3) |> ignore
             static member vkGetPhysicalDeviceExternalFencePropertiesKHR = s_vkGetPhysicalDeviceExternalFencePropertiesKHRDel
         let vkGetPhysicalDeviceExternalFencePropertiesKHR(physicalDevice : VkPhysicalDevice, pExternalFenceInfo : nativeptr<VkPhysicalDeviceExternalFenceInfoKHR>, pExternalFenceProperties : nativeptr<VkExternalFencePropertiesKHR>) = Loader<unit>.vkGetPhysicalDeviceExternalFencePropertiesKHR.Invoke(physicalDevice, pExternalFenceInfo, pExternalFenceProperties)
 
@@ -6338,9 +6366,10 @@ module KHRExternalFenceFd =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_external_fence_fd"
-            static let s_vkImportFenceFdKHRDel = VkRaw.importDelegate<VkImportFenceFdKHRDel> "vkImportFenceFdKHR"
-            static let s_vkGetFenceFdKHRDel = VkRaw.importDelegate<VkGetFenceFdKHRDel> "vkGetFenceFdKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_external_fence_fd")
+            static let s_vkImportFenceFdKHRDel = VkRaw.vkImportInstanceDelegate<VkImportFenceFdKHRDel> "vkImportFenceFdKHR"
+            static let s_vkGetFenceFdKHRDel = VkRaw.vkImportInstanceDelegate<VkGetFenceFdKHRDel> "vkGetFenceFdKHR"
+            static do Report.End(3) |> ignore
             static member vkImportFenceFdKHR = s_vkImportFenceFdKHRDel
             static member vkGetFenceFdKHR = s_vkGetFenceFdKHRDel
         let vkImportFenceFdKHR(device : VkDevice, pImportFenceFdInfo : nativeptr<VkImportFenceFdInfoKHR>) = Loader<unit>.vkImportFenceFdKHR.Invoke(device, pImportFenceFdInfo)
@@ -6415,9 +6444,10 @@ module KHRExternalFenceWin32 =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_external_fence_win32"
-            static let s_vkImportFenceWin32HandleKHRDel = VkRaw.importDelegate<VkImportFenceWin32HandleKHRDel> "vkImportFenceWin32HandleKHR"
-            static let s_vkGetFenceWin32HandleKHRDel = VkRaw.importDelegate<VkGetFenceWin32HandleKHRDel> "vkGetFenceWin32HandleKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_external_fence_win32")
+            static let s_vkImportFenceWin32HandleKHRDel = VkRaw.vkImportInstanceDelegate<VkImportFenceWin32HandleKHRDel> "vkImportFenceWin32HandleKHR"
+            static let s_vkGetFenceWin32HandleKHRDel = VkRaw.vkImportInstanceDelegate<VkGetFenceWin32HandleKHRDel> "vkGetFenceWin32HandleKHR"
+            static do Report.End(3) |> ignore
             static member vkImportFenceWin32HandleKHR = s_vkImportFenceWin32HandleKHRDel
             static member vkGetFenceWin32HandleKHR = s_vkGetFenceWin32HandleKHRDel
         let vkImportFenceWin32HandleKHR(device : VkDevice, pImportFenceWin32HandleInfo : nativeptr<VkImportFenceWin32HandleInfoKHR>) = Loader<unit>.vkImportFenceWin32HandleKHR.Invoke(device, pImportFenceWin32HandleInfo)
@@ -6503,9 +6533,10 @@ module KHRExternalMemoryWin32 =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_external_memory_win32"
-            static let s_vkGetMemoryWin32HandleKHRDel = VkRaw.importDelegate<VkGetMemoryWin32HandleKHRDel> "vkGetMemoryWin32HandleKHR"
-            static let s_vkGetMemoryWin32HandlePropertiesKHRDel = VkRaw.importDelegate<VkGetMemoryWin32HandlePropertiesKHRDel> "vkGetMemoryWin32HandlePropertiesKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_external_memory_win32")
+            static let s_vkGetMemoryWin32HandleKHRDel = VkRaw.vkImportInstanceDelegate<VkGetMemoryWin32HandleKHRDel> "vkGetMemoryWin32HandleKHR"
+            static let s_vkGetMemoryWin32HandlePropertiesKHRDel = VkRaw.vkImportInstanceDelegate<VkGetMemoryWin32HandlePropertiesKHRDel> "vkGetMemoryWin32HandlePropertiesKHR"
+            static do Report.End(3) |> ignore
             static member vkGetMemoryWin32HandleKHR = s_vkGetMemoryWin32HandleKHRDel
             static member vkGetMemoryWin32HandlePropertiesKHR = s_vkGetMemoryWin32HandlePropertiesKHRDel
         let vkGetMemoryWin32HandleKHR(device : VkDevice, pGetWin32HandleInfo : nativeptr<VkMemoryGetWin32HandleInfoKHR>, pHandle : nativeptr<nativeint>) = Loader<unit>.vkGetMemoryWin32HandleKHR.Invoke(device, pGetWin32HandleInfo, pHandle)
@@ -6573,8 +6604,9 @@ module KHRExternalSemaphoreCapabilities =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_external_semaphore_capabilities"
-            static let s_vkGetPhysicalDeviceExternalSemaphorePropertiesKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceExternalSemaphorePropertiesKHRDel> "vkGetPhysicalDeviceExternalSemaphorePropertiesKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_external_semaphore_capabilities")
+            static let s_vkGetPhysicalDeviceExternalSemaphorePropertiesKHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceExternalSemaphorePropertiesKHRDel> "vkGetPhysicalDeviceExternalSemaphorePropertiesKHR"
+            static do Report.End(3) |> ignore
             static member vkGetPhysicalDeviceExternalSemaphorePropertiesKHR = s_vkGetPhysicalDeviceExternalSemaphorePropertiesKHRDel
         let vkGetPhysicalDeviceExternalSemaphorePropertiesKHR(physicalDevice : VkPhysicalDevice, pExternalSemaphoreInfo : nativeptr<VkPhysicalDeviceExternalSemaphoreInfoKHR>, pExternalSemaphoreProperties : nativeptr<VkExternalSemaphorePropertiesKHR>) = Loader<unit>.vkGetPhysicalDeviceExternalSemaphorePropertiesKHR.Invoke(physicalDevice, pExternalSemaphoreInfo, pExternalSemaphoreProperties)
 
@@ -6663,9 +6695,10 @@ module KHRExternalSemaphoreFd =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_external_semaphore_fd"
-            static let s_vkImportSemaphoreFdKHRDel = VkRaw.importDelegate<VkImportSemaphoreFdKHRDel> "vkImportSemaphoreFdKHR"
-            static let s_vkGetSemaphoreFdKHRDel = VkRaw.importDelegate<VkGetSemaphoreFdKHRDel> "vkGetSemaphoreFdKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_external_semaphore_fd")
+            static let s_vkImportSemaphoreFdKHRDel = VkRaw.vkImportInstanceDelegate<VkImportSemaphoreFdKHRDel> "vkImportSemaphoreFdKHR"
+            static let s_vkGetSemaphoreFdKHRDel = VkRaw.vkImportInstanceDelegate<VkGetSemaphoreFdKHRDel> "vkGetSemaphoreFdKHR"
+            static do Report.End(3) |> ignore
             static member vkImportSemaphoreFdKHR = s_vkImportSemaphoreFdKHRDel
             static member vkGetSemaphoreFdKHR = s_vkGetSemaphoreFdKHRDel
         let vkImportSemaphoreFdKHR(device : VkDevice, pImportSemaphoreFdInfo : nativeptr<VkImportSemaphoreFdInfoKHR>) = Loader<unit>.vkImportSemaphoreFdKHR.Invoke(device, pImportSemaphoreFdInfo)
@@ -6756,9 +6789,10 @@ module KHRExternalSemaphoreWin32 =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_external_semaphore_win32"
-            static let s_vkImportSemaphoreWin32HandleKHRDel = VkRaw.importDelegate<VkImportSemaphoreWin32HandleKHRDel> "vkImportSemaphoreWin32HandleKHR"
-            static let s_vkGetSemaphoreWin32HandleKHRDel = VkRaw.importDelegate<VkGetSemaphoreWin32HandleKHRDel> "vkGetSemaphoreWin32HandleKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_external_semaphore_win32")
+            static let s_vkImportSemaphoreWin32HandleKHRDel = VkRaw.vkImportInstanceDelegate<VkImportSemaphoreWin32HandleKHRDel> "vkImportSemaphoreWin32HandleKHR"
+            static let s_vkGetSemaphoreWin32HandleKHRDel = VkRaw.vkImportInstanceDelegate<VkGetSemaphoreWin32HandleKHRDel> "vkGetSemaphoreWin32HandleKHR"
+            static do Report.End(3) |> ignore
             static member vkImportSemaphoreWin32HandleKHR = s_vkImportSemaphoreWin32HandleKHRDel
             static member vkGetSemaphoreWin32HandleKHR = s_vkGetSemaphoreWin32HandleKHRDel
         let vkImportSemaphoreWin32HandleKHR(device : VkDevice, pImportSemaphoreWin32HandleInfo : nativeptr<VkImportSemaphoreWin32HandleInfoKHR>) = Loader<unit>.vkImportSemaphoreWin32HandleKHR.Invoke(device, pImportSemaphoreWin32HandleInfo)
@@ -6824,9 +6858,10 @@ module KHRGetSurfaceCapabilities2 =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_get_surface_capabilities2"
-            static let s_vkGetPhysicalDeviceSurfaceCapabilities2KHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceSurfaceCapabilities2KHRDel> "vkGetPhysicalDeviceSurfaceCapabilities2KHR"
-            static let s_vkGetPhysicalDeviceSurfaceFormats2KHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceSurfaceFormats2KHRDel> "vkGetPhysicalDeviceSurfaceFormats2KHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_get_surface_capabilities2")
+            static let s_vkGetPhysicalDeviceSurfaceCapabilities2KHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceSurfaceCapabilities2KHRDel> "vkGetPhysicalDeviceSurfaceCapabilities2KHR"
+            static let s_vkGetPhysicalDeviceSurfaceFormats2KHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceSurfaceFormats2KHRDel> "vkGetPhysicalDeviceSurfaceFormats2KHR"
+            static do Report.End(3) |> ignore
             static member vkGetPhysicalDeviceSurfaceCapabilities2KHR = s_vkGetPhysicalDeviceSurfaceCapabilities2KHRDel
             static member vkGetPhysicalDeviceSurfaceFormats2KHR = s_vkGetPhysicalDeviceSurfaceFormats2KHRDel
         let vkGetPhysicalDeviceSurfaceCapabilities2KHR(physicalDevice : VkPhysicalDevice, pSurfaceInfo : nativeptr<VkPhysicalDeviceSurfaceInfo2KHR>, pSurfaceCapabilities : nativeptr<VkSurfaceCapabilities2KHR>) = Loader<unit>.vkGetPhysicalDeviceSurfaceCapabilities2KHR.Invoke(physicalDevice, pSurfaceInfo, pSurfaceCapabilities)
@@ -6926,8 +6961,9 @@ module KHRMaintenance1 =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_maintenance1"
-            static let s_vkTrimCommandPoolKHRDel = VkRaw.importDelegate<VkTrimCommandPoolKHRDel> "vkTrimCommandPoolKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_maintenance1")
+            static let s_vkTrimCommandPoolKHRDel = VkRaw.vkImportInstanceDelegate<VkTrimCommandPoolKHRDel> "vkTrimCommandPoolKHR"
+            static do Report.End(3) |> ignore
             static member vkTrimCommandPoolKHR = s_vkTrimCommandPoolKHRDel
         let vkTrimCommandPoolKHR(device : VkDevice, commandPool : VkCommandPool, flags : VkCommandPoolTrimFlagsKHR) = Loader<unit>.vkTrimCommandPoolKHR.Invoke(device, commandPool, flags)
 
@@ -7054,9 +7090,10 @@ module KHRMirSurface =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_mir_surface"
-            static let s_vkCreateMirSurfaceKHRDel = VkRaw.importDelegate<VkCreateMirSurfaceKHRDel> "vkCreateMirSurfaceKHR"
-            static let s_vkGetPhysicalDeviceMirPresentationSupportKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceMirPresentationSupportKHRDel> "vkGetPhysicalDeviceMirPresentationSupportKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_mir_surface")
+            static let s_vkCreateMirSurfaceKHRDel = VkRaw.vkImportInstanceDelegate<VkCreateMirSurfaceKHRDel> "vkCreateMirSurfaceKHR"
+            static let s_vkGetPhysicalDeviceMirPresentationSupportKHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceMirPresentationSupportKHRDel> "vkGetPhysicalDeviceMirPresentationSupportKHR"
+            static do Report.End(3) |> ignore
             static member vkCreateMirSurfaceKHR = s_vkCreateMirSurfaceKHRDel
             static member vkGetPhysicalDeviceMirPresentationSupportKHR = s_vkGetPhysicalDeviceMirPresentationSupportKHRDel
         let vkCreateMirSurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkMirSurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateMirSurfaceKHR.Invoke(instance, pCreateInfo, pAllocator, pSurface)
@@ -7094,8 +7131,9 @@ module KHRPushDescriptor =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_push_descriptor"
-            static let s_vkCmdPushDescriptorSetKHRDel = VkRaw.importDelegate<VkCmdPushDescriptorSetKHRDel> "vkCmdPushDescriptorSetKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_push_descriptor")
+            static let s_vkCmdPushDescriptorSetKHRDel = VkRaw.vkImportInstanceDelegate<VkCmdPushDescriptorSetKHRDel> "vkCmdPushDescriptorSetKHR"
+            static do Report.End(3) |> ignore
             static member vkCmdPushDescriptorSetKHR = s_vkCmdPushDescriptorSetKHRDel
         let vkCmdPushDescriptorSetKHR(commandBuffer : VkCommandBuffer, pipelineBindPoint : VkPipelineBindPoint, layout : VkPipelineLayout, set : uint32, descriptorWriteCount : uint32, pDescriptorWrites : nativeptr<VkWriteDescriptorSet>) = Loader<unit>.vkCmdPushDescriptorSetKHR.Invoke(commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites)
 
@@ -7267,9 +7305,10 @@ module KHRSamplerYcbcrConversion =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_sampler_ycbcr_conversion"
-            static let s_vkCreateSamplerYcbcrConversionKHRDel = VkRaw.importDelegate<VkCreateSamplerYcbcrConversionKHRDel> "vkCreateSamplerYcbcrConversionKHR"
-            static let s_vkDestroySamplerYcbcrConversionKHRDel = VkRaw.importDelegate<VkDestroySamplerYcbcrConversionKHRDel> "vkDestroySamplerYcbcrConversionKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_sampler_ycbcr_conversion")
+            static let s_vkCreateSamplerYcbcrConversionKHRDel = VkRaw.vkImportInstanceDelegate<VkCreateSamplerYcbcrConversionKHRDel> "vkCreateSamplerYcbcrConversionKHR"
+            static let s_vkDestroySamplerYcbcrConversionKHRDel = VkRaw.vkImportInstanceDelegate<VkDestroySamplerYcbcrConversionKHRDel> "vkDestroySamplerYcbcrConversionKHR"
+            static do Report.End(3) |> ignore
             static member vkCreateSamplerYcbcrConversionKHR = s_vkCreateSamplerYcbcrConversionKHRDel
             static member vkDestroySamplerYcbcrConversionKHR = s_vkDestroySamplerYcbcrConversionKHRDel
         let vkCreateSamplerYcbcrConversionKHR(device : VkDevice, pCreateInfo : nativeptr<VkSamplerYcbcrConversionCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pYcbcrConversion : nativeptr<VkSamplerYcbcrConversionKHR>) = Loader<unit>.vkCreateSamplerYcbcrConversionKHR.Invoke(device, pCreateInfo, pAllocator, pYcbcrConversion)
@@ -7325,8 +7364,9 @@ module KHRSharedPresentableImage =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_shared_presentable_image"
-            static let s_vkGetSwapchainStatusKHRDel = VkRaw.importDelegate<VkGetSwapchainStatusKHRDel> "vkGetSwapchainStatusKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_shared_presentable_image")
+            static let s_vkGetSwapchainStatusKHRDel = VkRaw.vkImportInstanceDelegate<VkGetSwapchainStatusKHRDel> "vkGetSwapchainStatusKHR"
+            static do Report.End(3) |> ignore
             static member vkGetSwapchainStatusKHR = s_vkGetSwapchainStatusKHRDel
         let vkGetSwapchainStatusKHR(device : VkDevice, swapchain : VkSwapchainKHR) = Loader<unit>.vkGetSwapchainStatusKHR.Invoke(device, swapchain)
 
@@ -7394,9 +7434,10 @@ module KHRWaylandSurface =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_wayland_surface"
-            static let s_vkCreateWaylandSurfaceKHRDel = VkRaw.importDelegate<VkCreateWaylandSurfaceKHRDel> "vkCreateWaylandSurfaceKHR"
-            static let s_vkGetPhysicalDeviceWaylandPresentationSupportKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceWaylandPresentationSupportKHRDel> "vkGetPhysicalDeviceWaylandPresentationSupportKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_wayland_surface")
+            static let s_vkCreateWaylandSurfaceKHRDel = VkRaw.vkImportInstanceDelegate<VkCreateWaylandSurfaceKHRDel> "vkCreateWaylandSurfaceKHR"
+            static let s_vkGetPhysicalDeviceWaylandPresentationSupportKHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceWaylandPresentationSupportKHRDel> "vkGetPhysicalDeviceWaylandPresentationSupportKHR"
+            static do Report.End(3) |> ignore
             static member vkCreateWaylandSurfaceKHR = s_vkCreateWaylandSurfaceKHRDel
             static member vkGetPhysicalDeviceWaylandPresentationSupportKHR = s_vkGetPhysicalDeviceWaylandPresentationSupportKHRDel
         let vkCreateWaylandSurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkWaylandSurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateWaylandSurfaceKHR.Invoke(instance, pCreateInfo, pAllocator, pSurface)
@@ -7473,9 +7514,10 @@ module KHRWin32Surface =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_win32_surface"
-            static let s_vkCreateWin32SurfaceKHRDel = VkRaw.importDelegate<VkCreateWin32SurfaceKHRDel> "vkCreateWin32SurfaceKHR"
-            static let s_vkGetPhysicalDeviceWin32PresentationSupportKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceWin32PresentationSupportKHRDel> "vkGetPhysicalDeviceWin32PresentationSupportKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_win32_surface")
+            static let s_vkCreateWin32SurfaceKHRDel = VkRaw.vkImportInstanceDelegate<VkCreateWin32SurfaceKHRDel> "vkCreateWin32SurfaceKHR"
+            static let s_vkGetPhysicalDeviceWin32PresentationSupportKHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceWin32PresentationSupportKHRDel> "vkGetPhysicalDeviceWin32PresentationSupportKHR"
+            static do Report.End(3) |> ignore
             static member vkCreateWin32SurfaceKHR = s_vkCreateWin32SurfaceKHRDel
             static member vkGetPhysicalDeviceWin32PresentationSupportKHR = s_vkGetPhysicalDeviceWin32PresentationSupportKHRDel
         let vkCreateWin32SurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkWin32SurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateWin32SurfaceKHR.Invoke(instance, pCreateInfo, pAllocator, pSurface)
@@ -7517,9 +7559,10 @@ module KHRXcbSurface =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_xcb_surface"
-            static let s_vkCreateXcbSurfaceKHRDel = VkRaw.importDelegate<VkCreateXcbSurfaceKHRDel> "vkCreateXcbSurfaceKHR"
-            static let s_vkGetPhysicalDeviceXcbPresentationSupportKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceXcbPresentationSupportKHRDel> "vkGetPhysicalDeviceXcbPresentationSupportKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_xcb_surface")
+            static let s_vkCreateXcbSurfaceKHRDel = VkRaw.vkImportInstanceDelegate<VkCreateXcbSurfaceKHRDel> "vkCreateXcbSurfaceKHR"
+            static let s_vkGetPhysicalDeviceXcbPresentationSupportKHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceXcbPresentationSupportKHRDel> "vkGetPhysicalDeviceXcbPresentationSupportKHR"
+            static do Report.End(3) |> ignore
             static member vkCreateXcbSurfaceKHR = s_vkCreateXcbSurfaceKHRDel
             static member vkGetPhysicalDeviceXcbPresentationSupportKHR = s_vkGetPhysicalDeviceXcbPresentationSupportKHRDel
         let vkCreateXcbSurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkXcbSurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateXcbSurfaceKHR.Invoke(instance, pCreateInfo, pAllocator, pSurface)
@@ -7561,9 +7604,10 @@ module KHRXlibSurface =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHR_xlib_surface"
-            static let s_vkCreateXlibSurfaceKHRDel = VkRaw.importDelegate<VkCreateXlibSurfaceKHRDel> "vkCreateXlibSurfaceKHR"
-            static let s_vkGetPhysicalDeviceXlibPresentationSupportKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceXlibPresentationSupportKHRDel> "vkGetPhysicalDeviceXlibPresentationSupportKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_xlib_surface")
+            static let s_vkCreateXlibSurfaceKHRDel = VkRaw.vkImportInstanceDelegate<VkCreateXlibSurfaceKHRDel> "vkCreateXlibSurfaceKHR"
+            static let s_vkGetPhysicalDeviceXlibPresentationSupportKHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceXlibPresentationSupportKHRDel> "vkGetPhysicalDeviceXlibPresentationSupportKHR"
+            static do Report.End(3) |> ignore
             static member vkCreateXlibSurfaceKHR = s_vkCreateXlibSurfaceKHRDel
             static member vkGetPhysicalDeviceXlibPresentationSupportKHR = s_vkGetPhysicalDeviceXlibPresentationSupportKHRDel
         let vkCreateXlibSurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkXlibSurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateXlibSurfaceKHR.Invoke(instance, pCreateInfo, pAllocator, pSurface)
@@ -7615,8 +7659,9 @@ module KHXDeviceGroupCreation =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHX_device_group_creation"
-            static let s_vkEnumeratePhysicalDeviceGroupsKHXDel = VkRaw.importDelegate<VkEnumeratePhysicalDeviceGroupsKHXDel> "vkEnumeratePhysicalDeviceGroupsKHX"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHX_device_group_creation")
+            static let s_vkEnumeratePhysicalDeviceGroupsKHXDel = VkRaw.vkImportInstanceDelegate<VkEnumeratePhysicalDeviceGroupsKHXDel> "vkEnumeratePhysicalDeviceGroupsKHX"
+            static do Report.End(3) |> ignore
             static member vkEnumeratePhysicalDeviceGroupsKHX = s_vkEnumeratePhysicalDeviceGroupsKHXDel
         let vkEnumeratePhysicalDeviceGroupsKHX(instance : VkInstance, pPhysicalDeviceGroupCount : nativeptr<uint32>, pPhysicalDeviceGroupProperties : nativeptr<VkPhysicalDeviceGroupPropertiesKHX>) = Loader<unit>.vkEnumeratePhysicalDeviceGroupsKHX.Invoke(instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties)
 
@@ -7731,10 +7776,11 @@ module KHXDeviceGroup =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_KHX_device_group"
-            static let s_vkGetDeviceGroupPeerMemoryFeaturesKHXDel = VkRaw.importDelegate<VkGetDeviceGroupPeerMemoryFeaturesKHXDel> "vkGetDeviceGroupPeerMemoryFeaturesKHX"
-            static let s_vkCmdSetDeviceMaskKHXDel = VkRaw.importDelegate<VkCmdSetDeviceMaskKHXDel> "vkCmdSetDeviceMaskKHX"
-            static let s_vkCmdDispatchBaseKHXDel = VkRaw.importDelegate<VkCmdDispatchBaseKHXDel> "vkCmdDispatchBaseKHX"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHX_device_group")
+            static let s_vkGetDeviceGroupPeerMemoryFeaturesKHXDel = VkRaw.vkImportInstanceDelegate<VkGetDeviceGroupPeerMemoryFeaturesKHXDel> "vkGetDeviceGroupPeerMemoryFeaturesKHX"
+            static let s_vkCmdSetDeviceMaskKHXDel = VkRaw.vkImportInstanceDelegate<VkCmdSetDeviceMaskKHXDel> "vkCmdSetDeviceMaskKHX"
+            static let s_vkCmdDispatchBaseKHXDel = VkRaw.vkImportInstanceDelegate<VkCmdDispatchBaseKHXDel> "vkCmdDispatchBaseKHX"
+            static do Report.End(3) |> ignore
             static member vkGetDeviceGroupPeerMemoryFeaturesKHX = s_vkGetDeviceGroupPeerMemoryFeaturesKHXDel
             static member vkCmdSetDeviceMaskKHX = s_vkCmdSetDeviceMaskKHXDel
             static member vkCmdDispatchBaseKHX = s_vkCmdDispatchBaseKHXDel
@@ -7835,8 +7881,9 @@ module MVKIosSurface =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_MVK_ios_surface"
-            static let s_vkCreateIOSSurfaceMVKDel = VkRaw.importDelegate<VkCreateIOSSurfaceMVKDel> "vkCreateIOSSurfaceMVK"
+            static do Report.Begin(3, "[Vulkan] loading VK_MVK_ios_surface")
+            static let s_vkCreateIOSSurfaceMVKDel = VkRaw.vkImportInstanceDelegate<VkCreateIOSSurfaceMVKDel> "vkCreateIOSSurfaceMVK"
+            static do Report.End(3) |> ignore
             static member vkCreateIOSSurfaceMVK = s_vkCreateIOSSurfaceMVKDel
         let vkCreateIOSSurfaceMVK(instance : VkInstance, pCreateInfo : nativeptr<VkIOSSurfaceCreateInfoMVK>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateIOSSurfaceMVK.Invoke(instance, pCreateInfo, pAllocator, pSurface)
 
@@ -7873,8 +7920,9 @@ module MVKMacosSurface =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_MVK_macos_surface"
-            static let s_vkCreateMacOSSurfaceMVKDel = VkRaw.importDelegate<VkCreateMacOSSurfaceMVKDel> "vkCreateMacOSSurfaceMVK"
+            static do Report.Begin(3, "[Vulkan] loading VK_MVK_macos_surface")
+            static let s_vkCreateMacOSSurfaceMVKDel = VkRaw.vkImportInstanceDelegate<VkCreateMacOSSurfaceMVKDel> "vkCreateMacOSSurfaceMVK"
+            static do Report.End(3) |> ignore
             static member vkCreateMacOSSurfaceMVK = s_vkCreateMacOSSurfaceMVKDel
         let vkCreateMacOSSurfaceMVK(instance : VkInstance, pCreateInfo : nativeptr<VkMacOSSurfaceCreateInfoMVK>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateMacOSSurfaceMVK.Invoke(instance, pCreateInfo, pAllocator, pSurface)
 
@@ -7921,8 +7969,9 @@ module NNViSurface =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_NN_vi_surface"
-            static let s_vkCreateViSurfaceNNDel = VkRaw.importDelegate<VkCreateViSurfaceNNDel> "vkCreateViSurfaceNN"
+            static do Report.Begin(3, "[Vulkan] loading VK_NN_vi_surface")
+            static let s_vkCreateViSurfaceNNDel = VkRaw.vkImportInstanceDelegate<VkCreateViSurfaceNNDel> "vkCreateViSurfaceNN"
+            static do Report.End(3) |> ignore
             static member vkCreateViSurfaceNN = s_vkCreateViSurfaceNNDel
         let vkCreateViSurfaceNN(instance : VkInstance, pCreateInfo : nativeptr<VkViSurfaceCreateInfoNN>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateViSurfaceNN.Invoke(instance, pCreateInfo, pAllocator, pSurface)
 
@@ -7971,8 +8020,9 @@ module NVClipSpaceWScaling =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_NV_clip_space_w_scaling"
-            static let s_vkCmdSetViewportWScalingNVDel = VkRaw.importDelegate<VkCmdSetViewportWScalingNVDel> "vkCmdSetViewportWScalingNV"
+            static do Report.Begin(3, "[Vulkan] loading VK_NV_clip_space_w_scaling")
+            static let s_vkCmdSetViewportWScalingNVDel = VkRaw.vkImportInstanceDelegate<VkCmdSetViewportWScalingNVDel> "vkCmdSetViewportWScalingNV"
+            static do Report.End(3) |> ignore
             static member vkCmdSetViewportWScalingNV = s_vkCmdSetViewportWScalingNVDel
         let vkCmdSetViewportWScalingNV(commandBuffer : VkCommandBuffer, firstViewport : uint32, viewportCount : uint32, pViewportWScalings : nativeptr<VkViewportWScalingNV>) = Loader<unit>.vkCmdSetViewportWScalingNV.Invoke(commandBuffer, firstViewport, viewportCount, pViewportWScalings)
 
@@ -8071,8 +8121,9 @@ module NVExternalMemoryCapabilities =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_NV_external_memory_capabilities"
-            static let s_vkGetPhysicalDeviceExternalImageFormatPropertiesNVDel = VkRaw.importDelegate<VkGetPhysicalDeviceExternalImageFormatPropertiesNVDel> "vkGetPhysicalDeviceExternalImageFormatPropertiesNV"
+            static do Report.Begin(3, "[Vulkan] loading VK_NV_external_memory_capabilities")
+            static let s_vkGetPhysicalDeviceExternalImageFormatPropertiesNVDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceExternalImageFormatPropertiesNVDel> "vkGetPhysicalDeviceExternalImageFormatPropertiesNV"
+            static do Report.End(3) |> ignore
             static member vkGetPhysicalDeviceExternalImageFormatPropertiesNV = s_vkGetPhysicalDeviceExternalImageFormatPropertiesNVDel
         let vkGetPhysicalDeviceExternalImageFormatPropertiesNV(physicalDevice : VkPhysicalDevice, format : VkFormat, _type : VkImageType, tiling : VkImageTiling, usage : VkImageUsageFlags, flags : VkImageCreateFlags, externalHandleType : VkExternalMemoryHandleTypeFlagsNV, pExternalImageFormatProperties : nativeptr<VkExternalImageFormatPropertiesNV>) = Loader<unit>.vkGetPhysicalDeviceExternalImageFormatPropertiesNV.Invoke(physicalDevice, format, _type, tiling, usage, flags, externalHandleType, pExternalImageFormatProperties)
 
@@ -8163,8 +8214,9 @@ module NVExternalMemoryWin32 =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_NV_external_memory_win32"
-            static let s_vkGetMemoryWin32HandleNVDel = VkRaw.importDelegate<VkGetMemoryWin32HandleNVDel> "vkGetMemoryWin32HandleNV"
+            static do Report.Begin(3, "[Vulkan] loading VK_NV_external_memory_win32")
+            static let s_vkGetMemoryWin32HandleNVDel = VkRaw.vkImportInstanceDelegate<VkGetMemoryWin32HandleNVDel> "vkGetMemoryWin32HandleNV"
+            static do Report.End(3) |> ignore
             static member vkGetMemoryWin32HandleNV = s_vkGetMemoryWin32HandleNVDel
         let vkGetMemoryWin32HandleNV(device : VkDevice, memory : VkDeviceMemory, handleType : VkExternalMemoryHandleTypeFlagsNV, pHandle : nativeptr<nativeint>) = Loader<unit>.vkGetMemoryWin32HandleNV.Invoke(device, memory, handleType, pHandle)
 
@@ -8635,16 +8687,17 @@ module NVXDeviceGeneratedCommands =
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Log.line "[Vulkan] loading VK_NVX_device_generated_commands"
-            static let s_vkCmdProcessCommandsNVXDel = VkRaw.importDelegate<VkCmdProcessCommandsNVXDel> "vkCmdProcessCommandsNVX"
-            static let s_vkCmdReserveSpaceForCommandsNVXDel = VkRaw.importDelegate<VkCmdReserveSpaceForCommandsNVXDel> "vkCmdReserveSpaceForCommandsNVX"
-            static let s_vkCreateIndirectCommandsLayoutNVXDel = VkRaw.importDelegate<VkCreateIndirectCommandsLayoutNVXDel> "vkCreateIndirectCommandsLayoutNVX"
-            static let s_vkDestroyIndirectCommandsLayoutNVXDel = VkRaw.importDelegate<VkDestroyIndirectCommandsLayoutNVXDel> "vkDestroyIndirectCommandsLayoutNVX"
-            static let s_vkCreateObjectTableNVXDel = VkRaw.importDelegate<VkCreateObjectTableNVXDel> "vkCreateObjectTableNVX"
-            static let s_vkDestroyObjectTableNVXDel = VkRaw.importDelegate<VkDestroyObjectTableNVXDel> "vkDestroyObjectTableNVX"
-            static let s_vkRegisterObjectsNVXDel = VkRaw.importDelegate<VkRegisterObjectsNVXDel> "vkRegisterObjectsNVX"
-            static let s_vkUnregisterObjectsNVXDel = VkRaw.importDelegate<VkUnregisterObjectsNVXDel> "vkUnregisterObjectsNVX"
-            static let s_vkGetPhysicalDeviceGeneratedCommandsPropertiesNVXDel = VkRaw.importDelegate<VkGetPhysicalDeviceGeneratedCommandsPropertiesNVXDel> "vkGetPhysicalDeviceGeneratedCommandsPropertiesNVX"
+            static do Report.Begin(3, "[Vulkan] loading VK_NVX_device_generated_commands")
+            static let s_vkCmdProcessCommandsNVXDel = VkRaw.vkImportInstanceDelegate<VkCmdProcessCommandsNVXDel> "vkCmdProcessCommandsNVX"
+            static let s_vkCmdReserveSpaceForCommandsNVXDel = VkRaw.vkImportInstanceDelegate<VkCmdReserveSpaceForCommandsNVXDel> "vkCmdReserveSpaceForCommandsNVX"
+            static let s_vkCreateIndirectCommandsLayoutNVXDel = VkRaw.vkImportInstanceDelegate<VkCreateIndirectCommandsLayoutNVXDel> "vkCreateIndirectCommandsLayoutNVX"
+            static let s_vkDestroyIndirectCommandsLayoutNVXDel = VkRaw.vkImportInstanceDelegate<VkDestroyIndirectCommandsLayoutNVXDel> "vkDestroyIndirectCommandsLayoutNVX"
+            static let s_vkCreateObjectTableNVXDel = VkRaw.vkImportInstanceDelegate<VkCreateObjectTableNVXDel> "vkCreateObjectTableNVX"
+            static let s_vkDestroyObjectTableNVXDel = VkRaw.vkImportInstanceDelegate<VkDestroyObjectTableNVXDel> "vkDestroyObjectTableNVX"
+            static let s_vkRegisterObjectsNVXDel = VkRaw.vkImportInstanceDelegate<VkRegisterObjectsNVXDel> "vkRegisterObjectsNVX"
+            static let s_vkUnregisterObjectsNVXDel = VkRaw.vkImportInstanceDelegate<VkUnregisterObjectsNVXDel> "vkUnregisterObjectsNVX"
+            static let s_vkGetPhysicalDeviceGeneratedCommandsPropertiesNVXDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceGeneratedCommandsPropertiesNVXDel> "vkGetPhysicalDeviceGeneratedCommandsPropertiesNVX"
+            static do Report.End(3) |> ignore
             static member vkCmdProcessCommandsNVX = s_vkCmdProcessCommandsNVXDel
             static member vkCmdReserveSpaceForCommandsNVX = s_vkCmdReserveSpaceForCommandsNVXDel
             static member vkCreateIndirectCommandsLayoutNVX = s_vkCreateIndirectCommandsLayoutNVXDel
