@@ -8,11 +8,10 @@ open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 open System.Reflection
-open VK_KHX_device_group_creation
+open KHXDeviceGroupCreation
 
 #nowarn "9"
 #nowarn "51"
-#nowarn "1337"
 
 type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<string>) as this =   
     inherit VulkanObject()
@@ -116,7 +115,6 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
             VkRaw.vkCreateInstance(&&info, NativePtr.zero, &&instance)
                 |> check "could not create instance"
 
-            VkRaw.activeInstance <- instance
 
             instance
         finally
@@ -136,7 +134,7 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
         devices |> Array.mapi (fun i d -> PhysicalDevice(this, d, i))
 
     let groups =    
-        if Set.contains VK_KHX_device_group_creation.Name extensions then
+        if Set.contains KHXDeviceGroupCreation.Name extensions then
             let mutable groupCount = 0u
 
             VkRaw.vkEnumeratePhysicalDeviceGroupsKHX(instance, &&groupCount, NativePtr.zero)

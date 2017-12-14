@@ -3296,23 +3296,20 @@ type VkWriteDescriptorSet =
             sprintf "VkWriteDescriptorSet { sType = %A; pNext = %A; dstSet = %A; dstBinding = %A; dstArrayElement = %A; descriptorCount = %A; descriptorType = %A; pImageInfo = %A; pBufferInfo = %A; pTexelBufferView = %A }" x.sType x.pNext x.dstSet x.dstBinding x.dstArrayElement x.descriptorCount x.descriptorType x.pImageInfo x.pBufferInfo x.pTexelBufferView
     end
 
-[<AutoOpen>]
-module WSIEnums = 
-    type VkStructureType with
-        static member XLibSurfaceCreateInfo = unbox<VkStructureType> 1000004000
-        static member XcbSurfaceCreateInfo = unbox<VkStructureType> 1000005000
-        static member WaylandSurfaceCreateInfo = unbox<VkStructureType> 1000006000
-        static member MirSurfaceCreateInfo = unbox<VkStructureType> 1000007000
-        static member AndroidSurfaceCreateInfo = unbox<VkStructureType> 1000008000
-        static member Win32SurfaceCreateInfo = unbox<VkStructureType> 1000009000
 module VkRaw = 
     [<CompilerMessage("activeInstance is for internal use only", 1337, IsError=false, IsHidden=true)>]
-    let mutable activeInstance : VkInstance = 0n
+    let mutable internal activeInstance : VkInstance = 0n
     [<Literal>]
     let lib = "vulkan-1.dll"
 
-    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
-    extern VkResult vkCreateInstance(VkInstanceCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkInstance* pInstance)
+    [<DllImport(lib, EntryPoint="vkCreateInstance");SuppressUnmanagedCodeSecurity>]
+    extern VkResult private _vkCreateInstance(VkInstanceCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkInstance* pInstance)
+    let vkCreateInstance(pCreateInfo : nativeptr<VkInstanceCreateInfo>, pAllocator : nativeptr<VkAllocationCallbacks>, pInstance : nativeptr<VkInstance>) = 
+        let res = _vkCreateInstance(pCreateInfo, pAllocator, pInstance)
+        if res = VkResult.VkSuccess then
+            activeInstance <- NativePtr.read pInstance
+        res
+    
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyInstance(VkInstance instance, VkAllocationCallbacks* pAllocator)
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
@@ -3593,8 +3590,19 @@ module VkRaw =
     extern VkResult vkAcquireNextImage2KHX(VkDevice device, VkAcquireNextImageInfoKHX* pAcquireInfo, uint32* pImageIndex)
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetPhysicalDevicePresentRectanglesKHX(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint32* pRectCount, VkRect2D* pRects)
-module VK_EXT_debug_report =
+    
+    [<CompilerMessage("activeInstance is for internal use only", 1337, IsError=false, IsHidden=true)>]
+    let importDelegate<'a>(name : string) = 
+        let ptr = vkGetInstanceProcAddr(activeInstance, name)
+        if ptr = 0n then
+            Log.warn "[Vulkan] could not load extension: %s" name
+            Unchecked.defaultof<'a>
+        else
+            Marshal.GetDelegateForFunctionPointer(ptr, typeof<'a>) |> unbox<'a>
+
+module EXTDebugReport =
     let Name = "VK_EXT_debug_report"
+    let Number = 12
     
     type VkDebugReportObjectTypeEXT = 
         | VkDebugReportObjectTypeUnknownExt = 0
@@ -3655,6 +3663,7 @@ module VK_EXT_debug_report =
     type VkStructureType with
          static member inline DebugReportCallbackCreateInfoExt = unbox<VkStructureType> 1000011000
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCreateDebugReportCallbackEXTDel = delegate of VkInstance * nativeptr<VkDebugReportCallbackCreateInfoEXT> * nativeptr<VkAllocationCallbacks> * nativeptr<VkDebugReportCallbackEXT> -> VkResult
@@ -3662,290 +3671,101 @@ module VK_EXT_debug_report =
         type VkDestroyDebugReportCallbackEXTDel = delegate of VkInstance * VkDebugReportCallbackEXT * nativeptr<VkAllocationCallbacks> -> unit
         [<SuppressUnmanagedCodeSecurity>]
         type VkDebugReportMessageEXTDel = delegate of VkInstance * VkDebugReportFlagsEXT * VkDebugReportObjectTypeEXT * uint64 * uint64 * int * cstr * cstr -> unit
-        let private vkCreateDebugReportCallbackEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCreateDebugReportCallbackEXT"), typeof<VkCreateDebugReportCallbackEXTDel>) |> unbox<VkCreateDebugReportCallbackEXTDel>)
-        let private vkDestroyDebugReportCallbackEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkDestroyDebugReportCallbackEXT"), typeof<VkDestroyDebugReportCallbackEXTDel>) |> unbox<VkDestroyDebugReportCallbackEXTDel>)
-        let private vkDebugReportMessageEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkDebugReportMessageEXT"), typeof<VkDebugReportMessageEXTDel>) |> unbox<VkDebugReportMessageEXTDel>)
-        let vkCreateDebugReportCallbackEXT(instance : VkInstance, pCreateInfo : nativeptr<VkDebugReportCallbackCreateInfoEXT>, pAllocator : nativeptr<VkAllocationCallbacks>, pCallback : nativeptr<VkDebugReportCallbackEXT>) = vkCreateDebugReportCallbackEXTDel.Value.Invoke(instance, pCreateInfo, pAllocator, pCallback)
-        let vkDestroyDebugReportCallbackEXT(instance : VkInstance, callback : VkDebugReportCallbackEXT, pAllocator : nativeptr<VkAllocationCallbacks>) = vkDestroyDebugReportCallbackEXTDel.Value.Invoke(instance, callback, pAllocator)
-        let vkDebugReportMessageEXT(instance : VkInstance, flags : VkDebugReportFlagsEXT, objectType : VkDebugReportObjectTypeEXT, _object : uint64, location : uint64, messageCode : int, pLayerPrefix : cstr, pMessage : cstr) = vkDebugReportMessageEXTDel.Value.Invoke(instance, flags, objectType, _object, location, messageCode, pLayerPrefix, pMessage)
-module VK_AMD_draw_indirect_count =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_EXT_debug_report"
+            static let s_vkCreateDebugReportCallbackEXTDel = VkRaw.importDelegate<VkCreateDebugReportCallbackEXTDel> "vkCreateDebugReportCallbackEXT"
+            static let s_vkDestroyDebugReportCallbackEXTDel = VkRaw.importDelegate<VkDestroyDebugReportCallbackEXTDel> "vkDestroyDebugReportCallbackEXT"
+            static let s_vkDebugReportMessageEXTDel = VkRaw.importDelegate<VkDebugReportMessageEXTDel> "vkDebugReportMessageEXT"
+            static member vkCreateDebugReportCallbackEXT = s_vkCreateDebugReportCallbackEXTDel
+            static member vkDestroyDebugReportCallbackEXT = s_vkDestroyDebugReportCallbackEXTDel
+            static member vkDebugReportMessageEXT = s_vkDebugReportMessageEXTDel
+        let vkCreateDebugReportCallbackEXT(instance : VkInstance, pCreateInfo : nativeptr<VkDebugReportCallbackCreateInfoEXT>, pAllocator : nativeptr<VkAllocationCallbacks>, pCallback : nativeptr<VkDebugReportCallbackEXT>) = Loader<unit>.vkCreateDebugReportCallbackEXT.Invoke(instance, pCreateInfo, pAllocator, pCallback)
+        let vkDestroyDebugReportCallbackEXT(instance : VkInstance, callback : VkDebugReportCallbackEXT, pAllocator : nativeptr<VkAllocationCallbacks>) = Loader<unit>.vkDestroyDebugReportCallbackEXT.Invoke(instance, callback, pAllocator)
+        let vkDebugReportMessageEXT(instance : VkInstance, flags : VkDebugReportFlagsEXT, objectType : VkDebugReportObjectTypeEXT, _object : uint64, location : uint64, messageCode : int, pLayerPrefix : cstr, pMessage : cstr) = Loader<unit>.vkDebugReportMessageEXT.Invoke(instance, flags, objectType, _object, location, messageCode, pLayerPrefix, pMessage)
+
+module AMDDrawIndirectCount =
     let Name = "VK_AMD_draw_indirect_count"
-    open VK_EXT_debug_report
+    let Number = 34
+    
+    open EXTDebugReport
     
     
     
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCmdDrawIndirectCountAMDDel = delegate of VkCommandBuffer * VkBuffer * VkDeviceSize * VkBuffer * VkDeviceSize * uint32 * uint32 -> unit
         [<SuppressUnmanagedCodeSecurity>]
         type VkCmdDrawIndexedIndirectCountAMDDel = delegate of VkCommandBuffer * VkBuffer * VkDeviceSize * VkBuffer * VkDeviceSize * uint32 * uint32 -> unit
-        let private vkCmdDrawIndirectCountAMDDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCmdDrawIndirectCountAMD"), typeof<VkCmdDrawIndirectCountAMDDel>) |> unbox<VkCmdDrawIndirectCountAMDDel>)
-        let private vkCmdDrawIndexedIndirectCountAMDDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCmdDrawIndexedIndirectCountAMD"), typeof<VkCmdDrawIndexedIndirectCountAMDDel>) |> unbox<VkCmdDrawIndexedIndirectCountAMDDel>)
-        let vkCmdDrawIndirectCountAMD(commandBuffer : VkCommandBuffer, buffer : VkBuffer, offset : VkDeviceSize, countBuffer : VkBuffer, countBufferOffset : VkDeviceSize, maxDrawCount : uint32, stride : uint32) = vkCmdDrawIndirectCountAMDDel.Value.Invoke(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride)
-        let vkCmdDrawIndexedIndirectCountAMD(commandBuffer : VkCommandBuffer, buffer : VkBuffer, offset : VkDeviceSize, countBuffer : VkBuffer, countBufferOffset : VkDeviceSize, maxDrawCount : uint32, stride : uint32) = vkCmdDrawIndexedIndirectCountAMDDel.Value.Invoke(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride)
-module VK_AMD_extension_134 =
-    let Name = "VK_AMD_extension_134"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_135 =
-    let Name = "VK_AMD_extension_135"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_136 =
-    let Name = "VK_AMD_extension_136"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_139 =
-    let Name = "VK_AMD_extension_139"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_140 =
-    let Name = "VK_AMD_extension_140"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_142 =
-    let Name = "VK_AMD_extension_142"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_143 =
-    let Name = "VK_AMD_extension_143"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_17 =
-    let Name = "VK_AMD_extension_17"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_18 =
-    let Name = "VK_AMD_extension_18"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_180 =
-    let Name = "VK_AMD_extension_180"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_181 =
-    let Name = "VK_AMD_extension_181"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_182 =
-    let Name = "VK_AMD_extension_182"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_183 =
-    let Name = "VK_AMD_extension_183"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_184 =
-    let Name = "VK_AMD_extension_184"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_185 =
-    let Name = "VK_AMD_extension_185"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_186 =
-    let Name = "VK_AMD_extension_186"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_187 =
-    let Name = "VK_AMD_extension_187"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_188 =
-    let Name = "VK_AMD_extension_188"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_189 =
-    let Name = "VK_AMD_extension_189"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_190 =
-    let Name = "VK_AMD_extension_190"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_20 =
-    let Name = "VK_AMD_extension_20"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_24 =
-    let Name = "VK_AMD_extension_24"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_25 =
-    let Name = "VK_AMD_extension_25"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_32 =
-    let Name = "VK_AMD_extension_32"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_33 =
-    let Name = "VK_AMD_extension_33"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_35 =
-    let Name = "VK_AMD_extension_35"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_39 =
-    let Name = "VK_AMD_extension_39"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_40 =
-    let Name = "VK_AMD_extension_40"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_41 =
-    let Name = "VK_AMD_extension_41"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_44 =
-    let Name = "VK_AMD_extension_44"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_45 =
-    let Name = "VK_AMD_extension_45"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_extension_46 =
-    let Name = "VK_AMD_extension_46"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_AMD_gcn_shader =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_AMD_draw_indirect_count"
+            static let s_vkCmdDrawIndirectCountAMDDel = VkRaw.importDelegate<VkCmdDrawIndirectCountAMDDel> "vkCmdDrawIndirectCountAMD"
+            static let s_vkCmdDrawIndexedIndirectCountAMDDel = VkRaw.importDelegate<VkCmdDrawIndexedIndirectCountAMDDel> "vkCmdDrawIndexedIndirectCountAMD"
+            static member vkCmdDrawIndirectCountAMD = s_vkCmdDrawIndirectCountAMDDel
+            static member vkCmdDrawIndexedIndirectCountAMD = s_vkCmdDrawIndexedIndirectCountAMDDel
+        let vkCmdDrawIndirectCountAMD(commandBuffer : VkCommandBuffer, buffer : VkBuffer, offset : VkDeviceSize, countBuffer : VkBuffer, countBufferOffset : VkDeviceSize, maxDrawCount : uint32, stride : uint32) = Loader<unit>.vkCmdDrawIndirectCountAMD.Invoke(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride)
+        let vkCmdDrawIndexedIndirectCountAMD(commandBuffer : VkCommandBuffer, buffer : VkBuffer, offset : VkDeviceSize, countBuffer : VkBuffer, countBufferOffset : VkDeviceSize, maxDrawCount : uint32, stride : uint32) = Loader<unit>.vkCmdDrawIndexedIndirectCountAMD.Invoke(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride)
+
+module AMDGcnShader =
     let Name = "VK_AMD_gcn_shader"
-    open VK_EXT_debug_report
+    let Number = 26
+    
+    open EXTDebugReport
     
     
     
     
-module VK_AMD_gpu_shader_half_float =
+
+module AMDGpuShaderHalfFloat =
     let Name = "VK_AMD_gpu_shader_half_float"
-    open VK_EXT_debug_report
+    let Number = 37
+    
+    open EXTDebugReport
     
     
     
     
-module VK_AMD_gpu_shader_int16 =
+
+module AMDGpuShaderInt16 =
     let Name = "VK_AMD_gpu_shader_int16"
-    open VK_EXT_debug_report
+    let Number = 133
+    
+    open EXTDebugReport
     
     
     
     
-module VK_AMD_mixed_attachment_samples =
+
+module AMDMixedAttachmentSamples =
     let Name = "VK_AMD_mixed_attachment_samples"
-    open VK_EXT_debug_report
+    let Number = 137
+    
+    open EXTDebugReport
     
     
     
     
-module VK_AMD_negative_viewport_height =
+
+module AMDNegativeViewportHeight =
     let Name = "VK_AMD_negative_viewport_height"
-    open VK_EXT_debug_report
+    let Number = 36
+    
+    open EXTDebugReport
     
     
     
     
-module VK_AMD_rasterization_order =
+
+module AMDRasterizationOrder =
     let Name = "VK_AMD_rasterization_order"
-    open VK_EXT_debug_report
+    let Number = 19
+    
+    open EXTDebugReport
     
     type VkRasterizationOrderAMD = 
         | VkRasterizationOrderStrictAmd = 0
@@ -3968,37 +3788,52 @@ module VK_AMD_rasterization_order =
     type VkStructureType with
          static member inline PipelineRasterizationStateRasterizationOrderAmd = unbox<VkStructureType> 1000018000
     
-module VK_AMD_shader_ballot =
+
+module AMDShaderBallot =
     let Name = "VK_AMD_shader_ballot"
-    open VK_EXT_debug_report
+    let Number = 38
+    
+    open EXTDebugReport
     
     
     
     
-module VK_AMD_shader_explicit_vertex_parameter =
+
+module AMDShaderExplicitVertexParameter =
     let Name = "VK_AMD_shader_explicit_vertex_parameter"
-    open VK_EXT_debug_report
+    let Number = 22
+    
+    open EXTDebugReport
     
     
     
     
-module VK_AMD_shader_fragment_mask =
+
+module AMDShaderFragmentMask =
     let Name = "VK_AMD_shader_fragment_mask"
-    open VK_EXT_debug_report
+    let Number = 138
+    
+    open EXTDebugReport
     
     
     
     
-module VK_AMD_shader_image_load_store_lod =
+
+module AMDShaderImageLoadStoreLod =
     let Name = "VK_AMD_shader_image_load_store_lod"
-    open VK_EXT_debug_report
+    let Number = 47
+    
+    open EXTDebugReport
     
     
     
     
-module VK_AMD_shader_info =
+
+module AMDShaderInfo =
     let Name = "VK_AMD_shader_info"
-    open VK_EXT_debug_report
+    let Number = 43
+    
+    open EXTDebugReport
     
     type VkShaderInfoTypeAMD = 
         | VkShaderInfoTypeStatisticsAmd = 0
@@ -4038,21 +3873,33 @@ module VK_AMD_shader_info =
     
     
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetShaderInfoAMDDel = delegate of VkDevice * VkPipeline * VkShaderStageFlags * VkShaderInfoTypeAMD * nativeptr<uint64> * nativeint -> VkResult
-        let private vkGetShaderInfoAMDDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetShaderInfoAMD"), typeof<VkGetShaderInfoAMDDel>) |> unbox<VkGetShaderInfoAMDDel>)
-        let vkGetShaderInfoAMD(device : VkDevice, pipeline : VkPipeline, shaderStage : VkShaderStageFlags, infoType : VkShaderInfoTypeAMD, pInfoSize : nativeptr<uint64>, pInfo : nativeint) = vkGetShaderInfoAMDDel.Value.Invoke(device, pipeline, shaderStage, infoType, pInfoSize, pInfo)
-module VK_AMD_shader_trinary_minmax =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_AMD_shader_info"
+            static let s_vkGetShaderInfoAMDDel = VkRaw.importDelegate<VkGetShaderInfoAMDDel> "vkGetShaderInfoAMD"
+            static member vkGetShaderInfoAMD = s_vkGetShaderInfoAMDDel
+        let vkGetShaderInfoAMD(device : VkDevice, pipeline : VkPipeline, shaderStage : VkShaderStageFlags, infoType : VkShaderInfoTypeAMD, pInfoSize : nativeptr<uint64>, pInfo : nativeint) = Loader<unit>.vkGetShaderInfoAMD.Invoke(device, pipeline, shaderStage, infoType, pInfoSize, pInfo)
+
+module AMDShaderTrinaryMinmax =
     let Name = "VK_AMD_shader_trinary_minmax"
-    open VK_EXT_debug_report
+    let Number = 21
+    
+    open EXTDebugReport
     
     
     
     
-module VK_KHR_get_physical_device_properties2 =
+
+module KHRGetPhysicalDeviceProperties2 =
     let Name = "VK_KHR_get_physical_device_properties2"
-    open VK_EXT_debug_report
+    let Number = 60
+    
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -4183,6 +4030,7 @@ module VK_KHR_get_physical_device_properties2 =
          static member inline SparseImageFormatProperties2Khr = unbox<VkStructureType> 1000059007
          static member inline PhysicalDeviceSparseImageFormatInfo2Khr = unbox<VkStructureType> 1000059008
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetPhysicalDeviceFeatures2KHRDel = delegate of VkPhysicalDevice * nativeptr<VkPhysicalDeviceFeatures2KHR> -> unit
@@ -4198,24 +4046,39 @@ module VK_KHR_get_physical_device_properties2 =
         type VkGetPhysicalDeviceMemoryProperties2KHRDel = delegate of VkPhysicalDevice * nativeptr<VkPhysicalDeviceMemoryProperties2KHR> -> unit
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetPhysicalDeviceSparseImageFormatProperties2KHRDel = delegate of VkPhysicalDevice * nativeptr<VkPhysicalDeviceSparseImageFormatInfo2KHR> * nativeptr<uint32> * nativeptr<VkSparseImageFormatProperties2KHR> -> unit
-        let private vkGetPhysicalDeviceFeatures2KHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceFeatures2KHR"), typeof<VkGetPhysicalDeviceFeatures2KHRDel>) |> unbox<VkGetPhysicalDeviceFeatures2KHRDel>)
-        let private vkGetPhysicalDeviceProperties2KHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceProperties2KHR"), typeof<VkGetPhysicalDeviceProperties2KHRDel>) |> unbox<VkGetPhysicalDeviceProperties2KHRDel>)
-        let private vkGetPhysicalDeviceFormatProperties2KHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceFormatProperties2KHR"), typeof<VkGetPhysicalDeviceFormatProperties2KHRDel>) |> unbox<VkGetPhysicalDeviceFormatProperties2KHRDel>)
-        let private vkGetPhysicalDeviceImageFormatProperties2KHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceImageFormatProperties2KHR"), typeof<VkGetPhysicalDeviceImageFormatProperties2KHRDel>) |> unbox<VkGetPhysicalDeviceImageFormatProperties2KHRDel>)
-        let private vkGetPhysicalDeviceQueueFamilyProperties2KHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceQueueFamilyProperties2KHR"), typeof<VkGetPhysicalDeviceQueueFamilyProperties2KHRDel>) |> unbox<VkGetPhysicalDeviceQueueFamilyProperties2KHRDel>)
-        let private vkGetPhysicalDeviceMemoryProperties2KHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceMemoryProperties2KHR"), typeof<VkGetPhysicalDeviceMemoryProperties2KHRDel>) |> unbox<VkGetPhysicalDeviceMemoryProperties2KHRDel>)
-        let private vkGetPhysicalDeviceSparseImageFormatProperties2KHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceSparseImageFormatProperties2KHR"), typeof<VkGetPhysicalDeviceSparseImageFormatProperties2KHRDel>) |> unbox<VkGetPhysicalDeviceSparseImageFormatProperties2KHRDel>)
-        let vkGetPhysicalDeviceFeatures2KHR(physicalDevice : VkPhysicalDevice, pFeatures : nativeptr<VkPhysicalDeviceFeatures2KHR>) = vkGetPhysicalDeviceFeatures2KHRDel.Value.Invoke(physicalDevice, pFeatures)
-        let vkGetPhysicalDeviceProperties2KHR(physicalDevice : VkPhysicalDevice, pProperties : nativeptr<VkPhysicalDeviceProperties2KHR>) = vkGetPhysicalDeviceProperties2KHRDel.Value.Invoke(physicalDevice, pProperties)
-        let vkGetPhysicalDeviceFormatProperties2KHR(physicalDevice : VkPhysicalDevice, format : VkFormat, pFormatProperties : nativeptr<VkFormatProperties2KHR>) = vkGetPhysicalDeviceFormatProperties2KHRDel.Value.Invoke(physicalDevice, format, pFormatProperties)
-        let vkGetPhysicalDeviceImageFormatProperties2KHR(physicalDevice : VkPhysicalDevice, pImageFormatInfo : nativeptr<VkPhysicalDeviceImageFormatInfo2KHR>, pImageFormatProperties : nativeptr<VkImageFormatProperties2KHR>) = vkGetPhysicalDeviceImageFormatProperties2KHRDel.Value.Invoke(physicalDevice, pImageFormatInfo, pImageFormatProperties)
-        let vkGetPhysicalDeviceQueueFamilyProperties2KHR(physicalDevice : VkPhysicalDevice, pQueueFamilyPropertyCount : nativeptr<uint32>, pQueueFamilyProperties : nativeptr<VkQueueFamilyProperties2KHR>) = vkGetPhysicalDeviceQueueFamilyProperties2KHRDel.Value.Invoke(physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties)
-        let vkGetPhysicalDeviceMemoryProperties2KHR(physicalDevice : VkPhysicalDevice, pMemoryProperties : nativeptr<VkPhysicalDeviceMemoryProperties2KHR>) = vkGetPhysicalDeviceMemoryProperties2KHRDel.Value.Invoke(physicalDevice, pMemoryProperties)
-        let vkGetPhysicalDeviceSparseImageFormatProperties2KHR(physicalDevice : VkPhysicalDevice, pFormatInfo : nativeptr<VkPhysicalDeviceSparseImageFormatInfo2KHR>, pPropertyCount : nativeptr<uint32>, pProperties : nativeptr<VkSparseImageFormatProperties2KHR>) = vkGetPhysicalDeviceSparseImageFormatProperties2KHRDel.Value.Invoke(physicalDevice, pFormatInfo, pPropertyCount, pProperties)
-module VK_AMD_texture_gather_bias_lod =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_get_physical_device_properties2"
+            static let s_vkGetPhysicalDeviceFeatures2KHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceFeatures2KHRDel> "vkGetPhysicalDeviceFeatures2KHR"
+            static let s_vkGetPhysicalDeviceProperties2KHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceProperties2KHRDel> "vkGetPhysicalDeviceProperties2KHR"
+            static let s_vkGetPhysicalDeviceFormatProperties2KHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceFormatProperties2KHRDel> "vkGetPhysicalDeviceFormatProperties2KHR"
+            static let s_vkGetPhysicalDeviceImageFormatProperties2KHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceImageFormatProperties2KHRDel> "vkGetPhysicalDeviceImageFormatProperties2KHR"
+            static let s_vkGetPhysicalDeviceQueueFamilyProperties2KHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceQueueFamilyProperties2KHRDel> "vkGetPhysicalDeviceQueueFamilyProperties2KHR"
+            static let s_vkGetPhysicalDeviceMemoryProperties2KHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceMemoryProperties2KHRDel> "vkGetPhysicalDeviceMemoryProperties2KHR"
+            static let s_vkGetPhysicalDeviceSparseImageFormatProperties2KHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceSparseImageFormatProperties2KHRDel> "vkGetPhysicalDeviceSparseImageFormatProperties2KHR"
+            static member vkGetPhysicalDeviceFeatures2KHR = s_vkGetPhysicalDeviceFeatures2KHRDel
+            static member vkGetPhysicalDeviceProperties2KHR = s_vkGetPhysicalDeviceProperties2KHRDel
+            static member vkGetPhysicalDeviceFormatProperties2KHR = s_vkGetPhysicalDeviceFormatProperties2KHRDel
+            static member vkGetPhysicalDeviceImageFormatProperties2KHR = s_vkGetPhysicalDeviceImageFormatProperties2KHRDel
+            static member vkGetPhysicalDeviceQueueFamilyProperties2KHR = s_vkGetPhysicalDeviceQueueFamilyProperties2KHRDel
+            static member vkGetPhysicalDeviceMemoryProperties2KHR = s_vkGetPhysicalDeviceMemoryProperties2KHRDel
+            static member vkGetPhysicalDeviceSparseImageFormatProperties2KHR = s_vkGetPhysicalDeviceSparseImageFormatProperties2KHRDel
+        let vkGetPhysicalDeviceFeatures2KHR(physicalDevice : VkPhysicalDevice, pFeatures : nativeptr<VkPhysicalDeviceFeatures2KHR>) = Loader<unit>.vkGetPhysicalDeviceFeatures2KHR.Invoke(physicalDevice, pFeatures)
+        let vkGetPhysicalDeviceProperties2KHR(physicalDevice : VkPhysicalDevice, pProperties : nativeptr<VkPhysicalDeviceProperties2KHR>) = Loader<unit>.vkGetPhysicalDeviceProperties2KHR.Invoke(physicalDevice, pProperties)
+        let vkGetPhysicalDeviceFormatProperties2KHR(physicalDevice : VkPhysicalDevice, format : VkFormat, pFormatProperties : nativeptr<VkFormatProperties2KHR>) = Loader<unit>.vkGetPhysicalDeviceFormatProperties2KHR.Invoke(physicalDevice, format, pFormatProperties)
+        let vkGetPhysicalDeviceImageFormatProperties2KHR(physicalDevice : VkPhysicalDevice, pImageFormatInfo : nativeptr<VkPhysicalDeviceImageFormatInfo2KHR>, pImageFormatProperties : nativeptr<VkImageFormatProperties2KHR>) = Loader<unit>.vkGetPhysicalDeviceImageFormatProperties2KHR.Invoke(physicalDevice, pImageFormatInfo, pImageFormatProperties)
+        let vkGetPhysicalDeviceQueueFamilyProperties2KHR(physicalDevice : VkPhysicalDevice, pQueueFamilyPropertyCount : nativeptr<uint32>, pQueueFamilyProperties : nativeptr<VkQueueFamilyProperties2KHR>) = Loader<unit>.vkGetPhysicalDeviceQueueFamilyProperties2KHR.Invoke(physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties)
+        let vkGetPhysicalDeviceMemoryProperties2KHR(physicalDevice : VkPhysicalDevice, pMemoryProperties : nativeptr<VkPhysicalDeviceMemoryProperties2KHR>) = Loader<unit>.vkGetPhysicalDeviceMemoryProperties2KHR.Invoke(physicalDevice, pMemoryProperties)
+        let vkGetPhysicalDeviceSparseImageFormatProperties2KHR(physicalDevice : VkPhysicalDevice, pFormatInfo : nativeptr<VkPhysicalDeviceSparseImageFormatInfo2KHR>, pPropertyCount : nativeptr<uint32>, pProperties : nativeptr<VkSparseImageFormatProperties2KHR>) = Loader<unit>.vkGetPhysicalDeviceSparseImageFormatProperties2KHR.Invoke(physicalDevice, pFormatInfo, pPropertyCount, pProperties)
+
+module AMDTextureGatherBiasLod =
     let Name = "VK_AMD_texture_gather_bias_lod"
-    open VK_EXT_debug_report
-    open VK_KHR_get_physical_device_properties2
+    let Number = 42
+    
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -4234,9 +4097,12 @@ module VK_AMD_texture_gather_bias_lod =
     type VkStructureType with
          static member inline TextureLodGatherFormatPropertiesAmd = unbox<VkStructureType> 1000041000
     
-module VK_ANDROID_native_buffer =
+
+module ANDROIDNativeBuffer =
     let Name = "VK_ANDROID_native_buffer"
-    open VK_EXT_debug_report
+    let Number = 11
+    
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -4258,6 +4124,7 @@ module VK_ANDROID_native_buffer =
     type VkStructureType with
          static member inline NativeBufferAndroid = unbox<VkStructureType> 1000010000
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetSwapchainGrallocUsageANDROIDDel = delegate of VkDevice * VkFormat * VkImageUsageFlags * nativeptr<int> -> VkResult
@@ -4265,29 +4132,25 @@ module VK_ANDROID_native_buffer =
         type VkAcquireImageANDROIDDel = delegate of VkDevice * VkImage * int * VkSemaphore * VkFence -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkQueueSignalReleaseImageANDROIDDel = delegate of VkQueue * uint32 * nativeptr<VkSemaphore> * VkImage * nativeptr<int> -> VkResult
-        let private vkGetSwapchainGrallocUsageANDROIDDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetSwapchainGrallocUsageANDROID"), typeof<VkGetSwapchainGrallocUsageANDROIDDel>) |> unbox<VkGetSwapchainGrallocUsageANDROIDDel>)
-        let private vkAcquireImageANDROIDDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkAcquireImageANDROID"), typeof<VkAcquireImageANDROIDDel>) |> unbox<VkAcquireImageANDROIDDel>)
-        let private vkQueueSignalReleaseImageANDROIDDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkQueueSignalReleaseImageANDROID"), typeof<VkQueueSignalReleaseImageANDROIDDel>) |> unbox<VkQueueSignalReleaseImageANDROIDDel>)
-        let vkGetSwapchainGrallocUsageANDROID(device : VkDevice, format : VkFormat, imageUsage : VkImageUsageFlags, grallocUsage : nativeptr<int>) = vkGetSwapchainGrallocUsageANDROIDDel.Value.Invoke(device, format, imageUsage, grallocUsage)
-        let vkAcquireImageANDROID(device : VkDevice, image : VkImage, nativeFenceFd : int, semaphore : VkSemaphore, fence : VkFence) = vkAcquireImageANDROIDDel.Value.Invoke(device, image, nativeFenceFd, semaphore, fence)
-        let vkQueueSignalReleaseImageANDROID(queue : VkQueue, waitSemaphoreCount : uint32, pWaitSemaphores : nativeptr<VkSemaphore>, image : VkImage, pNativeFenceFd : nativeptr<int>) = vkQueueSignalReleaseImageANDROIDDel.Value.Invoke(queue, waitSemaphoreCount, pWaitSemaphores, image, pNativeFenceFd)
-module VK_ARM_extension_01 =
-    let Name = "VK_ARM_extension_01"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_ARM_extension_02 =
-    let Name = "VK_ARM_extension_02"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_KHR_surface =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_ANDROID_native_buffer"
+            static let s_vkGetSwapchainGrallocUsageANDROIDDel = VkRaw.importDelegate<VkGetSwapchainGrallocUsageANDROIDDel> "vkGetSwapchainGrallocUsageANDROID"
+            static let s_vkAcquireImageANDROIDDel = VkRaw.importDelegate<VkAcquireImageANDROIDDel> "vkAcquireImageANDROID"
+            static let s_vkQueueSignalReleaseImageANDROIDDel = VkRaw.importDelegate<VkQueueSignalReleaseImageANDROIDDel> "vkQueueSignalReleaseImageANDROID"
+            static member vkGetSwapchainGrallocUsageANDROID = s_vkGetSwapchainGrallocUsageANDROIDDel
+            static member vkAcquireImageANDROID = s_vkAcquireImageANDROIDDel
+            static member vkQueueSignalReleaseImageANDROID = s_vkQueueSignalReleaseImageANDROIDDel
+        let vkGetSwapchainGrallocUsageANDROID(device : VkDevice, format : VkFormat, imageUsage : VkImageUsageFlags, grallocUsage : nativeptr<int>) = Loader<unit>.vkGetSwapchainGrallocUsageANDROID.Invoke(device, format, imageUsage, grallocUsage)
+        let vkAcquireImageANDROID(device : VkDevice, image : VkImage, nativeFenceFd : int, semaphore : VkSemaphore, fence : VkFence) = Loader<unit>.vkAcquireImageANDROID.Invoke(device, image, nativeFenceFd, semaphore, fence)
+        let vkQueueSignalReleaseImageANDROID(queue : VkQueue, waitSemaphoreCount : uint32, pWaitSemaphores : nativeptr<VkSemaphore>, image : VkImage, pNativeFenceFd : nativeptr<int>) = Loader<unit>.vkQueueSignalReleaseImageANDROID.Invoke(queue, waitSemaphoreCount, pWaitSemaphores, image, pNativeFenceFd)
+
+module KHRSurface =
     let Name = "VK_KHR_surface"
-    open VK_EXT_debug_report
+    let Number = 1
+    
+    open EXTDebugReport
     
     
     
@@ -4297,6 +4160,7 @@ module VK_KHR_surface =
          static member inline VkErrorSurfaceLostKhr = unbox<VkResult> -1000000000
          static member inline VkErrorNativeWindowInUseKhr = unbox<VkResult> -1000000001
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkDestroySurfaceKHRDel = delegate of VkInstance * VkSurfaceKHR * nativeptr<VkAllocationCallbacks> -> unit
@@ -4308,20 +4172,33 @@ module VK_KHR_surface =
         type VkGetPhysicalDeviceSurfaceFormatsKHRDel = delegate of VkPhysicalDevice * VkSurfaceKHR * nativeptr<uint32> * nativeptr<VkSurfaceFormatKHR> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetPhysicalDeviceSurfacePresentModesKHRDel = delegate of VkPhysicalDevice * VkSurfaceKHR * nativeptr<uint32> * nativeptr<VkPresentModeKHR> -> VkResult
-        let private vkDestroySurfaceKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkDestroySurfaceKHR"), typeof<VkDestroySurfaceKHRDel>) |> unbox<VkDestroySurfaceKHRDel>)
-        let private vkGetPhysicalDeviceSurfaceSupportKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceSurfaceSupportKHR"), typeof<VkGetPhysicalDeviceSurfaceSupportKHRDel>) |> unbox<VkGetPhysicalDeviceSurfaceSupportKHRDel>)
-        let private vkGetPhysicalDeviceSurfaceCapabilitiesKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"), typeof<VkGetPhysicalDeviceSurfaceCapabilitiesKHRDel>) |> unbox<VkGetPhysicalDeviceSurfaceCapabilitiesKHRDel>)
-        let private vkGetPhysicalDeviceSurfaceFormatsKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceSurfaceFormatsKHR"), typeof<VkGetPhysicalDeviceSurfaceFormatsKHRDel>) |> unbox<VkGetPhysicalDeviceSurfaceFormatsKHRDel>)
-        let private vkGetPhysicalDeviceSurfacePresentModesKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceSurfacePresentModesKHR"), typeof<VkGetPhysicalDeviceSurfacePresentModesKHRDel>) |> unbox<VkGetPhysicalDeviceSurfacePresentModesKHRDel>)
-        let vkDestroySurfaceKHR(instance : VkInstance, surface : VkSurfaceKHR, pAllocator : nativeptr<VkAllocationCallbacks>) = vkDestroySurfaceKHRDel.Value.Invoke(instance, surface, pAllocator)
-        let vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice : VkPhysicalDevice, queueFamilyIndex : uint32, surface : VkSurfaceKHR, pSupported : nativeptr<VkBool32>) = vkGetPhysicalDeviceSurfaceSupportKHRDel.Value.Invoke(physicalDevice, queueFamilyIndex, surface, pSupported)
-        let vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice : VkPhysicalDevice, surface : VkSurfaceKHR, pSurfaceCapabilities : nativeptr<VkSurfaceCapabilitiesKHR>) = vkGetPhysicalDeviceSurfaceCapabilitiesKHRDel.Value.Invoke(physicalDevice, surface, pSurfaceCapabilities)
-        let vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice : VkPhysicalDevice, surface : VkSurfaceKHR, pSurfaceFormatCount : nativeptr<uint32>, pSurfaceFormats : nativeptr<VkSurfaceFormatKHR>) = vkGetPhysicalDeviceSurfaceFormatsKHRDel.Value.Invoke(physicalDevice, surface, pSurfaceFormatCount, pSurfaceFormats)
-        let vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice : VkPhysicalDevice, surface : VkSurfaceKHR, pPresentModeCount : nativeptr<uint32>, pPresentModes : nativeptr<VkPresentModeKHR>) = vkGetPhysicalDeviceSurfacePresentModesKHRDel.Value.Invoke(physicalDevice, surface, pPresentModeCount, pPresentModes)
-module VK_KHR_display =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_surface"
+            static let s_vkDestroySurfaceKHRDel = VkRaw.importDelegate<VkDestroySurfaceKHRDel> "vkDestroySurfaceKHR"
+            static let s_vkGetPhysicalDeviceSurfaceSupportKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceSurfaceSupportKHRDel> "vkGetPhysicalDeviceSurfaceSupportKHR"
+            static let s_vkGetPhysicalDeviceSurfaceCapabilitiesKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceSurfaceCapabilitiesKHRDel> "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"
+            static let s_vkGetPhysicalDeviceSurfaceFormatsKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceSurfaceFormatsKHRDel> "vkGetPhysicalDeviceSurfaceFormatsKHR"
+            static let s_vkGetPhysicalDeviceSurfacePresentModesKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceSurfacePresentModesKHRDel> "vkGetPhysicalDeviceSurfacePresentModesKHR"
+            static member vkDestroySurfaceKHR = s_vkDestroySurfaceKHRDel
+            static member vkGetPhysicalDeviceSurfaceSupportKHR = s_vkGetPhysicalDeviceSurfaceSupportKHRDel
+            static member vkGetPhysicalDeviceSurfaceCapabilitiesKHR = s_vkGetPhysicalDeviceSurfaceCapabilitiesKHRDel
+            static member vkGetPhysicalDeviceSurfaceFormatsKHR = s_vkGetPhysicalDeviceSurfaceFormatsKHRDel
+            static member vkGetPhysicalDeviceSurfacePresentModesKHR = s_vkGetPhysicalDeviceSurfacePresentModesKHRDel
+        let vkDestroySurfaceKHR(instance : VkInstance, surface : VkSurfaceKHR, pAllocator : nativeptr<VkAllocationCallbacks>) = Loader<unit>.vkDestroySurfaceKHR.Invoke(instance, surface, pAllocator)
+        let vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice : VkPhysicalDevice, queueFamilyIndex : uint32, surface : VkSurfaceKHR, pSupported : nativeptr<VkBool32>) = Loader<unit>.vkGetPhysicalDeviceSurfaceSupportKHR.Invoke(physicalDevice, queueFamilyIndex, surface, pSupported)
+        let vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice : VkPhysicalDevice, surface : VkSurfaceKHR, pSurfaceCapabilities : nativeptr<VkSurfaceCapabilitiesKHR>) = Loader<unit>.vkGetPhysicalDeviceSurfaceCapabilitiesKHR.Invoke(physicalDevice, surface, pSurfaceCapabilities)
+        let vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice : VkPhysicalDevice, surface : VkSurfaceKHR, pSurfaceFormatCount : nativeptr<uint32>, pSurfaceFormats : nativeptr<VkSurfaceFormatKHR>) = Loader<unit>.vkGetPhysicalDeviceSurfaceFormatsKHR.Invoke(physicalDevice, surface, pSurfaceFormatCount, pSurfaceFormats)
+        let vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice : VkPhysicalDevice, surface : VkSurfaceKHR, pPresentModeCount : nativeptr<uint32>, pPresentModes : nativeptr<VkPresentModeKHR>) = Loader<unit>.vkGetPhysicalDeviceSurfacePresentModesKHR.Invoke(physicalDevice, surface, pPresentModeCount, pPresentModes)
+
+module KHRDisplay =
     let Name = "VK_KHR_display"
-    open VK_EXT_debug_report
-    open VK_KHR_surface
+    let Number = 3
+    
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
+    open EXTDebugReport
     
     [<Flags>]
     type VkDisplayPlaneAlphaFlagBitsKHR = 
@@ -4439,6 +4316,7 @@ module VK_KHR_display =
          static member inline DisplayModeCreateInfoKhr = unbox<VkStructureType> 1000002000
          static member inline DisplaySurfaceCreateInfoKhr = unbox<VkStructureType> 1000002001
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetPhysicalDeviceDisplayPropertiesKHRDel = delegate of VkPhysicalDevice * nativeptr<uint32> * nativeptr<VkDisplayPropertiesKHR> -> VkResult
@@ -4454,56 +4332,91 @@ module VK_KHR_display =
         type VkGetDisplayPlaneCapabilitiesKHRDel = delegate of VkPhysicalDevice * VkDisplayModeKHR * uint32 * nativeptr<VkDisplayPlaneCapabilitiesKHR> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkCreateDisplayPlaneSurfaceKHRDel = delegate of VkInstance * nativeptr<VkDisplaySurfaceCreateInfoKHR> * nativeptr<VkAllocationCallbacks> * nativeptr<VkSurfaceKHR> -> VkResult
-        let private vkGetPhysicalDeviceDisplayPropertiesKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceDisplayPropertiesKHR"), typeof<VkGetPhysicalDeviceDisplayPropertiesKHRDel>) |> unbox<VkGetPhysicalDeviceDisplayPropertiesKHRDel>)
-        let private vkGetPhysicalDeviceDisplayPlanePropertiesKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceDisplayPlanePropertiesKHR"), typeof<VkGetPhysicalDeviceDisplayPlanePropertiesKHRDel>) |> unbox<VkGetPhysicalDeviceDisplayPlanePropertiesKHRDel>)
-        let private vkGetDisplayPlaneSupportedDisplaysKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetDisplayPlaneSupportedDisplaysKHR"), typeof<VkGetDisplayPlaneSupportedDisplaysKHRDel>) |> unbox<VkGetDisplayPlaneSupportedDisplaysKHRDel>)
-        let private vkGetDisplayModePropertiesKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetDisplayModePropertiesKHR"), typeof<VkGetDisplayModePropertiesKHRDel>) |> unbox<VkGetDisplayModePropertiesKHRDel>)
-        let private vkCreateDisplayModeKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCreateDisplayModeKHR"), typeof<VkCreateDisplayModeKHRDel>) |> unbox<VkCreateDisplayModeKHRDel>)
-        let private vkGetDisplayPlaneCapabilitiesKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetDisplayPlaneCapabilitiesKHR"), typeof<VkGetDisplayPlaneCapabilitiesKHRDel>) |> unbox<VkGetDisplayPlaneCapabilitiesKHRDel>)
-        let private vkCreateDisplayPlaneSurfaceKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCreateDisplayPlaneSurfaceKHR"), typeof<VkCreateDisplayPlaneSurfaceKHRDel>) |> unbox<VkCreateDisplayPlaneSurfaceKHRDel>)
-        let vkGetPhysicalDeviceDisplayPropertiesKHR(physicalDevice : VkPhysicalDevice, pPropertyCount : nativeptr<uint32>, pProperties : nativeptr<VkDisplayPropertiesKHR>) = vkGetPhysicalDeviceDisplayPropertiesKHRDel.Value.Invoke(physicalDevice, pPropertyCount, pProperties)
-        let vkGetPhysicalDeviceDisplayPlanePropertiesKHR(physicalDevice : VkPhysicalDevice, pPropertyCount : nativeptr<uint32>, pProperties : nativeptr<VkDisplayPlanePropertiesKHR>) = vkGetPhysicalDeviceDisplayPlanePropertiesKHRDel.Value.Invoke(physicalDevice, pPropertyCount, pProperties)
-        let vkGetDisplayPlaneSupportedDisplaysKHR(physicalDevice : VkPhysicalDevice, planeIndex : uint32, pDisplayCount : nativeptr<uint32>, pDisplays : nativeptr<VkDisplayKHR>) = vkGetDisplayPlaneSupportedDisplaysKHRDel.Value.Invoke(physicalDevice, planeIndex, pDisplayCount, pDisplays)
-        let vkGetDisplayModePropertiesKHR(physicalDevice : VkPhysicalDevice, display : VkDisplayKHR, pPropertyCount : nativeptr<uint32>, pProperties : nativeptr<VkDisplayModePropertiesKHR>) = vkGetDisplayModePropertiesKHRDel.Value.Invoke(physicalDevice, display, pPropertyCount, pProperties)
-        let vkCreateDisplayModeKHR(physicalDevice : VkPhysicalDevice, display : VkDisplayKHR, pCreateInfo : nativeptr<VkDisplayModeCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pMode : nativeptr<VkDisplayModeKHR>) = vkCreateDisplayModeKHRDel.Value.Invoke(physicalDevice, display, pCreateInfo, pAllocator, pMode)
-        let vkGetDisplayPlaneCapabilitiesKHR(physicalDevice : VkPhysicalDevice, mode : VkDisplayModeKHR, planeIndex : uint32, pCapabilities : nativeptr<VkDisplayPlaneCapabilitiesKHR>) = vkGetDisplayPlaneCapabilitiesKHRDel.Value.Invoke(physicalDevice, mode, planeIndex, pCapabilities)
-        let vkCreateDisplayPlaneSurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkDisplaySurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = vkCreateDisplayPlaneSurfaceKHRDel.Value.Invoke(instance, pCreateInfo, pAllocator, pSurface)
-module VK_EXT_direct_mode_display =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_display"
+            static let s_vkGetPhysicalDeviceDisplayPropertiesKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceDisplayPropertiesKHRDel> "vkGetPhysicalDeviceDisplayPropertiesKHR"
+            static let s_vkGetPhysicalDeviceDisplayPlanePropertiesKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceDisplayPlanePropertiesKHRDel> "vkGetPhysicalDeviceDisplayPlanePropertiesKHR"
+            static let s_vkGetDisplayPlaneSupportedDisplaysKHRDel = VkRaw.importDelegate<VkGetDisplayPlaneSupportedDisplaysKHRDel> "vkGetDisplayPlaneSupportedDisplaysKHR"
+            static let s_vkGetDisplayModePropertiesKHRDel = VkRaw.importDelegate<VkGetDisplayModePropertiesKHRDel> "vkGetDisplayModePropertiesKHR"
+            static let s_vkCreateDisplayModeKHRDel = VkRaw.importDelegate<VkCreateDisplayModeKHRDel> "vkCreateDisplayModeKHR"
+            static let s_vkGetDisplayPlaneCapabilitiesKHRDel = VkRaw.importDelegate<VkGetDisplayPlaneCapabilitiesKHRDel> "vkGetDisplayPlaneCapabilitiesKHR"
+            static let s_vkCreateDisplayPlaneSurfaceKHRDel = VkRaw.importDelegate<VkCreateDisplayPlaneSurfaceKHRDel> "vkCreateDisplayPlaneSurfaceKHR"
+            static member vkGetPhysicalDeviceDisplayPropertiesKHR = s_vkGetPhysicalDeviceDisplayPropertiesKHRDel
+            static member vkGetPhysicalDeviceDisplayPlanePropertiesKHR = s_vkGetPhysicalDeviceDisplayPlanePropertiesKHRDel
+            static member vkGetDisplayPlaneSupportedDisplaysKHR = s_vkGetDisplayPlaneSupportedDisplaysKHRDel
+            static member vkGetDisplayModePropertiesKHR = s_vkGetDisplayModePropertiesKHRDel
+            static member vkCreateDisplayModeKHR = s_vkCreateDisplayModeKHRDel
+            static member vkGetDisplayPlaneCapabilitiesKHR = s_vkGetDisplayPlaneCapabilitiesKHRDel
+            static member vkCreateDisplayPlaneSurfaceKHR = s_vkCreateDisplayPlaneSurfaceKHRDel
+        let vkGetPhysicalDeviceDisplayPropertiesKHR(physicalDevice : VkPhysicalDevice, pPropertyCount : nativeptr<uint32>, pProperties : nativeptr<VkDisplayPropertiesKHR>) = Loader<unit>.vkGetPhysicalDeviceDisplayPropertiesKHR.Invoke(physicalDevice, pPropertyCount, pProperties)
+        let vkGetPhysicalDeviceDisplayPlanePropertiesKHR(physicalDevice : VkPhysicalDevice, pPropertyCount : nativeptr<uint32>, pProperties : nativeptr<VkDisplayPlanePropertiesKHR>) = Loader<unit>.vkGetPhysicalDeviceDisplayPlanePropertiesKHR.Invoke(physicalDevice, pPropertyCount, pProperties)
+        let vkGetDisplayPlaneSupportedDisplaysKHR(physicalDevice : VkPhysicalDevice, planeIndex : uint32, pDisplayCount : nativeptr<uint32>, pDisplays : nativeptr<VkDisplayKHR>) = Loader<unit>.vkGetDisplayPlaneSupportedDisplaysKHR.Invoke(physicalDevice, planeIndex, pDisplayCount, pDisplays)
+        let vkGetDisplayModePropertiesKHR(physicalDevice : VkPhysicalDevice, display : VkDisplayKHR, pPropertyCount : nativeptr<uint32>, pProperties : nativeptr<VkDisplayModePropertiesKHR>) = Loader<unit>.vkGetDisplayModePropertiesKHR.Invoke(physicalDevice, display, pPropertyCount, pProperties)
+        let vkCreateDisplayModeKHR(physicalDevice : VkPhysicalDevice, display : VkDisplayKHR, pCreateInfo : nativeptr<VkDisplayModeCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pMode : nativeptr<VkDisplayModeKHR>) = Loader<unit>.vkCreateDisplayModeKHR.Invoke(physicalDevice, display, pCreateInfo, pAllocator, pMode)
+        let vkGetDisplayPlaneCapabilitiesKHR(physicalDevice : VkPhysicalDevice, mode : VkDisplayModeKHR, planeIndex : uint32, pCapabilities : nativeptr<VkDisplayPlaneCapabilitiesKHR>) = Loader<unit>.vkGetDisplayPlaneCapabilitiesKHR.Invoke(physicalDevice, mode, planeIndex, pCapabilities)
+        let vkCreateDisplayPlaneSurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkDisplaySurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateDisplayPlaneSurfaceKHR.Invoke(instance, pCreateInfo, pAllocator, pSurface)
+
+module EXTDirectModeDisplay =
     let Name = "VK_EXT_direct_mode_display"
-    open VK_EXT_debug_report
-    open VK_KHR_display
-    open VK_KHR_surface
+    let Number = 89
+    
+    let Required = [ KHRDisplay.Name; KHRSurface.Name ]
+    open KHRDisplay
+    open KHRSurface
+    open EXTDebugReport
     
     
     
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkReleaseDisplayEXTDel = delegate of VkPhysicalDevice * VkDisplayKHR -> VkResult
-        let private vkReleaseDisplayEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkReleaseDisplayEXT"), typeof<VkReleaseDisplayEXTDel>) |> unbox<VkReleaseDisplayEXTDel>)
-        let vkReleaseDisplayEXT(physicalDevice : VkPhysicalDevice, display : VkDisplayKHR) = vkReleaseDisplayEXTDel.Value.Invoke(physicalDevice, display)
-module VK_EXT_acquire_xlib_display =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_EXT_direct_mode_display"
+            static let s_vkReleaseDisplayEXTDel = VkRaw.importDelegate<VkReleaseDisplayEXTDel> "vkReleaseDisplayEXT"
+            static member vkReleaseDisplayEXT = s_vkReleaseDisplayEXTDel
+        let vkReleaseDisplayEXT(physicalDevice : VkPhysicalDevice, display : VkDisplayKHR) = Loader<unit>.vkReleaseDisplayEXT.Invoke(physicalDevice, display)
+
+module EXTAcquireXlibDisplay =
     let Name = "VK_EXT_acquire_xlib_display"
-    open VK_EXT_debug_report
-    open VK_EXT_direct_mode_display
-    open VK_KHR_display
-    open VK_KHR_surface
+    let Number = 90
+    
+    let Required = [ EXTDirectModeDisplay.Name; KHRDisplay.Name; KHRSurface.Name ]
+    open EXTDirectModeDisplay
+    open KHRDisplay
+    open KHRSurface
+    open EXTDebugReport
     
     
     
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkAcquireXlibDisplayEXTDel = delegate of VkPhysicalDevice * nativeptr<nativeint> * VkDisplayKHR -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetRandROutputDisplayEXTDel = delegate of VkPhysicalDevice * nativeptr<nativeint> * nativeint * nativeptr<VkDisplayKHR> -> VkResult
-        let private vkAcquireXlibDisplayEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkAcquireXlibDisplayEXT"), typeof<VkAcquireXlibDisplayEXTDel>) |> unbox<VkAcquireXlibDisplayEXTDel>)
-        let private vkGetRandROutputDisplayEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetRandROutputDisplayEXT"), typeof<VkGetRandROutputDisplayEXTDel>) |> unbox<VkGetRandROutputDisplayEXTDel>)
-        let vkAcquireXlibDisplayEXT(physicalDevice : VkPhysicalDevice, dpy : nativeptr<nativeint>, display : VkDisplayKHR) = vkAcquireXlibDisplayEXTDel.Value.Invoke(physicalDevice, dpy, display)
-        let vkGetRandROutputDisplayEXT(physicalDevice : VkPhysicalDevice, dpy : nativeptr<nativeint>, rrOutput : nativeint, pDisplay : nativeptr<VkDisplayKHR>) = vkGetRandROutputDisplayEXTDel.Value.Invoke(physicalDevice, dpy, rrOutput, pDisplay)
-module VK_EXT_blend_operation_advanced =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_EXT_acquire_xlib_display"
+            static let s_vkAcquireXlibDisplayEXTDel = VkRaw.importDelegate<VkAcquireXlibDisplayEXTDel> "vkAcquireXlibDisplayEXT"
+            static let s_vkGetRandROutputDisplayEXTDel = VkRaw.importDelegate<VkGetRandROutputDisplayEXTDel> "vkGetRandROutputDisplayEXT"
+            static member vkAcquireXlibDisplayEXT = s_vkAcquireXlibDisplayEXTDel
+            static member vkGetRandROutputDisplayEXT = s_vkGetRandROutputDisplayEXTDel
+        let vkAcquireXlibDisplayEXT(physicalDevice : VkPhysicalDevice, dpy : nativeptr<nativeint>, display : VkDisplayKHR) = Loader<unit>.vkAcquireXlibDisplayEXT.Invoke(physicalDevice, dpy, display)
+        let vkGetRandROutputDisplayEXT(physicalDevice : VkPhysicalDevice, dpy : nativeptr<nativeint>, rrOutput : nativeint, pDisplay : nativeptr<VkDisplayKHR>) = Loader<unit>.vkGetRandROutputDisplayEXT.Invoke(physicalDevice, dpy, rrOutput, pDisplay)
+
+module EXTBlendOperationAdvanced =
     let Name = "VK_EXT_blend_operation_advanced"
-    open VK_EXT_debug_report
+    let Number = 149
+    
+    open EXTDebugReport
     
     type VkBlendOverlapEXT = 
         | VkBlendOverlapUncorrelatedExt = 0
@@ -4607,9 +4520,14 @@ module VK_EXT_blend_operation_advanced =
          static member inline PhysicalDeviceBlendOperationAdvancedPropertiesExt = unbox<VkStructureType> 1000148001
          static member inline PipelineColorBlendAdvancedStateCreateInfoExt = unbox<VkStructureType> 1000148002
     
-module VK_EXT_debug_marker =
+
+module EXTDebugMarker =
     let Name = "VK_EXT_debug_marker"
-    open VK_EXT_debug_report
+    let Number = 23
+    
+    let Required = [ EXTDebugReport.Name ]
+    open EXTDebugReport
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -4661,6 +4579,7 @@ module VK_EXT_debug_marker =
          static member inline DebugMarkerObjectTagInfoExt = unbox<VkStructureType> 1000022001
          static member inline DebugMarkerMarkerInfoExt = unbox<VkStructureType> 1000022002
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkDebugMarkerSetObjectTagEXTDel = delegate of VkDevice * nativeptr<VkDebugMarkerObjectTagInfoEXT> -> VkResult
@@ -4672,27 +4591,43 @@ module VK_EXT_debug_marker =
         type VkCmdDebugMarkerEndEXTDel = delegate of VkCommandBuffer -> unit
         [<SuppressUnmanagedCodeSecurity>]
         type VkCmdDebugMarkerInsertEXTDel = delegate of VkCommandBuffer * nativeptr<VkDebugMarkerMarkerInfoEXT> -> unit
-        let private vkDebugMarkerSetObjectTagEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkDebugMarkerSetObjectTagEXT"), typeof<VkDebugMarkerSetObjectTagEXTDel>) |> unbox<VkDebugMarkerSetObjectTagEXTDel>)
-        let private vkDebugMarkerSetObjectNameEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkDebugMarkerSetObjectNameEXT"), typeof<VkDebugMarkerSetObjectNameEXTDel>) |> unbox<VkDebugMarkerSetObjectNameEXTDel>)
-        let private vkCmdDebugMarkerBeginEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCmdDebugMarkerBeginEXT"), typeof<VkCmdDebugMarkerBeginEXTDel>) |> unbox<VkCmdDebugMarkerBeginEXTDel>)
-        let private vkCmdDebugMarkerEndEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCmdDebugMarkerEndEXT"), typeof<VkCmdDebugMarkerEndEXTDel>) |> unbox<VkCmdDebugMarkerEndEXTDel>)
-        let private vkCmdDebugMarkerInsertEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCmdDebugMarkerInsertEXT"), typeof<VkCmdDebugMarkerInsertEXTDel>) |> unbox<VkCmdDebugMarkerInsertEXTDel>)
-        let vkDebugMarkerSetObjectTagEXT(device : VkDevice, pTagInfo : nativeptr<VkDebugMarkerObjectTagInfoEXT>) = vkDebugMarkerSetObjectTagEXTDel.Value.Invoke(device, pTagInfo)
-        let vkDebugMarkerSetObjectNameEXT(device : VkDevice, pNameInfo : nativeptr<VkDebugMarkerObjectNameInfoEXT>) = vkDebugMarkerSetObjectNameEXTDel.Value.Invoke(device, pNameInfo)
-        let vkCmdDebugMarkerBeginEXT(commandBuffer : VkCommandBuffer, pMarkerInfo : nativeptr<VkDebugMarkerMarkerInfoEXT>) = vkCmdDebugMarkerBeginEXTDel.Value.Invoke(commandBuffer, pMarkerInfo)
-        let vkCmdDebugMarkerEndEXT(commandBuffer : VkCommandBuffer) = vkCmdDebugMarkerEndEXTDel.Value.Invoke(commandBuffer)
-        let vkCmdDebugMarkerInsertEXT(commandBuffer : VkCommandBuffer, pMarkerInfo : nativeptr<VkDebugMarkerMarkerInfoEXT>) = vkCmdDebugMarkerInsertEXTDel.Value.Invoke(commandBuffer, pMarkerInfo)
-module VK_EXT_depth_range_unrestricted =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_EXT_debug_marker"
+            static let s_vkDebugMarkerSetObjectTagEXTDel = VkRaw.importDelegate<VkDebugMarkerSetObjectTagEXTDel> "vkDebugMarkerSetObjectTagEXT"
+            static let s_vkDebugMarkerSetObjectNameEXTDel = VkRaw.importDelegate<VkDebugMarkerSetObjectNameEXTDel> "vkDebugMarkerSetObjectNameEXT"
+            static let s_vkCmdDebugMarkerBeginEXTDel = VkRaw.importDelegate<VkCmdDebugMarkerBeginEXTDel> "vkCmdDebugMarkerBeginEXT"
+            static let s_vkCmdDebugMarkerEndEXTDel = VkRaw.importDelegate<VkCmdDebugMarkerEndEXTDel> "vkCmdDebugMarkerEndEXT"
+            static let s_vkCmdDebugMarkerInsertEXTDel = VkRaw.importDelegate<VkCmdDebugMarkerInsertEXTDel> "vkCmdDebugMarkerInsertEXT"
+            static member vkDebugMarkerSetObjectTagEXT = s_vkDebugMarkerSetObjectTagEXTDel
+            static member vkDebugMarkerSetObjectNameEXT = s_vkDebugMarkerSetObjectNameEXTDel
+            static member vkCmdDebugMarkerBeginEXT = s_vkCmdDebugMarkerBeginEXTDel
+            static member vkCmdDebugMarkerEndEXT = s_vkCmdDebugMarkerEndEXTDel
+            static member vkCmdDebugMarkerInsertEXT = s_vkCmdDebugMarkerInsertEXTDel
+        let vkDebugMarkerSetObjectTagEXT(device : VkDevice, pTagInfo : nativeptr<VkDebugMarkerObjectTagInfoEXT>) = Loader<unit>.vkDebugMarkerSetObjectTagEXT.Invoke(device, pTagInfo)
+        let vkDebugMarkerSetObjectNameEXT(device : VkDevice, pNameInfo : nativeptr<VkDebugMarkerObjectNameInfoEXT>) = Loader<unit>.vkDebugMarkerSetObjectNameEXT.Invoke(device, pNameInfo)
+        let vkCmdDebugMarkerBeginEXT(commandBuffer : VkCommandBuffer, pMarkerInfo : nativeptr<VkDebugMarkerMarkerInfoEXT>) = Loader<unit>.vkCmdDebugMarkerBeginEXT.Invoke(commandBuffer, pMarkerInfo)
+        let vkCmdDebugMarkerEndEXT(commandBuffer : VkCommandBuffer) = Loader<unit>.vkCmdDebugMarkerEndEXT.Invoke(commandBuffer)
+        let vkCmdDebugMarkerInsertEXT(commandBuffer : VkCommandBuffer, pMarkerInfo : nativeptr<VkDebugMarkerMarkerInfoEXT>) = Loader<unit>.vkCmdDebugMarkerInsertEXT.Invoke(commandBuffer, pMarkerInfo)
+
+module EXTDepthRangeUnrestricted =
     let Name = "VK_EXT_depth_range_unrestricted"
-    open VK_EXT_debug_report
+    let Number = 14
+    
+    open EXTDebugReport
     
     
     
     
-module VK_EXT_discard_rectangles =
+
+module EXTDiscardRectangles =
     let Name = "VK_EXT_discard_rectangles"
-    open VK_EXT_debug_report
-    open VK_KHR_get_physical_device_properties2
+    let Number = 100
+    
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     type VkDiscardRectangleModeEXT = 
         | VkDiscardRectangleModeInclusiveExt = 0
@@ -4733,16 +4668,26 @@ module VK_EXT_discard_rectangles =
          static member inline PhysicalDeviceDiscardRectanglePropertiesExt = unbox<VkStructureType> 1000099000
          static member inline PipelineDiscardRectangleStateCreateInfoExt = unbox<VkStructureType> 1000099001
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCmdSetDiscardRectangleEXTDel = delegate of VkCommandBuffer * uint32 * uint32 * nativeptr<VkRect2D> -> unit
-        let private vkCmdSetDiscardRectangleEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCmdSetDiscardRectangleEXT"), typeof<VkCmdSetDiscardRectangleEXTDel>) |> unbox<VkCmdSetDiscardRectangleEXTDel>)
-        let vkCmdSetDiscardRectangleEXT(commandBuffer : VkCommandBuffer, firstDiscardRectangle : uint32, discardRectangleCount : uint32, pDiscardRectangles : nativeptr<VkRect2D>) = vkCmdSetDiscardRectangleEXTDel.Value.Invoke(commandBuffer, firstDiscardRectangle, discardRectangleCount, pDiscardRectangles)
-module VK_EXT_display_surface_counter =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_EXT_discard_rectangles"
+            static let s_vkCmdSetDiscardRectangleEXTDel = VkRaw.importDelegate<VkCmdSetDiscardRectangleEXTDel> "vkCmdSetDiscardRectangleEXT"
+            static member vkCmdSetDiscardRectangleEXT = s_vkCmdSetDiscardRectangleEXTDel
+        let vkCmdSetDiscardRectangleEXT(commandBuffer : VkCommandBuffer, firstDiscardRectangle : uint32, discardRectangleCount : uint32, pDiscardRectangles : nativeptr<VkRect2D>) = Loader<unit>.vkCmdSetDiscardRectangleEXT.Invoke(commandBuffer, firstDiscardRectangle, discardRectangleCount, pDiscardRectangles)
+
+module EXTDisplaySurfaceCounter =
     let Name = "VK_EXT_display_surface_counter"
-    open VK_EXT_debug_report
-    open VK_KHR_display
-    open VK_KHR_surface
+    let Number = 91
+    
+    let Required = [ KHRDisplay.Name; KHRSurface.Name ]
+    open KHRDisplay
+    open KHRSurface
+    open EXTDebugReport
     
     [<Flags>]
     type VkSurfaceCounterFlagBitsEXT = 
@@ -4776,15 +4721,25 @@ module VK_EXT_display_surface_counter =
     type VkStructureType with
          static member inline SurfaceCapabilities2Ext = unbox<VkStructureType> 1000090000
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetPhysicalDeviceSurfaceCapabilities2EXTDel = delegate of VkPhysicalDevice * VkSurfaceKHR * nativeptr<VkSurfaceCapabilities2EXT> -> VkResult
-        let private vkGetPhysicalDeviceSurfaceCapabilities2EXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceSurfaceCapabilities2EXT"), typeof<VkGetPhysicalDeviceSurfaceCapabilities2EXTDel>) |> unbox<VkGetPhysicalDeviceSurfaceCapabilities2EXTDel>)
-        let vkGetPhysicalDeviceSurfaceCapabilities2EXT(physicalDevice : VkPhysicalDevice, surface : VkSurfaceKHR, pSurfaceCapabilities : nativeptr<VkSurfaceCapabilities2EXT>) = vkGetPhysicalDeviceSurfaceCapabilities2EXTDel.Value.Invoke(physicalDevice, surface, pSurfaceCapabilities)
-module VK_KHR_swapchain =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_EXT_display_surface_counter"
+            static let s_vkGetPhysicalDeviceSurfaceCapabilities2EXTDel = VkRaw.importDelegate<VkGetPhysicalDeviceSurfaceCapabilities2EXTDel> "vkGetPhysicalDeviceSurfaceCapabilities2EXT"
+            static member vkGetPhysicalDeviceSurfaceCapabilities2EXT = s_vkGetPhysicalDeviceSurfaceCapabilities2EXTDel
+        let vkGetPhysicalDeviceSurfaceCapabilities2EXT(physicalDevice : VkPhysicalDevice, surface : VkSurfaceKHR, pSurfaceCapabilities : nativeptr<VkSurfaceCapabilities2EXT>) = Loader<unit>.vkGetPhysicalDeviceSurfaceCapabilities2EXT.Invoke(physicalDevice, surface, pSurfaceCapabilities)
+
+module KHRSwapchain =
     let Name = "VK_KHR_swapchain"
-    open VK_EXT_debug_report
-    open VK_KHR_surface
+    let Number = 2
+    
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
+    open EXTDebugReport
     
     
     
@@ -4799,6 +4754,7 @@ module VK_KHR_swapchain =
          static member inline SwapchainCreateInfoKhr = unbox<VkStructureType> 1000001000
          static member inline PresentInfoKhr = unbox<VkStructureType> 1000001001
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCreateSwapchainKHRDel = delegate of VkDevice * nativeptr<VkSwapchainCreateInfoKHR> * nativeptr<VkAllocationCallbacks> * nativeptr<VkSwapchainKHR> -> VkResult
@@ -4810,23 +4766,36 @@ module VK_KHR_swapchain =
         type VkAcquireNextImageKHRDel = delegate of VkDevice * VkSwapchainKHR * uint64 * VkSemaphore * VkFence * nativeptr<uint32> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkQueuePresentKHRDel = delegate of VkQueue * nativeptr<VkPresentInfoKHR> -> VkResult
-        let private vkCreateSwapchainKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCreateSwapchainKHR"), typeof<VkCreateSwapchainKHRDel>) |> unbox<VkCreateSwapchainKHRDel>)
-        let private vkDestroySwapchainKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkDestroySwapchainKHR"), typeof<VkDestroySwapchainKHRDel>) |> unbox<VkDestroySwapchainKHRDel>)
-        let private vkGetSwapchainImagesKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetSwapchainImagesKHR"), typeof<VkGetSwapchainImagesKHRDel>) |> unbox<VkGetSwapchainImagesKHRDel>)
-        let private vkAcquireNextImageKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkAcquireNextImageKHR"), typeof<VkAcquireNextImageKHRDel>) |> unbox<VkAcquireNextImageKHRDel>)
-        let private vkQueuePresentKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkQueuePresentKHR"), typeof<VkQueuePresentKHRDel>) |> unbox<VkQueuePresentKHRDel>)
-        let vkCreateSwapchainKHR(device : VkDevice, pCreateInfo : nativeptr<VkSwapchainCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSwapchain : nativeptr<VkSwapchainKHR>) = vkCreateSwapchainKHRDel.Value.Invoke(device, pCreateInfo, pAllocator, pSwapchain)
-        let vkDestroySwapchainKHR(device : VkDevice, swapchain : VkSwapchainKHR, pAllocator : nativeptr<VkAllocationCallbacks>) = vkDestroySwapchainKHRDel.Value.Invoke(device, swapchain, pAllocator)
-        let vkGetSwapchainImagesKHR(device : VkDevice, swapchain : VkSwapchainKHR, pSwapchainImageCount : nativeptr<uint32>, pSwapchainImages : nativeptr<VkImage>) = vkGetSwapchainImagesKHRDel.Value.Invoke(device, swapchain, pSwapchainImageCount, pSwapchainImages)
-        let vkAcquireNextImageKHR(device : VkDevice, swapchain : VkSwapchainKHR, timeout : uint64, semaphore : VkSemaphore, fence : VkFence, pImageIndex : nativeptr<uint32>) = vkAcquireNextImageKHRDel.Value.Invoke(device, swapchain, timeout, semaphore, fence, pImageIndex)
-        let vkQueuePresentKHR(queue : VkQueue, pPresentInfo : nativeptr<VkPresentInfoKHR>) = vkQueuePresentKHRDel.Value.Invoke(queue, pPresentInfo)
-module VK_EXT_display_control =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_swapchain"
+            static let s_vkCreateSwapchainKHRDel = VkRaw.importDelegate<VkCreateSwapchainKHRDel> "vkCreateSwapchainKHR"
+            static let s_vkDestroySwapchainKHRDel = VkRaw.importDelegate<VkDestroySwapchainKHRDel> "vkDestroySwapchainKHR"
+            static let s_vkGetSwapchainImagesKHRDel = VkRaw.importDelegate<VkGetSwapchainImagesKHRDel> "vkGetSwapchainImagesKHR"
+            static let s_vkAcquireNextImageKHRDel = VkRaw.importDelegate<VkAcquireNextImageKHRDel> "vkAcquireNextImageKHR"
+            static let s_vkQueuePresentKHRDel = VkRaw.importDelegate<VkQueuePresentKHRDel> "vkQueuePresentKHR"
+            static member vkCreateSwapchainKHR = s_vkCreateSwapchainKHRDel
+            static member vkDestroySwapchainKHR = s_vkDestroySwapchainKHRDel
+            static member vkGetSwapchainImagesKHR = s_vkGetSwapchainImagesKHRDel
+            static member vkAcquireNextImageKHR = s_vkAcquireNextImageKHRDel
+            static member vkQueuePresentKHR = s_vkQueuePresentKHRDel
+        let vkCreateSwapchainKHR(device : VkDevice, pCreateInfo : nativeptr<VkSwapchainCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSwapchain : nativeptr<VkSwapchainKHR>) = Loader<unit>.vkCreateSwapchainKHR.Invoke(device, pCreateInfo, pAllocator, pSwapchain)
+        let vkDestroySwapchainKHR(device : VkDevice, swapchain : VkSwapchainKHR, pAllocator : nativeptr<VkAllocationCallbacks>) = Loader<unit>.vkDestroySwapchainKHR.Invoke(device, swapchain, pAllocator)
+        let vkGetSwapchainImagesKHR(device : VkDevice, swapchain : VkSwapchainKHR, pSwapchainImageCount : nativeptr<uint32>, pSwapchainImages : nativeptr<VkImage>) = Loader<unit>.vkGetSwapchainImagesKHR.Invoke(device, swapchain, pSwapchainImageCount, pSwapchainImages)
+        let vkAcquireNextImageKHR(device : VkDevice, swapchain : VkSwapchainKHR, timeout : uint64, semaphore : VkSemaphore, fence : VkFence, pImageIndex : nativeptr<uint32>) = Loader<unit>.vkAcquireNextImageKHR.Invoke(device, swapchain, timeout, semaphore, fence, pImageIndex)
+        let vkQueuePresentKHR(queue : VkQueue, pPresentInfo : nativeptr<VkPresentInfoKHR>) = Loader<unit>.vkQueuePresentKHR.Invoke(queue, pPresentInfo)
+
+module EXTDisplayControl =
     let Name = "VK_EXT_display_control"
-    open VK_EXT_debug_report
-    open VK_EXT_display_surface_counter
-    open VK_KHR_display
-    open VK_KHR_surface
-    open VK_KHR_swapchain
+    let Number = 92
+    
+    let Required = [ EXTDisplaySurfaceCounter.Name; KHRDisplay.Name; KHRSurface.Name; KHRSwapchain.Name ]
+    open EXTDisplaySurfaceCounter
+    open KHRDisplay
+    open KHRSurface
+    open KHRSwapchain
+    open EXTDebugReport
     
     type VkDisplayPowerStateEXT = 
         | VkDisplayPowerStateOffExt = 0
@@ -4895,6 +4864,7 @@ module VK_EXT_display_control =
          static member inline DisplayEventInfoExt = unbox<VkStructureType> 1000091002
          static member inline SwapchainCounterCreateInfoExt = unbox<VkStructureType> 1000091003
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkDisplayPowerControlEXTDel = delegate of VkDevice * VkDisplayKHR * nativeptr<VkDisplayPowerInfoEXT> -> VkResult
@@ -4904,81 +4874,30 @@ module VK_EXT_display_control =
         type VkRegisterDisplayEventEXTDel = delegate of VkDevice * VkDisplayKHR * nativeptr<VkDisplayEventInfoEXT> * nativeptr<VkAllocationCallbacks> * nativeptr<VkFence> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetSwapchainCounterEXTDel = delegate of VkDevice * VkSwapchainKHR * VkSurfaceCounterFlagBitsEXT * nativeptr<uint64> -> VkResult
-        let private vkDisplayPowerControlEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkDisplayPowerControlEXT"), typeof<VkDisplayPowerControlEXTDel>) |> unbox<VkDisplayPowerControlEXTDel>)
-        let private vkRegisterDeviceEventEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkRegisterDeviceEventEXT"), typeof<VkRegisterDeviceEventEXTDel>) |> unbox<VkRegisterDeviceEventEXTDel>)
-        let private vkRegisterDisplayEventEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkRegisterDisplayEventEXT"), typeof<VkRegisterDisplayEventEXTDel>) |> unbox<VkRegisterDisplayEventEXTDel>)
-        let private vkGetSwapchainCounterEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetSwapchainCounterEXT"), typeof<VkGetSwapchainCounterEXTDel>) |> unbox<VkGetSwapchainCounterEXTDel>)
-        let vkDisplayPowerControlEXT(device : VkDevice, display : VkDisplayKHR, pDisplayPowerInfo : nativeptr<VkDisplayPowerInfoEXT>) = vkDisplayPowerControlEXTDel.Value.Invoke(device, display, pDisplayPowerInfo)
-        let vkRegisterDeviceEventEXT(device : VkDevice, pDeviceEventInfo : nativeptr<VkDeviceEventInfoEXT>, pAllocator : nativeptr<VkAllocationCallbacks>, pFence : nativeptr<VkFence>) = vkRegisterDeviceEventEXTDel.Value.Invoke(device, pDeviceEventInfo, pAllocator, pFence)
-        let vkRegisterDisplayEventEXT(device : VkDevice, display : VkDisplayKHR, pDisplayEventInfo : nativeptr<VkDisplayEventInfoEXT>, pAllocator : nativeptr<VkAllocationCallbacks>, pFence : nativeptr<VkFence>) = vkRegisterDisplayEventEXTDel.Value.Invoke(device, display, pDisplayEventInfo, pAllocator, pFence)
-        let vkGetSwapchainCounterEXT(device : VkDevice, swapchain : VkSwapchainKHR, counter : VkSurfaceCounterFlagBitsEXT, pCounterValue : nativeptr<uint64>) = vkGetSwapchainCounterEXTDel.Value.Invoke(device, swapchain, counter, pCounterValue)
-module VK_EXT_extension_129 =
-    let Name = "VK_EXT_extension_129"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_EXT_extension_159 =
-    let Name = "VK_EXT_extension_159"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_EXT_extension_160 =
-    let Name = "VK_EXT_extension_160"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_EXT_extension_162 =
-    let Name = "VK_EXT_extension_162"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_EXT_extension_170 =
-    let Name = "VK_EXT_extension_170"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_EXT_extension_176 =
-    let Name = "VK_EXT_extension_176"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_EXT_extension_177 =
-    let Name = "VK_EXT_extension_177"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_EXT_extension_178 =
-    let Name = "VK_EXT_extension_178"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_EXT_extension_28 =
-    let Name = "VK_EXT_extension_28"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_KHR_external_memory_capabilities =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_EXT_display_control"
+            static let s_vkDisplayPowerControlEXTDel = VkRaw.importDelegate<VkDisplayPowerControlEXTDel> "vkDisplayPowerControlEXT"
+            static let s_vkRegisterDeviceEventEXTDel = VkRaw.importDelegate<VkRegisterDeviceEventEXTDel> "vkRegisterDeviceEventEXT"
+            static let s_vkRegisterDisplayEventEXTDel = VkRaw.importDelegate<VkRegisterDisplayEventEXTDel> "vkRegisterDisplayEventEXT"
+            static let s_vkGetSwapchainCounterEXTDel = VkRaw.importDelegate<VkGetSwapchainCounterEXTDel> "vkGetSwapchainCounterEXT"
+            static member vkDisplayPowerControlEXT = s_vkDisplayPowerControlEXTDel
+            static member vkRegisterDeviceEventEXT = s_vkRegisterDeviceEventEXTDel
+            static member vkRegisterDisplayEventEXT = s_vkRegisterDisplayEventEXTDel
+            static member vkGetSwapchainCounterEXT = s_vkGetSwapchainCounterEXTDel
+        let vkDisplayPowerControlEXT(device : VkDevice, display : VkDisplayKHR, pDisplayPowerInfo : nativeptr<VkDisplayPowerInfoEXT>) = Loader<unit>.vkDisplayPowerControlEXT.Invoke(device, display, pDisplayPowerInfo)
+        let vkRegisterDeviceEventEXT(device : VkDevice, pDeviceEventInfo : nativeptr<VkDeviceEventInfoEXT>, pAllocator : nativeptr<VkAllocationCallbacks>, pFence : nativeptr<VkFence>) = Loader<unit>.vkRegisterDeviceEventEXT.Invoke(device, pDeviceEventInfo, pAllocator, pFence)
+        let vkRegisterDisplayEventEXT(device : VkDevice, display : VkDisplayKHR, pDisplayEventInfo : nativeptr<VkDisplayEventInfoEXT>, pAllocator : nativeptr<VkAllocationCallbacks>, pFence : nativeptr<VkFence>) = Loader<unit>.vkRegisterDisplayEventEXT.Invoke(device, display, pDisplayEventInfo, pAllocator, pFence)
+        let vkGetSwapchainCounterEXT(device : VkDevice, swapchain : VkSwapchainKHR, counter : VkSurfaceCounterFlagBitsEXT, pCounterValue : nativeptr<uint64>) = Loader<unit>.vkGetSwapchainCounterEXT.Invoke(device, swapchain, counter, pCounterValue)
+
+module KHRExternalMemoryCapabilities =
     let Name = "VK_KHR_external_memory_capabilities"
-    open VK_EXT_debug_report
-    open VK_KHR_get_physical_device_properties2
+    let Number = 72
+    
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     [<Flags>]
     type VkExternalMemoryHandleTypeFlagBitsKHR = 
@@ -5085,16 +5004,26 @@ module VK_KHR_external_memory_capabilities =
          static member inline ExternalBufferPropertiesKhr = unbox<VkStructureType> 1000071003
          static member inline PhysicalDeviceIdPropertiesKhr = unbox<VkStructureType> 1000071004
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetPhysicalDeviceExternalBufferPropertiesKHRDel = delegate of VkPhysicalDevice * nativeptr<VkPhysicalDeviceExternalBufferInfoKHR> * nativeptr<VkExternalBufferPropertiesKHR> -> unit
-        let private vkGetPhysicalDeviceExternalBufferPropertiesKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceExternalBufferPropertiesKHR"), typeof<VkGetPhysicalDeviceExternalBufferPropertiesKHRDel>) |> unbox<VkGetPhysicalDeviceExternalBufferPropertiesKHRDel>)
-        let vkGetPhysicalDeviceExternalBufferPropertiesKHR(physicalDevice : VkPhysicalDevice, pExternalBufferInfo : nativeptr<VkPhysicalDeviceExternalBufferInfoKHR>, pExternalBufferProperties : nativeptr<VkExternalBufferPropertiesKHR>) = vkGetPhysicalDeviceExternalBufferPropertiesKHRDel.Value.Invoke(physicalDevice, pExternalBufferInfo, pExternalBufferProperties)
-module VK_KHR_external_memory =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_external_memory_capabilities"
+            static let s_vkGetPhysicalDeviceExternalBufferPropertiesKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceExternalBufferPropertiesKHRDel> "vkGetPhysicalDeviceExternalBufferPropertiesKHR"
+            static member vkGetPhysicalDeviceExternalBufferPropertiesKHR = s_vkGetPhysicalDeviceExternalBufferPropertiesKHRDel
+        let vkGetPhysicalDeviceExternalBufferPropertiesKHR(physicalDevice : VkPhysicalDevice, pExternalBufferInfo : nativeptr<VkPhysicalDeviceExternalBufferInfoKHR>, pExternalBufferProperties : nativeptr<VkExternalBufferPropertiesKHR>) = Loader<unit>.vkGetPhysicalDeviceExternalBufferPropertiesKHR.Invoke(physicalDevice, pExternalBufferInfo, pExternalBufferProperties)
+
+module KHRExternalMemory =
     let Name = "VK_KHR_external_memory"
-    open VK_EXT_debug_report
-    open VK_KHR_external_memory_capabilities
-    open VK_KHR_get_physical_device_properties2
+    let Number = 73
+    
+    let Required = [ KHRExternalMemoryCapabilities.Name; KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRExternalMemoryCapabilities
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -5141,12 +5070,16 @@ module VK_KHR_external_memory =
          static member inline ExternalMemoryImageCreateInfoKhr = unbox<VkStructureType> 1000072001
          static member inline ExportMemoryAllocateInfoKhr = unbox<VkStructureType> 1000072002
     
-module VK_KHR_external_memory_fd =
+
+module KHRExternalMemoryFd =
     let Name = "VK_KHR_external_memory_fd"
-    open VK_EXT_debug_report
-    open VK_KHR_external_memory
-    open VK_KHR_external_memory_capabilities
-    open VK_KHR_get_physical_device_properties2
+    let Number = 75
+    
+    let Required = [ KHRExternalMemory.Name; KHRExternalMemoryCapabilities.Name; KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRExternalMemory
+    open KHRExternalMemoryCapabilities
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -5193,32 +5126,47 @@ module VK_KHR_external_memory_fd =
          static member inline MemoryFdPropertiesKhr = unbox<VkStructureType> 1000074001
          static member inline MemoryGetFdInfoKhr = unbox<VkStructureType> 1000074002
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetMemoryFdKHRDel = delegate of VkDevice * nativeptr<VkMemoryGetFdInfoKHR> * nativeptr<int> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetMemoryFdPropertiesKHRDel = delegate of VkDevice * VkExternalMemoryHandleTypeFlagBitsKHR * int * nativeptr<VkMemoryFdPropertiesKHR> -> VkResult
-        let private vkGetMemoryFdKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetMemoryFdKHR"), typeof<VkGetMemoryFdKHRDel>) |> unbox<VkGetMemoryFdKHRDel>)
-        let private vkGetMemoryFdPropertiesKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetMemoryFdPropertiesKHR"), typeof<VkGetMemoryFdPropertiesKHRDel>) |> unbox<VkGetMemoryFdPropertiesKHRDel>)
-        let vkGetMemoryFdKHR(device : VkDevice, pGetFdInfo : nativeptr<VkMemoryGetFdInfoKHR>, pFd : nativeptr<int>) = vkGetMemoryFdKHRDel.Value.Invoke(device, pGetFdInfo, pFd)
-        let vkGetMemoryFdPropertiesKHR(device : VkDevice, handleType : VkExternalMemoryHandleTypeFlagBitsKHR, fd : int, pMemoryFdProperties : nativeptr<VkMemoryFdPropertiesKHR>) = vkGetMemoryFdPropertiesKHRDel.Value.Invoke(device, handleType, fd, pMemoryFdProperties)
-module VK_EXT_external_memory_dma_buf =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_external_memory_fd"
+            static let s_vkGetMemoryFdKHRDel = VkRaw.importDelegate<VkGetMemoryFdKHRDel> "vkGetMemoryFdKHR"
+            static let s_vkGetMemoryFdPropertiesKHRDel = VkRaw.importDelegate<VkGetMemoryFdPropertiesKHRDel> "vkGetMemoryFdPropertiesKHR"
+            static member vkGetMemoryFdKHR = s_vkGetMemoryFdKHRDel
+            static member vkGetMemoryFdPropertiesKHR = s_vkGetMemoryFdPropertiesKHRDel
+        let vkGetMemoryFdKHR(device : VkDevice, pGetFdInfo : nativeptr<VkMemoryGetFdInfoKHR>, pFd : nativeptr<int>) = Loader<unit>.vkGetMemoryFdKHR.Invoke(device, pGetFdInfo, pFd)
+        let vkGetMemoryFdPropertiesKHR(device : VkDevice, handleType : VkExternalMemoryHandleTypeFlagBitsKHR, fd : int, pMemoryFdProperties : nativeptr<VkMemoryFdPropertiesKHR>) = Loader<unit>.vkGetMemoryFdPropertiesKHR.Invoke(device, handleType, fd, pMemoryFdProperties)
+
+module EXTExternalMemoryDmaBuf =
     let Name = "VK_EXT_external_memory_dma_buf"
-    open VK_EXT_debug_report
-    open VK_KHR_external_memory
-    open VK_KHR_external_memory_capabilities
-    open VK_KHR_external_memory_fd
-    open VK_KHR_get_physical_device_properties2
+    let Number = 126
+    
+    let Required = [ KHRExternalMemory.Name; KHRExternalMemoryCapabilities.Name; KHRExternalMemoryFd.Name; KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRExternalMemory
+    open KHRExternalMemoryCapabilities
+    open KHRExternalMemoryFd
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     
     
     
-module VK_EXT_external_memory_host =
+
+module EXTExternalMemoryHost =
     let Name = "VK_EXT_external_memory_host"
-    open VK_EXT_debug_report
-    open VK_KHR_external_memory
-    open VK_KHR_external_memory_capabilities
-    open VK_KHR_get_physical_device_properties2
+    let Number = 179
+    
+    let Required = [ KHRExternalMemory.Name; KHRExternalMemoryCapabilities.Name; KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRExternalMemory
+    open KHRExternalMemoryCapabilities
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -5264,14 +5212,23 @@ module VK_EXT_external_memory_host =
          static member inline MemoryHostPointerPropertiesExt = unbox<VkStructureType> 1000178001
          static member inline PhysicalDeviceExternalMemoryHostPropertiesExt = unbox<VkStructureType> 1000178002
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetMemoryHostPointerPropertiesEXTDel = delegate of VkDevice * VkExternalMemoryHandleTypeFlagBitsKHR * nativeint * nativeptr<VkMemoryHostPointerPropertiesEXT> -> VkResult
-        let private vkGetMemoryHostPointerPropertiesEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetMemoryHostPointerPropertiesEXT"), typeof<VkGetMemoryHostPointerPropertiesEXTDel>) |> unbox<VkGetMemoryHostPointerPropertiesEXTDel>)
-        let vkGetMemoryHostPointerPropertiesEXT(device : VkDevice, handleType : VkExternalMemoryHandleTypeFlagBitsKHR, pHostPointer : nativeint, pMemoryHostPointerProperties : nativeptr<VkMemoryHostPointerPropertiesEXT>) = vkGetMemoryHostPointerPropertiesEXTDel.Value.Invoke(device, handleType, pHostPointer, pMemoryHostPointerProperties)
-module VK_EXT_global_priority =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_EXT_external_memory_host"
+            static let s_vkGetMemoryHostPointerPropertiesEXTDel = VkRaw.importDelegate<VkGetMemoryHostPointerPropertiesEXTDel> "vkGetMemoryHostPointerPropertiesEXT"
+            static member vkGetMemoryHostPointerPropertiesEXT = s_vkGetMemoryHostPointerPropertiesEXTDel
+        let vkGetMemoryHostPointerPropertiesEXT(device : VkDevice, handleType : VkExternalMemoryHandleTypeFlagBitsKHR, pHostPointer : nativeint, pMemoryHostPointerProperties : nativeptr<VkMemoryHostPointerPropertiesEXT>) = Loader<unit>.vkGetMemoryHostPointerPropertiesEXT.Invoke(device, handleType, pHostPointer, pMemoryHostPointerProperties)
+
+module EXTGlobalPriority =
     let Name = "VK_EXT_global_priority"
-    open VK_EXT_debug_report
+    let Number = 175
+    
+    open EXTDebugReport
     
     type VkQueueGlobalPriorityEXT = 
         | VkQueueGlobalPriorityLowExt = 128
@@ -5298,11 +5255,15 @@ module VK_EXT_global_priority =
     type VkStructureType with
          static member inline DeviceQueueGlobalPriorityCreateInfoExt = unbox<VkStructureType> 1000174000
     
-module VK_EXT_hdr_metadata =
+
+module EXTHdrMetadata =
     let Name = "VK_EXT_hdr_metadata"
-    open VK_EXT_debug_report
-    open VK_KHR_surface
-    open VK_KHR_swapchain
+    let Number = 106
+    
+    let Required = [ KHRSurface.Name; KHRSwapchain.Name ]
+    open KHRSurface
+    open KHRSwapchain
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -5339,31 +5300,47 @@ module VK_EXT_hdr_metadata =
     type VkStructureType with
          static member inline HdrMetadataExt = unbox<VkStructureType> 1000105000
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkSetHdrMetadataEXTDel = delegate of VkDevice * uint32 * nativeptr<VkSwapchainKHR> * nativeptr<VkHdrMetadataEXT> -> unit
-        let private vkSetHdrMetadataEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkSetHdrMetadataEXT"), typeof<VkSetHdrMetadataEXTDel>) |> unbox<VkSetHdrMetadataEXTDel>)
-        let vkSetHdrMetadataEXT(device : VkDevice, swapchainCount : uint32, pSwapchains : nativeptr<VkSwapchainKHR>, pMetadata : nativeptr<VkHdrMetadataEXT>) = vkSetHdrMetadataEXTDel.Value.Invoke(device, swapchainCount, pSwapchains, pMetadata)
-module VK_EXT_post_depth_coverage =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_EXT_hdr_metadata"
+            static let s_vkSetHdrMetadataEXTDel = VkRaw.importDelegate<VkSetHdrMetadataEXTDel> "vkSetHdrMetadataEXT"
+            static member vkSetHdrMetadataEXT = s_vkSetHdrMetadataEXTDel
+        let vkSetHdrMetadataEXT(device : VkDevice, swapchainCount : uint32, pSwapchains : nativeptr<VkSwapchainKHR>, pMetadata : nativeptr<VkHdrMetadataEXT>) = Loader<unit>.vkSetHdrMetadataEXT.Invoke(device, swapchainCount, pSwapchains, pMetadata)
+
+module EXTPostDepthCoverage =
     let Name = "VK_EXT_post_depth_coverage"
-    open VK_EXT_debug_report
+    let Number = 156
+    
+    open EXTDebugReport
     
     
     
     
-module VK_EXT_queue_family_foreign =
+
+module EXTQueueFamilyForeign =
     let Name = "VK_EXT_queue_family_foreign"
-    open VK_EXT_debug_report
-    open VK_KHR_external_memory
-    open VK_KHR_external_memory_capabilities
-    open VK_KHR_get_physical_device_properties2
+    let Number = 127
+    
+    let Required = [ KHRExternalMemory.Name; KHRExternalMemoryCapabilities.Name; KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRExternalMemory
+    open KHRExternalMemoryCapabilities
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     
     
     
-module VK_EXT_sample_locations =
+
+module EXTSampleLocations =
     let Name = "VK_EXT_sample_locations"
-    open VK_EXT_debug_report
+    let Number = 144
+    
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -5480,19 +5457,30 @@ module VK_EXT_sample_locations =
          static member inline PhysicalDeviceSampleLocationsPropertiesExt = unbox<VkStructureType> 1000143003
          static member inline MultisamplePropertiesExt = unbox<VkStructureType> 1000143004
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCmdSetSampleLocationsEXTDel = delegate of VkCommandBuffer * nativeptr<VkSampleLocationsInfoEXT> -> unit
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetPhysicalDeviceMultisamplePropertiesEXTDel = delegate of VkPhysicalDevice * VkSampleCountFlags * nativeptr<VkMultisamplePropertiesEXT> -> unit
-        let private vkCmdSetSampleLocationsEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCmdSetSampleLocationsEXT"), typeof<VkCmdSetSampleLocationsEXTDel>) |> unbox<VkCmdSetSampleLocationsEXTDel>)
-        let private vkGetPhysicalDeviceMultisamplePropertiesEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceMultisamplePropertiesEXT"), typeof<VkGetPhysicalDeviceMultisamplePropertiesEXTDel>) |> unbox<VkGetPhysicalDeviceMultisamplePropertiesEXTDel>)
-        let vkCmdSetSampleLocationsEXT(commandBuffer : VkCommandBuffer, pSampleLocationsInfo : nativeptr<VkSampleLocationsInfoEXT>) = vkCmdSetSampleLocationsEXTDel.Value.Invoke(commandBuffer, pSampleLocationsInfo)
-        let vkGetPhysicalDeviceMultisamplePropertiesEXT(physicalDevice : VkPhysicalDevice, samples : VkSampleCountFlags, pMultisampleProperties : nativeptr<VkMultisamplePropertiesEXT>) = vkGetPhysicalDeviceMultisamplePropertiesEXTDel.Value.Invoke(physicalDevice, samples, pMultisampleProperties)
-module VK_EXT_sampler_filter_minmax =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_EXT_sample_locations"
+            static let s_vkCmdSetSampleLocationsEXTDel = VkRaw.importDelegate<VkCmdSetSampleLocationsEXTDel> "vkCmdSetSampleLocationsEXT"
+            static let s_vkGetPhysicalDeviceMultisamplePropertiesEXTDel = VkRaw.importDelegate<VkGetPhysicalDeviceMultisamplePropertiesEXTDel> "vkGetPhysicalDeviceMultisamplePropertiesEXT"
+            static member vkCmdSetSampleLocationsEXT = s_vkCmdSetSampleLocationsEXTDel
+            static member vkGetPhysicalDeviceMultisamplePropertiesEXT = s_vkGetPhysicalDeviceMultisamplePropertiesEXTDel
+        let vkCmdSetSampleLocationsEXT(commandBuffer : VkCommandBuffer, pSampleLocationsInfo : nativeptr<VkSampleLocationsInfoEXT>) = Loader<unit>.vkCmdSetSampleLocationsEXT.Invoke(commandBuffer, pSampleLocationsInfo)
+        let vkGetPhysicalDeviceMultisamplePropertiesEXT(physicalDevice : VkPhysicalDevice, samples : VkSampleCountFlags, pMultisampleProperties : nativeptr<VkMultisamplePropertiesEXT>) = Loader<unit>.vkGetPhysicalDeviceMultisamplePropertiesEXT.Invoke(physicalDevice, samples, pMultisampleProperties)
+
+module EXTSamplerFilterMinmax =
     let Name = "VK_EXT_sampler_filter_minmax"
-    open VK_EXT_debug_report
-    open VK_KHR_get_physical_device_properties2
+    let Number = 131
+    
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     type VkSamplerReductionModeEXT = 
         | VkSamplerReductionModeWeightedAverageExt = 0
@@ -5530,38 +5518,54 @@ module VK_EXT_sampler_filter_minmax =
          static member inline PhysicalDeviceSamplerFilterMinmaxPropertiesExt = unbox<VkStructureType> 1000130000
          static member inline SamplerReductionModeCreateInfoExt = unbox<VkStructureType> 1000130001
     
-module VK_EXT_shader_stencil_export =
+
+module EXTShaderStencilExport =
     let Name = "VK_EXT_shader_stencil_export"
-    open VK_EXT_debug_report
+    let Number = 141
+    
+    open EXTDebugReport
     
     
     
     
-module VK_EXT_shader_subgroup_ballot =
+
+module EXTShaderSubgroupBallot =
     let Name = "VK_EXT_shader_subgroup_ballot"
-    open VK_EXT_debug_report
+    let Number = 65
+    
+    open EXTDebugReport
     
     
     
     
-module VK_EXT_shader_subgroup_vote =
+
+module EXTShaderSubgroupVote =
     let Name = "VK_EXT_shader_subgroup_vote"
-    open VK_EXT_debug_report
+    let Number = 66
+    
+    open EXTDebugReport
     
     
     
     
-module VK_EXT_shader_viewport_index_layer =
+
+module EXTShaderViewportIndexLayer =
     let Name = "VK_EXT_shader_viewport_index_layer"
-    open VK_EXT_debug_report
+    let Number = 163
+    
+    open EXTDebugReport
     
     
     
     
-module VK_EXT_swapchain_colorspace =
+
+module EXTSwapchainColorspace =
     let Name = "VK_EXT_swapchain_colorspace"
-    open VK_EXT_debug_report
-    open VK_KHR_surface
+    let Number = 105
+    
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
+    open EXTDebugReport
     
     
     
@@ -5581,9 +5585,12 @@ module VK_EXT_swapchain_colorspace =
          static member inline VkColorSpacePassThroughExt = unbox<VkColorSpaceKHR> 1000104013
          static member inline VkColorSpaceExtendedSrgbNonlinearExt = unbox<VkColorSpaceKHR> 1000104014
     
-module VK_EXT_validation_cache =
+
+module EXTValidationCache =
     let Name = "VK_EXT_validation_cache"
-    open VK_EXT_debug_report
+    let Number = 161
+    
+    open EXTDebugReport
     
     type VkValidationCacheHeaderVersionEXT = 
         | VkValidationCacheHeaderVersionOneExt = 1
@@ -5622,6 +5629,7 @@ module VK_EXT_validation_cache =
          static member inline ValidationCacheCreateInfoExt = unbox<VkStructureType> 1000160000
          static member inline ShaderModuleValidationCacheCreateInfoExt = unbox<VkStructureType> 1000160001
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCreateValidationCacheEXTDel = delegate of VkDevice * nativeptr<VkValidationCacheCreateInfoEXT> * nativeptr<VkAllocationCallbacks> * nativeptr<VkValidationCacheEXT> -> VkResult
@@ -5631,17 +5639,28 @@ module VK_EXT_validation_cache =
         type VkMergeValidationCachesEXTDel = delegate of VkDevice * VkValidationCacheEXT * uint32 * nativeptr<VkValidationCacheEXT> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetValidationCacheDataEXTDel = delegate of VkDevice * VkValidationCacheEXT * nativeptr<uint64> * nativeint -> VkResult
-        let private vkCreateValidationCacheEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCreateValidationCacheEXT"), typeof<VkCreateValidationCacheEXTDel>) |> unbox<VkCreateValidationCacheEXTDel>)
-        let private vkDestroyValidationCacheEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkDestroyValidationCacheEXT"), typeof<VkDestroyValidationCacheEXTDel>) |> unbox<VkDestroyValidationCacheEXTDel>)
-        let private vkMergeValidationCachesEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkMergeValidationCachesEXT"), typeof<VkMergeValidationCachesEXTDel>) |> unbox<VkMergeValidationCachesEXTDel>)
-        let private vkGetValidationCacheDataEXTDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetValidationCacheDataEXT"), typeof<VkGetValidationCacheDataEXTDel>) |> unbox<VkGetValidationCacheDataEXTDel>)
-        let vkCreateValidationCacheEXT(device : VkDevice, pCreateInfo : nativeptr<VkValidationCacheCreateInfoEXT>, pAllocator : nativeptr<VkAllocationCallbacks>, pValidationCache : nativeptr<VkValidationCacheEXT>) = vkCreateValidationCacheEXTDel.Value.Invoke(device, pCreateInfo, pAllocator, pValidationCache)
-        let vkDestroyValidationCacheEXT(device : VkDevice, validationCache : VkValidationCacheEXT, pAllocator : nativeptr<VkAllocationCallbacks>) = vkDestroyValidationCacheEXTDel.Value.Invoke(device, validationCache, pAllocator)
-        let vkMergeValidationCachesEXT(device : VkDevice, dstCache : VkValidationCacheEXT, srcCacheCount : uint32, pSrcCaches : nativeptr<VkValidationCacheEXT>) = vkMergeValidationCachesEXTDel.Value.Invoke(device, dstCache, srcCacheCount, pSrcCaches)
-        let vkGetValidationCacheDataEXT(device : VkDevice, validationCache : VkValidationCacheEXT, pDataSize : nativeptr<uint64>, pData : nativeint) = vkGetValidationCacheDataEXTDel.Value.Invoke(device, validationCache, pDataSize, pData)
-module VK_EXT_validation_flags =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_EXT_validation_cache"
+            static let s_vkCreateValidationCacheEXTDel = VkRaw.importDelegate<VkCreateValidationCacheEXTDel> "vkCreateValidationCacheEXT"
+            static let s_vkDestroyValidationCacheEXTDel = VkRaw.importDelegate<VkDestroyValidationCacheEXTDel> "vkDestroyValidationCacheEXT"
+            static let s_vkMergeValidationCachesEXTDel = VkRaw.importDelegate<VkMergeValidationCachesEXTDel> "vkMergeValidationCachesEXT"
+            static let s_vkGetValidationCacheDataEXTDel = VkRaw.importDelegate<VkGetValidationCacheDataEXTDel> "vkGetValidationCacheDataEXT"
+            static member vkCreateValidationCacheEXT = s_vkCreateValidationCacheEXTDel
+            static member vkDestroyValidationCacheEXT = s_vkDestroyValidationCacheEXTDel
+            static member vkMergeValidationCachesEXT = s_vkMergeValidationCachesEXTDel
+            static member vkGetValidationCacheDataEXT = s_vkGetValidationCacheDataEXTDel
+        let vkCreateValidationCacheEXT(device : VkDevice, pCreateInfo : nativeptr<VkValidationCacheCreateInfoEXT>, pAllocator : nativeptr<VkAllocationCallbacks>, pValidationCache : nativeptr<VkValidationCacheEXT>) = Loader<unit>.vkCreateValidationCacheEXT.Invoke(device, pCreateInfo, pAllocator, pValidationCache)
+        let vkDestroyValidationCacheEXT(device : VkDevice, validationCache : VkValidationCacheEXT, pAllocator : nativeptr<VkAllocationCallbacks>) = Loader<unit>.vkDestroyValidationCacheEXT.Invoke(device, validationCache, pAllocator)
+        let vkMergeValidationCachesEXT(device : VkDevice, dstCache : VkValidationCacheEXT, srcCacheCount : uint32, pSrcCaches : nativeptr<VkValidationCacheEXT>) = Loader<unit>.vkMergeValidationCachesEXT.Invoke(device, dstCache, srcCacheCount, pSrcCaches)
+        let vkGetValidationCacheDataEXT(device : VkDevice, validationCache : VkValidationCacheEXT, pDataSize : nativeptr<uint64>, pData : nativeint) = Loader<unit>.vkGetValidationCacheDataEXT.Invoke(device, validationCache, pDataSize, pData)
+
+module EXTValidationFlags =
     let Name = "VK_EXT_validation_flags"
-    open VK_EXT_debug_report
+    let Number = 62
+    
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -5661,11 +5680,15 @@ module VK_EXT_validation_flags =
     type VkStructureType with
          static member inline ValidationFlagsExt = unbox<VkStructureType> 1000061000
     
-module VK_GOOGLE_display_timing =
+
+module GOOGLEDisplayTiming =
     let Name = "VK_GOOGLE_display_timing"
-    open VK_EXT_debug_report
-    open VK_KHR_surface
-    open VK_KHR_swapchain
+    let Number = 93
+    
+    let Required = [ KHRSurface.Name; KHRSwapchain.Name ]
+    open KHRSurface
+    open KHRSwapchain
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -5720,83 +5743,40 @@ module VK_GOOGLE_display_timing =
     type VkStructureType with
          static member inline PresentTimesInfoGoogle = unbox<VkStructureType> 1000092000
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetRefreshCycleDurationGOOGLEDel = delegate of VkDevice * VkSwapchainKHR * nativeptr<VkRefreshCycleDurationGOOGLE> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetPastPresentationTimingGOOGLEDel = delegate of VkDevice * VkSwapchainKHR * nativeptr<uint32> * nativeptr<VkPastPresentationTimingGOOGLE> -> VkResult
-        let private vkGetRefreshCycleDurationGOOGLEDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetRefreshCycleDurationGOOGLE"), typeof<VkGetRefreshCycleDurationGOOGLEDel>) |> unbox<VkGetRefreshCycleDurationGOOGLEDel>)
-        let private vkGetPastPresentationTimingGOOGLEDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPastPresentationTimingGOOGLE"), typeof<VkGetPastPresentationTimingGOOGLEDel>) |> unbox<VkGetPastPresentationTimingGOOGLEDel>)
-        let vkGetRefreshCycleDurationGOOGLE(device : VkDevice, swapchain : VkSwapchainKHR, pDisplayTimingProperties : nativeptr<VkRefreshCycleDurationGOOGLE>) = vkGetRefreshCycleDurationGOOGLEDel.Value.Invoke(device, swapchain, pDisplayTimingProperties)
-        let vkGetPastPresentationTimingGOOGLE(device : VkDevice, swapchain : VkSwapchainKHR, pPresentationTimingCount : nativeptr<uint32>, pPresentationTimings : nativeptr<VkPastPresentationTimingGOOGLE>) = vkGetPastPresentationTimingGOOGLEDel.Value.Invoke(device, swapchain, pPresentationTimingCount, pPresentationTimings)
-module VK_GOOGLE_extension_49 =
-    let Name = "VK_GOOGLE_extension_49"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_GOOGLE_extension_50 =
-    let Name = "VK_GOOGLE_extension_50"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_IMG_extension_107 =
-    let Name = "VK_IMG_extension_107"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_IMG_extension_108 =
-    let Name = "VK_IMG_extension_108"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_IMG_extension_109 =
-    let Name = "VK_IMG_extension_109"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_IMG_extension_110 =
-    let Name = "VK_IMG_extension_110"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_IMG_extension_111 =
-    let Name = "VK_IMG_extension_111"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_IMG_extension_69 =
-    let Name = "VK_IMG_extension_69"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_IMG_filter_cubic =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_GOOGLE_display_timing"
+            static let s_vkGetRefreshCycleDurationGOOGLEDel = VkRaw.importDelegate<VkGetRefreshCycleDurationGOOGLEDel> "vkGetRefreshCycleDurationGOOGLE"
+            static let s_vkGetPastPresentationTimingGOOGLEDel = VkRaw.importDelegate<VkGetPastPresentationTimingGOOGLEDel> "vkGetPastPresentationTimingGOOGLE"
+            static member vkGetRefreshCycleDurationGOOGLE = s_vkGetRefreshCycleDurationGOOGLEDel
+            static member vkGetPastPresentationTimingGOOGLE = s_vkGetPastPresentationTimingGOOGLEDel
+        let vkGetRefreshCycleDurationGOOGLE(device : VkDevice, swapchain : VkSwapchainKHR, pDisplayTimingProperties : nativeptr<VkRefreshCycleDurationGOOGLE>) = Loader<unit>.vkGetRefreshCycleDurationGOOGLE.Invoke(device, swapchain, pDisplayTimingProperties)
+        let vkGetPastPresentationTimingGOOGLE(device : VkDevice, swapchain : VkSwapchainKHR, pPresentationTimingCount : nativeptr<uint32>, pPresentationTimings : nativeptr<VkPastPresentationTimingGOOGLE>) = Loader<unit>.vkGetPastPresentationTimingGOOGLE.Invoke(device, swapchain, pPresentationTimingCount, pPresentationTimings)
+
+module IMGFilterCubic =
     let Name = "VK_IMG_filter_cubic"
-    open VK_EXT_debug_report
+    let Number = 16
+    
+    open EXTDebugReport
     
     
     
     type VkFilter with
          static member inline CubicImg = unbox<VkFilter> 1000015000
     
-module VK_IMG_format_pvrtc =
+
+module IMGFormatPvrtc =
     let Name = "VK_IMG_format_pvrtc"
-    open VK_EXT_debug_report
+    let Number = 55
+    
+    open EXTDebugReport
     
     
     
@@ -5810,18 +5790,25 @@ module VK_IMG_format_pvrtc =
          static member inline Pvrtc22bppSrgbBlockImg = unbox<VkFormat> 1000054006
          static member inline Pvrtc24bppSrgbBlockImg = unbox<VkFormat> 1000054007
     
-module VK_KHR_storage_buffer_storage_class =
+
+module KHRStorageBufferStorageClass =
     let Name = "VK_KHR_storage_buffer_storage_class"
-    open VK_EXT_debug_report
+    let Number = 132
+    
+    open EXTDebugReport
     
     
     
     
-module VK_KHR_16bit_storage =
+
+module KHR16bitStorage =
     let Name = "VK_KHR_16bit_storage"
-    open VK_EXT_debug_report
-    open VK_KHR_get_physical_device_properties2
-    open VK_KHR_storage_buffer_storage_class
+    let Number = 84
+    
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name; KHRStorageBufferStorageClass.Name ]
+    open KHRGetPhysicalDeviceProperties2
+    open KHRStorageBufferStorageClass
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -5843,10 +5830,14 @@ module VK_KHR_16bit_storage =
     type VkStructureType with
          static member inline PhysicalDevice16bitStorageFeaturesKhr = unbox<VkStructureType> 1000083000
     
-module VK_KHR_android_surface =
+
+module KHRAndroidSurface =
     let Name = "VK_KHR_android_surface"
-    open VK_EXT_debug_report
-    open VK_KHR_surface
+    let Number = 9
+    
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -5866,14 +5857,23 @@ module VK_KHR_android_surface =
     type VkStructureType with
          static member inline AndroidSurfaceCreateInfoKhr = unbox<VkStructureType> 1000008000
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCreateAndroidSurfaceKHRDel = delegate of VkInstance * nativeptr<VkAndroidSurfaceCreateInfoKHR> * nativeptr<VkAllocationCallbacks> * nativeptr<VkSurfaceKHR> -> VkResult
-        let private vkCreateAndroidSurfaceKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCreateAndroidSurfaceKHR"), typeof<VkCreateAndroidSurfaceKHRDel>) |> unbox<VkCreateAndroidSurfaceKHRDel>)
-        let vkCreateAndroidSurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkAndroidSurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = vkCreateAndroidSurfaceKHRDel.Value.Invoke(instance, pCreateInfo, pAllocator, pSurface)
-module VK_KHR_bind_memory2 =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_android_surface"
+            static let s_vkCreateAndroidSurfaceKHRDel = VkRaw.importDelegate<VkCreateAndroidSurfaceKHRDel> "vkCreateAndroidSurfaceKHR"
+            static member vkCreateAndroidSurfaceKHR = s_vkCreateAndroidSurfaceKHRDel
+        let vkCreateAndroidSurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkAndroidSurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateAndroidSurfaceKHR.Invoke(instance, pCreateInfo, pAllocator, pSurface)
+
+module KHRBindMemory2 =
     let Name = "VK_KHR_bind_memory2"
-    open VK_EXT_debug_report
+    let Number = 158
+    
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -5909,18 +5909,28 @@ module VK_KHR_bind_memory2 =
          static member inline BindBufferMemoryInfoKhr = unbox<VkStructureType> 1000157000
          static member inline BindImageMemoryInfoKhr = unbox<VkStructureType> 1000157001
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkBindBufferMemory2KHRDel = delegate of VkDevice * uint32 * nativeptr<VkBindBufferMemoryInfoKHR> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkBindImageMemory2KHRDel = delegate of VkDevice * uint32 * nativeptr<VkBindImageMemoryInfoKHR> -> VkResult
-        let private vkBindBufferMemory2KHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkBindBufferMemory2KHR"), typeof<VkBindBufferMemory2KHRDel>) |> unbox<VkBindBufferMemory2KHRDel>)
-        let private vkBindImageMemory2KHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkBindImageMemory2KHR"), typeof<VkBindImageMemory2KHRDel>) |> unbox<VkBindImageMemory2KHRDel>)
-        let vkBindBufferMemory2KHR(device : VkDevice, bindInfoCount : uint32, pBindInfos : nativeptr<VkBindBufferMemoryInfoKHR>) = vkBindBufferMemory2KHRDel.Value.Invoke(device, bindInfoCount, pBindInfos)
-        let vkBindImageMemory2KHR(device : VkDevice, bindInfoCount : uint32, pBindInfos : nativeptr<VkBindImageMemoryInfoKHR>) = vkBindImageMemory2KHRDel.Value.Invoke(device, bindInfoCount, pBindInfos)
-module VK_KHR_get_memory_requirements2 =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_bind_memory2"
+            static let s_vkBindBufferMemory2KHRDel = VkRaw.importDelegate<VkBindBufferMemory2KHRDel> "vkBindBufferMemory2KHR"
+            static let s_vkBindImageMemory2KHRDel = VkRaw.importDelegate<VkBindImageMemory2KHRDel> "vkBindImageMemory2KHR"
+            static member vkBindBufferMemory2KHR = s_vkBindBufferMemory2KHRDel
+            static member vkBindImageMemory2KHR = s_vkBindImageMemory2KHRDel
+        let vkBindBufferMemory2KHR(device : VkDevice, bindInfoCount : uint32, pBindInfos : nativeptr<VkBindBufferMemoryInfoKHR>) = Loader<unit>.vkBindBufferMemory2KHR.Invoke(device, bindInfoCount, pBindInfos)
+        let vkBindImageMemory2KHR(device : VkDevice, bindInfoCount : uint32, pBindInfos : nativeptr<VkBindImageMemoryInfoKHR>) = Loader<unit>.vkBindImageMemory2KHR.Invoke(device, bindInfoCount, pBindInfos)
+
+module KHRGetMemoryRequirements2 =
     let Name = "VK_KHR_get_memory_requirements2"
-    open VK_EXT_debug_report
+    let Number = 147
+    
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -5991,6 +6001,7 @@ module VK_KHR_get_memory_requirements2 =
          static member inline MemoryRequirements2Khr = unbox<VkStructureType> 1000146003
          static member inline SparseImageMemoryRequirements2Khr = unbox<VkStructureType> 1000146004
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetImageMemoryRequirements2KHRDel = delegate of VkDevice * nativeptr<VkImageMemoryRequirementsInfo2KHR> * nativeptr<VkMemoryRequirements2KHR> -> unit
@@ -5998,16 +6009,27 @@ module VK_KHR_get_memory_requirements2 =
         type VkGetBufferMemoryRequirements2KHRDel = delegate of VkDevice * nativeptr<VkBufferMemoryRequirementsInfo2KHR> * nativeptr<VkMemoryRequirements2KHR> -> unit
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetImageSparseMemoryRequirements2KHRDel = delegate of VkDevice * nativeptr<VkImageSparseMemoryRequirementsInfo2KHR> * nativeptr<uint32> * nativeptr<VkSparseImageMemoryRequirements2KHR> -> unit
-        let private vkGetImageMemoryRequirements2KHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetImageMemoryRequirements2KHR"), typeof<VkGetImageMemoryRequirements2KHRDel>) |> unbox<VkGetImageMemoryRequirements2KHRDel>)
-        let private vkGetBufferMemoryRequirements2KHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetBufferMemoryRequirements2KHR"), typeof<VkGetBufferMemoryRequirements2KHRDel>) |> unbox<VkGetBufferMemoryRequirements2KHRDel>)
-        let private vkGetImageSparseMemoryRequirements2KHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetImageSparseMemoryRequirements2KHR"), typeof<VkGetImageSparseMemoryRequirements2KHRDel>) |> unbox<VkGetImageSparseMemoryRequirements2KHRDel>)
-        let vkGetImageMemoryRequirements2KHR(device : VkDevice, pInfo : nativeptr<VkImageMemoryRequirementsInfo2KHR>, pMemoryRequirements : nativeptr<VkMemoryRequirements2KHR>) = vkGetImageMemoryRequirements2KHRDel.Value.Invoke(device, pInfo, pMemoryRequirements)
-        let vkGetBufferMemoryRequirements2KHR(device : VkDevice, pInfo : nativeptr<VkBufferMemoryRequirementsInfo2KHR>, pMemoryRequirements : nativeptr<VkMemoryRequirements2KHR>) = vkGetBufferMemoryRequirements2KHRDel.Value.Invoke(device, pInfo, pMemoryRequirements)
-        let vkGetImageSparseMemoryRequirements2KHR(device : VkDevice, pInfo : nativeptr<VkImageSparseMemoryRequirementsInfo2KHR>, pSparseMemoryRequirementCount : nativeptr<uint32>, pSparseMemoryRequirements : nativeptr<VkSparseImageMemoryRequirements2KHR>) = vkGetImageSparseMemoryRequirements2KHRDel.Value.Invoke(device, pInfo, pSparseMemoryRequirementCount, pSparseMemoryRequirements)
-module VK_KHR_dedicated_allocation =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_get_memory_requirements2"
+            static let s_vkGetImageMemoryRequirements2KHRDel = VkRaw.importDelegate<VkGetImageMemoryRequirements2KHRDel> "vkGetImageMemoryRequirements2KHR"
+            static let s_vkGetBufferMemoryRequirements2KHRDel = VkRaw.importDelegate<VkGetBufferMemoryRequirements2KHRDel> "vkGetBufferMemoryRequirements2KHR"
+            static let s_vkGetImageSparseMemoryRequirements2KHRDel = VkRaw.importDelegate<VkGetImageSparseMemoryRequirements2KHRDel> "vkGetImageSparseMemoryRequirements2KHR"
+            static member vkGetImageMemoryRequirements2KHR = s_vkGetImageMemoryRequirements2KHRDel
+            static member vkGetBufferMemoryRequirements2KHR = s_vkGetBufferMemoryRequirements2KHRDel
+            static member vkGetImageSparseMemoryRequirements2KHR = s_vkGetImageSparseMemoryRequirements2KHRDel
+        let vkGetImageMemoryRequirements2KHR(device : VkDevice, pInfo : nativeptr<VkImageMemoryRequirementsInfo2KHR>, pMemoryRequirements : nativeptr<VkMemoryRequirements2KHR>) = Loader<unit>.vkGetImageMemoryRequirements2KHR.Invoke(device, pInfo, pMemoryRequirements)
+        let vkGetBufferMemoryRequirements2KHR(device : VkDevice, pInfo : nativeptr<VkBufferMemoryRequirementsInfo2KHR>, pMemoryRequirements : nativeptr<VkMemoryRequirements2KHR>) = Loader<unit>.vkGetBufferMemoryRequirements2KHR.Invoke(device, pInfo, pMemoryRequirements)
+        let vkGetImageSparseMemoryRequirements2KHR(device : VkDevice, pInfo : nativeptr<VkImageSparseMemoryRequirementsInfo2KHR>, pSparseMemoryRequirementCount : nativeptr<uint32>, pSparseMemoryRequirements : nativeptr<VkSparseImageMemoryRequirements2KHR>) = Loader<unit>.vkGetImageSparseMemoryRequirements2KHR.Invoke(device, pInfo, pSparseMemoryRequirementCount, pSparseMemoryRequirements)
+
+module KHRDedicatedAllocation =
     let Name = "VK_KHR_dedicated_allocation"
-    open VK_EXT_debug_report
-    open VK_KHR_get_memory_requirements2
+    let Number = 128
+    
+    let Required = [ KHRGetMemoryRequirements2.Name ]
+    open KHRGetMemoryRequirements2
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -6041,9 +6063,12 @@ module VK_KHR_dedicated_allocation =
          static member inline MemoryDedicatedRequirementsKhr = unbox<VkStructureType> 1000127000
          static member inline MemoryDedicatedAllocateInfoKhr = unbox<VkStructureType> 1000127001
     
-module VK_KHR_descriptor_update_template =
+
+module KHRDescriptorUpdateTemplate =
     let Name = "VK_KHR_descriptor_update_template"
-    open VK_EXT_debug_report
+    let Number = 86
+    
+    open EXTDebugReport
     
     type VkDescriptorUpdateTemplateTypeKHR = 
         | VkDescriptorUpdateTemplateTypeDescriptorSetKhr = 0
@@ -6092,6 +6117,7 @@ module VK_KHR_descriptor_update_template =
     type VkStructureType with
          static member inline DescriptorUpdateTemplateCreateInfoKhr = unbox<VkStructureType> 1000085000
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCreateDescriptorUpdateTemplateKHRDel = delegate of VkDevice * nativeptr<VkDescriptorUpdateTemplateCreateInfoKHR> * nativeptr<VkAllocationCallbacks> * nativeptr<VkDescriptorUpdateTemplateKHR> -> VkResult
@@ -6101,20 +6127,32 @@ module VK_KHR_descriptor_update_template =
         type VkUpdateDescriptorSetWithTemplateKHRDel = delegate of VkDevice * VkDescriptorSet * VkDescriptorUpdateTemplateKHR * nativeint -> unit
         [<SuppressUnmanagedCodeSecurity>]
         type VkCmdPushDescriptorSetWithTemplateKHRDel = delegate of VkCommandBuffer * VkDescriptorUpdateTemplateKHR * VkPipelineLayout * uint32 * nativeint -> unit
-        let private vkCreateDescriptorUpdateTemplateKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCreateDescriptorUpdateTemplateKHR"), typeof<VkCreateDescriptorUpdateTemplateKHRDel>) |> unbox<VkCreateDescriptorUpdateTemplateKHRDel>)
-        let private vkDestroyDescriptorUpdateTemplateKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkDestroyDescriptorUpdateTemplateKHR"), typeof<VkDestroyDescriptorUpdateTemplateKHRDel>) |> unbox<VkDestroyDescriptorUpdateTemplateKHRDel>)
-        let private vkUpdateDescriptorSetWithTemplateKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkUpdateDescriptorSetWithTemplateKHR"), typeof<VkUpdateDescriptorSetWithTemplateKHRDel>) |> unbox<VkUpdateDescriptorSetWithTemplateKHRDel>)
-        let private vkCmdPushDescriptorSetWithTemplateKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCmdPushDescriptorSetWithTemplateKHR"), typeof<VkCmdPushDescriptorSetWithTemplateKHRDel>) |> unbox<VkCmdPushDescriptorSetWithTemplateKHRDel>)
-        let vkCreateDescriptorUpdateTemplateKHR(device : VkDevice, pCreateInfo : nativeptr<VkDescriptorUpdateTemplateCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pDescriptorUpdateTemplate : nativeptr<VkDescriptorUpdateTemplateKHR>) = vkCreateDescriptorUpdateTemplateKHRDel.Value.Invoke(device, pCreateInfo, pAllocator, pDescriptorUpdateTemplate)
-        let vkDestroyDescriptorUpdateTemplateKHR(device : VkDevice, descriptorUpdateTemplate : VkDescriptorUpdateTemplateKHR, pAllocator : nativeptr<VkAllocationCallbacks>) = vkDestroyDescriptorUpdateTemplateKHRDel.Value.Invoke(device, descriptorUpdateTemplate, pAllocator)
-        let vkUpdateDescriptorSetWithTemplateKHR(device : VkDevice, descriptorSet : VkDescriptorSet, descriptorUpdateTemplate : VkDescriptorUpdateTemplateKHR, pData : nativeint) = vkUpdateDescriptorSetWithTemplateKHRDel.Value.Invoke(device, descriptorSet, descriptorUpdateTemplate, pData)
-        let vkCmdPushDescriptorSetWithTemplateKHR(commandBuffer : VkCommandBuffer, descriptorUpdateTemplate : VkDescriptorUpdateTemplateKHR, layout : VkPipelineLayout, set : uint32, pData : nativeint) = vkCmdPushDescriptorSetWithTemplateKHRDel.Value.Invoke(commandBuffer, descriptorUpdateTemplate, layout, set, pData)
-module VK_KHR_display_swapchain =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_descriptor_update_template"
+            static let s_vkCreateDescriptorUpdateTemplateKHRDel = VkRaw.importDelegate<VkCreateDescriptorUpdateTemplateKHRDel> "vkCreateDescriptorUpdateTemplateKHR"
+            static let s_vkDestroyDescriptorUpdateTemplateKHRDel = VkRaw.importDelegate<VkDestroyDescriptorUpdateTemplateKHRDel> "vkDestroyDescriptorUpdateTemplateKHR"
+            static let s_vkUpdateDescriptorSetWithTemplateKHRDel = VkRaw.importDelegate<VkUpdateDescriptorSetWithTemplateKHRDel> "vkUpdateDescriptorSetWithTemplateKHR"
+            static let s_vkCmdPushDescriptorSetWithTemplateKHRDel = VkRaw.importDelegate<VkCmdPushDescriptorSetWithTemplateKHRDel> "vkCmdPushDescriptorSetWithTemplateKHR"
+            static member vkCreateDescriptorUpdateTemplateKHR = s_vkCreateDescriptorUpdateTemplateKHRDel
+            static member vkDestroyDescriptorUpdateTemplateKHR = s_vkDestroyDescriptorUpdateTemplateKHRDel
+            static member vkUpdateDescriptorSetWithTemplateKHR = s_vkUpdateDescriptorSetWithTemplateKHRDel
+            static member vkCmdPushDescriptorSetWithTemplateKHR = s_vkCmdPushDescriptorSetWithTemplateKHRDel
+        let vkCreateDescriptorUpdateTemplateKHR(device : VkDevice, pCreateInfo : nativeptr<VkDescriptorUpdateTemplateCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pDescriptorUpdateTemplate : nativeptr<VkDescriptorUpdateTemplateKHR>) = Loader<unit>.vkCreateDescriptorUpdateTemplateKHR.Invoke(device, pCreateInfo, pAllocator, pDescriptorUpdateTemplate)
+        let vkDestroyDescriptorUpdateTemplateKHR(device : VkDevice, descriptorUpdateTemplate : VkDescriptorUpdateTemplateKHR, pAllocator : nativeptr<VkAllocationCallbacks>) = Loader<unit>.vkDestroyDescriptorUpdateTemplateKHR.Invoke(device, descriptorUpdateTemplate, pAllocator)
+        let vkUpdateDescriptorSetWithTemplateKHR(device : VkDevice, descriptorSet : VkDescriptorSet, descriptorUpdateTemplate : VkDescriptorUpdateTemplateKHR, pData : nativeint) = Loader<unit>.vkUpdateDescriptorSetWithTemplateKHR.Invoke(device, descriptorSet, descriptorUpdateTemplate, pData)
+        let vkCmdPushDescriptorSetWithTemplateKHR(commandBuffer : VkCommandBuffer, descriptorUpdateTemplate : VkDescriptorUpdateTemplateKHR, layout : VkPipelineLayout, set : uint32, pData : nativeint) = Loader<unit>.vkCmdPushDescriptorSetWithTemplateKHR.Invoke(commandBuffer, descriptorUpdateTemplate, layout, set, pData)
+
+module KHRDisplaySwapchain =
     let Name = "VK_KHR_display_swapchain"
-    open VK_EXT_debug_report
-    open VK_KHR_display
-    open VK_KHR_surface
-    open VK_KHR_swapchain
+    let Number = 4
+    
+    let Required = [ KHRDisplay.Name; KHRSurface.Name; KHRSwapchain.Name ]
+    open KHRDisplay
+    open KHRSurface
+    open KHRSwapchain
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -6137,78 +6175,25 @@ module VK_KHR_display_swapchain =
     type VkStructureType with
          static member inline DisplayPresentInfoKhr = unbox<VkStructureType> 1000003000
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCreateSharedSwapchainsKHRDel = delegate of VkDevice * uint32 * nativeptr<VkSwapchainCreateInfoKHR> * nativeptr<VkAllocationCallbacks> * nativeptr<VkSwapchainKHR> -> VkResult
-        let private vkCreateSharedSwapchainsKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCreateSharedSwapchainsKHR"), typeof<VkCreateSharedSwapchainsKHRDel>) |> unbox<VkCreateSharedSwapchainsKHRDel>)
-        let vkCreateSharedSwapchainsKHR(device : VkDevice, swapchainCount : uint32, pCreateInfos : nativeptr<VkSwapchainCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSwapchains : nativeptr<VkSwapchainKHR>) = vkCreateSharedSwapchainsKHRDel.Value.Invoke(device, swapchainCount, pCreateInfos, pAllocator, pSwapchains)
-module VK_KHR_extension_117 =
-    let Name = "VK_KHR_extension_117"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_KHR_extension_119 =
-    let Name = "VK_KHR_extension_119"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_KHR_extension_122 =
-    let Name = "VK_KHR_extension_122"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_KHR_extension_130 =
-    let Name = "VK_KHR_extension_130"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_KHR_extension_146 =
-    let Name = "VK_KHR_extension_146"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_KHR_extension_169 =
-    let Name = "VK_KHR_extension_169"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_KHR_extension_82 =
-    let Name = "VK_KHR_extension_82"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_KHR_extension_83 =
-    let Name = "VK_KHR_extension_83"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_KHR_extension_94 =
-    let Name = "VK_KHR_extension_94"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_KHR_external_fence_capabilities =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_display_swapchain"
+            static let s_vkCreateSharedSwapchainsKHRDel = VkRaw.importDelegate<VkCreateSharedSwapchainsKHRDel> "vkCreateSharedSwapchainsKHR"
+            static member vkCreateSharedSwapchainsKHR = s_vkCreateSharedSwapchainsKHRDel
+        let vkCreateSharedSwapchainsKHR(device : VkDevice, swapchainCount : uint32, pCreateInfos : nativeptr<VkSwapchainCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSwapchains : nativeptr<VkSwapchainKHR>) = Loader<unit>.vkCreateSharedSwapchainsKHR.Invoke(device, swapchainCount, pCreateInfos, pAllocator, pSwapchains)
+
+module KHRExternalFenceCapabilities =
     let Name = "VK_KHR_external_fence_capabilities"
-    open VK_EXT_debug_report
-    open VK_KHR_get_physical_device_properties2
+    let Number = 113
+    
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     [<Flags>]
     type VkExternalFenceHandleTypeFlagBitsKHR = 
@@ -6256,16 +6241,26 @@ module VK_KHR_external_fence_capabilities =
          static member inline PhysicalDeviceExternalFenceInfoKhr = unbox<VkStructureType> 1000112000
          static member inline ExternalFencePropertiesKhr = unbox<VkStructureType> 1000112001
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetPhysicalDeviceExternalFencePropertiesKHRDel = delegate of VkPhysicalDevice * nativeptr<VkPhysicalDeviceExternalFenceInfoKHR> * nativeptr<VkExternalFencePropertiesKHR> -> unit
-        let private vkGetPhysicalDeviceExternalFencePropertiesKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceExternalFencePropertiesKHR"), typeof<VkGetPhysicalDeviceExternalFencePropertiesKHRDel>) |> unbox<VkGetPhysicalDeviceExternalFencePropertiesKHRDel>)
-        let vkGetPhysicalDeviceExternalFencePropertiesKHR(physicalDevice : VkPhysicalDevice, pExternalFenceInfo : nativeptr<VkPhysicalDeviceExternalFenceInfoKHR>, pExternalFenceProperties : nativeptr<VkExternalFencePropertiesKHR>) = vkGetPhysicalDeviceExternalFencePropertiesKHRDel.Value.Invoke(physicalDevice, pExternalFenceInfo, pExternalFenceProperties)
-module VK_KHR_external_fence =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_external_fence_capabilities"
+            static let s_vkGetPhysicalDeviceExternalFencePropertiesKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceExternalFencePropertiesKHRDel> "vkGetPhysicalDeviceExternalFencePropertiesKHR"
+            static member vkGetPhysicalDeviceExternalFencePropertiesKHR = s_vkGetPhysicalDeviceExternalFencePropertiesKHRDel
+        let vkGetPhysicalDeviceExternalFencePropertiesKHR(physicalDevice : VkPhysicalDevice, pExternalFenceInfo : nativeptr<VkPhysicalDeviceExternalFenceInfoKHR>, pExternalFenceProperties : nativeptr<VkExternalFencePropertiesKHR>) = Loader<unit>.vkGetPhysicalDeviceExternalFencePropertiesKHR.Invoke(physicalDevice, pExternalFenceInfo, pExternalFenceProperties)
+
+module KHRExternalFence =
     let Name = "VK_KHR_external_fence"
-    open VK_EXT_debug_report
-    open VK_KHR_external_fence_capabilities
-    open VK_KHR_get_physical_device_properties2
+    let Number = 114
+    
+    let Required = [ KHRExternalFenceCapabilities.Name; KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRExternalFenceCapabilities
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     [<Flags>]
     type VkFenceImportFlagBitsKHR = 
@@ -6289,12 +6284,16 @@ module VK_KHR_external_fence =
     type VkStructureType with
          static member inline ExportFenceCreateInfoKhr = unbox<VkStructureType> 1000113000
     
-module VK_KHR_external_fence_fd =
+
+module KHRExternalFenceFd =
     let Name = "VK_KHR_external_fence_fd"
-    open VK_EXT_debug_report
-    open VK_KHR_external_fence
-    open VK_KHR_external_fence_capabilities
-    open VK_KHR_get_physical_device_properties2
+    let Number = 116
+    
+    let Required = [ KHRExternalFence.Name; KHRExternalFenceCapabilities.Name; KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRExternalFence
+    open KHRExternalFenceCapabilities
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -6330,21 +6329,32 @@ module VK_KHR_external_fence_fd =
          static member inline ImportFenceFdInfoKhr = unbox<VkStructureType> 1000115000
          static member inline FenceGetFdInfoKhr = unbox<VkStructureType> 1000115001
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkImportFenceFdKHRDel = delegate of VkDevice * nativeptr<VkImportFenceFdInfoKHR> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetFenceFdKHRDel = delegate of VkDevice * nativeptr<VkFenceGetFdInfoKHR> * nativeptr<int> -> VkResult
-        let private vkImportFenceFdKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkImportFenceFdKHR"), typeof<VkImportFenceFdKHRDel>) |> unbox<VkImportFenceFdKHRDel>)
-        let private vkGetFenceFdKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetFenceFdKHR"), typeof<VkGetFenceFdKHRDel>) |> unbox<VkGetFenceFdKHRDel>)
-        let vkImportFenceFdKHR(device : VkDevice, pImportFenceFdInfo : nativeptr<VkImportFenceFdInfoKHR>) = vkImportFenceFdKHRDel.Value.Invoke(device, pImportFenceFdInfo)
-        let vkGetFenceFdKHR(device : VkDevice, pGetFdInfo : nativeptr<VkFenceGetFdInfoKHR>, pFd : nativeptr<int>) = vkGetFenceFdKHRDel.Value.Invoke(device, pGetFdInfo, pFd)
-module VK_KHR_external_fence_win32 =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_external_fence_fd"
+            static let s_vkImportFenceFdKHRDel = VkRaw.importDelegate<VkImportFenceFdKHRDel> "vkImportFenceFdKHR"
+            static let s_vkGetFenceFdKHRDel = VkRaw.importDelegate<VkGetFenceFdKHRDel> "vkGetFenceFdKHR"
+            static member vkImportFenceFdKHR = s_vkImportFenceFdKHRDel
+            static member vkGetFenceFdKHR = s_vkGetFenceFdKHRDel
+        let vkImportFenceFdKHR(device : VkDevice, pImportFenceFdInfo : nativeptr<VkImportFenceFdInfoKHR>) = Loader<unit>.vkImportFenceFdKHR.Invoke(device, pImportFenceFdInfo)
+        let vkGetFenceFdKHR(device : VkDevice, pGetFdInfo : nativeptr<VkFenceGetFdInfoKHR>, pFd : nativeptr<int>) = Loader<unit>.vkGetFenceFdKHR.Invoke(device, pGetFdInfo, pFd)
+
+module KHRExternalFenceWin32 =
     let Name = "VK_KHR_external_fence_win32"
-    open VK_EXT_debug_report
-    open VK_KHR_external_fence
-    open VK_KHR_external_fence_capabilities
-    open VK_KHR_get_physical_device_properties2
+    let Number = 115
+    
+    let Required = [ KHRExternalFence.Name; KHRExternalFenceCapabilities.Name; KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRExternalFence
+    open KHRExternalFenceCapabilities
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -6396,21 +6406,32 @@ module VK_KHR_external_fence_win32 =
          static member inline ExportFenceWin32HandleInfoKhr = unbox<VkStructureType> 1000114001
          static member inline FenceGetWin32HandleInfoKhr = unbox<VkStructureType> 1000114002
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkImportFenceWin32HandleKHRDel = delegate of VkDevice * nativeptr<VkImportFenceWin32HandleInfoKHR> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetFenceWin32HandleKHRDel = delegate of VkDevice * nativeptr<VkFenceGetWin32HandleInfoKHR> * nativeptr<nativeint> -> VkResult
-        let private vkImportFenceWin32HandleKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkImportFenceWin32HandleKHR"), typeof<VkImportFenceWin32HandleKHRDel>) |> unbox<VkImportFenceWin32HandleKHRDel>)
-        let private vkGetFenceWin32HandleKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetFenceWin32HandleKHR"), typeof<VkGetFenceWin32HandleKHRDel>) |> unbox<VkGetFenceWin32HandleKHRDel>)
-        let vkImportFenceWin32HandleKHR(device : VkDevice, pImportFenceWin32HandleInfo : nativeptr<VkImportFenceWin32HandleInfoKHR>) = vkImportFenceWin32HandleKHRDel.Value.Invoke(device, pImportFenceWin32HandleInfo)
-        let vkGetFenceWin32HandleKHR(device : VkDevice, pGetWin32HandleInfo : nativeptr<VkFenceGetWin32HandleInfoKHR>, pHandle : nativeptr<nativeint>) = vkGetFenceWin32HandleKHRDel.Value.Invoke(device, pGetWin32HandleInfo, pHandle)
-module VK_KHR_external_memory_win32 =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_external_fence_win32"
+            static let s_vkImportFenceWin32HandleKHRDel = VkRaw.importDelegate<VkImportFenceWin32HandleKHRDel> "vkImportFenceWin32HandleKHR"
+            static let s_vkGetFenceWin32HandleKHRDel = VkRaw.importDelegate<VkGetFenceWin32HandleKHRDel> "vkGetFenceWin32HandleKHR"
+            static member vkImportFenceWin32HandleKHR = s_vkImportFenceWin32HandleKHRDel
+            static member vkGetFenceWin32HandleKHR = s_vkGetFenceWin32HandleKHRDel
+        let vkImportFenceWin32HandleKHR(device : VkDevice, pImportFenceWin32HandleInfo : nativeptr<VkImportFenceWin32HandleInfoKHR>) = Loader<unit>.vkImportFenceWin32HandleKHR.Invoke(device, pImportFenceWin32HandleInfo)
+        let vkGetFenceWin32HandleKHR(device : VkDevice, pGetWin32HandleInfo : nativeptr<VkFenceGetWin32HandleInfoKHR>, pHandle : nativeptr<nativeint>) = Loader<unit>.vkGetFenceWin32HandleKHR.Invoke(device, pGetWin32HandleInfo, pHandle)
+
+module KHRExternalMemoryWin32 =
     let Name = "VK_KHR_external_memory_win32"
-    open VK_EXT_debug_report
-    open VK_KHR_external_memory
-    open VK_KHR_external_memory_capabilities
-    open VK_KHR_get_physical_device_properties2
+    let Number = 74
+    
+    let Required = [ KHRExternalMemory.Name; KHRExternalMemoryCapabilities.Name; KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRExternalMemory
+    open KHRExternalMemoryCapabilities
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -6473,19 +6494,30 @@ module VK_KHR_external_memory_win32 =
          static member inline MemoryWin32HandlePropertiesKhr = unbox<VkStructureType> 1000073002
          static member inline MemoryGetWin32HandleInfoKhr = unbox<VkStructureType> 1000073003
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetMemoryWin32HandleKHRDel = delegate of VkDevice * nativeptr<VkMemoryGetWin32HandleInfoKHR> * nativeptr<nativeint> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetMemoryWin32HandlePropertiesKHRDel = delegate of VkDevice * VkExternalMemoryHandleTypeFlagBitsKHR * nativeint * nativeptr<VkMemoryWin32HandlePropertiesKHR> -> VkResult
-        let private vkGetMemoryWin32HandleKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetMemoryWin32HandleKHR"), typeof<VkGetMemoryWin32HandleKHRDel>) |> unbox<VkGetMemoryWin32HandleKHRDel>)
-        let private vkGetMemoryWin32HandlePropertiesKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetMemoryWin32HandlePropertiesKHR"), typeof<VkGetMemoryWin32HandlePropertiesKHRDel>) |> unbox<VkGetMemoryWin32HandlePropertiesKHRDel>)
-        let vkGetMemoryWin32HandleKHR(device : VkDevice, pGetWin32HandleInfo : nativeptr<VkMemoryGetWin32HandleInfoKHR>, pHandle : nativeptr<nativeint>) = vkGetMemoryWin32HandleKHRDel.Value.Invoke(device, pGetWin32HandleInfo, pHandle)
-        let vkGetMemoryWin32HandlePropertiesKHR(device : VkDevice, handleType : VkExternalMemoryHandleTypeFlagBitsKHR, handle : nativeint, pMemoryWin32HandleProperties : nativeptr<VkMemoryWin32HandlePropertiesKHR>) = vkGetMemoryWin32HandlePropertiesKHRDel.Value.Invoke(device, handleType, handle, pMemoryWin32HandleProperties)
-module VK_KHR_external_semaphore_capabilities =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_external_memory_win32"
+            static let s_vkGetMemoryWin32HandleKHRDel = VkRaw.importDelegate<VkGetMemoryWin32HandleKHRDel> "vkGetMemoryWin32HandleKHR"
+            static let s_vkGetMemoryWin32HandlePropertiesKHRDel = VkRaw.importDelegate<VkGetMemoryWin32HandlePropertiesKHRDel> "vkGetMemoryWin32HandlePropertiesKHR"
+            static member vkGetMemoryWin32HandleKHR = s_vkGetMemoryWin32HandleKHRDel
+            static member vkGetMemoryWin32HandlePropertiesKHR = s_vkGetMemoryWin32HandlePropertiesKHRDel
+        let vkGetMemoryWin32HandleKHR(device : VkDevice, pGetWin32HandleInfo : nativeptr<VkMemoryGetWin32HandleInfoKHR>, pHandle : nativeptr<nativeint>) = Loader<unit>.vkGetMemoryWin32HandleKHR.Invoke(device, pGetWin32HandleInfo, pHandle)
+        let vkGetMemoryWin32HandlePropertiesKHR(device : VkDevice, handleType : VkExternalMemoryHandleTypeFlagBitsKHR, handle : nativeint, pMemoryWin32HandleProperties : nativeptr<VkMemoryWin32HandlePropertiesKHR>) = Loader<unit>.vkGetMemoryWin32HandlePropertiesKHR.Invoke(device, handleType, handle, pMemoryWin32HandleProperties)
+
+module KHRExternalSemaphoreCapabilities =
     let Name = "VK_KHR_external_semaphore_capabilities"
-    open VK_EXT_debug_report
-    open VK_KHR_get_physical_device_properties2
+    let Number = 77
+    
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     [<Flags>]
     type VkExternalSemaphoreHandleTypeFlagBitsKHR = 
@@ -6534,16 +6566,26 @@ module VK_KHR_external_semaphore_capabilities =
          static member inline PhysicalDeviceExternalSemaphoreInfoKhr = unbox<VkStructureType> 1000076000
          static member inline ExternalSemaphorePropertiesKhr = unbox<VkStructureType> 1000076001
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetPhysicalDeviceExternalSemaphorePropertiesKHRDel = delegate of VkPhysicalDevice * nativeptr<VkPhysicalDeviceExternalSemaphoreInfoKHR> * nativeptr<VkExternalSemaphorePropertiesKHR> -> unit
-        let private vkGetPhysicalDeviceExternalSemaphorePropertiesKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceExternalSemaphorePropertiesKHR"), typeof<VkGetPhysicalDeviceExternalSemaphorePropertiesKHRDel>) |> unbox<VkGetPhysicalDeviceExternalSemaphorePropertiesKHRDel>)
-        let vkGetPhysicalDeviceExternalSemaphorePropertiesKHR(physicalDevice : VkPhysicalDevice, pExternalSemaphoreInfo : nativeptr<VkPhysicalDeviceExternalSemaphoreInfoKHR>, pExternalSemaphoreProperties : nativeptr<VkExternalSemaphorePropertiesKHR>) = vkGetPhysicalDeviceExternalSemaphorePropertiesKHRDel.Value.Invoke(physicalDevice, pExternalSemaphoreInfo, pExternalSemaphoreProperties)
-module VK_KHR_external_semaphore =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_external_semaphore_capabilities"
+            static let s_vkGetPhysicalDeviceExternalSemaphorePropertiesKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceExternalSemaphorePropertiesKHRDel> "vkGetPhysicalDeviceExternalSemaphorePropertiesKHR"
+            static member vkGetPhysicalDeviceExternalSemaphorePropertiesKHR = s_vkGetPhysicalDeviceExternalSemaphorePropertiesKHRDel
+        let vkGetPhysicalDeviceExternalSemaphorePropertiesKHR(physicalDevice : VkPhysicalDevice, pExternalSemaphoreInfo : nativeptr<VkPhysicalDeviceExternalSemaphoreInfoKHR>, pExternalSemaphoreProperties : nativeptr<VkExternalSemaphorePropertiesKHR>) = Loader<unit>.vkGetPhysicalDeviceExternalSemaphorePropertiesKHR.Invoke(physicalDevice, pExternalSemaphoreInfo, pExternalSemaphoreProperties)
+
+module KHRExternalSemaphore =
     let Name = "VK_KHR_external_semaphore"
-    open VK_EXT_debug_report
-    open VK_KHR_external_semaphore_capabilities
-    open VK_KHR_get_physical_device_properties2
+    let Number = 78
+    
+    let Required = [ KHRExternalSemaphoreCapabilities.Name; KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRExternalSemaphoreCapabilities
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     [<Flags>]
     type VkSemaphoreImportFlagBitsKHR = 
@@ -6567,12 +6609,16 @@ module VK_KHR_external_semaphore =
     type VkStructureType with
          static member inline ExportSemaphoreCreateInfoKhr = unbox<VkStructureType> 1000077000
     
-module VK_KHR_external_semaphore_fd =
+
+module KHRExternalSemaphoreFd =
     let Name = "VK_KHR_external_semaphore_fd"
-    open VK_EXT_debug_report
-    open VK_KHR_external_semaphore
-    open VK_KHR_external_semaphore_capabilities
-    open VK_KHR_get_physical_device_properties2
+    let Number = 80
+    
+    let Required = [ KHRExternalSemaphore.Name; KHRExternalSemaphoreCapabilities.Name; KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRExternalSemaphore
+    open KHRExternalSemaphoreCapabilities
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -6608,21 +6654,32 @@ module VK_KHR_external_semaphore_fd =
          static member inline ImportSemaphoreFdInfoKhr = unbox<VkStructureType> 1000079000
          static member inline SemaphoreGetFdInfoKhr = unbox<VkStructureType> 1000079001
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkImportSemaphoreFdKHRDel = delegate of VkDevice * nativeptr<VkImportSemaphoreFdInfoKHR> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetSemaphoreFdKHRDel = delegate of VkDevice * nativeptr<VkSemaphoreGetFdInfoKHR> * nativeptr<int> -> VkResult
-        let private vkImportSemaphoreFdKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkImportSemaphoreFdKHR"), typeof<VkImportSemaphoreFdKHRDel>) |> unbox<VkImportSemaphoreFdKHRDel>)
-        let private vkGetSemaphoreFdKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetSemaphoreFdKHR"), typeof<VkGetSemaphoreFdKHRDel>) |> unbox<VkGetSemaphoreFdKHRDel>)
-        let vkImportSemaphoreFdKHR(device : VkDevice, pImportSemaphoreFdInfo : nativeptr<VkImportSemaphoreFdInfoKHR>) = vkImportSemaphoreFdKHRDel.Value.Invoke(device, pImportSemaphoreFdInfo)
-        let vkGetSemaphoreFdKHR(device : VkDevice, pGetFdInfo : nativeptr<VkSemaphoreGetFdInfoKHR>, pFd : nativeptr<int>) = vkGetSemaphoreFdKHRDel.Value.Invoke(device, pGetFdInfo, pFd)
-module VK_KHR_external_semaphore_win32 =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_external_semaphore_fd"
+            static let s_vkImportSemaphoreFdKHRDel = VkRaw.importDelegate<VkImportSemaphoreFdKHRDel> "vkImportSemaphoreFdKHR"
+            static let s_vkGetSemaphoreFdKHRDel = VkRaw.importDelegate<VkGetSemaphoreFdKHRDel> "vkGetSemaphoreFdKHR"
+            static member vkImportSemaphoreFdKHR = s_vkImportSemaphoreFdKHRDel
+            static member vkGetSemaphoreFdKHR = s_vkGetSemaphoreFdKHRDel
+        let vkImportSemaphoreFdKHR(device : VkDevice, pImportSemaphoreFdInfo : nativeptr<VkImportSemaphoreFdInfoKHR>) = Loader<unit>.vkImportSemaphoreFdKHR.Invoke(device, pImportSemaphoreFdInfo)
+        let vkGetSemaphoreFdKHR(device : VkDevice, pGetFdInfo : nativeptr<VkSemaphoreGetFdInfoKHR>, pFd : nativeptr<int>) = Loader<unit>.vkGetSemaphoreFdKHR.Invoke(device, pGetFdInfo, pFd)
+
+module KHRExternalSemaphoreWin32 =
     let Name = "VK_KHR_external_semaphore_win32"
-    open VK_EXT_debug_report
-    open VK_KHR_external_semaphore
-    open VK_KHR_external_semaphore_capabilities
-    open VK_KHR_get_physical_device_properties2
+    let Number = 79
+    
+    let Required = [ KHRExternalSemaphore.Name; KHRExternalSemaphoreCapabilities.Name; KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRExternalSemaphore
+    open KHRExternalSemaphoreCapabilities
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -6690,19 +6747,30 @@ module VK_KHR_external_semaphore_win32 =
          static member inline D3d12FenceSubmitInfoKhr = unbox<VkStructureType> 1000078002
          static member inline SemaphoreGetWin32HandleInfoKhr = unbox<VkStructureType> 1000078003
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkImportSemaphoreWin32HandleKHRDel = delegate of VkDevice * nativeptr<VkImportSemaphoreWin32HandleInfoKHR> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetSemaphoreWin32HandleKHRDel = delegate of VkDevice * nativeptr<VkSemaphoreGetWin32HandleInfoKHR> * nativeptr<nativeint> -> VkResult
-        let private vkImportSemaphoreWin32HandleKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkImportSemaphoreWin32HandleKHR"), typeof<VkImportSemaphoreWin32HandleKHRDel>) |> unbox<VkImportSemaphoreWin32HandleKHRDel>)
-        let private vkGetSemaphoreWin32HandleKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetSemaphoreWin32HandleKHR"), typeof<VkGetSemaphoreWin32HandleKHRDel>) |> unbox<VkGetSemaphoreWin32HandleKHRDel>)
-        let vkImportSemaphoreWin32HandleKHR(device : VkDevice, pImportSemaphoreWin32HandleInfo : nativeptr<VkImportSemaphoreWin32HandleInfoKHR>) = vkImportSemaphoreWin32HandleKHRDel.Value.Invoke(device, pImportSemaphoreWin32HandleInfo)
-        let vkGetSemaphoreWin32HandleKHR(device : VkDevice, pGetWin32HandleInfo : nativeptr<VkSemaphoreGetWin32HandleInfoKHR>, pHandle : nativeptr<nativeint>) = vkGetSemaphoreWin32HandleKHRDel.Value.Invoke(device, pGetWin32HandleInfo, pHandle)
-module VK_KHR_get_surface_capabilities2 =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_external_semaphore_win32"
+            static let s_vkImportSemaphoreWin32HandleKHRDel = VkRaw.importDelegate<VkImportSemaphoreWin32HandleKHRDel> "vkImportSemaphoreWin32HandleKHR"
+            static let s_vkGetSemaphoreWin32HandleKHRDel = VkRaw.importDelegate<VkGetSemaphoreWin32HandleKHRDel> "vkGetSemaphoreWin32HandleKHR"
+            static member vkImportSemaphoreWin32HandleKHR = s_vkImportSemaphoreWin32HandleKHRDel
+            static member vkGetSemaphoreWin32HandleKHR = s_vkGetSemaphoreWin32HandleKHRDel
+        let vkImportSemaphoreWin32HandleKHR(device : VkDevice, pImportSemaphoreWin32HandleInfo : nativeptr<VkImportSemaphoreWin32HandleInfoKHR>) = Loader<unit>.vkImportSemaphoreWin32HandleKHR.Invoke(device, pImportSemaphoreWin32HandleInfo)
+        let vkGetSemaphoreWin32HandleKHR(device : VkDevice, pGetWin32HandleInfo : nativeptr<VkSemaphoreGetWin32HandleInfoKHR>, pHandle : nativeptr<nativeint>) = Loader<unit>.vkGetSemaphoreWin32HandleKHR.Invoke(device, pGetWin32HandleInfo, pHandle)
+
+module KHRGetSurfaceCapabilities2 =
     let Name = "VK_KHR_get_surface_capabilities2"
-    open VK_EXT_debug_report
-    open VK_KHR_surface
+    let Number = 120
+    
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -6747,18 +6815,28 @@ module VK_KHR_get_surface_capabilities2 =
          static member inline SurfaceCapabilities2Khr = unbox<VkStructureType> 1000119001
          static member inline SurfaceFormat2Khr = unbox<VkStructureType> 1000119002
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetPhysicalDeviceSurfaceCapabilities2KHRDel = delegate of VkPhysicalDevice * nativeptr<VkPhysicalDeviceSurfaceInfo2KHR> * nativeptr<VkSurfaceCapabilities2KHR> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetPhysicalDeviceSurfaceFormats2KHRDel = delegate of VkPhysicalDevice * nativeptr<VkPhysicalDeviceSurfaceInfo2KHR> * nativeptr<uint32> * nativeptr<VkSurfaceFormat2KHR> -> VkResult
-        let private vkGetPhysicalDeviceSurfaceCapabilities2KHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceSurfaceCapabilities2KHR"), typeof<VkGetPhysicalDeviceSurfaceCapabilities2KHRDel>) |> unbox<VkGetPhysicalDeviceSurfaceCapabilities2KHRDel>)
-        let private vkGetPhysicalDeviceSurfaceFormats2KHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceSurfaceFormats2KHR"), typeof<VkGetPhysicalDeviceSurfaceFormats2KHRDel>) |> unbox<VkGetPhysicalDeviceSurfaceFormats2KHRDel>)
-        let vkGetPhysicalDeviceSurfaceCapabilities2KHR(physicalDevice : VkPhysicalDevice, pSurfaceInfo : nativeptr<VkPhysicalDeviceSurfaceInfo2KHR>, pSurfaceCapabilities : nativeptr<VkSurfaceCapabilities2KHR>) = vkGetPhysicalDeviceSurfaceCapabilities2KHRDel.Value.Invoke(physicalDevice, pSurfaceInfo, pSurfaceCapabilities)
-        let vkGetPhysicalDeviceSurfaceFormats2KHR(physicalDevice : VkPhysicalDevice, pSurfaceInfo : nativeptr<VkPhysicalDeviceSurfaceInfo2KHR>, pSurfaceFormatCount : nativeptr<uint32>, pSurfaceFormats : nativeptr<VkSurfaceFormat2KHR>) = vkGetPhysicalDeviceSurfaceFormats2KHRDel.Value.Invoke(physicalDevice, pSurfaceInfo, pSurfaceFormatCount, pSurfaceFormats)
-module VK_KHR_image_format_list =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_get_surface_capabilities2"
+            static let s_vkGetPhysicalDeviceSurfaceCapabilities2KHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceSurfaceCapabilities2KHRDel> "vkGetPhysicalDeviceSurfaceCapabilities2KHR"
+            static let s_vkGetPhysicalDeviceSurfaceFormats2KHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceSurfaceFormats2KHRDel> "vkGetPhysicalDeviceSurfaceFormats2KHR"
+            static member vkGetPhysicalDeviceSurfaceCapabilities2KHR = s_vkGetPhysicalDeviceSurfaceCapabilities2KHRDel
+            static member vkGetPhysicalDeviceSurfaceFormats2KHR = s_vkGetPhysicalDeviceSurfaceFormats2KHRDel
+        let vkGetPhysicalDeviceSurfaceCapabilities2KHR(physicalDevice : VkPhysicalDevice, pSurfaceInfo : nativeptr<VkPhysicalDeviceSurfaceInfo2KHR>, pSurfaceCapabilities : nativeptr<VkSurfaceCapabilities2KHR>) = Loader<unit>.vkGetPhysicalDeviceSurfaceCapabilities2KHR.Invoke(physicalDevice, pSurfaceInfo, pSurfaceCapabilities)
+        let vkGetPhysicalDeviceSurfaceFormats2KHR(physicalDevice : VkPhysicalDevice, pSurfaceInfo : nativeptr<VkPhysicalDeviceSurfaceInfo2KHR>, pSurfaceFormatCount : nativeptr<uint32>, pSurfaceFormats : nativeptr<VkSurfaceFormat2KHR>) = Loader<unit>.vkGetPhysicalDeviceSurfaceFormats2KHR.Invoke(physicalDevice, pSurfaceInfo, pSurfaceFormatCount, pSurfaceFormats)
+
+module KHRImageFormatList =
     let Name = "VK_KHR_image_format_list"
-    open VK_EXT_debug_report
+    let Number = 148
+    
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -6778,11 +6856,15 @@ module VK_KHR_image_format_list =
     type VkStructureType with
          static member inline ImageFormatListCreateInfoKhr = unbox<VkStructureType> 1000147000
     
-module VK_KHR_incremental_present =
+
+module KHRIncrementalPresent =
     let Name = "VK_KHR_incremental_present"
-    open VK_EXT_debug_report
-    open VK_KHR_surface
-    open VK_KHR_swapchain
+    let Number = 85
+    
+    let Required = [ KHRSurface.Name; KHRSwapchain.Name ]
+    open KHRSurface
+    open KHRSwapchain
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -6825,23 +6907,35 @@ module VK_KHR_incremental_present =
     type VkStructureType with
          static member inline PresentRegionsKhr = unbox<VkStructureType> 1000084000
     
-module VK_KHR_maintenance1 =
+
+module KHRMaintenance1 =
     let Name = "VK_KHR_maintenance1"
-    open VK_EXT_debug_report
+    let Number = 70
+    
+    open EXTDebugReport
     
     
     
     type VkResult with
          static member inline VkErrorOutOfPoolMemoryKhr = unbox<VkResult> -1000069000
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkTrimCommandPoolKHRDel = delegate of VkDevice * VkCommandPool * VkCommandPoolTrimFlagsKHR -> unit
-        let private vkTrimCommandPoolKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkTrimCommandPoolKHR"), typeof<VkTrimCommandPoolKHRDel>) |> unbox<VkTrimCommandPoolKHRDel>)
-        let vkTrimCommandPoolKHR(device : VkDevice, commandPool : VkCommandPool, flags : VkCommandPoolTrimFlagsKHR) = vkTrimCommandPoolKHRDel.Value.Invoke(device, commandPool, flags)
-module VK_KHR_maintenance2 =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_maintenance1"
+            static let s_vkTrimCommandPoolKHRDel = VkRaw.importDelegate<VkTrimCommandPoolKHRDel> "vkTrimCommandPoolKHR"
+            static member vkTrimCommandPoolKHR = s_vkTrimCommandPoolKHRDel
+        let vkTrimCommandPoolKHR(device : VkDevice, commandPool : VkCommandPool, flags : VkCommandPoolTrimFlagsKHR) = Loader<unit>.vkTrimCommandPoolKHR.Invoke(device, commandPool, flags)
+
+module KHRMaintenance2 =
     let Name = "VK_KHR_maintenance2"
-    open VK_EXT_debug_report
+    let Number = 118
+    
+    open EXTDebugReport
     
     type VkPointClippingBehaviorKHR = 
         | VkPointClippingBehaviorAllClipPlanesKhr = 0
@@ -6923,10 +7017,14 @@ module VK_KHR_maintenance2 =
          static member inline ImageViewUsageCreateInfoKhr = unbox<VkStructureType> 1000117002
          static member inline PipelineTessellationDomainOriginStateCreateInfoKhr = unbox<VkStructureType> 1000117003
     
-module VK_KHR_mir_surface =
+
+module KHRMirSurface =
     let Name = "VK_KHR_mir_surface"
-    open VK_EXT_debug_report
-    open VK_KHR_surface
+    let Number = 8
+    
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -6947,19 +7045,30 @@ module VK_KHR_mir_surface =
     type VkStructureType with
          static member inline MirSurfaceCreateInfoKhr = unbox<VkStructureType> 1000007000
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCreateMirSurfaceKHRDel = delegate of VkInstance * nativeptr<VkMirSurfaceCreateInfoKHR> * nativeptr<VkAllocationCallbacks> * nativeptr<VkSurfaceKHR> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetPhysicalDeviceMirPresentationSupportKHRDel = delegate of VkPhysicalDevice * uint32 * nativeptr<nativeint> -> VkBool32
-        let private vkCreateMirSurfaceKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCreateMirSurfaceKHR"), typeof<VkCreateMirSurfaceKHRDel>) |> unbox<VkCreateMirSurfaceKHRDel>)
-        let private vkGetPhysicalDeviceMirPresentationSupportKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceMirPresentationSupportKHR"), typeof<VkGetPhysicalDeviceMirPresentationSupportKHRDel>) |> unbox<VkGetPhysicalDeviceMirPresentationSupportKHRDel>)
-        let vkCreateMirSurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkMirSurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = vkCreateMirSurfaceKHRDel.Value.Invoke(instance, pCreateInfo, pAllocator, pSurface)
-        let vkGetPhysicalDeviceMirPresentationSupportKHR(physicalDevice : VkPhysicalDevice, queueFamilyIndex : uint32, connection : nativeptr<nativeint>) = vkGetPhysicalDeviceMirPresentationSupportKHRDel.Value.Invoke(physicalDevice, queueFamilyIndex, connection)
-module VK_KHR_push_descriptor =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_mir_surface"
+            static let s_vkCreateMirSurfaceKHRDel = VkRaw.importDelegate<VkCreateMirSurfaceKHRDel> "vkCreateMirSurfaceKHR"
+            static let s_vkGetPhysicalDeviceMirPresentationSupportKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceMirPresentationSupportKHRDel> "vkGetPhysicalDeviceMirPresentationSupportKHR"
+            static member vkCreateMirSurfaceKHR = s_vkCreateMirSurfaceKHRDel
+            static member vkGetPhysicalDeviceMirPresentationSupportKHR = s_vkGetPhysicalDeviceMirPresentationSupportKHRDel
+        let vkCreateMirSurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkMirSurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateMirSurfaceKHR.Invoke(instance, pCreateInfo, pAllocator, pSurface)
+        let vkGetPhysicalDeviceMirPresentationSupportKHR(physicalDevice : VkPhysicalDevice, queueFamilyIndex : uint32, connection : nativeptr<nativeint>) = Loader<unit>.vkGetPhysicalDeviceMirPresentationSupportKHR.Invoke(physicalDevice, queueFamilyIndex, connection)
+
+module KHRPushDescriptor =
     let Name = "VK_KHR_push_descriptor"
-    open VK_EXT_debug_report
-    open VK_KHR_get_physical_device_properties2
+    let Number = 81
+    
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -6978,32 +7087,48 @@ module VK_KHR_push_descriptor =
     type VkStructureType with
          static member inline PhysicalDevicePushDescriptorPropertiesKhr = unbox<VkStructureType> 1000080000
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCmdPushDescriptorSetKHRDel = delegate of VkCommandBuffer * VkPipelineBindPoint * VkPipelineLayout * uint32 * uint32 * nativeptr<VkWriteDescriptorSet> -> unit
-        let private vkCmdPushDescriptorSetKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCmdPushDescriptorSetKHR"), typeof<VkCmdPushDescriptorSetKHRDel>) |> unbox<VkCmdPushDescriptorSetKHRDel>)
-        let vkCmdPushDescriptorSetKHR(commandBuffer : VkCommandBuffer, pipelineBindPoint : VkPipelineBindPoint, layout : VkPipelineLayout, set : uint32, descriptorWriteCount : uint32, pDescriptorWrites : nativeptr<VkWriteDescriptorSet>) = vkCmdPushDescriptorSetKHRDel.Value.Invoke(commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites)
-module VK_KHR_relaxed_block_layout =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_push_descriptor"
+            static let s_vkCmdPushDescriptorSetKHRDel = VkRaw.importDelegate<VkCmdPushDescriptorSetKHRDel> "vkCmdPushDescriptorSetKHR"
+            static member vkCmdPushDescriptorSetKHR = s_vkCmdPushDescriptorSetKHRDel
+        let vkCmdPushDescriptorSetKHR(commandBuffer : VkCommandBuffer, pipelineBindPoint : VkPipelineBindPoint, layout : VkPipelineLayout, set : uint32, descriptorWriteCount : uint32, pDescriptorWrites : nativeptr<VkWriteDescriptorSet>) = Loader<unit>.vkCmdPushDescriptorSetKHR.Invoke(commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites)
+
+module KHRRelaxedBlockLayout =
     let Name = "VK_KHR_relaxed_block_layout"
-    open VK_EXT_debug_report
+    let Number = 145
+    
+    open EXTDebugReport
     
     
     
     
-module VK_KHR_sampler_mirror_clamp_to_edge =
+
+module KHRSamplerMirrorClampToEdge =
     let Name = "VK_KHR_sampler_mirror_clamp_to_edge"
-    open VK_EXT_debug_report
+    let Number = 15
+    
+    open EXTDebugReport
     
     
     
     
-module VK_KHR_sampler_ycbcr_conversion =
+
+module KHRSamplerYcbcrConversion =
     let Name = "VK_KHR_sampler_ycbcr_conversion"
-    open VK_EXT_debug_report
-    open VK_KHR_bind_memory2
-    open VK_KHR_get_memory_requirements2
-    open VK_KHR_get_physical_device_properties2
-    open VK_KHR_maintenance1
+    let Number = 157
+    
+    let Required = [ KHRBindMemory2.Name; KHRGetMemoryRequirements2.Name; KHRGetPhysicalDeviceProperties2.Name; KHRMaintenance1.Name ]
+    open KHRBindMemory2
+    open KHRGetMemoryRequirements2
+    open KHRGetPhysicalDeviceProperties2
+    open KHRMaintenance1
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -7133,29 +7258,43 @@ module VK_KHR_sampler_ycbcr_conversion =
          static member inline PhysicalDeviceSamplerYcbcrConversionFeaturesKhr = unbox<VkStructureType> 1000156004
          static member inline SamplerYcbcrConversionImageFormatPropertiesKhr = unbox<VkStructureType> 1000156005
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCreateSamplerYcbcrConversionKHRDel = delegate of VkDevice * nativeptr<VkSamplerYcbcrConversionCreateInfoKHR> * nativeptr<VkAllocationCallbacks> * nativeptr<VkSamplerYcbcrConversionKHR> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkDestroySamplerYcbcrConversionKHRDel = delegate of VkDevice * VkSamplerYcbcrConversionKHR * nativeptr<VkAllocationCallbacks> -> unit
-        let private vkCreateSamplerYcbcrConversionKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCreateSamplerYcbcrConversionKHR"), typeof<VkCreateSamplerYcbcrConversionKHRDel>) |> unbox<VkCreateSamplerYcbcrConversionKHRDel>)
-        let private vkDestroySamplerYcbcrConversionKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkDestroySamplerYcbcrConversionKHR"), typeof<VkDestroySamplerYcbcrConversionKHRDel>) |> unbox<VkDestroySamplerYcbcrConversionKHRDel>)
-        let vkCreateSamplerYcbcrConversionKHR(device : VkDevice, pCreateInfo : nativeptr<VkSamplerYcbcrConversionCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pYcbcrConversion : nativeptr<VkSamplerYcbcrConversionKHR>) = vkCreateSamplerYcbcrConversionKHRDel.Value.Invoke(device, pCreateInfo, pAllocator, pYcbcrConversion)
-        let vkDestroySamplerYcbcrConversionKHR(device : VkDevice, ycbcrConversion : VkSamplerYcbcrConversionKHR, pAllocator : nativeptr<VkAllocationCallbacks>) = vkDestroySamplerYcbcrConversionKHRDel.Value.Invoke(device, ycbcrConversion, pAllocator)
-module VK_KHR_shader_draw_parameters =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_sampler_ycbcr_conversion"
+            static let s_vkCreateSamplerYcbcrConversionKHRDel = VkRaw.importDelegate<VkCreateSamplerYcbcrConversionKHRDel> "vkCreateSamplerYcbcrConversionKHR"
+            static let s_vkDestroySamplerYcbcrConversionKHRDel = VkRaw.importDelegate<VkDestroySamplerYcbcrConversionKHRDel> "vkDestroySamplerYcbcrConversionKHR"
+            static member vkCreateSamplerYcbcrConversionKHR = s_vkCreateSamplerYcbcrConversionKHRDel
+            static member vkDestroySamplerYcbcrConversionKHR = s_vkDestroySamplerYcbcrConversionKHRDel
+        let vkCreateSamplerYcbcrConversionKHR(device : VkDevice, pCreateInfo : nativeptr<VkSamplerYcbcrConversionCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pYcbcrConversion : nativeptr<VkSamplerYcbcrConversionKHR>) = Loader<unit>.vkCreateSamplerYcbcrConversionKHR.Invoke(device, pCreateInfo, pAllocator, pYcbcrConversion)
+        let vkDestroySamplerYcbcrConversionKHR(device : VkDevice, ycbcrConversion : VkSamplerYcbcrConversionKHR, pAllocator : nativeptr<VkAllocationCallbacks>) = Loader<unit>.vkDestroySamplerYcbcrConversionKHR.Invoke(device, ycbcrConversion, pAllocator)
+
+module KHRShaderDrawParameters =
     let Name = "VK_KHR_shader_draw_parameters"
-    open VK_EXT_debug_report
+    let Number = 64
+    
+    open EXTDebugReport
     
     
     
     
-module VK_KHR_shared_presentable_image =
+
+module KHRSharedPresentableImage =
     let Name = "VK_KHR_shared_presentable_image"
-    open VK_EXT_debug_report
-    open VK_KHR_get_physical_device_properties2
-    open VK_KHR_get_surface_capabilities2
-    open VK_KHR_surface
-    open VK_KHR_swapchain
+    let Number = 112
+    
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name; KHRGetSurfaceCapabilities2.Name; KHRSurface.Name; KHRSwapchain.Name ]
+    open KHRGetPhysicalDeviceProperties2
+    open KHRGetSurfaceCapabilities2
+    open KHRSurface
+    open KHRSwapchain
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -7179,16 +7318,26 @@ module VK_KHR_shared_presentable_image =
     type VkStructureType with
          static member inline SharedPresentSurfaceCapabilitiesKhr = unbox<VkStructureType> 1000111000
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetSwapchainStatusKHRDel = delegate of VkDevice * VkSwapchainKHR -> VkResult
-        let private vkGetSwapchainStatusKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetSwapchainStatusKHR"), typeof<VkGetSwapchainStatusKHRDel>) |> unbox<VkGetSwapchainStatusKHRDel>)
-        let vkGetSwapchainStatusKHR(device : VkDevice, swapchain : VkSwapchainKHR) = vkGetSwapchainStatusKHRDel.Value.Invoke(device, swapchain)
-module VK_KHR_variable_pointers =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_shared_presentable_image"
+            static let s_vkGetSwapchainStatusKHRDel = VkRaw.importDelegate<VkGetSwapchainStatusKHRDel> "vkGetSwapchainStatusKHR"
+            static member vkGetSwapchainStatusKHR = s_vkGetSwapchainStatusKHRDel
+        let vkGetSwapchainStatusKHR(device : VkDevice, swapchain : VkSwapchainKHR) = Loader<unit>.vkGetSwapchainStatusKHR.Invoke(device, swapchain)
+
+module KHRVariablePointers =
     let Name = "VK_KHR_variable_pointers"
-    open VK_EXT_debug_report
-    open VK_KHR_get_physical_device_properties2
-    open VK_KHR_storage_buffer_storage_class
+    let Number = 121
+    
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name; KHRStorageBufferStorageClass.Name ]
+    open KHRGetPhysicalDeviceProperties2
+    open KHRStorageBufferStorageClass
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -7208,10 +7357,14 @@ module VK_KHR_variable_pointers =
     type VkStructureType with
          static member inline PhysicalDeviceVariablePointerFeaturesKhr = unbox<VkStructureType> 1000120000
     
-module VK_KHR_wayland_surface =
+
+module KHRWaylandSurface =
     let Name = "VK_KHR_wayland_surface"
-    open VK_EXT_debug_report
-    open VK_KHR_surface
+    let Number = 7
+    
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -7232,22 +7385,33 @@ module VK_KHR_wayland_surface =
     type VkStructureType with
          static member inline WaylandSurfaceCreateInfoKhr = unbox<VkStructureType> 1000006000
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCreateWaylandSurfaceKHRDel = delegate of VkInstance * nativeptr<VkWaylandSurfaceCreateInfoKHR> * nativeptr<VkAllocationCallbacks> * nativeptr<VkSurfaceKHR> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetPhysicalDeviceWaylandPresentationSupportKHRDel = delegate of VkPhysicalDevice * uint32 * nativeptr<nativeint> -> VkBool32
-        let private vkCreateWaylandSurfaceKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCreateWaylandSurfaceKHR"), typeof<VkCreateWaylandSurfaceKHRDel>) |> unbox<VkCreateWaylandSurfaceKHRDel>)
-        let private vkGetPhysicalDeviceWaylandPresentationSupportKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceWaylandPresentationSupportKHR"), typeof<VkGetPhysicalDeviceWaylandPresentationSupportKHRDel>) |> unbox<VkGetPhysicalDeviceWaylandPresentationSupportKHRDel>)
-        let vkCreateWaylandSurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkWaylandSurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = vkCreateWaylandSurfaceKHRDel.Value.Invoke(instance, pCreateInfo, pAllocator, pSurface)
-        let vkGetPhysicalDeviceWaylandPresentationSupportKHR(physicalDevice : VkPhysicalDevice, queueFamilyIndex : uint32, display : nativeptr<nativeint>) = vkGetPhysicalDeviceWaylandPresentationSupportKHRDel.Value.Invoke(physicalDevice, queueFamilyIndex, display)
-module VK_KHR_win32_keyed_mutex =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_wayland_surface"
+            static let s_vkCreateWaylandSurfaceKHRDel = VkRaw.importDelegate<VkCreateWaylandSurfaceKHRDel> "vkCreateWaylandSurfaceKHR"
+            static let s_vkGetPhysicalDeviceWaylandPresentationSupportKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceWaylandPresentationSupportKHRDel> "vkGetPhysicalDeviceWaylandPresentationSupportKHR"
+            static member vkCreateWaylandSurfaceKHR = s_vkCreateWaylandSurfaceKHRDel
+            static member vkGetPhysicalDeviceWaylandPresentationSupportKHR = s_vkGetPhysicalDeviceWaylandPresentationSupportKHRDel
+        let vkCreateWaylandSurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkWaylandSurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateWaylandSurfaceKHR.Invoke(instance, pCreateInfo, pAllocator, pSurface)
+        let vkGetPhysicalDeviceWaylandPresentationSupportKHR(physicalDevice : VkPhysicalDevice, queueFamilyIndex : uint32, display : nativeptr<nativeint>) = Loader<unit>.vkGetPhysicalDeviceWaylandPresentationSupportKHR.Invoke(physicalDevice, queueFamilyIndex, display)
+
+module KHRWin32KeyedMutex =
     let Name = "VK_KHR_win32_keyed_mutex"
-    open VK_EXT_debug_report
-    open VK_KHR_external_memory
-    open VK_KHR_external_memory_capabilities
-    open VK_KHR_external_memory_win32
-    open VK_KHR_get_physical_device_properties2
+    let Number = 76
+    
+    let Required = [ KHRExternalMemory.Name; KHRExternalMemoryCapabilities.Name; KHRExternalMemoryWin32.Name; KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRExternalMemory
+    open KHRExternalMemoryCapabilities
+    open KHRExternalMemoryWin32
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -7272,10 +7436,14 @@ module VK_KHR_win32_keyed_mutex =
     type VkStructureType with
          static member inline Win32KeyedMutexAcquireReleaseInfoKhr = unbox<VkStructureType> 1000075000
     
-module VK_KHR_win32_surface =
+
+module KHRWin32Surface =
     let Name = "VK_KHR_win32_surface"
-    open VK_EXT_debug_report
-    open VK_KHR_surface
+    let Number = 10
+    
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -7296,19 +7464,30 @@ module VK_KHR_win32_surface =
     type VkStructureType with
          static member inline Win32SurfaceCreateInfoKhr = unbox<VkStructureType> 1000009000
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCreateWin32SurfaceKHRDel = delegate of VkInstance * nativeptr<VkWin32SurfaceCreateInfoKHR> * nativeptr<VkAllocationCallbacks> * nativeptr<VkSurfaceKHR> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetPhysicalDeviceWin32PresentationSupportKHRDel = delegate of VkPhysicalDevice * uint32 -> VkBool32
-        let private vkCreateWin32SurfaceKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCreateWin32SurfaceKHR"), typeof<VkCreateWin32SurfaceKHRDel>) |> unbox<VkCreateWin32SurfaceKHRDel>)
-        let private vkGetPhysicalDeviceWin32PresentationSupportKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceWin32PresentationSupportKHR"), typeof<VkGetPhysicalDeviceWin32PresentationSupportKHRDel>) |> unbox<VkGetPhysicalDeviceWin32PresentationSupportKHRDel>)
-        let vkCreateWin32SurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkWin32SurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = vkCreateWin32SurfaceKHRDel.Value.Invoke(instance, pCreateInfo, pAllocator, pSurface)
-        let vkGetPhysicalDeviceWin32PresentationSupportKHR(physicalDevice : VkPhysicalDevice, queueFamilyIndex : uint32) = vkGetPhysicalDeviceWin32PresentationSupportKHRDel.Value.Invoke(physicalDevice, queueFamilyIndex)
-module VK_KHR_xcb_surface =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_win32_surface"
+            static let s_vkCreateWin32SurfaceKHRDel = VkRaw.importDelegate<VkCreateWin32SurfaceKHRDel> "vkCreateWin32SurfaceKHR"
+            static let s_vkGetPhysicalDeviceWin32PresentationSupportKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceWin32PresentationSupportKHRDel> "vkGetPhysicalDeviceWin32PresentationSupportKHR"
+            static member vkCreateWin32SurfaceKHR = s_vkCreateWin32SurfaceKHRDel
+            static member vkGetPhysicalDeviceWin32PresentationSupportKHR = s_vkGetPhysicalDeviceWin32PresentationSupportKHRDel
+        let vkCreateWin32SurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkWin32SurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateWin32SurfaceKHR.Invoke(instance, pCreateInfo, pAllocator, pSurface)
+        let vkGetPhysicalDeviceWin32PresentationSupportKHR(physicalDevice : VkPhysicalDevice, queueFamilyIndex : uint32) = Loader<unit>.vkGetPhysicalDeviceWin32PresentationSupportKHR.Invoke(physicalDevice, queueFamilyIndex)
+
+module KHRXcbSurface =
     let Name = "VK_KHR_xcb_surface"
-    open VK_EXT_debug_report
-    open VK_KHR_surface
+    let Number = 6
+    
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -7329,19 +7508,30 @@ module VK_KHR_xcb_surface =
     type VkStructureType with
          static member inline XcbSurfaceCreateInfoKhr = unbox<VkStructureType> 1000005000
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCreateXcbSurfaceKHRDel = delegate of VkInstance * nativeptr<VkXcbSurfaceCreateInfoKHR> * nativeptr<VkAllocationCallbacks> * nativeptr<VkSurfaceKHR> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetPhysicalDeviceXcbPresentationSupportKHRDel = delegate of VkPhysicalDevice * uint32 * nativeptr<nativeint> * nativeint -> VkBool32
-        let private vkCreateXcbSurfaceKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCreateXcbSurfaceKHR"), typeof<VkCreateXcbSurfaceKHRDel>) |> unbox<VkCreateXcbSurfaceKHRDel>)
-        let private vkGetPhysicalDeviceXcbPresentationSupportKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceXcbPresentationSupportKHR"), typeof<VkGetPhysicalDeviceXcbPresentationSupportKHRDel>) |> unbox<VkGetPhysicalDeviceXcbPresentationSupportKHRDel>)
-        let vkCreateXcbSurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkXcbSurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = vkCreateXcbSurfaceKHRDel.Value.Invoke(instance, pCreateInfo, pAllocator, pSurface)
-        let vkGetPhysicalDeviceXcbPresentationSupportKHR(physicalDevice : VkPhysicalDevice, queueFamilyIndex : uint32, connection : nativeptr<nativeint>, visual_id : nativeint) = vkGetPhysicalDeviceXcbPresentationSupportKHRDel.Value.Invoke(physicalDevice, queueFamilyIndex, connection, visual_id)
-module VK_KHR_xlib_surface =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_xcb_surface"
+            static let s_vkCreateXcbSurfaceKHRDel = VkRaw.importDelegate<VkCreateXcbSurfaceKHRDel> "vkCreateXcbSurfaceKHR"
+            static let s_vkGetPhysicalDeviceXcbPresentationSupportKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceXcbPresentationSupportKHRDel> "vkGetPhysicalDeviceXcbPresentationSupportKHR"
+            static member vkCreateXcbSurfaceKHR = s_vkCreateXcbSurfaceKHRDel
+            static member vkGetPhysicalDeviceXcbPresentationSupportKHR = s_vkGetPhysicalDeviceXcbPresentationSupportKHRDel
+        let vkCreateXcbSurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkXcbSurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateXcbSurfaceKHR.Invoke(instance, pCreateInfo, pAllocator, pSurface)
+        let vkGetPhysicalDeviceXcbPresentationSupportKHR(physicalDevice : VkPhysicalDevice, queueFamilyIndex : uint32, connection : nativeptr<nativeint>, visual_id : nativeint) = Loader<unit>.vkGetPhysicalDeviceXcbPresentationSupportKHR.Invoke(physicalDevice, queueFamilyIndex, connection, visual_id)
+
+module KHRXlibSurface =
     let Name = "VK_KHR_xlib_surface"
-    open VK_EXT_debug_report
-    open VK_KHR_surface
+    let Number = 5
+    
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -7362,18 +7552,28 @@ module VK_KHR_xlib_surface =
     type VkStructureType with
          static member inline XlibSurfaceCreateInfoKhr = unbox<VkStructureType> 1000004000
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCreateXlibSurfaceKHRDel = delegate of VkInstance * nativeptr<VkXlibSurfaceCreateInfoKHR> * nativeptr<VkAllocationCallbacks> * nativeptr<VkSurfaceKHR> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetPhysicalDeviceXlibPresentationSupportKHRDel = delegate of VkPhysicalDevice * uint32 * nativeptr<nativeint> * nativeint -> VkBool32
-        let private vkCreateXlibSurfaceKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCreateXlibSurfaceKHR"), typeof<VkCreateXlibSurfaceKHRDel>) |> unbox<VkCreateXlibSurfaceKHRDel>)
-        let private vkGetPhysicalDeviceXlibPresentationSupportKHRDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceXlibPresentationSupportKHR"), typeof<VkGetPhysicalDeviceXlibPresentationSupportKHRDel>) |> unbox<VkGetPhysicalDeviceXlibPresentationSupportKHRDel>)
-        let vkCreateXlibSurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkXlibSurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = vkCreateXlibSurfaceKHRDel.Value.Invoke(instance, pCreateInfo, pAllocator, pSurface)
-        let vkGetPhysicalDeviceXlibPresentationSupportKHR(physicalDevice : VkPhysicalDevice, queueFamilyIndex : uint32, dpy : nativeptr<nativeint>, visualID : nativeint) = vkGetPhysicalDeviceXlibPresentationSupportKHRDel.Value.Invoke(physicalDevice, queueFamilyIndex, dpy, visualID)
-module VK_KHX_device_group_creation =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHR_xlib_surface"
+            static let s_vkCreateXlibSurfaceKHRDel = VkRaw.importDelegate<VkCreateXlibSurfaceKHRDel> "vkCreateXlibSurfaceKHR"
+            static let s_vkGetPhysicalDeviceXlibPresentationSupportKHRDel = VkRaw.importDelegate<VkGetPhysicalDeviceXlibPresentationSupportKHRDel> "vkGetPhysicalDeviceXlibPresentationSupportKHR"
+            static member vkCreateXlibSurfaceKHR = s_vkCreateXlibSurfaceKHRDel
+            static member vkGetPhysicalDeviceXlibPresentationSupportKHR = s_vkGetPhysicalDeviceXlibPresentationSupportKHRDel
+        let vkCreateXlibSurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkXlibSurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateXlibSurfaceKHR.Invoke(instance, pCreateInfo, pAllocator, pSurface)
+        let vkGetPhysicalDeviceXlibPresentationSupportKHR(physicalDevice : VkPhysicalDevice, queueFamilyIndex : uint32, dpy : nativeptr<nativeint>, visualID : nativeint) = Loader<unit>.vkGetPhysicalDeviceXlibPresentationSupportKHR.Invoke(physicalDevice, queueFamilyIndex, dpy, visualID)
+
+module KHXDeviceGroupCreation =
     let Name = "VK_KHX_device_group_creation"
-    open VK_EXT_debug_report
+    let Number = 71
+    
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -7408,15 +7608,25 @@ module VK_KHX_device_group_creation =
          static member inline PhysicalDeviceGroupPropertiesKhx = unbox<VkStructureType> 1000070000
          static member inline DeviceGroupDeviceCreateInfoKhx = unbox<VkStructureType> 1000070001
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkEnumeratePhysicalDeviceGroupsKHXDel = delegate of VkInstance * nativeptr<uint32> * nativeptr<VkPhysicalDeviceGroupPropertiesKHX> -> VkResult
-        let private vkEnumeratePhysicalDeviceGroupsKHXDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkEnumeratePhysicalDeviceGroupsKHX"), typeof<VkEnumeratePhysicalDeviceGroupsKHXDel>) |> unbox<VkEnumeratePhysicalDeviceGroupsKHXDel>)
-        let vkEnumeratePhysicalDeviceGroupsKHX(instance : VkInstance, pPhysicalDeviceGroupCount : nativeptr<uint32>, pPhysicalDeviceGroupProperties : nativeptr<VkPhysicalDeviceGroupPropertiesKHX>) = vkEnumeratePhysicalDeviceGroupsKHXDel.Value.Invoke(instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties)
-module VK_KHX_device_group =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHX_device_group_creation"
+            static let s_vkEnumeratePhysicalDeviceGroupsKHXDel = VkRaw.importDelegate<VkEnumeratePhysicalDeviceGroupsKHXDel> "vkEnumeratePhysicalDeviceGroupsKHX"
+            static member vkEnumeratePhysicalDeviceGroupsKHX = s_vkEnumeratePhysicalDeviceGroupsKHXDel
+        let vkEnumeratePhysicalDeviceGroupsKHX(instance : VkInstance, pPhysicalDeviceGroupCount : nativeptr<uint32>, pPhysicalDeviceGroupProperties : nativeptr<VkPhysicalDeviceGroupPropertiesKHX>) = Loader<unit>.vkEnumeratePhysicalDeviceGroupsKHX.Invoke(instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties)
+
+module KHXDeviceGroup =
     let Name = "VK_KHX_device_group"
-    open VK_EXT_debug_report
-    open VK_KHX_device_group_creation
+    let Number = 61
+    
+    let Required = [ KHXDeviceGroupCreation.Name ]
+    open KHXDeviceGroupCreation
+    open EXTDebugReport
     
     [<Flags>]
     type VkPeerMemoryFeatureFlagBitsKHX = 
@@ -7510,6 +7720,7 @@ module VK_KHX_device_group =
          static member inline DeviceGroupBindSparseInfoKhx = unbox<VkStructureType> 1000060006
          static member inline AcquireNextImageInfoKhx = unbox<VkStructureType> 1000060010
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetDeviceGroupPeerMemoryFeaturesKHXDel = delegate of VkDevice * uint32 * uint32 * uint32 * nativeptr<VkPeerMemoryFeatureFlagsKHX> -> unit
@@ -7517,16 +7728,27 @@ module VK_KHX_device_group =
         type VkCmdSetDeviceMaskKHXDel = delegate of VkCommandBuffer * uint32 -> unit
         [<SuppressUnmanagedCodeSecurity>]
         type VkCmdDispatchBaseKHXDel = delegate of VkCommandBuffer * uint32 * uint32 * uint32 * uint32 * uint32 * uint32 -> unit
-        let private vkGetDeviceGroupPeerMemoryFeaturesKHXDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetDeviceGroupPeerMemoryFeaturesKHX"), typeof<VkGetDeviceGroupPeerMemoryFeaturesKHXDel>) |> unbox<VkGetDeviceGroupPeerMemoryFeaturesKHXDel>)
-        let private vkCmdSetDeviceMaskKHXDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCmdSetDeviceMaskKHX"), typeof<VkCmdSetDeviceMaskKHXDel>) |> unbox<VkCmdSetDeviceMaskKHXDel>)
-        let private vkCmdDispatchBaseKHXDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCmdDispatchBaseKHX"), typeof<VkCmdDispatchBaseKHXDel>) |> unbox<VkCmdDispatchBaseKHXDel>)
-        let vkGetDeviceGroupPeerMemoryFeaturesKHX(device : VkDevice, heapIndex : uint32, localDeviceIndex : uint32, remoteDeviceIndex : uint32, pPeerMemoryFeatures : nativeptr<VkPeerMemoryFeatureFlagsKHX>) = vkGetDeviceGroupPeerMemoryFeaturesKHXDel.Value.Invoke(device, heapIndex, localDeviceIndex, remoteDeviceIndex, pPeerMemoryFeatures)
-        let vkCmdSetDeviceMaskKHX(commandBuffer : VkCommandBuffer, deviceMask : uint32) = vkCmdSetDeviceMaskKHXDel.Value.Invoke(commandBuffer, deviceMask)
-        let vkCmdDispatchBaseKHX(commandBuffer : VkCommandBuffer, baseGroupX : uint32, baseGroupY : uint32, baseGroupZ : uint32, groupCountX : uint32, groupCountY : uint32, groupCountZ : uint32) = vkCmdDispatchBaseKHXDel.Value.Invoke(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ)
-module VK_KHX_multiview =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_KHX_device_group"
+            static let s_vkGetDeviceGroupPeerMemoryFeaturesKHXDel = VkRaw.importDelegate<VkGetDeviceGroupPeerMemoryFeaturesKHXDel> "vkGetDeviceGroupPeerMemoryFeaturesKHX"
+            static let s_vkCmdSetDeviceMaskKHXDel = VkRaw.importDelegate<VkCmdSetDeviceMaskKHXDel> "vkCmdSetDeviceMaskKHX"
+            static let s_vkCmdDispatchBaseKHXDel = VkRaw.importDelegate<VkCmdDispatchBaseKHXDel> "vkCmdDispatchBaseKHX"
+            static member vkGetDeviceGroupPeerMemoryFeaturesKHX = s_vkGetDeviceGroupPeerMemoryFeaturesKHXDel
+            static member vkCmdSetDeviceMaskKHX = s_vkCmdSetDeviceMaskKHXDel
+            static member vkCmdDispatchBaseKHX = s_vkCmdDispatchBaseKHXDel
+        let vkGetDeviceGroupPeerMemoryFeaturesKHX(device : VkDevice, heapIndex : uint32, localDeviceIndex : uint32, remoteDeviceIndex : uint32, pPeerMemoryFeatures : nativeptr<VkPeerMemoryFeatureFlagsKHX>) = Loader<unit>.vkGetDeviceGroupPeerMemoryFeaturesKHX.Invoke(device, heapIndex, localDeviceIndex, remoteDeviceIndex, pPeerMemoryFeatures)
+        let vkCmdSetDeviceMaskKHX(commandBuffer : VkCommandBuffer, deviceMask : uint32) = Loader<unit>.vkCmdSetDeviceMaskKHX.Invoke(commandBuffer, deviceMask)
+        let vkCmdDispatchBaseKHX(commandBuffer : VkCommandBuffer, baseGroupX : uint32, baseGroupY : uint32, baseGroupZ : uint32, groupCountX : uint32, groupCountY : uint32, groupCountZ : uint32) = Loader<unit>.vkCmdDispatchBaseKHX.Invoke(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ)
+
+module KHXMultiview =
     let Name = "VK_KHX_multiview"
-    open VK_EXT_debug_report
-    open VK_KHR_get_physical_device_properties2
+    let Number = 54
+    
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -7579,10 +7801,14 @@ module VK_KHX_multiview =
          static member inline PhysicalDeviceMultiviewFeaturesKhx = unbox<VkStructureType> 1000053001
          static member inline PhysicalDeviceMultiviewPropertiesKhx = unbox<VkStructureType> 1000053002
     
-module VK_MVK_ios_surface =
+
+module MVKIosSurface =
     let Name = "VK_MVK_ios_surface"
-    open VK_EXT_debug_report
-    open VK_KHR_surface
+    let Number = 123
+    
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -7602,15 +7828,25 @@ module VK_MVK_ios_surface =
     type VkStructureType with
          static member inline IosSurfaceCreateInfoMvk = unbox<VkStructureType> 1000122000
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCreateIOSSurfaceMVKDel = delegate of VkInstance * nativeptr<VkIOSSurfaceCreateInfoMVK> * nativeptr<VkAllocationCallbacks> * nativeptr<VkSurfaceKHR> -> VkResult
-        let private vkCreateIOSSurfaceMVKDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCreateIOSSurfaceMVK"), typeof<VkCreateIOSSurfaceMVKDel>) |> unbox<VkCreateIOSSurfaceMVKDel>)
-        let vkCreateIOSSurfaceMVK(instance : VkInstance, pCreateInfo : nativeptr<VkIOSSurfaceCreateInfoMVK>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = vkCreateIOSSurfaceMVKDel.Value.Invoke(instance, pCreateInfo, pAllocator, pSurface)
-module VK_MVK_macos_surface =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_MVK_ios_surface"
+            static let s_vkCreateIOSSurfaceMVKDel = VkRaw.importDelegate<VkCreateIOSSurfaceMVKDel> "vkCreateIOSSurfaceMVK"
+            static member vkCreateIOSSurfaceMVK = s_vkCreateIOSSurfaceMVKDel
+        let vkCreateIOSSurfaceMVK(instance : VkInstance, pCreateInfo : nativeptr<VkIOSSurfaceCreateInfoMVK>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateIOSSurfaceMVK.Invoke(instance, pCreateInfo, pAllocator, pSurface)
+
+module MVKMacosSurface =
     let Name = "VK_MVK_macos_surface"
-    open VK_EXT_debug_report
-    open VK_KHR_surface
+    let Number = 124
+    
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -7630,22 +7866,35 @@ module VK_MVK_macos_surface =
     type VkStructureType with
          static member inline MacosSurfaceCreateInfoMvk = unbox<VkStructureType> 1000123000
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCreateMacOSSurfaceMVKDel = delegate of VkInstance * nativeptr<VkMacOSSurfaceCreateInfoMVK> * nativeptr<VkAllocationCallbacks> * nativeptr<VkSurfaceKHR> -> VkResult
-        let private vkCreateMacOSSurfaceMVKDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCreateMacOSSurfaceMVK"), typeof<VkCreateMacOSSurfaceMVKDel>) |> unbox<VkCreateMacOSSurfaceMVKDel>)
-        let vkCreateMacOSSurfaceMVK(instance : VkInstance, pCreateInfo : nativeptr<VkMacOSSurfaceCreateInfoMVK>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = vkCreateMacOSSurfaceMVKDel.Value.Invoke(instance, pCreateInfo, pAllocator, pSurface)
-module VK_MVK_moltenvk =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_MVK_macos_surface"
+            static let s_vkCreateMacOSSurfaceMVKDel = VkRaw.importDelegate<VkCreateMacOSSurfaceMVKDel> "vkCreateMacOSSurfaceMVK"
+            static member vkCreateMacOSSurfaceMVK = s_vkCreateMacOSSurfaceMVKDel
+        let vkCreateMacOSSurfaceMVK(instance : VkInstance, pCreateInfo : nativeptr<VkMacOSSurfaceCreateInfoMVK>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateMacOSSurfaceMVK.Invoke(instance, pCreateInfo, pAllocator, pSurface)
+
+module MVKMoltenvk =
     let Name = "VK_MVK_moltenvk"
-    open VK_EXT_debug_report
+    let Number = 125
+    
+    open EXTDebugReport
     
     
     
     
-module VK_NN_vi_surface =
+
+module NNViSurface =
     let Name = "VK_NN_vi_surface"
-    open VK_EXT_debug_report
-    open VK_KHR_surface
+    let Number = 63
+    
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -7665,14 +7914,462 @@ module VK_NN_vi_surface =
     type VkStructureType with
          static member inline ViSurfaceCreateInfoNn = unbox<VkStructureType> 1000062000
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCreateViSurfaceNNDel = delegate of VkInstance * nativeptr<VkViSurfaceCreateInfoNN> * nativeptr<VkAllocationCallbacks> * nativeptr<VkSurfaceKHR> -> VkResult
-        let private vkCreateViSurfaceNNDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCreateViSurfaceNN"), typeof<VkCreateViSurfaceNNDel>) |> unbox<VkCreateViSurfaceNNDel>)
-        let vkCreateViSurfaceNN(instance : VkInstance, pCreateInfo : nativeptr<VkViSurfaceCreateInfoNN>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = vkCreateViSurfaceNNDel.Value.Invoke(instance, pCreateInfo, pAllocator, pSurface)
-module VK_NVX_device_generated_commands =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_NN_vi_surface"
+            static let s_vkCreateViSurfaceNNDel = VkRaw.importDelegate<VkCreateViSurfaceNNDel> "vkCreateViSurfaceNN"
+            static member vkCreateViSurfaceNN = s_vkCreateViSurfaceNNDel
+        let vkCreateViSurfaceNN(instance : VkInstance, pCreateInfo : nativeptr<VkViSurfaceCreateInfoNN>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateViSurfaceNN.Invoke(instance, pCreateInfo, pAllocator, pSurface)
+
+module NVClipSpaceWScaling =
+    let Name = "VK_NV_clip_space_w_scaling"
+    let Number = 88
+    
+    open EXTDebugReport
+    
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkViewportWScalingNV = 
+        struct
+            val mutable public xcoeff : float32
+            val mutable public ycoeff : float32
+    
+            new(xcoeff : float32, ycoeff : float32) = { xcoeff = xcoeff; ycoeff = ycoeff }
+            override x.ToString() =
+                sprintf "VkViewportWScalingNV { xcoeff = %A; ycoeff = %A }" x.xcoeff x.ycoeff
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkPipelineViewportWScalingStateCreateInfoNV = 
+        struct
+            val mutable public sType : VkStructureType
+            val mutable public pNext : nativeint
+            val mutable public viewportWScalingEnable : VkBool32
+            val mutable public viewportCount : uint32
+            val mutable public pViewportWScalings : nativeptr<VkViewportWScalingNV>
+    
+            new(sType : VkStructureType, pNext : nativeint, viewportWScalingEnable : VkBool32, viewportCount : uint32, pViewportWScalings : nativeptr<VkViewportWScalingNV>) = { sType = sType; pNext = pNext; viewportWScalingEnable = viewportWScalingEnable; viewportCount = viewportCount; pViewportWScalings = pViewportWScalings }
+            override x.ToString() =
+                sprintf "VkPipelineViewportWScalingStateCreateInfoNV { sType = %A; pNext = %A; viewportWScalingEnable = %A; viewportCount = %A; pViewportWScalings = %A }" x.sType x.pNext x.viewportWScalingEnable x.viewportCount x.pViewportWScalings
+        end
+    
+    
+    type VkDynamicState with
+         static member inline ViewportWScalingNv = unbox<VkDynamicState> 1000087000
+    type VkStructureType with
+         static member inline PipelineViewportWScalingStateCreateInfoNv = unbox<VkStructureType> 1000087000
+    
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module VkRaw =
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCmdSetViewportWScalingNVDel = delegate of VkCommandBuffer * uint32 * uint32 * nativeptr<VkViewportWScalingNV> -> unit
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_NV_clip_space_w_scaling"
+            static let s_vkCmdSetViewportWScalingNVDel = VkRaw.importDelegate<VkCmdSetViewportWScalingNVDel> "vkCmdSetViewportWScalingNV"
+            static member vkCmdSetViewportWScalingNV = s_vkCmdSetViewportWScalingNVDel
+        let vkCmdSetViewportWScalingNV(commandBuffer : VkCommandBuffer, firstViewport : uint32, viewportCount : uint32, pViewportWScalings : nativeptr<VkViewportWScalingNV>) = Loader<unit>.vkCmdSetViewportWScalingNV.Invoke(commandBuffer, firstViewport, viewportCount, pViewportWScalings)
+
+module NVDedicatedAllocation =
+    let Name = "VK_NV_dedicated_allocation"
+    let Number = 27
+    
+    open EXTDebugReport
+    
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkDedicatedAllocationBufferCreateInfoNV = 
+        struct
+            val mutable public sType : VkStructureType
+            val mutable public pNext : nativeint
+            val mutable public dedicatedAllocation : VkBool32
+    
+            new(sType : VkStructureType, pNext : nativeint, dedicatedAllocation : VkBool32) = { sType = sType; pNext = pNext; dedicatedAllocation = dedicatedAllocation }
+            override x.ToString() =
+                sprintf "VkDedicatedAllocationBufferCreateInfoNV { sType = %A; pNext = %A; dedicatedAllocation = %A }" x.sType x.pNext x.dedicatedAllocation
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkDedicatedAllocationImageCreateInfoNV = 
+        struct
+            val mutable public sType : VkStructureType
+            val mutable public pNext : nativeint
+            val mutable public dedicatedAllocation : VkBool32
+    
+            new(sType : VkStructureType, pNext : nativeint, dedicatedAllocation : VkBool32) = { sType = sType; pNext = pNext; dedicatedAllocation = dedicatedAllocation }
+            override x.ToString() =
+                sprintf "VkDedicatedAllocationImageCreateInfoNV { sType = %A; pNext = %A; dedicatedAllocation = %A }" x.sType x.pNext x.dedicatedAllocation
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkDedicatedAllocationMemoryAllocateInfoNV = 
+        struct
+            val mutable public sType : VkStructureType
+            val mutable public pNext : nativeint
+            val mutable public image : VkImage
+            val mutable public buffer : VkBuffer
+    
+            new(sType : VkStructureType, pNext : nativeint, image : VkImage, buffer : VkBuffer) = { sType = sType; pNext = pNext; image = image; buffer = buffer }
+            override x.ToString() =
+                sprintf "VkDedicatedAllocationMemoryAllocateInfoNV { sType = %A; pNext = %A; image = %A; buffer = %A }" x.sType x.pNext x.image x.buffer
+        end
+    
+    
+    type VkStructureType with
+         static member inline DedicatedAllocationImageCreateInfoNv = unbox<VkStructureType> 1000026000
+         static member inline DedicatedAllocationBufferCreateInfoNv = unbox<VkStructureType> 1000026001
+         static member inline DedicatedAllocationMemoryAllocateInfoNv = unbox<VkStructureType> 1000026002
+    
+
+module NVExternalMemoryCapabilities =
+    let Name = "VK_NV_external_memory_capabilities"
+    let Number = 56
+    
+    open EXTDebugReport
+    
+    [<Flags>]
+    type VkExternalMemoryHandleTypeFlagBitsNV = 
+        | None = 0
+        | VkExternalMemoryHandleTypeOpaqueWin32BitNv = 0x00000001
+        | VkExternalMemoryHandleTypeOpaqueWin32KmtBitNv = 0x00000002
+        | VkExternalMemoryHandleTypeD3d11ImageBitNv = 0x00000004
+        | VkExternalMemoryHandleTypeD3d11ImageKmtBitNv = 0x00000008
+    
+    [<Flags>]
+    type VkExternalMemoryFeatureFlagBitsNV = 
+        | None = 0
+        | VkExternalMemoryFeatureDedicatedOnlyBitNv = 0x00000001
+        | VkExternalMemoryFeatureExportableBitNv = 0x00000002
+        | VkExternalMemoryFeatureImportableBitNv = 0x00000004
+    
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkExternalImageFormatPropertiesNV = 
+        struct
+            val mutable public imageFormatProperties : VkImageFormatProperties
+            val mutable public externalMemoryFeatures : VkExternalMemoryFeatureFlagsNV
+            val mutable public exportFromImportedHandleTypes : VkExternalMemoryHandleTypeFlagsNV
+            val mutable public compatibleHandleTypes : VkExternalMemoryHandleTypeFlagsNV
+    
+            new(imageFormatProperties : VkImageFormatProperties, externalMemoryFeatures : VkExternalMemoryFeatureFlagsNV, exportFromImportedHandleTypes : VkExternalMemoryHandleTypeFlagsNV, compatibleHandleTypes : VkExternalMemoryHandleTypeFlagsNV) = { imageFormatProperties = imageFormatProperties; externalMemoryFeatures = externalMemoryFeatures; exportFromImportedHandleTypes = exportFromImportedHandleTypes; compatibleHandleTypes = compatibleHandleTypes }
+            override x.ToString() =
+                sprintf "VkExternalImageFormatPropertiesNV { imageFormatProperties = %A; externalMemoryFeatures = %A; exportFromImportedHandleTypes = %A; compatibleHandleTypes = %A }" x.imageFormatProperties x.externalMemoryFeatures x.exportFromImportedHandleTypes x.compatibleHandleTypes
+        end
+    
+    
+    
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module VkRaw =
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkGetPhysicalDeviceExternalImageFormatPropertiesNVDel = delegate of VkPhysicalDevice * VkFormat * VkImageType * VkImageTiling * VkImageUsageFlags * VkImageCreateFlags * VkExternalMemoryHandleTypeFlagsNV * nativeptr<VkExternalImageFormatPropertiesNV> -> VkResult
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_NV_external_memory_capabilities"
+            static let s_vkGetPhysicalDeviceExternalImageFormatPropertiesNVDel = VkRaw.importDelegate<VkGetPhysicalDeviceExternalImageFormatPropertiesNVDel> "vkGetPhysicalDeviceExternalImageFormatPropertiesNV"
+            static member vkGetPhysicalDeviceExternalImageFormatPropertiesNV = s_vkGetPhysicalDeviceExternalImageFormatPropertiesNVDel
+        let vkGetPhysicalDeviceExternalImageFormatPropertiesNV(physicalDevice : VkPhysicalDevice, format : VkFormat, _type : VkImageType, tiling : VkImageTiling, usage : VkImageUsageFlags, flags : VkImageCreateFlags, externalHandleType : VkExternalMemoryHandleTypeFlagsNV, pExternalImageFormatProperties : nativeptr<VkExternalImageFormatPropertiesNV>) = Loader<unit>.vkGetPhysicalDeviceExternalImageFormatPropertiesNV.Invoke(physicalDevice, format, _type, tiling, usage, flags, externalHandleType, pExternalImageFormatProperties)
+
+module NVExternalMemory =
+    let Name = "VK_NV_external_memory"
+    let Number = 57
+    
+    let Required = [ NVExternalMemoryCapabilities.Name ]
+    open NVExternalMemoryCapabilities
+    open EXTDebugReport
+    
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkExportMemoryAllocateInfoNV = 
+        struct
+            val mutable public sType : VkStructureType
+            val mutable public pNext : nativeint
+            val mutable public handleTypes : VkExternalMemoryHandleTypeFlagsNV
+    
+            new(sType : VkStructureType, pNext : nativeint, handleTypes : VkExternalMemoryHandleTypeFlagsNV) = { sType = sType; pNext = pNext; handleTypes = handleTypes }
+            override x.ToString() =
+                sprintf "VkExportMemoryAllocateInfoNV { sType = %A; pNext = %A; handleTypes = %A }" x.sType x.pNext x.handleTypes
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkExternalMemoryImageCreateInfoNV = 
+        struct
+            val mutable public sType : VkStructureType
+            val mutable public pNext : nativeint
+            val mutable public handleTypes : VkExternalMemoryHandleTypeFlagsNV
+    
+            new(sType : VkStructureType, pNext : nativeint, handleTypes : VkExternalMemoryHandleTypeFlagsNV) = { sType = sType; pNext = pNext; handleTypes = handleTypes }
+            override x.ToString() =
+                sprintf "VkExternalMemoryImageCreateInfoNV { sType = %A; pNext = %A; handleTypes = %A }" x.sType x.pNext x.handleTypes
+        end
+    
+    
+    type VkStructureType with
+         static member inline ExternalMemoryImageCreateInfoNv = unbox<VkStructureType> 1000056000
+         static member inline ExportMemoryAllocateInfoNv = unbox<VkStructureType> 1000056001
+    
+
+module NVExternalMemoryWin32 =
+    let Name = "VK_NV_external_memory_win32"
+    let Number = 58
+    
+    let Required = [ NVExternalMemory.Name; NVExternalMemoryCapabilities.Name ]
+    open NVExternalMemory
+    open NVExternalMemoryCapabilities
+    open EXTDebugReport
+    
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkExportMemoryWin32HandleInfoNV = 
+        struct
+            val mutable public sType : VkStructureType
+            val mutable public pNext : nativeint
+            val mutable public pAttributes : nativeptr<nativeint>
+            val mutable public dwAccess : uint32
+    
+            new(sType : VkStructureType, pNext : nativeint, pAttributes : nativeptr<nativeint>, dwAccess : uint32) = { sType = sType; pNext = pNext; pAttributes = pAttributes; dwAccess = dwAccess }
+            override x.ToString() =
+                sprintf "VkExportMemoryWin32HandleInfoNV { sType = %A; pNext = %A; pAttributes = %A; dwAccess = %A }" x.sType x.pNext x.pAttributes x.dwAccess
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkImportMemoryWin32HandleInfoNV = 
+        struct
+            val mutable public sType : VkStructureType
+            val mutable public pNext : nativeint
+            val mutable public handleType : VkExternalMemoryHandleTypeFlagsNV
+            val mutable public handle : nativeint
+    
+            new(sType : VkStructureType, pNext : nativeint, handleType : VkExternalMemoryHandleTypeFlagsNV, handle : nativeint) = { sType = sType; pNext = pNext; handleType = handleType; handle = handle }
+            override x.ToString() =
+                sprintf "VkImportMemoryWin32HandleInfoNV { sType = %A; pNext = %A; handleType = %A; handle = %A }" x.sType x.pNext x.handleType x.handle
+        end
+    
+    
+    type VkStructureType with
+         static member inline ImportMemoryWin32HandleInfoNv = unbox<VkStructureType> 1000057000
+         static member inline ExportMemoryWin32HandleInfoNv = unbox<VkStructureType> 1000057001
+    
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module VkRaw =
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkGetMemoryWin32HandleNVDel = delegate of VkDevice * VkDeviceMemory * VkExternalMemoryHandleTypeFlagsNV * nativeptr<nativeint> -> VkResult
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_NV_external_memory_win32"
+            static let s_vkGetMemoryWin32HandleNVDel = VkRaw.importDelegate<VkGetMemoryWin32HandleNVDel> "vkGetMemoryWin32HandleNV"
+            static member vkGetMemoryWin32HandleNV = s_vkGetMemoryWin32HandleNVDel
+        let vkGetMemoryWin32HandleNV(device : VkDevice, memory : VkDeviceMemory, handleType : VkExternalMemoryHandleTypeFlagsNV, pHandle : nativeptr<nativeint>) = Loader<unit>.vkGetMemoryWin32HandleNV.Invoke(device, memory, handleType, pHandle)
+
+module NVFillRectangle =
+    let Name = "VK_NV_fill_rectangle"
+    let Number = 154
+    
+    open EXTDebugReport
+    
+    
+    
+    type VkPolygonMode with
+         static member inline FillRectangleNv = unbox<VkPolygonMode> 1000153000
+    
+
+module NVFragmentCoverageToColor =
+    let Name = "VK_NV_fragment_coverage_to_color"
+    let Number = 150
+    
+    open EXTDebugReport
+    
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkPipelineCoverageToColorStateCreateInfoNV = 
+        struct
+            val mutable public sType : VkStructureType
+            val mutable public pNext : nativeint
+            val mutable public flags : VkPipelineCoverageToColorStateCreateFlagsNV
+            val mutable public coverageToColorEnable : VkBool32
+            val mutable public coverageToColorLocation : uint32
+    
+            new(sType : VkStructureType, pNext : nativeint, flags : VkPipelineCoverageToColorStateCreateFlagsNV, coverageToColorEnable : VkBool32, coverageToColorLocation : uint32) = { sType = sType; pNext = pNext; flags = flags; coverageToColorEnable = coverageToColorEnable; coverageToColorLocation = coverageToColorLocation }
+            override x.ToString() =
+                sprintf "VkPipelineCoverageToColorStateCreateInfoNV { sType = %A; pNext = %A; flags = %A; coverageToColorEnable = %A; coverageToColorLocation = %A }" x.sType x.pNext x.flags x.coverageToColorEnable x.coverageToColorLocation
+        end
+    
+    
+    type VkStructureType with
+         static member inline PipelineCoverageToColorStateCreateInfoNv = unbox<VkStructureType> 1000149000
+    
+
+module NVFramebufferMixedSamples =
+    let Name = "VK_NV_framebuffer_mixed_samples"
+    let Number = 153
+    
+    open EXTDebugReport
+    
+    type VkCoverageModulationModeNV = 
+        | VkCoverageModulationModeNoneNv = 0
+        | VkCoverageModulationModeRgbNv = 1
+        | VkCoverageModulationModeAlphaNv = 2
+        | VkCoverageModulationModeRgbaNv = 3
+    
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkPipelineCoverageModulationStateCreateInfoNV = 
+        struct
+            val mutable public sType : VkStructureType
+            val mutable public pNext : nativeint
+            val mutable public flags : VkPipelineCoverageModulationStateCreateFlagsNV
+            val mutable public coverageModulationMode : VkCoverageModulationModeNV
+            val mutable public coverageModulationTableEnable : VkBool32
+            val mutable public coverageModulationTableCount : uint32
+            val mutable public pCoverageModulationTable : nativeptr<float32>
+    
+            new(sType : VkStructureType, pNext : nativeint, flags : VkPipelineCoverageModulationStateCreateFlagsNV, coverageModulationMode : VkCoverageModulationModeNV, coverageModulationTableEnable : VkBool32, coverageModulationTableCount : uint32, pCoverageModulationTable : nativeptr<float32>) = { sType = sType; pNext = pNext; flags = flags; coverageModulationMode = coverageModulationMode; coverageModulationTableEnable = coverageModulationTableEnable; coverageModulationTableCount = coverageModulationTableCount; pCoverageModulationTable = pCoverageModulationTable }
+            override x.ToString() =
+                sprintf "VkPipelineCoverageModulationStateCreateInfoNV { sType = %A; pNext = %A; flags = %A; coverageModulationMode = %A; coverageModulationTableEnable = %A; coverageModulationTableCount = %A; pCoverageModulationTable = %A }" x.sType x.pNext x.flags x.coverageModulationMode x.coverageModulationTableEnable x.coverageModulationTableCount x.pCoverageModulationTable
+        end
+    
+    
+    type VkStructureType with
+         static member inline PipelineCoverageModulationStateCreateInfoNv = unbox<VkStructureType> 1000152000
+    
+
+module NVGeometryShaderPassthrough =
+    let Name = "VK_NV_geometry_shader_passthrough"
+    let Number = 96
+    
+    open EXTDebugReport
+    
+    
+    
+    
+
+module NVGlslShader =
+    let Name = "VK_NV_glsl_shader"
+    let Number = 13
+    
+    open EXTDebugReport
+    
+    
+    
+    type VkResult with
+         static member inline VkErrorInvalidShaderNv = unbox<VkResult> -1000012000
+    
+
+module NVSampleMaskOverrideCoverage =
+    let Name = "VK_NV_sample_mask_override_coverage"
+    let Number = 95
+    
+    open EXTDebugReport
+    
+    
+    
+    
+
+module NVViewportArray2 =
+    let Name = "VK_NV_viewport_array2"
+    let Number = 97
+    
+    open EXTDebugReport
+    
+    
+    
+    
+
+module NVViewportSwizzle =
+    let Name = "VK_NV_viewport_swizzle"
+    let Number = 99
+    
+    open EXTDebugReport
+    
+    type VkViewportCoordinateSwizzleNV = 
+        | VkViewportCoordinateSwizzlePositiveXNv = 0
+        | VkViewportCoordinateSwizzleNegativeXNv = 1
+        | VkViewportCoordinateSwizzlePositiveYNv = 2
+        | VkViewportCoordinateSwizzleNegativeYNv = 3
+        | VkViewportCoordinateSwizzlePositiveZNv = 4
+        | VkViewportCoordinateSwizzleNegativeZNv = 5
+        | VkViewportCoordinateSwizzlePositiveWNv = 6
+        | VkViewportCoordinateSwizzleNegativeWNv = 7
+    
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkViewportSwizzleNV = 
+        struct
+            val mutable public x : VkViewportCoordinateSwizzleNV
+            val mutable public y : VkViewportCoordinateSwizzleNV
+            val mutable public z : VkViewportCoordinateSwizzleNV
+            val mutable public w : VkViewportCoordinateSwizzleNV
+    
+            new(x : VkViewportCoordinateSwizzleNV, y : VkViewportCoordinateSwizzleNV, z : VkViewportCoordinateSwizzleNV, w : VkViewportCoordinateSwizzleNV) = { x = x; y = y; z = z; w = w }
+            override x.ToString() =
+                sprintf "VkViewportSwizzleNV { x = %A; y = %A; z = %A; w = %A }" x.x x.y x.z x.w
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkPipelineViewportSwizzleStateCreateInfoNV = 
+        struct
+            val mutable public sType : VkStructureType
+            val mutable public pNext : nativeint
+            val mutable public flags : VkPipelineViewportSwizzleStateCreateFlagsNV
+            val mutable public viewportCount : uint32
+            val mutable public pViewportSwizzles : nativeptr<VkViewportSwizzleNV>
+    
+            new(sType : VkStructureType, pNext : nativeint, flags : VkPipelineViewportSwizzleStateCreateFlagsNV, viewportCount : uint32, pViewportSwizzles : nativeptr<VkViewportSwizzleNV>) = { sType = sType; pNext = pNext; flags = flags; viewportCount = viewportCount; pViewportSwizzles = pViewportSwizzles }
+            override x.ToString() =
+                sprintf "VkPipelineViewportSwizzleStateCreateInfoNV { sType = %A; pNext = %A; flags = %A; viewportCount = %A; pViewportSwizzles = %A }" x.sType x.pNext x.flags x.viewportCount x.pViewportSwizzles
+        end
+    
+    
+    type VkStructureType with
+         static member inline PipelineViewportSwizzleStateCreateInfoNv = unbox<VkStructureType> 1000098000
+    
+
+module NVWin32KeyedMutex =
+    let Name = "VK_NV_win32_keyed_mutex"
+    let Number = 59
+    
+    let Required = [ NVExternalMemory.Name; NVExternalMemoryCapabilities.Name; NVExternalMemoryWin32.Name ]
+    open NVExternalMemory
+    open NVExternalMemoryCapabilities
+    open NVExternalMemoryWin32
+    open EXTDebugReport
+    
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkWin32KeyedMutexAcquireReleaseInfoNV = 
+        struct
+            val mutable public sType : VkStructureType
+            val mutable public pNext : nativeint
+            val mutable public acquireCount : uint32
+            val mutable public pAcquireSyncs : nativeptr<VkDeviceMemory>
+            val mutable public pAcquireKeys : nativeptr<uint64>
+            val mutable public pAcquireTimeoutMilliseconds : nativeptr<uint32>
+            val mutable public releaseCount : uint32
+            val mutable public pReleaseSyncs : nativeptr<VkDeviceMemory>
+            val mutable public pReleaseKeys : nativeptr<uint64>
+    
+            new(sType : VkStructureType, pNext : nativeint, acquireCount : uint32, pAcquireSyncs : nativeptr<VkDeviceMemory>, pAcquireKeys : nativeptr<uint64>, pAcquireTimeoutMilliseconds : nativeptr<uint32>, releaseCount : uint32, pReleaseSyncs : nativeptr<VkDeviceMemory>, pReleaseKeys : nativeptr<uint64>) = { sType = sType; pNext = pNext; acquireCount = acquireCount; pAcquireSyncs = pAcquireSyncs; pAcquireKeys = pAcquireKeys; pAcquireTimeoutMilliseconds = pAcquireTimeoutMilliseconds; releaseCount = releaseCount; pReleaseSyncs = pReleaseSyncs; pReleaseKeys = pReleaseKeys }
+            override x.ToString() =
+                sprintf "VkWin32KeyedMutexAcquireReleaseInfoNV { sType = %A; pNext = %A; acquireCount = %A; pAcquireSyncs = %A; pAcquireKeys = %A; pAcquireTimeoutMilliseconds = %A; releaseCount = %A; pReleaseSyncs = %A; pReleaseKeys = %A }" x.sType x.pNext x.acquireCount x.pAcquireSyncs x.pAcquireKeys x.pAcquireTimeoutMilliseconds x.releaseCount x.pReleaseSyncs x.pReleaseKeys
+        end
+    
+    
+    type VkStructureType with
+         static member inline Win32KeyedMutexAcquireReleaseInfoNv = unbox<VkStructureType> 1000058000
+    
+
+module NVXDeviceGeneratedCommands =
     let Name = "VK_NVX_device_generated_commands"
-    open VK_EXT_debug_report
+    let Number = 87
+    
+    open EXTDebugReport
     
     [<Flags>]
     type VkIndirectCommandsLayoutUsageFlagBitsNVX = 
@@ -7915,6 +8612,7 @@ module VK_NVX_device_generated_commands =
          static member inline DeviceGeneratedCommandsLimitsNvx = unbox<VkStructureType> 1000086004
          static member inline DeviceGeneratedCommandsFeaturesNvx = unbox<VkStructureType> 1000086005
     
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCmdProcessCommandsNVXDel = delegate of VkCommandBuffer * nativeptr<VkCmdProcessCommandsInfoNVX> -> unit
@@ -7934,71 +8632,46 @@ module VK_NVX_device_generated_commands =
         type VkUnregisterObjectsNVXDel = delegate of VkDevice * VkObjectTableNVX * uint32 * nativeptr<VkObjectEntryTypeNVX> * nativeptr<uint32> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetPhysicalDeviceGeneratedCommandsPropertiesNVXDel = delegate of VkPhysicalDevice * nativeptr<VkDeviceGeneratedCommandsFeaturesNVX> * nativeptr<VkDeviceGeneratedCommandsLimitsNVX> -> unit
-        let private vkCmdProcessCommandsNVXDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCmdProcessCommandsNVX"), typeof<VkCmdProcessCommandsNVXDel>) |> unbox<VkCmdProcessCommandsNVXDel>)
-        let private vkCmdReserveSpaceForCommandsNVXDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCmdReserveSpaceForCommandsNVX"), typeof<VkCmdReserveSpaceForCommandsNVXDel>) |> unbox<VkCmdReserveSpaceForCommandsNVXDel>)
-        let private vkCreateIndirectCommandsLayoutNVXDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCreateIndirectCommandsLayoutNVX"), typeof<VkCreateIndirectCommandsLayoutNVXDel>) |> unbox<VkCreateIndirectCommandsLayoutNVXDel>)
-        let private vkDestroyIndirectCommandsLayoutNVXDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkDestroyIndirectCommandsLayoutNVX"), typeof<VkDestroyIndirectCommandsLayoutNVXDel>) |> unbox<VkDestroyIndirectCommandsLayoutNVXDel>)
-        let private vkCreateObjectTableNVXDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCreateObjectTableNVX"), typeof<VkCreateObjectTableNVXDel>) |> unbox<VkCreateObjectTableNVXDel>)
-        let private vkDestroyObjectTableNVXDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkDestroyObjectTableNVX"), typeof<VkDestroyObjectTableNVXDel>) |> unbox<VkDestroyObjectTableNVXDel>)
-        let private vkRegisterObjectsNVXDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkRegisterObjectsNVX"), typeof<VkRegisterObjectsNVXDel>) |> unbox<VkRegisterObjectsNVXDel>)
-        let private vkUnregisterObjectsNVXDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkUnregisterObjectsNVX"), typeof<VkUnregisterObjectsNVXDel>) |> unbox<VkUnregisterObjectsNVXDel>)
-        let private vkGetPhysicalDeviceGeneratedCommandsPropertiesNVXDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceGeneratedCommandsPropertiesNVX"), typeof<VkGetPhysicalDeviceGeneratedCommandsPropertiesNVXDel>) |> unbox<VkGetPhysicalDeviceGeneratedCommandsPropertiesNVXDel>)
-        let vkCmdProcessCommandsNVX(commandBuffer : VkCommandBuffer, pProcessCommandsInfo : nativeptr<VkCmdProcessCommandsInfoNVX>) = vkCmdProcessCommandsNVXDel.Value.Invoke(commandBuffer, pProcessCommandsInfo)
-        let vkCmdReserveSpaceForCommandsNVX(commandBuffer : VkCommandBuffer, pReserveSpaceInfo : nativeptr<VkCmdReserveSpaceForCommandsInfoNVX>) = vkCmdReserveSpaceForCommandsNVXDel.Value.Invoke(commandBuffer, pReserveSpaceInfo)
-        let vkCreateIndirectCommandsLayoutNVX(device : VkDevice, pCreateInfo : nativeptr<VkIndirectCommandsLayoutCreateInfoNVX>, pAllocator : nativeptr<VkAllocationCallbacks>, pIndirectCommandsLayout : nativeptr<VkIndirectCommandsLayoutNVX>) = vkCreateIndirectCommandsLayoutNVXDel.Value.Invoke(device, pCreateInfo, pAllocator, pIndirectCommandsLayout)
-        let vkDestroyIndirectCommandsLayoutNVX(device : VkDevice, indirectCommandsLayout : VkIndirectCommandsLayoutNVX, pAllocator : nativeptr<VkAllocationCallbacks>) = vkDestroyIndirectCommandsLayoutNVXDel.Value.Invoke(device, indirectCommandsLayout, pAllocator)
-        let vkCreateObjectTableNVX(device : VkDevice, pCreateInfo : nativeptr<VkObjectTableCreateInfoNVX>, pAllocator : nativeptr<VkAllocationCallbacks>, pObjectTable : nativeptr<VkObjectTableNVX>) = vkCreateObjectTableNVXDel.Value.Invoke(device, pCreateInfo, pAllocator, pObjectTable)
-        let vkDestroyObjectTableNVX(device : VkDevice, objectTable : VkObjectTableNVX, pAllocator : nativeptr<VkAllocationCallbacks>) = vkDestroyObjectTableNVXDel.Value.Invoke(device, objectTable, pAllocator)
-        let vkRegisterObjectsNVX(device : VkDevice, objectTable : VkObjectTableNVX, objectCount : uint32, ppObjectTableEntries : nativeptr<nativeptr<VkObjectTableEntryNVX>>, pObjectIndices : nativeptr<uint32>) = vkRegisterObjectsNVXDel.Value.Invoke(device, objectTable, objectCount, ppObjectTableEntries, pObjectIndices)
-        let vkUnregisterObjectsNVX(device : VkDevice, objectTable : VkObjectTableNVX, objectCount : uint32, pObjectEntryTypes : nativeptr<VkObjectEntryTypeNVX>, pObjectIndices : nativeptr<uint32>) = vkUnregisterObjectsNVXDel.Value.Invoke(device, objectTable, objectCount, pObjectEntryTypes, pObjectIndices)
-        let vkGetPhysicalDeviceGeneratedCommandsPropertiesNVX(physicalDevice : VkPhysicalDevice, pFeatures : nativeptr<VkDeviceGeneratedCommandsFeaturesNVX>, pLimits : nativeptr<VkDeviceGeneratedCommandsLimitsNVX>) = vkGetPhysicalDeviceGeneratedCommandsPropertiesNVXDel.Value.Invoke(physicalDevice, pFeatures, pLimits)
-module VK_NVX_extension_29 =
-    let Name = "VK_NVX_extension_29"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NVX_extension_30 =
-    let Name = "VK_NVX_extension_30"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NVX_extension_31 =
-    let Name = "VK_NVX_extension_31"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NVX_extension_48 =
-    let Name = "VK_NVX_extension_48"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NVX_extension_51 =
-    let Name = "VK_NVX_extension_51"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NVX_extension_52 =
-    let Name = "VK_NVX_extension_52"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NVX_multiview_per_view_attributes =
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Log.line "[Vulkan] loading VK_NVX_device_generated_commands"
+            static let s_vkCmdProcessCommandsNVXDel = VkRaw.importDelegate<VkCmdProcessCommandsNVXDel> "vkCmdProcessCommandsNVX"
+            static let s_vkCmdReserveSpaceForCommandsNVXDel = VkRaw.importDelegate<VkCmdReserveSpaceForCommandsNVXDel> "vkCmdReserveSpaceForCommandsNVX"
+            static let s_vkCreateIndirectCommandsLayoutNVXDel = VkRaw.importDelegate<VkCreateIndirectCommandsLayoutNVXDel> "vkCreateIndirectCommandsLayoutNVX"
+            static let s_vkDestroyIndirectCommandsLayoutNVXDel = VkRaw.importDelegate<VkDestroyIndirectCommandsLayoutNVXDel> "vkDestroyIndirectCommandsLayoutNVX"
+            static let s_vkCreateObjectTableNVXDel = VkRaw.importDelegate<VkCreateObjectTableNVXDel> "vkCreateObjectTableNVX"
+            static let s_vkDestroyObjectTableNVXDel = VkRaw.importDelegate<VkDestroyObjectTableNVXDel> "vkDestroyObjectTableNVX"
+            static let s_vkRegisterObjectsNVXDel = VkRaw.importDelegate<VkRegisterObjectsNVXDel> "vkRegisterObjectsNVX"
+            static let s_vkUnregisterObjectsNVXDel = VkRaw.importDelegate<VkUnregisterObjectsNVXDel> "vkUnregisterObjectsNVX"
+            static let s_vkGetPhysicalDeviceGeneratedCommandsPropertiesNVXDel = VkRaw.importDelegate<VkGetPhysicalDeviceGeneratedCommandsPropertiesNVXDel> "vkGetPhysicalDeviceGeneratedCommandsPropertiesNVX"
+            static member vkCmdProcessCommandsNVX = s_vkCmdProcessCommandsNVXDel
+            static member vkCmdReserveSpaceForCommandsNVX = s_vkCmdReserveSpaceForCommandsNVXDel
+            static member vkCreateIndirectCommandsLayoutNVX = s_vkCreateIndirectCommandsLayoutNVXDel
+            static member vkDestroyIndirectCommandsLayoutNVX = s_vkDestroyIndirectCommandsLayoutNVXDel
+            static member vkCreateObjectTableNVX = s_vkCreateObjectTableNVXDel
+            static member vkDestroyObjectTableNVX = s_vkDestroyObjectTableNVXDel
+            static member vkRegisterObjectsNVX = s_vkRegisterObjectsNVXDel
+            static member vkUnregisterObjectsNVX = s_vkUnregisterObjectsNVXDel
+            static member vkGetPhysicalDeviceGeneratedCommandsPropertiesNVX = s_vkGetPhysicalDeviceGeneratedCommandsPropertiesNVXDel
+        let vkCmdProcessCommandsNVX(commandBuffer : VkCommandBuffer, pProcessCommandsInfo : nativeptr<VkCmdProcessCommandsInfoNVX>) = Loader<unit>.vkCmdProcessCommandsNVX.Invoke(commandBuffer, pProcessCommandsInfo)
+        let vkCmdReserveSpaceForCommandsNVX(commandBuffer : VkCommandBuffer, pReserveSpaceInfo : nativeptr<VkCmdReserveSpaceForCommandsInfoNVX>) = Loader<unit>.vkCmdReserveSpaceForCommandsNVX.Invoke(commandBuffer, pReserveSpaceInfo)
+        let vkCreateIndirectCommandsLayoutNVX(device : VkDevice, pCreateInfo : nativeptr<VkIndirectCommandsLayoutCreateInfoNVX>, pAllocator : nativeptr<VkAllocationCallbacks>, pIndirectCommandsLayout : nativeptr<VkIndirectCommandsLayoutNVX>) = Loader<unit>.vkCreateIndirectCommandsLayoutNVX.Invoke(device, pCreateInfo, pAllocator, pIndirectCommandsLayout)
+        let vkDestroyIndirectCommandsLayoutNVX(device : VkDevice, indirectCommandsLayout : VkIndirectCommandsLayoutNVX, pAllocator : nativeptr<VkAllocationCallbacks>) = Loader<unit>.vkDestroyIndirectCommandsLayoutNVX.Invoke(device, indirectCommandsLayout, pAllocator)
+        let vkCreateObjectTableNVX(device : VkDevice, pCreateInfo : nativeptr<VkObjectTableCreateInfoNVX>, pAllocator : nativeptr<VkAllocationCallbacks>, pObjectTable : nativeptr<VkObjectTableNVX>) = Loader<unit>.vkCreateObjectTableNVX.Invoke(device, pCreateInfo, pAllocator, pObjectTable)
+        let vkDestroyObjectTableNVX(device : VkDevice, objectTable : VkObjectTableNVX, pAllocator : nativeptr<VkAllocationCallbacks>) = Loader<unit>.vkDestroyObjectTableNVX.Invoke(device, objectTable, pAllocator)
+        let vkRegisterObjectsNVX(device : VkDevice, objectTable : VkObjectTableNVX, objectCount : uint32, ppObjectTableEntries : nativeptr<nativeptr<VkObjectTableEntryNVX>>, pObjectIndices : nativeptr<uint32>) = Loader<unit>.vkRegisterObjectsNVX.Invoke(device, objectTable, objectCount, ppObjectTableEntries, pObjectIndices)
+        let vkUnregisterObjectsNVX(device : VkDevice, objectTable : VkObjectTableNVX, objectCount : uint32, pObjectEntryTypes : nativeptr<VkObjectEntryTypeNVX>, pObjectIndices : nativeptr<uint32>) = Loader<unit>.vkUnregisterObjectsNVX.Invoke(device, objectTable, objectCount, pObjectEntryTypes, pObjectIndices)
+        let vkGetPhysicalDeviceGeneratedCommandsPropertiesNVX(physicalDevice : VkPhysicalDevice, pFeatures : nativeptr<VkDeviceGeneratedCommandsFeaturesNVX>, pLimits : nativeptr<VkDeviceGeneratedCommandsLimitsNVX>) = Loader<unit>.vkGetPhysicalDeviceGeneratedCommandsPropertiesNVX.Invoke(physicalDevice, pFeatures, pLimits)
+
+module NVXMultiviewPerViewAttributes =
     let Name = "VK_NVX_multiview_per_view_attributes"
-    open VK_EXT_debug_report
-    open VK_KHR_get_physical_device_properties2
-    open VK_KHX_multiview
+    let Number = 98
+    
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name; KHXMultiview.Name ]
+    open KHRGetPhysicalDeviceProperties2
+    open KHXMultiview
+    open EXTDebugReport
     
     
     [<StructLayout(LayoutKind.Sequential)>]
@@ -8016,506 +8689,4 @@ module VK_NVX_multiview_per_view_attributes =
     
     type VkStructureType with
          static member inline PhysicalDeviceMultiviewPerViewAttributesPropertiesNvx = unbox<VkStructureType> 1000097000
-    
-module VK_NV_clip_space_w_scaling =
-    let Name = "VK_NV_clip_space_w_scaling"
-    open VK_EXT_debug_report
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkViewportWScalingNV = 
-        struct
-            val mutable public xcoeff : float32
-            val mutable public ycoeff : float32
-    
-            new(xcoeff : float32, ycoeff : float32) = { xcoeff = xcoeff; ycoeff = ycoeff }
-            override x.ToString() =
-                sprintf "VkViewportWScalingNV { xcoeff = %A; ycoeff = %A }" x.xcoeff x.ycoeff
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPipelineViewportWScalingStateCreateInfoNV = 
-        struct
-            val mutable public sType : VkStructureType
-            val mutable public pNext : nativeint
-            val mutable public viewportWScalingEnable : VkBool32
-            val mutable public viewportCount : uint32
-            val mutable public pViewportWScalings : nativeptr<VkViewportWScalingNV>
-    
-            new(sType : VkStructureType, pNext : nativeint, viewportWScalingEnable : VkBool32, viewportCount : uint32, pViewportWScalings : nativeptr<VkViewportWScalingNV>) = { sType = sType; pNext = pNext; viewportWScalingEnable = viewportWScalingEnable; viewportCount = viewportCount; pViewportWScalings = pViewportWScalings }
-            override x.ToString() =
-                sprintf "VkPipelineViewportWScalingStateCreateInfoNV { sType = %A; pNext = %A; viewportWScalingEnable = %A; viewportCount = %A; pViewportWScalings = %A }" x.sType x.pNext x.viewportWScalingEnable x.viewportCount x.pViewportWScalings
-        end
-    
-    
-    type VkDynamicState with
-         static member inline ViewportWScalingNv = unbox<VkDynamicState> 1000087000
-    type VkStructureType with
-         static member inline PipelineViewportWScalingStateCreateInfoNv = unbox<VkStructureType> 1000087000
-    
-    module VkRaw =
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkCmdSetViewportWScalingNVDel = delegate of VkCommandBuffer * uint32 * uint32 * nativeptr<VkViewportWScalingNV> -> unit
-        let private vkCmdSetViewportWScalingNVDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkCmdSetViewportWScalingNV"), typeof<VkCmdSetViewportWScalingNVDel>) |> unbox<VkCmdSetViewportWScalingNVDel>)
-        let vkCmdSetViewportWScalingNV(commandBuffer : VkCommandBuffer, firstViewport : uint32, viewportCount : uint32, pViewportWScalings : nativeptr<VkViewportWScalingNV>) = vkCmdSetViewportWScalingNVDel.Value.Invoke(commandBuffer, firstViewport, viewportCount, pViewportWScalings)
-module VK_NV_dedicated_allocation =
-    let Name = "VK_NV_dedicated_allocation"
-    open VK_EXT_debug_report
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkDedicatedAllocationBufferCreateInfoNV = 
-        struct
-            val mutable public sType : VkStructureType
-            val mutable public pNext : nativeint
-            val mutable public dedicatedAllocation : VkBool32
-    
-            new(sType : VkStructureType, pNext : nativeint, dedicatedAllocation : VkBool32) = { sType = sType; pNext = pNext; dedicatedAllocation = dedicatedAllocation }
-            override x.ToString() =
-                sprintf "VkDedicatedAllocationBufferCreateInfoNV { sType = %A; pNext = %A; dedicatedAllocation = %A }" x.sType x.pNext x.dedicatedAllocation
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkDedicatedAllocationImageCreateInfoNV = 
-        struct
-            val mutable public sType : VkStructureType
-            val mutable public pNext : nativeint
-            val mutable public dedicatedAllocation : VkBool32
-    
-            new(sType : VkStructureType, pNext : nativeint, dedicatedAllocation : VkBool32) = { sType = sType; pNext = pNext; dedicatedAllocation = dedicatedAllocation }
-            override x.ToString() =
-                sprintf "VkDedicatedAllocationImageCreateInfoNV { sType = %A; pNext = %A; dedicatedAllocation = %A }" x.sType x.pNext x.dedicatedAllocation
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkDedicatedAllocationMemoryAllocateInfoNV = 
-        struct
-            val mutable public sType : VkStructureType
-            val mutable public pNext : nativeint
-            val mutable public image : VkImage
-            val mutable public buffer : VkBuffer
-    
-            new(sType : VkStructureType, pNext : nativeint, image : VkImage, buffer : VkBuffer) = { sType = sType; pNext = pNext; image = image; buffer = buffer }
-            override x.ToString() =
-                sprintf "VkDedicatedAllocationMemoryAllocateInfoNV { sType = %A; pNext = %A; image = %A; buffer = %A }" x.sType x.pNext x.image x.buffer
-        end
-    
-    
-    type VkStructureType with
-         static member inline DedicatedAllocationImageCreateInfoNv = unbox<VkStructureType> 1000026000
-         static member inline DedicatedAllocationBufferCreateInfoNv = unbox<VkStructureType> 1000026001
-         static member inline DedicatedAllocationMemoryAllocateInfoNv = unbox<VkStructureType> 1000026002
-    
-module VK_NV_extension_101 =
-    let Name = "VK_NV_extension_101"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NV_extension_102 =
-    let Name = "VK_NV_extension_102"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NV_extension_103 =
-    let Name = "VK_NV_extension_103"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NV_extension_104 =
-    let Name = "VK_NV_extension_104"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NV_extension_151 =
-    let Name = "VK_NV_extension_151"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NV_extension_152 =
-    let Name = "VK_NV_extension_152"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NV_extension_155 =
-    let Name = "VK_NV_extension_155"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NV_extension_164 =
-    let Name = "VK_NV_extension_164"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NV_extension_165 =
-    let Name = "VK_NV_extension_165"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NV_extension_166 =
-    let Name = "VK_NV_extension_166"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NV_extension_167 =
-    let Name = "VK_NV_extension_167"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NV_extension_168 =
-    let Name = "VK_NV_extension_168"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NV_extension_191 =
-    let Name = "VK_NV_extension_191"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NV_extension_53 =
-    let Name = "VK_NV_extension_53"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NV_external_memory_capabilities =
-    let Name = "VK_NV_external_memory_capabilities"
-    open VK_EXT_debug_report
-    
-    [<Flags>]
-    type VkExternalMemoryHandleTypeFlagBitsNV = 
-        | None = 0
-        | VkExternalMemoryHandleTypeOpaqueWin32BitNv = 0x00000001
-        | VkExternalMemoryHandleTypeOpaqueWin32KmtBitNv = 0x00000002
-        | VkExternalMemoryHandleTypeD3d11ImageBitNv = 0x00000004
-        | VkExternalMemoryHandleTypeD3d11ImageKmtBitNv = 0x00000008
-    
-    [<Flags>]
-    type VkExternalMemoryFeatureFlagBitsNV = 
-        | None = 0
-        | VkExternalMemoryFeatureDedicatedOnlyBitNv = 0x00000001
-        | VkExternalMemoryFeatureExportableBitNv = 0x00000002
-        | VkExternalMemoryFeatureImportableBitNv = 0x00000004
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkExternalImageFormatPropertiesNV = 
-        struct
-            val mutable public imageFormatProperties : VkImageFormatProperties
-            val mutable public externalMemoryFeatures : VkExternalMemoryFeatureFlagsNV
-            val mutable public exportFromImportedHandleTypes : VkExternalMemoryHandleTypeFlagsNV
-            val mutable public compatibleHandleTypes : VkExternalMemoryHandleTypeFlagsNV
-    
-            new(imageFormatProperties : VkImageFormatProperties, externalMemoryFeatures : VkExternalMemoryFeatureFlagsNV, exportFromImportedHandleTypes : VkExternalMemoryHandleTypeFlagsNV, compatibleHandleTypes : VkExternalMemoryHandleTypeFlagsNV) = { imageFormatProperties = imageFormatProperties; externalMemoryFeatures = externalMemoryFeatures; exportFromImportedHandleTypes = exportFromImportedHandleTypes; compatibleHandleTypes = compatibleHandleTypes }
-            override x.ToString() =
-                sprintf "VkExternalImageFormatPropertiesNV { imageFormatProperties = %A; externalMemoryFeatures = %A; exportFromImportedHandleTypes = %A; compatibleHandleTypes = %A }" x.imageFormatProperties x.externalMemoryFeatures x.exportFromImportedHandleTypes x.compatibleHandleTypes
-        end
-    
-    
-    
-    module VkRaw =
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkGetPhysicalDeviceExternalImageFormatPropertiesNVDel = delegate of VkPhysicalDevice * VkFormat * VkImageType * VkImageTiling * VkImageUsageFlags * VkImageCreateFlags * VkExternalMemoryHandleTypeFlagsNV * nativeptr<VkExternalImageFormatPropertiesNV> -> VkResult
-        let private vkGetPhysicalDeviceExternalImageFormatPropertiesNVDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetPhysicalDeviceExternalImageFormatPropertiesNV"), typeof<VkGetPhysicalDeviceExternalImageFormatPropertiesNVDel>) |> unbox<VkGetPhysicalDeviceExternalImageFormatPropertiesNVDel>)
-        let vkGetPhysicalDeviceExternalImageFormatPropertiesNV(physicalDevice : VkPhysicalDevice, format : VkFormat, _type : VkImageType, tiling : VkImageTiling, usage : VkImageUsageFlags, flags : VkImageCreateFlags, externalHandleType : VkExternalMemoryHandleTypeFlagsNV, pExternalImageFormatProperties : nativeptr<VkExternalImageFormatPropertiesNV>) = vkGetPhysicalDeviceExternalImageFormatPropertiesNVDel.Value.Invoke(physicalDevice, format, _type, tiling, usage, flags, externalHandleType, pExternalImageFormatProperties)
-module VK_NV_external_memory =
-    let Name = "VK_NV_external_memory"
-    open VK_EXT_debug_report
-    open VK_NV_external_memory_capabilities
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkExportMemoryAllocateInfoNV = 
-        struct
-            val mutable public sType : VkStructureType
-            val mutable public pNext : nativeint
-            val mutable public handleTypes : VkExternalMemoryHandleTypeFlagsNV
-    
-            new(sType : VkStructureType, pNext : nativeint, handleTypes : VkExternalMemoryHandleTypeFlagsNV) = { sType = sType; pNext = pNext; handleTypes = handleTypes }
-            override x.ToString() =
-                sprintf "VkExportMemoryAllocateInfoNV { sType = %A; pNext = %A; handleTypes = %A }" x.sType x.pNext x.handleTypes
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkExternalMemoryImageCreateInfoNV = 
-        struct
-            val mutable public sType : VkStructureType
-            val mutable public pNext : nativeint
-            val mutable public handleTypes : VkExternalMemoryHandleTypeFlagsNV
-    
-            new(sType : VkStructureType, pNext : nativeint, handleTypes : VkExternalMemoryHandleTypeFlagsNV) = { sType = sType; pNext = pNext; handleTypes = handleTypes }
-            override x.ToString() =
-                sprintf "VkExternalMemoryImageCreateInfoNV { sType = %A; pNext = %A; handleTypes = %A }" x.sType x.pNext x.handleTypes
-        end
-    
-    
-    type VkStructureType with
-         static member inline ExternalMemoryImageCreateInfoNv = unbox<VkStructureType> 1000056000
-         static member inline ExportMemoryAllocateInfoNv = unbox<VkStructureType> 1000056001
-    
-module VK_NV_external_memory_win32 =
-    let Name = "VK_NV_external_memory_win32"
-    open VK_EXT_debug_report
-    open VK_NV_external_memory
-    open VK_NV_external_memory_capabilities
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkExportMemoryWin32HandleInfoNV = 
-        struct
-            val mutable public sType : VkStructureType
-            val mutable public pNext : nativeint
-            val mutable public pAttributes : nativeptr<nativeint>
-            val mutable public dwAccess : uint32
-    
-            new(sType : VkStructureType, pNext : nativeint, pAttributes : nativeptr<nativeint>, dwAccess : uint32) = { sType = sType; pNext = pNext; pAttributes = pAttributes; dwAccess = dwAccess }
-            override x.ToString() =
-                sprintf "VkExportMemoryWin32HandleInfoNV { sType = %A; pNext = %A; pAttributes = %A; dwAccess = %A }" x.sType x.pNext x.pAttributes x.dwAccess
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkImportMemoryWin32HandleInfoNV = 
-        struct
-            val mutable public sType : VkStructureType
-            val mutable public pNext : nativeint
-            val mutable public handleType : VkExternalMemoryHandleTypeFlagsNV
-            val mutable public handle : nativeint
-    
-            new(sType : VkStructureType, pNext : nativeint, handleType : VkExternalMemoryHandleTypeFlagsNV, handle : nativeint) = { sType = sType; pNext = pNext; handleType = handleType; handle = handle }
-            override x.ToString() =
-                sprintf "VkImportMemoryWin32HandleInfoNV { sType = %A; pNext = %A; handleType = %A; handle = %A }" x.sType x.pNext x.handleType x.handle
-        end
-    
-    
-    type VkStructureType with
-         static member inline ImportMemoryWin32HandleInfoNv = unbox<VkStructureType> 1000057000
-         static member inline ExportMemoryWin32HandleInfoNv = unbox<VkStructureType> 1000057001
-    
-    module VkRaw =
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkGetMemoryWin32HandleNVDel = delegate of VkDevice * VkDeviceMemory * VkExternalMemoryHandleTypeFlagsNV * nativeptr<nativeint> -> VkResult
-        let private vkGetMemoryWin32HandleNVDel = lazy (Marshal.GetDelegateForFunctionPointer(VkRaw.vkGetInstanceProcAddr(VkRaw.activeInstance, "vkGetMemoryWin32HandleNV"), typeof<VkGetMemoryWin32HandleNVDel>) |> unbox<VkGetMemoryWin32HandleNVDel>)
-        let vkGetMemoryWin32HandleNV(device : VkDevice, memory : VkDeviceMemory, handleType : VkExternalMemoryHandleTypeFlagsNV, pHandle : nativeptr<nativeint>) = vkGetMemoryWin32HandleNVDel.Value.Invoke(device, memory, handleType, pHandle)
-module VK_NV_fill_rectangle =
-    let Name = "VK_NV_fill_rectangle"
-    open VK_EXT_debug_report
-    
-    
-    
-    type VkPolygonMode with
-         static member inline FillRectangleNv = unbox<VkPolygonMode> 1000153000
-    
-module VK_NV_fragment_coverage_to_color =
-    let Name = "VK_NV_fragment_coverage_to_color"
-    open VK_EXT_debug_report
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPipelineCoverageToColorStateCreateInfoNV = 
-        struct
-            val mutable public sType : VkStructureType
-            val mutable public pNext : nativeint
-            val mutable public flags : VkPipelineCoverageToColorStateCreateFlagsNV
-            val mutable public coverageToColorEnable : VkBool32
-            val mutable public coverageToColorLocation : uint32
-    
-            new(sType : VkStructureType, pNext : nativeint, flags : VkPipelineCoverageToColorStateCreateFlagsNV, coverageToColorEnable : VkBool32, coverageToColorLocation : uint32) = { sType = sType; pNext = pNext; flags = flags; coverageToColorEnable = coverageToColorEnable; coverageToColorLocation = coverageToColorLocation }
-            override x.ToString() =
-                sprintf "VkPipelineCoverageToColorStateCreateInfoNV { sType = %A; pNext = %A; flags = %A; coverageToColorEnable = %A; coverageToColorLocation = %A }" x.sType x.pNext x.flags x.coverageToColorEnable x.coverageToColorLocation
-        end
-    
-    
-    type VkStructureType with
-         static member inline PipelineCoverageToColorStateCreateInfoNv = unbox<VkStructureType> 1000149000
-    
-module VK_NV_framebuffer_mixed_samples =
-    let Name = "VK_NV_framebuffer_mixed_samples"
-    open VK_EXT_debug_report
-    
-    type VkCoverageModulationModeNV = 
-        | VkCoverageModulationModeNoneNv = 0
-        | VkCoverageModulationModeRgbNv = 1
-        | VkCoverageModulationModeAlphaNv = 2
-        | VkCoverageModulationModeRgbaNv = 3
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPipelineCoverageModulationStateCreateInfoNV = 
-        struct
-            val mutable public sType : VkStructureType
-            val mutable public pNext : nativeint
-            val mutable public flags : VkPipelineCoverageModulationStateCreateFlagsNV
-            val mutable public coverageModulationMode : VkCoverageModulationModeNV
-            val mutable public coverageModulationTableEnable : VkBool32
-            val mutable public coverageModulationTableCount : uint32
-            val mutable public pCoverageModulationTable : nativeptr<float32>
-    
-            new(sType : VkStructureType, pNext : nativeint, flags : VkPipelineCoverageModulationStateCreateFlagsNV, coverageModulationMode : VkCoverageModulationModeNV, coverageModulationTableEnable : VkBool32, coverageModulationTableCount : uint32, pCoverageModulationTable : nativeptr<float32>) = { sType = sType; pNext = pNext; flags = flags; coverageModulationMode = coverageModulationMode; coverageModulationTableEnable = coverageModulationTableEnable; coverageModulationTableCount = coverageModulationTableCount; pCoverageModulationTable = pCoverageModulationTable }
-            override x.ToString() =
-                sprintf "VkPipelineCoverageModulationStateCreateInfoNV { sType = %A; pNext = %A; flags = %A; coverageModulationMode = %A; coverageModulationTableEnable = %A; coverageModulationTableCount = %A; pCoverageModulationTable = %A }" x.sType x.pNext x.flags x.coverageModulationMode x.coverageModulationTableEnable x.coverageModulationTableCount x.pCoverageModulationTable
-        end
-    
-    
-    type VkStructureType with
-         static member inline PipelineCoverageModulationStateCreateInfoNv = unbox<VkStructureType> 1000152000
-    
-module VK_NV_geometry_shader_passthrough =
-    let Name = "VK_NV_geometry_shader_passthrough"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NV_glsl_shader =
-    let Name = "VK_NV_glsl_shader"
-    open VK_EXT_debug_report
-    
-    
-    
-    type VkResult with
-         static member inline VkErrorInvalidShaderNv = unbox<VkResult> -1000012000
-    
-module VK_NV_sample_mask_override_coverage =
-    let Name = "VK_NV_sample_mask_override_coverage"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NV_viewport_array2 =
-    let Name = "VK_NV_viewport_array2"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_NV_viewport_swizzle =
-    let Name = "VK_NV_viewport_swizzle"
-    open VK_EXT_debug_report
-    
-    type VkViewportCoordinateSwizzleNV = 
-        | VkViewportCoordinateSwizzlePositiveXNv = 0
-        | VkViewportCoordinateSwizzleNegativeXNv = 1
-        | VkViewportCoordinateSwizzlePositiveYNv = 2
-        | VkViewportCoordinateSwizzleNegativeYNv = 3
-        | VkViewportCoordinateSwizzlePositiveZNv = 4
-        | VkViewportCoordinateSwizzleNegativeZNv = 5
-        | VkViewportCoordinateSwizzlePositiveWNv = 6
-        | VkViewportCoordinateSwizzleNegativeWNv = 7
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkViewportSwizzleNV = 
-        struct
-            val mutable public x : VkViewportCoordinateSwizzleNV
-            val mutable public y : VkViewportCoordinateSwizzleNV
-            val mutable public z : VkViewportCoordinateSwizzleNV
-            val mutable public w : VkViewportCoordinateSwizzleNV
-    
-            new(x : VkViewportCoordinateSwizzleNV, y : VkViewportCoordinateSwizzleNV, z : VkViewportCoordinateSwizzleNV, w : VkViewportCoordinateSwizzleNV) = { x = x; y = y; z = z; w = w }
-            override x.ToString() =
-                sprintf "VkViewportSwizzleNV { x = %A; y = %A; z = %A; w = %A }" x.x x.y x.z x.w
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPipelineViewportSwizzleStateCreateInfoNV = 
-        struct
-            val mutable public sType : VkStructureType
-            val mutable public pNext : nativeint
-            val mutable public flags : VkPipelineViewportSwizzleStateCreateFlagsNV
-            val mutable public viewportCount : uint32
-            val mutable public pViewportSwizzles : nativeptr<VkViewportSwizzleNV>
-    
-            new(sType : VkStructureType, pNext : nativeint, flags : VkPipelineViewportSwizzleStateCreateFlagsNV, viewportCount : uint32, pViewportSwizzles : nativeptr<VkViewportSwizzleNV>) = { sType = sType; pNext = pNext; flags = flags; viewportCount = viewportCount; pViewportSwizzles = pViewportSwizzles }
-            override x.ToString() =
-                sprintf "VkPipelineViewportSwizzleStateCreateInfoNV { sType = %A; pNext = %A; flags = %A; viewportCount = %A; pViewportSwizzles = %A }" x.sType x.pNext x.flags x.viewportCount x.pViewportSwizzles
-        end
-    
-    
-    type VkStructureType with
-         static member inline PipelineViewportSwizzleStateCreateInfoNv = unbox<VkStructureType> 1000098000
-    
-module VK_NV_win32_keyed_mutex =
-    let Name = "VK_NV_win32_keyed_mutex"
-    open VK_EXT_debug_report
-    open VK_NV_external_memory
-    open VK_NV_external_memory_capabilities
-    open VK_NV_external_memory_win32
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkWin32KeyedMutexAcquireReleaseInfoNV = 
-        struct
-            val mutable public sType : VkStructureType
-            val mutable public pNext : nativeint
-            val mutable public acquireCount : uint32
-            val mutable public pAcquireSyncs : nativeptr<VkDeviceMemory>
-            val mutable public pAcquireKeys : nativeptr<uint64>
-            val mutable public pAcquireTimeoutMilliseconds : nativeptr<uint32>
-            val mutable public releaseCount : uint32
-            val mutable public pReleaseSyncs : nativeptr<VkDeviceMemory>
-            val mutable public pReleaseKeys : nativeptr<uint64>
-    
-            new(sType : VkStructureType, pNext : nativeint, acquireCount : uint32, pAcquireSyncs : nativeptr<VkDeviceMemory>, pAcquireKeys : nativeptr<uint64>, pAcquireTimeoutMilliseconds : nativeptr<uint32>, releaseCount : uint32, pReleaseSyncs : nativeptr<VkDeviceMemory>, pReleaseKeys : nativeptr<uint64>) = { sType = sType; pNext = pNext; acquireCount = acquireCount; pAcquireSyncs = pAcquireSyncs; pAcquireKeys = pAcquireKeys; pAcquireTimeoutMilliseconds = pAcquireTimeoutMilliseconds; releaseCount = releaseCount; pReleaseSyncs = pReleaseSyncs; pReleaseKeys = pReleaseKeys }
-            override x.ToString() =
-                sprintf "VkWin32KeyedMutexAcquireReleaseInfoNV { sType = %A; pNext = %A; acquireCount = %A; pAcquireSyncs = %A; pAcquireKeys = %A; pAcquireTimeoutMilliseconds = %A; releaseCount = %A; pReleaseSyncs = %A; pReleaseKeys = %A }" x.sType x.pNext x.acquireCount x.pAcquireSyncs x.pAcquireKeys x.pAcquireTimeoutMilliseconds x.releaseCount x.pReleaseSyncs x.pReleaseKeys
-        end
-    
-    
-    type VkStructureType with
-         static member inline Win32KeyedMutexAcquireReleaseInfoNv = unbox<VkStructureType> 1000058000
-    
-module VK_QCOM_extension_171 =
-    let Name = "VK_QCOM_extension_171"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_QCOM_extension_172 =
-    let Name = "VK_QCOM_extension_172"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_QCOM_extension_173 =
-    let Name = "VK_QCOM_extension_173"
-    open VK_EXT_debug_report
-    
-    
-    
-    
-module VK_QCOM_extension_174 =
-    let Name = "VK_QCOM_extension_174"
-    open VK_EXT_debug_report
-    
-    
-    
     
