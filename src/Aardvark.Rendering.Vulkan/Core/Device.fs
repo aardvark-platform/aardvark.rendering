@@ -385,6 +385,8 @@ type Device internal(isGroup : bool, deviceGroup : PhysicalDevice[], wantedLayer
     member x.Handle = device
 
     member x.PhysicalDevice = physical
+    member x.PhysicalDevices = deviceGroup
+    member x.IsDeviceGroup = deviceGroup.Length > 1
 
     member x.CreateFence(signaled : bool) = new Fence(x, signaled)
     member x.CreateFence() = new Fence(x)

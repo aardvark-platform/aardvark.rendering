@@ -217,6 +217,8 @@ type MultiRuntime(runtimes : IRuntime[]) =
             disp.Trigger()
 
     interface IRuntime with
+        member x.DeviceCount = runtimes |> Seq.map (fun r -> r.DeviceCount) |> Seq.min
+
         member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) : unit =
             failwith "not implemented"
 
