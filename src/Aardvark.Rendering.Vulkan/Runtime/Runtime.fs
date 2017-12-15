@@ -237,7 +237,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
                     | :? Image as img ->
                         device.CreateOutputImageView(img, 0, 1, 0, 1)
-
+                    | :? ITextureLevel as a -> 
+                        device.CreateOutputImageView(a.Texture |> unbox,a.Levels)
                     | _ -> failf "invalid framebuffer attachment %A: %A" s o
             )
 
@@ -561,6 +562,9 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
     interface IRuntime with
+
+        member x.DeviceCount = device.PhysicalDevices.Length
+
         member x.MaxLocalSize = device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize
 
         member x.CreateComputeShader (c : FShade.ComputeShader) =

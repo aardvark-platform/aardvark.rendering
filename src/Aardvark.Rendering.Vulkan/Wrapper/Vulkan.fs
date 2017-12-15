@@ -1323,22 +1323,6 @@ type VkPhysicalDevice_32 =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
-type VkAcquireNextImageInfoKHX = 
-    struct
-        val mutable public sType : VkStructureType
-        val mutable public pNext : nativeint
-        val mutable public swapchain : VkSwapchainKHR
-        val mutable public timeout : uint64
-        val mutable public semaphore : VkSemaphore
-        val mutable public fence : VkFence
-        val mutable public deviceMask : uint32
-
-        new(sType : VkStructureType, pNext : nativeint, swapchain : VkSwapchainKHR, timeout : uint64, semaphore : VkSemaphore, fence : VkFence, deviceMask : uint32) = { sType = sType; pNext = pNext; swapchain = swapchain; timeout = timeout; semaphore = semaphore; fence = fence; deviceMask = deviceMask }
-        override x.ToString() =
-            sprintf "VkAcquireNextImageInfoKHX { sType = %A; pNext = %A; swapchain = %A; timeout = %A; semaphore = %A; fence = %A; deviceMask = %A }" x.sType x.pNext x.swapchain x.timeout x.semaphore x.fence x.deviceMask
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
 type VkAllocationCallbacks = 
     struct
         val mutable public pUserData : nativeint
@@ -1458,19 +1442,6 @@ type VkBindImageMemoryDeviceGroupInfoKHX =
         new(sType : VkStructureType, pNext : nativeint, deviceIndexCount : uint32, pDeviceIndices : nativeptr<uint32>, _SFRRectCount : uint32, pSFRRects : nativeptr<VkRect2D>) = { sType = sType; pNext = pNext; deviceIndexCount = deviceIndexCount; pDeviceIndices = pDeviceIndices; _SFRRectCount = _SFRRectCount; pSFRRects = pSFRRects }
         override x.ToString() =
             sprintf "VkBindImageMemoryDeviceGroupInfoKHX { sType = %A; pNext = %A; deviceIndexCount = %A; pDeviceIndices = %A; _SFRRectCount = %A; pSFRRects = %A }" x.sType x.pNext x.deviceIndexCount x.pDeviceIndices x._SFRRectCount x.pSFRRects
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
-type VkBindImageMemorySwapchainInfoKHX = 
-    struct
-        val mutable public sType : VkStructureType
-        val mutable public pNext : nativeint
-        val mutable public swapchain : VkSwapchainKHR
-        val mutable public imageIndex : uint32
-
-        new(sType : VkStructureType, pNext : nativeint, swapchain : VkSwapchainKHR, imageIndex : uint32) = { sType = sType; pNext = pNext; swapchain = swapchain; imageIndex = imageIndex }
-        override x.ToString() =
-            sprintf "VkBindImageMemorySwapchainInfoKHX { sType = %A; pNext = %A; swapchain = %A; imageIndex = %A }" x.sType x.pNext x.swapchain x.imageIndex
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -2119,32 +2090,6 @@ type VkDeviceGroupPresentCapabilitiesKHX =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
-type VkDeviceGroupPresentInfoKHX = 
-    struct
-        val mutable public sType : VkStructureType
-        val mutable public pNext : nativeint
-        val mutable public swapchainCount : uint32
-        val mutable public pDeviceMasks : nativeptr<uint32>
-        val mutable public mode : VkDeviceGroupPresentModeFlagBitsKHX
-
-        new(sType : VkStructureType, pNext : nativeint, swapchainCount : uint32, pDeviceMasks : nativeptr<uint32>, mode : VkDeviceGroupPresentModeFlagBitsKHX) = { sType = sType; pNext = pNext; swapchainCount = swapchainCount; pDeviceMasks = pDeviceMasks; mode = mode }
-        override x.ToString() =
-            sprintf "VkDeviceGroupPresentInfoKHX { sType = %A; pNext = %A; swapchainCount = %A; pDeviceMasks = %A; mode = %A }" x.sType x.pNext x.swapchainCount x.pDeviceMasks x.mode
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
-type VkDeviceGroupSwapchainCreateInfoKHX = 
-    struct
-        val mutable public sType : VkStructureType
-        val mutable public pNext : nativeint
-        val mutable public modes : VkDeviceGroupPresentModeFlagsKHX
-
-        new(sType : VkStructureType, pNext : nativeint, modes : VkDeviceGroupPresentModeFlagsKHX) = { sType = sType; pNext = pNext; modes = modes }
-        override x.ToString() =
-            sprintf "VkDeviceGroupSwapchainCreateInfoKHX { sType = %A; pNext = %A; modes = %A }" x.sType x.pNext x.modes
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
 type VkDispatchIndirectCommand = 
     struct
         val mutable public x : uint32
@@ -2610,18 +2555,6 @@ type VkImageResolve =
         new(srcSubresource : VkImageSubresourceLayers, srcOffset : VkOffset3D, dstSubresource : VkImageSubresourceLayers, dstOffset : VkOffset3D, extent : VkExtent3D) = { srcSubresource = srcSubresource; srcOffset = srcOffset; dstSubresource = dstSubresource; dstOffset = dstOffset; extent = extent }
         override x.ToString() =
             sprintf "VkImageResolve { srcSubresource = %A; srcOffset = %A; dstSubresource = %A; dstOffset = %A; extent = %A }" x.srcSubresource x.srcOffset x.dstSubresource x.dstOffset x.extent
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
-type VkImageSwapchainCreateInfoKHX = 
-    struct
-        val mutable public sType : VkStructureType
-        val mutable public pNext : nativeint
-        val mutable public swapchain : VkSwapchainKHR
-
-        new(sType : VkStructureType, pNext : nativeint, swapchain : VkSwapchainKHR) = { sType = sType; pNext = pNext; swapchain = swapchain }
-        override x.ToString() =
-            sprintf "VkImageSwapchainCreateInfoKHX { sType = %A; pNext = %A; swapchain = %A }" x.sType x.pNext x.swapchain
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -3586,8 +3519,6 @@ module VkRaw =
     extern VkResult vkGetDeviceGroupPresentCapabilitiesKHX(VkDevice device, VkDeviceGroupPresentCapabilitiesKHX* pDeviceGroupPresentCapabilities)
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetDeviceGroupSurfacePresentModesKHX(VkDevice device, VkSurfaceKHR surface, VkDeviceGroupPresentModeFlagsKHX* pModes)
-    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
-    extern VkResult vkAcquireNextImage2KHX(VkDevice device, VkAcquireNextImageInfoKHX* pAcquireInfo, uint32* pImageIndex)
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetPhysicalDevicePresentRectanglesKHX(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint32* pRectCount, VkRect2D* pRects)
     
@@ -7787,6 +7718,188 @@ module KHXDeviceGroup =
         let vkGetDeviceGroupPeerMemoryFeaturesKHX(device : VkDevice, heapIndex : uint32, localDeviceIndex : uint32, remoteDeviceIndex : uint32, pPeerMemoryFeatures : nativeptr<VkPeerMemoryFeatureFlagsKHX>) = Loader<unit>.vkGetDeviceGroupPeerMemoryFeaturesKHX.Invoke(device, heapIndex, localDeviceIndex, remoteDeviceIndex, pPeerMemoryFeatures)
         let vkCmdSetDeviceMaskKHX(commandBuffer : VkCommandBuffer, deviceMask : uint32) = Loader<unit>.vkCmdSetDeviceMaskKHX.Invoke(commandBuffer, deviceMask)
         let vkCmdDispatchBaseKHX(commandBuffer : VkCommandBuffer, baseGroupX : uint32, baseGroupY : uint32, baseGroupZ : uint32, groupCountX : uint32, groupCountY : uint32, groupCountZ : uint32) = Loader<unit>.vkCmdDispatchBaseKHX.Invoke(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ)
+    
+    module KHRBindMemory2 =
+        open EXTDebugReport
+        
+        
+        [<StructLayout(LayoutKind.Sequential)>]
+        type VkBindBufferMemoryDeviceGroupInfoKHX = 
+            struct
+                val mutable public sType : VkStructureType
+                val mutable public pNext : nativeint
+                val mutable public deviceIndexCount : uint32
+                val mutable public pDeviceIndices : nativeptr<uint32>
+        
+                new(sType : VkStructureType, pNext : nativeint, deviceIndexCount : uint32, pDeviceIndices : nativeptr<uint32>) = { sType = sType; pNext = pNext; deviceIndexCount = deviceIndexCount; pDeviceIndices = pDeviceIndices }
+                override x.ToString() =
+                    sprintf "VkBindBufferMemoryDeviceGroupInfoKHX { sType = %A; pNext = %A; deviceIndexCount = %A; pDeviceIndices = %A }" x.sType x.pNext x.deviceIndexCount x.pDeviceIndices
+            end
+        
+        [<StructLayout(LayoutKind.Sequential)>]
+        type VkBindImageMemoryDeviceGroupInfoKHX = 
+            struct
+                val mutable public sType : VkStructureType
+                val mutable public pNext : nativeint
+                val mutable public deviceIndexCount : uint32
+                val mutable public pDeviceIndices : nativeptr<uint32>
+                val mutable public _SFRRectCount : uint32
+                val mutable public pSFRRects : nativeptr<VkRect2D>
+        
+                new(sType : VkStructureType, pNext : nativeint, deviceIndexCount : uint32, pDeviceIndices : nativeptr<uint32>, _SFRRectCount : uint32, pSFRRects : nativeptr<VkRect2D>) = { sType = sType; pNext = pNext; deviceIndexCount = deviceIndexCount; pDeviceIndices = pDeviceIndices; _SFRRectCount = _SFRRectCount; pSFRRects = pSFRRects }
+                override x.ToString() =
+                    sprintf "VkBindImageMemoryDeviceGroupInfoKHX { sType = %A; pNext = %A; deviceIndexCount = %A; pDeviceIndices = %A; _SFRRectCount = %A; pSFRRects = %A }" x.sType x.pNext x.deviceIndexCount x.pDeviceIndices x._SFRRectCount x.pSFRRects
+            end
+        
+        
+        type VkStructureType with
+             static member inline BindBufferMemoryDeviceGroupInfoKhx = unbox<VkStructureType> 999998013
+             static member inline BindImageMemoryDeviceGroupInfoKhx = unbox<VkStructureType> 999998014
+        
+    
+    module KHRSurface =
+        open EXTDebugReport
+        
+        [<Flags>]
+        type VkDeviceGroupPresentModeFlagBitsKHX = 
+            | None = 0
+            | VkDeviceGroupPresentModeLocalBitKhx = 0x00000001
+            | VkDeviceGroupPresentModeRemoteBitKhx = 0x00000002
+            | VkDeviceGroupPresentModeSumBitKhx = 0x00000004
+            | VkDeviceGroupPresentModeLocalMultiDeviceBitKhx = 0x00000008
+        
+        
+        [<StructLayout(LayoutKind.Sequential)>]
+        type VkDeviceGroupPresentCapabilitiesKHX = 
+            struct
+                val mutable public sType : VkStructureType
+                val mutable public pNext : nativeint
+                val mutable public presentMask : uint32_32
+                val mutable public modes : VkDeviceGroupPresentModeFlagsKHX
+        
+                new(sType : VkStructureType, pNext : nativeint, presentMask : uint32_32, modes : VkDeviceGroupPresentModeFlagsKHX) = { sType = sType; pNext = pNext; presentMask = presentMask; modes = modes }
+                override x.ToString() =
+                    sprintf "VkDeviceGroupPresentCapabilitiesKHX { sType = %A; pNext = %A; presentMask = %A; modes = %A }" x.sType x.pNext x.presentMask x.modes
+            end
+        
+        
+        type VkStructureType with
+             static member inline DeviceGroupPresentCapabilitiesKhx = unbox<VkStructureType> 999998007
+        
+        [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+        module VkRaw =
+            [<SuppressUnmanagedCodeSecurity>]
+            type VkGetDeviceGroupPresentCapabilitiesKHXDel = delegate of VkDevice * nativeptr<VkDeviceGroupPresentCapabilitiesKHX> -> VkResult
+            [<SuppressUnmanagedCodeSecurity>]
+            type VkGetDeviceGroupSurfacePresentModesKHXDel = delegate of VkDevice * VkSurfaceKHR * nativeptr<VkDeviceGroupPresentModeFlagsKHX> -> VkResult
+            [<SuppressUnmanagedCodeSecurity>]
+            type VkGetPhysicalDevicePresentRectanglesKHXDel = delegate of VkPhysicalDevice * VkSurfaceKHR * nativeptr<uint32> * nativeptr<VkRect2D> -> VkResult
+            
+            [<AbstractClass; Sealed>]
+            type private Loader<'d> private() =
+                static do Report.Begin(3, "[Vulkan] loading VK_KHR_surface")
+                static let s_vkGetDeviceGroupPresentCapabilitiesKHXDel = VkRaw.vkImportInstanceDelegate<VkGetDeviceGroupPresentCapabilitiesKHXDel> "vkGetDeviceGroupPresentCapabilitiesKHX"
+                static let s_vkGetDeviceGroupSurfacePresentModesKHXDel = VkRaw.vkImportInstanceDelegate<VkGetDeviceGroupSurfacePresentModesKHXDel> "vkGetDeviceGroupSurfacePresentModesKHX"
+                static let s_vkGetPhysicalDevicePresentRectanglesKHXDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDevicePresentRectanglesKHXDel> "vkGetPhysicalDevicePresentRectanglesKHX"
+                static do Report.End(3) |> ignore
+                static member vkGetDeviceGroupPresentCapabilitiesKHX = s_vkGetDeviceGroupPresentCapabilitiesKHXDel
+                static member vkGetDeviceGroupSurfacePresentModesKHX = s_vkGetDeviceGroupSurfacePresentModesKHXDel
+                static member vkGetPhysicalDevicePresentRectanglesKHX = s_vkGetPhysicalDevicePresentRectanglesKHXDel
+            let vkGetDeviceGroupPresentCapabilitiesKHX(device : VkDevice, pDeviceGroupPresentCapabilities : nativeptr<VkDeviceGroupPresentCapabilitiesKHX>) = Loader<unit>.vkGetDeviceGroupPresentCapabilitiesKHX.Invoke(device, pDeviceGroupPresentCapabilities)
+            let vkGetDeviceGroupSurfacePresentModesKHX(device : VkDevice, surface : VkSurfaceKHR, pModes : nativeptr<VkDeviceGroupPresentModeFlagsKHX>) = Loader<unit>.vkGetDeviceGroupSurfacePresentModesKHX.Invoke(device, surface, pModes)
+            let vkGetPhysicalDevicePresentRectanglesKHX(physicalDevice : VkPhysicalDevice, surface : VkSurfaceKHR, pRectCount : nativeptr<uint32>, pRects : nativeptr<VkRect2D>) = Loader<unit>.vkGetPhysicalDevicePresentRectanglesKHX.Invoke(physicalDevice, surface, pRectCount, pRects)
+    
+    module KHRSwapchain =
+        open KHRSurface
+        open EXTDebugReport
+        
+        
+        [<StructLayout(LayoutKind.Sequential)>]
+        type VkAcquireNextImageInfoKHX = 
+            struct
+                val mutable public sType : VkStructureType
+                val mutable public pNext : nativeint
+                val mutable public swapchain : VkSwapchainKHR
+                val mutable public timeout : uint64
+                val mutable public semaphore : VkSemaphore
+                val mutable public fence : VkFence
+                val mutable public deviceMask : uint32
+        
+                new(sType : VkStructureType, pNext : nativeint, swapchain : VkSwapchainKHR, timeout : uint64, semaphore : VkSemaphore, fence : VkFence, deviceMask : uint32) = { sType = sType; pNext = pNext; swapchain = swapchain; timeout = timeout; semaphore = semaphore; fence = fence; deviceMask = deviceMask }
+                override x.ToString() =
+                    sprintf "VkAcquireNextImageInfoKHX { sType = %A; pNext = %A; swapchain = %A; timeout = %A; semaphore = %A; fence = %A; deviceMask = %A }" x.sType x.pNext x.swapchain x.timeout x.semaphore x.fence x.deviceMask
+            end
+        
+        [<StructLayout(LayoutKind.Sequential)>]
+        type VkBindImageMemorySwapchainInfoKHX = 
+            struct
+                val mutable public sType : VkStructureType
+                val mutable public pNext : nativeint
+                val mutable public swapchain : VkSwapchainKHR
+                val mutable public imageIndex : uint32
+        
+                new(sType : VkStructureType, pNext : nativeint, swapchain : VkSwapchainKHR, imageIndex : uint32) = { sType = sType; pNext = pNext; swapchain = swapchain; imageIndex = imageIndex }
+                override x.ToString() =
+                    sprintf "VkBindImageMemorySwapchainInfoKHX { sType = %A; pNext = %A; swapchain = %A; imageIndex = %A }" x.sType x.pNext x.swapchain x.imageIndex
+            end
+        
+        [<StructLayout(LayoutKind.Sequential)>]
+        type VkDeviceGroupPresentInfoKHX = 
+            struct
+                val mutable public sType : VkStructureType
+                val mutable public pNext : nativeint
+                val mutable public swapchainCount : uint32
+                val mutable public pDeviceMasks : nativeptr<uint32>
+                val mutable public mode : VkDeviceGroupPresentModeFlagBitsKHX
+        
+                new(sType : VkStructureType, pNext : nativeint, swapchainCount : uint32, pDeviceMasks : nativeptr<uint32>, mode : VkDeviceGroupPresentModeFlagBitsKHX) = { sType = sType; pNext = pNext; swapchainCount = swapchainCount; pDeviceMasks = pDeviceMasks; mode = mode }
+                override x.ToString() =
+                    sprintf "VkDeviceGroupPresentInfoKHX { sType = %A; pNext = %A; swapchainCount = %A; pDeviceMasks = %A; mode = %A }" x.sType x.pNext x.swapchainCount x.pDeviceMasks x.mode
+            end
+        
+        [<StructLayout(LayoutKind.Sequential)>]
+        type VkDeviceGroupSwapchainCreateInfoKHX = 
+            struct
+                val mutable public sType : VkStructureType
+                val mutable public pNext : nativeint
+                val mutable public modes : VkDeviceGroupPresentModeFlagsKHX
+        
+                new(sType : VkStructureType, pNext : nativeint, modes : VkDeviceGroupPresentModeFlagsKHX) = { sType = sType; pNext = pNext; modes = modes }
+                override x.ToString() =
+                    sprintf "VkDeviceGroupSwapchainCreateInfoKHX { sType = %A; pNext = %A; modes = %A }" x.sType x.pNext x.modes
+            end
+        
+        [<StructLayout(LayoutKind.Sequential)>]
+        type VkImageSwapchainCreateInfoKHX = 
+            struct
+                val mutable public sType : VkStructureType
+                val mutable public pNext : nativeint
+                val mutable public swapchain : VkSwapchainKHR
+        
+                new(sType : VkStructureType, pNext : nativeint, swapchain : VkSwapchainKHR) = { sType = sType; pNext = pNext; swapchain = swapchain }
+                override x.ToString() =
+                    sprintf "VkImageSwapchainCreateInfoKHX { sType = %A; pNext = %A; swapchain = %A }" x.sType x.pNext x.swapchain
+            end
+        
+        
+        type VkStructureType with
+             static member inline ImageSwapchainCreateInfoKhx = unbox<VkStructureType> 999998008
+             static member inline BindImageMemorySwapchainInfoKhx = unbox<VkStructureType> 999998009
+             static member inline DeviceGroupPresentInfoKhx = unbox<VkStructureType> 999998011
+             static member inline DeviceGroupSwapchainCreateInfoKhx = unbox<VkStructureType> 999998012
+        
+        [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+        module VkRaw =
+            [<SuppressUnmanagedCodeSecurity>]
+            type VkAcquireNextImage2KHXDel = delegate of VkDevice * nativeptr<VkAcquireNextImageInfoKHX> * nativeptr<uint32> -> VkResult
+            
+            [<AbstractClass; Sealed>]
+            type private Loader<'d> private() =
+                static do Report.Begin(3, "[Vulkan] loading VK_KHR_swapchain")
+                static let s_vkAcquireNextImage2KHXDel = VkRaw.vkImportInstanceDelegate<VkAcquireNextImage2KHXDel> "vkAcquireNextImage2KHX"
+                static do Report.End(3) |> ignore
+                static member vkAcquireNextImage2KHX = s_vkAcquireNextImage2KHXDel
+            let vkAcquireNextImage2KHX(device : VkDevice, pAcquireInfo : nativeptr<VkAcquireNextImageInfoKHX>, pImageIndex : nativeptr<uint32>) = Loader<unit>.vkAcquireNextImage2KHX.Invoke(device, pAcquireInfo, pImageIndex)
 
 module KHXMultiview =
     let Name = "VK_KHX_multiview"
