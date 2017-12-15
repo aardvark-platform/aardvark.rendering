@@ -96,6 +96,7 @@
     <Compile Include="Runtime\RenderProgram.fs" />
     <Compile Include="Runtime\Interpreter.fs" />
     <Compile Include="Runtime\RenderTasks.fs" />
+    <Compile Include="Runtime\Compute.fs" />
     <Compile Include="Runtime\Runtime.fs" />
     <None Include="paket.references" />
     <None Include="paket.template" />

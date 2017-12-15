@@ -490,8 +490,10 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
     let getScanner (add : Expr<'a -> 'a -> 'a>) = scanCache.GetOrCreate(add, fun add -> new Scan<'a>(runtime, add))
     let getReducer (add : Expr<'a -> 'a -> 'a>) = reduceCache.GetOrCreate(add, fun add -> new Reduce<'a>(runtime, add))
     let getMapReducer (map : Expr<int -> 'a -> 'b>) (add : Expr<'b -> 'b -> 'b>) =
-        let reducer = getReducer add
-        mapReduceCache.GetOrCreate(map, add, fun map add -> new MapReduce<'a, 'b>(runtime, reducer, map, add))
+        mapReduceCache.GetOrCreate(map, add, fun map add -> 
+            let reducer = getReducer add
+            new MapReduce<'a, 'b>(runtime, reducer, map, add)
+        )
 
 
     member x.CompileScan(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, output : IBufferVector<'a>) =
