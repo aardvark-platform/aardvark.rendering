@@ -102,15 +102,7 @@ module private Kernels =
                     outputData.[oid] <- (%add) inputData.[iid] outputData.[oid]
 
         }
-      
 
-    let inputImage =
-        sampler2d {
-            texture uniform?InputTexture
-            filter Filter.MinMagMipPoint
-            addressU WrapMode.Clamp
-            addressV WrapMode.Clamp
-        }
 
     [<LocalSize(X = halfScanSize)>]
     let reduceKernel (add : Expr<'a -> 'a -> 'a>) (inputData : 'a[]) (outputData : 'a[]) =
@@ -196,6 +188,169 @@ module private Kernels =
 
         }
 
+      
+    let inputImage2d =
+        sampler2d {
+            texture uniform?InputTexture
+            filter Filter.MinMagMipPoint
+            addressU WrapMode.Clamp
+            addressV WrapMode.Clamp
+        }
+
+    [<LocalSize(X = 8, Y = 8)>]
+    let mapReduceImageKernel2d (map : Expr<V3i -> V4f -> 'b>) (add : Expr<'b -> 'b -> 'b>) (numGroups : V2i) (inputSize : V2i) (inputLevel : int) (outputData : 'b[]) =
+        compute {
+            let s = inputSize
+            let ggc = numGroups
+            let lc = getLocalId().XY
+            let gc = getWorkGroupId().XY
+            let tid = lc.Y * 8 + lc.X
+            
+            let group = gc.Y * ggc.X + gc.X
+
+            let ai = gc * V2i(16,8) + lc * V2i(2,1)
+            let bi = ai + V2i(1,0)
+            let lai = lc.Y * 16 + lc.X * 2
+            let lbi = lai + 1
+            
+            let mem : 'b[] = allocateShared 128
+
+            if ai.X < s.X && ai.Y < s.Y then mem.[lai] <- (%map) (V3i(ai, 0)) (V4f inputImage2d.[ai, inputLevel])
+            else mem.[lai] <- (%map) (V3i(ai, 0)) V4f.Zero
+
+            if bi.X < s.X && bi.Y < s.Y then mem.[lbi] <- (%map) (V3i(bi, 0)) (V4f inputImage2d.[bi, inputLevel])
+            else mem.[lbi] <- (%map) (V3i(bi, 0)) V4f.Zero
+
+            
+            barrier()
+            let mutable s = 64
+            while s > 0 do
+                if tid < s then
+                    mem.[tid] <- (%add) mem.[tid] mem.[tid + s]
+
+                s <- s >>> 1
+                barrier()
+
+            if tid = 0 then
+                outputData.[group] <- mem.[0]
+
+        }
+
+
+      
+    let inputImage3d =
+        sampler3d {
+            texture uniform?InputTexture
+            filter Filter.MinMagMipPoint
+            addressU WrapMode.Clamp
+            addressV WrapMode.Clamp
+            addressW WrapMode.Clamp
+        }
+
+    [<LocalSize(X = 4, Y = 4, Z = 2)>]
+    let mapReduceImageKernel3d (map : Expr<V3i -> V4f -> 'b>) (add : Expr<'b -> 'b -> 'b>) (numGroups : V3i) (inputSize : V3i) (inputLevel : int) (outputData : 'b[]) =
+        compute {
+            let s = inputSize
+            let ggc = numGroups
+            let lc = getLocalId()
+            let gc = getWorkGroupId()
+            let tid = lc.Z * 16 + lc.Y * 4 + lc.X
+            
+            let group = gc.Z * (ggc.X * ggc.Y) + gc.Y * ggc.X + gc.X
+
+            let ai = gc * V3i(8,4,2) + lc * V3i(2,1,1)
+            let bi = ai + V3i(1,0,0)
+            let lai = lc.Z * 32 + lc.Y * 8 + lc.X * 2
+            let lbi = lai + 1
+            
+            let mem : 'b[] = allocateShared 128
+
+            if ai.X < s.X && ai.Y < s.Y then mem.[lai] <- (%map) ai (V4f inputImage3d.[ai, inputLevel])
+            else mem.[lai] <- (%map) ai V4f.Zero
+
+            if bi.X < s.X && bi.Y < s.Y then mem.[lbi] <- (%map) bi (V4f inputImage3d.[bi, inputLevel])
+            else mem.[lbi] <- (%map) bi V4f.Zero
+
+            
+            barrier()
+            let mutable s = 64
+            while s > 0 do
+                if tid < s then
+                    mem.[tid] <- (%add) mem.[tid] mem.[tid + s]
+
+                s <- s >>> 1
+                barrier()
+
+            if tid = 0 then
+                outputData.[group] <- mem.[0]
+
+        }
+
+
+    [<LocalSize(X = 64)>]
+    let map (map : Expr<int -> 'a -> 'b>) (src : 'a[]) (dst : 'b[]) =
+        compute {
+            let id = getGlobalId().X
+            let srcOffset : int = uniform?SrcOffset
+            let srcDelta : int = uniform?SrcDelta
+            let srcCnt : int = uniform?SrcCount
+            
+            let dstOffset : int = uniform?DstOffset
+            let dstDelta : int = uniform?DstDelta
+
+            if id < srcCnt then
+                dst.[dstOffset + id * dstDelta] <- (%map) id src.[srcOffset + id * srcDelta]
+        }
+
+
+type private Map<'a, 'b when 'a : unmanaged and 'b : unmanaged>(runtime : IComputeRuntime, map : Expr<int -> 'a -> 'b>) =
+    
+    static let ceilDiv (v : int) (d : int) =
+        if v % d = 0 then v / d
+        else 1 + v / d
+
+    let map    = runtime.CreateComputeShader (Kernels.map map)
+
+    let build (src : IBufferVector<'a>) (dst : IBufferVector<'b>) =
+        let args = runtime.NewInputBinding(map)
+        
+        args.["src"] <- src.Buffer
+        args.["SrcOffset"] <- src.Origin
+        args.["SrcDelta"] <- src.Delta
+        args.["SrcCount"] <- src.Count
+        
+        args.["dst"] <- dst.Buffer
+        args.["DstOffset"] <- dst.Origin
+        args.["DstDelta"] <- dst.Delta
+        args.Flush()
+        
+        args, [
+            ComputeCommand.Bind map
+            ComputeCommand.SetInput args
+            ComputeCommand.Dispatch(ceilDiv (int src.Count) 64)
+            ComputeCommand.Sync(dst.Buffer)
+        ]
+
+
+
+    member x.Compile(input : IBufferVector<'a>, output : IBufferVector<'b>) =
+        let args, cmd = build input output
+        
+        let prog = runtime.Compile cmd
+        { new ComputeProgram<unit>() with
+            member x.Dispose() =
+                prog.Dispose()
+                args.Dispose()
+            member x.RunUnit() =
+                prog.Run()
+        }
+
+    member x.Run(input : IBufferVector<'a>, output : IBufferVector<'b>) =
+        let args, cmd = build input output
+        runtime.Run(cmd)
+        args.Dispose()
+
+        
 
 type private Scan<'a when 'a : unmanaged>(runtime : IComputeRuntime, add : Expr<'a -> 'a -> 'a>) =
 
@@ -464,6 +619,165 @@ type private MapReduce<'a, 'b when 'a : unmanaged and 'b : unmanaged>(runtime : 
 
         }
  
+type private MapReduceImage<'b when 'b : unmanaged>(runtime : IComputeRuntime, reduce : Reduce<'b>, map : Expr<V3i -> V4f -> 'b>, add : Expr<'b -> 'b -> 'b>) =
+  
+    static let ceilDiv (v : int) (d : int) =
+        if v % d = 0 then v / d
+        else 1 + v / d
+
+    static let ceilDiv2 (v : V2i) (d : V2i) =
+        V2i(ceilDiv v.X d.X, ceilDiv v.Y d.Y)
+   
+    static let ceilDiv3 (v : V3i) (d : V3i) =
+        V3i(ceilDiv v.X d.X, ceilDiv v.Y d.Y, ceilDiv v.Z d.Z)
+   
+    let mapReduce2d = runtime.CreateComputeShader (Kernels.mapReduceImageKernel2d map add)
+    let mapReduce3d = runtime.CreateComputeShader (Kernels.mapReduceImageKernel3d map add)
+    let reduce      = reduce.ReduceShader
+
+    let rec build (args : HashSet<System.IDisposable>) (input : IBufferVector<'b>) (target : 'b[]) =
+        let cnt = int input.Count
+        if cnt > 1 then
+            let args0 = runtime.NewInputBinding(reduce)
+            
+            let groupCount = ceilDiv (int input.Count) Kernels.scanSize
+            let temp = runtime.CreateBuffer<'b>(groupCount)
+            args0.["inputOffset"] <- input.Origin |> int
+            args0.["inputDelta"] <- input.Delta |> int
+            args0.["inputSize"] <- input.Count |> int
+            args0.["inputData"] <- input.Buffer
+            args0.["outputData"] <- temp
+            args0.Flush()
+
+            args.Add args0 |> ignore
+            args.Add temp |> ignore
+
+            let cmd =
+                [
+                    ComputeCommand.Bind reduce
+                    ComputeCommand.SetInput args0
+                    ComputeCommand.Dispatch(ceilDiv (int input.Count) Kernels.scanSize)
+                    ComputeCommand.Sync(temp.Buffer)
+                ]
+
+            if temp.Count > 0 then
+                let inner = build args temp target
+                [
+                    yield! cmd
+                    yield! inner
+                ]
+            else
+                cmd
+        else
+            let b = input.Buffer.Coerce<'b>()
+            [
+                ComputeCommand.Copy(b.[input.Origin .. input.Origin], target)
+            ]
+    
+    let buildTop (args : HashSet<System.IDisposable>) (input : ITextureSubResource) (target : 'b[]) =
+        let dimensions =
+            match input.Texture.Dimension with
+                | TextureDimension.Texture2D | TextureDimension.TextureCube -> 2
+                | TextureDimension.Texture3D -> 3
+                | d -> 
+                    failwithf "cannot reduce image with dimension: %A" d
+
+        match dimensions with
+        | 2 -> 
+            let args0 = runtime.NewInputBinding(mapReduce2d)
+            
+            let size = input.Size.XY
+            let groupCount = ceilDiv2 size (V2i(16,8))
+            let temp = runtime.CreateBuffer<'b>(groupCount.X * groupCount.Y)
+
+
+            args0.["InputTexture"] <- input.Texture
+            args0.["outputData"] <- temp
+            args0.["numGroups"] <- groupCount
+            args0.["inputSize"] <- size
+            args0.["inputLevel"] <- input.Level
+            args0.Flush()
+
+            args.Add args0 |> ignore
+            args.Add temp |> ignore
+
+            let cmd =
+                [
+                    ComputeCommand.Bind mapReduce2d
+                    ComputeCommand.SetInput args0
+                    ComputeCommand.Dispatch(groupCount)
+                    ComputeCommand.Sync(temp.Buffer)
+                ]
+
+            if temp.Count > 0 then
+                let inner = build args temp target
+                [
+                    yield! cmd
+                    yield! inner
+                ]
+            else
+                cmd
+        | 3 ->
+            let args0 = runtime.NewInputBinding(mapReduce3d)
+            
+            let size = input.Size
+            let groupCount = ceilDiv3 size (V3i(8,4,2))
+            let temp = runtime.CreateBuffer<'b>(groupCount.X * groupCount.Y * groupCount.Z)
+
+
+            args0.["InputTexture"] <- input.Texture
+            args0.["outputData"] <- temp
+            args0.["numGroups"] <- groupCount
+            args0.["inputSize"] <- size
+            args0.["inputLevel"] <- input.Level
+            args0.Flush()
+
+            args.Add args0 |> ignore
+            args.Add temp |> ignore
+
+            let cmd =
+                [
+                    ComputeCommand.Bind mapReduce3d
+                    ComputeCommand.SetInput args0
+                    ComputeCommand.Dispatch(groupCount)
+                    ComputeCommand.Sync(temp.Buffer)
+                ]
+
+            if temp.Count > 0 then
+                let inner = build args temp target
+                [
+                    yield! cmd
+                    yield! inner
+                ]
+            else
+                cmd
+        | d ->  
+            failwithf "cannot reduce image with dimension: %A" d
+
+    member x.Run(input : ITextureSubResource) =
+        let args = System.Collections.Generic.HashSet<System.IDisposable>()
+        let target : 'b[] = Array.zeroCreate 1
+        let cmd = buildTop args input target
+        runtime.Run cmd
+        for a in args do a.Dispose()
+        target.[0]
+        
+    member x.Compile (input : ITextureSubResource) =
+        let args = System.Collections.Generic.HashSet<System.IDisposable>()
+        let target : 'b[] = Array.zeroCreate 1
+        let cmd = buildTop args input target
+        let prog = runtime.Compile cmd 
+
+        { new ComputeProgram<'b>() with
+            member x.Dispose() =
+                prog.Dispose()
+                for a in args do a.Dispose()
+                args.Clear()
+            member x.Run() =
+                prog.Run()
+                target.[0]
+
+        }
     
 type private ExpressionCache() =
     let store = System.Collections.Concurrent.ConcurrentDictionary<list<string>, obj>()
@@ -483,10 +797,14 @@ type private ExpressionCache() =
 
 type ParallelPrimitives(runtime : IComputeRuntime) =
     
+    let mapCache = ExpressionCache()
     let scanCache = ExpressionCache()
     let reduceCache = ExpressionCache()
     let mapReduceCache = ExpressionCache()
+    let mapReduceImageCache = ExpressionCache()
 
+
+    let getMapper (map : Expr<int -> 'a -> 'b>) = mapCache.GetOrCreate(map, fun map -> new Map<'a, 'b>(runtime, map))
     let getScanner (add : Expr<'a -> 'a -> 'a>) = scanCache.GetOrCreate(add, fun add -> new Scan<'a>(runtime, add))
     let getReducer (add : Expr<'a -> 'a -> 'a>) = reduceCache.GetOrCreate(add, fun add -> new Reduce<'a>(runtime, add))
     let getMapReducer (map : Expr<int -> 'a -> 'b>) (add : Expr<'b -> 'b -> 'b>) =
@@ -495,6 +813,11 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
             new MapReduce<'a, 'b>(runtime, reducer, map, add)
         )
 
+    let getImageMapReducer (map : Expr<V3i -> V4f -> 'b>) (add : Expr<'b -> 'b -> 'b>) =
+        mapReduceCache.GetOrCreate(map, add, fun map add -> 
+            let reducer = getReducer add
+            new MapReduceImage<'b>(runtime, reducer, map, add)
+        )
 
     member x.CompileScan(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, output : IBufferVector<'a>) =
         let scanner = getScanner add
@@ -508,6 +831,13 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
         let reducer = getMapReducer map add
         reducer.Compile(input)
 
+    member x.CompileMapReduce(map : Expr<V3i -> V4f -> 'b>, add : Expr<'b -> 'b -> 'b>, input : ITextureSubResource) =
+        let reducer = getImageMapReducer map add
+        reducer.Compile(input)
+
+    member x.CompileMap(map : Expr<int -> 'a -> 'b>, input : IBufferVector<'a>, output : IBufferVector<'b>) =
+        let mapper = getMapper map
+        mapper.Compile(input, output)
 
     member x.Scan(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, output : IBufferVector<'a>) =
         let scanner = getScanner add
@@ -520,4 +850,12 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
     member x.MapReduce(map : Expr<int -> 'a -> 'b>, add : Expr<'b -> 'b -> 'b>, input : IBufferVector<'a>) =
         let reducer = getMapReducer map add
         reducer.Run(input)
+
+    member x.MapReduce(map : Expr<V3i -> V4f -> 'b>, add : Expr<'b -> 'b -> 'b>, input : ITextureSubResource) =
+        let reducer = getImageMapReducer map add
+        reducer.Run(input)
+        
+    member x.Map(map : Expr<int -> 'a -> 'b>, input : IBufferVector<'a>, output : IBufferVector<'b>) =
+        let mapper = getMapper map
+        mapper.Run(input, output)
 
