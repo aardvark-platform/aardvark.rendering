@@ -3305,6 +3305,55 @@ module Image =
 
         image
 
+    let ofPixVolume (pi : PixVolume) (info : TextureParams) (device : Device) =
+        let format = pi.PixFormat
+        let size = pi.Size
+
+        let format = device.GetSupportedFormat(VkImageTiling.Optimal, format, info)
+        let textureFormat = VkFormat.toTextureFormat format
+        let expectedFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
+
+        
+        let mipMapLevels =
+            if info.wantMipMaps then
+                1 + (max (max size.X size.Y) size.Z) |> Fun.Log2 |> floor |> int 
+            else
+                1
+
+
+        let image = 
+            create 
+                size
+                mipMapLevels 1 1 
+                TextureDimension.Texture3D 
+                textureFormat 
+                (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit)
+                device
+
+        
+        device.eventually {
+            let tempImages = List()
+            try
+                do! Command.TransformLayout(image, VkImageLayout.TransferDstOptimal)
+
+                // upload the level 0
+                let temp = device.CreateTensorImage(pi.Size, expectedFormat, info.wantSrgb)
+                temp.Write(pi)
+                tempImages.Add temp
+                do! Command.Copy(temp, image.[ImageAspect.Color, 0, 0])
+
+                // generate the mipMaps
+                if info.wantMipMaps then
+                    do! Command.GenerateMipMaps image.[ImageAspect.Color]
+
+                do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
+
+            finally
+                for t in tempImages do device.Delete t
+        }
+
+        image
+
     let ofPixImageCube (pi : PixImageCube) (info : TextureParams) (device : Device) =
         let face0 = pi.MipMapArray.[0]
         if face0.LevelCount <= 0 then failf "empty PixImageMipMap"
@@ -3422,7 +3471,7 @@ module Image =
                 //Image(device, VkImage.Null, V3i.Zero, 1, 1, 1, TextureDimension.Texture2D, VkFormat.Undefined, DevicePtr.Null, VkImageLayout.ShaderReadOnlyOptimal)
 
             | :? PixTexture3d as t ->
-                failf "please implement volume textures"
+                device |> ofPixVolume t.PixVolume t.TextureParams
 
             | :? FileTexture as t ->
                 device |> ofFile t.FileName t.TextureParams
