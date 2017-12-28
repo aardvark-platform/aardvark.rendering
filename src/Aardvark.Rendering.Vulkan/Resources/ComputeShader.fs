@@ -629,7 +629,7 @@ module ``Compute Commands`` =
                     for u in downloads do u()
                 
 
-                override x.Dispose() =
+                override x.Release() =
                     for (_,b) in state.uploads do device.Delete b
                     for (b,_) in state.downloads do device.Delete b
                     stream.Dispose()

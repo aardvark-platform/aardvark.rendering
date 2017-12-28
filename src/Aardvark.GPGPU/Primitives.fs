@@ -337,13 +337,10 @@ type private Map<'a, 'b when 'a : unmanaged and 'b : unmanaged>(runtime : ICompu
         let args, cmd = build input output
         
         let prog = runtime.Compile cmd
-        { new ComputeProgram<unit>() with
-            member x.Dispose() =
-                prog.Dispose()
-                args.Dispose()
-            member x.RunUnit() =
-                prog.Run()
-        }
+        prog.OnDispose(fun () ->
+           args.Dispose()
+        )
+        prog
 
     member x.Run(input : IBufferVector<'a>, output : IBufferVector<'b>) =
         let args, cmd = build input output
@@ -422,15 +419,12 @@ type private Scan<'a when 'a : unmanaged>(runtime : IComputeRuntime, add : Expr<
         let args = System.Collections.Generic.HashSet<IComputeShaderInputBinding>()
         let cmd = build args input output
         let prog = runtime.Compile cmd
-
-        { new ComputeProgram<unit>() with
-            member x.Dispose() =
-                prog.Dispose()
-                for a in args do a.Dispose()
-                args.Clear()
-            member x.RunUnit() =
-                prog.Run()
-        }
+        
+        prog.OnDispose(fun () ->
+            for a in args do a.Dispose()
+            args.Clear()
+        )
+        prog
         
     member x.Run (input : IBufferVector<'a>, output : IBufferVector<'a>) =
         let args = System.Collections.Generic.HashSet<IComputeShaderInputBinding>()
@@ -501,9 +495,9 @@ type private Reduce<'a when 'a : unmanaged>(runtime : IComputeRuntime, add : Exp
         let target : 'a[] = Array.zeroCreate 1
         let cmd = build args input target
         let prog = runtime.Compile cmd 
-
+ 
         { new ComputeProgram<'a>() with
-            member x.Dispose() =
+            member x.Release() =
                 prog.Dispose()
                 for a in args do a.Dispose()
                 args.Clear()
@@ -609,7 +603,7 @@ type private MapReduce<'a, 'b when 'a : unmanaged and 'b : unmanaged>(runtime : 
         let prog = runtime.Compile cmd 
 
         { new ComputeProgram<'b>() with
-            member x.Dispose() =
+            member x.Release() =
                 prog.Dispose()
                 for a in args do a.Dispose()
                 args.Clear()
@@ -769,7 +763,7 @@ type private MapReduceImage<'b when 'b : unmanaged>(runtime : IComputeRuntime, r
         let prog = runtime.Compile cmd 
 
         { new ComputeProgram<'b>() with
-            member x.Dispose() =
+            member x.Release() =
                 prog.Dispose()
                 for a in args do a.Dispose()
                 args.Clear()

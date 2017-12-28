@@ -1289,11 +1289,24 @@ let main args =
     Ag.initialize()
     Aardvark.Init()
 
+    let app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication(true)
+    let runtime = app.Runtime
+
+    let comp = new JpegCompressor(runtime)
+
+    let input = PixImage.Create @"vs.png"
+
+    let tex = runtime.PrepareTexture(PixTexture2d(PixImageMipMap [| input |], TextureParams.empty))
+
+    let comp = comp.NewInstance(input.Size, Quantization.photoshop80)
+    let data = comp.Compress(tex)
+    File.WriteAllBytes(@"C:\Users\Schorsch\Desktop\test.jpg", data)
+
     //Aardvark.Application.OpenVR.UnhateTest.run()
 
     //Examples.Tessellation.run()
     //Examples.Stereo.runNew()
-    Examples.ComputeShader.run()
+    //Examples.ComputeShader.run()
     //Examples.CommandTest.run()
     //Examples.Wobble.run()
     //Examples.GeometryComposition.run()
