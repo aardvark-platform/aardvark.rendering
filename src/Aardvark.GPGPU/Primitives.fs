@@ -795,8 +795,39 @@ type private ExpressionCache() =
             create a b :> obj
         ) |> unbox<'c>
 
+type private Add<'a>() =
+    static let addMeth = System.Type.GetType("Microsoft.FSharp.Core.Operators, FSharp.Core").GetMethod("op_Addition")
+    
+    static let add : Expr<'a -> 'a -> 'a> = 
+        let m = addMeth.MakeGenericMethod [| typeof<'a>; typeof<'a>; typeof<'a> |]
+        let l = Var("l", typeof<'a>)
+        let r = Var("r", typeof<'a>)
+        Expr.Cast <| 
+            Expr.Lambda(l, 
+                Expr.Lambda(r, 
+                    Expr.Call(m, [Expr.Var l; Expr.Var r])
+                )
+            )
+
+    static member Expr = add
+
+[<AbstractClass>]
+type private Existential<'r>() =
+    static let visitMeth = typeof<Existential<'r>>.GetMethod "Visit"
+    
+    abstract member Visit<'a when 'a : unmanaged> : Option<'a> -> 'r
+
+    member x.Run(t : System.Type) =
+        let m = visitMeth.MakeGenericMethod [| t |]
+        m.Invoke(x, [| null |]) |> unbox<'r>
+
+    static member Run(t : System.Type, e : Existential<'r>) =
+        e.Run t
+
 type ParallelPrimitives(runtime : IComputeRuntime) =
     
+    let sumCache = ConcurrentDict<System.Type, obj>(Dict())
+
     let mapCache = ExpressionCache()
     let scanCache = ExpressionCache()
     let reduceCache = ExpressionCache()
@@ -818,6 +849,17 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
             let reducer = getReducer add
             new MapReduceImage<'b>(runtime, reducer, map, add)
         )
+
+    let getSum (t : System.Type) =
+        sumCache.GetOrCreate(t, fun t ->
+            Existential.Run(t, 
+                { new Existential<obj>() with
+                    member x.Visit(o : Option<'a>) =
+                        getReducer Add<'a>.Expr :> obj
+                }
+            )
+        )
+
 
     member x.CompileScan(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, output : IBufferVector<'a>) =
         let scanner = getScanner add
@@ -859,3 +901,10 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
         let mapper = getMapper map
         mapper.Run(input, output)
 
+    member x.Sum(b : IBufferVector<'a>) : 'a =
+        let s = getSum typeof<'a> |> unbox<Reduce<'a>>
+        s.Run(b)
+
+    member x.CompileSum(b : IBufferVector<'a>) =
+        let s = getSum typeof<'a> |> unbox<Reduce<'a>>
+        s.Compile(b)

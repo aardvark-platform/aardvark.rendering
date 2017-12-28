@@ -25,7 +25,7 @@ module Sponza =
             window {
                 display Display.Mono
                 samples 8
-                backend Backend.Both
+                backend Backend.Vulkan
                 debug true
             }
 

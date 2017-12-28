@@ -368,6 +368,14 @@ module ``Compute Commands`` =
         open Aardvark.Base.Monads.State
 
 
+        let private accessFlags =
+            LookupTable.lookupTable [
+                BufferAccess.ShaderRead, VkAccessFlags.ShaderReadBit
+                BufferAccess.ShaderWrite, VkAccessFlags.ShaderWriteBit
+                BufferAccess.TransferRead, VkAccessFlags.TransferReadBit
+                BufferAccess.TransferWrite, VkAccessFlags.TransferWriteBit
+            ]
+
         [<AutoOpen>]
         module private Compiler = 
             type CompilerState =
@@ -487,9 +495,7 @@ module ``Compute Commands`` =
                         [| barrier |]    
                     )
 
-                member x.Sync(b : Buffer) =
-                    let src = VkAccessFlags.ShaderWriteBit
-                    let dst = VkAccessFlags.ShaderReadBit
+                member x.Sync(b : Buffer, src : VkAccessFlags, dst : VkAccessFlags) =
 
                     let barrier =
                         VkBufferMemoryBarrier(
@@ -538,6 +544,10 @@ module ``Compute Commands`` =
                         [| barrier |],
                         [||]
                     )
+
+                member x.SetBuffer(b : Buffer, offset : int64, size : int64, pattern : byte[]) =
+                    let value = BitConverter.ToUInt32(pattern, 0)
+                    x.FillBuffer(b.Handle, uint64 offset, uint64 size, value)
 
 
             type ComputeProgram(stream : VKVM.CommandStream, state : CompilerState) =
@@ -718,8 +728,11 @@ module ``Compute Commands`` =
                     let layout = TextureLayout.toImageLayout layout
                     Command.TransformLayout(tex, layout)
 
-                | ComputeCommand.SyncBufferCmd b ->
-                    Command.Sync(unbox b, VkAccessFlags.ShaderWriteBit, VkAccessFlags.ShaderReadBit)
+                | ComputeCommand.SyncBufferCmd(b, src, dst) ->
+                    Command.Sync(unbox b, accessFlags src, accessFlags dst)
+
+                | ComputeCommand.SetBufferCmd(b, pattern) ->
+                    Command.SetBuffer(unbox b.Buffer, int64 b.Offset, int64 b.Size, pattern)
 
                 | ComputeCommand.ExecuteCmd other ->
                     match other with 
@@ -735,8 +748,6 @@ module ``Compute Commands`` =
                         | _ ->
                             failf "not implemented"
 
-                | ComputeCommand.DownloadImageCmd _ | ComputeCommand.UploadImageCmd _ ->
-                    failf "not implemented: %A" cmd
 
         let private compileS (cmd : ComputeCommand) (stream : VKVM.CommandStream) : State<CompilerState, unit> =
             state {
@@ -801,8 +812,11 @@ module ``Compute Commands`` =
                         if oldLayout <> newLayout then
                             stream.TransformLayout(tex, oldLayout, newLayout) |> ignore
             
-                    | ComputeCommand.SyncBufferCmd b ->
-                        stream.Sync (unbox b) |> ignore
+                    | ComputeCommand.SyncBufferCmd(b, src, dst) ->
+                        stream.Sync(unbox b, accessFlags src, accessFlags dst) |> ignore
+
+                    | ComputeCommand.SetBufferCmd(b, value) ->
+                        stream.SetBuffer(unbox b.Buffer, int64 b.Offset, int64 b.Size, value) |> ignore
 
                     | ComputeCommand.ExecuteCmd other ->
                         match other with
@@ -819,8 +833,6 @@ module ``Compute Commands`` =
                             | _ ->
                                 failf "not implemented"
 
-                    | ComputeCommand.DownloadImageCmd _ | ComputeCommand.UploadImageCmd _ ->
-                        failf "not implemented: %A" cmd
             }
 
         let compile (cmds : list<ComputeCommand>) (device : Device) =

@@ -8,6 +8,7 @@ open Microsoft.FSharp.NativeInterop
 open System.Runtime.CompilerServices
 
 #nowarn "9"
+#nowarn "51"
 
 //[<RequireQualifiedAccess>]
 type TextureLayout =
@@ -17,6 +18,12 @@ type TextureLayout =
     | ShaderRead        = 4
     | ShaderWrite       = 5
     | ShaderReadWrite   = 6
+
+type BufferAccess =
+    | ShaderRead    = 1
+    | ShaderWrite   = 2
+    | TransferRead  = 3
+    | TransferWrite = 4
 
 type IComputeShader =
     abstract member Runtime : IComputeRuntime
@@ -64,21 +71,23 @@ and [<RequireQualifiedAccess>]
     | CopyBufferCmd of src : IBufferRange * dst : IBufferRange
     | DownloadBufferCmd of src : IBufferRange * dst : HostMemory
     | UploadBufferCmd of src : HostMemory * dst : IBufferRange
-
-    | SyncBufferCmd of buffer : IBackendBuffer
+    | SetBufferCmd of buffer : IBufferRange * pattern : byte[]
+    | SyncBufferCmd of buffer : IBackendBuffer * src : BufferAccess * dst : BufferAccess
     | TransformLayoutCmd of tex : IBackendTexture * layout : TextureLayout
 
     | ExecuteCmd of ComputeProgram<unit>
 
+    | CopyImageCmd of src : IFramebufferOutput * srcOffset : V3i * dst : IFramebufferOutput * dstOffset : V3i * size : V3i
 
-    | CopyImageCmd of src : ITextureLevel * srcOffset : V3i * dst : ITextureLevel * dstOffset : V3i * size : V3i
-    | DownloadImageCmd of src : ITextureSubResource * srcOffset : V3i * dst : PixVolume
-    | UploadImageCmd of src : PixVolume * dst : ITextureSubResource * dstOffset : V3i
 
     static member Execute (other : ComputeProgram<unit>) =
         ComputeCommand.ExecuteCmd other
 
-    static member Sync b = SyncBufferCmd b
+    static member Sync b = ComputeCommand.SyncBufferCmd(b, BufferAccess.ShaderWrite, BufferAccess.ShaderRead)
+    
+    static member Sync(b, s, d) = ComputeCommand.SyncBufferCmd(b, s, d)
+
+    static member Zero(b) = ComputeCommand.SetBufferCmd(b, [| 0uy; 0uy; 0uy; 0uy |])
 
     static member Bind(shader : IComputeShader) =
         ComputeCommand.BindCmd shader
@@ -101,6 +110,12 @@ and [<RequireQualifiedAccess>]
     static member Copy(src : IBufferRange, dst : IBufferRange) =
         ComputeCommand.CopyBufferCmd(src, dst)
 
+    static member Set<'a when 'a : unmanaged>(dst : IBufferRange<'a>, value : 'a) =
+        let arr : byte[] = Array.zeroCreate sizeof<'a>
+        let mutable value = value
+        Marshal.Copy(NativePtr.toNativeInt &&value, arr, 0, arr.Length)
+        ComputeCommand.SetBufferCmd(dst, arr)
+
     static member Copy<'a when 'a : unmanaged>(src : IBufferRange<'a>, dst : 'a[], dstIndex : int) =
         ComputeCommand.DownloadBufferCmd(src, HostMemory.Managed (dst :> Array, dstIndex))
 
@@ -119,6 +134,8 @@ and [<RequireQualifiedAccess>]
     static member Copy<'a when 'a : unmanaged>(src : nativeptr<'a>, dst : IBufferRange<'a>) =
         ComputeCommand.UploadBufferCmd(HostMemory.Unmanaged (NativePtr.toNativeInt src), dst)
 
+    static member Copy(src : ITextureLevel, srcOffset : V3i, dst : ITextureLevel, dstOffset : V3i, size : V3i) =
+        ComputeCommand.CopyImageCmd(src, srcOffset, dst, dstOffset, size)
 
 
 [<AbstractClass; Sealed; Extension>]
