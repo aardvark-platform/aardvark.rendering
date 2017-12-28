@@ -48,9 +48,19 @@ and IComputeRuntime =
 
 and [<AbstractClass>]
     ComputeProgram<'r>() =
+
+    let mutable onDispose : list<unit -> unit> = []
+
     abstract member Run : unit -> 'r
     abstract member RunUnit : unit -> unit
-    abstract member Dispose : unit -> unit
+    abstract member Release : unit -> unit
+
+    member x.Dispose() =
+        x.Release()
+        for d in onDispose do d()
+        onDispose <- []
+
+    member x.OnDispose(f : unit -> unit) = onDispose <- f :: onDispose
 
     default x.Run() = x.RunUnit(); Unchecked.defaultof<'r>
     default x.RunUnit() = x.Run() |> ignore

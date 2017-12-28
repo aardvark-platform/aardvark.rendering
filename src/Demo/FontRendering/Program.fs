@@ -387,9 +387,11 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
+    Jpeg.Test.run()
+
     //tensorPerformance()
     //VulkanTests.run()
-    //Environment.Exit 0
+    Environment.Exit 0
 
 
     use app = new VulkanApplication(true)
