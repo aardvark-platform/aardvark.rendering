@@ -230,6 +230,11 @@ type Device internal(isGroup : bool, deviceGroup : PhysicalDevice[], wantedLayer
         let computeFamily   = computeQueues |> Option.map toFamily
         let transferFamily  = transferQueues |> Option.map toFamily
 
+        let computeFamily =
+            match computeFamily with
+                | Some c -> Some c
+                | None -> graphicsFamily
+
         graphicsFamily, computeFamily, transferFamily
 
     let queueFamilies =

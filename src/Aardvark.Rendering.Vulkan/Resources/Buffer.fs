@@ -287,6 +287,15 @@ module BufferCommands =
                     VkRaw.vkCmdFillBuffer(cmd.Handle, b.Handle, 0UL, uint64 b.Size, 0u)
                     Disposable.Empty
             }
+        static member SetBuffer(b : Buffer, offset : int64, size : int64, value : byte[]) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue cmd =
+                    if value.Length <> 4 then failf "[Vulkan] pattern too long"
+                    let v = BitConverter.ToUInt32(value, 0)
+                    VkRaw.vkCmdFillBuffer(cmd.Handle, b.Handle, uint64 offset, uint64 size, v)
+                    Disposable.Empty
+            }
 // =======================================================================
 // Resource functions for Device
 // =======================================================================

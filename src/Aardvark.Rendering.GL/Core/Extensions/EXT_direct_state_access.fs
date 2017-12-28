@@ -61,7 +61,7 @@ module EXT_direct_state_access =
                     GL.BufferStorage(t, size, data, flags)
                 )
 
-        static member MapNamedBuffer(buffer: int, access : BufferAccess) =
+        static member MapNamedBuffer(buffer: int, access : OpenTK.Graphics.OpenGL4.BufferAccess) =
             if supported then
                 GL.Ext.MapNamedBuffer(buffer, unbox (int access))
             else
