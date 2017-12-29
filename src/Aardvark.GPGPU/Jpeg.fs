@@ -765,24 +765,10 @@ module private JpegKernels =
 
     type UniformScope with
         member x.Quantization: Arr<64 N, V4i> = uniform?Quantization
-
-    let ycbcr (v : V3d) =
-        let v = 255.0 * v
-        V3d(
-            Vec.dot Constants.y (V4d(v, 1.0)),
-            Vec.dot Constants.cb (V4d(v, 1.0)),
-            Vec.dot Constants.cr (V4d(v, 1.0))
-        )
-
-    [<GLSLIntrinsic("roundEven({0})")>]
-    let roundEven (v : float) =
-        System.Math.Round(v, 0, System.MidpointRounding.ToEven)
-
-    let quantify (i : int) (v : V3d) =
-        let ql = V3i.Max(V3i.III, uniform.Quantization.[i].XYZ)
-        let t = v / V3d ql
-        V3i(int (round t.X), int (round t.Y), int (round t.Z))
-        
+        member x.DCLum : Arr<12 N, uint32> = uniform?Encoder?DCLum
+        member x.DCChroma : Arr<12 N, uint32> = uniform?Encoder?DCChroma
+        member x.ACLum : Arr<255 N, uint32> = uniform?Encoder?ACLum
+        member x.ACChroma : Arr<255 N, uint32> = uniform?Encoder?ACChroma
 
     let inputImage =
         sampler2d {
@@ -792,144 +778,162 @@ module private JpegKernels =
             addressV WrapMode.Clamp
         }
 
+    [<Inline>]
+    let ycbcr (v : V3d) =
+        let v = 255.0 * v
+        V3d(
+            Vec.dot Constants.y (V4d(v, 1.0)),
+            Vec.dot Constants.cb (V4d(v, 1.0)),
+            Vec.dot Constants.cr (V4d(v, 1.0))
+        )
+
+    [<Inline>]
+    let quantify (i : int) (v : V3d) =
+        let ql = V3i.Max(V3i.III, uniform.Quantization.[i].XYZ)
+        let t = v / V3d ql
+        V3i(int (round t.X), int (round t.Y), int (round t.Z))
+   
+    [<Inline>]
     let dctFactor (m : int) (x : int) =
-        //cos ( (2.0 * float m + 1.0) * Constant.Pi * float x / 16.0)
         Constants.cosTable.[m + 8 * x]
 
-    [<GLSLIntrinsic("fma({0}, {1}, {2})")>]
-    let fma (a : float) (b : float) (c : float) : float = failwith ""
+    [<Inline>]
+    let add (l : V2i) (r : V2i) =
+        if r.X <> 0 then
+            V2i(l.X + r.X, r.Y)
+        else
+            if l.X <> 0 then
+                V2i(l.X, l.Y)
+            else
+                V2i(0, r.Y)
 
+    [<Inline>]
+    let flipByteOrder (v : uint32) =
+        let v = (v >>> 16) ||| (v <<< 16)
+        ((v &&& 0xFF00FF00u) >>> 8) ||| ((v &&& 0x00FF00FFu) <<< 8)
 
-    let C = Array.init 8 (fun i -> cos (Constant.Pi / 16.0 * float i))
-    let S = C |> Array.mapi (fun i c -> if i = 0 then 1.0 / (2.0 * Constant.Sqrt2) else 1.0 / (4.0 * c))
-    let A = [| 0.0; C.[4]; C.[2] - C.[6]; C.[4]; C.[6] + C.[2]; C.[6] |]
+    module Ballot = 
+        [<GLSLIntrinsic("ballotARB({0})", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
+        let ballot (b : bool) : uint64 =
+            failwith ""
 
-    [<LocalSize(X = 32)>]
-    let fdct (target : V4i[]) =
-        compute {
-            let values : V3d[] = allocateShared 256
-            let lid = getLocalId().X
-            let wid = getWorkGroupId().X
+        [<GLSLIntrinsic("gl_SubGroupLtMaskARB", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
+        let lessMask() : uint64 =
+            failwith ""
 
-            let vOffset = wid * 64
+        [<GLSLIntrinsic("gl_SubGroupGtMaskARB", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
+        let greaterMask() : uint64 =
+            failwith ""
+         
+    module Tools =
+        [<GLSLIntrinsic("findMSB({0})")>]
+        let msb (v : uint32) =
+            Fun.HighestBit (int v)
 
-
-
-            let s = inputImage.Size
-            let totalBlocks = V2i((if s.X % 8 = 0 then s.X / 8 else 1 + s.X / 8), (if s.Y % 8 = 0 then s.Y / 8 else 1 + s.Y/ 8))
-
-            let bid = 4 * wid + (lid / 8)
-            let bCoord = V2i(bid % totalBlocks.X, bid / totalBlocks.X)
+        [<GLSLIntrinsic("atomicOr({0}, {1})")>]
+        let atomicOr (buf : uint32) (v : uint32) : unit =
+            failwith ""
+        
             
+    let leadingIsLast (b : bool) =
+        let scanSize = LocalSize.X
+        let mem : V2i[] = allocateShared LocalSize.X
+        let lid = getLocalId().X
 
-            let li = lid % 8
-            let iOff = 8 * bCoord
-            let rOffset = vOffset + 8 * li
-            let v0 = ycbcr inputImage.[iOff + V2i(0, li), 0].XYZ
-            let v1 = ycbcr inputImage.[iOff + V2i(1, li), 0].XYZ
-            let v2 = ycbcr inputImage.[iOff + V2i(2, li), 0].XYZ
-            let v3 = ycbcr inputImage.[iOff + V2i(3, li), 0].XYZ
-            let v4 = ycbcr inputImage.[iOff + V2i(4, li), 0].XYZ
-            let v5 = ycbcr inputImage.[iOff + V2i(5, li), 0].XYZ
-            let v6 = ycbcr inputImage.[iOff + V2i(6, li), 0].XYZ
-            let v7 = ycbcr inputImage.[iOff + V2i(7, li), 0].XYZ
+        mem.[lid] <- V2i((if b then 1 else 0), lid)
+        barrier()
 
-            // dct on [rOffset .. rOffset + 7]
-            let v8 = v0 + v3
-            let v9 = v1 + v2
-            let v10 = v1 - v2
-            let v11 = v0 - v3
-            let v12 = -v4 - v5
-            let v13 = (v5 + v6) * A.[3]
-            let v14 = v6 + v7
+        let mutable s = 1
+        let mutable d = 2
+        while d <= scanSize do
+            if lid % d = 0 && lid >= s then
+                mem.[lid] <- add mem.[lid - s] mem.[lid]
 
-            let v15 = v8 + v9;
-            let v16 = v8 - v9;
-            let v17 = (v10 + v11) * A.[1]
-            let v18 = (v12 + v14) * A.[5]
-
-            let v19 = -v12 * A.[2] - v18
-            let v20 = v14 * A.[4] - v18
-
-            let v21 = v17 + v11
-            let v22 = v11 - v17
-            let v23 = v13 + v7
-            let v24 = v7 - v13
-
-            let v25 = v19 + v24
-            let v26 = v23 + v20
-            let v27 = v23 - v20
-            let v28 = v24 - v19
-
-            values.[rOffset + 0] <- S.[0] * v15
-            values.[rOffset + 1] <- S.[1] * v26
-            values.[rOffset + 2] <- S.[2] * v21
-            values.[rOffset + 3] <- S.[3] * v28
-            values.[rOffset + 4] <- S.[4] * v16
-            values.[rOffset + 5] <- S.[5] * v25
-            values.[rOffset + 6] <- S.[6] * v22
-            values.[rOffset + 7] <- S.[7] * v27
             barrier()
+            s <- s <<< 1
+            d <- d <<< 1
 
-            let cOffset = vOffset + li
-            // dct on [cOffset .. 8 .. cOffset + ??]
-            let w0 = values.[cOffset + 0]  + values.[cOffset + 56]
-            let w1 = values.[cOffset + 8]  + values.[cOffset + 48]
-            let w2 = values.[cOffset + 16] + values.[cOffset + 40]
-            let w3 = values.[cOffset + 24] + values.[cOffset + 32]
-            let w4 = values.[cOffset + 24] - values.[cOffset + 32]
-            let w5 = values.[cOffset + 16] - values.[cOffset + 40]
-            let w6 = values.[cOffset + 8]  - values.[cOffset + 48]
-            let w7 = values.[cOffset + 0]  - values.[cOffset + 56]
-
-            let w8 = w0 + w3
-            let w9 = w1 + w2
-            let w10 = w1 - w2
-            let w11 = w0 - w3
-            let w12 = -w4 - w5
-            let w13 = (w5 + w6) * A.[3]
-            let w14 = w6 + w7
-
-            let w15 = w8 + w9;
-            let w16 = w8 - w9;
-            let w17 = (w10 + w11) * A.[1]
-            let w18 = (w12 + w14) * A.[5]
-
-            let w19 = -w12 * A.[2] - w18
-            let w20 = w14 * A.[4] - w18
-
-            let w21 = w17 + w11
-            let w22 = w11 - w17
-            let w23 = w13 + w7
-            let w24 = w7 - w13
-
-            let w25 = w19 + w24
-            let w26 = w23 + w20
-            let w27 = w23 - w20
-            let w28 = w24 - w19
-
-            values.[cOffset + 0]  <- S.[0] * w15
-            values.[cOffset + 8]  <- S.[1] * w26
-            values.[cOffset + 16] <- S.[2] * w21
-            values.[cOffset + 24] <- S.[3] * w28
-            values.[cOffset + 32] <- S.[4] * w16
-            values.[cOffset + 40] <- S.[5] * w25
-            values.[cOffset + 48] <- S.[6] * w22
-            values.[cOffset + 56] <- S.[7] * w27
+        d <- d >>> 1
+        s <- s >>> 1
+        while s >= 1 do
+            if lid % d = 0 && lid + s < scanSize then
+                mem.[lid + s] <- add mem.[lid] mem.[lid + s]
+                    
             barrier()
+            s <- s >>> 1
+            d <- d >>> 1
+              
 
-            if bCoord.X < totalBlocks.X && bCoord.Y < totalBlocks.Y then
-                // write rows to output
-                let tid = bid * 64 + li * 8
-                for i in 0 .. 7 do
-                    let res = quantify (8 * li + i) values.[rOffset + i]
-                    target.[tid + i] <- V4i(res,0)
-        }
+        let vl = if lid > 0 then mem.[lid - 1] else V2i(0, -1)
+        let total = mem.[scanSize - 1].X
+        let mine = mem.[lid].X
 
+        let last = 
+            if vl.X <> 0 then vl.Y
+            else -1
+
+        let leading = lid - last - 1
+        let isLast = mine = total
+        leading, isLast
+
+    let leadingIsLastBallot (ev : bool) (ov : bool) =
+        let eb = Ballot.ballot(ev) |> uint32
+        let ob = Ballot.ballot(ov) |> uint32
+
+        let i = getLocalId().X
+        let ei = 2 * i
+        let oi = ei + 1
+
+        let less        = Ballot.lessMask() |> uint32
+        let greater     = Ballot.lessMask() |> uint32
+
+        let les = eb &&& less |> Bitwise.MSB
+        let los = ob &&& less |> Bitwise.MSB
+
+        let eLast =
+            if les > los then 2 * les
+            else 2 * los + 1
+             
+        let oLast =
+            if ev then ei
+            else eLast 
+        
+        let eLeading = ei - eLast - 1
+        let oLeading = oi - oLast - 1
+
+        let cae = eb &&& greater |> Bitwise.BitCount
+        let cao = ob &&& greater |> Bitwise.BitCount
+
+        let oIsLast = ov && cae = 0 && cao = 0
+        let eIsLast = ev && oIsLast && not ov
+
+        (eLeading, oIsLast, oLeading, eIsLast)
+
+    let encode (index : int) (chroma : bool) (leading : int) (value : int) : int * uint32 =
+        let scale = Tools.msb (uint32 (abs value)) + 1
+        let off = if value < 0 then (1 <<< scale) - 1 else 0
+        let v = uint32 (off + value)
+
+        let mutable key = scale
+        if index <> 0 then
+            key <- (leading <<< 4) ||| scale
+
+        let mutable huff = 0u
+        if index = 0 && chroma then huff <- uniform.DCChroma.[key]
+        elif index = 0 then huff <- uniform.DCLum.[key]
+        elif chroma then huff <- uniform.ACChroma.[key]
+        else huff <- uniform.ACLum.[key]
+            
+        let len = Codeword.length huff
+        let cc = Codeword.code huff
+        len + scale, (cc <<< scale) ||| (v &&& ((1u <<< scale) - 1u))
+       
+    
     [<LocalSize(X = 8, Y = 8)>]
     let dct (target : V4i[]) =
         compute {
             let values : V3d[] = allocateShared 64
+            let imageSize : V2i = uniform?ImageSize
 
             let blockId = getWorkGroupId().XY 
             let blockCount = getWorkGroupCount().XY
@@ -939,8 +943,11 @@ module private JpegKernels =
             let lid = lc.Y * 8 + lc.X
             let cid = Constants.inverseZigZagOrder.[lid]
 
+            let tc = (V2d(float gc.X, float imageSize.Y - 1.0 - float gc.Y) + V2d(0.5, 0.5)) / V2d imageSize
+
+
             // every thread loads the RGB value and stores it in values (as YCbCr)
-            values.[lid] <- ycbcr inputImage.[gc, 0].XYZ
+            values.[lid] <- ycbcr (inputImage.SampleLevel(tc, 0.0).XYZ)
             barrier()
 
             // figure out the DCT normalization factors
@@ -991,154 +998,6 @@ module private JpegKernels =
             let tid = (blockId.X + blockCount.X * blockId.Y) * 64 + cid
             target.[tid] <- V4i(qdct, 0)
         }
-
-
-    let add (l : V2i) (r : V2i) =
-        if r.X <> 0 then
-            V2i(l.X + r.X, r.Y)
-        else
-            if l.X <> 0 then
-                V2i(l.X, l.Y)
-            else
-                V2i(0, r.Y)
-
-    let leadingIsLast (b : bool) =
-        let scanSize = LocalSize.X
-        let mem : V2i[] = allocateShared LocalSize.X
-        let lid = getLocalId().X
-
-        mem.[lid] <- V2i((if b then 1 else 0), lid)
-        barrier()
-
-        let mutable s = 1
-        let mutable d = 2
-        while d <= scanSize do
-            if lid % d = 0 && lid >= s then
-                mem.[lid] <- add mem.[lid - s] mem.[lid]
-
-            barrier()
-            s <- s <<< 1
-            d <- d <<< 1
-
-        d <- d >>> 1
-        s <- s >>> 1
-        while s >= 1 do
-            if lid % d = 0 && lid + s < scanSize then
-                mem.[lid + s] <- add mem.[lid] mem.[lid + s]
-                    
-            barrier()
-            s <- s >>> 1
-            d <- d >>> 1
-              
-
-        let vl = if lid > 0 then mem.[lid - 1] else V2i(0, -1)
-        let total = mem.[scanSize - 1].X
-        let mine = mem.[lid].X
-
-        let last = 
-            if vl.X <> 0 then vl.Y
-            else -1
-
-        let leading = lid - last - 1
-        let isLast = mine = total
-        leading, isLast
-
-//    let encoder = HuffmanEncoder.photoshop
-//
-//    let dcLum = encoder.dcLuminance.table
-//    let acLum = encoder.acLuminance.table
-//    let dcChrom = encoder.dcChroma.table
-//    let acChrom = encoder.acChroma.table
-
-
-    [<GLSLIntrinsic("findMSB({0})")>]
-    let msb (v : uint32) =
-        Fun.HighestBit (int v)
-
-    [<GLSLIntrinsic("atomicOr({0}, {1})")>]
-    let atomicOr (buf : uint32) (v : uint32) : unit =
-        failwith ""
-        
-    let flipByteOrder (v : uint32) =
-        let v = (v >>> 16) ||| (v <<< 16)
-        ((v &&& 0xFF00FF00u) >>> 8) ||| ((v &&& 0x00FF00FFu) <<< 8)
-
-
-    type UniformScope with
-        member x.DCLum : Arr<12 N, uint32> = uniform?Encoder?DCLum
-        member x.DCChroma : Arr<12 N, uint32> = uniform?Encoder?DCChroma
-        member x.ACLum : Arr<162 N, uint32> = uniform?Encoder?ACLum
-        member x.ACChroma : Arr<162 N, uint32> = uniform?Encoder?ACChroma
-
-
-
-    let encode (index : int) (chroma : bool) (leading : int) (value : int) : int * uint32 =
-        let scale = msb (uint32 (abs value)) + 1
-        let off = if value < 0 then (1 <<< scale) - 1 else 0
-        let v = uint32 (off + value)
-
-        let mutable key = scale
-        if index <> 0 then
-            key <- (leading <<< 4) ||| scale
-
-        let mutable huff = 0u
-        if index = 0 && chroma then huff <- uniform.DCChroma.[key % 12]
-        elif index = 0 then huff <- uniform.DCLum.[key % 12]
-        elif chroma then huff <- uniform.ACChroma.[key % 162]
-        else huff <- uniform.ACLum.[key % 162]
-            
-        let len = Codeword.length huff
-        let cc = Codeword.code huff
-        len + scale, (cc <<< scale) ||| (v &&& ((1u <<< scale) - 1u))
-       
-    
-    module Ballot = 
-        [<GLSLIntrinsic("ballotARB({0})", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
-        let ballot (b : bool) : uint64 =
-            failwith ""
-
-        [<GLSLIntrinsic("gl_SubGroupLtMaskARB", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
-        let lessMask() : uint64 =
-            failwith ""
-
-        [<GLSLIntrinsic("gl_SubGroupGtMaskARB", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
-        let greaterMask() : uint64 =
-            failwith ""
-            
-
-    let leadingIsLastBallot (ev : bool) (ov : bool) =
-        let eb = Ballot.ballot(ev) |> uint32
-        let ob = Ballot.ballot(ov) |> uint32
-
-        let i = getLocalId().X
-        let ei = 2 * i
-        let oi = ei + 1
-
-        let less        = Ballot.lessMask() |> uint32
-        let greater     = Ballot.lessMask() |> uint32
-
-        let les = eb &&& less |> Bitwise.MSB
-        let los = ob &&& less |> Bitwise.MSB
-
-        let eLast =
-            if les > los then 2 * les
-            else 2 * los + 1
-             
-        let oLast =
-            if ev then ei
-            else eLast 
-        
-        let eLeading = ei - eLast - 1
-        let oLeading = oi - oLast - 1
-
-        let cae = eb &&& greater |> Bitwise.BitCount
-        let cao = ob &&& greater |> Bitwise.BitCount
-
-        let oIsLast = ov && cae = 0 && cao = 0
-        let eIsLast = ev && oIsLast && not ov
-
-        (eLeading, oIsLast, oLeading, eIsLast)
-
 
     [<LocalSize(X = 32)>]
     let codewordsKernelBallot (data : int[]) (codewords : V2i[]) =
@@ -1275,14 +1134,14 @@ module private JpegKernels =
                 let space = 32 - oo
                 if space >= size then
                     let a = code <<< (space - size) |> flipByteOrder
-                    atomicOr target.[oi] a
+                    Tools.atomicOr target.[oi] a
                 else 
                     let rest = size - space
                     let a = (code >>> rest) |> flipByteOrder // &&& ((1u <<< space) - 1u) |> flipByteOrder
-                    atomicOr target.[oi] a
+                    Tools.atomicOr target.[oi] a
 
                     let b = (code &&& ((1u <<< rest) - 1u)) <<< (32 - rest) |> flipByteOrder
-                    atomicOr target.[oi + 1] b
+                    Tools.atomicOr target.[oi + 1] b
 
         }
    
@@ -1309,8 +1168,18 @@ type JpegCompressor(runtime : IRuntime) =
     member internal x.Scan(s,d) = scanner.Compile(s,d)
 
 
+    member x.Dispose() =
+        scanner.Dispose()
+        runtime.DeleteComputeShader dct
+        runtime.DeleteComputeShader codewords
+        runtime.DeleteComputeShader assemble
+
     member x.NewInstance(size : V2i, quality : Quantization) =
         new JpegCompressorInstance(x, size, quality)
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
 
 and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality : Quantization) =
     let mutable quality = quality
@@ -1328,12 +1197,6 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
 
     let cpuBuffer : byte[]  = Array.zeroCreate (int outputSize) //.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit outputSize
     let bitCountBuffer : int[] = Array.zeroCreate 1 //      = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit 4L
-
-//    do device.perform { 
-//        do! Command.ZeroBuffer outputBuffer 
-//        do! Command.ZeroBuffer bitCountBuffer
-//        do! Command.ZeroBuffer cpuBuffer
-//    }
 
     // TODO: flexible encoders??
     let encoder = HuffmanEncoder.photoshop
@@ -1418,21 +1281,14 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
     let scan = parent.Scan(codewordCountView, codewordCountView)
 
     let dctInput =
-        let i = runtime.NewInputBinding parent.DctShader //parent.DescriptorPool |> ComputeShader.newInputBinding parent.DctShader
+        let i = runtime.NewInputBinding parent.DctShader
         i.["size"] <- alignedSize
+        i.["ImageSize"] <- size
         i.["target"] <- dctBuffer
         i.["Quantization"] <- Quantization.toTable quality
         i.Flush()
         i
 
-//    let quantizationUpdate, quantizationWriter = dctInput.GetWriter<V4i[]> "Quantization"
-//
-//    let quantizationUpdate =
-//        let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
-//        cmd.Begin(CommandBufferUsage.None)
-//        cmd.Enqueue quantizationUpdate
-//        cmd.End()
-//        cmd
 
     let updateQuantization (q : Quantization) =
         if q != quality then
@@ -1563,11 +1419,6 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         // copy the data
         let gc = GCHandle.Alloc(cpuBuffer, GCHandleType.Pinned)
         let ptr = gc.AddrOfPinnedObject()
-//        let memHandle = cpuBuffer.Memory.Memory
-//        let mutable ptr = 0n
-//        VkRaw.vkMapMemory(device.Handle, memHandle.Handle, 0UL, uint64 byteCount, VkMemoryMapFlags.MinValue, &&ptr)
-//            |> check "could not map memory"
-
 
         let mutable pSrc : nativeptr<byte> = NativePtr.ofNativeInt ptr
         let mutable pDst : nativeptr<byte> = NativePtr.ofNativeInt dst
@@ -1616,18 +1467,13 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         dctInput.Dispose()
         codewordInput.Dispose()
         assembleInput.Dispose()
+        scan.Dispose()
+        overallCommand.Dispose()
 
         dctBuffer.Dispose()
         codewordBuffer.Dispose()
         outputBuffer.Dispose()
         Marshal.FreeHGlobal tempData
-//
-//        runtime.Delete dctBuffer      
-//        runtime.Delete codewordBuffer 
-//        runtime.Delete outputBuffer   
-//        runtime.Delete cpuBuffer      
-//        runtime.Delete bitCountBuffer 
-//        Marshal.FreeHGlobal tempData
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
