@@ -433,6 +433,11 @@ type private Scan<'a when 'a : unmanaged>(runtime : IComputeRuntime, add : Expr<
         for a in args do a.Dispose()
         args.Clear()
   
+    member x.Dispose() =
+        release()
+
+    
+
 type private Reduce<'a when 'a : unmanaged>(runtime : IComputeRuntime, add : Expr<'a -> 'a -> 'a>) =
   
     static let ceilDiv (v : int) (d : int) =
