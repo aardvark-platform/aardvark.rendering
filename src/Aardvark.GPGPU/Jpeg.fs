@@ -773,7 +773,7 @@ module private JpegKernels =
     let inputImage =
         sampler2d {
             texture uniform?InputImage
-            filter Filter.MinMagPoint
+            filter Filter.MinMagLinear
             addressU WrapMode.Clamp
             addressV WrapMode.Clamp
         }
@@ -934,6 +934,7 @@ module private JpegKernels =
         compute {
             let values : V3d[] = allocateShared 64
             let imageSize : V2i = uniform?ImageSize
+            let imageLevel : int = uniform?ImageLevel
 
             let blockId = getWorkGroupId().XY 
             let blockCount = getWorkGroupCount().XY
@@ -942,12 +943,13 @@ module private JpegKernels =
             let lc = getLocalId().XY
             let lid = lc.Y * 8 + lc.X
             let cid = Constants.inverseZigZagOrder.[lid]
+            let gc = V2i(gc.X, imageSize.Y - 1 - gc.Y)
 
-            let tc = (V2d(float gc.X, float imageSize.Y - 1.0 - float gc.Y) + V2d(0.5, 0.5)) / V2d imageSize
-
+            let tc = (V2d gc + V2d(0.5, 0.5)) / (V2d imageSize)
+     
 
             // every thread loads the RGB value and stores it in values (as YCbCr)
-            values.[lid] <- ycbcr (inputImage.SampleLevel(tc, 0.0).XYZ)
+            values.[lid] <- ycbcr (inputImage.SampleLevel(tc, float imageLevel).XYZ)
             barrier()
 
             // figure out the DCT normalization factors
@@ -1372,8 +1374,10 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         with get() = quality
         and set q = updateQuantization q
 
-    member x.Encode(image : IBackendTexture) =
+    member x.Encode(image : ITextureSubResource) =
+        assert (image.Size.XY = size)
         dctInput.["InputImage"] <- image
+        dctInput.["ImageLevel"] <- image.Level
         dctInput.Flush()
         overallCommand
         
@@ -1534,8 +1538,10 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         result
 
 
-    member x.Compress(image : IBackendTexture) =
-        dctInput.["InputImage"] <- image
+    member x.Compress(image : ITextureSubResource) =
+        assert (image.Size.XY = size)
+        dctInput.["InputImage"] <- image.Texture
+        dctInput.["ImageLevel"] <- image.Level
         dctInput.Flush()
 
         overallCommand.Run()
