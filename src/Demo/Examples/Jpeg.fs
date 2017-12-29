@@ -36,34 +36,34 @@ module Jpeg =
 
         // compress the image
         use comp = comp.NewInstance(input.Size, Quantization.photoshop80)
-        let data = comp.Compress(tex)
+        let data = comp.Compress(tex.[TextureAspect.Color, 0, 0])
         File.WriteAllBytes(outputPath, data)
         
-        for i in 1 .. 10 do
-            comp.Compress(tex) |> ignore
-            comp.Encode(tex).Run()
-            comp.Download() |> ignore
-
-        let sw = System.Diagnostics.Stopwatch.StartNew()
-        let mutable sum = 0uy
-        for i in 1 .. 1000 do
-            comp.Encode(tex).Run() |> ignore
-        sw.Stop()
-        Log.line "encode took: %A" (sw.MicroTime / 1000)
-        
-        let sw = System.Diagnostics.Stopwatch.StartNew()
-        let mutable sum = 0uy
-        for i in 1 .. 1000 do
-            comp.Download() |> ignore
-        sw.Stop()
-        Log.line "download took: %A" (sw.MicroTime / 1000)
-
-        let sw = System.Diagnostics.Stopwatch.StartNew()
-        let mutable sum = 0uy
-        for i in 1 .. 1000 do
-            comp.Compress(tex) |> ignore
-        sw.Stop()
-        Log.line "compress took: %A" (sw.MicroTime / 1000)
+//        for i in 1 .. 10 do
+//            comp.Compress(tex) |> ignore
+//            comp.Encode(tex).Run()
+//            comp.Download() |> ignore
+//
+//        let sw = System.Diagnostics.Stopwatch.StartNew()
+//        let mutable sum = 0uy
+//        for i in 1 .. 1000 do
+//            comp.Encode(tex).Run() |> ignore
+//        sw.Stop()
+//        Log.line "encode took: %A" (sw.MicroTime / 1000)
+//        
+//        let sw = System.Diagnostics.Stopwatch.StartNew()
+//        let mutable sum = 0uy
+//        for i in 1 .. 1000 do
+//            comp.Download() |> ignore
+//        sw.Stop()
+//        Log.line "download took: %A" (sw.MicroTime / 1000)
+//
+//        let sw = System.Diagnostics.Stopwatch.StartNew()
+//        let mutable sum = 0uy
+//        for i in 1 .. 1000 do
+//            comp.Compress(tex) |> ignore
+//        sw.Stop()
+//        Log.line "compress took: %A" (sw.MicroTime / 1000)
 
         // diff with input
         let result = PixImage.Create outputPath
@@ -76,10 +76,10 @@ module Jpeg =
             let r = rc.ToC3f().ToV4f()
 
             let d = (i - r).NormMax
-            if d > 0.07f then
-                HSVf((d - 0.07f) * 10.0f, 1.0f, 1.0f).ToC3f().ToC4b()
+            if d > 0.001f then
+                HSVf((d - 0.001f) * 10.0f, 1.0f, 1.0f).ToC3f().ToC4b()
             else
-                ic
+                C4f(ic.ToC3f().ToV3f() * 0.5f).ToC4b()
 
         ) |> ignore
         outputImage.SaveAsImage diffPath
