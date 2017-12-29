@@ -317,6 +317,9 @@ type MultiRuntime(runtimes : IRuntime[]) =
         member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) : unit =
             failwith ""
 
+        member x.CopyAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) : unit -> unit =
+            failwith ""
+
         member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) : unit = 
             failwith ""
 
