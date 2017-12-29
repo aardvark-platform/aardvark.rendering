@@ -468,6 +468,29 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, size))
         device.Delete temp
+        
+    member x.CopyAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
+        let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 size)
+        let src = unbox<Buffer> src
+
+        let cmd = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+        cmd.Begin(CommandBufferUsage.OneTimeSubmit)
+        cmd.Enqueue(Command.Copy(src, int64 srcOffset, temp, 0L, int64 size))
+        cmd.End()
+
+        let queue = device.GraphicsFamily.GetQueue()
+        match queue.StartFence(cmd) with
+            | Some fence ->
+                (fun () ->
+                    fence.Wait()
+                    temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, size))
+                    device.Delete temp
+                    cmd.Dispose()
+                )
+            | None ->
+                failwith ""
+
+
 
     member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
         let src = unbox<Buffer> src
@@ -655,3 +678,6 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = 
             x.Copy(src, srcOffset, dst, dstOffset, size)
+
+        member x.CopyAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
+            x.CopyAsync(src, srcOffset, dst, size)

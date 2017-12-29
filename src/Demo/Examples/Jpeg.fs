@@ -38,14 +38,32 @@ module Jpeg =
         use comp = comp.NewInstance(input.Size, Quantization.photoshop80)
         let data = comp.Compress(tex)
         File.WriteAllBytes(outputPath, data)
+        
+        for i in 1 .. 10 do
+            comp.Compress(tex) |> ignore
+            comp.Encode(tex).Run()
+            comp.Download() |> ignore
 
         let sw = System.Diagnostics.Stopwatch.StartNew()
         let mutable sum = 0uy
-        for i in 1 .. 100 do
-            let data = comp.Compress(tex)
-            sum <- sum + data.[0]
+        for i in 1 .. 1000 do
+            comp.Encode(tex).Run() |> ignore
         sw.Stop()
-        Log.line "compress took: %A" (sw.MicroTime / 100)
+        Log.line "encode took: %A" (sw.MicroTime / 1000)
+        
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        let mutable sum = 0uy
+        for i in 1 .. 1000 do
+            comp.Download() |> ignore
+        sw.Stop()
+        Log.line "download took: %A" (sw.MicroTime / 1000)
+
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        let mutable sum = 0uy
+        for i in 1 .. 1000 do
+            comp.Compress(tex) |> ignore
+        sw.Stop()
+        Log.line "compress took: %A" (sw.MicroTime / 1000)
 
         // diff with input
         let result = PixImage.Create outputPath

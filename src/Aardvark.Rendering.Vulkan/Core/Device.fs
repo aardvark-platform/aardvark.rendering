@@ -521,6 +521,30 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
             )
             fence.Wait()
             fence.Dispose()
+    member x.StartFence(cmd : CommandBuffer) =
+        if cmd.IsRecording then
+            failf "cannot submit recording CommandBuffer"
+
+        if not cmd.IsEmpty then
+            let fence = device.CreateFence()
+            lock x (fun () ->
+                let mutable handle = cmd.Handle
+                let mutable submitInfo =
+                    VkSubmitInfo(
+                        VkStructureType.SubmitInfo, 0n,
+                        0u, NativePtr.zero, NativePtr.zero,
+                        1u, &&handle,
+                        0u, NativePtr.zero
+                    )
+
+                VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, fence.Handle)
+                    |> check "could not submit command buffer"
+            )
+            Some fence
+        else
+            None
+
+
 
     member x.StartAsync(cmd : CommandBuffer, waitFor : list<Semaphore>) =
         if cmd.IsRecording then

@@ -1203,7 +1203,9 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
 
     let codewordCountView   = codewordBuffer.Buffer.Coerce<int>().Strided(2)
 
-    let tempData = Marshal.AllocHGlobal (2n * nativeint outputSize)
+    let outputData = Marshal.AllocHGlobal (2n * nativeint outputSize)
+
+   
 
     static let zigZagOrder =
         [|
@@ -1278,6 +1280,9 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         ms.Write(sos, 0, sos.Length)
         ms.ToArray()
 
+
+    do Marshal.Copy(header, 0, outputData, header.Length)
+
     let scan = parent.Scan(codewordCountView, codewordCountView)
 
     let dctInput =
@@ -1301,7 +1306,8 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
                 header.[qLuminanceOffset + i] <- byte q.luminance.[zigZagOrder.[i]]
             for i in 0 .. 63 do
                 header.[qChromaOffset + i] <- byte q.chroma.[zigZagOrder.[i]]
-
+                
+            Marshal.Copy(header, 0, outputData, header.Length)
 
         
     let codewordInput = 
@@ -1409,12 +1415,10 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         outputBuffer.Buffer.Coerce<byte>().Download(0, cpuBuffer, 0, byteCount)
 
 
-        let dstStart = tempData
+        let dstStart = outputData
 
-        // write the jpeg header
-        let mutable dst = dstStart
-        Marshal.Copy(header, 0, dstStart, header.Length)
-        dst <- dst + nativeint header.Length
+        // header is already written
+        let mutable dst = dstStart + nativeint header.Length
 
         // copy the data
         let gc = GCHandle.Alloc(cpuBuffer, GCHandleType.Pinned)
@@ -1452,9 +1456,83 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
 
         let result : byte[] = Array.zeroCreate finalLength
 
-        Marshal.Copy(tempData, result, 0, finalLength)
+        Marshal.Copy(outputData, result, 0, finalLength)
         //Array.Resize(&result, finalLength)
         result
+
+    member x.DownloadChunked(chunkSize : nativeint) =
+        let numberOfBits : int = bitCountBuffer.[0]
+        let byteCount = if numberOfBits % 8 = 0 then numberOfBits / 8 else 1 + numberOfBits / 8
+        
+        let mem = Marshal.AllocHGlobal (2n * chunkSize)
+
+        let mutable ping = mem
+        let mutable pong = mem + chunkSize
+        let mutable offset = 0n
+        let mutable remaining = nativeint byteCount
+        let mutable wait = id
+        let mutable copySize = min remaining chunkSize
+        runtime.Copy(outputBuffer.Buffer, 0n, ping, copySize)
+
+
+
+        let dstStart = outputData
+        // header is already written
+        let mutable dst = dstStart + nativeint header.Length
+
+        while remaining > 0n do
+            wait()
+            Fun.Swap(&ping, &pong)
+            let pongSize = copySize
+            offset <- offset + copySize
+            remaining <- remaining - copySize
+            copySize <- min remaining chunkSize
+            if copySize > 0n then
+                wait <- runtime.CopyAsync(outputBuffer.Buffer, offset, ping, copySize)
+            else
+                wait <- id
+
+            // read from pong now
+
+            let mutable src = pong
+            let mutable pSrc : nativeptr<byte> = NativePtr.ofNativeInt src
+            let mutable pDst : nativeptr<byte> = NativePtr.ofNativeInt dst
+
+            for i in 1 .. int pongSize do
+                let v : byte = NativePtr.read pSrc
+
+                if v = 0xFFuy then
+                    // writing two individual bytes seems to be more efficient
+                    // NativePtr.write (NativePtr.ofNativeInt (NativePtr.toNativeInt pDst)) 0x00FFus
+                    // pDst <- NativePtr.ofNativeInt ((NativePtr.toNativeInt pDst) + 2n)
+                    NativePtr.write pDst 0xFFuy
+                    pDst <- NativePtr.ofNativeInt ((NativePtr.toNativeInt pDst) + 1n)
+                    NativePtr.write pDst 0x00uy
+                    pDst <- NativePtr.ofNativeInt ((NativePtr.toNativeInt pDst) + 1n)
+                else
+                    NativePtr.write pDst v
+                    pDst <- NativePtr.ofNativeInt ((NativePtr.toNativeInt pDst) + 1n)
+
+                pSrc <- NativePtr.ofNativeInt ((NativePtr.toNativeInt pSrc) + 1n)
+
+            dst <- NativePtr.toNativeInt pDst
+
+            ()
+
+
+        Marshal.FreeHGlobal mem
+
+        // write EOI
+        NativeInt.write dst 0xD9FFus
+        dst <- dst + 2n
+        let finalLength = dst - dstStart |> int
+
+        let result : byte[] = Array.zeroCreate finalLength
+
+        Marshal.Copy(outputData, result, 0, finalLength)
+        //Array.Resize(&result, finalLength)
+        result
+
 
     member x.Compress(image : IBackendTexture) =
         dctInput.["InputImage"] <- image
@@ -1473,7 +1551,7 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         dctBuffer.Dispose()
         codewordBuffer.Dispose()
         outputBuffer.Dispose()
-        Marshal.FreeHGlobal tempData
+        Marshal.FreeHGlobal outputData
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
