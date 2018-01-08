@@ -310,6 +310,8 @@ module ResizeBufferImplementation =
 
     type Context with
         member x.CreateResizeBuffer() =
+            addBuffer x 0L
+
             use __ = x.ResourceLock
             if not RuntimeConfig.SupressSparseBuffers && GL.ARB_sparse_buffer then
                 let pageSize = GL.GetInteger64(GetPName.BufferPageSize)
