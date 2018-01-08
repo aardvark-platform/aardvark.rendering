@@ -196,80 +196,81 @@ module ComputeShader =
         let par = ParallelPrimitives(runtime)
 
 
+//
+//
+//        let data = PixImage<float32>(Col.Format.RGBA, V2i(1234, 3241))
+//        let rand = RandomSystem()
+//        data.GetMatrix<C4f>().SetByCoord(fun (c : V2l) ->
+//            let r = rand.UniformFloat() // * 0.5f + 0.5f
+//            let g = rand.UniformFloat() // * 0.5f + 0.5f
+//            let b = rand.UniformFloat() // * 0.5f + 0.5f
+//            C4f(r,g,b,1.0f)
+//            //C4b(rand.UniformInt(256), rand.UniformInt(256), rand.UniformInt(256), 255)
+//        ) |> ignore
+//
+//        
+//        let f = data.Size.X * data.Size.Y |> float32
+//        let cmp = 
+//            let data = data.GetMatrix<C4f>()
+//            let mutable sum = V4f.Zero
+//            data.ForeachIndex(fun i ->
+//                let v = data.[i] |> V4f
+//                sum <- sum + v / f //(V4f v / V4f(255.0, 255.0, 255.0, 255.0))
+//            )
+//            sum
+//
+//
+//        let img = runtime.PrepareTexture(PixTexture2d(PixImageMipMap [| data :> PixImage |], TextureParams.mipmapped))
+//
+//        let res = par.MapReduce(<@ fun _ (v : V4f) -> v / 3999394.0f @>, <@ (+) @>, img.[TextureAspect.Color, 0, 0])
+//        printfn "CPU: %A" cmp
+//        printfn "GPU: %A" res
+//        
+//        let data = PixVolume<float32>(Col.Format.RGBA, V3i(128,128,128))
+//        
+//        let rand = RandomSystem()
+//        data.GetVolume<C4f>().SetByCoord(fun (c : V3l) ->
+//            let r = rand.UniformFloat() // * 0.5f + 0.5f
+//            let g = rand.UniformFloat() // * 0.5f + 0.5f
+//            let b = rand.UniformFloat() // * 0.5f + 0.5f
+//            C4f(r,g,b,1.0f)
+//            //C4b(rand.UniformInt(256), rand.UniformInt(256), rand.UniformInt(256), 255)
+//        ) |> ignore
+//        
+//        let cmp = 
+//            let data = data.GetVolume<C4f>()
+//            let mutable sum = V4f.Zero
+//            data.ForeachIndex(fun i ->
+//                let v = data.[i] |> V4f
+//                sum <- sum + v / 2097152.0f //(V4f v / V4f(255.0, 255.0, 255.0, 255.0))
+//            )
+//            sum
+//        
+//        let img = runtime.PrepareTexture(PixTexture3d(data, TextureParams.mipmapped))
+//        let res = par.MapReduce(<@ fun _ (v : V4f) -> v / 2097152.0f @>, <@ (+) @>, img.[TextureAspect.Color, 0, 0])
+//        printfn "CPU: %A" cmp
+//        printfn "GPU: %A" res
 
-
-        let data = PixImage<float32>(Col.Format.RGBA, V2i(1234, 3241))
-        let rand = RandomSystem()
-        data.GetMatrix<C4f>().SetByCoord(fun (c : V2l) ->
-            let r = rand.UniformFloat() // * 0.5f + 0.5f
-            let g = rand.UniformFloat() // * 0.5f + 0.5f
-            let b = rand.UniformFloat() // * 0.5f + 0.5f
-            C4f(r,g,b,1.0f)
-            //C4b(rand.UniformInt(256), rand.UniformInt(256), rand.UniformInt(256), 255)
-        ) |> ignore
-
-        
-        let f = data.Size.X * data.Size.Y |> float32
-        let cmp = 
-            let data = data.GetMatrix<C4f>()
-            let mutable sum = V4f.Zero
-            data.ForeachIndex(fun i ->
-                let v = data.[i] |> V4f
-                sum <- sum + v / f //(V4f v / V4f(255.0, 255.0, 255.0, 255.0))
-            )
-            sum
-
-
-        let img = runtime.PrepareTexture(PixTexture2d(PixImageMipMap [| data :> PixImage |], TextureParams.mipmapped))
-
-        let res = par.MapReduce(<@ fun _ (v : V4f) -> v / 3999394.0f @>, <@ (+) @>, img.[TextureAspect.Color, 0, 0])
-        printfn "CPU: %A" cmp
-        printfn "GPU: %A" res
-        
-        let data = PixVolume<float32>(Col.Format.RGBA, V3i(128,128,128))
-        
-        let rand = RandomSystem()
-        data.GetVolume<C4f>().SetByCoord(fun (c : V3l) ->
-            let r = rand.UniformFloat() // * 0.5f + 0.5f
-            let g = rand.UniformFloat() // * 0.5f + 0.5f
-            let b = rand.UniformFloat() // * 0.5f + 0.5f
-            C4f(r,g,b,1.0f)
-            //C4b(rand.UniformInt(256), rand.UniformInt(256), rand.UniformInt(256), 255)
-        ) |> ignore
-        
-        let cmp = 
-            let data = data.GetVolume<C4f>()
-            let mutable sum = V4f.Zero
-            data.ForeachIndex(fun i ->
-                let v = data.[i] |> V4f
-                sum <- sum + v / 2097152.0f //(V4f v / V4f(255.0, 255.0, 255.0, 255.0))
-            )
-            sum
-        
-        let img = runtime.PrepareTexture(PixTexture3d(data, TextureParams.mipmapped))
-        let res = par.MapReduce(<@ fun _ (v : V4f) -> v / 2097152.0f @>, <@ (+) @>, img.[TextureAspect.Color, 0, 0])
-        printfn "CPU: %A" cmp
-        printfn "GPU: %A" res
-
-        System.Environment.Exit 0
+       // System.Environment.Exit 0
 
         let cnt = 1 <<< 22
         let aa = Array.create cnt 1
         let ba = runtime.CreateBuffer<int>(aa)
         let bb = runtime.CreateBuffer<int> cnt
 
+        
+        let map = <@ fun i a -> a @>
+        let add = <@ (+) @>
 
-        let suma = par.CompileMapReduce(<@ fun i a -> i + a @>, <@ (+) @>, ba)
-        //let suma = par.CompileReduce(<@ (+) @>, ba)
+
+        let suma = par.CompileMapReduce(map, add, ba)
 
         let reference () =
             let mutable sum = 0
             for i in 0 .. aa.Length - 1 do
-                sum <- sum + (i + aa.[i])
+                sum <- sum + aa.[i]
             sum
             
-        let map = <@ fun i a -> i + a @>
-        let add = <@ (+) @>
         benchmark 100 [
             "cpu", reference
             "gpu", suma.Run

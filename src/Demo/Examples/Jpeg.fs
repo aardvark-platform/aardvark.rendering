@@ -22,6 +22,9 @@ module Jpeg =
 
     let run() =
         use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication(true)
+
+        //use app = new Aardvark.Application.WinForms.OpenGlApplication(true)
+
         let runtime = app.Runtime
 
         use comp = new JpegCompressor(runtime)

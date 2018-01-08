@@ -44,8 +44,11 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
 
     let inputBuffers =
         shader.Buffers |> List.map (fun (l,name,t) ->
-            failwith ""
+            addReference name (ComputeShaderInputReference.StorageBuffer(l, t))
+            let empty = new GL.Buffer(shader.Context, 0n, 0)
+            l, (empty, 0n, 0n)
         )
+        |> Dictionary.ofList
 
     let inputSamplers =
         shader.Samplers |> List.map (fun (l, b, name, valueType, dim, isMS, isArray, isShadow, sampler) ->
@@ -77,8 +80,13 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
 
     member x.Bind() =
         for (l, b) in uniformBuffers do
+            ctx.Upload b
             GL.BindBufferRange(BufferRangeTarget.UniformBuffer, l, b.Handle, 0n, nativeint b.Size)
             GL.Check "could not bind uniform buffer"
+
+        for (KeyValue(slot, (b, o, s))) in inputBuffers do
+            GL.BindBufferRange(BufferRangeTarget.ShaderStorageBuffer, slot, b.Handle, o, s)
+            GL.Check "could not bind storage buffer"
 
         for (KeyValue(l, (tex, level, layered, layer))) in inputImages do
             GL.BindImageTexture(l, tex.Handle, level, layered, layer, TextureAccess.ReadWrite, unbox (int tex.Format))
@@ -98,6 +106,19 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
                     match ref with
                         | Uniform write -> 
                             write value
+
+                        | StorageBuffer(slot, _) ->
+                            match value with
+                                | :? IBufferRange as range ->
+                                    let buffer = unbox<GL.Buffer> range.Buffer
+                                    inputBuffers.[slot] <- (buffer, range.Offset, range.Size)
+
+                                | :? GL.Buffer as b ->
+                                    inputBuffers.[slot] <- (b, 0n, b.SizeInBytes)
+
+                                | _ ->
+                                    failwithf "[GL] bad buffer: %A" value
+                                    
 
                         | Image slot ->
                             let (t, level, layered, layer) = inputImages.[slot]
@@ -148,6 +169,7 @@ and private ComputeShaderInputReference =
     | Uniform of write : (obj -> unit)
     | Image of slot : int
     | Texture of slot : int
+    | StorageBuffer of slot : int * storageType : ShaderParameterType
 
 and ComputeShader(prog : Program, localSize : V3i) =
     let mutable isDisposed = 0
@@ -227,22 +249,22 @@ and ComputeShader(prog : Program, localSize : V3i) =
                 | _ -> Some u
         )
 
-    let uniformBlocks =
-        iface.UniformBlocks |> List.choose (fun b ->
-            if b.Name = "Arguments" then
-                let res = 
-                    { b with
-                        Fields = b.Fields |> List.map (fun f ->
-                            match f.Path with
-                                | ShaderPath.Value name -> { f with Path = ShaderPath.Value (name.Substring 3) }
-                                | _ -> f
-                        )
-                    }
-
-                Some res
-            else
-                Some b
-        )
+    let uniformBlocks = iface.UniformBlocks
+//        iface.UniformBlocks |> List.choose (fun b ->
+//            if b.Name = "Arguments" then
+////                let res = 
+////                    { b with
+////                        Fields = b.Fields |> List.map (fun f ->
+////                            match f.Path with
+////                                | ShaderPath.Value name -> { f with Path = ShaderPath.Value (name.Substring 3) }
+////                                | _ -> f
+////                        )
+////                    }
+//
+//                Some b
+//            else
+//                Some b
+//        )
 
     member x.Context : Context = ctx
     member x.Buffers : list<int * string * ShaderParameterType> = buffers
@@ -250,6 +272,7 @@ and ComputeShader(prog : Program, localSize : V3i) =
     member x.Samplers : list<int * int * string * ShaderParameterType * TextureDimension * bool * bool * bool * Sampler> = samplers
     member x.Uniforms : list<ShaderParameter>  = uniforms
     member x.UniformBlocks : list<ShaderBlock> = uniformBlocks
+    member x.Handle = prog.Handle
 
     member x.Dispose() =
         use __ = ctx.ResourceLock
@@ -293,3 +316,110 @@ type private GLCompute(ctx : Context) =
     member x.DispatchCompute(groups : V3i) =
         GL.DispatchCompute(groups.X, groups.Y, groups.Z)
 
+
+
+    member x.Run(i : ComputeCommand) =
+        match i with
+            | ComputeCommand.BindCmd shader ->
+                let shader = unbox<ComputeShader> shader
+                GL.UseProgram(shader.Handle)
+            | ComputeCommand.SetInputCmd(input) ->
+                let input = unbox<ComputeShaderInputBinding> input
+                input.Bind()
+            | ComputeCommand.DispatchCmd groups ->
+                GL.DispatchCompute(groups.X, groups.Y, groups.Z)
+            | ComputeCommand.SyncBufferCmd _
+            | ComputeCommand.TransformLayoutCmd _ ->
+                ()
+
+            | ComputeCommand.CopyBufferCmd(src, dst) ->
+                let srcBuffer = unbox<GL.Buffer> src.Buffer
+                let dstBuffer = unbox<GL.Buffer> dst.Buffer
+                ctx.Copy(srcBuffer, src.Offset, dstBuffer, dst.Offset, src.Size)
+                ()
+                
+            | ComputeCommand.UploadBufferCmd _ 
+            | ComputeCommand.CopyImageCmd _ ->
+                failwith "please implement"
+
+            | ComputeCommand.SetBufferCmd(dst, value) ->
+                let dstBuffer = unbox<GL.Buffer> dst.Buffer
+                if dst.Offset = 0n && dst.Size = dstBuffer.SizeInBytes then
+                    GL.NamedBufferData(dstBuffer.Handle, dstBuffer.SizeInBytes, 0n, BufferUsageHint.StaticDraw)
+                else
+                    let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
+                    GL.NamedClearBufferSubData(dstBuffer.Handle, PixelInternalFormat.R32ui, dst.Offset, dst.Size, PixelFormat.Red, PixelType.UnsignedInt, gc.AddrOfPinnedObject())
+                    gc.Free()
+
+            | ComputeCommand.DownloadBufferCmd(src, dst) ->
+                let srcBuffer = unbox<GL.Buffer> src.Buffer
+                match dst with
+                    | HostMemory.Managed(arr,index) ->
+                        let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
+                        let es = Marshal.SizeOf (arr.GetType().GetElementType()) |> nativeint
+                        GL.GetNamedBufferSubData(srcBuffer.Handle, src.Offset, src.Size, gc.AddrOfPinnedObject() + es * nativeint index)
+                        gc.Free()
+
+                    | HostMemory.Unmanaged ptr ->   
+                        GL.GetNamedBufferSubData(srcBuffer.Handle, src.Offset, src.Size, ptr)
+            | ComputeCommand.ExecuteCmd other ->
+                other.Run()
+    
+    member x.Run(i : list<ComputeCommand>) =
+        use __ = ctx.ResourceLock
+        for i in i do x.Run i
+
+[<AutoOpen>]
+module GLComputeExtensions =
+    let private computeInstanceCache = System.Collections.Concurrent.ConcurrentDictionary<Context, GLCompute>()
+
+    let private getGLCompute (ctx : Context) =
+        computeInstanceCache.GetOrAdd(ctx, fun ctx -> GLCompute(ctx))
+
+    type Context with
+
+        member x.TryCompileKernel (code : string, textureInfo : Map<_,_>, localSize : V3i) =
+            using x.ResourceLock (fun token ->
+                match x.TryCompileCompute(true, code) with
+                    | Success prog ->
+                        let kernel = new ComputeShader({ prog with TextureInfo = textureInfo }, localSize)
+                        Success kernel
+
+                    | Error err ->
+                        Error err
+            )
+
+        member x.TryCompileKernel (shader : FShade.ComputeShader) =
+            let gl = getGLCompute x
+            let glsl = shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSL410
+            let localSize = 
+                if shader.csLocalSize.AllGreater 0 then shader.csLocalSize
+                else failwith "[GL] compute shader has no local size"
+
+            printfn "%s" glsl.code
+
+            let samplerDescriptions =
+                shader.csTextureNames |> Map.map (fun (name, index) texName ->
+                    let samplerState =
+                        match Map.tryFind (name, index) shader.csSamplerStates with
+                            | Some sam -> sam
+                            | _ -> SamplerState.empty
+                    { textureName = Symbol.Create texName; samplerState = samplerState.SamplerStateDescription }
+                )
+
+            x.TryCompileKernel(glsl.code, samplerDescriptions, localSize)
+
+        member x.CompileKernel (shader : FShade.ComputeShader) =
+            match x.TryCompileKernel shader with
+                | Success kernel -> 
+                    kernel
+                | Error err ->
+                    Log.error "%s" err
+                    failwith err
+    
+        member x.Delete(k : ComputeShader) =
+            k.Dispose()
+
+        member x.Run(i : list<ComputeCommand>) =
+            let c = getGLCompute x
+            c.Run i
