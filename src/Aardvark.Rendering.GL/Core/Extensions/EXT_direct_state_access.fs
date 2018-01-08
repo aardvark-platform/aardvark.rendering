@@ -36,6 +36,15 @@ module EXT_direct_state_access =
                     GL.BufferSubData(t, offset, size, data)
                 )
 
+        static member NamedClearBufferSubData(buffer : int, ifmt : PixelInternalFormat, offset : nativeint, size : nativeint, fmt : PixelFormat, pixelType : PixelType, data : nativeint) =
+//            if supported then
+//                let ifmt = unbox<ExtDirectStateAccess> (int ifmt)
+//                GL.Ext.ClearNamedBufferSubData(buffer, ifmt, fmt, pixelType, offset, size, data)
+//            else
+                bindBuffer buffer (fun t ->
+                    GL.ClearBufferSubData(t, ifmt, offset, size, fmt, unbox<All> (int pixelType), data)
+                )
+
         static member GetNamedBufferSubData(buffer : int, offset : nativeint, size : nativeint, data : nativeint) =
             if supported then
                 GL.Ext.GetNamedBufferSubData(buffer, offset, size, data)

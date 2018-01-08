@@ -99,6 +99,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     let onDispose = Event<unit>()    
     do if not (isNull ctx) then using ctx.ResourceLock (fun _ -> GLVM.vmInit())
 
+    let compute = lazy ( new GLCompute(ctx) )
+
     new(ctx) = new Runtime(ctx, false, false)
 
     member x.SupportsUniformBuffers =
@@ -494,13 +496,19 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateMappedIndirectBuffer(indexed)  =
             x.CreateMappedIndirectBuffer (indexed)
             
-        member x.MaxLocalSize = failwith ""
-        member x.CreateComputeShader (c : FShade.ComputeShader) = failwith ""
-        member x.NewInputBinding(c : IComputeShader) = failwith ""
-        member x.DeleteComputeShader (shader : IComputeShader) = failwith ""
-        member x.Run (commands : list<ComputeCommand>) = failwith ""
-        member x.Compile (commands : list<ComputeCommand>) = failwith ""
-
+        member x.MaxLocalSize = compute.Value.WorkGroupSize
+        member x.CreateComputeShader (c : FShade.ComputeShader) = ctx.CompileKernel c :> IComputeShader
+        member x.NewInputBinding(c : IComputeShader) = new ComputeShaderInputBinding(unbox c) :> IComputeShaderInputBinding
+        member x.DeleteComputeShader (shader : IComputeShader) = ctx.Delete(unbox<GL.ComputeShader> shader)
+        member x.Run (commands : list<ComputeCommand>) = ctx.Run commands
+        member x.Compile (commands : list<ComputeCommand>) =
+            let x = x :> IComputeRuntime
+            { new ComputeProgram<unit>() with
+                member __.RunUnit() =
+                    x.Run(commands)
+                member x.Release() =
+                    ()
+            }
     
     member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) =
         let src = unbox<Texture> src
