@@ -546,15 +546,15 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
                     false
         )
 
-    member x.Add (call : ManagedDrawCall) =
-        if add x call.Call then
+    member x.Add (call : DrawCallInfo) =
+        if add x call then
             transact (fun () -> x.MarkOutdated())
             true
         else
             false
 
-    member x.Remove(call : ManagedDrawCall) =
-        if remove x call.Call then
+    member x.Remove(call : DrawCallInfo) =
+        if remove x call then
             transact (fun () -> x.MarkOutdated())
             true
         else
@@ -614,7 +614,7 @@ module ``Pool Semantics`` =
                 let ro = Aardvark.SceneGraph.Semantics.RenderObject.create()
 
 
-                let r = p.Calls.GetReader()
+                let r = (p.Calls |> ASet.map (fun mdc -> mdc.Call)).GetReader()
                 let calls =
                     let buffer = DrawCallBuffer(pool.Runtime, true) // who manages this? using finalizer for now
                     Mod.custom (fun self ->
