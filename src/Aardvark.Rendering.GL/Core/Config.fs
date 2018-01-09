@@ -40,12 +40,6 @@ module Config =
     let mutable NumberOfResourceContexts = 6
 
     /// <summary>
-    /// defines whether the GL context should log errors
-    /// </summary>
-    [<Literal>]
-    let mutableCheckErrors = true
-
-    /// <summary>
     /// The number of bits used for color values in default contexts
     /// </summary>
     let BitsPerPixel = 32
@@ -65,8 +59,7 @@ module Config =
     /// </summary>
     let Buffers = 2
 
-    [<Literal>]
-    let CheckErrors = false
+    let mutable CheckErrors = false
 
     let enableVertexArrayObjectsIfPossible = true
     let enableSamplersIfPossible = true

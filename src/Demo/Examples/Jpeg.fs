@@ -21,16 +21,18 @@ open Aardvark.SceneGraph.IO
 module Jpeg =
 
     let run() =
-        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication(true)
+        //use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication(true)
 
-        //use app = new Aardvark.Application.WinForms.OpenGlApplication(true)
+        
+        use app = new Aardvark.Application.WinForms.OpenGlApplication(true)
 
+        Aardvark.Rendering.GL.Config.CheckErrors <- true
         let runtime = app.Runtime
 
         use comp = new JpegCompressor(runtime)
 
-        let outputPath = @"C:\Users\Schorsch\Desktop\test.jpg"
-        let diffPath = @"C:\Users\Schorsch\Desktop\diff.png"
+        let outputPath = @"C:\Users\steinlechner\Desktop\test.jpg"
+        let diffPath = @"C:\Users\steinlechner\Desktop\diff.png"
 
         // load the input
         let input = PixImage.Create @"vs.png"
@@ -79,8 +81,8 @@ module Jpeg =
             let r = rc.ToC3f().ToV4f()
 
             let d = (i - r).NormMax
-            if d > 0.001f then
-                HSVf((d - 0.001f) * 10.0f, 1.0f, 1.0f).ToC3f().ToC4b()
+            if d > 0.03f then
+                HSVf((d - 0.03f) * 10.0f, 1.0f, 1.0f).ToC3f().ToC4b()
             else
                 C4f(ic.ToC3f().ToV3f() * 0.5f).ToC4b()
 
