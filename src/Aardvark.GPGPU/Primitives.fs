@@ -405,10 +405,11 @@ type private Scan<'a when 'a : unmanaged>(runtime : IComputeRuntime, add : Expr<
                 [
                     yield! cmd
                     yield! inner
-                    yield ComputeCommand.Bind fixup
-                    yield ComputeCommand.SetInput args1
-                    yield ComputeCommand.Dispatch(ceilDiv (int output.Count - Kernels.scanSize) Kernels.halfScanSize)
-                    yield ComputeCommand.Sync(output.Buffer)
+                    if int output.Count > Kernels.scanSize then
+                        yield ComputeCommand.Bind fixup
+                        yield ComputeCommand.SetInput args1
+                        yield ComputeCommand.Dispatch(ceilDiv (int output.Count - Kernels.scanSize) Kernels.halfScanSize)
+                        yield ComputeCommand.Sync(output.Buffer)
                 ]
             else
                 cmd
