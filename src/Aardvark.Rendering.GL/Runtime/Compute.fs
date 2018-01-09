@@ -20,6 +20,10 @@ open Aardvark.Base.ShaderReflection
 [<SuppressUnmanagedCodeSecurity>]
 type private DispatchComputeGroupSizeARBDelegate = delegate of uint32 * uint32 * uint32 * uint32 * uint32 * uint32 -> unit
 
+type internal Bound =
+    | Texture of slot : int * target : TextureTarget
+    | Buffer  of slot : int * target : BufferTarget
+    | Image of slot : int
 
 type ComputeShaderInputBinding(shader : ComputeShader) =
     let ctx = shader.Context
@@ -78,18 +82,21 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
             b.Index, buffer
         )
 
-    member x.Bind() =
+    member internal x.Bind(boundThings : HashSet<Bound>) =
         for (l, b) in uniformBuffers do
             ctx.Upload b
             GL.BindBufferRange(BufferRangeTarget.UniformBuffer, l, b.Handle, 0n, nativeint b.Size)
+            boundThings.Add(Buffer(l,BufferTarget.UniformBuffer)) |> ignore
             GL.Check "could not bind uniform buffer"
 
         for (KeyValue(slot, (b, o, s))) in inputBuffers do
             GL.BindBufferRange(BufferRangeTarget.ShaderStorageBuffer, slot, b.Handle, o, s)
+            boundThings.Add(Buffer(slot,BufferTarget.ShaderStorageBuffer)) |> ignore
             GL.Check "could not bind storage buffer"
 
         for (KeyValue(l, (tex, level, layered, layer))) in inputImages do
             GL.BindImageTexture(l, tex.Handle, level, layered, layer, TextureAccess.ReadWrite, unbox (int tex.Format))
+            boundThings.Add(Bound.Image l) |> ignore
             GL.Check "could not bind image texture"
 
         for (KeyValue(l, (target, tex, sampler))) in inputSamplers do
@@ -98,6 +105,7 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
             GL.Check "could not bind texture"
             GL.BindSampler(l, sampler.Handle)
             GL.Check "could not bind sampler"
+            boundThings.Add(Bound.Texture(l,target)) |> ignore
 
     member private x.Write(name : string, value : obj) =
         match Map.tryFind name references with
@@ -250,21 +258,6 @@ and ComputeShader(prog : Program, localSize : V3i) =
         )
 
     let uniformBlocks = iface.UniformBlocks
-//        iface.UniformBlocks |> List.choose (fun b ->
-//            if b.Name = "Arguments" then
-////                let res = 
-////                    { b with
-////                        Fields = b.Fields |> List.map (fun f ->
-////                            match f.Path with
-////                                | ShaderPath.Value name -> { f with Path = ShaderPath.Value (name.Substring 3) }
-////                                | _ -> f
-////                        )
-////                    }
-//
-//                Some b
-//            else
-//                Some b
-//        )
 
     member x.Context : Context = ctx
     member x.Buffers : list<int * string * ShaderParameterType> = buffers
@@ -285,7 +278,6 @@ and ComputeShader(prog : Program, localSize : V3i) =
     interface IComputeShader with
         member x.LocalSize = localSize
         member x.Runtime = x.Context.Runtime :> IComputeRuntime
-
     
 type private GLCompute(ctx : Context) =
     let mutable workGroupSize = V3i.Zero
@@ -318,17 +310,18 @@ type private GLCompute(ctx : Context) =
 
 
 
-    member x.Run(i : ComputeCommand) =
+    member private x.Run(i : ComputeCommand, boundThings : HashSet<Bound>) =
         match i with
             | ComputeCommand.BindCmd shader ->
                 let shader = unbox<ComputeShader> shader
                 GL.UseProgram(shader.Handle)
             | ComputeCommand.SetInputCmd(input) ->
                 let input = unbox<ComputeShaderInputBinding> input
-                input.Bind()
+                input.Bind(boundThings)
             | ComputeCommand.DispatchCmd groups ->
                 GL.DispatchCompute(groups.X, groups.Y, groups.Z)
-            | ComputeCommand.SyncBufferCmd _
+            | ComputeCommand.SyncBufferCmd _ -> 
+                GL.MemoryBarrier(MemoryBarrierFlags.BufferUpdateBarrierBit ||| MemoryBarrierFlags.ClientMappedBufferBarrierBit ||| MemoryBarrierFlags.ShaderStorageBarrierBit)
             | ComputeCommand.TransformLayoutCmd _ ->
                 ()
 
@@ -367,7 +360,19 @@ type private GLCompute(ctx : Context) =
     
     member x.Run(i : list<ComputeCommand>) =
         use __ = ctx.ResourceLock
-        for i in i do x.Run i
+        let boundThings = HashSet<_>()
+        for i in i do x.Run(i, boundThings)
+        for b in boundThings do
+            match b with
+                | Bound.Buffer(slot,target) -> 
+                    GL.BindBufferBase(unbox (int target),slot,0)
+                | Bound.Image(slot) -> 
+                    GL.BindImageTexture(slot,0,0,false,0,TextureAccess.ReadWrite,SizedInternalFormat.Rgba8)
+                | Bound.Texture(slot,target) -> 
+                    GL.ActiveTexture(TextureUnit.Texture0 + unbox slot)
+                    GL.BindTexture(target,0)
+                    GL.BindSampler(slot,0)
+        GL.Sync()
 
 [<AutoOpen>]
 module GLComputeExtensions =
