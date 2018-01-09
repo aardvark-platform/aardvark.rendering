@@ -177,7 +177,8 @@ module ComputeShader =
 
 
     let run() =
-        use app = new VulkanApplication(false)
+        //use app = new VulkanApplication(true)
+        use app = new OpenGlApplication(true)
         let runtime = app.Runtime :> IRuntime
         let win = app.CreateSimpleRenderWindow(8) 
         let run() = win.Run()
@@ -253,29 +254,59 @@ module ComputeShader =
 
        // System.Environment.Exit 0
 
-        let cnt = 1 <<< 22
+        let cnt = 1 <<< 20
         let aa = Array.create cnt 1
         let ba = runtime.CreateBuffer<int>(aa)
         let bb = runtime.CreateBuffer<int> cnt
 
-        
-        let map = <@ fun i a -> a @>
-        let add = <@ (+) @>
-
-
-        let suma = par.CompileMapReduce(map, add, ba)
-
-        let reference () =
-            let mutable sum = 0
-            for i in 0 .. aa.Length - 1 do
-                sum <- sum + aa.[i]
-            sum
+        let rand = Random()
+        let mutable i = 0
+        while true do
             
-        benchmark 100 [
-            "cpu", reference
-            "gpu", suma.Run
-            "gpui", fun () -> par.MapReduce(map, add, ba)
-        ]
+            let realCnt = 
+                if i < DictConstant.PrimeSizes.Length && DictConstant.PrimeSizes.[i] <= uint32 cnt then
+                    int DictConstant.PrimeSizes.[i]
+                
+                else 
+                    abs (rand.Next(cnt)) + 1
+
+            let map = <@ fun i a -> a @>
+            let add = <@ (+) @>
+
+            let ba = ba.[0..realCnt-1]
+            let bb = bb.[0..realCnt-1]
+
+            let bboida = ba.Download()
+
+
+            use scan = par.CompileScan(add,ba,bb)
+
+            let reference () =
+                let res = Array.zeroCreate ba.Count
+                let mutable sum = 0
+                for i in 0 .. ba.Count - 1 do
+                    sum <- sum + aa.[i]
+                    res.[i] <- sum
+                res
+                    
+            scan.Run()
+            let arr = bb.Download()
+            let ref = reference()
+            if arr <> ref then
+                Log.warn "cnt:  %A" realCnt
+                Log.warn "scan: %A" arr.[arr.Length-1]
+                Console.ReadLine() |> ignore
+                //Log.warn "fold: %A" r
+            else
+                Log.line "OK (%A)" realCnt
+
+            i <- i + 1
+//        benchmark 100 [
+//            
+//            //"cpu", reference
+//            //"gpu", suma.Run
+//            //"gpui", fun () -> par.MapReduce(map, add, ba)
+//        ]
 
 
 
