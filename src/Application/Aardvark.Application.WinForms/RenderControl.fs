@@ -17,7 +17,7 @@ type RenderControl() as this =
 
     let keyboard = new Keyboard()
     let mouse = new Mouse()
-    let sizes = Mod.init (V2i(this.ClientSize.Width, this.ClientSize.Height))
+    let sizes = Mod.init (V2i.II)
     let focus = Mod.init false
     let mutable inner : Option<IMod<DateTime>> = None
 
@@ -124,6 +124,10 @@ type RenderControl() as this =
     member x.Implementation
         with get() = match ctrl with | Some c -> c | _ -> null
         and set v = setControl x v (v |> unbox<IRenderTarget>)
+
+    override x.OnHandleCreated(e) =
+        base.OnHandleCreated(e)
+        transact (fun () -> sizes.Value <- V2i(this.ClientSize.Width, this.ClientSize.Height))
 
     override x.OnResize(e) =
         base.OnResize(e)

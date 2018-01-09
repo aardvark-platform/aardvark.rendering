@@ -14,22 +14,21 @@ type SimpleRenderWindow() as this =
 
     
 
-    do
-        base.ClientSize <- System.Drawing.Size(1024, 768)
-        ctrl.Dock <- DockStyle.Fill
-        base.Controls.Add ctrl
-        base.Text <- "Aardvark rocks \\o/"
+    let mutable lastBorderStyle = FormBorderStyle.None
+    let mutable lastState = FormWindowState.Normal
 
+    override x.OnHandleCreated(e) =
+        base.OnHandleCreated(e)
+        x.ClientSize <- System.Drawing.Size(1024, 768)
+        ctrl.Dock <- DockStyle.Fill
+        x.Controls.Add ctrl
+        x.Text <- "Aardvark rocks \\o/"
         let alt = ctrl.Keyboard.IsDown(Keys.LeftAlt)
         let shift = ctrl.Keyboard.IsDown(Keys.LeftShift)
         ctrl.Keyboard.KeyDown(Keys.Enter).Values.Add (fun () ->
             if Mod.force alt && Mod.force shift then
                 this.ToggleFullScreen()
         )
-
-    let mutable lastBorderStyle = FormBorderStyle.None
-    let mutable lastState = FormWindowState.Normal
-
     member private x.ToggleFullScreen() : unit =
         x.Invoke (new System.Action (fun () -> 
             x.SuspendLayout()
