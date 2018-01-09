@@ -79,7 +79,7 @@ enum CommandType {
 };
 
 
-#define DEFCMD(n,a) typedef struct { uint32_t Length; CommandType OpCode; a## } n##Command;
+#define DEFCMD(n,a) typedef struct { uint32_t Length; CommandType OpCode; a } n##Command;
 #define DEFCMD0(n) typedef struct { uint32_t Length; CommandType OpCode; } n##Command;
 
 typedef struct {
