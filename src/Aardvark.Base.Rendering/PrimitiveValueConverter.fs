@@ -1000,7 +1000,7 @@ module PrimitiveValueConverter =
                    
         type ArrayMapLambda<'a, 'b> private() =
             static member Create(converter : 'a -> 'b) =
-                fun (arr : 'a[]) -> arr |> Array.map converter
+                fun (arr : Array) -> arr |> unbox |> Array.map converter
                      
 
         let compose (f : obj) (g : obj) =
