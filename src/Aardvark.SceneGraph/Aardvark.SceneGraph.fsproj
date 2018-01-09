@@ -98,6 +98,9 @@
   <Choose>
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
       <ItemGroup>
+        <Reference Include="System.Runtime.Serialization">
+          <Paket>True</Paket>
+        </Reference>
         <Reference Include="Aardvark.Base">
           <HintPath>..\..\packages\Aardvark.Base\lib\net45\Aardvark.Base.dll</HintPath>
           <Private>True</Private>
@@ -191,9 +194,6 @@
   <Choose>
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
       <ItemGroup>
-        <Reference Include="System.Runtime.Serialization">
-          <Paket>True</Paket>
-        </Reference>
         <Reference Include="System.Xml">
           <Paket>True</Paket>
         </Reference>
