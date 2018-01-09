@@ -79,13 +79,14 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
 
     let mutable renderTask : IRenderTask = RenderTask.empty
     let mutable taskSubscription : IDisposable = null
-    let mutable sizes = Mod.init (V2i(this.ClientSize.Width, this.ClientSize.Height))
+    let mutable sizes = Mod.init (V2i.II)
     let mutable needsRedraw = false
     let mutable renderContiuously = false
 
     let time = Mod.custom(fun _ -> DateTime.Now)
 
     override x.OnLoad(desc : SwapchainDescription) =
+        transact (fun () -> sizes.Value <- V2i(this.ClientSize.Width, this.ClientSize.Height))
         x.KeyDown.Add(fun e ->
             if e.KeyCode = System.Windows.Forms.Keys.End && e.Control then
                 renderContiuously <- not renderContiuously
