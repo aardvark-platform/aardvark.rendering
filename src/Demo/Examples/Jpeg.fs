@@ -21,18 +21,18 @@ open Aardvark.SceneGraph.IO
 module Jpeg =
 
     let run() =
-        //use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication(true)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication(true)
 
         
-        use app = new Aardvark.Application.WinForms.OpenGlApplication(true)
+        //use app = new Aardvark.Application.WinForms.OpenGlApplication(true)
 
         Aardvark.Rendering.GL.Config.CheckErrors <- true
         let runtime = app.Runtime
 
         use comp = new JpegCompressor(runtime)
 
-        let outputPath = @"C:\Users\steinlechner\Desktop\test.jpg"
-        let diffPath = @"C:\Users\steinlechner\Desktop\diff.png"
+        let outputPath = @"/home/schorsch/Desktop/test.jpg"
+        let diffPath = @"/home/schorsch/Desktop/diff.png"
 
         // load the input
         let input = PixImage.Create @"vs.png"
@@ -40,7 +40,7 @@ module Jpeg =
 
 
         // compress the image
-        use comp = comp.NewInstance(input.Size, Quantization.photoshop80)
+        use comp = comp.NewInstance(input.Size, Quantization.photoshop10)
         let data = comp.Compress(tex.[TextureAspect.Color, 0, 0])
         File.WriteAllBytes(outputPath, data)
         

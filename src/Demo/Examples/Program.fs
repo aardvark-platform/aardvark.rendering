@@ -1299,10 +1299,10 @@ let main args =
     //Examples.Wobble.run()
     //Examples.GeometryComposition.run()
     //Examples.Eigi.run()
-    //Examples.Sponza.run()
+    Examples.Sponza.run()
     //Examples.LevelOfDetail.run()
     //Examples.Terrain.run()
-    Examples.Jpeg.run()
+    //Examples.Jpeg.run()
     System.Environment.Exit 0
 
     //colorLockTest()

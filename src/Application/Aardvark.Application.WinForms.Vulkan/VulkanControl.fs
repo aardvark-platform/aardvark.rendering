@@ -15,21 +15,10 @@ open Aardvark.Application.WinForms.Vulkan
 type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
     inherit UserControl()
 
-    do base.SetStyle(ControlStyles.UserPaint, true)
-       base.SetStyle(ControlStyles.DoubleBuffer, false)
-       base.SetStyle(ControlStyles.AllPaintingInWmPaint, true)
-       base.SetStyle(ControlStyles.Opaque, true)
-       base.SetStyle(ControlStyles.ResizeRedraw, true)
-       base.Padding <- Padding(0,0,0,0)
-       base.Margin <- Padding(0,0,0,0)
-       base.BorderStyle <- BorderStyle.None
-        
-
     let mutable surface : Surface = Unchecked.defaultof<_>
     let mutable swapchainDescription : SwapchainDescription = Unchecked.defaultof<_>
     let mutable swapchain : Swapchain = Unchecked.defaultof<_>
     let mutable loaded = false
-
 
     member x.SwapChainDescription = 
         if not x.IsHandleCreated then x.CreateHandle()
@@ -45,6 +34,17 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
 
     override x.OnHandleCreated(e) =
         base.OnHandleCreated e
+
+        x.SetStyle(ControlStyles.UserPaint, true)
+        x.SetStyle(ControlStyles.DoubleBuffer, false)
+        x.SetStyle(ControlStyles.AllPaintingInWmPaint, true)
+        x.SetStyle(ControlStyles.Opaque, true)
+        x.SetStyle(ControlStyles.ResizeRedraw, true)
+        x.Padding <- Padding(0,0,0,0)
+        x.Margin <- Padding(0,0,0,0)
+        x.BorderStyle <- BorderStyle.None
+
+
         surface <- device.CreateSurface(x)
         swapchainDescription <- device.CreateSwapchainDescription(surface, graphicsMode)
         swapchain <- device.CreateSwapchain(swapchainDescription)
