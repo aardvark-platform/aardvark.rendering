@@ -9,6 +9,18 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
 
+type ContextErrorEventArgs(msg : string) =
+    inherit EventArgs()
+
+    let mutable retry = false
+    member x.Retry 
+        with get() = retry
+        and set (value : bool) = retry <- value
+
+    member x.Message = msg
+
+type ContextErrorEventHandler =
+    delegate of obj * ContextErrorEventArgs -> unit
 
 /// <summary>
 /// a handle represents a GL context which can be made current and released
@@ -17,6 +29,7 @@ open Aardvark.Base
 [<AllowNullLiteral>]
 type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
     static let current = new ThreadLocal<Option<ContextHandle>>(fun () -> None)
+    static let contextError = new Event<ContextErrorEventHandler, ContextErrorEventArgs>()
 
     let l = obj()
     let mutable debugCallbackInstalled = false
@@ -29,6 +42,9 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
                 | _ -> None
 
         and set v = current.Value <- v
+        
+    [<CLIEvent>]
+    static member ContextError = contextError.Publish
 
     member x.GetProcAddress(name : string) =
         (handle |> unbox<IGraphicsContextInternal>).GetAddress(name)
@@ -50,8 +66,24 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
         match ContextHandle.Current with
             | Some handle -> handle.ReleaseCurrent()
             | _ -> ()
+        
+        let mutable retry = true
+        while retry do
+            try
+                handle.MakeCurrent(window) // wglMakeCurrent 
+                retry <- false
+            with 
+            | :? OpenTK.Graphics.GraphicsContextException as ex -> 
+                    Log.line "context error triggered"
+                    let args = ContextErrorEventArgs(ex.Message)
+                    contextError.Trigger(x, args)
+                    retry <- args.Retry
+                    if retry then
+                        Log.line "application requested retry"
+                        Thread.Sleep 100
+                    else
+                        reraise()
 
-        handle.MakeCurrent(window)
         ContextHandle.Current <- Some x
 
         GLVM.hglCleanup((unbox<IGraphicsContextInternal> handle).Context.Handle)
