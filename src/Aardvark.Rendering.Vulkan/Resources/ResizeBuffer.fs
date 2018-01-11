@@ -227,8 +227,7 @@ type SparseBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
                                 handle, 
                                 uint32 binds.Length, pBinds
                             )
-
-                        let mutable bindInfo =
+                        let bindInfo =
                             VkBindSparseInfo(
                                 VkStructureType.BindSparseInfo, 0n,
                                 0u, NativePtr.zero,
@@ -238,7 +237,7 @@ type SparseBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
                                 0u, NativePtr.zero
                             )
 
-                        VkRaw.vkQueueBindSparse(queue.Handle, 1u, &&bindInfo, fence.Handle)
+                        queue.BindSparse([| bindInfo |], fence.Handle)
                             |> check "could not bind buffer memory"
                     )
                 )
@@ -275,7 +274,7 @@ type SparseBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
                                 uint32 unbinds.Length, pUnbinds
                             )
 
-                        let mutable bindInfo =
+                        let bindInfo =
                             VkBindSparseInfo(
                                 VkStructureType.BindSparseInfo, 0n,
                                 0u, NativePtr.zero,
@@ -285,7 +284,7 @@ type SparseBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
                                 0u, NativePtr.zero
                             )
 
-                        VkRaw.vkQueueBindSparse(queue.Handle, 1u, &&bindInfo, fence.Handle)
+                        queue.BindSparse([| bindInfo |], fence.Handle)
                             |> check "could not bind buffer memory"
                     )
                 )
@@ -396,7 +395,7 @@ type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
                                         uint32 binds.Length, pBinds
                                     )
 
-                                let mutable bindInfo =
+                                let bindInfo =
                                     VkBindSparseInfo(
                                         VkStructureType.BindSparseInfo, 0n,
                                         0u, NativePtr.zero,
@@ -406,7 +405,7 @@ type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
                                         0u, NativePtr.zero
                                     )
 
-                                VkRaw.vkQueueBindSparse(queue.Handle, 1u, &&bindInfo, fence.Handle)
+                                queue.BindSparse([| bindInfo |], fence.Handle)
                                     |> check "could not bind buffer memory"
                             )
                         )
