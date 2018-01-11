@@ -162,7 +162,7 @@ type Device internal(isGroup : bool, deviceGroup : PhysicalDevice[], wantedLayer
                 |> Array.map (fun (familyIndex, count) ->
                     VkDeviceQueueCreateInfo(
                         VkStructureType.DeviceQueueCreateInfo, 0n,
-                        0u,
+                        VkDeviceQueueCreateFlags.MinValue,
                         uint32 familyIndex,
                         uint32 count,
                         queuePriorities
@@ -196,7 +196,7 @@ type Device internal(isGroup : bool, deviceGroup : PhysicalDevice[], wantedLayer
                 let mutable info =
                     VkDeviceCreateInfo(
                         VkStructureType.DeviceCreateInfo, next,
-                        0u,
+                        VkDeviceCreateFlags.MinValue,
                         uint32 queueInfos.Length, ptr,
                         uint32 layers.Length, pLayers,
                         uint32 extensions.Length, pExtensions,
@@ -1226,7 +1226,7 @@ and Semaphore internal(device : Device) =
         let mutable info =
             VkSemaphoreCreateInfo(
                 VkStructureType.SemaphoreCreateInfo, 0n,
-                0u
+                VkSemaphoreCreateFlags.MinValue
             )
 
         VkRaw.vkCreateSemaphore(device.Handle, &&info, NativePtr.zero, &&handle)

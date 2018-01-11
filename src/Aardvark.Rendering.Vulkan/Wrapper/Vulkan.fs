@@ -19,80 +19,81 @@ type PFN_vkFreeFunction = nativeint
 type PFN_vkVoidFunction = nativeint
 
 // missing in vk.xml
-type VkCmdBufferCreateFlags = uint32
-type VkEventCreateFlags = uint32
-type VkSemaphoreCreateFlags = uint32
-type VkShaderCreateFlags = uint32
-type VkShaderModuleCreateFlags = uint32
-type VkMemoryMapFlags = uint32
-type VkDisplayPlaneAlphaFlagsKHR = uint32
-type VkDisplaySurfaceCreateFlagsKHR = uint32
-type VkSwapchainCreateFlagsKHR = uint32
-type VkSurfaceTransformFlagsKHR = uint32
-type VkCompositeAlphaFlagsKHR = uint32
-type VkPipelineLayoutCreateFlags = uint32
-type VkBufferViewCreateFlags = uint32
-type VkPipelineShaderStageCreateFlags = uint32
-type VkDescriptorSetLayoutCreateFlags = uint32
-type VkDeviceQueueCreateFlags = uint32
-type VkInstanceCreateFlags = uint32
-type VkImageViewCreateFlags = uint32
-type VkDeviceCreateFlags = uint32
-type VkFramebufferCreateFlags = uint32
-type VkDescriptorPoolResetFlags = uint32
-type VkPipelineVertexInputStateCreateFlags = uint32
-type VkPipelineInputAssemblyStateCreateFlags = uint32
-type VkPipelineTesselationStateCreateFlags = uint32
-type VkPipelineViewportStateCreateFlags = uint32
-type VkPipelineRasterizationStateCreateFlags = uint32
-type VkPipelineMultisampleStateCreateFlags = uint32
-type VkPipelineDepthStencilStateCreateFlags = uint32
-type VkPipelineColorBlendStateCreateFlags = uint32
-type VkPipelineDynamicStateCreateFlags = uint32
-type VkPipelineCacheCreateFlags = uint32
-type VkQueryPoolCreateFlags = uint32
-type VkSubpassDescriptionFlags = uint32
-type VkRenderPassCreateFlags = uint32
-type VkSamplerCreateFlags = uint32
+type VkCmdBufferCreateFlags = | MinValue = 0
+type VkEventCreateFlags = | MinValue = 0
+type VkSemaphoreCreateFlags = | MinValue = 0
+type VkShaderCreateFlags = | MinValue = 0
+type VkShaderModuleCreateFlags = | MinValue = 0
+type VkMemoryMapFlags = | MinValue = 0
+type VkDisplayPlaneAlphaFlagsKHR = | MinValue = 0
+type VkDisplaySurfaceCreateFlagsKHR = | MinValue = 0
+type VkSwapchainCreateFlagsKHR = | MinValue = 0
+type VkSwapchainCreateFlagBitsKHR = | MinValue = 0
+type VkSurfaceTransformFlagsKHR = | MinValue = 0
+type VkCompositeAlphaFlagsKHR = | MinValue = 0
+type VkPipelineLayoutCreateFlags = | MinValue = 0
+type VkBufferViewCreateFlags = | MinValue = 0
+type VkPipelineShaderStageCreateFlags = | MinValue = 0
+type VkDescriptorSetLayoutCreateFlags = | MinValue = 0
+type VkDeviceQueueCreateFlags = | MinValue = 0
+type VkInstanceCreateFlags = | MinValue = 0
+type VkImageViewCreateFlags = | MinValue = 0
+type VkDeviceCreateFlags = | MinValue = 0
+type VkFramebufferCreateFlags = | MinValue = 0
+type VkDescriptorPoolResetFlags = | MinValue = 0
+type VkPipelineVertexInputStateCreateFlags = | MinValue = 0
+type VkPipelineInputAssemblyStateCreateFlags = | MinValue = 0
+type VkPipelineTesselationStateCreateFlags = | MinValue = 0
+type VkPipelineViewportStateCreateFlags = | MinValue = 0
+type VkPipelineRasterizationStateCreateFlags = | MinValue = 0
+type VkPipelineMultisampleStateCreateFlags = | MinValue = 0
+type VkPipelineDepthStencilStateCreateFlags = | MinValue = 0
+type VkPipelineColorBlendStateCreateFlags = | MinValue = 0
+type VkPipelineDynamicStateCreateFlags = | MinValue = 0
+type VkPipelineCacheCreateFlags = | MinValue = 0
+type VkQueryPoolCreateFlags = | MinValue = 0
+type VkSubpassDescriptionFlags = | MinValue = 0
+type VkRenderPassCreateFlags = | MinValue = 0
+type VkSamplerCreateFlags = | MinValue = 0
 
-type VkAndroidSurfaceCreateFlagsKHR = uint32
-type VkDisplayModeCreateFlagsKHR = uint32
-type VkPipelineTessellationStateCreateFlags = uint32
-type VkXcbSurfaceCreateFlagsKHR = uint32
-type VkXlibSurfaceCreateFlagsKHR = uint32
-type VkWin32SurfaceCreateFlagsKHR = uint32
-type VkWaylandSurfaceCreateFlagsKHR = uint32
-type VkMirSurfaceCreateFlagsKHR = uint32
-type VkDebugReportFlagsEXT = uint32
+type VkAndroidSurfaceCreateFlagsKHR = | MinValue = 0
+type VkDisplayModeCreateFlagsKHR = | MinValue = 0
+type VkPipelineTessellationStateCreateFlags = | MinValue = 0
+type VkXcbSurfaceCreateFlagsKHR = | MinValue = 0
+type VkXlibSurfaceCreateFlagsKHR = | MinValue = 0
+type VkWin32SurfaceCreateFlagsKHR = | MinValue = 0
+type VkWaylandSurfaceCreateFlagsKHR = | MinValue = 0
+type VkMirSurfaceCreateFlagsKHR = | MinValue = 0
+type VkDebugReportFlagsEXT = | MinValue = 0
 type PFN_vkDebugReportCallbackEXT = nativeint
 
-type VkExternalMemoryHandleTypeFlagsNV = uint32
-type VkExternalMemoryFeatureFlagsNV = uint32
-type VkIndirectCommandsLayoutUsageFlagsNVX = uint32
-type VkObjectEntryUsageFlagsNVX = uint32
+type VkExternalMemoryHandleTypeFlagsNV = | MinValue = 0
+type VkExternalMemoryFeatureFlagsNV = | MinValue = 0
+type VkIndirectCommandsLayoutUsageFlagsNVX = | MinValue = 0
+type VkObjectEntryUsageFlagsNVX = | MinValue = 0
 
-type VkDescriptorUpdateTemplateCreateFlagsKHR = uint32
-type VkDeviceGroupPresentModeFlagsKHX = uint32
-type VkExternalFenceHandleTypeFlagsKHR = uint32
-type VkExternalMemoryHandleTypeFlagsKHR = uint32
-type VkExternalSemaphoreHandleTypeFlagsKHR = uint32
-type VkExternalMemoryFeatureFlagsKHR = uint32
-type VkExternalFenceFeatureFlagsKHR = uint32
-type VkExternalSemaphoreFeatureFlagsKHR = uint32
-type VkIOSSurfaceCreateFlagsMVK = uint32
-type VkFenceImportFlagsKHR = uint32
-type VkSemaphoreImportFlagsKHR = uint32
-type VkMacOSSurfaceCreateFlagsMVK = uint32
-type VkMemoryAllocateFlagsKHX = uint32
-type VkPipelineCoverageModulationStateCreateFlagsNV = uint32
-type VkPipelineCoverageToColorStateCreateFlagsNV = uint32
-type VkPipelineDiscardRectangleStateCreateFlagsEXT = uint32
-type VkPipelineViewportSwizzleStateCreateFlagsNV = uint32
-type VkSurfaceCounterFlagsEXT = uint32
-type VkValidationCacheCreateFlagsEXT = uint32
-type VkViSurfaceCreateFlagsNN = uint32
-type VkPeerMemoryFeatureFlagsKHX = uint32
-type VkCommandPoolTrimFlagsKHR = uint32
+type VkDescriptorUpdateTemplateCreateFlagsKHR = | MinValue = 0
+type VkDeviceGroupPresentModeFlagsKHX = | MinValue = 0
+type VkExternalFenceHandleTypeFlagsKHR = | MinValue = 0
+type VkExternalMemoryHandleTypeFlagsKHR = | MinValue = 0
+type VkExternalSemaphoreHandleTypeFlagsKHR = | MinValue = 0
+type VkExternalMemoryFeatureFlagsKHR = | MinValue = 0
+type VkExternalFenceFeatureFlagsKHR = | MinValue = 0
+type VkExternalSemaphoreFeatureFlagsKHR = | MinValue = 0
+type VkIOSSurfaceCreateFlagsMVK = | MinValue = 0
+type VkFenceImportFlagsKHR = | MinValue = 0
+type VkSemaphoreImportFlagsKHR = | MinValue = 0
+type VkMacOSSurfaceCreateFlagsMVK = | MinValue = 0
+type VkMemoryAllocateFlagsKHX = | MinValue = 0
+type VkPipelineCoverageModulationStateCreateFlagsNV = | MinValue = 0
+type VkPipelineCoverageToColorStateCreateFlagsNV = | MinValue = 0
+type VkPipelineDiscardRectangleStateCreateFlagsEXT = | MinValue = 0
+type VkPipelineViewportSwizzleStateCreateFlagsNV = | MinValue = 0
+type VkSurfaceCounterFlagsEXT = | MinValue = 0
+type VkValidationCacheCreateFlagsEXT = | MinValue = 0
+type VkViSurfaceCreateFlagsNN = | MinValue = 0
+type VkPeerMemoryFeatureFlagsKHX = | MinValue = 0
+type VkCommandPoolTrimFlagsKHR = | MinValue = 0
 type VkInstance = nativeint
 type VkPhysicalDevice = nativeint
 type VkDevice = nativeint
@@ -4409,6 +4410,8 @@ module EXTBlendOperationAdvanced =
         end
     
     
+    type VkAccessFlags with
+         static member inline ColorAttachmentReadNoncoherentBitExt = unbox<VkAccessFlags> 524288
     type VkBlendOp with
          static member inline ZeroExt = unbox<VkBlendOp> 1000148000
          static member inline SrcExt = unbox<VkBlendOp> 1000148001
@@ -5104,6 +5107,8 @@ module EXTExternalMemoryDmaBuf =
     
     
     
+    type VkExternalMemoryHandleTypeFlagBitsKHR with
+         static member inline VkExternalMemoryHandleTypeDmaBufBitExt = unbox<VkExternalMemoryHandleTypeFlagBitsKHR> 512
     
 
 module EXTExternalMemoryHost =
@@ -5155,6 +5160,9 @@ module EXTExternalMemoryHost =
         end
     
     
+    type VkExternalMemoryHandleTypeFlagBitsKHR with
+         static member inline VkExternalMemoryHandleTypeHostAllocationBitExt = unbox<VkExternalMemoryHandleTypeFlagBitsKHR> 128
+         static member inline VkExternalMemoryHandleTypeHostMappedForeignMemoryBitExt = unbox<VkExternalMemoryHandleTypeFlagBitsKHR> 256
     type VkStructureType with
          static member inline ImportMemoryHostPointerInfoExt = unbox<VkStructureType> 1000178000
          static member inline MemoryHostPointerPropertiesExt = unbox<VkStructureType> 1000178001
@@ -5400,6 +5408,8 @@ module EXTSampleLocations =
     
     type VkDynamicState with
          static member inline SampleLocationsExt = unbox<VkDynamicState> 1000143000
+    type VkImageCreateFlags with
+         static member inline SampleLocationsCompatibleDepthBitExt = unbox<VkImageCreateFlags> 4096
     type VkStructureType with
          static member inline SampleLocationsInfoExt = unbox<VkStructureType> 1000143000
          static member inline RenderPassSampleLocationsBeginInfoExt = unbox<VkStructureType> 1000143001
@@ -5465,6 +5475,8 @@ module EXTSamplerFilterMinmax =
         end
     
     
+    type VkFormatFeatureFlags with
+         static member inline SampledImageFilterMinmaxBitExt = unbox<VkFormatFeatureFlags> 65536
     type VkStructureType with
          static member inline PhysicalDeviceSamplerFilterMinmaxPropertiesExt = unbox<VkStructureType> 1000130000
          static member inline SamplerReductionModeCreateInfoExt = unbox<VkStructureType> 1000130001
@@ -5723,6 +5735,8 @@ module IMGFilterCubic =
     
     type VkFilter with
          static member inline CubicImg = unbox<VkFilter> 1000015000
+    type VkFormatFeatureFlags with
+         static member inline SampledImageFilterCubicBitImg = unbox<VkFormatFeatureFlags> 8192
     
 
 module IMGFormatPvrtc =
@@ -5859,6 +5873,8 @@ module KHRBindMemory2 =
         end
     
     
+    type VkImageCreateFlags with
+         static member inline AliasBitKhr = unbox<VkImageCreateFlags> 1024
     type VkStructureType with
          static member inline BindBufferMemoryInfoKhr = unbox<VkStructureType> 1000157000
          static member inline BindImageMemoryInfoKhr = unbox<VkStructureType> 1000157001
@@ -6882,6 +6898,11 @@ module KHRMaintenance1 =
     
     
     
+    type VkFormatFeatureFlags with
+         static member inline TransferSrcBitKhr = unbox<VkFormatFeatureFlags> 16384
+         static member inline TransferDstBitKhr = unbox<VkFormatFeatureFlags> 32768
+    type VkImageCreateFlags with
+         static member inline D2dArrayCompatibleBitKhr = unbox<VkImageCreateFlags> 32
     type VkResult with
          static member inline VkErrorOutOfPoolMemoryKhr = unbox<VkResult> -1000069000
     
@@ -6975,6 +6996,9 @@ module KHRMaintenance2 =
         end
     
     
+    type VkImageCreateFlags with
+         static member inline BlockTexelViewCompatibleBitKhr = unbox<VkImageCreateFlags> 128
+         static member inline ExtendedUsageBitKhr = unbox<VkImageCreateFlags> 256
     type VkImageLayout with
          static member inline DepthReadOnlyStencilAttachmentOptimalKhr = unbox<VkImageLayout> 1000117000
          static member inline DepthAttachmentStencilReadOnlyOptimalKhr = unbox<VkImageLayout> 1000117001
@@ -7052,6 +7076,8 @@ module KHRPushDescriptor =
         end
     
     
+    type VkDescriptorSetLayoutCreateFlags with
+         static member inline PushDescriptorBitKhr = unbox<VkDescriptorSetLayoutCreateFlags> 1
     type VkStructureType with
          static member inline PhysicalDevicePushDescriptorPropertiesKhr = unbox<VkStructureType> 1000080000
     
@@ -7217,6 +7243,20 @@ module KHRSamplerYcbcrConversion =
          static member inline G16B16R163plane422UnormKhr = unbox<VkFormat> 1000156031
          static member inline G16B16r162plane422UnormKhr = unbox<VkFormat> 1000156032
          static member inline G16B16R163plane444UnormKhr = unbox<VkFormat> 1000156033
+    type VkFormatFeatureFlags with
+         static member inline MidpointChromaSamplesBitKhr = unbox<VkFormatFeatureFlags> 131072
+         static member inline SampledImageYcbcrConversionLinearFilterBitKhr = unbox<VkFormatFeatureFlags> 262144
+         static member inline SampledImageYcbcrConversionSeparateReconstructionFilterBitKhr = unbox<VkFormatFeatureFlags> 524288
+         static member inline SampledImageYcbcrConversionChromaReconstructionExplicitBitKhr = unbox<VkFormatFeatureFlags> 1048576
+         static member inline SampledImageYcbcrConversionChromaReconstructionExplicitForceableBitKhr = unbox<VkFormatFeatureFlags> 2097152
+         static member inline DisjointBitKhr = unbox<VkFormatFeatureFlags> 4194304
+         static member inline CositedChromaSamplesBitKhr = unbox<VkFormatFeatureFlags> 8388608
+    type VkImageAspectFlags with
+         static member inline Plane0BitKhr = unbox<VkImageAspectFlags> 16
+         static member inline Plane1BitKhr = unbox<VkImageAspectFlags> 32
+         static member inline Plane2BitKhr = unbox<VkImageAspectFlags> 64
+    type VkImageCreateFlags with
+         static member inline DisjointBitKhr = unbox<VkImageCreateFlags> 512
     type VkObjectType with
          static member inline SamplerYcbcrConversionKhr = unbox<VkObjectType> 1000156000
     type VkStructureType with
@@ -7579,6 +7619,8 @@ module KHXDeviceGroupCreation =
         end
     
     
+    type VkMemoryHeapFlags with
+         static member inline MultiInstanceBitKhx = unbox<VkMemoryHeapFlags> 2
     type VkStructureType with
          static member inline PhysicalDeviceGroupPropertiesKhx = unbox<VkStructureType> 1000070000
          static member inline DeviceGroupDeviceCreateInfoKhx = unbox<VkStructureType> 1000070001
@@ -7617,6 +7659,24 @@ module KHXDeviceGroup =
         | None = 0
         | VkMemoryAllocateDeviceMaskBitKhx = 0x00000001
     
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkBindImageMemoryInfoKHX = 
+        struct
+            val mutable public sType : VkStructureType
+            val mutable public pNext : nativeint
+            val mutable public image : VkImage
+            val mutable public memory : VkDeviceMemory
+            val mutable public memoryOffset : VkDeviceSize
+            val mutable public deviceIndexCount : uint32
+            val mutable public pDeviceIndices : nativeptr<uint32>
+            val mutable public _SFRRectCount : uint32
+            val mutable public pSFRRects : nativeptr<VkRect2D>
+    
+            new(sType : VkStructureType, pNext : nativeint, image : VkImage, memory : VkDeviceMemory, memoryOffset : VkDeviceSize, deviceIndexCount : uint32, pDeviceIndices : nativeptr<uint32>, _SFRRectCount : uint32, pSFRRects : nativeptr<VkRect2D>) = { sType = sType; pNext = pNext; image = image; memory = memory; memoryOffset = memoryOffset; deviceIndexCount = deviceIndexCount; pDeviceIndices = pDeviceIndices; _SFRRectCount = _SFRRectCount; pSFRRects = pSFRRects }
+            override x.ToString() =
+                sprintf "VkBindImageMemoryInfoKHX { sType = %A; pNext = %A; image = %A; memory = %A; memoryOffset = %A; deviceIndexCount = %A; pDeviceIndices = %A; _SFRRectCount = %A; pSFRRects = %A }" x.sType x.pNext x.image x.memory x.memoryOffset x.deviceIndexCount x.pDeviceIndices x._SFRRectCount x.pSFRRects
+        end
     
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDeviceGroupBindSparseInfoKHX = 
@@ -7688,8 +7748,15 @@ module KHXDeviceGroup =
         end
     
     
+    type VkDependencyFlags with
+         static member inline DeviceGroupBitKhx = unbox<VkDependencyFlags> 4
+    type VkPipelineCreateFlags with
+         static member inline ViewIndexFromDeviceIndexBitKhx = unbox<VkPipelineCreateFlags> 8
+         static member inline DispatchBaseKhx = unbox<VkPipelineCreateFlags> 16
     type VkStructureType with
          static member inline MemoryAllocateFlagsInfoKhx = unbox<VkStructureType> 1000060000
+         static member inline BindBufferMemoryInfoKhx = unbox<VkStructureType> 1000060001
+         static member inline BindImageMemoryInfoKhx = unbox<VkStructureType> 1000060002
          static member inline DeviceGroupRenderPassBeginInfoKhx = unbox<VkStructureType> 1000060003
          static member inline DeviceGroupCommandBufferBeginInfoKhx = unbox<VkStructureType> 1000060004
          static member inline DeviceGroupSubmitInfoKhx = unbox<VkStructureType> 1000060005
@@ -7704,6 +7771,8 @@ module KHXDeviceGroup =
         type VkCmdSetDeviceMaskKHXDel = delegate of VkCommandBuffer * uint32 -> unit
         [<SuppressUnmanagedCodeSecurity>]
         type VkCmdDispatchBaseKHXDel = delegate of VkCommandBuffer * uint32 * uint32 * uint32 * uint32 * uint32 * uint32 -> unit
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkBindImageMemory2KHXDel = delegate of VkDevice * uint32 * nativeptr<VkBindImageMemoryInfoKHX> -> VkResult
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
@@ -7711,13 +7780,16 @@ module KHXDeviceGroup =
             static let s_vkGetDeviceGroupPeerMemoryFeaturesKHXDel = VkRaw.vkImportInstanceDelegate<VkGetDeviceGroupPeerMemoryFeaturesKHXDel> "vkGetDeviceGroupPeerMemoryFeaturesKHX"
             static let s_vkCmdSetDeviceMaskKHXDel = VkRaw.vkImportInstanceDelegate<VkCmdSetDeviceMaskKHXDel> "vkCmdSetDeviceMaskKHX"
             static let s_vkCmdDispatchBaseKHXDel = VkRaw.vkImportInstanceDelegate<VkCmdDispatchBaseKHXDel> "vkCmdDispatchBaseKHX"
+            static let s_vkBindImageMemory2KHXDel = VkRaw.vkImportInstanceDelegate<VkBindImageMemory2KHXDel> "vkBindImageMemory2KHX"
             static do Report.End(3) |> ignore
             static member vkGetDeviceGroupPeerMemoryFeaturesKHX = s_vkGetDeviceGroupPeerMemoryFeaturesKHXDel
             static member vkCmdSetDeviceMaskKHX = s_vkCmdSetDeviceMaskKHXDel
             static member vkCmdDispatchBaseKHX = s_vkCmdDispatchBaseKHXDel
+            static member vkBindImageMemory2KHX = s_vkBindImageMemory2KHXDel
         let vkGetDeviceGroupPeerMemoryFeaturesKHX(device : VkDevice, heapIndex : uint32, localDeviceIndex : uint32, remoteDeviceIndex : uint32, pPeerMemoryFeatures : nativeptr<VkPeerMemoryFeatureFlagsKHX>) = Loader<unit>.vkGetDeviceGroupPeerMemoryFeaturesKHX.Invoke(device, heapIndex, localDeviceIndex, remoteDeviceIndex, pPeerMemoryFeatures)
         let vkCmdSetDeviceMaskKHX(commandBuffer : VkCommandBuffer, deviceMask : uint32) = Loader<unit>.vkCmdSetDeviceMaskKHX.Invoke(commandBuffer, deviceMask)
         let vkCmdDispatchBaseKHX(commandBuffer : VkCommandBuffer, baseGroupX : uint32, baseGroupY : uint32, baseGroupZ : uint32, groupCountX : uint32, groupCountY : uint32, groupCountZ : uint32) = Loader<unit>.vkCmdDispatchBaseKHX.Invoke(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ)
+        let vkBindImageMemory2KHX(device : VkDevice, bindInfoCount : uint32, pBindInfos : nativeptr<VkBindImageMemoryInfoKHX>) = Loader<unit>.vkBindImageMemory2KHX.Invoke(device, bindInfoCount, pBindInfos)
     
     module KHRBindMemory2 =
         open EXTDebugReport
@@ -7752,6 +7824,8 @@ module KHXDeviceGroup =
             end
         
         
+        type VkImageCreateFlags with
+             static member inline BindSfrBitKhx = unbox<VkImageCreateFlags> 64
         type VkStructureType with
              static member inline BindBufferMemoryDeviceGroupInfoKhx = unbox<VkStructureType> 999998013
              static member inline BindImageMemoryDeviceGroupInfoKhx = unbox<VkStructureType> 999998014
@@ -7887,6 +7961,8 @@ module KHXDeviceGroup =
              static member inline BindImageMemorySwapchainInfoKhx = unbox<VkStructureType> 999998009
              static member inline DeviceGroupPresentInfoKhx = unbox<VkStructureType> 999998011
              static member inline DeviceGroupSwapchainCreateInfoKhx = unbox<VkStructureType> 999998012
+        type VkSwapchainCreateFlagBitsKHR with
+             static member inline VkSwapchainCreateBindSfrBitKhx = unbox<VkSwapchainCreateFlagBitsKHR> 1
         
         [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
         module VkRaw =
@@ -7955,6 +8031,8 @@ module KHXMultiview =
         end
     
     
+    type VkDependencyFlags with
+         static member inline ViewLocalBitKhx = unbox<VkDependencyFlags> 2
     type VkStructureType with
          static member inline RenderPassMultiviewCreateInfoKhx = unbox<VkStructureType> 1000053000
          static member inline PhysicalDeviceMultiviewFeaturesKhx = unbox<VkStructureType> 1000053001
@@ -8766,9 +8844,14 @@ module NVXDeviceGeneratedCommands =
         end
     
     
+    type VkAccessFlags with
+         static member inline CommandProcessReadBitNvx = unbox<VkAccessFlags> 131072
+         static member inline CommandProcessWriteBitNvx = unbox<VkAccessFlags> 262144
     type VkObjectType with
          static member inline ObjectTableNvx = unbox<VkObjectType> 1000086000
          static member inline IndirectCommandsLayoutNvx = unbox<VkObjectType> 1000086001
+    type VkPipelineStageFlags with
+         static member inline CommandProcessBitNvx = unbox<VkPipelineStageFlags> 131072
     type VkStructureType with
          static member inline ObjectTableCreateInfoNvx = unbox<VkStructureType> 1000086000
          static member inline IndirectCommandsLayoutCreateInfoNvx = unbox<VkStructureType> 1000086001
@@ -8855,4 +8938,7 @@ module NVXMultiviewPerViewAttributes =
     
     type VkStructureType with
          static member inline PhysicalDeviceMultiviewPerViewAttributesPropertiesNvx = unbox<VkStructureType> 1000097000
+    type VkSubpassDescriptionFlags with
+         static member inline PerViewAttributesBitNvx = unbox<VkSubpassDescriptionFlags> 1
+         static member inline PerViewPositionXOnlyBitNvx = unbox<VkSubpassDescriptionFlags> 2
     

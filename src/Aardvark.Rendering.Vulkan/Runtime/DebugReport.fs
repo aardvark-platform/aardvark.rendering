@@ -159,7 +159,7 @@ module private DebugReportHelpers =
                 let mutable info =
                     VkDebugReportCallbackCreateInfoEXT(
                         unbox 1000011000, 0n,
-                        uint32 flags,
+                        unbox (int flags),
                         ptr,
                         0n
                     )
