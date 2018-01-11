@@ -104,7 +104,7 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
             let mutable info =
                 VkInstanceCreateInfo(
                     VkStructureType.InstanceCreateInfo, 0n,
-                    0u,
+                    VkInstanceCreateFlags.MinValue,
                     &&applicationInfo,
                     uint32 layers.Length, pLayers,
                     uint32 extensions.Length, pExtensions
