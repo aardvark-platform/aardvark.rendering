@@ -9,7 +9,7 @@ open System.Collections.Concurrent
 open Aardvark.Base
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
-
+open KHXDeviceGroup
 
 #nowarn "9"
 #nowarn "51"
@@ -182,7 +182,7 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
                             handle, uint32 binds.Length, pBinds
                         )
 
-                    let mutable info =
+                    let bind = 
                         VkBindSparseInfo(
                             VkStructureType.BindSparseInfo, 0n,
                             0u, NativePtr.zero,
@@ -190,19 +190,16 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
                             1u, &&images,
                             0u, NativePtr.zero,
                             0u, NativePtr.zero
-                
                         )
-
                     let q = device.GraphicsFamily.GetQueue()
                     let f = device.CreateFence()
                     lock q (fun () ->
-                        VkRaw.vkQueueBindSparse(q.Handle, 1u, &&info, f.Handle)
+                        q.BindSparse([| bind |], f.Handle)
                             |> check "could not bind sparse memory"
                     )
                     f.Wait()
                     f.Dispose()
                 )  
-
 
             tailPtr
 
@@ -300,7 +297,7 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
                             handle, uint32 binds.Length, pBinds
                         )
 
-                    let mutable info =
+                    let info =
                         VkBindSparseInfo(
                             VkStructureType.BindSparseInfo, 0n,
                             0u, NativePtr.zero,
@@ -314,7 +311,7 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
                     let q = device.GraphicsFamily.GetQueue()
                     let f = device.CreateFence()
                     lock q (fun () ->
-                        VkRaw.vkQueueBindSparse(q.Handle, 1u, &&info, f.Handle)
+                        q.BindSparse([| info |], f.Handle)
                             |> check "could not bind sparse memory"
                         f.Wait()
                         f.Dispose()
