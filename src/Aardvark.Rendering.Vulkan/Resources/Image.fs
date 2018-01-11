@@ -10,7 +10,7 @@ open Aardvark.Base
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base.ReflectionHelpers
-
+open KHXDeviceGroup
 #nowarn "9"
 #nowarn "51"
 
@@ -1518,6 +1518,7 @@ type Image =
         val mutable public Memory : DevicePtr
         val mutable public Layout : VkImageLayout
         val mutable public RefCount : int
+        val mutable public PeerHandles : VkImage[]
 
         member x.AddReference() = Interlocked.Increment(&x.RefCount) |> ignore
 
@@ -1573,6 +1574,7 @@ type Image =
                 Memory = mem
                 Layout = layout
                 RefCount = 1
+                PeerHandles = [||]
             }
     end
 
@@ -3149,6 +3151,82 @@ module ``Image Command Extensions`` =
                             let aspect = VkFormat.toAspect img.Format
                             Command.TransformLayout(img.[unbox (int aspect)], source, target).Enqueue(cmd)
                 }
+
+
+        static member SyncPeers (img : ImageSubresourceLayers, ranges : array<Range1i * Box3i>) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue(cmd) =
+                    if img.Image.PeerHandles.Length > 0 then
+                        cmd.AppendCommand()
+
+//                        let mutable info =
+//                            VkImageMemoryBarrier(
+//                                VkStructureType.ImageMemoryBarrier, 0n,
+//                                VkAccessFlags.ColorAttachmentWriteBit,
+//                                VkAccessFlags.TransferReadBit,
+//                                VkImageLayout.TransferSrcOptimal,
+//                                VkImageLayout.TransferSrcOptimal,
+//                                VK_QUEUE_FAMILY_IGNORED,
+//                                VK_QUEUE_FAMILY_IGNORED,
+//                                img.Image.Handle,
+//                                img.Image.[img.Aspect].VkImageSubresourceRange
+//                            )
+
+//                        VkRaw.vkCmdPipelineBarrier(
+//                            cmd.Handle,
+//                            VkPipelineStageFlags.TopOfPipeBit,
+//                            VkPipelineStageFlags.TransferBit,
+//                            VkDependencyFlags.DeviceGroupBitKhx,
+//                            0u, NativePtr.zero,
+//                            0u, NativePtr.zero, 
+//                            0u, NativePtr.zero
+//                        )
+
+
+                        let baseImage = img.Image
+                        let deviceIndices = baseImage.Device.AllIndicesArr
+                        
+                        for di in deviceIndices do
+                            VkRaw.vkCmdSetDeviceMaskKHX(cmd.Handle, 1u <<< int di)
+                            let srcSlices, srcRange = ranges.[int di]
+
+                            for ci in 0 .. baseImage.PeerHandles.Length - 1 do
+                                let srcSub = img.[srcSlices.Min .. srcSlices.Max].VkImageSubresourceLayers
+                                let mutable copy =
+                                    VkImageCopy(
+                                        srcSub,
+                                        VkOffset3D(srcRange.Min.X, srcRange.Min.Y, srcRange.Min.Z),
+                                        srcSub,
+                                        VkOffset3D(srcRange.Min.X, srcRange.Min.Y, srcRange.Min.Z),
+                                        VkExtent3D(1+srcRange.SizeX, 1+srcRange.SizeY, 1+srcRange.SizeZ)
+                                    )
+
+                                VkRaw.vkCmdCopyImage(
+                                    cmd.Handle, 
+                                    baseImage.Handle, VkImageLayout.TransferSrcOptimal, 
+                                    baseImage.PeerHandles.[ci], VkImageLayout.TransferDstOptimal,
+                                    1u, &&copy
+                                )
+
+                        VkRaw.vkCmdSetDeviceMaskKHX(cmd.Handle, baseImage.Device.AllMask)
+
+                        VkRaw.vkCmdPipelineBarrier(
+                            cmd.Handle,
+                            VkPipelineStageFlags.TransferBit,
+                            VkPipelineStageFlags.TopOfPipeBit,
+                            VkDependencyFlags.DeviceGroupBitKhx,
+                            0u, NativePtr.zero,
+                            0u, NativePtr.zero, 
+                            0u, NativePtr.zero // wrongness
+                        )
+
+
+                    Disposable.Empty
+            }
+
+
+
 //
 //        static member Sync(img : ImageSubresourceRange) =
 //            if img.Image.IsNull then
@@ -3192,14 +3270,28 @@ module ``Image Command Extensions`` =
 // ===========================================================================================
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Image =
+    open KHXDeviceGroup
+    open KHRBindMemory2
 
     let alloc (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
         if device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt) = VkFormatFeatureFlags.None then
             failf "bad image format %A" fmt
 
+        let mayHavePeers =
+            device.IsDeviceGroup &&
+            (
+                (usage &&& VkImageUsageFlags.ColorAttachmentBit <> VkImageUsageFlags.None) ||
+                (usage &&& VkImageUsageFlags.DepthStencilAttachmentBit <> VkImageUsageFlags.None) ||
+                (usage &&& VkImageUsageFlags.StorageBit <> VkImageUsageFlags.None)
+            )
+
         let flags =
             if dim = TextureDimension.TextureCube then VkImageCreateFlags.CubeCompatibleBit
             else VkImageCreateFlags.None
+
+        let flags =
+            if mayHavePeers then VkImageCreateFlags.AliasBitKhr ||| flags
+            else flags
 
         let mutable info =
             VkImageCreateInfo(
@@ -3228,11 +3320,56 @@ module Image =
         let memsize = int64 reqs.size |> Alignment.next device.BufferImageGranularity
         let ptr = device.Alloc(VkMemoryRequirements(uint64 memsize, uint64 memalign, reqs.memoryTypeBits), true)
 
-        VkRaw.vkBindImageMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
-            |> check "could not bind image memory"
 
-        let result = Image(device, handle, size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
-        result
+
+        if mayHavePeers then
+            let indices = device.AllIndicesArr
+            let handles = Array.zeroCreate indices.Length
+            handles.[0] <- handle
+            for i in 1 .. indices.Length - 1 do
+                let mutable handle = VkImage.Null
+                VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, &&handle)
+                    |> check "could not create image"
+                handles.[1] <- handle
+
+            for off in 0 .. indices.Length - 1 do 
+                let deviceIndices =
+                    Array.init indices.Length (fun i ->
+                        indices.[(i+off) % indices.Length] |> uint32
+                    )
+
+                deviceIndices |> NativePtr.withA (fun pDeviceIndices ->
+                    let mutable info =
+                        VkBindImageMemoryInfoKHX(
+                            VkStructureType.BindImageMemoryInfoKhx, 0n,
+                            handles.[off],
+                            ptr.Memory.Handle,
+                            uint64 ptr.Offset,
+                            uint32 deviceIndices.Length, pDeviceIndices,
+                            0u, NativePtr.zero
+                        )
+
+                    VkRaw.vkBindImageMemory2KHX(device.Handle, 1u, &&info)
+                        |> check "could not bind image memory"
+                )
+
+            let result = Image(device, handles.[0], size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
+            result.PeerHandles <- Array.skip 1 handles
+
+            device.perform {
+                for i in 1 .. handles.Length - 1 do
+                    let img = Image(device, handles.[i], size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
+                    do! Command.TransformLayout(img, VkImageLayout.TransferDstOptimal)
+            }
+
+            result
+        else
+            VkRaw.vkBindImageMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
+                |> check "could not bind image memory"
+
+            let result = Image(device, handle, size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
+        
+            result
 
     let delete (img : Image) (device : Device) =
         if Interlocked.Decrement(&img.RefCount) = 0 then
