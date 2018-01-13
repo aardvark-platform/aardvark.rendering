@@ -2,6 +2,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
 VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "03 - Animation", "Examples\03 - Animation\03 - Animation.fsproj", "{21A147AA-3100-439F-8E7A-5591F4995D17}"
+EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Base.Rendering", "Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj", "{F8233648-55CE-4795-9151-E512390D86E7}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.GL", "Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj", "{88B586F5-A5E2-4321-BD5D-27D296DA0FDD}"
@@ -78,6 +80,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{21A147AA-3100-439F-8E7A-5591F4995D17}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{21A147AA-3100-439F-8E7A-5591F4995D17}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{21A147AA-3100-439F-8E7A-5591F4995D17}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{21A147AA-3100-439F-8E7A-5591F4995D17}.Release|Any CPU.Build.0 = Release|Any CPU
 		{F8233648-55CE-4795-9151-E512390D86E7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{F8233648-55CE-4795-9151-E512390D86E7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F8233648-55CE-4795-9151-E512390D86E7}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -191,6 +197,7 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{21A147AA-3100-439F-8E7A-5591F4995D17} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{3A6C4D14-AF36-4740-9D9C-CC3D8AD523D6} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 		{E3508B1C-592C-4E8E-98F3-71DBEC6083DA} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{4F645DE6-6D22-4BAD-8489-C1F8456E3D55} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
