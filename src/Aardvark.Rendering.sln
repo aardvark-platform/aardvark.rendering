@@ -1,4 +1,3 @@
-﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
 VisualStudioVersion = 14.0.25420.1
@@ -63,12 +62,15 @@ EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.GPGPU", "Aardvark.GPGPU\Aardvark.GPGPU.fsproj", "{68E3B876-EB23-4D61-A71F-EF35A146F276}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Examples", "Examples", "{5E3312C4-1B3C-4D41-964C-C3A3E01DA966}"
+	ProjectSection(SolutionItems) = preProject
+		Examples\new.fsx = Examples\new.fsx
+	EndProjectSection
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "01 - Triangle", "Examples\Triangle\01 - Triangle.fsproj", "{586B6699-E349-4173-BB3F-6DA125EFFFDA}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "01 - Triangle", "Examples\01 - Triangle\01 - Triangle.fsproj", "{586B6699-E349-4173-BB3F-6DA125EFFFDA}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.Utilities", "Application\Aardvark.Application.Utilities\Aardvark.Application.Utilities.fsproj", "{3322678A-22DA-4C84-B2BF-33B0D2F8C80C}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "02 - TexturedCube", "Examples\TexturedCube\02 - TexturedCube.fsproj", "{BDFCAB13-3D52-4373-94ED-9E2F493EB89E}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "02 - TexturedCube", "Examples\02 - TexturedCube\02 - TexturedCube.fsproj", "{BDFCAB13-3D52-4373-94ED-9E2F493EB89E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
