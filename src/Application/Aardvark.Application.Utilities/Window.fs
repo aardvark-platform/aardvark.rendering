@@ -36,6 +36,7 @@ type RenderConfig =
         samples     : int
         display     : Display
         scene       : ISg
+        initialCamera  : Option<CameraView>
     }
 
 
@@ -334,8 +335,14 @@ module Utilities =
             if cfg.game && cfg.backend = Backend.GL then (unbox<OpenGlApplication> app).CreateGameWindow(cfg.samples) :> IRenderWindow
             else app.CreateSimpleRenderWindow(cfg.samples) :> IRenderWindow
 
+
+        let initialView = 
+            match cfg.initialCamera with
+                | None -> CameraView.lookAt (V3d(6.0, 6.0, 6.0)) V3d.Zero V3d.OOI
+                | Some c -> c
+
         let view =
-            CameraView.lookAt (V3d(6,6,6)) V3d.Zero V3d.OOI
+            initialView
                 |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
                 |> Mod.map CameraView.viewTrafo
 
@@ -440,9 +447,13 @@ module Utilities =
                 (fun h -> runtime.DeleteFramebuffer h)
                 id
 
+        let initialView = 
+            match cfg.initialCamera with
+                | None -> CameraView.lookAt (V3d(6.0, 6.0, 6.0)) V3d.Zero V3d.OOI
+                | Some c -> c
 
         let view = 
-            CameraView.lookAt (V3d(6.0, 6.0, 6.0)) V3d.Zero V3d.OOI
+            initialView
                 |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
                 |> Mod.map CameraView.viewTrafo
 
@@ -592,6 +603,7 @@ module Utilities =
             backend = backend
             debug = true
             samples = 8
+            initialCamera = None
         }
 
 [<AutoOpen>]
@@ -605,6 +617,7 @@ module ``Render Utilities`` =
                 samples = 8
                 display = Display.Mono
                 scene = Sg.empty
+                initialCamera = None
             }
 
         [<CustomOperation("backend")>]
@@ -627,6 +640,9 @@ module ``Render Utilities`` =
         member x.Scene(state : RenderConfig, s : ISg) =
             { state with scene = s }
 
+        [<CustomOperation("initialCamera")>]
+        member x.InitialCamera(state : RenderConfig, c : CameraView) =
+            { state with initialCamera = Some c }
 
         [<CustomOperation("game")>]
         member x.Game(state : RenderConfig, game : bool) =
@@ -644,6 +660,7 @@ module ``Render Utilities`` =
                 samples = 8
                 display = Display.Mono
                 scene = Sg.empty
+                initialCamera = None
             }
 
         [<CustomOperation("backend")>]
@@ -665,6 +682,10 @@ module ``Render Utilities`` =
         [<CustomOperation("game")>]
         member x.Game(state : RenderConfig, game : bool) =
             { state with game = game }
+
+        [<CustomOperation("initialCamera")>]
+        member x.InitialCamera(state : RenderConfig, c : CameraView) =
+            { state with initialCamera = Some c }
 
         member x.Run(cfg : RenderConfig) =
             Utilities.createWindow cfg

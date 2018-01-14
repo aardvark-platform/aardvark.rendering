@@ -438,7 +438,8 @@ module SgPrimitives =
 
         let private unitBox = Sg.ofIndexedGeometry Primitives.unitBox
         
-        let fullScreenQuad =
+        // creates a quad on the z-Plane, ranging -1,-1,0 to 1,1,0
+        let quad =
             let drawCall = 
                 DrawCallInfo(
                     FaceVertexCount = 4,
@@ -454,6 +455,9 @@ module SgPrimitives =
                 |> Sg.vertexAttribute DefaultSemantic.Positions (Mod.constant positions)
                 |> Sg.vertexAttribute DefaultSemantic.Normals (Mod.constant normals)
                 |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (Mod.constant texcoords)
+
+        let fullScreenQuad =
+            quad
 
         let farPlaneQuad =
             let drawCall = 
@@ -552,18 +556,22 @@ module SgPrimitives =
                 |> Sg.vertexAttribute DefaultSemantic.Positions positions
                 |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> Mod.map (fun c -> c.ToC4f().ToV4f()))
 
+        /// creates a subdivision sphere, where level is the subdivision level
         let unitSphere (level : int) (color : IMod<C4b>) =
             Sphere.getSg level
                 |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> Mod.map (fun c -> c.ToC4f() |> V4f))
 
+        /// creates a subdivision sphere, where level is the subdivision level
         let sphere (level : int) (color : IMod<C4b>) (radius : IMod<float>)  =
             Sphere.getSg level
                 |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> Mod.map (fun c -> c.ToC4f() |> V4f))
                 |> Sg.trafo (radius |> Mod.map Trafo3d.Scale)
 
+        /// creates a subdivision sphere, where level is the subdivision level
         let unitSphere' (level : int) (color : C4b) =
             unitSphere level (Mod.constant color)
-
+           
+        /// creates a subdivision sphere, where level is the subdivision level
         let sphere' (level : int) (color : C4b) (radius : float) =
             sphere level (Mod.constant color) (Mod.constant radius)
 
