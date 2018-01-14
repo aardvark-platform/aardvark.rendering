@@ -78,6 +78,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.Utilit
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "02 - TexturedCube", "Examples\02 - TexturedCube\02 - TexturedCube.fsproj", "{BDFCAB13-3D52-4373-94ED-9E2F493EB89E}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "00 - HelloWorld", "Examples\00 - HelloWorld\00 - HelloWorld.fsproj", "{CDDB9BC3-C264-4C51-BD40-4B98E50F0297}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -204,6 +206,10 @@ Global
 		{BDFCAB13-3D52-4373-94ED-9E2F493EB89E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BDFCAB13-3D52-4373-94ED-9E2F493EB89E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{BDFCAB13-3D52-4373-94ED-9E2F493EB89E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CDDB9BC3-C264-4C51-BD40-4B98E50F0297}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CDDB9BC3-C264-4C51-BD40-4B98E50F0297}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CDDB9BC3-C264-4C51-BD40-4B98E50F0297}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CDDB9BC3-C264-4C51-BD40-4B98E50F0297}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -231,5 +237,6 @@ Global
 		{586B6699-E349-4173-BB3F-6DA125EFFFDA} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{3322678A-22DA-4C84-B2BF-33B0D2F8C80C} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{BDFCAB13-3D52-4373-94ED-9E2F493EB89E} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
+		{CDDB9BC3-C264-4C51-BD40-4B98E50F0297} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 	EndGlobalSection
 EndGlobal

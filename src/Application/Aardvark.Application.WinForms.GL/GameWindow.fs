@@ -325,7 +325,7 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
             Config.Buffers, 
             false
         ),
-        "Aardvark rocks \\o/",
+        "Aardvark rocks \\o/ (OpenGL GameWindow)",
         GameWindowFlags.Default,
         DisplayDevice.Default,
         Config.MajorVersion, 
