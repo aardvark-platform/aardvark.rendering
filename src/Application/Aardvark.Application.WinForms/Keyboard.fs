@@ -19,6 +19,9 @@ type Keyboard() as this =
     let onKeyDown (s : obj) (e : KeyEventArgs) =
         this.KeyDown (%e.KeyCode)
         e.Handled <- true
+        if e.Alt || e.Control then 
+            e.Handled <- true
+            e.SuppressKeyPress <- true
 
     let onPreviewKeyDown (s : obj) (e : PreviewKeyDownEventArgs) =
         match e.KeyCode with
@@ -26,8 +29,9 @@ type Keyboard() as this =
                 this.KeyDown (%e.KeyCode)
             | _ -> ()
 
-        if (this :> IKeyboard).ClaimsKeyEvents then
+        if this.ClaimsKeyEvents then
             e.IsInputKey <- true
+            
 
     let onKeyUp (s : obj) (e : KeyEventArgs) =
         this.KeyUp (%e.KeyCode)
