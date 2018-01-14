@@ -28,6 +28,9 @@ type EventKeyboard() =
     let upEvent = EventSource<Keys>()
     let downWithRepeats = EventSource<Keys>()
     let input = EventSource<char>()
+    let mutable claimEvents = true
+
+
 
     abstract member KeyDown : Keys -> unit
     abstract member KeyUp : Keys -> unit
@@ -76,7 +79,10 @@ type EventKeyboard() =
             member x.Dispose() = subscriptions |> List.iter (fun i -> i.Dispose()) 
         }
 
-
+        
+    member x.ClaimsKeyEvents
+        with get() = claimEvents
+        and set v = claimEvents <- v
 
     interface IKeyboard with
         member x.IsDown (k : Keys) =
@@ -95,6 +101,8 @@ type EventKeyboard() =
         member x.DownWithRepeats = downWithRepeats :> IEvent<_>
         member x.Up = upEvent :> IEvent<_>
         member x.Press = input :> IEvent<_>
-
-        member val ClaimsKeyEvents = true with get, set
+        
+        member x.ClaimsKeyEvents
+            with get() = claimEvents
+            and set v = claimEvents <- v
 
