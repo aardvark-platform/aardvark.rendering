@@ -251,7 +251,7 @@ module Utilities =
         let teaser = 
             "press 'H' for help"
 
-        let help = 
+        let helpText = 
             String.concat "\r\n" [
                 "Key Bindings:"
                 "  H             toggle this Help"
@@ -280,7 +280,7 @@ module Utilities =
                     ]
             }
 
-        let help = status |> Mod.map (fun s -> help + "\r\n" + s)
+        let help = status |> Mod.map (fun s -> helpText + "\r\n" + s)
 
         let showHelp = Mod.init false
 
@@ -290,6 +290,8 @@ module Utilities =
 
         let text = showHelp |> Mod.bind (function true -> help | false -> Mod.constant teaser)
 
+
+        
 
         let trafo = 
             win.Sizes |> Mod.map (fun s -> 
@@ -301,6 +303,14 @@ module Utilities =
             )
 
         let font = Font "Consolas"
+        
+        let chars =
+            seq {
+                for c in 0 .. 255 do yield char c
+            }
+
+        win.Runtime.PrepareGlyphs(font, chars)
+
         let overlay = 
             Sg.text font C4b.White text
                 |> Sg.trafo trafo
