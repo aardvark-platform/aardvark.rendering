@@ -22,7 +22,11 @@ type SimpleRenderWindow() as this =
         x.ClientSize <- System.Drawing.Size(1024, 768)
         ctrl.Dock <- DockStyle.Fill
         x.Controls.Add ctrl
-        x.Text <- "Aardvark rocks \\o/"
+        // find better way...
+        let backend = 
+            if ctrl.Runtime.GetType().FullName.ToLower().Contains("vulkan") then "Vulkan"
+            else "OpenGL"
+        x.Text <- sprintf "Aardvark rocks \\o/ (%s SimpleRenderWindow)" backend
         let alt = ctrl.Keyboard.IsDown(Keys.LeftAlt)
         let shift = ctrl.Keyboard.IsDown(Keys.LeftShift)
         ctrl.Keyboard.KeyDown(Keys.Enter).Values.Add (fun () ->
