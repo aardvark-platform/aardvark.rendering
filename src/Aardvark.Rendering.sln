@@ -1,7 +1,11 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.27130.2010
+# Visual Studio 14
+VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "10 - NBodyCompute", "Examples\10 - NBodyCompute\10 - NBodyCompute.fsproj", "{6EFF89F1-0DFE-4346-9473-31A0A233F943}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "09 - TesselatedSphere", "Examples\09 - TesselatedSphere\09 - TesselatedSphere.fsproj", "{B24882D0-E4FC-45A3-A5F0-DF6D2B0E01BA}"
+EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "08 - NaiveViewFrustumCulling", "Examples\08 - NaiveViewFrustumCulling\08 - NaiveViewFrustumCulling.fsproj", "{2DE51C61-A2DE-43F6-B047-F428E2608089}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "07 - RenderToTexture", "Examples\07 - RenderToTexture\07 - RenderToTexture.fsproj", "{0C75D556-1B56-42B7-B399-9E4C7BE0D83F}"
@@ -90,6 +94,14 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6EFF89F1-0DFE-4346-9473-31A0A233F943}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6EFF89F1-0DFE-4346-9473-31A0A233F943}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6EFF89F1-0DFE-4346-9473-31A0A233F943}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6EFF89F1-0DFE-4346-9473-31A0A233F943}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B24882D0-E4FC-45A3-A5F0-DF6D2B0E01BA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B24882D0-E4FC-45A3-A5F0-DF6D2B0E01BA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B24882D0-E4FC-45A3-A5F0-DF6D2B0E01BA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B24882D0-E4FC-45A3-A5F0-DF6D2B0E01BA}.Release|Any CPU.Build.0 = Release|Any CPU
 		{2DE51C61-A2DE-43F6-B047-F428E2608089}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{2DE51C61-A2DE-43F6-B047-F428E2608089}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2DE51C61-A2DE-43F6-B047-F428E2608089}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -227,6 +239,8 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{6EFF89F1-0DFE-4346-9473-31A0A233F943} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
+		{B24882D0-E4FC-45A3-A5F0-DF6D2B0E01BA} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{2DE51C61-A2DE-43F6-B047-F428E2608089} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{0C75D556-1B56-42B7-B399-9E4C7BE0D83F} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{CFFF9E2D-5C66-494F-AB20-DD5047DAD8B9} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}

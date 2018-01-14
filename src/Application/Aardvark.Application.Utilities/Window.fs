@@ -162,7 +162,7 @@ module Utilities =
         abstract member Proj : IMod<Trafo3d[]>
 
         abstract member Scene : ISg with get, set
-        abstract member Run : unit -> unit
+        abstract member Run : ?preventDisposal:bool -> unit
 
     [<AbstractClass>]
     type private SimpleRenderWindow(win : IRenderWindow, view : IMod<Trafo3d[]>, proj : IMod<Trafo3d[]>) =
@@ -184,9 +184,14 @@ module Utilities =
         member x.Keyboard = win.Keyboard
         member x.Mouse = win.Mouse
 
-        member x.Run() = 
+        member x.Run(preventDisposal) = 
             win.Run()
-            x.Dispose()
+            match preventDisposal with
+                | Some t when t = true -> ()
+                | _ -> x.Dispose()
+
+        member x.RunWithoutDisposing() = 
+            win.Run()
 
         member x.Scene
             with get() = scene
@@ -202,7 +207,7 @@ module Utilities =
             member x.Time = x.Time
             member x.Keyboard = x.Keyboard
             member x.Mouse = x.Mouse
-            member x.Run() = x.Run()
+            member x.Run(?preventDisposal) = x.Run(preventDisposal)
             
             member x.View = view
             member x.Proj = proj
