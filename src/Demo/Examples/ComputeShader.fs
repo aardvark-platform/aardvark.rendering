@@ -54,6 +54,17 @@ module ComputeShader =
                     acc.[i] <- V4d(F / masses.[i], 0.0)
 
             }
+
+        [<LocalSize(X = 64)>]
+        let toTarget (n : int) (src : int[]) (bits : int[]) (targets : int[]) (result : int[]) =
+            compute {
+                let id = getGlobalId().X
+                if id < n then
+                    let inputValue = src.[id]
+                    let targetLocation = targets.[id]-1
+                    if bits.[id] = 1 then
+                        result.[targetLocation] <- inputValue
+            }
             
         [<LocalSize(X = 64)>]
         let step (n : int) (dt : float) (pos : V4d[]) (vel : V4d[]) (acc : V4d[]) =
@@ -177,8 +188,8 @@ module ComputeShader =
 
 
     let run() =
-        //use app = new VulkanApplication(true)
-        use app = new OpenGlApplication(true)
+        use app = new VulkanApplication(true)
+        //use app = new OpenGlApplication(true)
         let runtime = app.Runtime :> IRuntime
         let win = app.CreateSimpleRenderWindow(8) 
         let run() = win.Run()
@@ -253,6 +264,44 @@ module ComputeShader =
 //        printfn "GPU: %A" res
 
        // System.Environment.Exit 0
+
+        let testArr = [| 100; 5; 10; 20; 1000; 3 |]
+        let input = runtime.CreateBuffer<int>(testArr)
+        let bits = runtime.CreateBuffer<int>(input.Count)
+        let bitsum = runtime.CreateBuffer<int>(input.Count)
+        let result = runtime.CreateBuffer<int>(testArr)
+
+        par.CompileMap(<@ fun i e -> if e < 10 then 1 else 0 @>, input, bits).Run()
+        let scanned = par.Scan(<@ (+) @>, bits, bitsum)
+        let targetWriteShader = runtime.CreateComputeShader Shaders.toTarget
+        let targetWrite = runtime.NewInputBinding targetWriteShader
+        targetWrite.["src"] <- input
+        targetWrite.["n"] <- input.Count
+        targetWrite.["bits"] <- bits
+        targetWrite.["targets"] <- bitsum
+        targetWrite.["result"] <- result
+        targetWrite.Flush()
+        let ceilDiv (v : int) (d : int) =
+            if v % d = 0 then v / d
+            else 1 + v / d
+        let mk =
+             [
+                ComputeCommand.Bind(targetWriteShader)
+                ComputeCommand.SetInput targetWrite
+                ComputeCommand.Dispatch (ceilDiv (int input.Count) 64)
+             ]
+        let program =
+            runtime.Compile mk
+        program.Run()
+
+        let bits2 =  bits.Download()
+        printfn "%A" bits2
+
+        let scanned2 =  bitsum.Download()
+        printfn "%A" scanned2
+        let max = scanned2.[scanned2.Length-1]
+        let result2 = result.[0..max-1].Download()
+        printfn "%A" result2
 
         let cnt = 1 <<< 20
         let aa = Array.create cnt 1
