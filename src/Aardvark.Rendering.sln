@@ -2,6 +2,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.27130.2010
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "08 - NaiveViewFrustumCulling", "Examples\08 - NaiveViewFrustumCulling\08 - NaiveViewFrustumCulling.fsproj", "{2DE51C61-A2DE-43F6-B047-F428E2608089}"
+EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "07 - RenderToTexture", "Examples\07 - RenderToTexture\07 - RenderToTexture.fsproj", "{0C75D556-1B56-42B7-B399-9E4C7BE0D83F}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "06 - GeometryPrimitives", "Examples\06 - GeometryPrimitives\06 - GeometryPrimitives.fsproj", "{CFFF9E2D-5C66-494F-AB20-DD5047DAD8B9}"
@@ -88,6 +90,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{2DE51C61-A2DE-43F6-B047-F428E2608089}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2DE51C61-A2DE-43F6-B047-F428E2608089}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2DE51C61-A2DE-43F6-B047-F428E2608089}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2DE51C61-A2DE-43F6-B047-F428E2608089}.Release|Any CPU.Build.0 = Release|Any CPU
 		{0C75D556-1B56-42B7-B399-9E4C7BE0D83F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{0C75D556-1B56-42B7-B399-9E4C7BE0D83F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0C75D556-1B56-42B7-B399-9E4C7BE0D83F}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -221,6 +227,7 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{2DE51C61-A2DE-43F6-B047-F428E2608089} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{0C75D556-1B56-42B7-B399-9E4C7BE0D83F} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{CFFF9E2D-5C66-494F-AB20-DD5047DAD8B9} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{AE1BA94B-B2F3-4A74-9748-4576440E0337} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}

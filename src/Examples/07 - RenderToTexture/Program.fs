@@ -4,7 +4,7 @@ open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
 open Aardvark.Application
 
-// This example illustrates how to render a simple triangle using aardvark.
+// This example illustrates how to render to texture in a dependency aware manner :)
 
 [<EntryPoint>]
 let main argv = 
