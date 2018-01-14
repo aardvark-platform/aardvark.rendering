@@ -1847,6 +1847,8 @@ module RenderTask =
 
             base.Perform(token, rt, desc)
 
+        override x.Runtime = Some device.Runtime
+
         override x.Release() =
             reader.Dispose()
             base.Release()

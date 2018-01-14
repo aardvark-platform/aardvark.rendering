@@ -244,7 +244,7 @@ let main argv =
             |> Sg.uniform "Scale" (Mod.constant 0.05)
             |> Sg.uniform "Magic" magic
     
-    win.Run(true)
+    win.Run(preventDisposal = true)
     
     positions.Dispose()
     accelerations.Dispose()
