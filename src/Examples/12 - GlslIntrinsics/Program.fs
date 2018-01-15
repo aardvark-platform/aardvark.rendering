@@ -49,7 +49,7 @@ let main argv =
 
     // show the scene in a simple window
     show {
-        backend Backend.Both
+        backends [Backend.GL; Backend.Vulkan; Backend.Vulkan]
         display Display.Mono
         debug false
         samples 8

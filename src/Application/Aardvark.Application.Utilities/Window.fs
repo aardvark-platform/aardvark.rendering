@@ -20,7 +20,6 @@ open Aardvark.Application.OpenVR
 type Backend =
     | GL 
     | Vulkan 
-    | Both
     
 [<RequireQualifiedAccess>]
 type Display =
@@ -30,7 +29,7 @@ type Display =
 
 type RenderConfig =
     {
-        backend     : Backend
+        backends    : list<Backend>
         game        : bool
         debug       : bool
         samples     : int
@@ -273,22 +272,23 @@ module Utilities =
                 ""
             ]
 
+        let status =
+            adaptive {
+                let! cull = cullMode
+                let! fill = fillMode
+
+                return 
+                    String.concat "\r\n" [
+                        "Status:"
+                        sprintf "  CullMode: %A" cull
+                        sprintf "  FillMode: %A" fill
+                    ]
+            }
+
+
         let overlay =
             match Environment.OSVersion with
-                | Windows when config.backend <> Backend.Both ->  
-                    let status =
-                        adaptive {
-                            let! cull = cullMode
-                            let! fill = fillMode
-
-                            return 
-                                String.concat "\r\n" [
-                                    "Status:"
-                                    sprintf "  CullMode: %A" cull
-                                    sprintf "  FillMode: %A" fill
-                                ]
-                        }
-
+                | Windows when List.length config.backends = 1 ->  
                     let help = status |> Mod.map (fun s -> helpText + "\r\n" + s)
 
                     let showHelp = Mod.init false
@@ -300,7 +300,7 @@ module Utilities =
                     let text = showHelp |> Mod.bind (function true -> help | false -> Mod.constant teaser)
 
 
-                    
+        
 
                     let trafo = 
                         win.Sizes |> Mod.map (fun s -> 
@@ -312,7 +312,7 @@ module Utilities =
                         )
 
                     let font = Font "Consolas"
-                    
+        
                     let chars =
                         seq {
                             for c in 0 .. 255 do yield char c
@@ -331,15 +331,22 @@ module Utilities =
         let sg = sg |> Sg.fillMode fillMode |> Sg.cullMode cullMode
         sg, overlay
 
+    let createApp (debug : bool) (backend : Backend)  =
+        match backend with
+            | Backend.GL -> new OpenGlApplication(debug) :> IApplication
+            | Backend.Vulkan -> new VulkanApplication(debug) :> IApplication
+
+    let createApplication (cfg : RenderConfig) =
+        match cfg.backends with
+            | [Backend.GL] -> new OpenGlApplication(cfg.debug) :> IApplication
+            | [Backend.Vulkan] -> new VulkanApplication(cfg.debug) :> IApplication
+            | xs -> new MultiApplication(xs |> List.map (createApp cfg.debug) |> List.toArray ) :> IApplication
+
     let private createMonoScreen (cfg : RenderConfig) =
-        let app =
-            match cfg.backend with
-                | Backend.GL -> new OpenGlApplication(cfg.debug) :> IApplication
-                | Backend.Vulkan -> new VulkanApplication(cfg.debug) :> IApplication
-                | Backend.Both -> new MultiApplication([|new OpenGlApplication(cfg.debug) :> IApplication; new VulkanApplication(cfg.debug) :> IApplication|]) :> IApplication
+        let app = createApplication cfg
 
         let win = 
-            if cfg.game && cfg.backend = Backend.GL then (unbox<OpenGlApplication> app).CreateGameWindow(cfg.samples) :> IRenderWindow
+            if cfg.game && cfg.backends = [Backend.GL] then (unbox<OpenGlApplication> app).CreateGameWindow(cfg.samples) :> IRenderWindow
             else app.CreateSimpleRenderWindow(cfg.samples) :> IRenderWindow
 
 
@@ -374,11 +381,7 @@ module Utilities =
         } :> ISimpleRenderWindow
 
     let private createStereoScreen (cfg : RenderConfig) =
-        let app =
-            match cfg.backend with
-                | Backend.GL -> new OpenGlApplication(cfg.debug) :> IApplication
-                | Backend.Vulkan -> new VulkanApplication(cfg.debug) :> IApplication
-                | Backend.Both -> failwith "not implemented"
+        let app = createApplication cfg
 
         let win = app.CreateSimpleRenderWindow(cfg.samples)
         let runtime = app.Runtime
@@ -567,8 +570,8 @@ module Utilities =
         res
 
     let private createOpenVR (cfg : RenderConfig) =
-        match cfg.backend with
-            | Backend.Vulkan ->
+        match cfg.backends with
+            | [Backend.Vulkan] ->
                 let app = VulkanVRApplicationLayered(cfg.samples, cfg.debug)
 
                 let hmdLocation = app.Hmd.MotionState.Pose |> Mod.map (fun t -> t.Forward.C3.XYZ)
@@ -584,11 +587,11 @@ module Utilities =
                         |> Sg.compile app.Runtime app.FramebufferSignature
                 } :> ISimpleRenderWindow
 
-            | Backend.GL -> 
+            | [Backend.GL] -> 
                 failwith "no OpenGL OpenVR backend atm."
 
-            | Backend.Both -> 
-                failwith "no OpenGL OpenVR backend atm."
+            | xs -> 
+                failwith "no multi backend support for OpenVR atm."
 
 
     let createWindow (cfg : RenderConfig) =
@@ -602,12 +605,12 @@ module Utilities =
         win.Scene <- cfg.scene
         win.Run()
 
-    let run (display : Display) (backend : Backend) (scene : ISg) =
+    let run (display : Display) (backends : list<Backend>) (scene : ISg) =
         runConfig {
             scene = scene
             game = false
             display = display
-            backend = backend
+            backends = backends
             debug = true
             samples = 8
             initialCamera = None
@@ -618,7 +621,7 @@ module ``Render Utilities`` =
     type ShowBuilder() =
         member x.Yield(()) =
             {
-                backend = Backend.Vulkan
+                backends = [Backend.Vulkan]
                 debug = true
                 game = false
                 samples = 8
@@ -629,7 +632,11 @@ module ``Render Utilities`` =
 
         [<CustomOperation("backend")>]
         member x.Backend(s : RenderConfig, b : Backend) =
-            { s with backend = b }
+            { s with backends = [b] }
+
+        [<CustomOperation("backends")>]
+        member x.Backends(s : RenderConfig, bs : list<Backend>) =
+            { s with backends = bs }
 
         [<CustomOperation("debug")>]
         member x.Debug(s : RenderConfig, d : bool) =
@@ -661,7 +668,7 @@ module ``Render Utilities`` =
     type WindowBuilder() =
         member x.Yield(()) =
             {
-                backend = Backend.Vulkan
+                backends = [Backend.Vulkan]
                 debug = true
                 game = false
                 samples = 8
@@ -672,7 +679,11 @@ module ``Render Utilities`` =
 
         [<CustomOperation("backend")>]
         member x.Backend(s : RenderConfig, b : Backend) =
-            { s with backend = b }
+            { s with backends = [b] }
+
+        [<CustomOperation("backends")>]
+        member x.Backends(s : RenderConfig, bs : list<Backend>) =
+            { s with backends = bs }
 
         [<CustomOperation("debug")>]
         member x.Debug(s : RenderConfig, d : bool) =
