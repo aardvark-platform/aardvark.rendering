@@ -79,6 +79,9 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
     let mutable threadStealing : StopStealing = 
         { new StopStealing with member x.StopStealing () = { new IDisposable with member x.Dispose() = () } }
 
+    let beforeRender = Event<unit>()
+    let afterRender = Event<unit>()
+
     member x.ContextHandle = contextHandle
 
     member val OnPaintRender = true with get, set
@@ -157,6 +160,14 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
         base.OnHandleCreated(e)
         loaded <- true
+
+        x.KeyDown.Add(fun e ->
+            if e.KeyCode = System.Windows.Forms.Keys.End && e.Control then
+                renderContinuously <- not renderContinuously
+                x.Invalidate()
+                e.Handled <- true
+        )
+
         base.MakeCurrent()
          
     member x.Render() = 
@@ -170,6 +181,8 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
             let size = V2i(base.ClientSize.Width, base.ClientSize.Height)
           
+            
+            beforeRender.Trigger()
 
             match task with
                 | Some t ->
@@ -241,6 +254,8 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
                     needsRedraw <- false
 
+            afterRender.Trigger()
+
             if renderContinuously then
                 x.Invalidate()
         
@@ -254,6 +269,9 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
     member x.Time = time
     member x.FramebufferSignature = fboSignature :> IFramebufferSignature
+    
+    member x.BeforeRender = beforeRender.Publish
+    member x.AfterRender = afterRender.Publish
 
     interface IRenderTarget with
         member x.FramebufferSignature = fboSignature :> IFramebufferSignature
@@ -264,6 +282,8 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
             and set t = x.RenderTask <- t
         member x.Sizes = sizes :> IMod<_>
         member x.Samples = samples
+        member x.BeforeRender = beforeRender.Publish
+        member x.AfterRender = afterRender.Publish
 
     new(runtime : Runtime, enableDebug : bool) = new OpenGlRenderControl(runtime, enableDebug, 1)
 

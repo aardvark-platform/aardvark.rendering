@@ -7,7 +7,7 @@
 
 #define get(t,v) ((t##Command*)(v)) 
 
-#define getptr(t,v,r) (r*)(((char*)((t##Command*)data)->v##) + (intptr_t)data) 
+#define getptr(t,v,r) (r*)(((char*)((t##Command*)data)->v) + (intptr_t)data) 
 
 typedef struct {
 	VkPipeline CurrentPipeline;

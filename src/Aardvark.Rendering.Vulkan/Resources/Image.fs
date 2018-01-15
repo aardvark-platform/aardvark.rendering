@@ -10,7 +10,7 @@ open Aardvark.Base
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base.ReflectionHelpers
-
+open KHXDeviceGroup
 #nowarn "9"
 #nowarn "51"
 
@@ -1518,6 +1518,7 @@ type Image =
         val mutable public Memory : DevicePtr
         val mutable public Layout : VkImageLayout
         val mutable public RefCount : int
+        val mutable public PeerHandles : VkImage[]
 
         member x.AddReference() = Interlocked.Increment(&x.RefCount) |> ignore
 
@@ -1525,6 +1526,7 @@ type Image =
             member x.WantMipMaps = x.MipMapLevels > 1
 
         interface IBackendTexture with
+            member x.Runtime = x.Device.Runtime :> ITextureRuntime
             member x.Handle = x.Handle :> obj
             member x.Count = x.Count
             member x.Dimension = x.Dimension
@@ -1534,6 +1536,7 @@ type Image =
             member x.Size = x.Size
 
         interface IRenderbuffer with
+            member x.Runtime = x.Device.Runtime :> ITextureRuntime
             member x.Size = x.Size.XY
             member x.Samples = x.Samples
             member x.Format = VkFormat.toTextureFormat x.Format |> TextureFormat.toRenderbufferFormat
@@ -1571,6 +1574,7 @@ type Image =
                 Memory = mem
                 Layout = layout
                 RefCount = 1
+                PeerHandles = [||]
             }
     end
 
@@ -2168,12 +2172,12 @@ type TensorImage(buffer : Buffer, info : Tensor4Info, format : PixFormat, imageF
     member x.ImageFormat = imageFormat
 
     abstract member Write<'x when 'x : unmanaged> : NativeMatrix<'x> -> unit
-    abstract member Write<'x when 'x : unmanaged> : NativeVolume<'x> -> unit
-    abstract member Write<'x when 'x : unmanaged> : NativeTensor4<'x> -> unit
+    abstract member Write<'x when 'x : unmanaged> : Col.Format * NativeVolume<'x> -> unit
+    abstract member Write<'x when 'x : unmanaged> : Col.Format * NativeTensor4<'x> -> unit
     
     abstract member Read<'x when 'x : unmanaged> : NativeMatrix<'x> -> unit
-    abstract member Read<'x when 'x : unmanaged> : NativeVolume<'x> -> unit
-    abstract member Read<'x when 'x : unmanaged> : NativeTensor4<'x> -> unit
+    abstract member Read<'x when 'x : unmanaged> : Col.Format * NativeVolume<'x> -> unit
+    abstract member Read<'x when 'x : unmanaged> : Col.Format * NativeTensor4<'x> -> unit
 
     abstract member Write : data : nativeint * rowSize : nativeint * format : Col.Format * trafo : ImageTrafo -> unit
     abstract member Read : data : nativeint * rowSize : nativeint * format : Col.Format * trafo : ImageTrafo -> unit
@@ -2184,7 +2188,7 @@ type TensorImage(buffer : Buffer, info : Tensor4Info, format : PixFormat, imageF
                 override __.Visit(img : PixImage<'a>, value : 'a) =
                     let img = img.Transformed beforeRead |> unbox<PixImage<'a>>
                     NativeVolume.using img.Volume (fun src ->
-                        x.Write src
+                        x.Write(img.Format, src)
                     )
                     1
         } |> ignore
@@ -2195,7 +2199,7 @@ type TensorImage(buffer : Buffer, info : Tensor4Info, format : PixFormat, imageF
                 override __.Visit(img : PixImage<'a>, value : 'a) =
                     let img = img.Transformed beforeWrite |> unbox<PixImage<'a>>
                     NativeVolume.using img.Volume (fun dst ->
-                        x.Read dst
+                        x.Read(img.Format, dst)
                     )
                     1
         } |> ignore
@@ -2205,7 +2209,7 @@ type TensorImage(buffer : Buffer, info : Tensor4Info, format : PixFormat, imageF
             new PixVolumeVisitor<int>() with 
                 override __.Visit(img : PixVolume<'a>, value : 'a) =
                     NativeTensor4.using img.Tensor4 (fun src ->
-                        x.Write src
+                        x.Write(img.Format, src)
                     )
                     1
         } |> ignore
@@ -2215,7 +2219,7 @@ type TensorImage(buffer : Buffer, info : Tensor4Info, format : PixFormat, imageF
             new PixVolumeVisitor<int>() with 
                 override __.Visit(img : PixVolume<'a>, value : 'a) =
                     NativeTensor4.using img.Tensor4 (fun dst ->
-                        x.Read dst
+                        x.Read(img.Format, dst)
                     )
                     1
         } |> ignore
@@ -2224,6 +2228,25 @@ type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4
     inherit TensorImage(buffer, info, PixFormat(typeof<'a>, format), imageFormat)
 
     static let sa = sizeof<'a> |> int64
+
+    static let rgbFormats =
+        HashSet.ofList [
+            Col.Format.RGB
+            Col.Format.RGBA
+            Col.Format.RGBP
+        ]
+
+    static let bgrFormats =
+        HashSet.ofList [
+            Col.Format.BGR
+            Col.Format.BGRA
+            Col.Format.BGRP
+        ]
+
+    static let reverseRGB (srcFormat : Col.Format) (dstFormat : Col.Format) =
+        (rgbFormats.Contains srcFormat && bgrFormats.Contains dstFormat) ||
+        (rgbFormats.Contains dstFormat && bgrFormats.Contains srcFormat)
+
 
     let tensor = DeviceTensor4<'a>(buffer.Memory, info)
 
@@ -2240,6 +2263,35 @@ type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4
             | TypeInfo.Patterns.Float32 -> 1.0f |> unbox<'a>
             | TypeInfo.Patterns.Float64 -> 1.0 |> unbox<'a>
             | _ -> failf "unsupported channel-type: %A" typeof<'a>
+
+    static let copy (src : NativeTensor4<'a>) (srcFormat : Col.Format) (dst : NativeTensor4<'a>) (dstFormat : Col.Format) =
+        let channels = min src.SW dst.SW
+
+        let mutable src = src
+        let mutable dst = dst
+
+        if src.Size.XYZ <> dst.Size.XYZ then
+            let s = V3l(min src.SX dst.SX, min src.SY dst.SY, min src.SZ dst.SZ)
+            src <- src.SubTensor4(V4l.Zero, V4l(s, src.SW))
+            dst <- dst.SubTensor4(V4l.Zero, V4l(s, dst.SW))
+
+        if reverseRGB srcFormat dstFormat then
+            let src3 = src.[*,*,*,0..2].MirrorW()
+            let dst3 = dst.[*,*,*,0..2]
+            NativeTensor4.copy src3 dst3
+
+            if channels > 3L then
+                 NativeTensor4.copy src.[*,*,*,3..] dst.[*,*,*,3..]
+
+            if dst.SW > channels then
+                NativeTensor4.set defaultValue dst.[*,*,*,channels..]
+        else
+            // copy all available channels
+            NativeTensor4.copy src dst.[*,*,*,0L..channels-1L]
+            
+            // set the missing channels to default
+            if dst.SW > channels then
+                NativeTensor4.set defaultValue dst.[*,*,*,channels..]
 
     override x.Write(data : nativeint, rowSize : nativeint, format : Col.Format, trafo : ImageTrafo) =
         let rowSize = int64 rowSize
@@ -2259,7 +2311,7 @@ type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4
             srcInfo.Transformed(trafo)
 
         let src = NativeVolume<'a>(NativePtr.ofNativeInt data, srcInfo)
-        x.Write(src)
+        x.Write(format, src)
 
     override x.Read(data : nativeint, rowSize : nativeint, format : Col.Format, trafo : ImageTrafo) =
         let rowSize = int64 rowSize
@@ -2279,7 +2331,7 @@ type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4
             dstInfo.Transformed(trafo)
 
         let dst = NativeVolume<'a>(NativePtr.ofNativeInt data, dstInfo)
-        x.Read(dst)
+        x.Read(format, dst)
 
     override x.Write(matrix : NativeMatrix<'x>) : unit =
         if typeof<'a> = typeof<'x> then
@@ -2295,38 +2347,23 @@ type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4
         else
             failf "mismatching types is upload"
 
-    override x.Write(volume : NativeVolume<'x>) =
+    override x.Write(fmt : Col.Format, volume : NativeVolume<'x>) =
         if typeof<'a> = typeof<'x> then
             let src = unbox<NativeVolume<'a>> volume
-
-            // copy all available channels
-            let dst = tensor.[*,*,0L,0L..src.SZ-1L]
-            dst.CopyFrom src
             
-            // set the missing channels to default
-            if src.Size.Z < tensor.Size.W then
-                let missingChannels = tensor.[*,*,0L,src.Size.Z..]
-                missingChannels.Set defaultValue
-
-            // set the remaining tensor to default
-            let rest = tensor.[*,*,1..,*]
-            rest.Set defaultValue
-
+            let srcTensor = src.ToXYWTensor4()
+            tensor.Mapped (fun dst ->
+                copy srcTensor fmt dst format
+            )
         else
             failf "mismatching types is upload"
 
-    override x.Write(t : NativeTensor4<'x>) =
+    override x.Write(fmt : Col.Format, t : NativeTensor4<'x>) =
         if typeof<'a> = typeof<'x> then
             let src = unbox<NativeTensor4<'a>> t
-
-            // copy all available channels
-            let dst = tensor.[*,*,*,0L..src.SZ-1L]
-            dst.CopyFrom src
-            
-            // set the missing channels to default
-            if src.Size.W < tensor.Size.W then
-                let missingChannels = tensor.[*,*,*,src.Size.W..]
-                missingChannels.Set defaultValue
+            tensor.Mapped (fun dst ->
+                copy src fmt dst format
+            )
 
         else
             failf "mismatching types is upload"
@@ -2339,19 +2376,23 @@ type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4
         else
             failf "mismatching types is download"
 
-    override x.Read(dst : NativeVolume<'x>) : unit =
+    override x.Read(fmt : Col.Format, dst : NativeVolume<'x>) : unit =
         if typeof<'a> = typeof<'x> then
             let dst = unbox<NativeVolume<'a>> dst
-            let src = tensor.[*,*,0,*]
-            src.CopyTo dst
+            let dstTensor = dst.ToXYWTensor4()
+            tensor.Mapped (fun src ->
+                copy src format dstTensor fmt
+            )
+
         else
             failf "mismatching types is download"
 
-    override x.Read(dst : NativeTensor4<'x>) : unit =
+    override x.Read(fmt : Col.Format, dst : NativeTensor4<'x>) : unit =
         if typeof<'a> = typeof<'x> then
             let dst = unbox<NativeTensor4<'a>> dst
-            let src = tensor
-            src.CopyTo dst
+            tensor.Mapped (fun src ->
+                copy src format dst fmt
+            )
         else
             failf "mismatching types is download"
 
@@ -2486,6 +2527,8 @@ module ``Devil Loader`` =
 
     module TensorImage =
         let ofFile (file : string) (srgb : bool) (device : Device) =
+            // let img = PixImage.Create file
+            // TensorImage.ofPixImage img srgb device
             lock devilLock (fun () ->
                 PixImage.InitDevil()
 
@@ -2506,7 +2549,7 @@ module ``Devil Loader`` =
                     let rowSize = nativeint bytesPerPixel * nativeint width
                     
                     let target = device |> TensorImage.createUntyped (V3i(width, height, 1)) pixFormat srgb
-                    target.Write(data, rowSize, pixFormat.Format, ImageTrafo.Rot0)
+                    target.Write(data, rowSize, pixFormat.Format, ImageTrafo.MirrorY)
 
                     target
                 finally
@@ -2899,12 +2942,31 @@ module ``Image Command Extensions`` =
                     let dstLayout = dst.Image.Layout
 
                     let mutable srcOffsets = VkOffset3D_2()
+
+                    let inline extend (b : Box3i) =
+                        let mutable min = b.Min
+                        let mutable max = b.Max
+
+                        if max.X >= min.X then max.X <- 1 + max.X
+                        else min.X <- min.X + 1
+
+                        if max.Y >= min.Y then max.Y <- 1 + max.Y
+                        else min.Y <- min.Y + 1
+
+                        if max.Z >= min.Z then max.Z <- 1 + max.Z
+                        else min.Z <- min.Z + 1
+
+                        Box3i(min, max)
+                         
+                    let srcRange = extend srcRange
+                    let dstRange = extend dstRange
+
                     srcOffsets.[0] <- VkOffset3D(srcRange.Min.X, srcRange.Min.Y, srcRange.Min.Z)
-                    srcOffsets.[1] <- VkOffset3D(1 + srcRange.Max.X, 1 + srcRange.Max.Y, 1 + srcRange.Max.Z)
+                    srcOffsets.[1] <- VkOffset3D(srcRange.Max.X, srcRange.Max.Y, srcRange.Max.Z)
 
                     let mutable dstOffsets = VkOffset3D_2()
                     dstOffsets.[0] <- VkOffset3D(dstRange.Min.X, dstRange.Min.Y, dstRange.Min.Z)
-                    dstOffsets.[1] <- VkOffset3D(1 + dstRange.Max.X, 1 + dstRange.Max.Y, 1 + dstRange.Max.Z)
+                    dstOffsets.[1] <- VkOffset3D(dstRange.Max.X, dstRange.Max.Y, dstRange.Max.Z)
 
 
                     let mutable blit =
@@ -3089,6 +3151,82 @@ module ``Image Command Extensions`` =
                             let aspect = VkFormat.toAspect img.Format
                             Command.TransformLayout(img.[unbox (int aspect)], source, target).Enqueue(cmd)
                 }
+
+
+        static member SyncPeers (img : ImageSubresourceLayers, ranges : array<Range1i * Box3i>) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue(cmd) =
+                    if img.Image.PeerHandles.Length > 0 then
+                        cmd.AppendCommand()
+
+//                        let mutable info =
+//                            VkImageMemoryBarrier(
+//                                VkStructureType.ImageMemoryBarrier, 0n,
+//                                VkAccessFlags.ColorAttachmentWriteBit,
+//                                VkAccessFlags.TransferReadBit,
+//                                VkImageLayout.TransferSrcOptimal,
+//                                VkImageLayout.TransferSrcOptimal,
+//                                VK_QUEUE_FAMILY_IGNORED,
+//                                VK_QUEUE_FAMILY_IGNORED,
+//                                img.Image.Handle,
+//                                img.Image.[img.Aspect].VkImageSubresourceRange
+//                            )
+
+//                        VkRaw.vkCmdPipelineBarrier(
+//                            cmd.Handle,
+//                            VkPipelineStageFlags.TopOfPipeBit,
+//                            VkPipelineStageFlags.TransferBit,
+//                            VkDependencyFlags.DeviceGroupBitKhx,
+//                            0u, NativePtr.zero,
+//                            0u, NativePtr.zero, 
+//                            0u, NativePtr.zero
+//                        )
+
+
+                        let baseImage = img.Image
+                        let deviceIndices = baseImage.Device.AllIndicesArr
+                        
+                        for di in deviceIndices do
+                            VkRaw.vkCmdSetDeviceMaskKHX(cmd.Handle, 1u <<< int di)
+                            let srcSlices, srcRange = ranges.[int di]
+
+                            for ci in 0 .. baseImage.PeerHandles.Length - 1 do
+                                let srcSub = img.[srcSlices.Min .. srcSlices.Max].VkImageSubresourceLayers
+                                let mutable copy =
+                                    VkImageCopy(
+                                        srcSub,
+                                        VkOffset3D(srcRange.Min.X, srcRange.Min.Y, srcRange.Min.Z),
+                                        srcSub,
+                                        VkOffset3D(srcRange.Min.X, srcRange.Min.Y, srcRange.Min.Z),
+                                        VkExtent3D(1+srcRange.SizeX, 1+srcRange.SizeY, 1+srcRange.SizeZ)
+                                    )
+
+                                VkRaw.vkCmdCopyImage(
+                                    cmd.Handle, 
+                                    baseImage.Handle, VkImageLayout.TransferSrcOptimal, 
+                                    baseImage.PeerHandles.[ci], VkImageLayout.TransferDstOptimal,
+                                    1u, &&copy
+                                )
+
+                        VkRaw.vkCmdSetDeviceMaskKHX(cmd.Handle, baseImage.Device.AllMask)
+
+                        VkRaw.vkCmdPipelineBarrier(
+                            cmd.Handle,
+                            VkPipelineStageFlags.TransferBit,
+                            VkPipelineStageFlags.TopOfPipeBit,
+                            VkDependencyFlags.DeviceGroupBitKhx,
+                            0u, NativePtr.zero,
+                            0u, NativePtr.zero, 
+                            0u, NativePtr.zero // wrongness
+                        )
+
+
+                    Disposable.Empty
+            }
+
+
+
 //
 //        static member Sync(img : ImageSubresourceRange) =
 //            if img.Image.IsNull then
@@ -3132,14 +3270,28 @@ module ``Image Command Extensions`` =
 // ===========================================================================================
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Image =
+    open KHXDeviceGroup
+    open KHRBindMemory2
 
     let alloc (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
         if device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt) = VkFormatFeatureFlags.None then
             failf "bad image format %A" fmt
 
+        let mayHavePeers =
+            device.IsDeviceGroup &&
+            (
+                (usage &&& VkImageUsageFlags.ColorAttachmentBit <> VkImageUsageFlags.None) ||
+                (usage &&& VkImageUsageFlags.DepthStencilAttachmentBit <> VkImageUsageFlags.None) ||
+                (usage &&& VkImageUsageFlags.StorageBit <> VkImageUsageFlags.None)
+            )
+
         let flags =
             if dim = TextureDimension.TextureCube then VkImageCreateFlags.CubeCompatibleBit
             else VkImageCreateFlags.None
+
+        let flags =
+            if mayHavePeers then VkImageCreateFlags.AliasBitKhr ||| flags
+            else flags
 
         let mutable info =
             VkImageCreateInfo(
@@ -3168,11 +3320,56 @@ module Image =
         let memsize = int64 reqs.size |> Alignment.next device.BufferImageGranularity
         let ptr = device.Alloc(VkMemoryRequirements(uint64 memsize, uint64 memalign, reqs.memoryTypeBits), true)
 
-        VkRaw.vkBindImageMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
-            |> check "could not bind image memory"
 
-        let result = Image(device, handle, size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
-        result
+
+        if mayHavePeers then
+            let indices = device.AllIndicesArr
+            let handles = Array.zeroCreate indices.Length
+            handles.[0] <- handle
+            for i in 1 .. indices.Length - 1 do
+                let mutable handle = VkImage.Null
+                VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, &&handle)
+                    |> check "could not create image"
+                handles.[1] <- handle
+
+            for off in 0 .. indices.Length - 1 do 
+                let deviceIndices =
+                    Array.init indices.Length (fun i ->
+                        indices.[(i+off) % indices.Length] |> uint32
+                    )
+
+                deviceIndices |> NativePtr.withA (fun pDeviceIndices ->
+                    let mutable info =
+                        VkBindImageMemoryInfoKHX(
+                            VkStructureType.BindImageMemoryInfoKhx, 0n,
+                            handles.[off],
+                            ptr.Memory.Handle,
+                            uint64 ptr.Offset,
+                            uint32 deviceIndices.Length, pDeviceIndices,
+                            0u, NativePtr.zero
+                        )
+
+                    VkRaw.vkBindImageMemory2KHX(device.Handle, 1u, &&info)
+                        |> check "could not bind image memory"
+                )
+
+            let result = Image(device, handles.[0], size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
+            result.PeerHandles <- Array.skip 1 handles
+
+            device.perform {
+                for i in 1 .. handles.Length - 1 do
+                    let img = Image(device, handles.[i], size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
+                    do! Command.TransformLayout(img, VkImageLayout.TransferDstOptimal)
+            }
+
+            result
+        else
+            VkRaw.vkBindImageMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
+                |> check "could not bind image memory"
+
+            let result = Image(device, handle, size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
+        
+            result
 
     let delete (img : Image) (device : Device) =
         if Interlocked.Decrement(&img.RefCount) = 0 then
@@ -3235,6 +3432,55 @@ module Image =
 
                 // generate the mipMaps
                 if generateMipMaps then
+                    do! Command.GenerateMipMaps image.[ImageAspect.Color]
+
+                do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
+
+            finally
+                for t in tempImages do device.Delete t
+        }
+
+        image
+
+    let ofPixVolume (pi : PixVolume) (info : TextureParams) (device : Device) =
+        let format = pi.PixFormat
+        let size = pi.Size
+
+        let format = device.GetSupportedFormat(VkImageTiling.Optimal, format, info)
+        let textureFormat = VkFormat.toTextureFormat format
+        let expectedFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
+
+        
+        let mipMapLevels =
+            if info.wantMipMaps then
+                1 + (max (max size.X size.Y) size.Z) |> Fun.Log2 |> floor |> int 
+            else
+                1
+
+
+        let image = 
+            create 
+                size
+                mipMapLevels 1 1 
+                TextureDimension.Texture3D 
+                textureFormat 
+                (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit)
+                device
+
+        
+        device.eventually {
+            let tempImages = List()
+            try
+                do! Command.TransformLayout(image, VkImageLayout.TransferDstOptimal)
+
+                // upload the level 0
+                let temp = device.CreateTensorImage(pi.Size, expectedFormat, info.wantSrgb)
+                temp.Write(pi)
+                tempImages.Add temp
+                do! Command.Copy(temp, image.[ImageAspect.Color, 0, 0])
+
+                // generate the mipMaps
+                if info.wantMipMaps then
                     do! Command.GenerateMipMaps image.[ImageAspect.Color]
 
                 do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
@@ -3362,7 +3608,7 @@ module Image =
                 //Image(device, VkImage.Null, V3i.Zero, 1, 1, 1, TextureDimension.Texture2D, VkFormat.Undefined, DevicePtr.Null, VkImageLayout.ShaderReadOnlyOptimal)
 
             | :? PixTexture3d as t ->
-                failf "please implement volume textures"
+                device |> ofPixVolume t.PixVolume t.TextureParams
 
             | :? FileTexture as t ->
                 device |> ofFile t.FileName t.TextureParams
@@ -3443,3 +3689,38 @@ type ContextImageExtensions private() =
     [<Extension>]
     static member inline DownloadLevel(this : Device, src : ImageSubresource, dst : PixImage) =
         this |> Image.downloadLevel src dst
+
+[<AutoOpen>]
+module private ImageRanges =
+    
+    module ImageAspect =
+        let ofTextureAspect =
+            LookupTable.lookupTable [
+                TextureAspect.Color, ImageAspect.Color
+                TextureAspect.Depth, ImageAspect.Depth
+                TextureAspect.Stencil, ImageAspect.Stencil
+            ]
+            
+    module ImageSubresource =
+        let ofTextureSubResource (src : ITextureSubResource) =
+            let srcAspect = ImageAspect.ofTextureAspect src.Aspect
+            let srcImage = src.Texture |> unbox<Image>
+            srcImage.[srcAspect, src.Level, src.Slice]
+            
+    module ImageSubresourceLayers =
+        let ofFramebufferOutput (src : IFramebufferOutput) =
+            match src with
+                | :? Image as img ->
+                    if VkFormat.hasDepth img.Format then
+                        img.[ImageAspect.Depth, 0, *]
+                    else
+                        img.[ImageAspect.Color, 0, *]
+
+                | :? ITextureLevel as src ->
+                    let srcAspect = ImageAspect.ofTextureAspect src.Aspect
+                    let srcImage = src.Texture |> unbox<Image>
+                    srcImage.[srcAspect, src.Level, src.Slices.Min .. src.Slices.Max]
+
+                | _ ->
+                    failf "unexpected IFramebufferOutput: %A" src
+        

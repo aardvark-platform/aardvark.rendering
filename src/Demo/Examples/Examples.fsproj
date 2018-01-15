@@ -90,6 +90,8 @@
     <Compile Include="Eigi.fs" />
     <Compile Include="Terrain.fs" />
     <Compile Include="LevelOfDetail.fs" />
+    <Compile Include="Sponza.fs" />
+    <Compile Include="Jpeg.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <None Include="paket.references" />
@@ -101,6 +103,11 @@
     <ProjectReference Include="..\..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj">
       <Name>Aardvark.Base.Rendering</Name>
       <Project>{f8233648-55ce-4795-9151-e512390d86e7}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Aardvark.GPGPU\Aardvark.GPGPU.fsproj">
+      <Name>Aardvark.GPGPU</Name>
+      <Project>{68e3b876-eb23-4d61-a71f-ef35a146f276}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj">
@@ -196,6 +203,9 @@
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
       <ItemGroup>
         <Reference Include="System.Drawing">
+          <Paket>True</Paket>
+        </Reference>
+        <Reference Include="System.Runtime.Serialization">
           <Paket>True</Paket>
         </Reference>
         <Reference Include="Aardvark.Base">
@@ -340,9 +350,6 @@
   <Choose>
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
       <ItemGroup>
-        <Reference Include="System.Runtime.Serialization">
-          <Paket>True</Paket>
-        </Reference>
         <Reference Include="System.Xml">
           <Paket>True</Paket>
         </Reference>

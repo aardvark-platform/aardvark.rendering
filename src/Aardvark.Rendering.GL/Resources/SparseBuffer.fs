@@ -405,10 +405,12 @@ type SparseBufferGeometryPool(ctx : Context, types : Map<Symbol, Type>) =
             | _ -> None
 
     member x.Dispose() =
-        use __ = ctx.ResourceLock
-        for (_,(b,_,_)) in Map.toSeq buffers do
-            b.Dispose()
-
+        try
+            use __ = ctx.ResourceLock
+            for (_,(b,_,_)) in Map.toSeq buffers do
+                b.Dispose()
+        with _ ->
+            ()
     interface IGeometryPool with
         member x.Count = count
         member x.UsedMemory = buffers |> Map.toSeq |> Seq.sumBy (fun (_,(b,_,_)) -> b.UsedMemory)

@@ -8,7 +8,8 @@ open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
-
+open KHXDeviceGroupCreation
+open KHXDeviceGroup
 #nowarn "9"
 #nowarn "51"
 
@@ -100,13 +101,26 @@ type private QueueFamilyPool(allFamilies : array<QueueFamilyInfo>) =
                         Some (allFamilies.[fam.index], fam.count)
 
 
-type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, wantedExtensions : Set<string>) as this =
+type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExtensions : Set<string>) as this =
+    let isGroup, deviceGroup =
+        match dev with
+            | :? PhysicalDeviceGroup as g -> true, g.Devices
+            | _ -> false, [| dev |]
+
+    let physical = deviceGroup.[0]
     let pool = QueueFamilyPool(physical.QueueFamilies)
     let graphicsQueues  = pool.TryTakeSingleFamily(QueueFlags.Graphics, 4)
     let computeQueues   = pool.TryTakeExplicit(QueueFlags.Compute, 2)
     let transferQueues  = pool.TryTakeSingleFamily(QueueFlags.Transfer ||| QueueFlags.SparseBinding, 2)
     let onDispose = Event<unit>()
-
+    
+    let allIndicesArr = deviceGroup |> Array.map (fun d -> uint32 d.Index)
+    let allIndices = 
+        let ptr = NativePtr.alloc allIndicesArr.Length
+        for i in 0 .. allIndicesArr.Length - 1 do
+            NativePtr.set ptr i allIndicesArr.[i]
+        ptr
+    let allMask = deviceGroup |> Array.map (fun d -> 1u <<< d.Index) |> Array.fold (|||) 0u
 
     let layers, extensions =
         let availableExtensions = physical.GlobalExtensions |> Seq.map (fun e -> e.name.ToLower(), e.name) |> Dictionary.ofSeq
@@ -160,7 +174,7 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
                 |> Array.map (fun (familyIndex, count) ->
                     VkDeviceQueueCreateInfo(
                         VkStructureType.DeviceQueueCreateInfo, 0n,
-                        0u,
+                        VkDeviceQueueCreateFlags.MinValue,
                         uint32 familyIndex,
                         uint32 count,
                         queuePriorities
@@ -177,21 +191,36 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
             let mutable features = VkPhysicalDeviceFeatures()
             VkRaw.vkGetPhysicalDeviceFeatures(physical.Handle, &&features)
 
-            let mutable info =
-                VkDeviceCreateInfo(
-                    VkStructureType.DeviceCreateInfo, 0n,
-                    0u,
-                    uint32 queueInfos.Length, ptr,
-                    uint32 layers.Length, pLayers,
-                    uint32 extensions.Length, pExtensions,
-                    &&features
-                )
 
-            let mutable device = VkDevice.Zero
-            VkRaw.vkCreateDevice(physical.Handle, &&info, NativePtr.zero, &&device)
-                |> check "could not create device"
+            let deviceHandles = deviceGroup |> Array.map (fun d -> d.Handle)
 
-            device
+            deviceHandles |> NativePtr.withA(fun pDevices ->
+                let mutable groupInfo =
+                    VkDeviceGroupDeviceCreateInfoKHX(
+                        VkStructureType.DeviceGroupDeviceCreateInfoKhx,
+                        0n,
+                        uint32 deviceGroup.Length,
+                        pDevices
+                    )
+
+                let next = if isGroup then NativePtr.toNativeInt &&groupInfo else 0n
+
+                let mutable info =
+                    VkDeviceCreateInfo(
+                        VkStructureType.DeviceCreateInfo, next,
+                        VkDeviceCreateFlags.MinValue,
+                        uint32 queueInfos.Length, ptr,
+                        uint32 layers.Length, pLayers,
+                        uint32 extensions.Length, pExtensions,
+                        &&features
+                    )
+
+                let mutable device = VkDevice.Zero
+                VkRaw.vkCreateDevice(physical.Handle, &&info, NativePtr.zero, &&device)
+                    |> check "could not create device"
+
+                device
+            )
         )
 
     let graphicsFamily, computeFamily, transferFamily =
@@ -212,6 +241,11 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
         let graphicsFamily  = graphicsQueues |> Option.map toFamily
         let computeFamily   = computeQueues |> Option.map toFamily
         let transferFamily  = transferQueues |> Option.map toFamily
+
+        let computeFamily =
+            match computeFamily with
+                | Some c -> Some c
+                | None -> graphicsFamily
 
         graphicsFamily, computeFamily, transferFamily
 
@@ -329,6 +363,10 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
     member internal x.AllQueueFamiliesPtr = pAllFamilies
     member internal x.AllQueueFamiliesCnt = pAllFamiliesCnt
     member internal x.AllSharingMode = concurrentSharingMode
+    member internal x.AllMask = allMask
+    member internal x.AllCount = uint32 deviceGroup.Length
+    member internal x.AllIndices = allIndices
+    member internal x.AllIndicesArr = allIndicesArr
 
     member x.GraphicsFamily = 
         match graphicsFamily with
@@ -368,6 +406,8 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
     member x.Handle = device
 
     member x.PhysicalDevice = physical
+    member x.PhysicalDevices = deviceGroup
+    member x.IsDeviceGroup = deviceGroup.Length > 1
 
     member x.CreateFence(signaled : bool) = new Fence(x, signaled)
     member x.CreateFence() = new Fence(x)
@@ -476,6 +516,40 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
     member x.Index = index
     member x.Handle = handle
 
+    member x.BindSparse(binds : VkBindSparseInfo[], fence : VkFence) =
+        if device.IsDeviceGroup then
+            let groupInfos =
+                binds |> Array.collect (fun b ->
+                    device.AllIndicesArr |> Array.map (fun i ->
+                        VkDeviceGroupBindSparseInfoKHX(
+                            VkStructureType.DeviceGroupBindSparseInfoKhx, 0n,
+                            uint32 i,
+                            uint32 i
+                        )
+                    )
+                )
+
+            groupInfos |> NativePtr.withA (fun pGroupInfos ->
+                let binds = 
+                    let mutable gi = 0
+                    binds |> Array.collect (fun b ->
+                        device.AllIndicesArr |> Array.map (fun i ->
+                            let mutable res = b
+                            res.pNext <- NativePtr.toNativeInt (NativePtr.add pGroupInfos gi)
+                            gi <- gi + 1
+                            res
+                        )
+                    )
+                
+                binds |> NativePtr.withA (fun pBinds ->
+                    VkRaw.vkQueueBindSparse(handle, uint32 binds.Length, pBinds, fence)
+                )
+            )
+        else
+            binds |> NativePtr.withA (fun pBinds ->
+                VkRaw.vkQueueBindSparse(handle, uint32 binds.Length, pBinds, fence)
+            )
+
     member x.RunSynchronously(cmd : CommandBuffer) =
         if cmd.IsRecording then
             failf "cannot submit recording CommandBuffer"
@@ -483,20 +557,74 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
         if not cmd.IsEmpty then
             let fence = device.CreateFence()
             lock x (fun () ->
-                let mutable handle = cmd.Handle
-                let mutable submitInfo =
-                    VkSubmitInfo(
-                        VkStructureType.SubmitInfo, 0n,
-                        0u, NativePtr.zero, NativePtr.zero,
-                        1u, &&handle,
-                        0u, NativePtr.zero
-                    )
+                let mutable mask = device.AllMask
+                let groupInfo =
+                    if device.IsDeviceGroup then
+                        VkDeviceGroupSubmitInfoKHX(
+                            VkStructureType.DeviceGroupSubmitInfoKhx, 0n, 
+                            0u, NativePtr.zero,
+                            1u, &&mask,
+                            0u, NativePtr.zero
+                        ) |> Some
+                    else
+                        None
 
-                VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, fence.Handle)
-                    |> check "could not submit command buffer"
+                groupInfo |> NativePtr.withOption (fun pnext ->
+                    let mutable handle = cmd.Handle
+                    let mutable submitInfo =
+                        VkSubmitInfo(
+                            VkStructureType.SubmitInfo, NativePtr.toNativeInt pnext,
+                            0u, NativePtr.zero, NativePtr.zero,
+                            1u, &&handle,
+                            0u, NativePtr.zero
+                        )
+
+                    VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, fence.Handle)
+                        |> check "could not submit command buffer"
+                )
             )
             fence.Wait()
             fence.Dispose()
+
+    member x.StartFence(cmd : CommandBuffer) =
+        if cmd.IsRecording then
+            failf "cannot submit recording CommandBuffer"
+
+        if not cmd.IsEmpty then
+            let fence = device.CreateFence()
+            lock x (fun () ->
+            
+                let mutable mask = device.AllMask
+                let groupInfo =
+                    if device.IsDeviceGroup then
+                        VkDeviceGroupSubmitInfoKHX(
+                            VkStructureType.DeviceGroupSubmitInfoKhx, 0n, 
+                            0u, NativePtr.zero,
+                            1u, &&mask,
+                            0u, NativePtr.zero
+                        ) |> Some
+                    else
+                        None
+
+                groupInfo |> NativePtr.withOption (fun pnext ->
+                    let mutable handle = cmd.Handle
+                    let mutable submitInfo =
+                        VkSubmitInfo(
+                            VkStructureType.SubmitInfo, NativePtr.toNativeInt pnext,
+                            0u, NativePtr.zero, NativePtr.zero,
+                            1u, &&handle,
+                            0u, NativePtr.zero
+                        )
+
+                    VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, fence.Handle)
+                        |> check "could not submit command buffer"
+                )
+            )
+            Some fence
+        else
+            None
+
+
 
     member x.StartAsync(cmd : CommandBuffer, waitFor : list<Semaphore>) =
         if cmd.IsRecording then
@@ -510,73 +638,98 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
 
             match waitFor with
                 | [] ->
-                    let mutable submitInfo =
-                        VkSubmitInfo(
-                            VkStructureType.SubmitInfo, 0n,
-                            0u, NativePtr.zero, NativePtr.zero,
-                            cnt, &&handle,
-                            1u, &&semHandle
-                        )
+                    let mutable mask = device.AllMask
+                    let groupInfo =
+                        if device.IsDeviceGroup then
+                            VkDeviceGroupSubmitInfoKHX(
+                                VkStructureType.DeviceGroupSubmitInfoKhx, 0n, 
+                                0u, NativePtr.zero,
+                                cnt, &&mask,
+                                device.AllCount, device.AllIndices
+                            ) |> Some
+                        else
+                            None
 
-                    VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null)
-                        |> check "could not submit command buffer"
-                    sem
+                    groupInfo |> NativePtr.withOption (fun pnext ->
+                        let mutable submitInfo =
+                            VkSubmitInfo(
+                                VkStructureType.SubmitInfo, NativePtr.toNativeInt pnext,
+                                0u, NativePtr.zero, NativePtr.zero,
+                                cnt, &&handle,
+                                1u, &&semHandle
+                            )
+
+                        VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null)
+                            |> check "could not submit command buffer"
+                        sem
+                    )
 
                 | _ ->
                     let handles = waitFor |> List.map (fun s -> s.Handle) |> List.toArray
                     let mask = Array.create handles.Length (int VkPipelineStageFlags.TopOfPipeBit)
             
+                    let mutable dmask = device.AllMask
+                    let groupInfo =
+                        if device.IsDeviceGroup then
+                            VkDeviceGroupSubmitInfoKHX(
+                                VkStructureType.DeviceGroupSubmitInfoKhx, 0n, 
+                                device.AllCount, device.AllIndices,
+                                cnt, &&dmask,
+                                device.AllCount, device.AllIndices
+                            ) |> Some
+                        else
+                            None
+
                     mask |> NativePtr.withA (fun pMask ->
                         handles |> NativePtr.withA (fun pWaitFor ->
-                            let mutable submitInfo =
-                                VkSubmitInfo(
-                                    VkStructureType.SubmitInfo, 0n,
-                                    uint32 handles.Length, pWaitFor, NativePtr.cast pMask,
-                                    cnt, &&handle,
-                                    1u, &&semHandle
-                                )
+                            groupInfo |> NativePtr.withOption (fun pnext ->
+                                let mutable submitInfo =
+                                    VkSubmitInfo(
+                                        VkStructureType.SubmitInfo, NativePtr.toNativeInt pnext,
+                                        uint32 handles.Length, pWaitFor, NativePtr.cast pMask,
+                                        cnt, &&handle,
+                                        1u, &&semHandle
+                                    )
 
-                            VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null)
-                                |> check "could not submit command buffer"
-                            sem
+                                VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null)
+                                    |> check "could not submit command buffer"
+                                sem
+                            )
                         )
                     )
         )
 
     member x.StartAsync(cmd : CommandBuffer) =
         x.StartAsync(cmd, [])
-//
-//    member x.Wait(sem : Semaphore) =
-//        lock x (fun () ->
-//            let mutable semHandle = sem.Handle
-//            let mutable submitInfo =
-//                let mutable dstStage = VkPipelineStageFlags.BottomOfPipeBit
-//                VkSubmitInfo(
-//                    VkStructureType.SubmitInfo, 0n, 
-//                    1u, &&semHandle, &&dstStage,
-//                    0u, NativePtr.zero,
-//                    0u, NativePtr.zero
-//                )
-//
-//            VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null) 
-//                |> check "vkQueueWaitSemaphore"
-//        )
 
     member x.Wait(sem : Semaphore) =
         let f = device.CreateFence()
         lock x (fun () ->
-            let mutable semHandle = sem.Handle
-            let mutable submitInfo =
-                let mutable dstStage = VkPipelineStageFlags.BottomOfPipeBit
-                VkSubmitInfo(
-                    VkStructureType.SubmitInfo, 0n, 
-                    1u, &&semHandle, &&dstStage,
-                    0u, NativePtr.zero,
-                    0u, NativePtr.zero
-                )
+            let mutable dmask = device.AllMask
+            let groupInfo =
+                if device.IsDeviceGroup then
+                    VkDeviceGroupSubmitInfoKHX(
+                        VkStructureType.DeviceGroupSubmitInfoKhx, 0n, 
+                        device.AllCount, device.AllIndices,
+                        0u, NativePtr.zero,
+                        0u, NativePtr.zero
+                    ) |> Some
+                else
+                    None
+            groupInfo |> NativePtr.withOption (fun pnext ->
+                let mutable semHandle = sem.Handle
+                let mutable submitInfo =
+                    let mutable dstStage = VkPipelineStageFlags.BottomOfPipeBit
+                    VkSubmitInfo(
+                        VkStructureType.SubmitInfo, NativePtr.toNativeInt pnext, 
+                        1u, &&semHandle, &&dstStage,
+                        0u, NativePtr.zero,
+                        0u, NativePtr.zero
+                    )
 
-            VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, f.Handle) 
-                |> check "vkQueueWaitSemaphore"
+                VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, f.Handle) 
+                    |> check "vkQueueWaitSemaphore"
+            )
         )
         f.Wait()
         f.Dispose()
@@ -584,51 +737,39 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
     member x.Wait(sems : seq<Semaphore>) =
         let f = device.CreateFence()
         lock x (fun () ->
-            let sems = sems |> Seq.map (fun s -> s.Handle) |> Seq.toArray
-            let masks = Array.create sems.Length (int VkPipelineStageFlags.TopOfPipeBit)
+            let mutable dmask = device.AllMask
+            let groupInfo =
+                if device.IsDeviceGroup then
+                    VkDeviceGroupSubmitInfoKHX(
+                        VkStructureType.DeviceGroupSubmitInfoKhx, 0n, 
+                        device.AllCount, device.AllIndices,
+                        0u, NativePtr.zero,
+                        0u, NativePtr.zero
+                    ) |> Some
+                else
+                    None
+            groupInfo |> NativePtr.withOption (fun pnext ->
+                let sems = sems |> Seq.map (fun s -> s.Handle) |> Seq.toArray
+                let masks = Array.create sems.Length (int VkPipelineStageFlags.TopOfPipeBit)
 
-            sems |> NativePtr.withA (fun pSems ->
-                masks |> NativePtr.withA (fun pMask ->
-                    let mutable submitInfo =
-                        VkSubmitInfo(
-                            VkStructureType.SubmitInfo, 0n, 
-                            uint32 sems.Length, pSems, NativePtr.cast pMask,
-                            0u, NativePtr.zero,
-                            0u, NativePtr.zero
-                        )
+                sems |> NativePtr.withA (fun pSems ->
+                    masks |> NativePtr.withA (fun pMask ->
+                        let mutable submitInfo =
+                            VkSubmitInfo(
+                                VkStructureType.SubmitInfo, NativePtr.toNativeInt pnext, 
+                                uint32 sems.Length, pSems, NativePtr.cast pMask,
+                                0u, NativePtr.zero,
+                                0u, NativePtr.zero
+                            )
 
-                    VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, f.Handle) 
-                        |> check "vkQueueWaitSemaphore"
+                        VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, f.Handle) 
+                            |> check "vkQueueWaitSemaphore"
+                    )
                 )
             )
         )
         f.Wait()
         f.Dispose()
-
-//
-//    member x.Signal() =
-//        let sem = device.CreateSemaphore()
-//        lock x (fun () ->
-//            let mutable semHandle = sem.Handle
-//            let mutable submitInfo =
-//                VkSubmitInfo(
-//                    VkStructureType.SubmitInfo, 0n, 
-//                    0u, NativePtr.zero, NativePtr.zero,
-//                    0u, NativePtr.zero,
-//                    1u, &&semHandle
-//                )
-//            VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null) 
-//                |> check "vkQueueWaitSemaphore"
-//        )
-//        sem
-
-//    member x.Fence() =
-//        let fence = device.CreateFence()
-//        lock x (fun () ->
-//            VkRaw.vkQueueSubmit(x.Handle, 0u, NativePtr.zero, fence.Handle)
-//                |> check "could not submit command buffer"
-//        )
-//        fence
 
     member x.WaitIdle() =
         VkRaw.vkQueueWaitIdle(x.Handle)
@@ -1178,7 +1319,7 @@ and Semaphore internal(device : Device) =
         let mutable info =
             VkSemaphoreCreateInfo(
                 VkStructureType.SemaphoreCreateInfo, 0n,
-                0u
+                VkSemaphoreCreateFlags.MinValue
             )
 
         VkRaw.vkCreateSemaphore(device.Handle, &&info, NativePtr.zero, &&handle)
@@ -1193,16 +1334,29 @@ and Semaphore internal(device : Device) =
         if handle.IsValid then
             let queue = device.ComputeFamily.GetQueue()
 
-            let mutable submitInfo =
-                VkSubmitInfo(
-                    VkStructureType.SubmitInfo, 0n,
-                    0u, NativePtr.zero, NativePtr.zero,
-                    0u, NativePtr.zero,
-                    1u, &&handle
-                )
+            let groupInfo =
+                if device.IsDeviceGroup then
+                    VkDeviceGroupSubmitInfoKHX(
+                        VkStructureType.DeviceGroupSubmitInfoKhx, 0n, 
+                        device.AllCount, device.AllIndices,
+                        0u, NativePtr.zero,
+                        device.AllCount,  device.AllIndices 
+                    ) |> Some
+                else
+                    None
 
-            VkRaw.vkQueueSubmit(queue.Handle, 1u, &&submitInfo, VkFence.Null)
-                |> check "cannot signal fence"
+            groupInfo |> NativePtr.withOption (fun pnext -> 
+                let mutable submitInfo =
+                    VkSubmitInfo(
+                        VkStructureType.SubmitInfo, NativePtr.toNativeInt pnext,
+                        0u, NativePtr.zero, NativePtr.zero,
+                        0u, NativePtr.zero,
+                        1u, &&handle
+                    )
+
+                VkRaw.vkQueueSubmit(queue.Handle, 1u, &&submitInfo, VkFence.Null)
+                    |> check "cannot signal fence"
+            )
         else
             failf "cannot signal disposed fence" 
 

@@ -252,6 +252,37 @@ module FShadeInterop =
             RenderbufferFormat.Rgb10A2ui, typeof<V4d>
         ]
 
+    [<GLSLIntrinsic("gl_DeviceIndex", "GL_EXT_device_group")>]
+    let private deviceIndex() : int = failwith ""
+
+    open FShade.Imperative
+    let private withDeviceIndex (deviceCount : int) (e : Effect) =
+        if deviceCount = 1 then e 
+        else
+            match e.GeometryShader with
+                | Some gs ->
+                    if gs.shaderInvocations % deviceCount <> 0 then
+                        failwithf "[FShade] multi gpu setup with %d shader invocations and %d devices is not implemented" gs.shaderInvocations deviceCount
+                    let newInvocations = gs.shaderInvocations / deviceCount
+
+                    let gs = 
+                        gs |> Shader.substituteReads (fun kind typ name index ->
+                            match kind, index with
+                                | ParameterKind.Input, None when name = Intrinsics.InvocationId ->
+                                    if newInvocations = 1 then
+                                        Some <@@ deviceIndex() @@>
+                                    else
+                                        let iid = Expr.ReadInput<int>(kind, name)
+                                        let did = <@ deviceIndex() @>
+
+                                        Some <@@ %did * newInvocations + %iid @@>
+                                | _ ->
+                                    None
+                        )
+
+                    Effect.add { gs with shaderInvocations = newInvocations } e
+                | None -> e
+
     type AttachmentSignature with
         member x.GetType(name : Symbol) =
             match builtInTypes.TryGetValue name with
@@ -286,6 +317,7 @@ module FShadeInterop =
                 effect 
                     // TODO: other topologies????
                     |> Effect.toLayeredEffect x.LayerCount (x.PerLayerUniforms |> Seq.map (fun n -> n, n) |> Map.ofSeq) InputTopology.Triangle
+                    |> withDeviceIndex x.Runtime.DeviceCount
                     |> Effect.toModule config
 
             else

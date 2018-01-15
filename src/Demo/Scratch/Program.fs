@@ -101,17 +101,17 @@ let quad() =
 let quadTexture() =
     let environment =
         PixImageCube.load [
-            CubeSide.NegativeX, @"E:\Development\WorkDirectory\DataSVN\lazarus_negative_x.jpg"
-            CubeSide.PositiveX, @"E:\Development\WorkDirectory\DataSVN\lazarus_positive_x.jpg"
-            CubeSide.NegativeY, @"E:\Development\WorkDirectory\DataSVN\lazarus_negative_y.jpg"
-            CubeSide.PositiveY, @"E:\Development\WorkDirectory\DataSVN\lazarus_positive_y.jpg"
-            CubeSide.NegativeZ, @"E:\Development\WorkDirectory\DataSVN\lazarus_negative_z.jpg"
-            CubeSide.PositiveZ, @"E:\Development\WorkDirectory\DataSVN\lazarus_positive_z.jpg"
+            CubeSide.NegativeX, @"C:\Users\Schorsch\Development\WorkDirectory\lazarus_negative_x.jpg"
+            CubeSide.PositiveX, @"C:\Users\Schorsch\Development\WorkDirectory\lazarus_positive_x.jpg"
+            CubeSide.NegativeY, @"C:\Users\Schorsch\Development\WorkDirectory\lazarus_negative_y.jpg"
+            CubeSide.PositiveY, @"C:\Users\Schorsch\Development\WorkDirectory\lazarus_positive_y.jpg"
+            CubeSide.NegativeZ, @"C:\Users\Schorsch\Development\WorkDirectory\lazarus_negative_z.jpg"
+            CubeSide.PositiveZ, @"C:\Users\Schorsch\Development\WorkDirectory\lazarus_positive_z.jpg"
         ]
 
     let environment =
         environment 
-            //|> PixImageCube.toOpenGlConvention
+//            |> PixImageCube.toOpenGlConvention
             |> PixImageCube.rotX90
             |> PixImageCube.toTexture true
 
@@ -135,7 +135,7 @@ let quadTexture() =
             DefaultSurfaces.constantColor C4f.Red |> toEffect
             DefaultSurfaces.diffuseTexture |> toEffect
            ]
-        |> Sg.diffuseFileTexture' @"E:\Development\WorkDirectory\DataSVN\pattern.jpg" false
+        |> Sg.diffuseFileTexture' @"C:\Users\Schorsch\Development\WorkDirectory\pattern.jpg" false
         |> Sg.andAlso env
         |> Sg.andAlso coord
 
@@ -863,7 +863,7 @@ let main argv =
     Aardvark.Init()
     
     App.Config <- { BackendConfiguration.Default with useDebugOutput = true }
-    App.run()
+    App.run(quadTexture())
 
     0 // return an integer exit code
 

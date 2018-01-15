@@ -449,13 +449,6 @@ type IGeometryPool =
     abstract member Alloc : int * IndexedGeometry -> Management.Block<unit>
     abstract member Free : Management.Block<unit> -> unit
     abstract member TryGetBufferView : Symbol -> Option<BufferView>
-    
-
-type IComputeShaderInputBinding =
-    inherit IDisposable
-    abstract member Item : string -> obj with set
-    abstract member Flush : unit -> unit
-
 
 
 [<AbstractClass; Sealed; Extension>]
@@ -480,6 +473,11 @@ type IResourceManager =
     abstract member CreateTexture : texture : IMod<ITexture> -> IResource<IBackendTexture>
 
 and IRuntime =
+    inherit IBufferRuntime
+    inherit ITextureRuntime
+    inherit IComputeRuntime
+    abstract member DeviceCount : int
+
     abstract member OnDispose : Microsoft.FSharp.Control.IEvent<unit>
     abstract member ResourceManager : IResourceManager
     abstract member ContextLock : IDisposable
@@ -489,40 +487,47 @@ and IRuntime =
 
     abstract member AssembleEffect : FShade.Effect * IFramebufferSignature -> BackendSurface
 
-    abstract member PrepareBuffer : IBuffer -> IBackendBuffer
-    abstract member PrepareTexture : ITexture -> IBackendTexture
     abstract member PrepareSurface : IFramebufferSignature * ISurface -> IBackendSurface
     abstract member PrepareRenderObject : IFramebufferSignature * IRenderObject -> IPreparedRenderObject
 
-    abstract member MaxLocalSize : V3i
-    abstract member Compile : FShade.ComputeShader -> IComputeShader
-    abstract member Delete : IComputeShader -> unit
+//    abstract member MaxLocalSize : V3i
+//    abstract member Compile : FShade.ComputeShader -> IComputeShader
+//    abstract member Delete : IComputeShader -> unit
+//    abstract member NewInputBinding : IComputeShader -> IComputeShaderInputBinding
+//    abstract member Invoke : shader : IComputeShader * groupCount : V3i * input : IComputeShaderInputBinding -> unit
 
-    abstract member NewInputBinding : IComputeShader -> IComputeShaderInputBinding
-    abstract member Invoke : shader : IComputeShader * groupCount : V3i * input : IComputeShaderInputBinding -> unit
-
-    abstract member DeleteBuffer : IBackendBuffer -> unit
-    abstract member DeleteTexture : IBackendTexture -> unit
     abstract member DeleteSurface : IBackendSurface -> unit
 
 
-    abstract member CreateBuffer : size : nativeint -> IBackendBuffer
-    abstract member Copy : srcData : nativeint * dst : IBackendBuffer * dstOffset : nativeint * size : nativeint -> unit
-    abstract member Copy : srcBuffer : IBackendBuffer * srcOffset : nativeint * dstData : nativeint * size : nativeint -> unit
+//    abstract member PrepareBuffer : IBuffer -> IBackendBuffer
+//    abstract member DeleteBuffer : IBackendBuffer -> unit
+//    abstract member CreateBuffer : size : nativeint -> IBackendBuffer
+//    abstract member Copy : srcData : nativeint * dst : IBackendBuffer * dstOffset : nativeint * size : nativeint -> unit
+//    abstract member Copy : srcBuffer : IBackendBuffer * srcOffset : nativeint * dstData : nativeint * size : nativeint -> unit
 
 
-
+//    abstract member PrepareTexture : ITexture -> IBackendTexture
+//    abstract member CreateTexture : size : V3i * dim : TextureDimension * format : TextureFormat * slices : int * levels : int * samples : int -> IBackendTexture
+//    abstract member CreateRenderbuffer : size : V2i * format : RenderbufferFormat * samples : int -> IRenderbuffer
+//    abstract member DeleteTexture : IBackendTexture -> unit
+    
+//    abstract member CreateTexture : size : V2i * format : TextureFormat * levels : int * samples : int -> IBackendTexture
+//    abstract member CreateTextureArray : size : V2i * format : TextureFormat * levels : int * samples : int * count : int -> IBackendTexture
+//    abstract member CreateTextureCube : size : V2i * format : TextureFormat * levels : int * samples : int -> IBackendTexture
+   
+//    abstract member GenerateMipMaps : IBackendTexture -> unit
+//    abstract member ResolveMultisamples : src : IFramebufferOutput * target : IBackendTexture * imgTrafo : ImageTrafo -> unit
+//    abstract member Upload : texture : IBackendTexture * level : int * slice : int * source : PixImage -> unit
+//    abstract member Download : texture : IBackendTexture * level : int * slice : int * target : PixImage -> unit
+//    abstract member DownloadStencil : texture : IBackendTexture * level : int * slice : int * target : Matrix<int> -> unit
+//    abstract member DownloadDepth : texture : IBackendTexture * level : int * slice : int * target : Matrix<float32> -> unit
+//    abstract member Copy : src : IBackendTexture * srcBaseSlice : int * srcBaseLevel : int * dst : IBackendTexture * dstBaseSlice : int * dstBaseLevel : int * slices : int * levels : int -> unit
+//
 
 
     abstract member CreateStreamingTexture : mipMaps : bool -> IStreamingTexture
     abstract member CreateSparseTexture<'a when 'a : unmanaged> : size : V3i * levels : int * slices : int * dim : TextureDimension * format : Col.Format * brickSize : V3i * maxMemory : int64 -> ISparseTexture<'a>
-
-
-    abstract member CreateTexture : size : V2i * format : TextureFormat * levels : int * samples : int -> IBackendTexture
-    abstract member CreateTextureArray : size : V2i * format : TextureFormat * levels : int * samples : int * count : int -> IBackendTexture
-    abstract member CreateTextureCube : size : V2i * format : TextureFormat * levels : int * samples : int -> IBackendTexture
-    //abstract member CreateTextureCubeArray : size : V2i * format : TextureFormat * levels : int * samples : int -> IBackendTexture
-    abstract member CreateRenderbuffer : size : V2i * format : RenderbufferFormat * samples : int -> IRenderbuffer
+    
     abstract member CreateFramebuffer : signature : IFramebufferSignature * attachments : Map<Symbol, IFramebufferOutput> -> IFramebuffer
     abstract member CreateMappedBuffer : unit -> IMappedBuffer
     abstract member CreateMappedIndirectBuffer : indexed : bool -> IMappedIndirectBuffer
@@ -536,14 +541,7 @@ and IRuntime =
     abstract member CompileClear : fboSignature : IFramebufferSignature * clearColors : IMod<Map<Symbol, C4f>> * clearDepth : IMod<Option<double>> -> IRenderTask
     abstract member CompileRender : fboSignature : IFramebufferSignature * BackendConfiguration * aset<IRenderObject> -> IRenderTask
     
-    abstract member GenerateMipMaps : IBackendTexture -> unit
-    abstract member ResolveMultisamples : src : IFramebufferOutput * target : IBackendTexture * imgTrafo : ImageTrafo -> unit
-    abstract member Upload : texture : IBackendTexture * level : int * slice : int * source : PixImage -> unit
-    abstract member Download : texture : IBackendTexture * level : int * slice : int * target : PixImage -> unit
-    abstract member DownloadStencil : texture : IBackendTexture * level : int * slice : int * target : Matrix<int> -> unit
-    abstract member DownloadDepth : texture : IBackendTexture * level : int * slice : int * target : Matrix<float32> -> unit
 
-    abstract member Copy : src : IBackendTexture * srcBaseSlice : int * srcBaseLevel : int * dst : IBackendTexture * dstBaseSlice : int * dstBaseLevel : int * slices : int * levels : int -> unit
 
 and IRenderTask =
     inherit IDisposable
@@ -675,55 +673,6 @@ type BinarySurface(shaders : Map<ShaderStage, BinaryShader>) =
     new() = BinarySurface(Map.empty)
 
 
-//type RenderToFramebufferMod(task : IRenderTask, fbo : IMod<OutputDescription>) =
-//    inherit Mod.AbstractMod<OutputDescription * FrameStatistics>()
-//
-//    member x.Task = task
-//    member x.Framebuffer = fbo
-//
-//    override x.Inputs =
-//        seq {
-//            yield task :> _
-//            yield fbo :> _
-//        }
-//
-//    override x.Compute() =
-//        let handle = fbo.GetValue x
-//        let stats = task.Run(x, handle)
-//        handle, stats
-//
-//type RenderingResultMod(res : RenderToFramebufferMod, semantic : Symbol) =
-//    inherit Mod.AbstractMod<ITexture>()
-//    let mutable lastStats = FrameStatistics.Zero
-//
-//    member x.LastStatistics = lastStats
-//    member x.Task = res.Task
-//    member x.Framebuffer = res.Framebuffer
-//    member x.Semantic = semantic
-//    member x.Inner = res
-//
-//    override x.Inputs = Seq.singleton (res :> _)
-//
-//    override x.Compute() =
-//        lock res (fun () ->
-//            let wasOutDated = res.OutOfDate
-//            let (output, stats) = res.GetValue x
-//            if wasOutDated then
-//                lastStats <- stats
-//            else
-//                lastStats <- FrameStatistics.Zero
-//                    
-//            match Map.tryFind semantic output.framebuffer.Attachments with
-//                | Some o ->
-//                    match o with
-//                        | :? BackendTextureOutputView as o ->
-//                            o.texture :> ITexture
-//                        | _ ->
-//                            failwithf "unexpected output: %A" o
-//                | None ->
-//                    failwithf "could not get output: %A" semantic
-//        )
-//
 
 
 [<AutoOpen>]
@@ -741,126 +690,3 @@ module NullResources =
               [m :> IAdaptiveObject] |> Mod.mapCustom (fun s ->
                     not <| isNullResource (m.GetValue s)
               ) 
-
-
-    type BackendBuffer(runtime : IRuntime, real : IBackendBuffer) =
-        member x.Handle = real
-
-        member x.Dispose() = runtime.DeleteBuffer real
-
-        member x.Upload(offset : nativeint, data : nativeint, size : nativeint) =
-            runtime.Copy(data, real, offset, size)
-
-        member x.Download(offset : nativeint, data : nativeint, size : nativeint) =
-            runtime.Copy(real, offset, data, size)
-
-        interface IDisposable with
-            member x.Dispose() = x.Dispose()
-
-type IBufferView =
-    abstract member Buffer : BackendBuffer
-    abstract member Offset : nativeint
-    abstract member Size : nativeint
-
-type IBufferView<'a when 'a : unmanaged> =
-    inherit IBufferView
-    abstract member Count : int
-    
-type IBuffer<'a when 'a : unmanaged> =
-    inherit IBuffer
-    inherit IBufferView<'a>
-    inherit IDisposable
-
-type private BackendBufferView<'a when 'a : unmanaged>(buffer : BackendBuffer, offset : nativeint, count : int) =
-
-    member x.Buffer = buffer
-    member x.Offset = offset
-    member x.Count = count
-
-    interface IBufferView<'a> with
-        member x.Buffer = buffer
-        member x.Offset = offset
-        member x.Count = count        
-        member x.Size = nativeint count * nativeint sizeof<'a>
-
-type private BackendBuffer<'a when 'a : unmanaged>(buffer : BackendBuffer) =
-    inherit BackendBufferView<'a>(buffer, 0n, int (buffer.Handle.SizeInBytes / nativeint sizeof<'a>))
-    interface IBuffer<'a> with
-        member x.Dispose() = buffer.Dispose()
-
-[<AutoOpen>]
-module TypedBufferExtensions =
-    open System.Runtime.InteropServices
-
-    let private nsa<'a when 'a : unmanaged> = nativeint sizeof<'a>
-        
-    type IBufferView<'a when 'a : unmanaged> with
-        member x.Upload(src : 'a[], srcIndex : int, dstIndex : int, count : int) =
-            let gc = GCHandle.Alloc(src, GCHandleType.Pinned)
-            try
-                let ptr = gc.AddrOfPinnedObject()
-                x.Buffer.Upload(nativeint dstIndex * nsa<'a>, ptr + nsa<'a> * nativeint srcIndex, nsa<'a> * nativeint count)
-            finally
-                gc.Free()
-                
-        member x.Download(srcIndex : int, dst : 'a[], dstIndex : int, count : int) =
-            let gc = GCHandle.Alloc(dst, GCHandleType.Pinned)
-            try
-                let ptr = gc.AddrOfPinnedObject()
-                x.Buffer.Download(nativeint srcIndex * nsa<'a>, ptr + nsa<'a> * nativeint dstIndex, nsa<'a> * nativeint count)
-            finally
-                gc.Free()
-
-        member x.Upload(src : 'a[], dstIndex : int, count : int) = x.Upload(src, 0, dstIndex, count)
-        member x.Upload(src : 'a[], count : int) = x.Upload(src, 0, 0, count)
-        member x.Upload(src : 'a[]) = x.Upload(src, 0, 0, src.Length)
-
-            
-        member x.Download(srcIndex : int, dst : 'a[], count : int) = x.Download(srcIndex, dst, 0, count)
-        member x.Download(dst : 'a[], count : int) = x.Download(0, dst, 0, count)
-        member x.Download(dst : 'a[]) = x.Download(0, dst, 0, dst.Length)
-        member x.Download() = 
-            let dst = Array.zeroCreate x.Count 
-            x.Download(0, dst, 0, dst.Length)
-            dst
-
-        member x.GetSlice(min : Option<int>, max : Option<int>) =
-            let min = defaultArg min 0
-            let max = defaultArg max (x.Count - min)
-            BackendBufferView<'a>(x.Buffer, x.Offset + nativeint min * nsa<'a>, 1 + max - min) :> IBufferView<_>
-
-    type IRuntime with
-        member x.CreateBuffer<'a when 'a : unmanaged>(count : int) =
-            let buffer = new BackendBuffer(x, x.CreateBuffer(nsa<'a> * nativeint count))
-            new BackendBuffer<'a>(buffer) :> IBuffer<'a>
-
-        member x.CreateBuffer<'a when 'a : unmanaged>(data : 'a[]) =
-            let buffer = new BackendBuffer(x, x.CreateBuffer(nsa<'a> * nativeint data.Length))
-            let res = new BackendBuffer<'a>(buffer) :> IBuffer<'a>
-            res.Upload(data)
-            res
-
-        member x.CompileCompute (shader : 'a -> 'b) =
-            let sh = FShade.ComputeShader.ofFunction x.MaxLocalSize shader
-            x.Compile(sh)
-            
-        member x.Invoke(cShader : IComputeShader, groupCount : V2i, input : IComputeShaderInputBinding) =
-            x.Invoke(cShader, V3i(groupCount, 1), input)
-            
-        member x.Invoke(cShader : IComputeShader, groupCount : int, input : IComputeShaderInputBinding) =
-            x.Invoke(cShader, V3i(groupCount, 1, 1), input)
-
-        member x.Invoke(cShader : IComputeShader, groupCount : V3i, values : seq<string * obj>) =
-            use i = x.NewInputBinding cShader
-            for (name, value) in values do
-                i.[name] <- value
-            i.Flush()
-            x.Invoke(cShader, groupCount, i)
-
-        member x.Invoke(cShader : IComputeShader, groupCount : V2i, values : seq<string * obj>) =
-            x.Invoke(cShader, V3i(groupCount, 1), values)
-
-        member x.Invoke(cShader : IComputeShader, groupCount : int, values : seq<string * obj>) =
-            x.Invoke(cShader, V3i(groupCount, 1, 1), values)
-            
-            

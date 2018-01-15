@@ -26,9 +26,28 @@ type ImageView =
             member x.slices = x.ArrayRange
 
         interface IFramebufferOutput with
+            member x.Runtime = x.Device.Runtime :> ITextureRuntime
             member x.Format = VkFormat.toTextureFormat x.Image.Format |> TextureFormat.toRenderbufferFormat
             member x.Samples = x.Image.Samples
-            member x.Size = x.Image.Size.XY
+            member x.Size = 
+                let s = x.Image.Size
+                let d = 1 <<< x.MipLevelRange.Min
+                V2i(max 1 (s.X / d), max 1 (s.Y / d))
+
+        interface ITextureRange with
+            member x.Texture = x.Image :> IBackendTexture
+            member x.Levels = x.MipLevelRange
+            member x.Slices = x.ArrayRange
+            member x.Aspect = 
+                if VkFormat.hasDepth x.Image.Format then TextureAspect.Depth
+                else TextureAspect.Color
+                
+        interface ITextureLevel with
+            member x.Level = x.MipLevelRange.Min
+            member x.Size = 
+                let s = x.Image.Size
+                let d = 1 <<< x.MipLevelRange.Min
+                V3i(max 1 (s.X / d), max 1 (s.Y / d), max 1 (s.Z / d))
 
         new(device : Device, handle : VkImageView, img, viewType, levelRange, arrayRange, resolved) = { inherit Resource<_>(device, handle); Image = img; ImageViewType = viewType; MipLevelRange = levelRange; ArrayRange = arrayRange; IsResolved = resolved }
     end

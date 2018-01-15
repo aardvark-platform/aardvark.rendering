@@ -325,7 +325,7 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
             Config.Buffers, 
             false
         ),
-        "Aardvark rocks \\o/",
+        "Aardvark rocks \\o/ (OpenGL GameWindow)",
         GameWindowFlags.Default,
         DisplayDevice.Default,
         Config.MajorVersion, 
@@ -386,6 +386,10 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
    
     let frameWatch = System.Diagnostics.Stopwatch()
 
+    let beforeRender = Event<unit>()
+    let afterRender = Event<unit>()
+
+
     do mouse.SetControl this
        keyboard.SetControl this
 
@@ -417,6 +421,8 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
     override x.OnRenderFrame(e) =
         if loaded then
             frameWatch.Restart()
+
+            beforeRender.Trigger()
 
             if contextHandle = null then
                 contextHandle <- ContextHandle(base.Context, base.WindowInfo) 
@@ -462,6 +468,8 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
                 avgFrameTime.Add(frameWatch.Elapsed.TotalSeconds)
             first <- false
 
+            afterRender.Trigger()
+
    
     member x.Mouse = mouse :> IMouse
     member x.Keyboard = keyboard :> IKeyboard     
@@ -470,7 +478,9 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
     member x.Run()  =
         startupTime.Start()
         x.Run()
-
+        
+    member x.BeforeRender = beforeRender.Publish
+    member x.AfterRender = afterRender.Publish
 
     interface IRenderTarget with
         member x.FramebufferSignature = fboSignature :> IFramebufferSignature
@@ -481,6 +491,8 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
             and set t = x.RenderTask <- t
         member x.Sizes = sizes :> IMod<_>
         member x.Samples = samples
+        member x.BeforeRender = beforeRender.Publish
+        member x.AfterRender = afterRender.Publish
 
     interface IRenderControl with
         member x.Mouse = mouse :> IMouse

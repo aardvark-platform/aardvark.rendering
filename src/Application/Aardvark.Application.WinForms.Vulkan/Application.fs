@@ -48,19 +48,23 @@ module VisualDeviceChooser =
         match devices with
             | [single] -> single
             | _ -> 
-                let allIds = devices |> List.map (fun d -> string d.Index) |> String.concat ";"
+                let allIds = devices |> List.map (fun d -> d.Id) |> String.concat ";"
 
                 let choose() =
                     let chosen = 
                         devices
                             |> List.mapi (fun i d -> 
-                                let name = sprintf "%d: %A %s" i d.Vendor d.Name
+                                let prefix =
+                                    match d with
+                                        | :? PhysicalDeviceGroup as g -> sprintf "%d x "g.Devices.Length
+                                        | _ -> ""
+                                let name = sprintf "%s%s %s" prefix d.Vendor d.Name
                                 name, d
                                )
                             |> ChooseForm.run
                     match chosen with
                         | Some d -> 
-                            File.WriteAllLines(configFile, [ allIds; string d.Index ])
+                            File.WriteAllLines(configFile, [ allIds; d.Id ])
                             d
                         | None -> 
                             Log.warn "no vulkan device chosen => stopping Application"
@@ -72,9 +76,7 @@ module VisualDeviceChooser =
                     match cache with
                         | [| fAll; fcache |] when fAll = allIds ->
                     
-                            let did = Int32.Parse(fcache)
-
-                            match devices |> List.tryFind (fun d -> d.Index = did) with
+                            match devices |> List.tryFind (fun d -> d.Id = fcache) with
                                 | Some d -> d
                                 | _ -> choose()
 
