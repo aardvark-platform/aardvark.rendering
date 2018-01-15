@@ -273,52 +273,51 @@ module Utilities =
                 ""
             ]
 
-        let status =
-            adaptive {
-                let! cull = cullMode
-                let! fill = fillMode
-
-                return 
-                    String.concat "\r\n" [
-                        "Status:"
-                        sprintf "  CullMode: %A" cull
-                        sprintf "  FillMode: %A" fill
-                    ]
-            }
-
-        let help = status |> Mod.map (fun s -> helpText + "\r\n" + s)
-
-        let showHelp = Mod.init false
-
-        win.Keyboard.KeyDown(Aardvark.Application.Keys.H).Values.Add (fun () ->
-            transact (fun () -> showHelp.Value <- not showHelp.Value)
-        )
-
-        let text = showHelp |> Mod.bind (function true -> help | false -> Mod.constant teaser)
-
-
-        
-
-        let trafo = 
-            win.Sizes |> Mod.map (fun s -> 
-                let border = V2d(20.0, 10.0) / V2d s
-                let pixels = 30.0 / float s.Y
-                Trafo3d.Scale(pixels) *
-                Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
-                Trafo3d.Translation(-1.0 + border.X, 1.0 - border.Y - pixels, -1.0)
-            )
-
-        let font = Font "Consolas"
-        
-        let chars =
-            seq {
-                for c in 0 .. 255 do yield char c
-            }
-
-
         let overlay =
             match Environment.OSVersion with
                 | Windows when config.backend <> Backend.Both ->  
+                    let status =
+                        adaptive {
+                            let! cull = cullMode
+                            let! fill = fillMode
+
+                            return 
+                                String.concat "\r\n" [
+                                    "Status:"
+                                    sprintf "  CullMode: %A" cull
+                                    sprintf "  FillMode: %A" fill
+                                ]
+                        }
+
+                    let help = status |> Mod.map (fun s -> helpText + "\r\n" + s)
+
+                    let showHelp = Mod.init false
+
+                    win.Keyboard.KeyDown(Aardvark.Application.Keys.H).Values.Add (fun () ->
+                        transact (fun () -> showHelp.Value <- not showHelp.Value)
+                    )
+
+                    let text = showHelp |> Mod.bind (function true -> help | false -> Mod.constant teaser)
+
+
+                    
+
+                    let trafo = 
+                        win.Sizes |> Mod.map (fun s -> 
+                            let border = V2d(20.0, 10.0) / V2d s
+                            let pixels = 30.0 / float s.Y
+                            Trafo3d.Scale(pixels) *
+                            Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
+                            Trafo3d.Translation(-1.0 + border.X, 1.0 - border.Y - pixels, -1.0)
+                        )
+
+                    let font = Font "Consolas"
+                    
+                    let chars =
+                        seq {
+                            for c in 0 .. 255 do yield char c
+                        }
+
                     win.Runtime.PrepareGlyphs(font, chars)
                     Sg.text font C4b.White text
                         |> Sg.trafo trafo
