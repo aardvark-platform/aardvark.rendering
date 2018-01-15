@@ -6,9 +6,9 @@ open Aardvark.Application
 open Aardvark.Rendering.Vulkan
 open FSharp.Quotations
 
+
 // This example illustrates how to use Aardvark.GPGPU primitives and compute shaders
 // to do simple parallel programming.
-
 module Shader =
     open FShade
 
@@ -17,59 +17,90 @@ module Shader =
         compute {
             let id = getGlobalId().X
             if id < n then
-                let inputValue = src.[id]
+                // reconstruct the bit from the scan-data
                 let r = targets.[id]
                 let l = if id > 0 then targets.[id-1] else 0
-                if l < r then
-                    result.[r - 1] <- inputValue
+                let bit = r - l
+
+                // if the bit was 1 then the output-index is (r-1)
+                if bit > 0 then result.[r - 1] <- src.[id]
         }
+
+// a simple utility for calculating ceil(v / d) as int
+let ceilDiv (v : int) (d : int) =
+    if v % d = 0 then v / d
+    else 1 + v / d
 
 let parallelFilter<'a when 'a : unmanaged> (runtime : IRuntime) (arr : 'a[]) (predicate : Expr<'a -> bool>) =
     
     let par = ParallelPrimitives(runtime)
-    let input = runtime.CreateBuffer<'a>(arr)
-    let bits = runtime.CreateBuffer<int>(input.Count)
-    let result = runtime.CreateBuffer<'a>(arr.Length)
 
-    let mapper = par.CompileMap(<@ fun i e -> if (%predicate) e then 1 else 0 @>, input, bits)
-    let scanner = par.CompileScan(<@ (+) @>, bits, bits)
+    // create buffers holding the data
+    use input   = runtime.CreateBuffer<'a>(arr)
+    use bits    = runtime.CreateBuffer<int>(input.Count)
+    use result  = runtime.CreateBuffer<'a>(arr.Length)
 
-    let resolveTargetShader = runtime.CreateComputeShader Shader.resolve
-    let targetWrite = runtime.NewInputBinding resolveTargetShader
-    targetWrite.["src"] <- input
-    targetWrite.["n"] <- input.Count
-    targetWrite.["targets"] <- bits
-    targetWrite.["result"] <- result
-    targetWrite.Flush()
-    let ceilDiv (v : int) (d : int) =
-        if v % d = 0 then v / d
-        else 1 + v / d
+    // compile some tools we need for our computation
+    use mapper  = par.CompileMap(<@ fun i e -> if (%predicate) e then 1 else 0 @>, input, bits)
+    use scanner = par.CompileScan(<@ (+) @>, bits, bits)
 
+    // compile our custom resolve-shader and setup its inputs
+    let resolveShader = runtime.CreateComputeShader Shader.resolve
+    use resolveInputs = runtime.NewInputBinding resolveShader
+    resolveInputs.["src"] <- input
+    resolveInputs.["n"] <- input.Count
+    resolveInputs.["targets"] <- bits
+    resolveInputs.["result"] <- result
+    resolveInputs.Flush()
+
+    // create the CPU arrays for downloading data
+    #if DEBUG
     let bitsCPU = Array.zeroCreate arr.Length
     let bitsumCPU = Array.zeroCreate arr.Length
+    #endif
+    let overallCount = Array.zeroCreate 1
 
-    let commands = [
+    // run the overall command
+    runtime.Run [
+        // create bits for all entries: (0: false, 1: true)
         ComputeCommand.Execute mapper
         ComputeCommand.Sync(bits.Buffer,BufferAccess.ShaderWrite,BufferAccess.ShaderRead)
-        ComputeCommand.Copy(bits, bitsCPU)
 
+        // download the bits (just for showing the values)
+        #if DEBUG
+        ComputeCommand.Copy(bits, bitsCPU)
+        ComputeCommand.Sync(bits.Buffer,BufferAccess.TransferRead,BufferAccess.ShaderRead)
+        #endif 
+
+        // perform an inclusive scan on the bits (since the bits are no longer needed we can use the identical buffer as output here)
         ComputeCommand.Execute scanner
         ComputeCommand.Sync(bits.Buffer,BufferAccess.ShaderWrite,BufferAccess.ShaderRead)
+
+        // download the bits (just for showing the values)
+        #if DEBUG
         ComputeCommand.Copy(bits, bitsumCPU)
-        ComputeCommand.Bind(resolveTargetShader)
-        ComputeCommand.SetInput targetWrite
-        ComputeCommand.Dispatch (ceilDiv (int input.Count) 64)
+        #endif
+
+        // download the last entry from bits (the total number of elements in output)
+        ComputeCommand.Copy(bits.[bits.Count - 1 .. bits.Count - 1], overallCount)
+
+        // resolve (write) all the valid entries to their respective output-index
+        ComputeCommand.Bind resolveShader
+        ComputeCommand.SetInput resolveInputs
+        ComputeCommand.Dispatch (ceilDiv (int input.Count) resolveShader.LocalSize.X)
+
     ]
 
-    let program = runtime.Compile commands
-    program.Run()
+    // download and print the resulting data
+    let overallCount = overallCount.[0]
+    let resultCPU = result.[0..overallCount-1].Download()
 
-    Log.line "bits: %A" bitsCPU
+    #if DEBUG
+    Log.line "bits:   %A" bitsCPU
     Log.line "bitsum: %A" bitsumCPU
-    let max = bitsumCPU.[bitsumCPU.Length-1]
-    let result2 = result.[0..max-1].Download()
-    Log.line "result: %A" result2
-    ()
+    #endif
+    Log.line "result: %A" resultCPU
+
 
 [<EntryPoint>]
 let main argv = 
