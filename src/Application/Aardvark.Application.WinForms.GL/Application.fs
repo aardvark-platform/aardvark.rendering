@@ -67,8 +67,9 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
     member x.Runtime = runtime
 
     member x.Dispose() =
-        ctx.Dispose()
+        // first dispose runtime in order to properly dispose resources..
         runtime.Dispose()
+        ctx.Dispose()
 
     member x.Initialize(ctrl : IRenderControl, samples : int) = 
         match ctrl with

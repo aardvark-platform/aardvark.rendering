@@ -15,17 +15,10 @@ open Aardvark.Application.WinForms.Vulkan
 type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
     inherit UserControl()
 
-    do base.SetStyle(ControlStyles.UserPaint, true)
-       base.SetStyle(ControlStyles.DoubleBuffer, false)
-       base.SetStyle(ControlStyles.AllPaintingInWmPaint, true)
-       base.SetStyle(ControlStyles.Opaque, true)
-       base.SetStyle(ControlStyles.ResizeRedraw, true)
-
     let mutable surface : Surface = Unchecked.defaultof<_>
     let mutable swapchainDescription : SwapchainDescription = Unchecked.defaultof<_>
     let mutable swapchain : Swapchain = Unchecked.defaultof<_>
     let mutable loaded = false
-
 
     member x.SwapChainDescription = 
         if not x.IsHandleCreated then x.CreateHandle()
@@ -41,6 +34,17 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
 
     override x.OnHandleCreated(e) =
         base.OnHandleCreated e
+
+        x.SetStyle(ControlStyles.UserPaint, true)
+        x.SetStyle(ControlStyles.DoubleBuffer, false)
+        x.SetStyle(ControlStyles.AllPaintingInWmPaint, true)
+        x.SetStyle(ControlStyles.Opaque, true)
+        x.SetStyle(ControlStyles.ResizeRedraw, true)
+        x.Padding <- Padding(0,0,0,0)
+        x.Margin <- Padding(0,0,0,0)
+        x.BorderStyle <- BorderStyle.None
+
+
         surface <- device.CreateSurface(x)
         swapchainDescription <- device.CreateSwapchainDescription(surface, graphicsMode)
         swapchain <- device.CreateSwapchain(swapchainDescription)
@@ -75,13 +79,17 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
 
     let mutable renderTask : IRenderTask = RenderTask.empty
     let mutable taskSubscription : IDisposable = null
-    let mutable sizes = Mod.init (V2i(this.ClientSize.Width, this.ClientSize.Height))
+    let mutable sizes = Mod.init (V2i.II)
     let mutable needsRedraw = false
     let mutable renderContiuously = false
 
     let time = Mod.custom(fun _ -> DateTime.Now)
 
+    let beforeRender = Event<unit>()
+    let afterRender = Event<unit>()
+
     override x.OnLoad(desc : SwapchainDescription) =
+        transact (fun () -> sizes.Value <- V2i(this.ClientSize.Width, this.ClientSize.Height))
         x.KeyDown.Add(fun e ->
             if e.KeyCode = System.Windows.Forms.Keys.End && e.Control then
                 renderContiuously <- not renderContiuously
@@ -95,7 +103,9 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
         if s <> sizes.Value then
             transact (fun () -> Mod.change sizes s)
 
+        beforeRender.Trigger()
         renderTask.Run(RenderToken.Empty, fbo)
+        afterRender.Trigger()
 
         //x.Invalidate()
         transact (fun () -> time.MarkOutdated())
@@ -148,6 +158,8 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
                 try base.Invoke (new System.Action(f)) |> ignore
                 with _ -> ()
 
+    member x.BeforeRender = beforeRender.Publish
+    member x.AfterRender = afterRender.Publish
     interface IRenderTarget with
         member x.FramebufferSignature = x.RenderPass :> IFramebufferSignature
         member x.Runtime = runtime :> IRuntime
@@ -158,5 +170,7 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
         member x.Samples = 1
         member x.Sizes = sizes :> IMod<_>
         member x.Time = time
+        member x.BeforeRender = beforeRender.Publish
+        member x.AfterRender = afterRender.Publish
 
 

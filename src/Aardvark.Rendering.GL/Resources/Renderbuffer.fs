@@ -25,6 +25,7 @@ type Renderbuffer =
             member x.Handle = x.Handle
 
         interface IFramebufferOutput with
+            member x.Runtime = x.Context.Runtime :> ITextureRuntime
             member x.Format = x.Format
             member x.Size = x.Size
             member x.Samples = x.Samples

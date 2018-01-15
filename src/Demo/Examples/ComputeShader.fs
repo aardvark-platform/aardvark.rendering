@@ -54,6 +54,17 @@ module ComputeShader =
                     acc.[i] <- V4d(F / masses.[i], 0.0)
 
             }
+
+        [<LocalSize(X = 64)>]
+        let toTarget (n : int) (src : int[]) (bits : int[]) (targets : int[]) (result : int[]) =
+            compute {
+                let id = getGlobalId().X
+                if id < n then
+                    let inputValue = src.[id]
+                    let targetLocation = targets.[id]-1
+                    if bits.[id] = 1 then
+                        result.[targetLocation] <- inputValue
+            }
             
         [<LocalSize(X = 64)>]
         let step (n : int) (dt : float) (pos : V4d[]) (vel : V4d[]) (acc : V4d[]) =
@@ -130,39 +141,252 @@ module ComputeShader =
 
     open Aardvark.Application.OpenVR
 
+
+    let benchmark (iter : int) (alternatives : list<string * (unit -> 'a)>) =
+        let alternatives = Map.ofList alternatives
+        let results = alternatives |> Map.map (fun _ _ -> Array.zeroCreate iter)
+
+        for (name, run) in Map.toSeq alternatives do
+            let res = results.[name]
+            
+            for i in 0 .. min (iter - 1) 10 do
+                res.[i] <- run()
+
+            let sw = System.Diagnostics.Stopwatch()
+            sw.Start() 
+            for i in 0 .. iter - 1 do
+                res.[i] <- run()
+            sw.Stop()
+            Log.line "%s: %A" name (sw.MicroTime / iter)
+
+        let res = results |> Map.toSeq |> Seq.map snd |> Seq.toArray
+        let cnt = res.Length
+
+        let mutable errorIndex = -1
+        for i in 0 .. iter - 1 do
+            let v = res.[0].[i]
+            for j in 1 .. cnt - 1 do
+                if res.[j].[i] <> v then errorIndex <- i
+
+        if errorIndex >= 0 then
+            let values = results |> Map.map (fun _ a -> a.[errorIndex])
+            Log.warn "ERROR"
+            for (name, value) in Map.toSeq values do
+                Log.warn "%s: %A" name value
+        else
+            Log.line "OK"
+
+
+                    
+                
+
+
+
+
+
+
+
+
     let run() =
-//        use app = new VulkanApplication(false)
-//        let runtime = app.Runtime :> IRuntime
-//        let win = app.CreateSimpleRenderWindow(8) 
-//        let run() = win.Run()
-//        let view = 
-//            CameraView.lookAt (V3d(4,4,4)) V3d.Zero V3d.OOI
-//                |> DefaultCameraController.control win.Mouse win.Keyboard win.Time 
-//                |> Mod.map CameraView.viewTrafo
-//                :> IMod
-//        let proj =
-//            win.Sizes 
-//                |> Mod.map (fun s -> Frustum.perspective 60.0 0.05 1000.0 (float s.X / float s.Y))
-//                |> Mod.map Frustum.projTrafo
-//                :> IMod
-//        let win = win :> IRenderTarget
-//        let subscribe (f : unit -> unit) = ()
-
-        let app = new VulkanVRApplicationLayered(false)
+        use app = new VulkanApplication(true)
+        //use app = new OpenGlApplication(true)
         let runtime = app.Runtime :> IRuntime
-        let win = app :> IRenderTarget
-        let view = app.Info.viewTrafos
-        let proj = app.Info.projTrafos :> IMod
-        let run () = app.Run()
-        let subscribe (f : unit -> unit) =
-            app.Controllers |> Array.iter (fun c ->
-                c.Axis |> Array.iter (fun a -> 
-                    a.Press.Add (f)
-                )
-            )
+        let win = app.CreateSimpleRenderWindow(8) 
+        let run() = win.Run()
+        let view = 
+            CameraView.lookAt (V3d(4,4,4)) V3d.Zero V3d.OOI
+                |> DefaultCameraController.control win.Mouse win.Keyboard win.Time 
+                |> Mod.map CameraView.viewTrafo
+        let proj =
+            win.Sizes 
+                |> Mod.map (fun s -> Frustum.perspective 60.0 0.05 1000.0 (float s.X / float s.Y))
+                |> Mod.map Frustum.projTrafo
+                :> IMod
+        let win = win :> IRenderTarget
+        let subscribe (f : unit -> unit) = ()
+        
+        let par = ParallelPrimitives(runtime)
 
-        let update = runtime.CompileCompute Shaders.updateAcceleration
-        let step = runtime.CompileCompute Shaders.step
+
+//
+//
+//        let data = PixImage<float32>(Col.Format.RGBA, V2i(1234, 3241))
+//        let rand = RandomSystem()
+//        data.GetMatrix<C4f>().SetByCoord(fun (c : V2l) ->
+//            let r = rand.UniformFloat() // * 0.5f + 0.5f
+//            let g = rand.UniformFloat() // * 0.5f + 0.5f
+//            let b = rand.UniformFloat() // * 0.5f + 0.5f
+//            C4f(r,g,b,1.0f)
+//            //C4b(rand.UniformInt(256), rand.UniformInt(256), rand.UniformInt(256), 255)
+//        ) |> ignore
+//
+//        
+//        let f = data.Size.X * data.Size.Y |> float32
+//        let cmp = 
+//            let data = data.GetMatrix<C4f>()
+//            let mutable sum = V4f.Zero
+//            data.ForeachIndex(fun i ->
+//                let v = data.[i] |> V4f
+//                sum <- sum + v / f //(V4f v / V4f(255.0, 255.0, 255.0, 255.0))
+//            )
+//            sum
+//
+//
+//        let img = runtime.PrepareTexture(PixTexture2d(PixImageMipMap [| data :> PixImage |], TextureParams.mipmapped))
+//
+//        let res = par.MapReduce(<@ fun _ (v : V4f) -> v / 3999394.0f @>, <@ (+) @>, img.[TextureAspect.Color, 0, 0])
+//        printfn "CPU: %A" cmp
+//        printfn "GPU: %A" res
+//        
+//        let data = PixVolume<float32>(Col.Format.RGBA, V3i(128,128,128))
+//        
+//        let rand = RandomSystem()
+//        data.GetVolume<C4f>().SetByCoord(fun (c : V3l) ->
+//            let r = rand.UniformFloat() // * 0.5f + 0.5f
+//            let g = rand.UniformFloat() // * 0.5f + 0.5f
+//            let b = rand.UniformFloat() // * 0.5f + 0.5f
+//            C4f(r,g,b,1.0f)
+//            //C4b(rand.UniformInt(256), rand.UniformInt(256), rand.UniformInt(256), 255)
+//        ) |> ignore
+//        
+//        let cmp = 
+//            let data = data.GetVolume<C4f>()
+//            let mutable sum = V4f.Zero
+//            data.ForeachIndex(fun i ->
+//                let v = data.[i] |> V4f
+//                sum <- sum + v / 2097152.0f //(V4f v / V4f(255.0, 255.0, 255.0, 255.0))
+//            )
+//            sum
+//        
+//        let img = runtime.PrepareTexture(PixTexture3d(data, TextureParams.mipmapped))
+//        let res = par.MapReduce(<@ fun _ (v : V4f) -> v / 2097152.0f @>, <@ (+) @>, img.[TextureAspect.Color, 0, 0])
+//        printfn "CPU: %A" cmp
+//        printfn "GPU: %A" res
+
+       // System.Environment.Exit 0
+
+        let testArr = [| 100; 5; 10; 20; 1000; 3 |]
+        let input = runtime.CreateBuffer<int>(testArr)
+        let bits = runtime.CreateBuffer<int>(input.Count)
+        let bitsum = runtime.CreateBuffer<int>(input.Count)
+        let result = runtime.CreateBuffer<int>(testArr)
+
+        par.CompileMap(<@ fun i e -> if e < 10 then 1 else 0 @>, input, bits).Run()
+        let scanned = par.Scan(<@ (+) @>, bits, bitsum)
+        let targetWriteShader = runtime.CreateComputeShader Shaders.toTarget
+        let targetWrite = runtime.NewInputBinding targetWriteShader
+        targetWrite.["src"] <- input
+        targetWrite.["n"] <- input.Count
+        targetWrite.["bits"] <- bits
+        targetWrite.["targets"] <- bitsum
+        targetWrite.["result"] <- result
+        targetWrite.Flush()
+        let ceilDiv (v : int) (d : int) =
+            if v % d = 0 then v / d
+            else 1 + v / d
+        let mk =
+             [
+                ComputeCommand.Bind(targetWriteShader)
+                ComputeCommand.SetInput targetWrite
+                ComputeCommand.Dispatch (ceilDiv (int input.Count) 64)
+             ]
+        let program =
+            runtime.Compile mk
+        program.Run()
+
+        let bits2 =  bits.Download()
+        printfn "%A" bits2
+
+        let scanned2 =  bitsum.Download()
+        printfn "%A" scanned2
+        let max = scanned2.[scanned2.Length-1]
+        let result2 = result.[0..max-1].Download()
+        printfn "%A" result2
+
+        let cnt = 1 <<< 20
+        let aa = Array.create cnt 1
+        let ba = runtime.CreateBuffer<int>(aa)
+        let bb = runtime.CreateBuffer<int> cnt
+
+        let rand = Random()
+        let mutable i = 0
+        while true do
+            
+            let realCnt = 
+                if i < DictConstant.PrimeSizes.Length && DictConstant.PrimeSizes.[i] <= uint32 cnt then
+                    int DictConstant.PrimeSizes.[i]
+                
+                else 
+                    abs (rand.Next(cnt)) + 1
+
+            let map = <@ fun i a -> a @>
+            let add = <@ (+) @>
+
+            let ba = ba.[0..realCnt-1]
+            let bb = bb.[0..realCnt-1]
+
+            let bboida = ba.Download()
+
+
+            use scan = par.CompileScan(add,ba,bb)
+
+            let reference () =
+                let res = Array.zeroCreate ba.Count
+                let mutable sum = 0
+                for i in 0 .. ba.Count - 1 do
+                    sum <- sum + aa.[i]
+                    res.[i] <- sum
+                res
+                    
+            scan.Run()
+            let arr = bb.Download()
+            let ref = reference()
+            if arr <> ref then
+                Log.warn "cnt:  %A" realCnt
+                Log.warn "scan: %A" arr.[arr.Length-1]
+                Console.ReadLine() |> ignore
+                //Log.warn "fold: %A" r
+            else
+                Log.line "OK (%A)" realCnt
+
+            i <- i + 1
+//        benchmark 100 [
+//            
+//            //"cpu", reference
+//            //"gpu", suma.Run
+//            //"gpui", fun () -> par.MapReduce(map, add, ba)
+//        ]
+
+
+
+//        let scanab = par.CompileScan(<@ (+) @>, ba, bb)
+//        scanab.Run()
+//
+//        let data = bb.Download()
+//        let expected = Array.init data.Length (fun i -> 1 + i)
+//        if data <> expected then
+//            printfn "bad"
+//        else
+//            printfn "good"
+//            printfn "%A" data
+        Environment.Exit 0
+
+
+//        let app = new VulkanVRApplicationLayered(false)
+//        let runtime = app.Runtime :> IRuntime
+//        let win = app :> IRenderTarget
+//        let view = app.Info.viewTrafos
+//        let proj = app.Info.projTrafos :> IMod
+//        let run () = app.Run()
+//        let subscribe (f : unit -> unit) =
+//            app.Controllers |> Array.iter (fun c ->
+//                c.Axis |> Array.iter (fun a -> 
+//                    a.Press.Add (f)
+//                )
+//            )
+
+        let update = runtime.CreateComputeShader Shaders.updateAcceleration
+        let step = runtime.CreateComputeShader Shaders.step
 
         let rand = RandomSystem()
         let particeCount = 1000
@@ -199,14 +423,31 @@ module ComputeShader =
         stepInputs.["dt"] <- 0.0
         stepInputs.Flush()
 
+        let groupSize = 
+            if particeCount % update.LocalSize.X = 0 then 
+                particeCount / update.LocalSize.X
+            else
+                1 + particeCount / update.LocalSize.X
+
+        let compiled = false
+
+        let commands =
+            [
+                ComputeCommand.Bind update
+                ComputeCommand.SetInput updateInputs
+                ComputeCommand.Dispatch groupSize
+
+                ComputeCommand.Bind step
+                ComputeCommand.SetInput stepInputs
+                ComputeCommand.Dispatch groupSize
+            ]
+
+
+        let program =
+            runtime.Compile commands
+
         let magic =
             let sw = System.Diagnostics.Stopwatch()
-            let groupSize = 
-                if particeCount % update.LocalSize.X = 0 then 
-                    particeCount / update.LocalSize.X
-                else
-                    1 + particeCount / update.LocalSize.X
-
 
             win.Time |> Mod.map (fun _ ->
                 let dt = sw.Elapsed.TotalSeconds
@@ -219,9 +460,10 @@ module ComputeShader =
                         let rdt = min maxStep (dt - t)
                         stepInputs.["dt"] <-rdt
                         stepInputs.Flush()
-
-                        runtime.Invoke(update, groupSize, updateInputs)
-                        runtime.Invoke(step, groupSize, stepInputs)
+                        if compiled then
+                            program.Run()
+                        else
+                            runtime.Run commands
                         t <- t + rdt
                 
                 else
@@ -261,7 +503,7 @@ module ComputeShader =
                 }
                 |> u "ViewTrafo" view
                 |> u "ProjTrafo" proj
-                |> Sg.viewTrafo (view |> Mod.map (Array.item 0))
+                |> Sg.viewTrafo view //(view |> Mod.map (Array.item 0))
                 |> Sg.uniform "Scale" (Mod.constant 0.05)
                 |> Sg.uniform "Magic" magic
                 |> Sg.compile runtime win.FramebufferSignature
@@ -272,6 +514,6 @@ module ComputeShader =
         velocities.Dispose()
         updateInputs.Dispose()
         stepInputs.Dispose()
-        runtime.Delete update
-        runtime.Delete step
+        runtime.DeleteComputeShader update
+        runtime.DeleteComputeShader step
 

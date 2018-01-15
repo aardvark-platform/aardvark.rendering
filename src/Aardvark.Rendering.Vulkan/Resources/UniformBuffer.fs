@@ -100,7 +100,7 @@ module UniformBuffer =
 
                 let buffer = device.CreateBuffer(VkBufferUsageFlags.UniformBufferBit ||| VkBufferUsageFlags.TransferDstBit, alignedSize)
 
-                UniformBuffer(device, buffer.Handle, buffer.Memory, storage, layout)
+                new UniformBuffer(device, buffer.Handle, buffer.Memory, storage, layout)
             | Dynamic ->
                 failf "cannot create UniformBuffer with dynamic size"
 

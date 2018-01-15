@@ -67,7 +67,7 @@ module Sharing =
 
         let get (b : IBuffer) =
             cache.GetOrAdd(b, fun v -> 
-                RefCountedBuffer(
+                new RefCountedBuffer(
                     ctx,
                     (fun () -> ctx.CreateBuffer b),
                     (fun () -> cache.TryRemove b |> ignore)
@@ -114,11 +114,11 @@ module Sharing =
     type ArrayBufferManager(ctx : Context, active : bool) =
         let cache = ConcurrentDictionary<Array, RefCountedBuffer>()
         
-        let nullBuffer = Buffer(ctx, 0n, 0)
+        let nullBuffer = new Buffer(ctx, 0n, 0)
 
         let get (b : Array) =
             cache.GetOrAdd(b, fun v -> 
-                RefCountedBuffer(
+                new RefCountedBuffer(
                     ctx,
                     (fun () -> ctx.CreateBuffer b),
                     (fun () -> cache.TryRemove b |> ignore)
@@ -502,7 +502,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
             | :? SingleValueBuffer as v ->
                 bufferCache.GetOrCreate(Mod.constant 0, {
-                    create = fun b      -> Buffer(ctx, 0n, 0)
+                    create = fun b      -> new Buffer(ctx, 0n, 0)
                     update = fun h b    -> h
                     delete = fun h      -> ()
                     info =   fun h      -> ResourceInfo.Zero

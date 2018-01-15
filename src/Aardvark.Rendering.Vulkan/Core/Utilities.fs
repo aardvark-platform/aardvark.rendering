@@ -69,9 +69,17 @@ type Logger private(verbosity : int) =
 module BaseLibExtensions = 
     module NativePtr =
         let withA (f : nativeptr<'a> -> 'b) (a : 'a[]) =
-            let gc = GCHandle.Alloc(a, GCHandleType.Pinned)
-            try f (gc.AddrOfPinnedObject() |> NativePtr.ofNativeInt)
-            finally gc.Free()
+            if a.Length = 0 then
+                f NativePtr.zero
+            else
+                let gc = GCHandle.Alloc(a, GCHandleType.Pinned)
+                try f (gc.AddrOfPinnedObject() |> NativePtr.ofNativeInt)
+                finally gc.Free()
+
+        let withOption (f : nativeptr<'a> -> 'b) (a : Option<'a>) =
+            match a with
+                | Some a -> [| a |] |> withA f
+                | None -> f NativePtr.zero
 
     type Version with
         member v.ToVulkan() =

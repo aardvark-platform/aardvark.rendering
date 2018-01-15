@@ -1289,6 +1289,7 @@ let main args =
     Ag.initialize()
     Aardvark.Init()
 
+
     //Aardvark.Application.OpenVR.UnhateTest.run()
 
     //Examples.Tessellation.run()
@@ -1298,8 +1299,10 @@ let main args =
     //Examples.Wobble.run()
     //Examples.GeometryComposition.run()
     //Examples.Eigi.run()
-    Examples.LevelOfDetail.run()
+    Examples.Sponza.run()
+    //Examples.LevelOfDetail.run()
     //Examples.Terrain.run()
+    //Examples.Jpeg.run()
     System.Environment.Exit 0
 
     //colorLockTest()

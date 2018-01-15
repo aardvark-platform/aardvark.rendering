@@ -7,12 +7,16 @@ open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
+open System.Reflection
+open KHXDeviceGroupCreation
 
 #nowarn "9"
 #nowarn "51"
 
 type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<string>) as this =   
     inherit VulkanObject()
+
+    let extensions = extensions |> Set.add KHXDeviceGroupCreation.Name |> Set.add KHXDeviceGroup.Name
 
     static let availableLayers =
         let mutable count = 0u
@@ -100,7 +104,7 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
             let mutable info =
                 VkInstanceCreateInfo(
                     VkStructureType.InstanceCreateInfo, 0n,
-                    0u,
+                    VkInstanceCreateFlags.MinValue,
                     &&applicationInfo,
                     uint32 layers.Length, pLayers,
                     uint32 extensions.Length, pExtensions
@@ -110,6 +114,7 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
 
             VkRaw.vkCreateInstance(&&info, NativePtr.zero, &&instance)
                 |> check "could not create instance"
+
 
             instance
         finally
@@ -128,6 +133,34 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
 
         devices |> Array.mapi (fun i d -> PhysicalDevice(this, d, i))
 
+    let groups =    
+        if Set.contains KHXDeviceGroupCreation.Name extensions then
+            let mutable groupCount = 0u
+
+            VkRaw.vkEnumeratePhysicalDeviceGroupsKHX(instance, &&groupCount, NativePtr.zero)
+                |> check "could not get physical device groups"
+
+
+            let groups = Array.zeroCreate (int groupCount)
+            groups |> NativePtr.withA (fun ptr ->
+                VkRaw.vkEnumeratePhysicalDeviceGroupsKHX(instance, &&groupCount, ptr)
+                    |> check "could not get physical device groups"
+            )
+
+            groups |> Array.mapi (fun i d -> 
+                let devices = 
+                    Array.init (int d.physicalDeviceCount) (fun ii ->
+                        let handle = d.physicalDevices.[ii]
+                        PhysicalDevice(this, handle, ii)
+                    )
+                PhysicalDeviceGroup(this, devices)
+            )
+            |> Array.filter (fun g -> g.Devices.Length > 1)
+        else
+            [||]
+
+    let devicesAndGroups =
+        Array.append devices (groups |> Array.map (fun a -> a :> _))
     
     static member AvailableLayers = availableLayers
     static member GlobalExtensions = globalExtensions
@@ -141,7 +174,7 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
 
     member x.Handle = instance
 
-    member x.Devices = devices
+    member x.Devices = devicesAndGroups
 
     member x.PrintInfo(l : ILogger, chosenDevice : int) =
         let caps = 
@@ -233,7 +266,6 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
             )
 
         )
-
 
 and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, index : int) =
     static let allFormats = Enum.GetValues(typeof<VkFormat>) |> unbox<VkFormat[]>
@@ -346,9 +378,24 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, inde
     member x.Instance = instance
     member x.Limits : DeviceLimits = limits
 
+    abstract member Id : string
+    default x.Id = x.Vendor + x.Name + string index
+
     override x.ToString() =
         sprintf "{ name = %s; type = %A; api = %A }" name x.Type x.APIVersion
-        
+    
+
+and PhysicalDeviceGroup internal(instance : Instance, devices : PhysicalDevice[]) =
+    inherit PhysicalDevice(instance, devices.[0].Handle, devices.[0].Index)
+   
+    member x.Devices : PhysicalDevice[] = devices
+    override x.Id = devices |> Seq.map (fun d -> d.Id) |> String.concat "_"
+
+    override x.ToString() =
+        let cnt = devices.Length
+        sprintf "%d x { name = %s; type = %A; api = %A }" cnt x.Name x.Type x.APIVersion
+    
+            
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Instance =
     module Extensions =
@@ -445,14 +492,20 @@ module ConsoleDeviceChooser =
         match devices with
             | [single] -> single
             | _ -> 
-                let allIds = devices |> List.map (fun d -> string d.Index) |> String.concat ";"
+                let allIds = devices |> List.map (fun d -> d.Id) |> String.concat ";"
 
                 let choose() =
                     let devices = List.toArray devices
                     Log.line "Multiple GPUs detected (please select one)"
                     for i in 0 .. devices.Length - 1 do
                         let d = devices.[i]
-                        Log.line "   %d: %s %s" i d.Vendor d.Name
+                        
+                        let prefix =
+                            match d with
+                                | :? PhysicalDeviceGroup as g -> sprintf "%d x "g.Devices.Length
+                                | _ -> ""
+
+                        Log.line "   %d: %s%s %s" i prefix d.Vendor d.Name
                     
                     let mutable chosenId = -1
                     while chosenId < 0 do
@@ -460,7 +513,8 @@ module ConsoleDeviceChooser =
                         let entry = Console.ReadLine()
                         match Int32.TryParse(entry) with
                             | (true, v) when v >= 0 && v < devices.Length ->
-                                File.WriteAllLines(configFile, [ allIds; string v ])
+                                let d = devices.[v]
+                                File.WriteAllLines(configFile, [ allIds; d.Id ])
                                 chosenId <- v
                             | _ ->
                                 ()
@@ -477,10 +531,8 @@ module ConsoleDeviceChooser =
                     let cache = File.ReadAllLines configFile
                     match cache with
                         | [| fAll; fcache |] when fAll = allIds ->
-                    
-                            let did = Int32.Parse(fcache)
 
-                            match devices |> List.tryFind (fun d -> d.Index = did) with
+                            match devices |> List.tryFind (fun d -> d.Id = fcache) with
                                 | Some d -> d
                                 | _ -> choose()
 

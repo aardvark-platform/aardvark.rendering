@@ -17,10 +17,10 @@ open Aardvark.Rendering.Text
 
 module Wobble =
     let run() =
-        use app = new VulkanApplication(false)
+        use app = new VulkanApplication(true)
         let win = app.CreateSimpleRenderWindow(8)
 
-        FShade.EffectDebugger.attach()
+        //FShade.EffectDebugger.attach()
 
         let offset = Mod.init (V3d(1000000.0, 0.0, 0.0))
         

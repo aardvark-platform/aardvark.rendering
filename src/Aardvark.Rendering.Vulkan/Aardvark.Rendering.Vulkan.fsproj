@@ -61,6 +61,7 @@
   </Target>
   -->
   <ItemGroup>
+    <None Include="Wrapper\vk.xml" />
     <None Include="Wrapper\Generator.fsx" />
     <Compile Include="Wrapper\Types.fs" />
     <Compile Include="Wrapper\Vulkan.fs" />
@@ -128,6 +129,9 @@
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
       <ItemGroup>
         <Reference Include="System.Drawing">
+          <Paket>True</Paket>
+        </Reference>
+        <Reference Include="System.Runtime.Serialization">
           <Paket>True</Paket>
         </Reference>
         <Reference Include="Aardvark.Base">
@@ -267,9 +271,6 @@
   <Choose>
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
       <ItemGroup>
-        <Reference Include="System.Runtime.Serialization">
-          <Paket>True</Paket>
-        </Reference>
         <Reference Include="System.Xml">
           <Paket>True</Paket>
         </Reference>

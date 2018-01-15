@@ -699,8 +699,8 @@ module RenderTask =
 
                     if viewportChanged then
                         first.SeekToBegin()
-                        first.SetViewport(0u, vps |> Array.map (fun b -> VkViewport(float32 b.Min.X, float32 b.Min.X, float32 (1 + b.SizeX), float32 (1 + b.SizeY), 0.0f, 1.0f))) |> ignore
-                        first.SetScissor(0u, vps |> Array.map (fun b -> VkRect2D(VkOffset2D(b.Min.X, b.Min.X), VkExtent2D(1 + b.SizeX, 1 + b.SizeY)))) |> ignore
+                        first.SetViewport(0u, vps |> Array.map (fun b -> VkViewport(float32 b.Min.X, float32 b.Min.Y, float32 b.SizeX, float32 b.SizeY, 0.0f, 1.0f))) |> ignore
+                        first.SetScissor(0u, vps |> Array.map (fun b -> VkRect2D(VkOffset2D(b.Min.X, b.Min.Y), VkExtent2D(b.SizeX, b.SizeY)))) |> ignore
 
                     cmdBuffer.Reset()
                     cmdBuffer.Begin(renderPass, CommandBufferUsage.RenderPassContinue)
@@ -1805,6 +1805,11 @@ module RenderTask =
             let passCmds = passes.Values |> Seq.map (fun p -> p.GetValue(token)) |> Seq.toList
             tt.Sync()
 
+            let isGrouped = 
+                let attachment = fbo.ImageViews.[0]
+                device.IsDeviceGroup && attachment.ArrayRange.Max > attachment.ArrayRange.Min
+
+
             cmd.Reset()
             cmd.Begin(renderPass, CommandBufferUsage.OneTimeSubmit)
             cmd.enqueue {
@@ -1820,6 +1825,31 @@ module RenderTask =
                 do! Command.BeginPass(renderPass, fbo, false)
                 do! Command.Execute passCmds
                 do! Command.EndPass
+
+                if isGrouped then
+                    let deviceCount = int device.AllCount
+                    
+                    for a in fbo.ImageViews do
+                        let img = a.Image
+                        let layers = a.ArrayRange
+                        let layerCount = 1 + layers.Max - layers.Min
+                        
+                        let aspect =
+                            match VkFormat.toImageKind img.Format with
+                                | ImageKind.Depth -> ImageAspect.Depth
+                                | ImageKind.DepthStencil  -> ImageAspect.DepthStencil
+                                | _ -> ImageAspect.Color 
+
+                        let subResource = img.[aspect, a.MipLevelRange.Min]
+                        let ranges =
+                            let vp = desc.viewport
+                            let box = Box3i(V3i(vp.Min.X, vp.Min.Y, 0), V3i(vp.Max.X, vp.Max.Y, 0))
+                            let perDevice = layerCount / deviceCount
+                            Array.init deviceCount (fun di ->
+                                let range = Range1i(perDevice * di, perDevice * (di + 1) - 1)
+                                range, box
+                            )
+                        do! Command.SyncPeers(subResource, ranges)
 
                 for i in 0 .. fbo.ImageViews.Length - 1 do
                     let img = fbo.ImageViews.[i].Image
@@ -1846,6 +1876,8 @@ module RenderTask =
                 )
 
             base.Perform(token, rt, desc)
+
+        override x.Runtime = Some device.Runtime
 
         override x.Release() =
             reader.Dispose()

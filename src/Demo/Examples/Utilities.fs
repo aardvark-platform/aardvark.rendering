@@ -18,6 +18,7 @@ open Aardvark.Application.OpenVR
 type Backend =
     | GL 
     | Vulkan 
+    | Both
     
 [<RequireQualifiedAccess>]
 type Display =
@@ -255,6 +256,7 @@ module Utilities =
             match cfg.backend with
                 | Backend.GL -> new OpenGlApplication(cfg.debug) :> IApplication
                 | Backend.Vulkan -> new VulkanApplication(cfg.debug) :> IApplication
+                | Backend.Both -> new MultiApplication([|new OpenGlApplication(cfg.debug) :> IApplication; new VulkanApplication(cfg.debug) :> IApplication|]) :> IApplication
 
         let win = 
             if cfg.game && cfg.backend = Backend.GL then (unbox<OpenGlApplication> app).CreateGameWindow(cfg.samples) :> IRenderWindow
@@ -288,6 +290,7 @@ module Utilities =
             match cfg.backend with
                 | Backend.GL -> new OpenGlApplication(cfg.debug) :> IApplication
                 | Backend.Vulkan -> new VulkanApplication(cfg.debug) :> IApplication
+                | Backend.Both -> failwith "not implemented"
 
         let win = app.CreateSimpleRenderWindow(1)
         let runtime = app.Runtime
@@ -345,7 +348,7 @@ module Utilities =
         let framebuffer =
             OutputMod.custom
                 [colors; depth]
-                (fun t -> runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, colors.GetValue(t).[0] :> IFramebufferOutput; DefaultSemantic.Depth, depth.GetValue(t).[0] :> IFramebufferOutput]))
+                (fun t -> runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, colors.GetValue(t).[TextureAspect.Color, 0] :> IFramebufferOutput; DefaultSemantic.Depth, depth.GetValue(t).[TextureAspect.Depth, 0] :> IFramebufferOutput]))
                 (fun t h -> false)
                 (fun h -> runtime.DeleteFramebuffer h)
                 id
@@ -400,24 +403,24 @@ module Utilities =
             let clearTask =
                 runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
 
-            let dependent =
-                Mod.custom (fun t ->
-                    let fbo = framebuffer.GetValue t
-                    let output = OutputDescription.ofFramebuffer fbo
-
-                    let r = resolved.GetValue(t)
-
-                    clearTask.Run(t, RenderToken.Empty, output)
-                    stereoTask.Run(t, RenderToken.Empty, output)
-                    runtime.Copy(colors.GetValue(t), 0, 0, r, 0, 0, 2, 1)
-
-                    r :> ITexture
-                )
+//            let dependent =
+//                Mod.custom (fun t ->
+//                    let fbo = framebuffer.GetValue t
+//                    let output = OutputDescription.ofFramebuffer fbo
+//
+//                    let r = resolved.GetValue(t)
+//
+//                    clearTask.Run(t, RenderToken.Empty, output)
+//                    stereoTask.Run(t, RenderToken.Empty, output)
+//                    runtime.Copy(colors.GetValue(t), 0, 0, r, 0, 0, 2, 1)
+//
+//                    r :> ITexture
+//                )
 
             let task =
                 Sg.fullScreenQuad
                     |> Sg.uniform "Dependent" (Mod.constant 0.0)
-                    |> Sg.diffuseTexture dependent
+                    |> Sg.diffuseTexture (resolved |> Mod.map (fun t -> t :> ITexture))
                     |> Sg.shader {
                         do! Shader.renderStereo
                     }
@@ -428,7 +431,16 @@ module Utilities =
                     member x.FramebufferSignature = Some win.FramebufferSignature
                     member x.Runtime = Some win.Runtime
                     member x.PerformUpdate (_,_) = ()
-                    member x.Perform (_,_,_) = ()
+                    member x.Perform (t,_,_) =
+                        let fbo = framebuffer.GetValue t
+                        let output = OutputDescription.ofFramebuffer fbo
+
+                        let r = resolved.GetValue(t)
+
+                        clearTask.Run(t, RenderToken.Empty, output)
+                        stereoTask.Run(t, RenderToken.Empty, output)
+                        runtime.Copy(colors.GetValue(t), 0, 0, r, 0, 0, 2, 1)
+
                     member x.Release() =
                         stereoTask.Dispose()
                         clearTask.Dispose()
@@ -475,6 +487,9 @@ module Utilities =
                 } :> ISimpleRenderWindow
 
             | Backend.GL -> 
+                failwith "no OpenGL OpenVR backend atm."
+
+            | Backend.Both -> 
                 failwith "no OpenGL OpenVR backend atm."
 
 

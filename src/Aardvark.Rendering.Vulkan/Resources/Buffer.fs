@@ -24,9 +24,10 @@ type Buffer =
 
 
         interface IBackendBuffer with
+            member x.Runtime = x.Device.Runtime :> IBufferRuntime
             member x.Handle = x.Handle :> obj
             member x.SizeInBytes = nativeint x.Memory.Size
-
+            member x.Dispose() = x.Device.Runtime.DeleteBuffer x
 
         member x.AddReference() = Interlocked.Increment(&x.RefCount) |> ignore
 
@@ -286,6 +287,15 @@ module BufferCommands =
                     VkRaw.vkCmdFillBuffer(cmd.Handle, b.Handle, 0UL, uint64 b.Size, 0u)
                     Disposable.Empty
             }
+        static member SetBuffer(b : Buffer, offset : int64, size : int64, value : byte[]) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue cmd =
+                    if value.Length <> 4 then failf "[Vulkan] pattern too long"
+                    let v = BitConverter.ToUInt32(value, 0)
+                    VkRaw.vkCmdFillBuffer(cmd.Handle, b.Handle, uint64 offset, uint64 size, v)
+                    Disposable.Empty
+            }
 // =======================================================================
 // Resource functions for Device
 // =======================================================================
@@ -334,20 +344,8 @@ module Buffer =
                 emptyBuffers.TryRemove(key) |> ignore
             )   
 
-            Buffer(device, handle, ptr, 256L)
+            new Buffer(device, handle, ptr, 256L)
         )
-
-    let setName (name : string) (b : Buffer) =
-        let pName = CStr.salloc name
-        let mutable info =
-            VkDebugMarkerObjectNameInfoEXT(
-                unbox 1000022000, 0n,
-                VkDebugReportObjectTypeEXT.VkDebugReportObjectTypeBufferExt,
-                uint64 b.Handle.Handle,
-                pName
-            )
-        VkRaw.vkDebugMarkerSetObjectNameEXT(b.Device.Handle, &&info)
-            |> check "could not set buffer name"
 
     let createConcurrent (conc : bool) (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
         let device = memory.Device
@@ -378,7 +376,7 @@ module Buffer =
             |> check "could not bind buffer-memory"
 
 
-        Buffer(device, handle, ptr, size)
+        new Buffer(device, handle, ptr, size)
 
     let inline create  (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
         createConcurrent false flags size memory
@@ -452,8 +450,8 @@ module Buffer =
                 else
                     false
                 
-            | :? IBufferView as bv ->
-                let handle = bv.Buffer.Handle
+            | :? IBufferRange as bv ->
+                let handle = bv.Buffer
                 tryUpdate handle buffer
 
             | _ ->
@@ -484,8 +482,8 @@ module Buffer =
                 b.AddReference()
                 b
 
-            | :? IBufferView as bv ->
-                let handle = bv.Buffer.Handle
+            | :? IBufferRange as bv ->
+                let handle = bv.Buffer
                 ofBuffer flags handle device
 
             | _ ->

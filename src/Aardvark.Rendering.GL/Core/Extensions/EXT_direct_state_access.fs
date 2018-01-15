@@ -36,12 +36,29 @@ module EXT_direct_state_access =
                     GL.BufferSubData(t, offset, size, data)
                 )
 
+        static member NamedClearBufferSubData(buffer : int, ifmt : PixelInternalFormat, offset : nativeint, size : nativeint, fmt : PixelFormat, pixelType : PixelType, data : nativeint) =
+//            if supported then
+//                let ifmt = unbox<ExtDirectStateAccess> (int ifmt)
+//                GL.Ext.ClearNamedBufferSubData(buffer, ifmt, fmt, pixelType, offset, size, data)
+//            else
+                bindBuffer buffer (fun t ->
+                    GL.ClearBufferSubData(t, ifmt, offset, size, fmt, unbox<All> (int pixelType), data)
+                )
+
         static member GetNamedBufferSubData(buffer : int, offset : nativeint, size : nativeint, data : nativeint) =
             if supported then
                 GL.Ext.GetNamedBufferSubData(buffer, offset, size, data)
             else
                 bindBuffer buffer (fun t ->
                     GL.GetBufferSubData(t, offset, size, data)
+                )
+
+        static member CopyNamedBufferSubData(src : int, srcOffset : nativeint, dst : int, dstOffset : nativeint, size : nativeint) =
+            if supported then
+                GL.Ext.NamedCopyBufferSubData(src, dst, srcOffset, dstOffset, size)
+            else
+                bindBuffers src dst (fun tSrc tDst ->
+                    GL.CopyBufferSubData(tSrc, tDst, srcOffset, dstOffset, size)
                 )
 
 
@@ -53,7 +70,7 @@ module EXT_direct_state_access =
                     GL.BufferStorage(t, size, data, flags)
                 )
 
-        static member MapNamedBuffer(buffer: int, access : BufferAccess) =
+        static member MapNamedBuffer(buffer: int, access : OpenTK.Graphics.OpenGL4.BufferAccess) =
             if supported then
                 GL.Ext.MapNamedBuffer(buffer, unbox (int access))
             else

@@ -46,9 +46,10 @@ type Buffer =
             member x.Handle = x.Handle
             
         interface IBackendBuffer with
+            member x.Runtime = x.Context.Runtime :> IBufferRuntime
             member x.Handle = x.Handle :> obj
             member x.SizeInBytes = x.SizeInBytes
-
+            member x.Dispose() = x.Context.Runtime.DeleteBuffer x
 
         new(ctx : Context, size : nativeint, handle : int) = { Context = ctx; SizeInBytes = size; Handle = handle}
     end
@@ -103,7 +104,7 @@ module BufferExtensions =
                     handle
                 )
 
-            Buffer(x, nativeint size, handle)
+            new Buffer(x, nativeint size, handle)
 
         /// <summary>
         /// creates a new buffer and initializes its size (allocates GPU memory)
@@ -138,7 +139,7 @@ module BufferExtensions =
                     handle
                 )
 
-            Buffer(x, nativeint sizeInBytes, handle)
+            new Buffer(x, nativeint sizeInBytes, handle)
 
         /// <summary>
         /// creates a new buffer and initializes its content (copy to GPU memory)
@@ -170,8 +171,8 @@ module BufferExtensions =
                 | :? INativeBuffer as nb ->
                     nb.Use (fun ptr -> x.CreateBuffer(ptr, nb.SizeInBytes, Static))
 
-                | :? IBufferView as bv ->
-                    let handle = bv.Buffer.Handle
+                | :? IBufferRange as bv ->
+                    let handle = bv.Buffer
                     x.CreateBuffer handle
 
                 | _ -> 
@@ -191,8 +192,8 @@ module BufferExtensions =
                     n.Use (fun ptr -> x.Upload(b, ptr, nativeint n.SizeInBytes, useNamed))
 
                 
-                | :? IBufferView as bv ->
-                    let handle = bv.Buffer.Handle
+                | :? IBufferRange as bv ->
+                    let handle = bv.Buffer
                     x.Upload(b, handle, useNamed)
 
                 | _ ->

@@ -9,6 +9,7 @@ open System.Runtime.CompilerServices
 open System.Threading
 open System.Collections.Concurrent
 open Aardvark.Base
+open EXTDebugReport
 
 type MessageSeverity =
     | Information           = 0x00000001
@@ -60,12 +61,10 @@ type DebugMessage =
 
 [<AutoOpen>]
 module private DebugReportHelpers =
+    open EXTDebugReport
 
     [<AutoOpen>]
     module EnumExtensions =
-        type VkResult with
-            static member ErrorValidationFailed = -5000 |> unbox<VkResult>
-
         type VkDebugReportFlagBitsEXT with
             static member All =
                 VkDebugReportFlagBitsEXT.VkDebugReportDebugBitExt |||
@@ -79,24 +78,17 @@ module private DebugReportHelpers =
             VkDebugReportFlagBitsEXT * VkDebugReportObjectTypeEXT * 
             uint64 * uint64 * int * cstr * cstr * nativeint -> uint32
 
-    type VkCreateDebugReportCallbackEXTDelegate = delegate of VkInstance * nativeptr<VkDebugReportCallbackCreateInfoEXT> * nativeptr<VkAllocationCallbacks> * nativeptr<VkDebugReportCallbackEXT> -> VkResult
-    type VkDestroyDebugReportCallbackEXTDelegate = delegate of VkInstance * VkDebugReportCallbackEXT * nativeptr<VkAllocationCallbacks> -> unit
-
-    open System.IO
 
     type DebugReportAdapter internal(instance : Instance) =
         let flags = VkDebugReportFlagBitsEXT.All
-        let load (name : string) : 'a =
-            let ptr = VkRaw.vkGetInstanceProcAddr(instance.Handle, name)
-            if ptr = 0n then failf "could not get %s" name
-            else Marshal.GetDelegateForFunctionPointer(ptr, typeof<'a>) |> unbox<'a>
+//        let load (name : string) : 'a =
+//            let ptr = VkRaw.vkGetInstanceProcAddr(instance.Handle, name)
+//            if ptr = 0n then failf "could not get %s" name
+//            else Marshal.GetDelegateForFunctionPointer(ptr, typeof<'a>) |> unbox<'a>
 
         static let md5 = new System.Security.Cryptography.MD5Cng()
         static let ignoreRx = System.Text.RegularExpressions.Regex @"vkBeginCommandBuffer\(\)[ \t]*:[ \t]*Secondary[ \t]+Command[ \t]+Buffers[ \t]+\(0x[0-9A-Fa-f]+\)[ \t]+may[ \t]+perform[ \t]+better[ \t]+if[ \t]+a[ \t]+valid[ \t]+framebuffer[ \t]+parameter[ \t]+is[ \t]+specified\."
-        
-        let vkCreateDebugReportCallbackEXT : VkCreateDebugReportCallbackEXTDelegate = load "vkCreateDebugReportCallbackEXT"
-        let vkDestroyDebugReportCallbackEXT : VkDestroyDebugReportCallbackEXTDelegate = load "vkDestroyDebugReportCallbackEXT"
-     
+
         let mutable refCount = 0
         let mutable currentId = 0
         let observers = ConcurrentDictionary<int, IObserver<DebugMessage>>()
@@ -108,12 +100,12 @@ module private DebugReportHelpers =
         let raise (message : DebugMessage) = 
             for (KeyValue(_,obs)) in observers do
                 obs.OnNext message
-
-        let computeHash (f : BinaryWriter -> unit) =
-            use ms = new MemoryStream()
-            f (new BinaryWriter(ms, Text.Encoding.UTF8, true))
-            ms.ToArray() |> md5.ComputeHash |> Guid
-
+//
+//        let computeHash (f : BinaryWriter -> unit) =
+//            use ms = new MemoryStream()
+//            f (new BinaryWriter(ms, Text.Encoding.UTF8, true))
+//            ms.ToArray() |> md5.ComputeHash |> Guid
+//
 
 
         let callback (flags : VkDebugReportFlagBitsEXT) (objType : VkDebugReportObjectTypeEXT) (srcObject : uint64) (location : uint64) (msgCode : int) (layerPrefix : cstr) (msg : cstr) (userData : nativeint) =
@@ -150,7 +142,7 @@ module private DebugReportHelpers =
             if o <> 0 then
                 shutdown()
                 gc.Free()
-                vkDestroyDebugReportCallbackEXT.Invoke(instance.Handle, callback, NativePtr.zero)
+                VkRaw.vkDestroyDebugReportCallbackEXT(instance.Handle, callback, NativePtr.zero)
                 callback <- VkDebugReportCallbackEXT.Null
                 observers.Clear()
                 currentId <- 0
@@ -167,11 +159,11 @@ module private DebugReportHelpers =
                 let mutable info =
                     VkDebugReportCallbackCreateInfoEXT(
                         unbox 1000011000, 0n,
-                        uint32 flags,
+                        unbox (int flags),
                         ptr,
                         0n
                     )
-                vkCreateDebugReportCallbackEXT.Invoke(instance.Handle, &&info, NativePtr.zero, &&callback)
+                VkRaw.vkCreateDebugReportCallbackEXT(instance.Handle, &&info, NativePtr.zero, &&callback)
                     |> check "vkDbgCreateMsgCallback"
 
                 instance.BeforeDispose.AddHandler(instanceDisposedHandler)
@@ -184,7 +176,7 @@ module private DebugReportHelpers =
                     let n = Interlocked.Decrement(&refCount)
                     if n = 0 then
                         gc.Free()
-                        vkDestroyDebugReportCallbackEXT.Invoke(instance.Handle, callback, NativePtr.zero)
+                        VkRaw.vkDestroyDebugReportCallbackEXT(instance.Handle, callback, NativePtr.zero)
                         callback <- VkDebugReportCallbackEXT.Null
                         instance.BeforeDispose.RemoveHandler(instanceDisposedHandler)
                 | _ ->
