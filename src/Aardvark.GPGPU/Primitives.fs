@@ -860,6 +860,7 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
             )
         )
 
+    member x.Runtime = runtime
 
     member x.CompileScan(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, output : IBufferVector<'a>) =
         let scanner = getScanner add

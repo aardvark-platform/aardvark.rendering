@@ -31,9 +31,8 @@ let ceilDiv (v : int) (d : int) =
     if v % d = 0 then v / d
     else 1 + v / d
 
-let parallelFilter<'a when 'a : unmanaged> (runtime : IRuntime) (arr : 'a[]) (predicate : Expr<'a -> bool>) =
-    
-    let par = ParallelPrimitives(runtime)
+let parallelFilter<'a when 'a : unmanaged> (par : ParallelPrimitives) (arr : 'a[]) (predicate : Expr<'a -> bool>) =
+    let runtime = par.Runtime
 
     // create buffers holding the data
     use input   = runtime.CreateBuffer<'a>(arr)
@@ -95,7 +94,11 @@ let parallelFilter<'a when 'a : unmanaged> (runtime : IRuntime) (arr : 'a[]) (pr
     let overallCount = overallCount.[0]
     let resultCPU = result.[0..overallCount-1].Download()
 
+    // cleanup...
+    runtime.DeleteComputeShader resolveShader
+
     #if DEBUG
+    Log.line "data:   %A" arr
     Log.line "bits:   %A" bitsCPU
     Log.line "bitsum: %A" bitsumCPU
     #endif
@@ -109,9 +112,14 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
+    // create an application
     use app = new HeadlessVulkanApplication(false)
-    
+
+    // and an instance of our parallel primitives
+    let primitives = new ParallelPrimitives(app.Runtime)
+
+    // run the filter
     let testArr = [| 100; 5; 10; 20; 1000; 3 |]
-    parallelFilter app.Runtime  testArr <@ fun v -> v <= 20 @>
+    parallelFilter primitives testArr <@ fun v -> v <= 20 @>
 
     0
