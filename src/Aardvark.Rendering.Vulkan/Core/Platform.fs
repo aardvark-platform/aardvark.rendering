@@ -155,6 +155,7 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
                     )
                 PhysicalDeviceGroup(this, devices)
             )
+            |> Array.filter (fun g -> g.Devices.Length > 1)
         else
             [||]
 
@@ -387,7 +388,7 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, inde
 and PhysicalDeviceGroup internal(instance : Instance, devices : PhysicalDevice[]) =
     inherit PhysicalDevice(instance, devices.[0].Handle, devices.[0].Index)
    
-    member x.Devices = devices
+    member x.Devices : PhysicalDevice[] = devices
     override x.Id = devices |> Seq.map (fun d -> d.Id) |> String.concat "_"
 
     override x.ToString() =
