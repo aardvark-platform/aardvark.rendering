@@ -431,13 +431,17 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
     let mutable running = false
     let mutable color : Option<D3DRenderbuffer> = None
     let mutable depth : Option<Renderbuffer> = None
-    
+    let beforeRender = Event<unit>()
+    let afterRender = Event<unit>()
+
     let colorBufferLock = obj()
 
     let render (size : V2i) =
         lock colorBufferLock (fun () ->
             use __ = ctx.RenderingLock(handle)
             
+            beforeRender.Trigger()
+
             let backBuffer =
                 match color with
                     | None -> 
@@ -496,6 +500,8 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
             GL.DeleteFramebuffer fbo
             GL.Flush()
             GL.Finish()
+
+            afterRender.Trigger()
         )
 
     //let mutable backBufferDirty = 0
@@ -680,6 +686,8 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
 
     member x.Sizes = size :> IMod<_>
     
+    member x.BeforeRender = beforeRender
+    member x.AfterRender = afterRender
 
     interface IRenderTarget with
         member x.FramebufferSignature = x.FramebufferSignature
@@ -690,6 +698,8 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
             with get() = x.RenderTask
             and set t = x.RenderTask <- t
         member x.Sizes = x.Sizes
+        member x.BeforeRender = beforeRender.Publish
+        member x.AfterRender = afterRender.Publish
 
     interface IRenderControl with
         member x.Mouse = mouse :> IMouse

@@ -7,6 +7,7 @@ open System.Windows.Forms
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Base.Rendering
+open System.Threading
 
 type MultiFramebuffer(signature : IFramebufferSignature, framebuffers : IFramebuffer[]) =
     member x.Framebuffers = framebuffers
@@ -18,7 +19,7 @@ type MultiFramebuffer(signature : IFramebufferSignature, framebuffers : IFramebu
         member x.Attachments = failwith ""
         member x.Size = framebuffers.[0].Size
 
-type MultiRenderTask(runtime : IRuntime, signature : IFramebufferSignature, tasks : IRenderTask[]) =
+type MultiRenderTask(runtime : MultiRuntime, signature : IFramebufferSignature, tasks : IRenderTask[]) =
     inherit AdaptiveObject()
 
     member x.Tasks = tasks
@@ -33,18 +34,15 @@ type MultiRenderTask(runtime : IRuntime, signature : IFramebufferSignature, task
         member x.Use f = f()
         member x.FrameId = tasks |> Seq.map (fun t -> t.FrameId) |> Seq.max
         member x.FramebufferSignature = Some signature
-        member x.Runtime = Some runtime
+        member x.Runtime = Some (runtime :> IRuntime)
         member x.Run(t,rt,o) =
             x.EvaluateAlways t (fun t ->
-                match o.framebuffer with
-                    | :? MultiFramebuffer as f ->
-                        for (task,f) in Array.zip tasks f.Framebuffers do
-                            task.Run(t, rt, { o with framebuffer = f })
-                    | _ ->
-                        failwith "bad framebuffer"
+                let current = o.framebuffer.Signature.Runtime
+                let index = runtime.Runtimes.IndexOf current
+                tasks.[index].Run(t, rt, o)
             )
 
-type MultiFramebufferSignature(runtime : IRuntime, signatures : IFramebufferSignature[]) =
+and MultiFramebufferSignature(runtime : IRuntime, signatures : IFramebufferSignature[]) =
     member x.Signatures = signatures
     interface IFramebufferSignature with
         member x.IsAssignableFrom _ = true
@@ -94,9 +92,8 @@ type MultiFramebufferSignature(runtime : IRuntime, signatures : IFramebufferSign
 //        member x.UsedMemory = pools |> Array.sumBy (fun p -> p.UsedMemory)
 
 
-open System.Threading
 
-type private NAryTimeMod(inputs : IMod<DateTime>[]) =
+and private NAryTimeMod(inputs : IMod<DateTime>[]) =
     inherit Mod.AbstractMod<DateTime>()
 //
 //    let all = inputs |> Seq.map (fun m -> m.Id) |> Set.ofSeq
@@ -118,9 +115,33 @@ type private NAryTimeMod(inputs : IMod<DateTime>[]) =
         DateTime.Now
 
 
-type SplitControl(runtime : IRuntime, count : int, samples : int) as this =
+and SplitControl(runtime : IRuntime, count : int, samples : int) as this =
     inherit Panel()
     let controls = Array.init count (fun _ -> new RenderControl(Dock = DockStyle.None))
+
+    let beforeRender = Event<unit>()
+    let afterRender = Event<unit>()
+
+    let mutable beforeCount = 0
+    let mutable afterCount = 0
+
+    do controls |> Array.iter (fun c -> 
+        c.BeforeRender.Add (fun () ->
+            let nv = Interlocked.Increment(&beforeCount)
+            if nv = 1 then
+                beforeRender.Trigger()
+            elif nv = controls.Length then
+                beforeCount <- 0
+        )
+    )
+    do controls |> Array.iter (fun c -> 
+        c.AfterRender.Add (fun () ->
+            let nv = Interlocked.Increment(&afterCount)
+            if nv = controls.Length then
+                afterRender.Trigger()
+                afterCount <- 0
+        )
+    )
 
     let time = lazy (NAryTimeMod (controls |> Array.map (fun c -> c.Time)) :> IMod<_>)
 
@@ -185,6 +206,9 @@ type SplitControl(runtime : IRuntime, count : int, samples : int) as this =
         splitterChanged()
 
     member x.Controls = controls
+    
+    member x.BeforeRender = beforeRender.Publish
+    member x.AfterRender = afterRender.Publish
 
     interface IRenderTarget with
         member x.FramebufferSignature = signature.Value :> IFramebufferSignature
@@ -192,22 +216,21 @@ type SplitControl(runtime : IRuntime, count : int, samples : int) as this =
         member x.RenderTask
             with get() = task 
             and set t =
-                match t with
-                    | :? MultiRenderTask as t ->
-                        Array.iter2 (fun (c : RenderControl) (t : IRenderTask) -> c.RenderTask <- t) controls t.Tasks
-                        task <- t :> IRenderTask
-                    | _ ->
-                        ()
+                Array.iter (fun (c : RenderControl) -> c.RenderTask <- t) controls
+                task <- t
+
         member x.Samples = samples
         member x.Sizes = controls.[0].Sizes
         member x.Time = time.Value
+        member x.BeforeRender = beforeRender.Publish
+        member x.AfterRender = afterRender.Publish
 
     interface IRenderControl with
         member x.Mouse = mouse :> IMouse
         member x.Keyboard = keyboard :> IKeyboard
 
 
-type MultiRuntime(runtimes : IRuntime[]) =
+and MultiRuntime(runtimes : IRuntime[]) =
     let disp = Event<unit>()
     member x.Dispose() =
         disp.Trigger()
@@ -215,6 +238,8 @@ type MultiRuntime(runtimes : IRuntime[]) =
     interface IDisposable with
         member x.Dispose() =
             disp.Trigger()
+
+    member x.Runtimes : IRuntime[] = runtimes
 
     interface IRuntime with
         member x.DeviceCount = runtimes |> Seq.map (fun r -> r.DeviceCount) |> Seq.min

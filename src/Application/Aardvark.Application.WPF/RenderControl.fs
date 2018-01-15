@@ -22,6 +22,9 @@ type RenderControl() as self =
     let keyboard = new Aardvark.Application.WinForms.Keyboard()
     let mouse = new Aardvark.Application.WinForms.Mouse()
     let sizes = Mod.init (V2i(base.ActualWidth, base.ActualHeight))
+    
+    let beforeRender = Event<unit>()
+    let afterRender = Event<unit>()
 
 
     let actualSize = 
@@ -77,6 +80,9 @@ type RenderControl() as self =
             | Some task -> cr.RenderTask <- task
             | None -> ()
 
+            
+        cr.BeforeRender.Add beforeRender.Trigger
+        cr.AfterRender.Add afterRender.Trigger
 
         ctrl <- Some c
         impl <- Some cr
@@ -115,6 +121,11 @@ type RenderControl() as self =
                 | None -> ()
 
     member x.Time = time
+
+
+    member x.BeforeRender = beforeRender.Publish
+    member x.AfterRender = afterRender.Publish
+
     interface IRenderControl with
         member x.FramebufferSignature = x.FramebufferSignature
         member x.Runtime = x.Runtime
@@ -123,7 +134,9 @@ type RenderControl() as self =
         member x.Time = time
         member x.Keyboard = x.Keyboard
         member x.Mouse = x.Mouse
-
+        
+        member x.BeforeRender = beforeRender.Publish
+        member x.AfterRender = afterRender.Publish
         member x.RenderTask 
             with get() = x.RenderTask
             and set t = x.RenderTask <- t

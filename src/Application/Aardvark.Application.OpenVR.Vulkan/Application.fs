@@ -79,6 +79,9 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
     let keyboard = new EventKeyboard()
     let mouse = new EventMouse(false)
 
+    let beforeRender = Event<unit>()
+    let afterRender = Event<unit>()
+
     new(samples) = VulkanVRApplicationLayered(samples, false)
     new(debug) = VulkanVRApplicationLayered(1, debug)
     new() = VulkanVRApplicationLayered(1, false)
@@ -288,6 +291,9 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
 
         // dispose the app
         app.Dispose()
+        
+    member x.BeforeRender = beforeRender
+    member x.AfterRender = afterRender
 
     interface IRenderTarget with
         member x.Runtime = app.Runtime :> IRuntime
@@ -298,6 +304,8 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
             with get() = x.RenderTask
             and set t = x.RenderTask <- t
         member x.Time = time
+        member x.BeforeRender = beforeRender.Publish
+        member x.AfterRender = afterRender.Publish
 
     interface IRenderControl with
         member x.Keyboard = keyboard :> IKeyboard

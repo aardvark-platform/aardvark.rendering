@@ -22,6 +22,9 @@ type IRenderTarget =
     abstract member RenderTask : IRenderTask with get, set
     abstract member Time : IMod<DateTime>
 
+    abstract member BeforeRender : Microsoft.FSharp.Control.IEvent<unit>
+    abstract member AfterRender : Microsoft.FSharp.Control.IEvent<unit>
+
 type IRenderControl =
     inherit IRenderTarget
 

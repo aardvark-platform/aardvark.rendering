@@ -219,7 +219,7 @@ module Utilities =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
-    let private hookSg (win : IRenderControl) (sg : ISg) =
+    let private hookSg (config : RenderConfig )(win : IRenderControl) (sg : ISg) =
         let fillMode = Mod.init FillMode.Fill
         let cullMode = Mod.init CullMode.None
 
@@ -315,16 +315,19 @@ module Utilities =
                 for c in 0 .. 255 do yield char c
             }
 
-        win.Runtime.PrepareGlyphs(font, chars)
 
-        let overlay = 
-            Sg.text font C4b.White text
-                |> Sg.trafo trafo
-                |> Sg.uniform "ViewTrafo" (Mod.constant Trafo3d.Identity)
-                |> Sg.uniform "ProjTrafo" (Mod.constant Trafo3d.Identity)
-//                //|> Sg.translate -1.0 0.5 0.0
-                |> Sg.viewTrafo (Mod.constant Trafo3d.Identity)
-                |> Sg.projTrafo (Mod.constant Trafo3d.Identity)
+        let overlay =
+            match Environment.OSVersion with
+                | Windows when config.backend <> Backend.Both ->  
+                    win.Runtime.PrepareGlyphs(font, chars)
+                    Sg.text font C4b.White text
+                        |> Sg.trafo trafo
+                        |> Sg.uniform "ViewTrafo" (Mod.constant Trafo3d.Identity)
+                        |> Sg.uniform "ProjTrafo" (Mod.constant Trafo3d.Identity)
+                        |> Sg.viewTrafo (Mod.constant Trafo3d.Identity)
+                        |> Sg.projTrafo (Mod.constant Trafo3d.Identity)
+                | _ ->
+                    Sg.empty
 
         let sg = sg |> Sg.fillMode fillMode |> Sg.cullMode cullMode
         sg, overlay
@@ -358,7 +361,7 @@ module Utilities =
 
         { new SimpleRenderWindow(win, view |> Mod.map Array.singleton, proj |> Mod.map Array.singleton) with
             override x.Compile(win, sg) =
-                let sg, overlay = sg |> hookSg win
+                let sg, overlay = sg |> hookSg cfg win
                 sg
                 |> Sg.viewTrafo view
                 |> Sg.projTrafo proj
@@ -488,12 +491,12 @@ module Utilities =
                 |]
             )
 
-        let compile (sg : ISg) =
+        let compile (config : RenderConfig) (sg : ISg) =
 
             framebuffer.Acquire()
             resolved.Acquire()
 
-            let sg, overlay = sg |> hookSg win
+            let sg, overlay = sg |> hookSg config win
 
             let stereoTask =
                 sg
@@ -551,7 +554,7 @@ module Utilities =
         let res =
             { new SimpleRenderWindow(win, views, projs) with
                 override x.Compile(win, sg) =
-                    compile sg
+                    compile cfg sg
 
                 override x.Release() =
                     win.Dispose()

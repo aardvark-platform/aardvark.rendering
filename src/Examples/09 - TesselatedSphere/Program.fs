@@ -99,7 +99,7 @@ let main argv =
 
     let win = 
         window {
-            backend Backend.GL
+            backend Backend.Vulkan
             display Display.Mono
             debug false
             samples 8
@@ -111,10 +111,10 @@ let main argv =
     let sg =   
         model   
             |> Sg.effect [
-                // No Vertex shader since the tessellation evaluation shader adopts the final vertex transform
-                Shader.tesselationShader        |> toEffect       
-                DefaultSurfaces.vertexColor     |> toEffect
-                DefaultSurfaces.simpleLighting  |> toEffect
+                    // No Vertex shader since the tessellation evaluation shader adopts the final vertex transform
+                    Shader.tesselationShader        |> toEffect       
+                    DefaultSurfaces.vertexColor     |> toEffect
+                    DefaultSurfaces.simpleLighting  |> toEffect
                 ]
              |> Sg.blendMode (Rendering.BlendMode.Blend |> Mod.constant )
              |> Sg.fillMode  (FillMode.Line             |> Mod.constant)

@@ -61,7 +61,8 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) a
             and set t = x.RenderTask <- t
 
         member x.Sizes = x.Sizes
-
+        member x.BeforeRender = ctrl.BeforeRender
+        member x.AfterRender = ctrl.AfterRender
     new(context, enableDebug) = new OpenGlRenderControl(context, enableDebug, 1)
 
 #endif
