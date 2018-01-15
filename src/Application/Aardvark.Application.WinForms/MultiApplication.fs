@@ -174,20 +174,46 @@ and SplitControl(runtime : IRuntime, count : int, samples : int) as this =
 
         this.ResumeLayout()
 
+    let withLabel (i : int) (ctrl : RenderControl) =
+        let runtime = runtime |> unbox<MultiRuntime>
+        let text = 
+            let name = runtime.Runtimes.[i].GetType().FullName
+            if name.Contains "GL." then "GL"
+            else "Vulkan"
+            
+
+        let label = new Label(Text = text)
+        label.ForeColor <- Color.White
+        label.BackColor <- Color.Black
+        label.Font <- new Font("Consolas", 20.0f)
+        label.Width <- 100000
+        label.Height <- 30
+
+        let left = new Panel()
+        left.Controls.Add ctrl
+        left.Controls.Add label
+        left.Dock <- DockStyle.Fill
+        
+        label.BringToFront()
+        left :> Control
+
     let rec merge (i : int) (controls : RenderControl[]) =
         if i >= controls.Length - 1 then
-            controls.[i] :> Control
+            withLabel i controls.[i]
         else
-            let l = controls.[i]
-            let r = merge (i + 1) controls
+            let l = withLabel i controls.[i]
+
             let container = new SplitContainer(Dock = DockStyle.Fill)
+            splitters.[i] <- container
+
+            let r = merge (i + 1) controls
 
             container.Panel1.Controls.Add l
             container.Panel2.Controls.Add r
             container.SplitterMoved.Add (fun e ->
                 splitterChanged()
             )
-            splitters.[i] <- container
+
             container :> Control
 
     let content = merge 0 controls
