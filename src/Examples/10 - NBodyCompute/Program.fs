@@ -126,7 +126,7 @@ let main argv =
 
     let win =
         window {
-            backend Backend.Vulkan
+            backend Backend.GL
             display Display.Mono
             debug false
             samples 8

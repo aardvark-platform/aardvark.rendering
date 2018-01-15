@@ -403,24 +403,24 @@ module Utilities =
             let clearTask =
                 runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
 
-            let dependent =
-                Mod.custom (fun t ->
-                    let fbo = framebuffer.GetValue t
-                    let output = OutputDescription.ofFramebuffer fbo
-
-                    let r = resolved.GetValue(t)
-
-                    clearTask.Run(t, RenderToken.Empty, output)
-                    stereoTask.Run(t, RenderToken.Empty, output)
-                    runtime.Copy(colors.GetValue(t), 0, 0, r, 0, 0, 2, 1)
-
-                    r :> ITexture
-                )
+//            let dependent =
+//                Mod.custom (fun t ->
+//                    let fbo = framebuffer.GetValue t
+//                    let output = OutputDescription.ofFramebuffer fbo
+//
+//                    let r = resolved.GetValue(t)
+//
+//                    clearTask.Run(t, RenderToken.Empty, output)
+//                    stereoTask.Run(t, RenderToken.Empty, output)
+//                    runtime.Copy(colors.GetValue(t), 0, 0, r, 0, 0, 2, 1)
+//
+//                    r :> ITexture
+//                )
 
             let task =
                 Sg.fullScreenQuad
                     |> Sg.uniform "Dependent" (Mod.constant 0.0)
-                    |> Sg.diffuseTexture dependent
+                    |> Sg.diffuseTexture (resolved |> Mod.map (fun t -> t :> ITexture))
                     |> Sg.shader {
                         do! Shader.renderStereo
                     }
@@ -431,7 +431,16 @@ module Utilities =
                     member x.FramebufferSignature = Some win.FramebufferSignature
                     member x.Runtime = Some win.Runtime
                     member x.PerformUpdate (_,_) = ()
-                    member x.Perform (_,_,_) = ()
+                    member x.Perform (t,_,_) =
+                        let fbo = framebuffer.GetValue t
+                        let output = OutputDescription.ofFramebuffer fbo
+
+                        let r = resolved.GetValue(t)
+
+                        clearTask.Run(t, RenderToken.Empty, output)
+                        stereoTask.Run(t, RenderToken.Empty, output)
+                        runtime.Copy(colors.GetValue(t), 0, 0, r, 0, 0, 2, 1)
+
                     member x.Release() =
                         stereoTask.Dispose()
                         clearTask.Dispose()

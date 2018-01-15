@@ -68,9 +68,9 @@ let main argv =
         Sg.box' C4b.White Box3d.Unit 
             // here we use fshade to construct a shader: https://github.com/aardvark-platform/aardvark.docs/wiki/FShadeOverview
             |> Sg.effect [
-                DefaultSurfaces.trafo                 |> toEffect
-                DefaultSurfaces.constantColor C4f.Red |> toEffect
-                DefaultSurfaces.simpleLighting        |> toEffect
+                    DefaultSurfaces.trafo                 |> toEffect
+                    DefaultSurfaces.constantColor C4f.Red |> toEffect
+                    DefaultSurfaces.simpleLighting        |> toEffect
                 ]
             // extract our viewTrafo from the dynamic cameraView and attach it to the scene graphs viewTrafo 
             |> Sg.viewTrafo (cameraView  |> Mod.map CameraView.viewTrafo )

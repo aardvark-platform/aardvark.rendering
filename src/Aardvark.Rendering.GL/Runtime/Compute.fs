@@ -73,11 +73,16 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
                             let t = o.GetType()
                             let sem = ShaderParameterWriter.get t f.Type 
                             sem.WriteUnsafe(buffer.Data + nativeint f.Offset, o)
+                            buffer.Dirty <- true
                             lock dirtyBuffers (fun () -> dirtyBuffers.Add buffer |> ignore)
 
                 let name = ShaderPath.name f.Path
+
+                let nameFixed =
+                    if name.StartsWith "cs_" then name.Substring(3) else name
+
                 let ref = ComputeShaderInputReference.Uniform(write)
-                addReference name ref
+                addReference nameFixed ref
 
             b.Index, buffer
         )

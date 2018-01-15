@@ -85,6 +85,9 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
 
     let time = Mod.custom(fun _ -> DateTime.Now)
 
+    let beforeRender = Event<unit>()
+    let afterRender = Event<unit>()
+
     override x.OnLoad(desc : SwapchainDescription) =
         transact (fun () -> sizes.Value <- V2i(this.ClientSize.Width, this.ClientSize.Height))
         x.KeyDown.Add(fun e ->
@@ -100,7 +103,9 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
         if s <> sizes.Value then
             transact (fun () -> Mod.change sizes s)
 
+        beforeRender.Trigger()
         renderTask.Run(RenderToken.Empty, fbo)
+        afterRender.Trigger()
 
         //x.Invalidate()
         transact (fun () -> time.MarkOutdated())
@@ -153,6 +158,8 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
                 try base.Invoke (new System.Action(f)) |> ignore
                 with _ -> ()
 
+    member x.BeforeRender = beforeRender.Publish
+    member x.AfterRender = afterRender.Publish
     interface IRenderTarget with
         member x.FramebufferSignature = x.RenderPass :> IFramebufferSignature
         member x.Runtime = runtime :> IRuntime
@@ -163,5 +170,7 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
         member x.Samples = 1
         member x.Sizes = sizes :> IMod<_>
         member x.Time = time
+        member x.BeforeRender = beforeRender.Publish
+        member x.AfterRender = afterRender.Publish
 
 

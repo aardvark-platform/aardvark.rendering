@@ -35,7 +35,9 @@ type SimpleRenderWindow() =
     member x.Run() = 
         let app = Application()
         app.Run(x) |> ignore
-
+        
+    member x.BeforeRender = ctrl.BeforeRender
+    member x.AfterRender = ctrl.AfterRender
     interface IRenderWindow with
         member x.FramebufferSignature = ctrl.FramebufferSignature
         member x.Runtime = ctrl.Runtime
@@ -49,6 +51,8 @@ type SimpleRenderWindow() =
         member x.Keyboard = ctrl.Keyboard
         member x.Mouse = ctrl.Mouse
         member x.Run() = x.Run()
+        member x.BeforeRender = ctrl.BeforeRender
+        member x.AfterRender = ctrl.AfterRender
 
 
 [<AbstractClass; Sealed; Extension>]

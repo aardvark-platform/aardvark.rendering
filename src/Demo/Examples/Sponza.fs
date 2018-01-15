@@ -16,17 +16,18 @@ open Aardvark.Rendering.Text
 open System.Runtime.InteropServices
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.IO
-
+open FShade
 
 module Sponza =
     let run() =
-
+        
         let win = 
             window {
                 display Display.Mono
                 samples 8
-                backend Backend.Vulkan
-                debug true
+                backend Backend.Both
+
+                debug false
             }
 
         let sg = 
@@ -38,6 +39,15 @@ module Sponza =
                     do! DefaultSurfaces.trafo
                     do! DefaultSurfaces.diffuseTexture
                     do! DefaultSurfaces.simpleLighting
+
+                    do! fun (v : Effects.Vertex) ->
+                        fragment {
+                            let mutable a = cos(v.tc.X)
+                            for i in 1 .. 10000 do
+                                a <- a * sin(float i) * cos(float i)
+                            return v.c * (1.0 + a)
+                        }
+
                 }
 
         win.Scene <- sg

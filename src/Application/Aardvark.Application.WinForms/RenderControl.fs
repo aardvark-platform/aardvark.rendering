@@ -21,6 +21,9 @@ type RenderControl() as this =
     let focus = Mod.init false
     let mutable inner : Option<IMod<DateTime>> = None
 
+    let beforeRender = Event<unit>()
+    let afterRender = Event<unit>()
+
     let onGotFocus (sender : obj) (e : EventArgs) =
         transact(fun () ->
             Mod.change focus true)
@@ -75,6 +78,9 @@ type RenderControl() as this =
         ctrl <- Some c
         impl <- Some cr
         
+        cr.BeforeRender.Add beforeRender.Trigger
+        cr.AfterRender.Add afterRender.Trigger
+
         c.GotFocus.AddHandler gotFocusHandler
         c.LostFocus.AddHandler lostFocusHandler
         self.ResumeLayout()
@@ -152,6 +158,9 @@ type RenderControl() as this =
     member x.Runtime = impl.Value.Runtime
     member x.Time = time
     member x.Focus = focus :> IMod<_>
+    
+    member x.BeforeRender = beforeRender.Publish
+    member x.AfterRender = afterRender.Publish
 
     interface IRenderControl with
         member x.FramebufferSignature = impl.Value.FramebufferSignature
@@ -162,6 +171,9 @@ type RenderControl() as this =
 
         member x.Keyboard = x.Keyboard
         member x.Mouse = x.Mouse
+
+        member x.BeforeRender = beforeRender.Publish
+        member x.AfterRender = afterRender.Publish
 
         member x.RenderTask 
             with get() = x.RenderTask
