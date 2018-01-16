@@ -342,12 +342,9 @@ type private GLCompute(ctx : Context) =
 
             | ComputeCommand.SetBufferCmd(dst, value) ->
                 let dstBuffer = unbox<GL.Buffer> dst.Buffer
-                if dst.Offset = 0n && dst.Size = dstBuffer.SizeInBytes then
-                    GL.NamedBufferData(dstBuffer.Handle, dstBuffer.SizeInBytes, 0n, BufferUsageHint.StaticDraw)
-                else
-                    let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
-                    GL.NamedClearBufferSubData(dstBuffer.Handle, PixelInternalFormat.R32ui, dst.Offset, dst.Size, PixelFormat.Red, PixelType.UnsignedInt, gc.AddrOfPinnedObject())
-                    gc.Free()
+                let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
+                GL.NamedClearBufferSubData(dstBuffer.Handle, PixelInternalFormat.R32ui, dst.Offset, dst.Size, PixelFormat.Red, PixelType.UnsignedInt, gc.AddrOfPinnedObject())
+                gc.Free()
 
             | ComputeCommand.DownloadBufferCmd(src, dst) ->
                 let srcBuffer = unbox<GL.Buffer> src.Buffer
