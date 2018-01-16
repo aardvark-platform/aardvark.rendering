@@ -221,7 +221,13 @@ type UniformBufferManager(ctx : Context, block : ShaderBlock) =
     let size = block.DataSize
     let alignedSize = (size + 255) &&& ~~~255
 
-    let buffer = ctx.CreateSparseBuffer()
+    let buffer = 
+        // TODO: better implementation for uniform buffers (see https://github.com/aardvark-platform/aardvark.rendering/issues/32)
+        use __ = ctx.ResourceLock
+        let handle = GL.GenBuffer()
+        GL.Check "could not create buffer"
+        new FakeSparseBuffer(ctx, handle, id, id) :> SparseBuffer
+
     let manager = MemoryManager.createNop()
 
     let viewCache = ResourceCache<UniformBufferView, int>(None, None)
