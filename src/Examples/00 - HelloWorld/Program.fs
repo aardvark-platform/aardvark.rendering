@@ -29,7 +29,7 @@ let main argv =
     // Note that there is also a WPF binding for OpenGL. For more complex GUIs however,
     // we recommend using aardvark-media anyways..
     let win = app.CreateSimpleRenderWindow(samples = 8)
-    win.Text <- "Aardvark rocks \\o/"
+    //win.Title <- "Hello Aardvark"
 
     // Given eye, target and sky vector we compute our initial camera pose
     let initialView = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)

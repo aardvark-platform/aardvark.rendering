@@ -21,6 +21,7 @@ type SimpleRenderWindow() as this =
     let mutable totalTime = MicroTime.Zero
     let mutable baseTitle = ""
 
+    let mutable customTitle = None
     
 
     member x.NewFrame (t : MicroTime) = 
@@ -28,7 +29,9 @@ type SimpleRenderWindow() as this =
         totalTime <- totalTime + t
         if frameCount > 50 then
             let fps = float frameCount / totalTime.TotalSeconds
-            x.Text <- baseTitle + sprintf " (%.3f fps)" fps
+            // magic only if no custom
+            if Option.isNone customTitle then
+                x.Text <- baseTitle + sprintf " (%.3f fps)" fps
             frameCount <- 0
             totalTime <- MicroTime.Zero
         ()
@@ -38,11 +41,16 @@ type SimpleRenderWindow() as this =
         x.ClientSize <- System.Drawing.Size(1024, 768)
         ctrl.Dock <- DockStyle.Fill
         x.Controls.Add ctrl
-        // find better way...
-        let backend = 
-            if ctrl.Runtime.GetType().FullName.ToLower().Contains("vulkan") then "Vulkan"
-            else "OpenGL"
-        baseTitle <- sprintf "Aardvark rocks \\o/ (%s SimpleRenderWindow)" backend
+        match customTitle with
+            | None -> 
+                // find better way...
+                let backend = 
+                    if ctrl.Runtime.GetType().FullName.ToLower().Contains("vulkan") then "Vulkan"
+                    else "OpenGL"
+                baseTitle <- sprintf "Aardvark rocks \\o/ (%s SimpleRenderWindow)" backend
+            | Some t -> // override magic
+                baseTitle <- t
+
         x.Text <- baseTitle
         let alt = ctrl.Keyboard.IsDown(Keys.LeftAlt)
         let shift = ctrl.Keyboard.IsDown(Keys.LeftShift)
@@ -82,7 +90,11 @@ type SimpleRenderWindow() as this =
         and set (v : bool) =
             if x.Fullscreen <> v then
                 x.ToggleFullScreen()
-                    
+                   
+    member x.Title 
+        with set v =
+            customTitle <- Some v
+            base.Text <- v
 
     member x.Control = ctrl
 
