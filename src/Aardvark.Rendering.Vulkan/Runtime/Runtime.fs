@@ -159,8 +159,12 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     // install debug output to file (and errors/warnings to console)
     let debugSubscription = 
-        if debug then instance.DebugMessages.Subscribe debugMessage
-        else { new IDisposable with member x.Dispose() = () }
+        if debug then 
+            let res = instance.DebugMessages.Subscribe debugMessage
+            instance.RaiseDebugMessage(MessageSeverity.Warning, "enabled debug report")
+            res
+        else 
+            { new IDisposable with member x.Dispose() = () }
 
     let onDispose = Event<unit>()
 

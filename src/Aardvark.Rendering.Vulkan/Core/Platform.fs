@@ -60,7 +60,7 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
                             availableExtensions.[e.name.ToLower()] <- e.name
                         true
                     | _ ->
-                        VkRaw.warn "could not enable instance-layer '%s' since it is not available" name
+                        //VkRaw.warn "could not enable instance-layer '%s' since it is not available" name
                         false
             )
 
@@ -72,7 +72,7 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
                         VkRaw.debug "enabled extension %A" name
                         Some realName
                     | _ -> 
-                        VkRaw.warn "could not enable instance-extension '%s' since it is not available" name
+                        //VkRaw.warn "could not enable instance-extension '%s' since it is not available" name
                         None
             ) |> Set.ofSeq
 
@@ -176,7 +176,14 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
 
     member x.Devices = devicesAndGroups
 
-    member x.PrintInfo(l : ILogger, chosenDevice : int) =
+    member x.PrintInfo(l : ILogger, chosenDevice : PhysicalDevice) =
+        let devices =
+            match chosenDevice with
+                | :? PhysicalDeviceGroup as g -> g.Devices
+                | _ -> [| chosenDevice |]
+
+        let chosenDevices = HSet.ofArray devices
+
         let caps = 
             [
                 QueueFlags.Compute, "compute"
@@ -208,14 +215,15 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
             )
 
             l.section "devices:" (fun () ->
+                let mutable index = 0
                 for d in devices do
                     let l =
-                        if d.Index = chosenDevice then l
+                        if HSet.contains d chosenDevices then l
                         else l.WithVerbosity(l.Verbosity + 1)
 
 
-                    l.section "%d:" d.Index (fun () ->
-                        if d.Index = chosenDevice then 
+                    l.section "%d:" index (fun () ->
+                        if HSet.contains d chosenDevices then 
                             l.line "CHOSEN DEVICE"
                         l.line "type:     %A" d.Type
                         l.line "vendor:   %s" d.Vendor
@@ -263,7 +271,20 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
 
 
                     )
+
+                    index <- index + 1
             )
+
+            if devices.Length > 1 then
+                l.section "group:" (fun () ->
+                    for i in 0 .. devices.Length - 1 do
+                        let d = devices.[i]
+                        l.line "%d: %s %s" i d.Vendor d.Name
+                )
+            else
+                let d = devices.[0]
+                l.line "device: %s %s" d.Vendor d.Name
+
 
         )
 
@@ -304,7 +325,7 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, inde
     let name = properties.deviceName.Value
     let driverVersion = Version.FromVulkan properties.driverVersion
     let apiVersion = Version.FromVulkan properties.apiVersion
-    
+
     let queueFamilyInfos =
         let mutable count = 0u
         VkRaw.vkGetPhysicalDeviceQueueFamilyProperties(handle, &&count, NativePtr.zero)
@@ -365,7 +386,7 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, inde
     member x.Heaps = heaps
 
     member x.Handle = handle
-    member x.Index = index
+    //member x.Index : int = index
     member x.Vendor = vendor
     member x.Name = name
     member x.Type = properties.deviceType
@@ -379,14 +400,14 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, inde
     member x.Limits : DeviceLimits = limits
 
     abstract member Id : string
-    default x.Id = x.Vendor + x.Name + string index
+    default x.Id = sprintf "V%d_D%d" properties.vendorID properties.deviceID |> string
 
     override x.ToString() =
         sprintf "{ name = %s; type = %A; api = %A }" name x.Type x.APIVersion
     
 
 and PhysicalDeviceGroup internal(instance : Instance, devices : PhysicalDevice[]) =
-    inherit PhysicalDevice(instance, devices.[0].Handle, devices.[0].Index)
+    inherit PhysicalDevice(instance, devices.[0].Handle, -1)
    
     member x.Devices : PhysicalDevice[] = devices
     override x.Id = devices |> Seq.map (fun d -> d.Id) |> String.concat "_"
@@ -519,7 +540,7 @@ module ConsoleDeviceChooser =
                             | _ ->
                                 ()
                             
-                    File.WriteAllLines(configFile, [ allIds; string chosenId ])
+                    File.WriteAllLines(configFile, [ allIds; devices.[chosenId].Id ])
                     devices.[chosenId]
 
                 let altDown = 
