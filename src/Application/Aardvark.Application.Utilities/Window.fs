@@ -618,6 +618,66 @@ module Utilities =
 
 [<AutoOpen>]
 module ``Render Utilities`` =
+    open System.Text.RegularExpressions
+
+    let private backendRX = Regex @"(--backend|-b)[ \t]*(?<name>[a-zA-Z_]+)"
+    let private displayRX = Regex @"(--display|-d)[ \t]*(?<name>[a-zA-Z_]+)"
+    let private samplesRX = Regex @"(--samples|-s)[ \t]*(?<value>[0-9]+)"
+    let private debugRX = Regex @"(--debug|-g)[ \t]*(?<state>(on|off)?)"
+
+    let private cliOverrides (cfg : RenderConfig) =
+        let args = System.Environment.GetCommandLineArgs() |> Array.skip 1 |> String.concat " "
+
+        let mutable cfg = cfg
+        let m = backendRX.Match args
+        if m.Success then 
+            match m.Groups.["name"].Value.ToLower() with
+                | "vulkan" | "vk" -> 
+                    Log.line "[Application] using Vulkan"
+                    cfg <- { cfg with backends = [Backend.Vulkan] }
+                | "gl" | "opengl" -> 
+                    Log.line "[Application] using GL"
+                    cfg <- { cfg with backends = [Backend.GL] }
+                | v -> 
+                    Log.warn "[Application] bad backend: %s" v
+
+        let m = displayRX.Match args
+        if m.Success then 
+            match m.Groups.["name"].Value.ToLower() with
+                | "stereo" -> 
+                    Log.line "[Application] using Stereo display"
+                    cfg <- { cfg with display = Display.Stereo }
+                | "mono" -> 
+                    Log.line "[Application] using Mono display"
+                    cfg <- { cfg with display = Display.Mono }
+                | "vr" | "openvr" -> 
+                    Log.line "[Application] using OpenVR display"
+                    cfg <- { cfg with display = Display.OpenVR }
+                | v -> 
+                    Log.warn "bad display: %s" v
+
+        let m = samplesRX.Match args
+        if m.Success then
+            let samples = Int32.Parse(m.Groups.["value"].Value)
+            Log.line "[Application] using %d samples" samples
+            cfg <- { cfg with samples = samples }
+
+        let m = debugRX.Match args
+        if m.Success then    
+            let g = m.Groups.["state"]
+            let state =
+                if g.Success then 
+                    match g.Value with
+                        | "off" -> false
+                        | _ -> true
+                else
+                    true
+            Log.line "[Application] debug: %A" state
+            cfg <- { cfg with debug = state }
+
+
+        cfg
+
     type ShowBuilder() =
         member x.Yield(()) =
             {
@@ -663,10 +723,12 @@ module ``Render Utilities`` =
             { state with game = game }
 
         member x.Run(cfg : RenderConfig) =
-            Utilities.runConfig cfg
+            Utilities.runConfig (cliOverrides cfg)
 
     type WindowBuilder() =
+
         member x.Yield(()) =
+    
             {
                 backends = [Backend.Vulkan]
                 debug = true
@@ -706,7 +768,7 @@ module ``Render Utilities`` =
             { state with initialCamera = Some c }
 
         member x.Run(cfg : RenderConfig) =
-            Utilities.createWindow cfg
+            Utilities.createWindow (cliOverrides cfg)
             
     let window = WindowBuilder()
     let show = ShowBuilder()
