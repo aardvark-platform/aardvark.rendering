@@ -310,7 +310,9 @@ module GameWindowIO =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
-
+module DefaultText =
+    [<Literal>]
+    let baseText = "Aardvark rocks \\o/ - OpenGL GameWindow"
 
 type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
     inherit OpenTK.GameWindow(
@@ -325,7 +327,7 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
             Config.Buffers, 
             false
         ),
-        "Aardvark rocks \\o/ (OpenGL GameWindow)",
+        DefaultText.baseText,
         GameWindowFlags.Default,
         DisplayDevice.Default,
         Config.MajorVersion, 
@@ -393,6 +395,20 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
     do mouse.SetControl this
        keyboard.SetControl this
 
+    let mutable frameCount = 0
+    let mutable totalTime = MicroTime.Zero
+    let mutable baseTitle = ""
+
+    member x.NewFrame (t : MicroTime) = 
+        frameCount <- frameCount + 1
+        totalTime <- totalTime + t
+        if frameCount > 50 then
+            let fps = float frameCount / totalTime.TotalSeconds
+            base.Title <- DefaultText.baseText + sprintf " (%.3f fps)" fps
+            frameCount <- 0
+            totalTime <- MicroTime.Zero
+        ()
+
     member x.RenderTask
         with get() = task.Value
         and set t = task <- Some t
@@ -402,6 +418,9 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
     member x.Time = time :> IMod<_>
 
     member x.AverageFrameTime = MicroTime(TimeSpan.FromSeconds avgFrameTime.Average)
+
+    member x.BeforeRender = beforeRender.Publish
+    member x.AfterRender = afterRender.Publish
 
     override x.OnLoad(e) =
         GL.Hint(HintTarget.PointSmoothHint, HintMode.Fastest)
@@ -413,6 +432,10 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
 
         if ContextHandle.primaryContext <> null then
             ContextHandle.primaryContext.MakeCurrent()
+
+        let sw = System.Diagnostics.Stopwatch()
+        x.BeforeRender.Add sw.Restart
+        x.AfterRender.Add (fun () -> sw.Stop(); x.NewFrame sw.MicroTime)
 
         base.OnLoad(e)
         loaded <- true
@@ -478,9 +501,7 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
     member x.Run()  =
         startupTime.Start()
         x.Run()
-        
-    member x.BeforeRender = beforeRender.Publish
-    member x.AfterRender = afterRender.Publish
+       
 
     interface IRenderTarget with
         member x.FramebufferSignature = fboSignature :> IFramebufferSignature
