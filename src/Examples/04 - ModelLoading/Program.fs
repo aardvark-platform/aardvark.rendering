@@ -13,7 +13,7 @@ let main argv =
 
     let sg = 
         // load the scene and wrap it in an adapter
-        Loader.Assimp.load @"..\..\data\aardvark\aardvark.obj"
+        Loader.Assimp.load (Path.combine ["..";"..";"data";"aardvark";"aardvark.obj"])
             |> Sg.adapter
 
             // flip the z coordinates (since the model is upside down)
