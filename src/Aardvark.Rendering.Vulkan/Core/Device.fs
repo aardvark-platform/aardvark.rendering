@@ -107,6 +107,10 @@ type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExt
             | :? PhysicalDeviceGroup as g -> true, g.Devices
             | _ -> false, [| dev |]
 
+    let wantedExtensions =
+        if isGroup then wantedExtensions |> Set.add KHXDeviceGroup.Name
+        else wantedExtensions
+
     let physical = deviceGroup.[0]
     let pool = QueueFamilyPool(physical.QueueFamilies)
     let graphicsQueues  = pool.TryTakeSingleFamily(QueueFlags.Graphics, 4)
@@ -145,7 +149,7 @@ type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExt
                             availableExtensions.[e.name.ToLower()] <- e.name
                         true
                     | _ ->
-                        VkRaw.warn "could not enable instance-layer '%s' since it is not available" name
+                        VkRaw.warn "could not enable device-layer '%s' since it is not available" name
                         false
             )
 
@@ -157,7 +161,7 @@ type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExt
                         VkRaw.debug "enabled extension %A" name
                         Some realName
                     | _ -> 
-                        VkRaw.warn "could not enable instance-extension '%s' since it is not available" name
+                        VkRaw.warn "could not enable device-extension '%s' since it is not available" name
                         None
             ) |> Set.ofSeq
 

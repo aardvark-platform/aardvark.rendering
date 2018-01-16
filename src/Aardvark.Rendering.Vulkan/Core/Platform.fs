@@ -18,7 +18,10 @@ open KHRExternalMemoryCapabilities
 type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<string>) as this =   
     inherit VulkanObject()
 
-    let extensions = extensions |> Set.add KHXDeviceGroupCreation.Name |> Set.add KHXDeviceGroup.Name |> Set.add KHRGetPhysicalDeviceProperties2.Name
+    let extensions = 
+        extensions 
+            |> Set.add KHXDeviceGroupCreation.Name
+            |> Set.add KHRGetPhysicalDeviceProperties2.Name
 
     static let availableLayers =
         let mutable count = 0u
