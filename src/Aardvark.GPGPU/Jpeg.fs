@@ -1190,7 +1190,7 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
     let alignedSize = size |> Align.next2 8
     
     let alignedPixelCount   = int64 alignedSize.X * int64 alignedSize.Y
-    let outputSize          = alignedPixelCount
+    let outputSize          = alignedPixelCount * 3L
 
     let dctBuffer           = runtime.CreateBuffer<V4i>(int alignedPixelCount)
     let codewordBuffer      = runtime.CreateBuffer<V2i>(int alignedPixelCount * 3)
