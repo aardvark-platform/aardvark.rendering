@@ -114,13 +114,23 @@ type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExt
     let transferQueues  = pool.TryTakeSingleFamily(QueueFlags.Transfer ||| QueueFlags.SparseBinding, 2)
     let onDispose = Event<unit>()
     
-    let allIndicesArr = deviceGroup |> Array.mapi (fun i d -> uint32 i)
+    let allIndicesArr = 
+        [|
+            let mutable mask = 1u
+            for i in 0u .. 31u do
+                if dev.DeviceMask &&& mask <> 0u then
+                    yield i
+                mask <- mask <<< 1
+                
+        |]
+
     let allIndices = 
         let ptr = NativePtr.alloc allIndicesArr.Length
         for i in 0 .. allIndicesArr.Length - 1 do
             NativePtr.set ptr i allIndicesArr.[i]
         ptr
-    let allMask = deviceGroup |> Array.mapi (fun i d -> 1u <<< i) |> Array.fold (|||) 0u
+
+    let allMask = dev.DeviceMask
 
     let layers, extensions =
         let availableExtensions = physical.GlobalExtensions |> Seq.map (fun e -> e.name.ToLower(), e.name) |> Dictionary.ofSeq
@@ -363,6 +373,7 @@ type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExt
     member internal x.AllQueueFamiliesPtr = pAllFamilies
     member internal x.AllQueueFamiliesCnt = pAllFamiliesCnt
     member internal x.AllSharingMode = concurrentSharingMode
+
     member internal x.AllMask = allMask
     member internal x.AllCount = uint32 deviceGroup.Length
     member internal x.AllIndices = allIndices

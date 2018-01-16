@@ -23,9 +23,9 @@ module Sponza =
         
         let win = 
             window {
-                display Display.Mono
+                display Display.Stereo
                 samples 8
-                backend Backend.Both
+                backend Backend.Vulkan
 
                 debug false
             }
