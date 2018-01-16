@@ -3375,8 +3375,12 @@ module Image =
         if Interlocked.Decrement(&img.RefCount) = 0 then
             if device.Handle <> 0n && img.Handle.IsValid then
                 VkRaw.vkDestroyImage(img.Device.Handle, img.Handle, NativePtr.zero)
+                for p in img.PeerHandles do VkRaw.vkDestroyImage(img.Device.Handle, p, NativePtr.zero)
+                img.PeerHandles <- null
                 img.Memory.Dispose()
                 img.Handle <- VkImage.Null
+
+
 
     let create (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : TextureFormat) (usage : VkImageUsageFlags) (device : Device) =
         let vkfmt = VkFormat.ofTextureFormat fmt
