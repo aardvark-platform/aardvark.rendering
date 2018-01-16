@@ -75,7 +75,7 @@ let main argv =
         window {
             display Display.Mono
             samples 8
-            backend Backend.GL
+            backend Backend.Vulkan
             initialCamera (CameraView.lookAt (V3d.III * 20.0) V3d.OOO V3d.OOI)
             debug true
         }

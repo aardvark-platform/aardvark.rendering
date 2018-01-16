@@ -48,55 +48,55 @@ module IndexedGeometryPrimitives =
                 )
                     
 
-        let fromAttribs (pos:V3d[]) 
+        let fromAttribs (pos:V3f[]) 
                         (col:IndexedAttributeSpecification<C4b>) 
-                        (norm:IndexedAttributeSpecification<V3d>) (idx:Option<int[]>) mode =
+                        (norm:IndexedAttributeSpecification<V3f>) (idx:Option<int[]>) mode =
             let stuff =
                 [
                     yield DefaultSemantic.Positions,  pos     :> Array
                     yield DefaultSemantic.Colors, (col |> IndexedAttributeSpecification.toArray pos C4b.Red) :> Array
-                    yield DefaultSemantic.Normals,(norm |> IndexedAttributeSpecification.toArray pos V3d.OOI):> Array
+                    yield DefaultSemantic.Normals,(norm |> IndexedAttributeSpecification.toArray pos V3f.OOI):> Array
                 ] |> SymDict.ofList
             fromIndexedAttribs stuff idx mode
 
         let fromAttribsSimple pos col norm idx mode =
             fromAttribs pos (ManyValues col) (ManyValues norm) idx mode
 
-        let fromPos (pos:V3d[]) (idx:Option<int[]>) mode =
+        let fromPos (pos:V3f[]) (idx:Option<int[]>) mode =
             fromAttribs pos Nothing Nothing idx mode 
 
-        let fromPosCol (pos:V3d[]) (col:C4b[]) (idx:Option<int[]>) mode =
+        let fromPosCol (pos:V3f[]) (col:C4b[]) (idx:Option<int[]>) mode =
             fromAttribs pos (ManyValues col) Nothing idx mode 
 
-        let fromPosCol' (pos:V3d[]) (col:C4b) (idx:Option<int[]>) mode =
+        let fromPosCol' (pos:V3f[]) (col:C4b) (idx:Option<int[]>) mode =
             fromAttribs pos (OneValue col) Nothing idx mode 
 
-        let fromPosColNorm (pos:V3d[]) (col:C4b[]) (norm:V3d[]) (idx:Option<int[]>) mode =
+        let fromPosColNorm (pos:V3f[]) (col:C4b[]) (norm:V3f[]) (idx:Option<int[]>) mode =
             fromAttribs pos (ManyValues col) (ManyValues norm) idx mode 
 
-        let fromPosColNorm' (pos:V3d[]) (col:C4b[]) (norm:V3d) (idx:Option<int[]>) mode =
+        let fromPosColNorm' (pos:V3f[]) (col:C4b[]) (norm:V3f) (idx:Option<int[]>) mode =
             fromAttribs pos (ManyValues col) (OneValue norm) idx mode 
         
-        let fromPosCol'Norm (pos:V3d[]) (col:C4b) (norm:V3d[]) (idx:Option<int[]>) mode =
+        let fromPosCol'Norm (pos:V3f[]) (col:C4b) (norm:V3f[]) (idx:Option<int[]>) mode =
             fromAttribs pos (OneValue col) (ManyValues norm) idx mode 
 
-        let fromPosCol'Norm' (pos:V3d[]) (col:C4b) (norm:V3d) (idx:Option<int[]>) mode =
+        let fromPosCol'Norm' (pos:V3f[]) (col:C4b) (norm:V3f) (idx:Option<int[]>) mode =
             fromAttribs pos (OneValue col) (OneValue norm) idx mode 
 
-    let points (pos : V3d[]) (col : C4b[]) =
+    let points (pos : V3f[]) (col : C4b[]) =
         IndexedGeometry.fromPosCol pos col None IndexedGeometryMode.PointList
 
-    let pointsWithNormals (pos : V3d[]) (col : C4b[]) (norm : V3d[]) =
+    let pointsWithNormals (pos : V3f[]) (col : C4b[]) (norm : V3f[]) =
         IndexedGeometry.fromPosColNorm pos col norm None IndexedGeometryMode.PointList
 
-    let point (pos : V3d) (col : C4b) =
+    let point (pos : V3f) (col : C4b) =
         IndexedGeometry.fromPosCol' [|pos|] col None IndexedGeometryMode.PointList
 
-    let pointWithNormal (pos : V3d) (col : C4b) (norm : V3d) =
+    let pointWithNormal (pos : V3f) (col : C4b) (norm : V3f) =
         IndexedGeometry.fromPosCol'Norm' [|pos|] col norm None IndexedGeometryMode.PointList
 
     let lines (lines:seq<Line3d*C4b>) =
-        let pos = lines |> Seq.map fst |> Seq.collect(fun l -> [|l.P0.ToV3f().ToV3d(); l.P1.ToV3f().ToV3d()|]) |> Seq.toArray
+        let pos = lines |> Seq.map fst |> Seq.collect(fun l -> [|l.P0.ToV3f(); l.P1.ToV3f()|]) |> Seq.toArray
         let col = lines |> Seq.map snd |> Seq.collect(fun c -> [|c;c|]) |> Seq.toArray
         IndexedGeometry.fromPosCol pos col None IndexedGeometryMode.LineList
 
@@ -108,7 +108,7 @@ module IndexedGeometryPrimitives =
 
     let quad (v0 : V3d * C4b) (v1 : V3d * C4b) (v2 : V3d * C4b) (v3 : V3d * C4b) =
         let ((p0,c0),(p1,c1),(p2,c2),(p3,c3)) = v0,v1,v2,v3
-        let pos = [| p0; p1; p2; p3 |]
+        let pos = [| V3f p0; V3f p1; V3f p2; V3f p3 |]
         let col = [| c0; c1; c2; c3 |]
         let idx = Some [|0;1;2; 0;2;3|]
         IndexedGeometry.fromPosCol pos col idx IndexedGeometryMode.TriangleList
@@ -117,7 +117,7 @@ module IndexedGeometryPrimitives =
         quad (v0, col) (v1, col) (v2, col) (v3, col)
         
     let triangles (tris:seq<Triangle3d * C4b>) =
-        let pos = tris |> Seq.map fst |> Seq.collect(fun t -> [|t.P0.ToV3f().ToV3d(); t.P1.ToV3f().ToV3d(); t.P2.ToV3f().ToV3d()|]) |> Seq.toArray
+        let pos = tris |> Seq.map fst |> Seq.collect(fun t -> [|t.P0.ToV3f(); t.P1.ToV3f(); t.P2.ToV3f()|]) |> Seq.toArray
         let col = tris |> Seq.map snd |> Seq.collect(fun c -> [|c;c;c|]) |> Seq.toArray
         IndexedGeometry.fromPosCol pos col None IndexedGeometryMode.TriangleList
 
@@ -125,9 +125,9 @@ module IndexedGeometryPrimitives =
         triangles (tris |> Seq.map ( fun t -> t,col ))
 
     let trianglesWithNormals (tris:seq<Triangle3d * C4b * V3d>) =
-        let pos = tris |> Seq.map fst' |> Seq.collect(fun t -> [|t.P0.ToV3f().ToV3d(); t.P1.ToV3f().ToV3d(); t.P2.ToV3f().ToV3d()|]) |> Seq.toArray
+        let pos = tris |> Seq.map fst' |> Seq.collect(fun t -> [|t.P0.ToV3f(); t.P1.ToV3f(); t.P2.ToV3f()|]) |> Seq.toArray
         let col = tris |> Seq.map snd' |> Seq.collect(fun c -> [|c;c;c|]) |> Seq.toArray
-        let nrm = tris |> Seq.map trd' |> Seq.collect(fun n -> [|n;n;n|]) |> Seq.toArray
+        let nrm = tris |> Seq.map trd' |> Seq.collect(fun n -> [|V3f n;V3f n;V3f n|]) |> Seq.toArray
         IndexedGeometry.fromPosColNorm pos col nrm None IndexedGeometryMode.TriangleList
 
     let triangles'WithNormals (tris:seq<Triangle3d * V3d>) (col : C4b) =
@@ -307,7 +307,7 @@ module IndexedGeometryPrimitives =
             let (idx,pos,norm) = tessellated tess mode
             let trafo = Trafo3d.Translation(sphere.Center)
             let scale = Trafo3d.Scale(sphere.Radius)
-            let pos = pos |> Array.map (scale.Forward.TransformPos >> trafo.Forward.TransformPos)
+            let pos = pos |> Array.map (scale.Forward.TransformPos >> trafo.Forward.TransformPos >> V3f)
             let col = color |> Array.replicate (pos |> Array.length) 
             
             IndexedGeometry.fromPosCol pos col (Some idx) mode
@@ -423,9 +423,10 @@ module IndexedGeometryPrimitives =
             vertices.Add(V3d.OOO)
             normals.Add(-axisNormalized)
 
-            let pos = vertices |> Seq.toArray |> Array.map (Trafo3d.Translation(center).Forward.TransformPos)
-            let norm = normals |> Seq.toArray
+            let pos = vertices |> Seq.toArray |> Array.map (Trafo3d.Translation(center).Forward.TransformPos >> V3f)
+            let norm = normals |> Seq.map V3f |> Seq.toArray
             let idx = indices  |> Seq.toArray
+
 
             pos,norm,idx
 
@@ -490,9 +491,9 @@ module IndexedGeometryPrimitives =
                     positions.AddRange quad
                     normals.AddRange (Triangle3d(quad).Normal |> Array.replicate 4)
             
-            let pos = positions |> Seq.toArray
+            let pos = positions |> Seq.map V3f |> Seq.toArray
             let idx = indices   |> Seq.toArray
-            let norm = normals  |> Seq.toArray
+            let norm = normals |> Seq.map V3f |> Seq.toArray
 
             idx,pos,norm
         
