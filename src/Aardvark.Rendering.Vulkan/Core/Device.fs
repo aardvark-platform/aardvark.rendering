@@ -114,13 +114,13 @@ type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExt
     let transferQueues  = pool.TryTakeSingleFamily(QueueFlags.Transfer ||| QueueFlags.SparseBinding, 2)
     let onDispose = Event<unit>()
     
-    let allIndicesArr = deviceGroup |> Array.map (fun d -> uint32 d.Index)
+    let allIndicesArr = deviceGroup |> Array.mapi (fun i d -> uint32 i)
     let allIndices = 
         let ptr = NativePtr.alloc allIndicesArr.Length
         for i in 0 .. allIndicesArr.Length - 1 do
             NativePtr.set ptr i allIndicesArr.[i]
         ptr
-    let allMask = deviceGroup |> Array.map (fun d -> 1u <<< d.Index) |> Array.fold (|||) 0u
+    let allMask = deviceGroup |> Array.mapi (fun i d -> 1u <<< i) |> Array.fold (|||) 0u
 
     let layers, extensions =
         let availableExtensions = physical.GlobalExtensions |> Seq.map (fun e -> e.name.ToLower(), e.name) |> Dictionary.ofSeq

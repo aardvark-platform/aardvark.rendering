@@ -100,6 +100,10 @@ module private DebugReportHelpers =
         let raise (message : DebugMessage) = 
             for (KeyValue(_,obs)) in observers do
                 obs.OnNext message
+
+
+
+
 //
 //        let computeHash (f : BinaryWriter -> unit) =
 //            use ms = new MemoryStream()
@@ -182,6 +186,8 @@ module private DebugReportHelpers =
                 | _ ->
                     Report.Warn "[Vulkan] DebugReport Observer removed which was never added"
 
+        let layer = CStr.malloc "DebugReport"
+
         interface IObservable<DebugMessage> with
             member x.Subscribe (observer : IObserver<DebugMessage>) =
                 let id = add observer
@@ -189,10 +195,30 @@ module private DebugReportHelpers =
                     member x.Dispose() = remove id
                 }
                 
+        member x.Raise(severity : MessageSeverity, msg : string) =
+            let flags =
+                match severity with
+                    | MessageSeverity.Debug -> VkDebugReportFlagBitsEXT.VkDebugReportDebugBitExt 
+                    | MessageSeverity.Information -> VkDebugReportFlagBitsEXT.VkDebugReportInformationBitExt
+                    | MessageSeverity.PerformanceWarning -> VkDebugReportFlagBitsEXT.VkDebugReportPerformanceWarningBitExt
+                    | MessageSeverity.Warning -> VkDebugReportFlagBitsEXT.VkDebugReportWarningBitExt
+                    | MessageSeverity.Error -> VkDebugReportFlagBitsEXT.VkDebugReportErrorBitExt
+                    | _ -> VkDebugReportFlagBitsEXT.None
 
+            msg |> CStr.suse (fun str -> 
+                VkRaw.vkDebugReportMessageEXT(
+                    instance.Handle,
+                    unbox (int flags),
+                    VkDebugReportObjectTypeEXT.VkDebugReportObjectTypeUnknownExt,
+                    0UL, 0UL, 0,
+                    layer,
+                    str
+                )
+            )
+            
 [<AbstractClass; Sealed; Extension>]
 type InstanceExtensions private() =
-    static let table = new ConditionalWeakTable<Instance, IObservable<DebugMessage>>()
+    static let table = new ConditionalWeakTable<Instance, Option<DebugReportAdapter>>()
 
     static let notEnabledObservable =
         { new IObservable<DebugMessage> with
@@ -209,22 +235,30 @@ type InstanceExtensions private() =
                 { new IDisposable with member x.Dispose() = () }
         }
 
-    static let getMessageObservable (instance : Instance) =
+    static let getAdapter (instance : Instance) =
         lock table (fun () ->
             match table.TryGetValue instance with
                 | (true, adapter) -> adapter
                 | _ ->
                     if Set.contains Instance.Extensions.DebugReport instance.EnabledExtensions then
-                        let adapter = new DebugReportAdapter(instance) :> IObservable<_>
-                        table.Add(instance, adapter)
-                        adapter
+                        let adapter = new DebugReportAdapter(instance)
+                        table.Add(instance, Some adapter)
+                        Some adapter
                     else
-                       notEnabledObservable 
+                       None 
         )
 
     [<Extension>]
     static member GetDebugMessageObservable(this : Instance) =
-        getMessageObservable this
+        match getAdapter this with
+            | Some a -> a :> IObservable<_>
+            | _ -> notEnabledObservable
+
+    [<Extension>]
+    static member RaiseDebugMessage(this : Instance, severity : MessageSeverity, msg : string) =
+        match getAdapter this with
+            | Some a -> a.Raise(severity, msg)
+            | _ -> ()
 
 [<AutoOpen>]
 module ``FSharp Style Debug Extensions`` =

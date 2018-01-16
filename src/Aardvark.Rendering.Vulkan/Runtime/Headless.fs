@@ -58,7 +58,7 @@ type HeadlessVulkanApplication(debug : bool, instanceExtensions : list<string>, 
         else
             ConsoleDeviceChooser.run instance.Devices
 
-    do instance.PrintInfo(Logger.Default, physicalDevice.Index)
+    do instance.PrintInfo(Logger.Default, physicalDevice)
 
     // create a device
     let device = 

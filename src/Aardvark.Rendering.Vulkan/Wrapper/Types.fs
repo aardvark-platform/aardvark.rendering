@@ -142,6 +142,12 @@ module CStr =
         str |> writeTo ptr |> ignore
         ptr
 
+    [<System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)>]
+    let suse (f : cstr -> 'r) (str : string) =
+        let ptr = NativePtr.stackalloc (str.Length - 1)
+        str |> writeTo ptr |> ignore
+        f ptr
+
     let inline sallocMany (strs : seq<string>) =
         let mutable length = 0
         let mutable count = 0

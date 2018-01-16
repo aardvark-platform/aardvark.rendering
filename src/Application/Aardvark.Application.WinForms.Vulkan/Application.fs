@@ -137,7 +137,7 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
         else
             chooseDevice (Array.toList instance.Devices)
 
-    do instance.PrintInfo(Logger.Get 2, physicalDevice.Index)
+    do instance.PrintInfo(Logger.Get 2, physicalDevice)
 
     // create a device
     let device = 
