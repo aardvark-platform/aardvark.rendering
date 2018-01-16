@@ -437,7 +437,7 @@ module Loader =
             let toTextures (table : Map<string, Map<Symbol, string>>) (m : Assimp.TextureSlot[]) : Map<Symbol, Texture> =
                 let slots = 
                     m |> Seq.toList |> List.map (fun slot -> 
-                        let path = slot.FilePath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+                        let path = slot.FilePath.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar)
                         let name = Path.GetFileNameWithoutExtension(path).ToLower()
                         name, slot
                     )
@@ -485,7 +485,6 @@ module Loader =
                                     textures <- Map.add k { texture = FileTexture(v, true) :> ITexture; coordIndex = 0 } textures
                         | None ->
                             ()
-
 
                 textures
 
