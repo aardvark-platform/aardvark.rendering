@@ -9,6 +9,8 @@ open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 open System.Reflection
 open KHXDeviceGroupCreation
+open KHRGetPhysicalDeviceProperties2
+open KHRExternalMemoryCapabilities
 
 #nowarn "9"
 #nowarn "51"
@@ -16,7 +18,7 @@ open KHXDeviceGroupCreation
 type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<string>) as this =   
     inherit VulkanObject()
 
-    let extensions = extensions |> Set.add KHXDeviceGroupCreation.Name |> Set.add KHXDeviceGroup.Name
+    let extensions = extensions |> Set.add KHXDeviceGroupCreation.Name |> Set.add KHXDeviceGroup.Name |> Set.add KHRGetPhysicalDeviceProperties2.Name
 
     static let availableLayers =
         let mutable count = 0u
@@ -131,7 +133,7 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
                 |> check "could not get physical devices"
         )
 
-        devices |> Array.mapi (fun i d -> PhysicalDevice(this, d, i))
+        devices |> Array.map (fun d -> PhysicalDevice(this, d, extensions))
 
     let groups =    
         if Set.contains KHXDeviceGroupCreation.Name extensions then
@@ -151,9 +153,9 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
                 let devices = 
                     Array.init (int d.physicalDeviceCount) (fun ii ->
                         let handle = d.physicalDevices.[ii]
-                        PhysicalDevice(this, handle, ii)
+                        devices |> Array.find (fun dd -> dd.Handle = handle)
                     )
-                PhysicalDeviceGroup(this, devices)
+                PhysicalDeviceGroup(this, devices, extensions)
             )
             |> Array.filter (fun g -> g.Devices.Length > 1)
         else
@@ -288,7 +290,7 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
 
         )
 
-and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, index : int) =
+and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enabledInstanceExtensions : Set<string>) =
     static let allFormats = Enum.GetValues(typeof<VkFormat>) |> unbox<VkFormat[]>
 
     let availableLayers = 
@@ -319,8 +321,37 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, inde
     let mutable properties = VkPhysicalDeviceProperties()
     do VkRaw.vkGetPhysicalDeviceProperties(handle, &&properties)
 
+    
+    let uniqueId, deviceMask =
+        if Set.contains KHRGetPhysicalDeviceProperties2.Name enabledInstanceExtensions then
+            let mutable id =
+                KHRExternalMemoryCapabilities.VkPhysicalDeviceIDPropertiesKHR(
+                    VkStructureType.PhysicalDeviceIdPropertiesKhr,
+                    0n,
+                    Guid.Empty,
+                    Guid.Empty,
+                    byte_8 (),
+                    0u,
+                    0u
+                )
+
+            let mutable khrProps = 
+                VkPhysicalDeviceProperties2KHR(
+                    VkStructureType.PhysicalDeviceProperties2Khr,
+                    NativePtr.toNativeInt &&id,
+                    VkPhysicalDeviceProperties()
+                )
+            VkRaw.vkGetPhysicalDeviceProperties2KHR(handle, &&khrProps)
+            let uid = sprintf "{ GUID = %A; Mask = %d }" id.deviceUUID id.deviceNodeMask
+            uid, id.deviceNodeMask
+        else
+            let uid = sprintf "{ Vendor = %d; Device = %d }" properties.vendorID properties.deviceID
+            uid, 1u
+
     let limits = DeviceLimits.ofVkDeviceLimits properties.limits
     let vendor = PCI.vendorName (int properties.vendorID)
+
+
 
     let name = properties.deviceName.Value
     let driverVersion = Version.FromVulkan properties.driverVersion
@@ -399,23 +430,32 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, inde
     member x.Instance = instance
     member x.Limits : DeviceLimits = limits
 
+    abstract member DeviceMask : uint32
+    default x.DeviceMask = deviceMask
+
     abstract member Id : string
-    default x.Id = sprintf "V%d_D%d" properties.vendorID properties.deviceID |> string
+    default x.Id = uniqueId
 
     override x.ToString() =
         sprintf "{ name = %s; type = %A; api = %A }" name x.Type x.APIVersion
     
 
-and PhysicalDeviceGroup internal(instance : Instance, devices : PhysicalDevice[]) =
-    inherit PhysicalDevice(instance, devices.[0].Handle, -1)
+and PhysicalDeviceGroup internal(instance : Instance, devices : PhysicalDevice[], enabledInstanceExtensions : Set<string>) =
+    inherit PhysicalDevice(instance, devices.[0].Handle, enabledInstanceExtensions)
    
+    let mask = devices |> Seq.map (fun d -> d.DeviceMask) |> Seq.fold (|||) 0u
+
     member x.Devices : PhysicalDevice[] = devices
     override x.Id = devices |> Seq.map (fun d -> d.Id) |> String.concat "_"
+
+    override x.DeviceMask = mask
 
     override x.ToString() =
         let cnt = devices.Length
         sprintf "%d x { name = %s; type = %A; api = %A }" cnt x.Name x.Type x.APIVersion
     
+
+
             
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Instance =
