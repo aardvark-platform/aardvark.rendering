@@ -3188,6 +3188,7 @@ module ``Image Command Extensions`` =
                         let deviceIndices = baseImage.Device.AllIndicesArr
                         
                         for di in deviceIndices do
+                            
                             VkRaw.vkCmdSetDeviceMaskKHX(cmd.Handle, 1u <<< int di)
                             let srcSlices, srcRange = ranges.[int di]
 

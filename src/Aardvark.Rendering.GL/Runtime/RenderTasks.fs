@@ -118,7 +118,7 @@ module RenderTasks =
             elif handle <> 0 then
                 failwithf "cannot render to texture on this OpenGL driver"
 
-            GL.Viewport(desc.viewport.Min.X, desc.viewport.Min.Y, desc.viewport.SizeX, desc.viewport.SizeY)
+            GL.Viewport(desc.viewport.Min.X, desc.viewport.Min.Y, desc.viewport.SizeX + 1, desc.viewport.SizeY + 1)
             GL.Check "could not set viewport"
 
        

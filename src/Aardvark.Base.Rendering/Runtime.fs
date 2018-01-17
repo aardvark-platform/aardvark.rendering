@@ -634,7 +634,7 @@ module OutputDescription =
         { 
             framebuffer = framebuffer
             images = Map.empty
-            viewport = Box2i.FromMinAndSize(V2i.OO, framebuffer.Size)
+            viewport = Box2i.FromMinAndSize(V2i.OO, framebuffer.Size - V2i.II)
             overrides = Map.empty
         }
    

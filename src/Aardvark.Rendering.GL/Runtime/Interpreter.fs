@@ -403,7 +403,7 @@ module OpenGLInterpreter =
 
         member inline x.viewport (target : int) (viewport : Box2i) =
             if x.ShouldSetViewport(viewport) then
-                OpenTK.Graphics.OpenGL4.GL.Viewport(viewport.Min.X, viewport.Min.Y, viewport.SizeX, viewport.SizeY)
+                OpenTK.Graphics.OpenGL4.GL.Viewport(viewport.Min.X, viewport.Min.Y, viewport.SizeX + 1, viewport.SizeY + 1)
 
 
         member inline x.drawElements (mode : int) (count : int) (indexType : int) (indices : nativeint) =

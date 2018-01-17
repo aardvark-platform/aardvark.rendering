@@ -24,7 +24,7 @@ module Sponza =
         let win = 
             window {
                 display Display.Stereo
-                samples 8
+                samples 1
                 backend Backend.Vulkan
 
                 debug false
@@ -43,7 +43,7 @@ module Sponza =
                     do! fun (v : Effects.Vertex) ->
                         fragment {
                             let mutable a = cos(v.tc.X)
-                            for i in 1 .. 10000 do
+                            for i in 1 .. 2000 do
                                 a <- a * sin(float i) * cos(float i)
                             return v.c * (1.0 + a)
                         }

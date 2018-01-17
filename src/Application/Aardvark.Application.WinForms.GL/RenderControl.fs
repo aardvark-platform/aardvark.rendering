@@ -203,7 +203,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
                             transact (fun () -> Mod.change sizes size)
 
                         defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
-                        defaultOutput <- { defaultOutput with viewport = Box2i(V2i.OO, defaultFramebuffer.Size) }
+                        defaultOutput <- { defaultOutput with viewport = Box2i(V2i.OO, defaultFramebuffer.Size - V2i.II) }
 
                         GL.ColorMask(true, true, true, true)
                         GL.DepthMask(true)

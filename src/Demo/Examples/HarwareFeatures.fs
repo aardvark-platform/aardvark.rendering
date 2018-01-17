@@ -27,7 +27,6 @@ module HarwareFeatures =
             match bb with
                 | Backend.GL -> new OpenGlApplication() :> IApplication
                 | Backend.Vulkan -> new VulkanApplication() :> IApplication
-                | Backend.Both -> failwith "not implemented"
         let win = 
             if game && bb = Backend.GL then (unbox<OpenGlApplication> app).CreateGameWindow(samples) :> IRenderWindow
             else app.CreateSimpleRenderWindow(samples) :> IRenderWindow

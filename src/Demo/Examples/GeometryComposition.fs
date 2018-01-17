@@ -322,7 +322,7 @@ module GeometryComposition =
         show {
             display Display.Mono
             samples 8
-            backend Backend.Both
+            backends [Backend.GL; Backend.Vulkan]
             debug false
 
             scene sg
