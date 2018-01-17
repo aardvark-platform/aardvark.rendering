@@ -79,7 +79,6 @@
     <Compile Include="Commands.fs" />
     <Compile Include="Trie.fs" />
     <Compile Include="CullingTest.fs" />
-    <Compile Include="Utilities.fs" />
     <Compile Include="Stereo.fs" />
     <Compile Include="Wobble.fs" />
     <Compile Include="Tessellation.fs" />
@@ -153,6 +152,11 @@
     <ProjectReference Include="..\..\Application\Aardvark.Application.OpenVR\Aardvark.Application.OpenVR.fsproj">
       <Name>Aardvark.Application.OpenVR</Name>
       <Project>{7aaac578-443f-4120-ba74-3732cce920e8}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Application\Aardvark.Application.Utilities\Aardvark.Application.Utilities.fsproj">
+      <Name>Aardvark.Application.Utilities</Name>
+      <Project>{3322678a-22da-4c84-b2bf-33b0d2f8c80c}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj">

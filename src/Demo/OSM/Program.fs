@@ -168,7 +168,7 @@ let main argv =
         Mod.init box.Min, Mod.init box.Size
 
     // compose viewportOrigin/Size to a Box2d
-    let viewport = Mod.map2 (schönfinkel Box2d.FromMinAndSize) viewportOrigin viewportSize
+    let viewport = Mod.map2 (fun vo vs -> Box2d.FromMinAndSize(vo,vs-V2d.II)) viewportOrigin viewportSize
 
     // whenever the window size changes we'd like to adjust the viewport's aspect
     // Note that we don't do this in the mod-system since we want to be able to override
@@ -380,14 +380,14 @@ let main argv =
     w.Mouse.Scroll.Values.Subscribe(fun delta ->
         let delta = delta / 120.0
 
-        let vp = Box2d.FromMinAndSize(viewportOrigin.Value, viewportSize.Value)
+        let vp = Box2d.FromMinAndSize(viewportOrigin.Value, viewportSize.Value - V2d.II)
         let zoomCenter = vp.Size * w.Mouse.Position.GetValue().NormalizedPosition + vp.Min
 
         let newViewport = vp.Translated(-zoomCenter).Scaled(V2d.II * Fun.Pow(0.9, delta)).Translated(zoomCenter)
 
         transact (fun () ->
             viewportOrigin.Value <- newViewport.Min
-            viewportSize.Value <- newViewport.Size
+            viewportSize.Value <- newViewport.Size + V2d.II
         )
     ) |> ignore
 

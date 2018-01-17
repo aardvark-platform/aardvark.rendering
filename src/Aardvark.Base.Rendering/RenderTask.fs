@@ -530,7 +530,7 @@ type AbstractRenderTask() =
 
     static let runtimeUniforms =
         Map.ofList [
-            "ViewportSize", fun (o : OutputDescription) -> o.viewport.Size
+            "ViewportSize", fun (o : OutputDescription) -> o.viewport.Size + V2i.II
         ]
 
 

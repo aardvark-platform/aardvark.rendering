@@ -699,8 +699,8 @@ module RenderTask =
 
                     if viewportChanged then
                         first.SeekToBegin()
-                        first.SetViewport(0u, vps |> Array.map (fun b -> VkViewport(float32 b.Min.X, float32 b.Min.Y, float32 b.SizeX, float32 b.SizeY, 0.0f, 1.0f))) |> ignore
-                        first.SetScissor(0u, vps |> Array.map (fun b -> VkRect2D(VkOffset2D(b.Min.X, b.Min.Y), VkExtent2D(b.SizeX, b.SizeY)))) |> ignore
+                        first.SetViewport(0u, vps |> Array.map (fun b -> VkViewport(float32 b.Min.X, float32 b.Min.Y, float32 b.SizeX + 1.0f, float32 b.SizeY + 1.0f, 0.0f, 1.0f))) |> ignore
+                        first.SetScissor(0u, vps |> Array.map (fun b -> VkRect2D(VkOffset2D(b.Min.X, b.Min.Y), VkExtent2D(b.SizeX + 1, b.SizeY + 1)))) |> ignore
 
                     cmdBuffer.Reset()
                     cmdBuffer.Begin(renderPass, CommandBufferUsage.RenderPassContinue)
@@ -1793,7 +1793,7 @@ module RenderTask =
 
         override x.Perform(token : AdaptiveToken, rt : RenderToken, desc : OutputDescription) =
             x.OutOfDate <- true
-            let vp = Array.create renderPass.AttachmentCount desc.viewport
+            let vp = Array.create renderPass.AttachmentCount desc.viewport 
             transact (fun () -> viewports.Value <- vp)
 
             let fbo =
