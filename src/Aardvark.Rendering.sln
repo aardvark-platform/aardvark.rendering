@@ -2,6 +2,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
 VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "13 - Mandelbrot", "Examples\13 - Mandelbrot\13 - Mandelbrot.fsproj", "{9A3BD9B8-9942-40B5-BC90-F4D14FE766CB}"
+EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "12 - GlslIntrinsics", "Examples\12 - GlslIntrinsics\12 - GlslIntrinsics.fsproj", "{3E7A4330-FB2B-4899-9B44-6FECF67A629F}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "11 - ParallelPrimitives", "Examples\11 - ParallelPrimitives\11 - ParallelPrimitives.fsproj", "{02ED0B81-E99A-45DE-923A-862D66D318C0}"
@@ -98,6 +100,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9A3BD9B8-9942-40B5-BC90-F4D14FE766CB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9A3BD9B8-9942-40B5-BC90-F4D14FE766CB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9A3BD9B8-9942-40B5-BC90-F4D14FE766CB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9A3BD9B8-9942-40B5-BC90-F4D14FE766CB}.Release|Any CPU.Build.0 = Release|Any CPU
 		{3E7A4330-FB2B-4899-9B44-6FECF67A629F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{3E7A4330-FB2B-4899-9B44-6FECF67A629F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3E7A4330-FB2B-4899-9B44-6FECF67A629F}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -251,6 +257,7 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{9A3BD9B8-9942-40B5-BC90-F4D14FE766CB} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{3E7A4330-FB2B-4899-9B44-6FECF67A629F} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{02ED0B81-E99A-45DE-923A-862D66D318C0} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{6EFF89F1-0DFE-4346-9473-31A0A233F943} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
