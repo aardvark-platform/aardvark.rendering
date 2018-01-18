@@ -33,6 +33,7 @@ module ProgramResourceExtensions =
             let mutable prop = prop
             let mutable res = [| 0 |]
             Impl.glGetProgramResourceiv.Value.Invoke(program, iface, index, 1, &prop, 1, &length, res)
+            GL.Check "GetProgramResource[0]"
             res.[0]
 
         static member GetProgramResource(program : int, iface : ProgramInterface, index : int, prop : ProgramProperty, cnt : int) =
@@ -40,6 +41,7 @@ module ProgramResourceExtensions =
             let mutable prop = prop
             let mutable res = Array.zeroCreate cnt
             Impl.glGetProgramResourceiv.Value.Invoke(program, iface, index, 1, &prop, cnt, &length, res)
+            GL.Check "GetProgramResource"
             res
 
         static member GetProgramResourceName(program : int, iface : ProgramInterface, index : int) =
@@ -47,6 +49,7 @@ module ProgramResourceExtensions =
             let buffer = Array.zeroCreate len
             let mutable realLength = 0
             Impl.glGetProgramResourceName.Value.Invoke(program, iface, index, len, &realLength, buffer)
+            GL.Check "GetProgramResourceName"
             System.Text.Encoding.UTF8.GetString(buffer, 0, realLength)
 
 
@@ -378,23 +381,28 @@ module ShaderInterface =
                             if isRowMajor then ShaderParameterType.makeRowMajor _type
                             else _type
 
-                        let _type, name =
-                            let m = arrayRx.Match(name) 
-                            if m.Success then
-                                let name = m.Groups.["name"].Value
-                                let size = GL.GetProgramResource(p, iface, vi, ProgramProperty.ArraySize)
-                                if size <= 0 then
-                                    DynamicArray(_type, stride), name
+                        try
+                            let _type, pathName =
+                                let m = arrayRx.Match(name) 
+                                if m.Success then
+                                    let elementName = m.Groups.["name"].Value
+                                    let size = GL.GetProgramResource(p, iface, vi, ProgramProperty.ArraySize)
+                                    if size <= 0 then
+                                        DynamicArray(_type, stride), elementName
+                                    else
+                                        FixedArray(_type, stride, size), elementName
                                 else
-                                    FixedArray(_type, stride, size), name
-                            else
-                                _type, name
-                        {
-                            Path           = parsePath name
-                            Type           = _type
-                            Offset         = offset
-                            Referenced     = getReferencingStages p iface vi
-                        }
+                                    _type, name
+                            {
+                                Path           = parsePath pathName
+                                Type           = _type
+                                Offset         = offset
+                                Referenced     = getReferencingStages p iface vi
+                            }
+                        with
+                        | e -> 
+                            Log.warn "error processing shader resource info\n    name = \"%s\"\n    type = %A\n    offset = %d\n    isRowMajor = %A\n    stride = %d" name _type offset isRowMajor stride
+                            reraise()
                     )
                     
                 match iface with
