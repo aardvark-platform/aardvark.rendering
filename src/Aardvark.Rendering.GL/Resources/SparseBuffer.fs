@@ -180,8 +180,8 @@ module private SparseBufferImplementation =
         member x.AdjustCapacity(c : nativeint) =
             if c <> x.SizeInBytes then
                 lock x (fun () ->
-                    if c < x.SizeInBytes then Log.warn "shrink: %A where (x=%A)" (Mem c) (Mem x.SizeInBytes)
-                    else  Log.warn "grow: %A where (x=%A)" (Mem c) (Mem x.SizeInBytes)
+                    //if c < x.SizeInBytes then Log.warn "shrink: %A where (x=%A)" (Mem c) (Mem x.SizeInBytes)
+                    //else  Log.warn "grow: %A where (x=%A)" (Mem c) (Mem x.SizeInBytes)
                     writeFences.WaitCPU()
                     let copySize = min c x.SizeInBytes
 
