@@ -1086,7 +1086,18 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
                 0u, NativePtr.zero
             )
         )
-
+    member x.WaitAll(e : Event[], dstFlags : VkPipelineStageFlags) =
+        x.AppendCommand()
+        let handles = e |> Array.map (fun e -> e.Handle)
+        handles |> NativePtr.withA (fun ptr ->
+            VkRaw.vkCmdWaitEvents(
+                handle, uint32 handles.Length, ptr,
+                VkPipelineStageFlags.None, dstFlags,
+                0u, NativePtr.zero,
+                0u, NativePtr.zero,
+                0u, NativePtr.zero
+            )
+        )
     member x.IsEmpty = commands = 0
     member x.CommandCount = commands
     member x.IsRecording = recording
