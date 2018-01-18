@@ -147,10 +147,79 @@ module TPL =
 
         cmd.End()
         queue.StartFence cmd |> Option.get
-        
-    
+   
+    let copy (src : Buffer) (dst : Buffer) = 
+        let cmd = src.Device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+        cmd.Begin(CommandBufferUsage.SimultaneousUse)
+        cmd.enqueue {
+            do! Command.Copy(src, dst)
+        }
+        cmd.End()
+
+        fun (queue : DeviceQueue) ->
+            queue.StartFence cmd |> Option.get
+             
+ 
+    let runRace() =
+        use app = new HeadlessVulkanApplication(false)
+        let device = app.Runtime.Device
+
+
+        let data = Array.init (1 <<< 25) id
+        let a = app.Runtime.CreateBuffer(data)
+        let b = app.Runtime.CreateBuffer<int>(a.Count)
+        let c = app.Runtime.CreateBuffer<int>(a.Count)
+
+        let e = device.CreateEvent()
+
+
+        let queue0 = device.GraphicsFamily.GetQueue()
+        let queue1 = device.GraphicsFamily.GetQueue()
+
+        use pool = new ThreadPool([| queue0; queue1 |], 1)
+        pool.Start()
+
+
+        let b2c =  copy (unbox b.Buffer) (unbox c.Buffer)
+        let a2b =  copy (unbox a.Buffer) (unbox b.Buffer)
+
+        Report.Begin("testing for race")
+        for i in 1 .. 1000 do
+            device.perform {
+                do! Command.ZeroBuffer(unbox b.Buffer)
+                do! Command.ZeroBuffer(unbox c.Buffer)
+            }
+            let a2b = pool.StartAsTask(a2b)
+            let b2c = pool.StartAsTask(b2c)
+
+            let info1 = b2c.Result
+            let info0 = a2b.Result
+
+
+            let b = b.Download()
+            let c = c.Download()
+
+            let dAB = Array.fold2 (fun c a b -> if a <> b then c + 1 else c) 0 data b
+            let dAC = Array.fold2 (fun c a b -> if a <> b then c + 1 else c) 0 data c
+
+            if dAB <> 0 then
+                Log.warn "b invalid (%A)" dAB
+
+            if dAC <> 0 then
+                Log.line "c invalid (%d)" dAC
+
+            Report.Progress(float i / 1000.0)
+
+        pool.Stop()
+
+        Log.stop()
+
+        ()   
 
     let run() =
+        runRace()
+        Environment.Exit 0
+
         use app = new HeadlessVulkanApplication(false)
         let device = app.Runtime.Device
 
