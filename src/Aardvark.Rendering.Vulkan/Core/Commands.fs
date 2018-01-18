@@ -133,6 +133,14 @@ type Command() =
                 cmd.WaitAll [| e |]
                 Disposable.Empty
         }
+    static member Wait(e : Event, dstFlags : VkPipelineStageFlags) =
+        { new Command() with
+            member x.Compatible = QueueFlags.All
+            member x.Enqueue cmd =
+                cmd.AppendCommand()
+                cmd.WaitAll([| e |], dstFlags)
+                Disposable.Empty
+        }
 
 [<AbstractClass; Sealed; Extension>]
 type CommandBufferExtensions private() =

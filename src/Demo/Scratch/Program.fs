@@ -838,6 +838,7 @@ let test () =
 
 [<EntryPoint>]
 let main argv = 
+    
     //Rendering.Examples.NullBufferTest.run() |> ignore
 
 //    
@@ -862,8 +863,10 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
     
-    App.Config <- { BackendConfiguration.Default with useDebugOutput = true }
-    App.run(quadTexture())
+    Scratch.TPL.run()
+
+//    App.Config <- { BackendConfiguration.Default with useDebugOutput = true }
+//    App.run(quadTexture())
 
     0 // return an integer exit code
 
