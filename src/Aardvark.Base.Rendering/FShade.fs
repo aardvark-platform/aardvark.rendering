@@ -253,11 +253,12 @@ module FShadeInterop =
         ]
 
     [<GLSLIntrinsic("gl_DeviceIndex", "GL_EXT_device_group")>]
-    let private deviceIndex() : int = failwith ""
+    let private deviceIndex() : int = onlyInShaderCode "deviceIndex"
 
     open FShade.Imperative
     let private withDeviceIndex (deviceCount : int) (e : Effect) =
-        if deviceCount = 1 then e 
+        if deviceCount = 1 then 
+            e 
         else
             match e.GeometryShader with
                 | Some gs ->
@@ -282,6 +283,44 @@ module FShadeInterop =
 
                     Effect.add { gs with shaderInvocations = newInvocations } e
                 | None -> e
+
+    [<StructuredFormatDisplay("{AsString}")>]
+    type FramebufferRange = 
+        { 
+            frMin : V2i
+            frMax : V2i; 
+            frLayers : Range1i 
+        } with
+
+        override x.ToString() =
+            sprintf "{ min = %A; size = %A; layers = %A }" x.frMin (V2i.II + x.frMax - x.frMin) x.frLayers
+    
+        member private x.AsString = x.ToString()
+        
+        member x.Split(deviceCount : int) =
+            if deviceCount = 1 then
+                [| x |]
+            else
+                let layerCount = (1 + x.frLayers.Max - x.frLayers.Min)
+                if layerCount = 1 then
+                    let size = V2i.II + x.frMax - x.frMin
+                    let perDevice = size.X / deviceCount
+
+                    Array.init deviceCount (fun di ->
+                        let offset = V2i(perDevice * di, 0)
+                        let size = 
+                            if di = deviceCount - 1 then size - offset
+                            else V2i(perDevice, size.Y)
+                        { x with frMin = x.frMin + offset; frMax = x.frMin + offset + size - V2i.II }
+                    )
+                elif layerCount % deviceCount = 0 then
+                    let perDevice = layerCount / deviceCount
+                    let firstlayer = x.frLayers.Min
+                    Array.init deviceCount (fun di -> { x with frLayers = Range1i(firstlayer + perDevice * di, firstlayer + perDevice * di - 1) })
+                else
+                    failwithf "[FShade] cannot render to %d layers using %d devices" layerCount deviceCount
+
+
 
     type AttachmentSignature with
         member x.GetType(name : Symbol) =
@@ -313,13 +352,21 @@ module FShadeInterop =
                     flipHandedness = flip
                 }
 
-            if x.LayerCount > 1 then
-                effect 
-                    // TODO: other topologies????
-                    |> Effect.toLayeredEffect x.LayerCount (x.PerLayerUniforms |> Seq.map (fun n -> n, n) |> Map.ofSeq) InputTopology.Triangle
-                    |> withDeviceIndex x.Runtime.DeviceCount
-                    |> Effect.toModule config
 
+            let deviceCount = x.Runtime.DeviceCount
+            if deviceCount > 1 then
+                if x.LayerCount > 1 then
+                    effect 
+                        // TODO: other topologies????
+                        |> Effect.toLayeredEffect x.LayerCount (x.PerLayerUniforms |> Seq.map (fun n -> n, n) |> Map.ofSeq) InputTopology.Triangle
+                        |> withDeviceIndex deviceCount
+                        |> Effect.toModule config
+                else 
+                    effect 
+                        // TODO: other topologies????
+                        |> Effect.toMultiViewportEffect deviceCount Map.empty InputTopology.Triangle
+                        |> withDeviceIndex deviceCount
+                        |> Effect.toModule config
             else
                 effect |> Effect.toModule config
 
