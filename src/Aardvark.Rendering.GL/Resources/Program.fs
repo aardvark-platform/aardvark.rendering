@@ -431,25 +431,35 @@ module ProgramExtensions =
                     let supported = 
                         shaders |> List.tryPick (fun s -> s.SupportedModes)
 
-                    let iface = ShaderInterface.ofProgram firstTexture x handle
-                    let iface = 
-                        if expectsRowMajorMatrices then ShaderInterface.flipMatrixMajority iface
-                        else iface
+                    try
+                        try
+                            let iface = ShaderInterface.ofProgram firstTexture x handle
+                            let iface = 
+                                if expectsRowMajorMatrices then ShaderInterface.flipMatrixMajority iface
+                                else iface
 
-                    GL.UseProgram(0)
-                    GL.Check "could not unbind program"
+                            Success {
+                                Context = x
+                                Code = code
+                                Handle = handle
+                                Shaders = shaders
+                                UniformGetters = SymDict.empty
+                                SupportedModes = supported
+                                Interface = iface
+                                TextureInfo = Map.empty
+                            }
 
+                        finally 
+                            GL.UseProgram(0)
+                            GL.Check "could not unbind program"
 
-                    Success {
-                        Context = x
-                        Code = code
-                        Handle = handle
-                        Shaders = shaders
-                        UniformGetters = SymDict.empty
-                        SupportedModes = supported
-                        Interface = iface
-                        TextureInfo = Map.empty
-                    }
+                        
+                    with 
+                    | e -> 
+                             let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
+                             let numberdLines = withLineNumbers codeWithDefine
+                             Report.Line("Failed to build shader interface of:\n{0}", numberdLines)
+                             reraise()
                 else
                     let log =
                         if String.IsNullOrEmpty log then "ERROR: program could not be linked but log was empty"
