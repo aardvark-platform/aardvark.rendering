@@ -150,7 +150,13 @@ module Pipeline =
 
 
         let mutable viewportState =
-            let vp = desc.renderPass.AttachmentCount
+            
+            let vp  =
+                if device.AllCount > 1u then
+                    if desc.renderPass.LayerCount > 1 then 1u
+                    else device.AllCount
+                else 1u
+
             VkPipelineViewportStateCreateInfo(
                 VkStructureType.PipelineViewportStateCreateInfo, 0n,
                 VkPipelineViewportStateCreateFlags.MinValue,

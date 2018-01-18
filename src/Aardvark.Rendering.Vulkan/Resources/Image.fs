@@ -3157,8 +3157,25 @@ module ``Image Command Extensions`` =
             { new Command() with
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue(cmd) =
+                    let mutable info =
+                        VkQueryPoolCreateInfo(
+                            VkStructureType.QueryPoolCreateInfo, 0n,
+                            VkQueryPoolCreateFlags.MinValue,
+                            VkQueryType.Timestamp,
+                            2u,
+                            VkQueryPipelineStatisticFlags.None
+                        )
+                        
+                    let device = img.Image.Device
+                    let mutable pool = VkQueryPool.Null
+                    VkRaw.vkCreateQueryPool(device.Handle, &&info, NativePtr.zero, &&pool)
+                        |> check "could not create QueryPool"
+                    let mutable totalSize = 0L
+
                     if img.Image.PeerHandles.Length > 0 then
                         cmd.AppendCommand()
+                        let device = img.Image.Device
+
 
 //                        let mutable info =
 //                            VkImageMemoryBarrier(
@@ -3190,6 +3207,8 @@ module ``Image Command Extensions`` =
                         for di in deviceIndices do
                             
                             VkRaw.vkCmdSetDeviceMaskKHX(cmd.Handle, 1u <<< int di)
+                            if di = 0u then
+                                VkRaw.vkCmdWriteTimestamp(cmd.Handle, VkPipelineStageFlags.BottomOfPipeBit, pool, 0u)
                             let srcSlices, srcRange = ranges.[int di]
 
                             for ci in 0 .. baseImage.PeerHandles.Length - 1 do
@@ -3203,12 +3222,19 @@ module ``Image Command Extensions`` =
                                         VkExtent3D(1+srcRange.SizeX, 1+srcRange.SizeY, 1+srcRange.SizeZ)
                                     )
 
+                                if di = 0u then
+                                    let imgSize = int64 copy.extent.width * int64 copy.extent.height * int64 copy.extent.depth * 4L
+                                    totalSize <- totalSize + imgSize * int64 copy.srcSubresource.layerCount
+
                                 VkRaw.vkCmdCopyImage(
                                     cmd.Handle, 
                                     baseImage.Handle, VkImageLayout.TransferSrcOptimal, 
                                     baseImage.PeerHandles.[ci], VkImageLayout.TransferDstOptimal,
                                     1u, &&copy
                                 )
+
+                            if di = 0u then
+                                VkRaw.vkCmdWriteTimestamp(cmd.Handle, VkPipelineStageFlags.BottomOfPipeBit, pool, 1u)
 
                         VkRaw.vkCmdSetDeviceMaskKHX(cmd.Handle, baseImage.Device.AllMask)
 
@@ -3222,8 +3248,18 @@ module ``Image Command Extensions`` =
                             0u, NativePtr.zero // wrongness
                         )
 
+                    Disposable.Custom (fun () ->
+                        let data : nativeptr<int64> = NativePtr.alloc 2
+                        VkRaw.vkGetQueryPoolResults(device.Handle, pool, 0u, 2u, 8UL * 2UL, NativePtr.toNativeInt data, 0UL, VkQueryResultFlags.D64Bit ||| VkQueryResultFlags.WaitBit)
+                            |> check "vkGetQueryPoolResults"
 
-                    Disposable.Empty
+                        let t0 = NativePtr.get data 0 
+                        let t1 = NativePtr.get data 1
+                        let dt = MicroTime(t1 - t0)
+                        //Log.line "bandwidth: %AGBit/s" (float totalSize / (134217728.0 * dt.TotalSeconds))
+                        NativePtr.free data
+                        ()
+                    )
             }
 
 

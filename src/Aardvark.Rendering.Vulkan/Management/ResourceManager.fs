@@ -869,8 +869,13 @@ module Resources =
             let pipeline = 
                 prog.ShaderCreateInfos |> NativePtr.withA (fun pShaderCreateInfos ->
 
+
                     let mutable viewportState =
-                        let vp = renderPass.AttachmentCount
+                        let vp  =
+                            if device.AllCount > 1u then
+                                if renderPass.LayerCount > 1 then 1u
+                                else device.AllCount
+                            else 1u
                         VkPipelineViewportStateCreateInfo(
                             VkStructureType.PipelineViewportStateCreateInfo, 0n,
                             VkPipelineViewportStateCreateFlags.MinValue,

@@ -595,7 +595,7 @@ module RenderTask =
         open Compiler
 
         [<AbstractClass>]
-        type AbstractChangeableCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>) =
+        type AbstractChangeableCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>, scissors : IMod<Box2i[]>) =
             inherit Mod.AbstractMod<CommandBuffer>()
 
             let locked = ReferenceCountingSet<ILockedResource>()
@@ -611,6 +611,7 @@ module RenderTask =
             //let mutable resourceVersion = 0
             let mutable cmdVersion = -1
             let mutable cmdViewports = [||]
+            let mutable cmdScissors = [||]
 
             let cmdBuffer = pool.CreateCommandBuffer(CommandBufferLevel.Secondary)
             let dirty = HashSet<ICommandStreamResource>()
@@ -676,8 +677,9 @@ module RenderTask =
 
                 // refill the CommandBuffer (if necessary)
                 let vps = viewports.GetValue t
+                let scs = scissors.GetValue t
                 let contentChanged      = cmdVersion < 0 || dirty.Length > 0
-                let viewportChanged     = cmdViewports <> vps
+                let viewportChanged     = cmdViewports <> vps || cmdScissors <> scs
                 let versionChanged      = cmdVersion >= 0 && resourceChanged
                 let orderChanged        = x.Sort t
 
@@ -694,13 +696,14 @@ module RenderTask =
 
                     Log.line "[Vulkan] recompile commands: %s" cause
                     cmdViewports <- vps
+                    cmdScissors <- scs
                     cmdVersion <- 1
                     //cmdVersion <- resourceVersion
 
                     if viewportChanged then
                         first.SeekToBegin()
                         first.SetViewport(0u, vps |> Array.map (fun b -> VkViewport(float32 b.Min.X, float32 b.Min.Y, float32 b.SizeX + 1.0f, float32 b.SizeY + 1.0f, 0.0f, 1.0f))) |> ignore
-                        first.SetScissor(0u, vps |> Array.map (fun b -> VkRect2D(VkOffset2D(b.Min.X, b.Min.Y), VkExtent2D(b.SizeX + 1, b.SizeY + 1)))) |> ignore
+                        first.SetScissor(0u, scs |> Array.map (fun b -> VkRect2D(VkOffset2D(b.Min.X, b.Min.Y), VkExtent2D(b.SizeX + 1, b.SizeY + 1)))) |> ignore
 
                     cmdBuffer.Reset()
                     cmdBuffer.Begin(renderPass, CommandBufferUsage.RenderPassContinue)
@@ -712,14 +715,14 @@ module RenderTask =
             
 
         [<AbstractClass>]
-        type AbstractChangeableSetCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>) =
-            inherit AbstractChangeableCommandBuffer(manager, pool, renderPass, viewports)
+        type AbstractChangeableSetCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>, scissors : IMod<Box2i[]>) =
+            inherit AbstractChangeableCommandBuffer(manager, pool, renderPass, viewports, scissors )
 
             abstract member Add : IRenderObject -> bool
             abstract member Remove : IRenderObject -> bool
 
-        type ChangeableUnorderedCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>) =
-            inherit AbstractChangeableSetCommandBuffer(manager, pool, renderPass, viewports)
+        type ChangeableUnorderedCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>, scissors : IMod<Box2i[]>) =
+            inherit AbstractChangeableSetCommandBuffer(manager, pool, renderPass, viewports, scissors)
 
             let first = new VKVM.CommandStream()
             let trie = Trie<VKVM.CommandStream>()
@@ -755,8 +758,8 @@ module RenderTask =
                     | _ ->
                         false
 
-        type ChangeableOrderedCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>, sorter : IMod<Trafo3d -> Box3d[] -> int[]>) =
-            inherit AbstractChangeableSetCommandBuffer(manager, pool, renderPass, viewports)
+        type ChangeableOrderedCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>, scissors : IMod<Box2i[]>, sorter : IMod<Trafo3d -> Box3d[] -> int[]>) =
+            inherit AbstractChangeableSetCommandBuffer(manager, pool, renderPass, viewports, scissors)
         
             let first = new VKVM.CommandStream()
 
@@ -1523,6 +1526,7 @@ module RenderTask =
                 renderPass      : RenderPass
                 stats           : nativeptr<V2i>
                 viewports       : IMod<Box2i[]>
+                scissors        : IMod<Box2i[]>
             }
 
             member x.Compile (cmd : RuntimeCommand) : PreparedCommand =
@@ -1564,7 +1568,8 @@ module RenderTask =
 
         let pool = device.GraphicsFamily.CreateCommandPool()
         let viewports = Mod.init [||]
-        
+        let scissors = Mod.init [||]
+
         let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
         let inner = pool.CreateCommandBuffer(CommandBufferLevel.Secondary)
 
@@ -1587,6 +1592,7 @@ module RenderTask =
                 RuntimeCommands.renderPass      = renderPass
                 RuntimeCommands.stats           = stats
                 RuntimeCommands.viewports       = viewports
+                RuntimeCommands.scissors        = scissors
             }
 
         let compiled = compiler.Compile command
@@ -1618,13 +1624,31 @@ module RenderTask =
                     | :? Framebuffer as fbo -> fbo
                     | fbo -> failwithf "unsupported framebuffer: %A" fbo
 
+            
+            let sc =
+                if device.AllCount > 1u then
+                    if renderPass.LayerCount > 1 then
+                        [| desc.viewport |]
+                    else
+                        let range = 
+                            { 
+                                frMin = desc.viewport.Min; 
+                                frMax = desc.viewport.Max;
+                                frLayers = Range1i(0,renderPass.LayerCount-1)
+                            }
+                        range.Split(int device.AllCount) 
+                            |> Array.map (fun { frMin = min; frMax = max } -> Box2i(min, max))
+                        
+                else
+                    [| desc.viewport |]
 
-            let vp = Array.create renderPass.AttachmentCount desc.viewport
+            let vp = Array.create sc.Length desc.viewport
+
             let viewportChanged =
-                if viewports.Value = vp then
+                if viewports.Value = vp && scissors.Value = sc then
                     false
                 else
-                    transact (fun () -> viewports.Value <- vp)
+                    transact (fun () -> viewports.Value <- vp; scissors.Value <- sc)
                     true
 
             use tt = device.Token
@@ -1656,7 +1680,7 @@ module RenderTask =
 
                 inner.enqueue {
                     do! Command.SetViewports(vp)
-                    do! Command.SetScissors(vp)
+                    do! Command.SetScissors(sc)
                 }
 
                 inner.AppendCommand()
@@ -1699,6 +1723,7 @@ module RenderTask =
         let pool = device.GraphicsFamily.CreateCommandPool()
         let passes = SortedDictionary<Aardvark.Base.Rendering.RenderPass, AbstractChangeableSetCommandBuffer>()
         let viewports = Mod.init [||]
+        let scissors = Mod.init [||]
         
         let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
 
@@ -1751,7 +1776,7 @@ module RenderTask =
 //                                | RenderPassOrder.BackToFront | RenderPassOrder.FrontToBack -> 
 //                                    ChangeableOrderedCommandBuffer(manager, pool, renderPass, viewports, Mod.constant (sortByCamera key.Order)) :> AbstractChangeableSetCommandBuffer
 //                                | _ -> 
-                                    ChangeableUnorderedCommandBuffer(manager, pool, renderPass, viewports) :> AbstractChangeableSetCommandBuffer
+                                    ChangeableUnorderedCommandBuffer(manager, pool, renderPass, viewports, scissors) :> AbstractChangeableSetCommandBuffer
                         passes.[key] <- c
                         x.MarkOutdated()
                         c
@@ -1793,8 +1818,26 @@ module RenderTask =
 
         override x.Perform(token : AdaptiveToken, rt : RenderToken, desc : OutputDescription) =
             x.OutOfDate <- true
-            let vp = Array.create renderPass.AttachmentCount desc.viewport 
-            transact (fun () -> viewports.Value <- vp)
+            let range = 
+                { 
+                    frMin = desc.viewport.Min; 
+                    frMax = desc.viewport.Max;
+                    frLayers = Range1i(0,renderPass.LayerCount-1)
+                }
+            let ranges = range.Split(int device.AllCount)
+            let sc =
+                if device.AllCount > 1u then
+                    if renderPass.LayerCount > 1 then
+                        [| desc.viewport |]
+                    else
+                        ranges |> Array.map (fun { frMin = min; frMax = max } -> Box2i(min, max))
+                        
+                else
+                    [| desc.viewport |]
+            let vp = Array.create sc.Length desc.viewport
+
+            if viewports.Value <> vp || scissors.Value <> sc then
+                transact (fun () -> viewports.Value <- vp; scissors.Value <- sc)
 
             let fbo =
                 match desc.framebuffer with
@@ -1804,10 +1847,6 @@ module RenderTask =
             use tt = device.Token
             let passCmds = passes.Values |> Seq.map (fun p -> p.GetValue(token)) |> Seq.toList
             tt.Sync()
-
-            let isGrouped = 
-                let attachment = fbo.ImageViews.[0]
-                device.IsDeviceGroup && attachment.ArrayRange.Max > attachment.ArrayRange.Min
 
 
             cmd.Reset()
@@ -1826,31 +1865,30 @@ module RenderTask =
                 do! Command.Execute passCmds
                 do! Command.EndPass
 
-                if isGrouped then
+                if ranges.Length > 1 then
                     let deviceCount = int device.AllCount
                     
-                    for a in fbo.ImageViews do
-                        let img = a.Image
-                        let layers = a.ArrayRange
-                        let layerCount = 1 + layers.Max - layers.Min
+                    for (sem,a) in Map.toSeq fbo.Attachments do
+                        if sem <> DefaultSemantic.Depth then 
+                            let img = a.Image
+                            let layers = a.ArrayRange
+                            let layerCount = 1 + layers.Max - layers.Min
                         
-                        let aspect =
-                            match VkFormat.toImageKind img.Format with
-                                | ImageKind.Depth -> ImageAspect.Depth
-                                | ImageKind.DepthStencil  -> ImageAspect.DepthStencil
-                                | _ -> ImageAspect.Color 
+                            let aspect =
+                                match VkFormat.toImageKind img.Format with
+                                    | ImageKind.Depth -> ImageAspect.Depth
+                                    | ImageKind.DepthStencil  -> ImageAspect.DepthStencil
+                                    | _ -> ImageAspect.Color 
 
-                        let subResource = img.[aspect, a.MipLevelRange.Min]
-                        let ranges =
-                            let vp = desc.viewport
-                            let box = Box3i(V3i(vp.Min.X, vp.Min.Y, 0), V3i(vp.Max.X, vp.Max.Y, 0))
-                            let perDevice = layerCount / deviceCount
-                            Array.init deviceCount (fun di ->
-                                let range = Range1i(perDevice * di, perDevice * (di + 1) - 1)
-                                range, box
-                            )
-                        do! Command.SyncPeers(subResource, ranges)
+                            let subResource = img.[aspect, a.MipLevelRange.Min]
+                            let ranges =
+                                ranges |> Array.map (fun { frMin = min; frMax = max; frLayers = layers} ->
+                                    layers, Box3i(V3i(min,0), V3i(max, 0))
+                                )
 
+                            do! Command.SyncPeers(subResource, ranges)
+
+                    
                 for i in 0 .. fbo.ImageViews.Length - 1 do
                     let img = fbo.ImageViews.[i].Image
                     do! Command.TransformLayout(img, oldLayouts.[i])
