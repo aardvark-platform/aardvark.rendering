@@ -593,9 +593,9 @@ module TPL =
 
         let mutable freeBricks =
             [ 
-                for x in 0 .. dbCount.X - 1 do
+                for z in 0 .. dbCount.Z - 1 do
                     for y in 0 .. dbCount.Y - 1 do
-                        for z in 0 .. dbCount.Z - 1 do
+                        for x in 0 .. dbCount.X - 1 do
                             yield V4i(x,y,z,0)  
             ]
 
@@ -749,7 +749,10 @@ module TPL =
                 if resId < 0 then
                     return { v with c = V4d.IOOI }
                 else
-                    return { v with c = V4d uniform.Values.[resId] }
+                    let offset = uniform.Values.[resId].XYZ + V3i(1,1,1) |> V3d
+                    let rOffset = offset / V3d(12.0, 12.0, 12.0)
+
+                    return { v with c = V4d(rOffset, 1.0) }
                     
             }
 
