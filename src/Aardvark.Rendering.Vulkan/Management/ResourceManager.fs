@@ -1300,7 +1300,8 @@ type ResourceManager(user : IResourceUser, device : Device) =
                         Mod.custom (fun t ->
                             match value.GetValue t with
                             | :? Array as a -> ArrayBuffer(a) :> IBuffer
-                            | _ -> failwith ""
+                            | :? IBuffer as b -> b
+                            | _ -> failf "invalid storage buffer"
                         )
                     new BufferResource(cache, key, device, usage, buffer)
                 ) |> Choice1Of2
