@@ -639,6 +639,42 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
         else
             None
 
+    member x.Submit(cmd : CommandBuffer, fence : Fence) =
+        if cmd.IsRecording then
+            failf "cannot submit recording CommandBuffer"
+
+        if not cmd.IsEmpty then
+            lock x (fun () ->
+            
+                let mutable mask = device.AllMask
+                let groupInfo =
+                    if device.IsDeviceGroup then
+                        VkDeviceGroupSubmitInfoKHX(
+                            VkStructureType.DeviceGroupSubmitInfoKhx, 0n, 
+                            0u, NativePtr.zero,
+                            1u, &&mask,
+                            0u, NativePtr.zero
+                        ) |> Some
+                    else
+                        None
+
+                groupInfo |> NativePtr.withOption (fun pnext ->
+                    let mutable handle = cmd.Handle
+                    let mutable submitInfo =
+                        VkSubmitInfo(
+                            VkStructureType.SubmitInfo, NativePtr.toNativeInt pnext,
+                            0u, NativePtr.zero, NativePtr.zero,
+                            1u, &&handle,
+                            0u, NativePtr.zero
+                        )
+
+                    VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, fence.Handle)
+                        |> check "could not submit command buffer"
+                )
+            )
+            true
+        else
+            false
 
 
     member x.StartAsync(cmd : CommandBuffer, waitFor : list<Semaphore>) =
