@@ -520,7 +520,7 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
                         async {
                             do! Async.SwitchToThreadPool()
                             try render s
-                            with e -> Log.error "render faulted"
+                            with e -> Log.error "render faulted: %A" e
 
                             do! Async.SwitchToContext sctx
 
