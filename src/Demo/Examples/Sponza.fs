@@ -31,7 +31,7 @@ module Sponza =
             }
 
         let sg = 
-            Aardvark.SceneGraph.IO.Loader.Assimp.loadFrom @"C:\Users\steinlechner\Desktop\Sponza bunt\sponza_cm.obj" Loader.Assimp.defaultFlags
+            Aardvark.SceneGraph.IO.Loader.Assimp.loadFrom @"/home/hs/dev/Sponza bunt/sponza_cm.obj" Loader.Assimp.defaultFlags
                 |> Sg.adapter
                 |> Sg.scale (0.01)
                 |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero))

@@ -399,7 +399,7 @@ module Buffer =
             let buffer = device |> alloc flags deviceAlignedSize
             buffer.Size <- int64 size
             let deviceMem = buffer.Memory
-        
+
             let hostPtr = device.HostMemory.Alloc(align, deviceAlignedSize)
             hostPtr.Mapped (fun dst -> writer dst)
 

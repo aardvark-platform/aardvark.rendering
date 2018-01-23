@@ -115,7 +115,7 @@ type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExt
     let pool = QueueFamilyPool(physical.QueueFamilies)
     let graphicsQueues  = pool.TryTakeSingleFamily(QueueFlags.Graphics, 4)
     let computeQueues   = pool.TryTakeExplicit(QueueFlags.Compute, 2)
-    let transferQueues  = pool.TryTakeSingleFamily(QueueFlags.Transfer ||| QueueFlags.SparseBinding, 2)
+    let transferQueues  = pool.TryTakeExplicit(QueueFlags.Transfer, 2)
     let onDispose = Event<unit>()
     
     let allIndicesArr = 
@@ -383,7 +383,7 @@ type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExt
     member internal x.AllIndices = allIndices
     member internal x.AllIndicesArr = allIndicesArr
 
-    member x.GraphicsFamily = 
+    member x.GraphicsFamily : DeviceQueueFamily  = 
         match graphicsFamily with
             | Some pool -> pool
             | None -> failf "the device does not support graphics-queues"
@@ -471,6 +471,124 @@ and DeviceCache<'a, 'b when 'b :> RefCountedResource>(device : Device, create : 
 
     interface IDeviceCache<'b> with
         member x.Revoke b = x.Revoke b
+
+and CopyCommand =
+    | BufferCopy of src : VkBuffer * dst : VkBuffer * copy : VkBufferCopy * cont : (unit -> unit)
+    | BufferImageCopy of src : VkBuffer * dst : VkImage * copy : VkBufferImageCopy * fmt : TextureFormat * cont : (unit -> unit)
+
+    member x.Size =
+        match x with
+            | BufferCopy(_,_,c,_) -> c.size |> int64
+            | BufferImageCopy(_,_,c, fmt,_) -> 
+                let r = if c.bufferRowLength = 0u then int c.imageExtent.width * TextureFormat.pixelSizeInBytes fmt else int c.bufferRowLength
+                let h = if c.bufferImageHeight = 0u then int c.imageExtent.height else int c.bufferImageHeight
+                int64 r * int64 h
+
+and CopyEngine(family : DeviceQueueFamily) =
+    let device : Device = family.Device
+    let graphicsFamily = device.GraphicsFamily.Index
+    
+    let copies = List<CopyCommand>()
+    let mutable totalSize = 0L
+
+    let run (queue : DeviceQueue) () =
+        let family = queue.FamilyIndex
+        let device = queue.Device
+        let fence = new Fence(device)
+        let pool : CommandPool = queue.Family.CreateCommandPool()
+        let cmd : CommandBuffer = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
+
+        while true do
+            let copies = 
+                lock copies (fun () ->
+                    while copies.Count <= 0 do
+                        Monitor.Wait copies |> ignore
+
+                    let arr = copies.ToArray()
+                    copies.Clear()
+                    arr 
+                )
+
+            fence.Reset()
+
+            cmd.Begin(CommandBufferUsage.OneTimeSubmit)
+            cmd.AppendCommand()
+            for c in copies do
+                match c with
+                    | BufferCopy(src, dst, copy, cont) ->
+                        let mutable copy = copy
+                        VkRaw.vkCmdCopyBuffer(cmd.Handle, src, dst, 1u, &&copy)
+
+                        let mutable barrier =
+                            VkBufferMemoryBarrier(
+                                VkStructureType.BufferMemoryBarrier, 0n,
+                                VkAccessFlags.TransferWriteBit,
+                                VkAccessFlags.None, //VkAccessFlags.TransferReadBit ||| VkAccessFlags.ShaderReadBit ||| VkAccessFlags.IndexReadBit ||| VkAccessFlags.IndirectCommandReadBit ||| VkAccessFlags.VertexAttributeReadBit,
+                                uint32 family,
+                                uint32 graphicsFamily,
+                                dst,
+
+                                // here be dragons
+                                0UL, copy.size
+                            )
+
+                        VkRaw.vkCmdPipelineBarrier(
+                            cmd.Handle, 
+                            VkPipelineStageFlags.TransferBit,
+                            VkPipelineStageFlags.BottomOfPipeBit,
+                            VkDependencyFlags.None,
+                            0u, NativePtr.zero,
+                            1u, &&barrier,
+                            0u, NativePtr.zero
+                        )
+
+                    | BufferImageCopy(src, dst, copy,_, cont) ->
+                        let mutable copy = copy
+                        VkRaw.vkCmdCopyBufferToImage(cmd.Handle, src, dst, VkImageLayout.TransferDstOptimal, 1u, &&copy)
+                        
+            cmd.End()
+
+            let mutable cmdHandle = cmd.Handle
+            let mutable submit =
+                VkSubmitInfo(
+                    VkStructureType.SubmitInfo, 0n,
+                    0u, NativePtr.zero, NativePtr.zero,
+                    1u, &&cmdHandle,
+                    0u, NativePtr.zero
+                )
+
+            VkRaw.vkQueueSubmit(queue.Handle, 1u, &&submit, fence.Handle) |> check "could not submit command"
+            
+            fence.Wait()
+
+
+            
+            for c in copies do
+                match c with
+                    | BufferCopy(src, dst, copy, cont) -> cont()
+                    | BufferImageCopy(_,_,_,_,cont) -> cont()
+
+
+
+
+        ()
+
+    let thread = 
+        family.Queues |> List.map (fun q -> 
+            let t = Thread(ThreadStart(run q), IsBackground = true)
+            t.Start()
+            t
+        )
+
+    member x.Enqueue(c : CopyCommand) =
+        lock copies (fun () ->
+            copies.Add c
+            totalSize <- totalSize + c.Size
+            Monitor.Pulse copies
+        )
+        
+
+
 
 
 and RefCountedResource =

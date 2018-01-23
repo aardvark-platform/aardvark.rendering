@@ -271,84 +271,107 @@ module TPL =
         use app = new HeadlessVulkanApplication(false)
         let device = app.Runtime.Device
 
+        let copyEngine = CopyEngine(device.TransferFamily)
 
-        let data = Array.init (1 <<< 25) (fun i -> i + 1)
-        let a = app.Runtime.CreateBuffer(data)
-        let b = app.Runtime.CreateBuffer<int>(a.Count)
-        let c = app.Runtime.CreateBuffer<int>(a.Count)
+        let mutable pending = 0L
 
-        let e = device.CreateEvent()
 
-        let copyCompute =
-            let shader = app.Runtime.CreateComputeShader Shader.copyShader
-            let inputs = shader.Runtime.NewInputBinding shader
+        let evt = new SemaphoreSlim(0)
+        let size = 16L <<< 20
+        let enqueueCopy(size : int64) =
+            let hostBuffer = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit size
+            hostBuffer.Memory.Mapped(fun ptr -> Marshal.Set(ptr, 1, size))
+            let deviceBuffer = device.DeviceMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit size
+
+
+            Interlocked.Add(&pending, size) |> ignore
+            let destroy() =
+                device.Delete hostBuffer
+                device.Delete deviceBuffer
+                evt.Release() |> ignore
+            copyEngine.Enqueue(CopyCommand.BufferCopy(hostBuffer.Handle, deviceBuffer.Handle, VkBufferCopy(0UL, 0UL, uint64 size), destroy))
+            evt.Wait()
+
+        let rand = RandomSystem()
+        let mutable running = false
+        let copyRunning = new ManualResetEventSlim(false)
+        let copyThreadHate () =
+            while true do
+                copyRunning.Wait()
+                let size = 16L <<< 20 //rand.UniformLong(1L <<< 16) + 1024L
+                enqueueCopy size
+
+        let thread = Thread(ThreadStart(copyThreadHate), IsBackground = true)
+        thread.Start()
+
+        let computeThread () =
+            let data = Array.init (1 <<< 23) (fun i -> i + 1)
+            let a = app.Runtime.CreateBuffer(data)
+            let b = app.Runtime.CreateBuffer<int>(a.Count)
+
+
+            let copyCompute =
+                let shader = app.Runtime.CreateComputeShader Shader.copyShader
+                let inputs = shader.Runtime.NewInputBinding shader
             
-            inputs.["src"] <- a
-            inputs.["dst"] <- b
-            inputs.Flush()
+                inputs.["src"] <- a
+                inputs.["dst"] <- b
+                inputs.Flush()
 
 
-            let prog = 
-                shader.Runtime.Compile [ 
-                    ComputeCommand.SetInput inputs
-                    ComputeCommand.Bind shader
-                    ComputeCommand.Dispatch(data.Length / 64)
-                ]
+                let prog = 
+                    shader.Runtime.Compile [ 
+                        ComputeCommand.SetInput inputs
+                        ComputeCommand.Bind shader
+                        ComputeCommand.Dispatch(data.Length / 64)
+                    ]
 
-            let stream = prog.GetType().GetProperty("Stream", BindingFlags.Instance ||| BindingFlags.NonPublic).GetValue(prog) |> unbox<VKVM.CommandStream>
+                let stream = prog.GetType().GetProperty("Stream", BindingFlags.Instance ||| BindingFlags.NonPublic).GetValue(prog) |> unbox<VKVM.CommandStream>
 
-            let cmd = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
-            cmd.Begin(CommandBufferUsage.SimultaneousUse)
-            cmd.AppendCommand()
-            stream.Run(cmd.Handle)
-            cmd.End()
+                let cmd = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+                cmd.Begin(CommandBufferUsage.SimultaneousUse)
+                cmd.AppendCommand()
+                stream.Run(cmd.Handle)
+                cmd.End()
 
             
-            fun (queue : DeviceQueue) (fence : Fence) ->
-                queue.Submit(cmd, fence)
+                fun (queue : DeviceQueue) (fence : Fence) ->
+                    queue.Submit(cmd, fence) |> ignore
+
+            let fence = device.CreateFence()
+            let q = device.GraphicsFamily.GetQueue()
+
+            let sw = System.Diagnostics.Stopwatch()
+            let mutable iter = 0
+            while true do
+                fence.Reset()
+                sw.Start()
+                a.Upload data
+                copyCompute q fence
+                fence.Wait()
+                sw.Stop()
+                iter <- iter + 1
+
+                if iter >= 100 then
+                    let t = sw.MicroTime / iter
+                    Log.line "took: %A" t
+                    iter <- 0
+                    sw.Reset()
 
 
 
-        let queue0 = device.GraphicsFamily.GetQueue()
-        let queue1 = device.GraphicsFamily.GetQueue()
 
-        use pool = new ThreadPool([| queue0; queue1 |])
-        pool.Start()
+        let computeThread = Thread(ThreadStart(computeThread), IsBackground = true)
+        computeThread.Start()
 
 
-        let a2b =  copyCompute // copy (unbox a.Buffer) (unbox b.Buffer)
-        let b2c =  copy (unbox b.Buffer) (unbox c.Buffer)
+        while true do
+            printfn "press enter to toggle upload"
+            Console.ReadLine() |> ignore
+            running <- not running
+            if running then copyRunning.Set()
+            else copyRunning.Reset()
 
-        Report.Begin("testing for race")
-        for i in 1 .. 1000 do
-            device.perform {
-                do! Command.ZeroBuffer(unbox b.Buffer)
-                do! Command.ZeroBuffer(unbox c.Buffer)
-            }
-            let a2b = pool.StartAsTask(a2b)
-            let b2c = pool.StartAsTask(b2c)
-
-            let info1 = b2c.Result
-            let info0 = a2b.Result
-
-
-            let b = b.Download()
-            let c = c.Download()
-
-            let dAB = Array.fold2 (fun c a b -> if a <> b then c + 1 else c) 0 data b
-            let dAC = Array.fold2 (fun c a b -> if a <> b then c + 1 else c) 0 data c
-
-            if dAB <> 0 then
-                Log.warn "b invalid (%A)" dAB
-
-            if dAC <> 0 then
-                Log.line "c invalid (%d)" dAC
-
-            Report.Progress(float i / 1000.0)
-
-        pool.Stop()
-
-        Log.stop()
 
         ()   
         
@@ -757,6 +780,9 @@ module TPL =
             }
 
     let run() =
+        runRace()
+        Environment.Exit 0
+
         use app = new VulkanApplication(true)
         let device = app.Runtime.Device
 

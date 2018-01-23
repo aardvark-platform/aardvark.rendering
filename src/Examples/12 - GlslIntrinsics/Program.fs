@@ -9,8 +9,9 @@ open Aardvark.Application
 module Shader =
     open FShade 
 
+    [<ReflectedDefinition>]
     [<GLSLIntrinsic("gl_FrontFacing")>]
-    let frontFace () : bool = failwith ""
+    let frontFace () : bool = raise <| FShade.Imperative.FShadeOnlyInShaderCodeException "frontFace"
 
     let test (v : Effects.Vertex) =
         fragment {
