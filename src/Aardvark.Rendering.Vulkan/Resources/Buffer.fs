@@ -196,6 +196,39 @@ module BufferCommands =
         static member inline Copy(src : Buffer, dst : Buffer) = 
             Command.Copy(src, 0L, dst, 0L, min src.Size dst.Size)
 
+        static member Acquire(buffer : Buffer, offset : int64, size : int64) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue cmd =
+                    cmd.AppendCommand()
+
+                    let mutable barrier =
+                        VkBufferMemoryBarrier(
+                            VkStructureType.BufferMemoryBarrier, 0n,
+                            VkAccessFlags.None,
+                            VkAccessFlags.IndexReadBit ||| VkAccessFlags.IndirectCommandReadBit ||| VkAccessFlags.ShaderReadBit ||| VkAccessFlags.UniformReadBit ||| VkAccessFlags.VertexAttributeReadBit,
+                            uint32 buffer.Device.TransferFamily.Index,
+                            uint32 buffer.Device.GraphicsFamily.Index,
+                            buffer.Handle,
+                            uint64 offset,
+                            uint64 size
+                        )
+
+                    VkRaw.vkCmdPipelineBarrier(
+                        cmd.Handle,
+                        VkPipelineStageFlags.None,
+                        VkPipelineStageFlags.TopOfPipeBit,
+                        VkDependencyFlags.None,
+                        0u, NativePtr.zero,
+                        0u, NativePtr.zero,
+                        0u, NativePtr.zero
+                    )
+
+                    Disposable.Empty
+
+
+            }
+
         static member Sync(b : Buffer, src : VkAccessFlags, dst : VkAccessFlags) =
             { new Command() with
                 member x.Compatible = QueueFlags.All
@@ -390,6 +423,13 @@ module Buffer =
 
     let inline alloc (flags : VkBufferUsageFlags) (size : int64) (device : Device) =
         allocConcurrent false flags size device
+        
+    let delete (buffer : Buffer) (device : Device) =
+        if Interlocked.Decrement(&buffer.RefCount) = 0 then
+            if buffer.Handle.IsValid && buffer.Size > 0L then
+                VkRaw.vkDestroyBuffer(device.Handle, buffer.Handle, NativePtr.zero)
+                buffer.Handle <- VkBuffer.Null
+                buffer.Memory.Dispose()
 
     let internal ofWriter (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit) (device : Device) =
         if size > 0n then
@@ -400,12 +440,16 @@ module Buffer =
             buffer.Size <- int64 size
             let deviceMem = buffer.Memory
 
-            let hostPtr = device.HostMemory.Alloc(align, deviceAlignedSize)
-            hostPtr.Mapped (fun dst -> writer dst)
+            let hostBuffer = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit deviceAlignedSize
+            hostBuffer.Memory.Mapped (fun dst -> writer dst)
+
+            device.CopyEngine.Enqueue [
+                CopyCommand.BufferCopy(hostBuffer.Handle, buffer.Handle, VkBufferCopy(0UL, 0UL, uint64 size), true)
+                CopyCommand.Callback (fun () -> delete hostBuffer device)
+            ]
 
             device.eventually {
-                try do! Command.Copy(hostPtr, 0L, buffer, 0L, int64 size)
-                finally hostPtr.Dispose()
+                do! Command.Acquire(buffer, 0L, int64 size)
             }
 
             buffer
@@ -426,13 +470,6 @@ module Buffer =
             try do! Command.Copy(hostPtr, 0L, buffer, 0L, buffer.Size)
             finally hostPtr.Dispose()
         }
-
-    let delete (buffer : Buffer) (device : Device) =
-        if Interlocked.Decrement(&buffer.RefCount) = 0 then
-            if buffer.Handle.IsValid && buffer.Size > 0L then
-                VkRaw.vkDestroyBuffer(device.Handle, buffer.Handle, NativePtr.zero)
-                buffer.Handle <- VkBuffer.Null
-                buffer.Memory.Dispose()
 
     let rec tryUpdate (data : IBuffer) (buffer : Buffer) =
         match data with 
