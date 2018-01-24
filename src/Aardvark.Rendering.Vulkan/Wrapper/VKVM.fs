@@ -1519,6 +1519,8 @@ module VKVM =
                 for i in 0 .. iCount - 1 do NativePtr.set iPtr i imageBarriers.[i]
             )
 
+
+
         member x.BeginQuery(pool : VkQueryPool, query : uint32, flags : VkQueryControlFlags) =
             let mutable cmd =
                 BeginQueryCommand(
