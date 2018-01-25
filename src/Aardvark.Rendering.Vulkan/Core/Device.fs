@@ -360,6 +360,13 @@ type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExt
                 ref := Some t
                 t 
 
+    member x.UnsafeCurrentToken =
+        !currentResourceToken.Value
+
+    member x.UnsafeSetToken (t : Option<DeviceToken>) =
+        let ref = currentResourceToken.Value
+        ref := t
+
     member x.Sync() =
         let ref = currentResourceToken.Value
         match !ref with
@@ -1310,8 +1317,10 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
         f.Dispose()
 
     member x.WaitIdle() =
-        VkRaw.vkQueueWaitIdle(x.Handle)
-            |> check "could not wait for queue"
+        lock x (fun () ->
+            VkRaw.vkQueueWaitIdle(x.Handle)
+                |> check "could not wait for queue"
+        )
 
 and DeviceQueuePool internal(device : Device, queues : list<DeviceQueueFamily>) =
     let available : HashSet<QueueFlags> = queues |> List.collect (fun f -> Enum.allSubFlags f.Flags) |> HashSet.ofList
