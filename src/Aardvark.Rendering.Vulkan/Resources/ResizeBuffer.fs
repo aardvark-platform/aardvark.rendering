@@ -47,7 +47,7 @@ type private SparseBlock =
 
 [<Obsolete("not finished yet")>]
 type SparseBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer, virtualSize : int64) =
-    inherit Buffer(device, handle, new DevicePtr(DeviceMemory.Null, 0L, virtualSize), virtualSize)
+    inherit Buffer(device, handle, new DevicePtr(DeviceMemory.Null, 0L, virtualSize), virtualSize, usage)
     
     let mutable reqs = VkMemoryRequirements()
     do VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, &&reqs)
@@ -293,7 +293,7 @@ type SparseBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
         )
 
 type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer, virtualSize : int64) =
-    inherit Buffer(device, handle, new DevicePtr(DeviceMemory.Null, 0L, 2L <<< 30), virtualSize)
+    inherit Buffer(device, handle, new DevicePtr(DeviceMemory.Null, 0L, 2L <<< 30), virtualSize, usage)
 
     let align, memoryTypeBits = 
         let mutable reqs = VkMemoryRequirements()

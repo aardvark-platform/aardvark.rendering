@@ -21,7 +21,7 @@ type Buffer =
         val mutable public Memory : DevicePtr
         val mutable public Size : int64
         val mutable public RefCount : int
-
+        val mutable public Usage : VkBufferUsageFlags
 
         interface IBackendBuffer with
             member x.Runtime = x.Device.Runtime :> IBufferRuntime
@@ -31,7 +31,7 @@ type Buffer =
 
         member x.AddReference() = Interlocked.Increment(&x.RefCount) |> ignore
 
-        new(device, handle, memory, size) = { inherit Resource<_>(device, handle); Memory = memory; Size = size; RefCount = 1 }
+        new(device, handle, memory, size, usage) = { inherit Resource<_>(device, handle); Memory = memory; Size = size; RefCount = 1; Usage = usage }
     end
 
 type BufferView =
@@ -202,11 +202,24 @@ module BufferCommands =
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
 
+
+                    let access, stage =
+                        if buffer.Usage.HasFlag VkBufferUsageFlags.IndexBufferBit then 
+                            VkAccessFlags.IndexReadBit, VkPipelineStageFlags.VertexInputBit
+                        elif buffer.Usage.HasFlag VkBufferUsageFlags.VertexBufferBit then
+                            VkAccessFlags.VertexAttributeReadBit, VkPipelineStageFlags.VertexInputBit
+                        elif buffer.Usage.HasFlag VkBufferUsageFlags.IndirectBufferBit then
+                            VkAccessFlags.IndirectCommandReadBit, VkPipelineStageFlags.DrawIndirectBit
+                        else
+                            failwith ""
+                            
+                            
+
                     let mutable barrier =
                         VkBufferMemoryBarrier(
                             VkStructureType.BufferMemoryBarrier, 0n,
                             VkAccessFlags.None,
-                            VkAccessFlags.IndexReadBit ||| VkAccessFlags.IndirectCommandReadBit ||| VkAccessFlags.ShaderReadBit ||| VkAccessFlags.UniformReadBit ||| VkAccessFlags.VertexAttributeReadBit,
+                            access,
                             uint32 buffer.Device.TransferFamily.Index,
                             uint32 buffer.Device.GraphicsFamily.Index,
                             buffer.Handle,
@@ -216,8 +229,8 @@ module BufferCommands =
 
                     VkRaw.vkCmdPipelineBarrier(
                         cmd.Handle,
-                        VkPipelineStageFlags.None,
                         VkPipelineStageFlags.TopOfPipeBit,
+                        stage,
                         VkDependencyFlags.None,
                         0u, NativePtr.zero,
                         0u, NativePtr.zero,
@@ -381,7 +394,7 @@ module Buffer =
                 emptyBuffers.TryRemove(key) |> ignore
             )   
 
-            new Buffer(device, handle, ptr, 256L)
+            new Buffer(device, handle, ptr, 256L, usage)
         )
 
     let createConcurrent (conc : bool) (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
@@ -413,7 +426,7 @@ module Buffer =
             |> check "could not bind buffer-memory"
 
 
-        new Buffer(device, handle, ptr, size)
+        new Buffer(device, handle, ptr, size, flags)
 
     let inline create  (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
         createConcurrent false flags size memory

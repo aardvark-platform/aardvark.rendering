@@ -283,7 +283,7 @@ module GeometryPoolUtilities =
 
 
     type MappedBufferOld(device : Device, lock : ResourceLock2, usage : VkBufferUsageFlags, handle : VkBuffer, devPtr : DevicePtr, size : int64) =
-        inherit Buffer(device, handle, devPtr, size)
+        inherit Buffer(device, handle, devPtr, size, usage)
         static let sRange = sizeof<VkMappedMemoryRange> |> nativeint
 
         let transfer = device.TransferFamily
@@ -316,7 +316,7 @@ module GeometryPoolUtilities =
             VkRaw.vkMapMemory(device.Handle, hm.Handle, 0UL, uint64 hm.Size, VkMemoryMapFlags.MinValue, &&ptr)
                 |> check "could not map memory"
             
-            hm, new Buffer(device, handle, hm, size)
+            hm, new Buffer(device, handle, hm, size, VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit)
 
         let mutable isEmpty = true
 
@@ -428,7 +428,7 @@ module GeometryPoolUtilities =
             member x.Dispose() = x.Dispose()
 
     type StreamingBufferOld(device : Device, rlock : ResourceLock2, usage : VkBufferUsageFlags, handle : VkBuffer, devPtr : DevicePtr, size : int64) =
-        inherit Buffer(device, handle, devPtr, size)
+        inherit Buffer(device, handle, devPtr, size, usage)
 
         let streamSize = size
 
@@ -578,7 +578,7 @@ module GeometryPoolUtilities =
             member x.Dispose() = x.Dispose()
 
     type StreamingBuffer(device : Device, rlock : ResourceLock2, usage : VkBufferUsageFlags, handle : VkBuffer, devPtr : DevicePtr, size : int64) =
-        inherit Buffer(device, handle, devPtr, size)
+        inherit Buffer(device, handle, devPtr, size, usage)
         let streamSize = size
 
         let mutable scratchBuffer, scratchMem =
