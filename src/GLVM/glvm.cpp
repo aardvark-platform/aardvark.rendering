@@ -126,6 +126,20 @@ DllExport(void) vmInit()
 
 }
 
+static size_t getIndexSize(GLenum indexType)
+{
+	switch (indexType)
+	{
+	case GL_UNSIGNED_INT: return sizeof(int);
+	case GL_UNSIGNED_BYTE: return sizeof(char);
+	case GL_UNSIGNED_SHORT: return sizeof(short);
+	case GL_INT: return sizeof(int);
+	case GL_BYTE: return sizeof(char);
+	case GL_SHORT: return sizeof(short);
+	default: return 4;
+	}
+}
+
 DllExport(Fragment*) vmCreate()
 {
 	Fragment* ptr = new Fragment();
@@ -802,7 +816,6 @@ DllExport(void) hglDrawArrays(RuntimeStats* stats, int* isActive, BeginMode* mod
 	auto v = mode->PatchVertices;
 	if (m == GL_PATCHES) glPatchParameteri(GL_PATCH_VERTICES, v);
 
-
 	stats->DrawCalls+=cnt;
 
 	for (int i = 0; i < cnt; i++, info += 1)
@@ -831,6 +844,8 @@ DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* m
 	auto v = mode->PatchVertices;
 	if (m == GL_PATCHES) glPatchParameteri(GL_PATCH_VERTICES, v);
 
+	auto indexSize = getIndexSize(indexType);
+
 	stats->DrawCalls+=(int)cnt;
 	for (int i = 0; i < cnt; i++, info += 1)
 	{
@@ -838,11 +853,11 @@ DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* m
 
 		if (info->InstanceCount != 1 || info->FirstInstance != 0)
 		{
-			glDrawElementsInstancedBaseVertexBaseInstance(m, info->FaceVertexCount, indexType, (const void*)(int64_t)(info->FirstIndex*4), info->InstanceCount, info->BaseVertex, info->FirstInstance);
+			glDrawElementsInstancedBaseVertexBaseInstance(m, info->FaceVertexCount, indexType, (const void*)(int64_t)(info->FirstIndex*indexSize), info->InstanceCount, info->BaseVertex, info->FirstInstance);
 		}
 		else
 		{
-			auto offset = int64_t(info->FirstIndex * sizeof(int));
+			auto offset = int64_t(info->FirstIndex * indexSize);
 
 			if (info->BaseVertex == 0)
 			{
@@ -927,6 +942,7 @@ DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, Begi
 
 	if (glMultiDrawElementsIndirect == nullptr)
 	{
+		auto indexSize = getIndexSize(indexType);
 		GLint size = 0;
 		glBindBuffer(GL_COPY_READ_BUFFER, buffer);
 		glGetBufferParameteriv(GL_COPY_READ_BUFFER, GL_BUFFER_SIZE, &size);
@@ -941,7 +957,7 @@ DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, Begi
 				m,
 				cmd->Count,
 				indexType,
-				(void*) (cmd->FirstIndex * sizeof(int)), // TODO: proper size of indexType
+				(void*) (cmd->FirstIndex * indexSize), 
 				cmd->InstanceCount,
 				cmd->BaseVertex,
 				cmd->BaseInstance
