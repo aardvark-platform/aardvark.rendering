@@ -457,7 +457,8 @@ module Buffer =
             hostBuffer.Memory.Mapped (fun dst -> writer dst)
 
             device.CopyEngine.Enqueue [
-                CopyCommand.BufferCopy(hostBuffer.Handle, buffer.Handle, VkBufferCopy(0UL, 0UL, uint64 size), true)
+                CopyCommand.Copy(hostBuffer.Handle, 0L, buffer.Handle, 0L, int64 size)
+                CopyCommand.Release(buffer.Handle, 0L, int64 size, device.GraphicsFamily.Index)
                 CopyCommand.Callback (fun () -> delete hostBuffer device)
             ]
 

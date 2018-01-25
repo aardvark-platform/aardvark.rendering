@@ -485,111 +485,169 @@ and DeviceCache<'a, 'b when 'b :> RefCountedResource>(device : Device, create : 
     interface IDeviceCache<'b> with
         member x.Revoke b = x.Revoke b
 
-and CopyCommandKind =
-    | ContOnly = 0
-    | BufferToBuffer = 1
-    | BufferToImage = 2
-    | ImageToBuffer = 3
+//and CopyCommandKind =
+//    | ContOnly = 0
+//    | BufferToBuffer = 1
+//    | BufferToImage = 2
+//    | ImageToBuffer = 3
 
-    
-and [<StructLayout(LayoutKind.Explicit, Size = 104)>] CopyCommand =
-    struct
-        [<FieldOffset(0)>]
-        val mutable public Kind : CopyCommandKind
-        
-        [<FieldOffset(8)>]
-        val mutable public Src : int64
+//    
+//and [<StructLayout(LayoutKind.Explicit, Size = 104)>] CopyCommand =
+//    struct
+//        [<FieldOffset(0)>]
+//        val mutable public Kind : CopyCommandKind
+//        
+//        [<FieldOffset(8)>]
+//        val mutable public Src : int64
+//
+//        [<FieldOffset(16)>]
+//        val mutable public Dst : int64
+//
+//        [<FieldOffset(24)>]
+//        val mutable public Cont : Option<unit -> unit>
+//
+//        [<FieldOffset(32)>]
+//        val mutable public Size : int64
+//
+//        [<FieldOffset(40)>]
+//        val mutable public TransferOwnership : bool
+//
+//        // size = 24
+//        [<FieldOffset(48)>]
+//        val mutable public BufferBufferInfo : VkBufferCopy
+//        
+//        // size = 56
+//        [<FieldOffset(48)>]
+//        val mutable public BufferImageInfo : VkBufferImageCopy
+//
+//
+//        member x.Split(maxSize : int64) =
+//            match x.Kind with
+//                | CopyCommandKind.BufferToBuffer ->
+//
+//                    let chunks = if x.Size % maxSize = 0L then x.Size / maxSize else 1L + x.Size / maxSize
+//                    let self = x
+//
+//                    Array.init (int chunks) (fun ci ->
+//                        let mutable self = self
+//                        let offset = int64 ci * maxSize
+//                        let size = min (int64 self.BufferBufferInfo.size - offset) maxSize
+//                        self.BufferBufferInfo.srcOffset <- self.BufferBufferInfo.srcOffset + uint64 offset
+//                        self.BufferBufferInfo.dstOffset <- self.BufferBufferInfo.dstOffset + uint64 offset
+//                        self.BufferBufferInfo.size <- uint64 size
+//
+//                        self
+//                    )
+//
+//                | _ ->
+//                    [| x |]
+//
+//        static member BufferCopy(src : VkBuffer, dst : VkBuffer, copy : VkBufferCopy, transfer : bool) =
+//            let mutable cmd = Unchecked.defaultof<CopyCommand>
+//            cmd.Kind <- CopyCommandKind.BufferToBuffer
+//            cmd.Src <- src.Handle
+//            cmd.Dst <- dst.Handle
+//            cmd.Cont <- None
+//            cmd.Size <- int64 copy.size
+//            cmd.BufferBufferInfo <- copy
+//            cmd.TransferOwnership <- transfer
+//            cmd
+//
+//        static member BufferImageCopy(src : VkBuffer, dst : VkImage, copy : VkBufferImageCopy, fmt : TextureFormat, transfer : bool) =
+//            let mutable cmd = Unchecked.defaultof<CopyCommand>
+//            cmd.Kind <- CopyCommandKind.BufferToImage
+//            cmd.Src <- src.Handle
+//            cmd.Dst <- dst.Handle
+//            cmd.Cont <- None
+//            cmd.BufferImageInfo <- copy
+//            
+//            let r = if copy.bufferRowLength = 0u then int copy.imageExtent.width * TextureFormat.pixelSizeInBytes fmt else int copy.bufferRowLength
+//            let h = if copy.bufferImageHeight = 0u then int copy.imageExtent.height else int copy.bufferImageHeight
+//            cmd.Size <- int64 r * int64 h
+//            cmd.TransferOwnership <- transfer
+//
+//            cmd
+//        
+//        static member ImageBufferCopy(src : VkImage, dst : VkBuffer, copy : VkBufferImageCopy, fmt : TextureFormat, transfer : bool) =
+//            let mutable cmd = Unchecked.defaultof<CopyCommand>
+//            cmd.Kind <- CopyCommandKind.ImageToBuffer
+//            cmd.Src <- src.Handle
+//            cmd.Dst <- dst.Handle
+//            cmd.Cont <- None
+//            cmd.BufferImageInfo <- copy
+//            cmd.TransferOwnership <- transfer
+//
+//            let r = if copy.bufferRowLength = 0u then int copy.imageExtent.width * TextureFormat.pixelSizeInBytes fmt else int copy.bufferRowLength
+//            let h = if copy.bufferImageHeight = 0u then int copy.imageExtent.height else int copy.bufferImageHeight
+//            cmd.Size <- int64 r * int64 h
+//
+//            cmd
+//        
+//        static member Callback(cont : unit -> unit) =
+//            let mutable cmd = Unchecked.defaultof<CopyCommand>
+//            cmd.Kind <- CopyCommandKind.ContOnly 
+//            cmd.Cont <- Some cont
+//            cmd
+//                
+//    end
 
-        [<FieldOffset(16)>]
-        val mutable public Dst : int64
+and [<RequireQualifiedAccess>] CopyCommand =
+    internal
+        | BufferToBufferCmd of src : VkBuffer * dst : VkBuffer * info : VkBufferCopy
+        | BufferToImageCmd of src : VkBuffer * dst : VkImage * dstLayout : VkImageLayout * info : VkBufferImageCopy * size : int64
+        | ImageToBufferCmd of src : VkImage * srcLayout : VkImageLayout * dst : VkBuffer * info : VkBufferImageCopy * size : int64
+        | CallbackCmd of (unit -> unit)
+        | ReleaseBufferCmd of buffer : VkBuffer * offset : int64 * size : int64 * dstQueueFamily : uint32
+        | ReleaseImageCmd of image : VkImage * range : VkImageSubresourceRange * srcLayout : VkImageLayout * dstLayout : VkImageLayout * dstQueueFamily : uint32
 
-        [<FieldOffset(24)>]
-        val mutable public Cont : Option<unit -> unit>
+    static member Copy(src : VkBuffer, srcOffset : int64, dst : VkBuffer, dstOffset : int64, size : int64) =
+        CopyCommand.BufferToBufferCmd(
+            src, 
+            dst, 
+            VkBufferCopy(uint64 srcOffset, uint64 dstOffset, uint64 size)
+        )
 
-        [<FieldOffset(32)>]
-        val mutable public Size : int64
+    static member Copy(src : VkBuffer, srcOffset : int64, dst : VkImage, dstLayout : VkImageLayout, format : VkFormat, info : VkBufferImageCopy) =
+        let sizeInBytes = 
+            int64 info.imageExtent.width *
+            int64 info.imageExtent.height * 
+            int64 info.imageExtent.depth *
+            int64 (VkFormat.sizeInBytes format)
 
-        [<FieldOffset(40)>]
-        val mutable public TransferOwnership : bool
+        CopyCommand.BufferToImageCmd(
+            src,
+            dst, dstLayout,
+            info, sizeInBytes
+        )
 
-        // size = 24
-        [<FieldOffset(48)>]
-        val mutable public BufferBufferInfo : VkBufferCopy
-        
-        // size = 56
-        [<FieldOffset(48)>]
-        val mutable public BufferImageInfo : VkBufferImageCopy
+    static member Copy(src : VkImage, srcLayout : VkImageLayout, dst : VkBuffer, format : VkFormat, info : VkBufferImageCopy) =
+        let sizeInBytes = 
+            int64 info.imageExtent.width *
+            int64 info.imageExtent.height * 
+            int64 info.imageExtent.depth *
+            int64 (VkFormat.sizeInBytes format)
 
+        CopyCommand.ImageToBufferCmd(
+            src, srcLayout,
+            dst,
+            info, sizeInBytes
+        )
 
-        member x.Split(maxSize : int64) =
-            match x.Kind with
-                | CopyCommandKind.BufferToBuffer ->
+    static member Callback(cb : unit -> unit) =
+        CopyCommand.CallbackCmd cb
 
-                    let chunks = if x.Size % maxSize = 0L then x.Size / maxSize else 1L + x.Size / maxSize
-                    let self = x
+    static member Release(buffer : VkBuffer, offset : int64, size : int64, dstQueueFamily : int) =
+        CopyCommand.ReleaseBufferCmd(buffer, offset, size, uint32 dstQueueFamily)
 
-                    Array.init (int chunks) (fun ci ->
-                        let mutable self = self
-                        let offset = int64 ci * maxSize
-                        let size = min (int64 self.BufferBufferInfo.size - offset) maxSize
-                        self.BufferBufferInfo.srcOffset <- self.BufferBufferInfo.srcOffset + uint64 offset
-                        self.BufferBufferInfo.dstOffset <- self.BufferBufferInfo.dstOffset + uint64 offset
-                        self.BufferBufferInfo.size <- uint64 size
+    static member Release(image : VkImage, range : VkImageSubresourceRange, srcLayout : VkImageLayout, dstLayout : VkImageLayout, dstQueueFamily : int) =
+        CopyCommand.ReleaseImageCmd(image, range, srcLayout, dstLayout, uint32 dstQueueFamily)
 
-                        self
-                    )
-
-                | _ ->
-                    [| x |]
-
-        static member BufferCopy(src : VkBuffer, dst : VkBuffer, copy : VkBufferCopy, transfer : bool) =
-            let mutable cmd = Unchecked.defaultof<CopyCommand>
-            cmd.Kind <- CopyCommandKind.BufferToBuffer
-            cmd.Src <- src.Handle
-            cmd.Dst <- dst.Handle
-            cmd.Cont <- None
-            cmd.Size <- int64 copy.size
-            cmd.BufferBufferInfo <- copy
-            cmd.TransferOwnership <- transfer
-            cmd
-
-        static member BufferImageCopy(src : VkBuffer, dst : VkImage, copy : VkBufferImageCopy, fmt : TextureFormat, transfer : bool) =
-            let mutable cmd = Unchecked.defaultof<CopyCommand>
-            cmd.Kind <- CopyCommandKind.BufferToImage
-            cmd.Src <- src.Handle
-            cmd.Dst <- dst.Handle
-            cmd.Cont <- None
-            cmd.BufferImageInfo <- copy
-            
-            let r = if copy.bufferRowLength = 0u then int copy.imageExtent.width * TextureFormat.pixelSizeInBytes fmt else int copy.bufferRowLength
-            let h = if copy.bufferImageHeight = 0u then int copy.imageExtent.height else int copy.bufferImageHeight
-            cmd.Size <- int64 r * int64 h
-            cmd.TransferOwnership <- transfer
-
-            cmd
-        
-        static member ImageBufferCopy(src : VkImage, dst : VkBuffer, copy : VkBufferImageCopy, fmt : TextureFormat, transfer : bool) =
-            let mutable cmd = Unchecked.defaultof<CopyCommand>
-            cmd.Kind <- CopyCommandKind.ImageToBuffer
-            cmd.Src <- src.Handle
-            cmd.Dst <- dst.Handle
-            cmd.Cont <- None
-            cmd.BufferImageInfo <- copy
-            cmd.TransferOwnership <- transfer
-
-            let r = if copy.bufferRowLength = 0u then int copy.imageExtent.width * TextureFormat.pixelSizeInBytes fmt else int copy.bufferRowLength
-            let h = if copy.bufferImageHeight = 0u then int copy.imageExtent.height else int copy.bufferImageHeight
-            cmd.Size <- int64 r * int64 h
-
-            cmd
-        
-        static member Callback(cont : unit -> unit) =
-            let mutable cmd = Unchecked.defaultof<CopyCommand>
-            cmd.Kind <- CopyCommandKind.ContOnly 
-            cmd.Cont <- Some cont
-            cmd
-                
-    end
+    member x.SizeInBytes =
+        match x with
+            | BufferToBufferCmd(_,_,i) -> int64 i.size
+            | BufferToImageCmd(_,_,_,_,s) -> s
+            | ImageToBufferCmd(_,_,_,_,s) -> s
+            | _ -> 0L
 
 and CopyEngine(family : DeviceQueueFamily) =
     let device : Device = family.Device
@@ -653,99 +711,153 @@ and CopyEngine(family : DeviceQueueFamily) =
                 cmd.AppendCommand()
 
                 for copy in copies do
-                    match copy.Cont with
-                        | Some cont -> conts.Add cont
-                        | None -> ()
+                    match copy with
+                        | CopyCommand.CallbackCmd cont ->
+                            conts.Add cont
 
-                    match copy.Kind with
-                        | CopyCommandKind.BufferToBuffer ->
-                            let src = VkBuffer(copy.Src)
-                            let dst = VkBuffer(copy.Dst)
-                            stream.CopyBuffer(src, dst, [| copy.BufferBufferInfo |]) |> ignore
+                        | CopyCommand.BufferToBufferCmd(src, dst, info) ->
+                            stream.CopyBuffer(src, dst, [| info |]) |> ignore
 
-                            if copy.TransferOwnership then 
+                        | CopyCommand.BufferToImageCmd(src, dst, dstLayout, info, size) ->
+                            stream.CopyBufferToImage(src, dst, dstLayout, [| info |]) |> ignore
 
-                                let release =
+                        | CopyCommand.ImageToBufferCmd(src, srcLayout, dst, info, size) ->
+                            stream.CopyImageToBuffer(src, srcLayout, dst, [| info |]) |> ignore
+
+                        | CopyCommand.ReleaseBufferCmd(buffer, offset, size, dstQueue) ->
+                            stream.PipelineBarrier(
+                                VkPipelineStageFlags.TransferBit,
+                                VkPipelineStageFlags.BottomOfPipeBit,
+                                [||],
+                                [|
                                     VkBufferMemoryBarrier(
                                         VkStructureType.BufferMemoryBarrier, 0n,
                                         VkAccessFlags.TransferWriteBit,
                                         VkAccessFlags.None,
                                         uint32 familyIndex,
-                                        uint32 graphicsFamily,
-                                        dst,
-                                        copy.BufferBufferInfo.dstOffset, copy.BufferBufferInfo.size
+                                        dstQueue,
+                                        buffer,
+                                        uint64 offset, uint64 size
                                     )
+                                |],
+                                [||]
+                            ) |> ignore
 
-                                stream.PipelineBarrier(
-                                    VkPipelineStageFlags.TransferBit,
-                                    VkPipelineStageFlags.BottomOfPipeBit,
-                                    [||],
-                                    [|release|],
-                                    [||]
-                                ) |> ignore
-
-                        | CopyCommandKind.ImageToBuffer ->
-                            let src = VkImage(copy.Src)
-                            let dst = VkBuffer(copy.Dst)
-                            stream.CopyImageToBuffer(src, VkImageLayout.TransferSrcOptimal, dst, [| copy.BufferImageInfo |]) |> ignore
-                                
-                            
-                            if copy.TransferOwnership then 
-
-                                let release =
-                                    VkBufferMemoryBarrier(
-                                        VkStructureType.BufferMemoryBarrier, 0n,
-                                        VkAccessFlags.TransferWriteBit,
-                                        VkAccessFlags.None,
-                                        uint32 familyIndex,
-                                        uint32 graphicsFamily,
-                                        dst,
-                                        copy.BufferBufferInfo.dstOffset, copy.BufferBufferInfo.size
-                                    )
-
-                                stream.PipelineBarrier(
-                                    VkPipelineStageFlags.TransferBit,
-                                    VkPipelineStageFlags.BottomOfPipeBit,
-                                    [||],
-                                    [|release|],
-                                    [||]
-                                ) |> ignore
-
-                        | CopyCommandKind.BufferToImage ->
-                            let src = VkBuffer(copy.Src)
-                            let dst = VkImage(copy.Dst)
-                            stream.CopyBufferToImage(src, dst, VkImageLayout.TransferDstOptimal, [| copy.BufferImageInfo |]) |> ignore
-                                
-                            if copy.TransferOwnership then 
-                                let layers = copy.BufferImageInfo.imageSubresource
-
-                                let release =
+                        | CopyCommand.ReleaseImageCmd(image, range, srcLayout, dstLayout, dstQueue) ->
+                            stream.PipelineBarrier(
+                                VkPipelineStageFlags.TransferBit,
+                                VkPipelineStageFlags.BottomOfPipeBit,
+                                [||],
+                                [||],
+                                [|
                                     VkImageMemoryBarrier(
                                         VkStructureType.ImageMemoryBarrier, 0n,
                                         VkAccessFlags.TransferWriteBit,
                                         VkAccessFlags.None,
-                                        VkImageLayout.TransferDstOptimal,
-                                        VkImageLayout.TransferDstOptimal,
+                                        srcLayout, dstLayout,
                                         uint32 familyIndex,
-                                        uint32 graphicsFamily,
-                                        dst,
-                                        VkImageSubresourceRange(layers.aspectMask, layers.mipLevel, 1u, layers.baseArrayLayer, layers.layerCount)
+                                        uint32 dstQueue,
+                                        image,
+                                        range
                                     )
+                                |]
+                            ) |> ignore
 
-                                stream.PipelineBarrier(
-                                    VkPipelineStageFlags.TransferBit,
-                                    VkPipelineStageFlags.BottomOfPipeBit,
-                                    [||],
-                                    [||],
-                                    [| release |]
-                                ) |> ignore
-
-                        | CopyCommandKind.ContOnly ->
-                            ()
-
-
-                        | _ ->
-                            Log.warn "[Vulkan] invalid copy: %A" copy.Kind
+//
+//                            
+//                    match copy.Cont with
+//                        | Some cont -> conts.Add cont
+//                        | None -> ()
+//
+//                    match copy.Kind with
+//                        | CopyCommandKind.BufferToBuffer ->
+//                            let src = VkBuffer(copy.Src)
+//                            let dst = VkBuffer(copy.Dst)
+//                            stream.CopyBuffer(src, dst, [| copy.BufferBufferInfo |]) |> ignore
+//
+//                            if copy.TransferOwnership then 
+//
+//                                let release =
+//                                    VkBufferMemoryBarrier(
+//                                        VkStructureType.BufferMemoryBarrier, 0n,
+//                                        VkAccessFlags.TransferWriteBit,
+//                                        VkAccessFlags.None,
+//                                        uint32 familyIndex,
+//                                        uint32 graphicsFamily,
+//                                        dst,
+//                                        copy.BufferBufferInfo.dstOffset, copy.BufferBufferInfo.size
+//                                    )
+//
+//                                stream.PipelineBarrier(
+//                                    VkPipelineStageFlags.TransferBit,
+//                                    VkPipelineStageFlags.BottomOfPipeBit,
+//                                    [||],
+//                                    [|release|],
+//                                    [||]
+//                                ) |> ignore
+//
+//                        | CopyCommandKind.ImageToBuffer ->
+//                            let src = VkImage(copy.Src)
+//                            let dst = VkBuffer(copy.Dst)
+//                            stream.CopyImageToBuffer(src, VkImageLayout.TransferSrcOptimal, dst, [| copy.BufferImageInfo |]) |> ignore
+//                                
+//                            
+//                            if copy.TransferOwnership then 
+//
+//                                let release =
+//                                    VkBufferMemoryBarrier(
+//                                        VkStructureType.BufferMemoryBarrier, 0n,
+//                                        VkAccessFlags.TransferWriteBit,
+//                                        VkAccessFlags.None,
+//                                        uint32 familyIndex,
+//                                        uint32 graphicsFamily,
+//                                        dst,
+//                                        copy.BufferBufferInfo.dstOffset, copy.BufferBufferInfo.size
+//                                    )
+//
+//                                stream.PipelineBarrier(
+//                                    VkPipelineStageFlags.TransferBit,
+//                                    VkPipelineStageFlags.BottomOfPipeBit,
+//                                    [||],
+//                                    [|release|],
+//                                    [||]
+//                                ) |> ignore
+//
+//                        | CopyCommandKind.BufferToImage ->
+//                            let src = VkBuffer(copy.Src)
+//                            let dst = VkImage(copy.Dst)
+//                            stream.CopyBufferToImage(src, dst, VkImageLayout.TransferDstOptimal, [| copy.BufferImageInfo |]) |> ignore
+//                                
+//                            if copy.TransferOwnership then 
+//                                let layers = copy.BufferImageInfo.imageSubresource
+//
+//                                let release =
+//                                    VkImageMemoryBarrier(
+//                                        VkStructureType.ImageMemoryBarrier, 0n,
+//                                        VkAccessFlags.TransferWriteBit,
+//                                        VkAccessFlags.None,
+//                                        VkImageLayout.TransferDstOptimal,
+//                                        VkImageLayout.TransferDstOptimal,
+//                                        uint32 familyIndex,
+//                                        uint32 graphicsFamily,
+//                                        dst,
+//                                        VkImageSubresourceRange(layers.aspectMask, layers.mipLevel, 1u, layers.baseArrayLayer, layers.layerCount)
+//                                    )
+//
+//                                stream.PipelineBarrier(
+//                                    VkPipelineStageFlags.TransferBit,
+//                                    VkPipelineStageFlags.BottomOfPipeBit,
+//                                    [||],
+//                                    [||],
+//                                    [| release |]
+//                                ) |> ignore
+//
+//                        | CopyCommandKind.ContOnly ->
+//                            ()
+//
+//
+//                        | _ ->
+//                            Log.warn "[Vulkan] invalid copy: %A" copy.Kind
                     ()
 
                 stream.Run cmd.Handle
@@ -829,15 +941,11 @@ and CopyEngine(family : DeviceQueueFamily) =
     member x.Enqueue(commands : seq<CopyCommand>) =
         let size = 
             lock lockObj (fun () ->
-                    
-                for e in commands do
-                    if e.Size > maxCommandSize then
-                        pending.AddRange (e.Split maxCommandSize)
-                    else
-                        pending.Add e
+                   
+                pending.AddRange commands
                         
                 //pending.AddRange commands
-                let s = commands |> Seq.fold (fun s c -> s + c.Size) 0L 
+                let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0L 
                 totalSize <- totalSize + s
                 s
             )
