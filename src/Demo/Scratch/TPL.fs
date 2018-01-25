@@ -70,7 +70,7 @@ module TPL =
             for ci in 0L .. chunks - 1L do
                 let offset = chunkSize * ci
                 let size = min (size - offset) chunkSize
-                let copy = CopyCommand.BufferCopy(hostBuffer.Handle, deviceBuffer.Handle, VkBufferCopy(uint64 offset, uint64 offset,  uint64 size))
+                let copy = CopyCommand.Copy(hostBuffer.Handle, offset, deviceBuffer.Handle, offset, size)
                 copyEngine.Enqueue(copy)
 
             copyEngine.Enqueue(CopyCommand.Callback destroy)
