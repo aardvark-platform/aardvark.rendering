@@ -422,6 +422,9 @@ type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExt
         if not instance.IsDisposed then
             let o = Interlocked.Exchange(&isDisposed, 1)
             if o = 0 then 
+                if copyEngine.IsValueCreated then
+                    copyEngine.Value.Dispose()
+
                 onDispose.Trigger()
                 for h in memories do h.Dispose()
                 for f in queueFamilies do f.Dispose()
@@ -666,7 +669,7 @@ and CopyEngine(family : DeviceQueueFamily) =
                                     VkBufferMemoryBarrier(
                                         VkStructureType.BufferMemoryBarrier, 0n,
                                         VkAccessFlags.TransferWriteBit,
-                                        VkAccessFlags.IndexReadBit ||| VkAccessFlags.IndirectCommandReadBit ||| VkAccessFlags.ShaderReadBit ||| VkAccessFlags.TransferReadBit,
+                                        VkAccessFlags.None,
                                         uint32 familyIndex,
                                         uint32 graphicsFamily,
                                         dst,
@@ -675,7 +678,7 @@ and CopyEngine(family : DeviceQueueFamily) =
 
                                 stream.PipelineBarrier(
                                     VkPipelineStageFlags.TransferBit,
-                                    VkPipelineStageFlags.None,
+                                    VkPipelineStageFlags.BottomOfPipeBit,
                                     [||],
                                     [|release|],
                                     [||]
@@ -693,7 +696,7 @@ and CopyEngine(family : DeviceQueueFamily) =
                                     VkBufferMemoryBarrier(
                                         VkStructureType.BufferMemoryBarrier, 0n,
                                         VkAccessFlags.TransferWriteBit,
-                                        VkAccessFlags.IndexReadBit ||| VkAccessFlags.IndirectCommandReadBit ||| VkAccessFlags.ShaderReadBit ||| VkAccessFlags.TransferReadBit,
+                                        VkAccessFlags.None,
                                         uint32 familyIndex,
                                         uint32 graphicsFamily,
                                         dst,
@@ -702,7 +705,7 @@ and CopyEngine(family : DeviceQueueFamily) =
 
                                 stream.PipelineBarrier(
                                     VkPipelineStageFlags.TransferBit,
-                                    VkPipelineStageFlags.None,
+                                    VkPipelineStageFlags.BottomOfPipeBit,
                                     [||],
                                     [|release|],
                                     [||]
@@ -720,7 +723,7 @@ and CopyEngine(family : DeviceQueueFamily) =
                                     VkImageMemoryBarrier(
                                         VkStructureType.ImageMemoryBarrier, 0n,
                                         VkAccessFlags.TransferWriteBit,
-                                        VkAccessFlags.ColorAttachmentReadBit ||| VkAccessFlags.ShaderReadBit,
+                                        VkAccessFlags.None,
                                         VkImageLayout.TransferDstOptimal,
                                         VkImageLayout.TransferDstOptimal,
                                         uint32 familyIndex,
@@ -731,7 +734,7 @@ and CopyEngine(family : DeviceQueueFamily) =
 
                                 stream.PipelineBarrier(
                                     VkPipelineStageFlags.TransferBit,
-                                    VkPipelineStageFlags.None,
+                                    VkPipelineStageFlags.BottomOfPipeBit,
                                     [||],
                                     [||],
                                     [| release |]
