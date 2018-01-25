@@ -92,6 +92,7 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
         member x.Dispose() = x.Dispose()
 
 open Aardvark.Rendering.Vulkan.Resources
+open System.Threading.Tasks
 
 [<AbstractClass; Sealed; Extension>]
 type DevicePreparedRenderObjectExtensions private() =
@@ -318,6 +319,59 @@ type DevicePreparedRenderObjectExtensions private() =
     [<Extension>]
     static member PrepareRenderObject(this : ResourceManager, renderPass : RenderPass, ro : RenderObject) =
         prepareObject this renderPass ro
+
+    [<Extension>]
+    static member PrepareRenderObjectAsync(this : ResourceManager, renderPass : RenderPass, ro : RenderObject) =
+        let device = this.Device
+        let oldToken = device.UnsafeCurrentToken
+        try
+            let newToken = new DeviceToken(device.GraphicsFamily.GetQueue(), ref None)
+            device.UnsafeSetToken (Some newToken)
+        
+            let result = prepareObject this renderPass ro
+            result.IncrementReferenceCount()
+            result.Update(AdaptiveToken.Top, RenderToken.Empty)
+
+            let tcs = System.Threading.Tasks.TaskCompletionSource()
+            device.CopyEngine.Enqueue [ CopyCommand.Callback (fun () -> tcs.SetResult ()) ]
+            tcs.Task.ContinueWith(fun (t : System.Threading.Tasks.Task<_>) ->
+                newToken.Dispose()
+                result
+            )
+        finally 
+            device.UnsafeSetToken oldToken
+        
+    [<Extension>]
+    static member PrepareRenderObjectAsync(this : ResourceManager, renderPass : RenderPass, ro : IRenderObject, hook : RenderObject -> RenderObject) =
+        match ro with
+            | :? RenderObject as ro ->
+                DevicePreparedRenderObjectExtensions.PrepareRenderObjectAsync(this, renderPass, ro).ContinueWith(fun (t : Task<_>) -> new PreparedMultiRenderObject([t.Result]))
+
+            | :? MultiRenderObject as mo ->
+                let tasks = mo.Children |> List.map (fun o -> DevicePreparedRenderObjectExtensions.PrepareRenderObjectAsync(this, renderPass, o, hook))
+
+                let runner = 
+                    async {
+                        let res = System.Collections.Generic.List<_>()
+                        for t in tasks do
+                            let! (r : PreparedMultiRenderObject) = Async.AwaitTask t
+                            res.AddRange r.Children
+
+                        return new PreparedMultiRenderObject(CSharpList.toList res)
+                    }
+
+                Async.StartAsTask runner
+
+            | :? PreparedRenderObject as o ->
+                Task.FromResult (new PreparedMultiRenderObject([o]))
+
+            | :? PreparedMultiRenderObject as mo ->
+                Task.FromResult mo
+
+            | _ ->
+                failf "unsupported RenderObject-type: %A" ro
+
+
 
     [<Extension>]
     static member PrepareRenderObject(this : ResourceManager, renderPass : RenderPass, ro : IRenderObject, hook : RenderObject -> RenderObject) =

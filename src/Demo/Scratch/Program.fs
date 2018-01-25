@@ -759,12 +759,14 @@ open Ranges
 open Aardvark.Rendering.Vulkan
 open System.Runtime.InteropServices
 open Aardvark.Application
+open Aardvark.Application.WinForms
 open Aardvark.SceneGraph
+open Aardvark.SceneGraph.Semantics
+open System.Threading.Tasks
 
 open System
 let test () =
 
-    
     let app = new OpenGlApplication()
     
     let enabled = ref false
@@ -838,7 +840,82 @@ let test () =
 
 [<EntryPoint>]
 let main argv = 
+ 
+    Ag.initialize()
+    Aardvark.Init()
+       
+    use app = new VulkanApplication(true)
+
+    let win = app.CreateSimpleRenderWindow()
+
+    let projTrafo = 
+        win.Sizes 
+            |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
+            |> Mod.map Frustum.projTrafo
+
+    let viewTrafo = 
+        CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
+            |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
+            |> Mod.map CameraView.viewTrafo
+
+    let rotor =
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        win.Time |> Mod.map (fun _ ->
+            Trafo3d.RotationZ sw.Elapsed.TotalSeconds
+        )
+
+    let viewTrafo =
+        Mod.map2 (*) rotor viewTrafo
+
+    let realObjects = CSet.empty
+
+    let addThing(pos : V3d) =
+        let sphere = IndexedGeometryPrimitives.solidPhiThetaSphere (Sphere3d(V3d.Zero, 0.1)) 32 C4b.Red
+        let sg =
+            Sg.ofIndexedGeometry sphere
+                |> Sg.shader {
+                    do! DefaultSurfaces.trafo
+                    do! DefaultSurfaces.simpleLighting
+                }
+                |> Sg.translate pos.X pos.Y pos.Z
+                |> Sg.viewTrafo viewTrafo
+                |> Sg.projTrafo projTrafo
+                //|> Sg.fillMode (Mod.constant FillMode.Line)
+
+
+        let objects = sg.RenderObjects() |> ASet.toList
     
+
+        for o in objects do
+            let test = app.Runtime.ResourceManager.PrepareRenderObjectAsync(unbox win.FramebufferSignature, o, id)
+            test.ContinueWith(fun (t : Task<PreparedMultiRenderObject>) ->
+            
+                transact (fun () -> realObjects.UnionWith (Seq.cast t.Result.Children))
+            ) |> ignore
+
+    addThing V3d.Zero
+
+
+    let rand = RandomSystem()
+    let box = Box3d(-V3d.III * 5.0, V3d.III * 5.0)
+    win.Keyboard.DownWithRepeats.Values.Add (fun k ->
+        if k = Keys.Space then
+            for i in 1 .. 20 do
+                Task.Factory.StartNew(fun () ->
+                    box |> rand.UniformV3d |> addThing
+                ) |> (fun _ -> ()) |> id
+    )
+
+
+    let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, realObjects)
+
+    win.RenderTask <- task
+    win.Run()
+    Environment.Exit 0
+
+
+
+
     //Rendering.Examples.NullBufferTest.run() |> ignore
 
 //    
@@ -860,9 +937,9 @@ let main argv =
 
 
 
-    Ag.initialize()
-    Aardvark.Init()
     
+
+
     Scratch.TPL.run()
 
 //    App.Config <- { BackendConfiguration.Default with useDebugOutput = true }
