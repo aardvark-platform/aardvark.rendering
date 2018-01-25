@@ -2326,7 +2326,6 @@ module Image =
                 device
 
 
-        device.CopyEngine
 
         
         device.eventually {
