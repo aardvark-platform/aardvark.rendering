@@ -18,7 +18,7 @@ module IndexedGeometryPrimitives =
     open Trips
         
     
-    module IndexedGeometry =
+    module private IndexedGeometry =
 
         type IndexedAttributeSpecification<'a> =
             | Nothing
@@ -166,165 +166,176 @@ module IndexedGeometryPrimitives =
 
     module Sphere =
 
-        let subdivisionWithMode (sphere : Sphere3d) level (color : C4b) (mode : IndexedGeometryMode) =
-            let center = sphere.Center
-            let radius = sphere.Radius
-            let unitSphere = SgPrimitives.Primitives.unitSphere level
-            let pos = unitSphere.IndexedAttributes.[DefaultSemantic.Positions] :?> V3f[]
-            let scl = Trafo3d.Scale radius
-            let tr = Trafo3d.Translation center
-            let tpos = pos |> Array.map ( fun p -> (p.ToV3d() |> scl.Forward.TransformPos |> tr.Forward.TransformPos).ToV3f() )
-            let tattribs = 
-                [ 
-                    for kvp in unitSphere.IndexedAttributes.KeyValuePairs do
-                        if not (kvp.Key = DefaultSemantic.Positions) then
-                            yield kvp.Key, kvp.Value
-                    yield DefaultSemantic.Positions, tpos :> Array
-                    yield DefaultSemantic.Colors, (Array.replicate (tpos |> Array.length) color) :> Array
-                ] |> SymDict.ofList
+        module private Impl = 
+            let subdivisionWithMode (sphere : Sphere3d) level (color : C4b) (mode : IndexedGeometryMode) =
+                let center = sphere.Center
+                let radius = sphere.Radius
+                let unitSphere = SgPrimitives.Primitives.unitSphere level
+                let pos = unitSphere.IndexedAttributes.[DefaultSemantic.Positions] :?> V3f[]
+                let scl = Trafo3d.Scale radius
+                let tr = Trafo3d.Translation center
+                let tpos = pos |> Array.map ( fun p -> (p.ToV3d() |> scl.Forward.TransformPos |> tr.Forward.TransformPos).ToV3f() )
+                let tattribs = 
+                    [ 
+                        for kvp in unitSphere.IndexedAttributes.KeyValuePairs do
+                            if not (kvp.Key = DefaultSemantic.Positions) then
+                                yield kvp.Key, kvp.Value
+                        yield DefaultSemantic.Positions, tpos :> Array
+                        yield DefaultSemantic.Colors, (Array.replicate (tpos |> Array.length) color) :> Array
+                    ] |> SymDict.ofList
 
-            IndexedGeometry(
-                Mode = mode,
-                IndexArray = unitSphere.IndexArray,
-                IndexedAttributes = tattribs,
-                SingleAttributes = unitSphere.SingleAttributes
-            )
+                IndexedGeometry(
+                    Mode = mode,
+                    IndexArray = unitSphere.IndexArray,
+                    IndexedAttributes = tattribs,
+                    SingleAttributes = unitSphere.SingleAttributes
+                )
 
-        let indicesTriangles horizontalSegments verticalSegments =
-            let vertexCount = horizontalSegments * verticalSegments + 2
-            let indices =  List<int>()
-            // indices bottom
-            for i in 0.. horizontalSegments-1 do
-                indices.Add(1 + (i + 1) % horizontalSegments)
-                indices.Add(1 + i)
-                indices.Add(0)
+            let indicesTriangles horizontalSegments verticalSegments =
+                let vertexCount = horizontalSegments * verticalSegments + 2
+                let indices =  List<int>()
+                // indices bottom
+                for i in 0.. horizontalSegments-1 do
+                    indices.Add(1 + (i + 1) % horizontalSegments)
+                    indices.Add(1 + i)
+                    indices.Add(0)
 
-            // indices rings
-            for i in 0.. verticalSegments - 2 do
-                for j in 0 .. horizontalSegments - 1 do
+                // indices rings
+                for i in 0.. verticalSegments - 2 do
+                    for j in 0 .. horizontalSegments - 1 do
 
-                    let bl = 1 + i * horizontalSegments + j
-                    let br = 1 + i * horizontalSegments + (j + 1) % horizontalSegments
-                    let tl = bl + horizontalSegments
-                    let tr = br + horizontalSegments
+                        let bl = 1 + i * horizontalSegments + j
+                        let br = 1 + i * horizontalSegments + (j + 1) % horizontalSegments
+                        let tl = bl + horizontalSegments
+                        let tr = br + horizontalSegments
                     
-                    indices.AddRange [bl; br; tl]
-                    indices.AddRange [br; tr; tl]
+                        indices.AddRange [bl; br; tl]
+                        indices.AddRange [br; tr; tl]
 
-            // indices top
-            for i in 0 .. horizontalSegments-1 do
-                indices.Add(vertexCount - 2 - (i + 1) % horizontalSegments)
-                indices.Add(vertexCount - 2 - i)
-                indices.Add(vertexCount - 1)
+                // indices top
+                for i in 0 .. horizontalSegments-1 do
+                    indices.Add(vertexCount - 2 - (i + 1) % horizontalSegments)
+                    indices.Add(vertexCount - 2 - i)
+                    indices.Add(vertexCount - 1)
             
-            indices
+                indices
 
-        let indicesLines horizontalSegments verticalSegments =
-            let vertexCount = horizontalSegments * verticalSegments + 2
-            let indices =  List<int>()
-            // indices bottom
-            for i in 0.. horizontalSegments-1 do
-                indices.Add(1 + (i + 1) % horizontalSegments)
-                indices.Add(1 + i)
-                indices.Add(1 + i)
-                indices.Add(0)
+            let indicesLines horizontalSegments verticalSegments =
+                let vertexCount = horizontalSegments * verticalSegments + 2
+                let indices =  List<int>()
+                // indices bottom
+                for i in 0.. horizontalSegments-1 do
+                    indices.Add(1 + (i + 1) % horizontalSegments)
+                    indices.Add(1 + i)
+                    indices.Add(1 + i)
+                    indices.Add(0)
 
-            // indices rings
-            for i in 0.. verticalSegments - 2 do
-                for j in 0 .. horizontalSegments - 1 do
+                // indices rings
+                for i in 0.. verticalSegments - 2 do
+                    for j in 0 .. horizontalSegments - 1 do
 
-                    let bl = 1 + i * horizontalSegments + j
-                    let br = 1 + i * horizontalSegments + (j + 1) % horizontalSegments
-                    let tl = bl + horizontalSegments
-                    let tr = br + horizontalSegments
+                        let bl = 1 + i * horizontalSegments + j
+                        let br = 1 + i * horizontalSegments + (j + 1) % horizontalSegments
+                        let tl = bl + horizontalSegments
+                        let tr = br + horizontalSegments
                     
-                    indices.AddRange [bl; br; br; tr; tr; tl; tl; bl]
+                        indices.AddRange [bl; br; br; tr; tr; tl; tl; bl]
 
-            // indices top
-            for i in 0 .. horizontalSegments-1 do
-                indices.Add(vertexCount - 2 - (i + 1) % horizontalSegments)
-                indices.Add(vertexCount - 2 - i)
-                indices.Add(vertexCount - 2 - i)
-                indices.Add(vertexCount - 1)
+                // indices top
+                for i in 0 .. horizontalSegments-1 do
+                    indices.Add(vertexCount - 2 - (i + 1) % horizontalSegments)
+                    indices.Add(vertexCount - 2 - i)
+                    indices.Add(vertexCount - 2 - i)
+                    indices.Add(vertexCount - 1)
             
-            indices
+                indices
 
-        let tessellated tess (mode : IndexedGeometryMode) =
-            if tess < 3 then failwithf "Tessellation too small (%A), must be at least 3." tess
+            let tessellated tess (mode : IndexedGeometryMode) =
+                if tess < 3 then failwithf "Tessellation too small (%A), must be at least 3." tess
 
-            let verticalSegments = tess
-            let horizontalSegments = tess * 2
+                let verticalSegments = tess
+                let horizontalSegments = tess * 2
 
-            let vertices = List<V3d>()
-            let normals =  List<V3d>()
+                let vertices = List<V3d>()
+                let normals =  List<V3d>()
 
-            // bottom of the sphere
-            vertices.Add(-V3d.YAxis)
-            normals.Add(-V3d.YAxis)
+                // bottom of the sphere
+                vertices.Add(-V3d.YAxis)
+                normals.Add(-V3d.YAxis)
 
-            // create rings of vertices at progressively higher latitudes
-            for i in 0 .. verticalSegments - 1 do
+                // create rings of vertices at progressively higher latitudes
+                for i in 0 .. verticalSegments - 1 do
             
-                let latitude = ((float i + 1.0) * Constant.Pi / float verticalSegments) - Constant.PiHalf
+                    let latitude = ((float i + 1.0) * Constant.Pi / float verticalSegments) - Constant.PiHalf
 
-                let dy = Fun.Sin(latitude)
-                let dxz = Fun.Cos(latitude)
+                    let dy = Fun.Sin(latitude)
+                    let dxz = Fun.Cos(latitude)
 
-                // create a single ring of vertices at this latitude
-                for j in 0.. horizontalSegments-1 do
+                    // create a single ring of vertices at this latitude
+                    for j in 0.. horizontalSegments-1 do
                 
-                    let longitude = float j * Constant.PiTimesTwo / float horizontalSegments
+                        let longitude = float j * Constant.PiTimesTwo / float horizontalSegments
 
-                    let dx = Fun.Cos(longitude) * dxz
-                    let dz = Fun.Sin(longitude) * dxz
+                        let dx = Fun.Cos(longitude) * dxz
+                        let dz = Fun.Sin(longitude) * dxz
 
-                    let normal = V3d(dx, dy, dz)
+                        let normal = V3d(dx, dy, dz)
 
-                    vertices.Add(normal)
-                    normals.Add(normal)
+                        vertices.Add(normal)
+                        normals.Add(normal)
             
-            let indices = 
-                match mode with
-                | IndexedGeometryMode.LineList -> 
-                    indicesLines horizontalSegments verticalSegments
-                | IndexedGeometryMode.TriangleList ->
-                    indicesTriangles horizontalSegments verticalSegments
-                | _ -> failwith "implement me"
+                let indices = 
+                    match mode with
+                    | IndexedGeometryMode.LineList -> 
+                        indicesLines horizontalSegments verticalSegments
+                    | IndexedGeometryMode.TriangleList ->
+                        indicesTriangles horizontalSegments verticalSegments
+                    | _ -> failwith "implement me"
 
-            // top of the sphere
-            vertices.Add(V3d.YAxis)
-            normals.Add(V3d.YAxis)
+                // top of the sphere
+                vertices.Add(V3d.YAxis)
+                normals.Add(V3d.YAxis)
 
-            let pos = vertices |> Seq.toArray
-            let idx = indices  |> Seq.toArray
-            let norm = normals |> Seq.toArray
+                let pos = vertices |> Seq.toArray
+                let idx = indices  |> Seq.toArray
+                let norm = normals |> Seq.toArray
 
-            idx,pos,norm
+                idx,pos,norm
 
-        let phiThetaWithMode (sphere : Sphere3d) (level:int) (color:C4b) (mode : IndexedGeometryMode) =
-            let tess = if level < 3 then 3 else level
+            let phiThetaWithMode (sphere : Sphere3d) (level:int) (color:C4b) (mode : IndexedGeometryMode) =
+                let tess = if level < 3 then 3 else level
 
-            let (idx,pos,norm) = tessellated tess mode
-            let trafo = Trafo3d.Translation(sphere.Center)
-            let scale = Trafo3d.Scale(sphere.Radius)
-            let pos = pos |> Array.map (scale.Forward.TransformPos >> trafo.Forward.TransformPos >> V3f)
-            let col = color |> Array.replicate (pos |> Array.length) 
+                let (idx,pos,norm) = tessellated tess mode
+                let trafo = Trafo3d.Translation(sphere.Center)
+                let scale = Trafo3d.Scale(sphere.Radius)
+                let pos = pos |> Array.map (scale.Forward.TransformPos >> trafo.Forward.TransformPos >> V3f)
+                let norm = norm |> Array.map V3f
+                let col = color |> Array.replicate (pos |> Array.length) 
             
-            IndexedGeometry.fromPosCol pos col (Some idx) mode
+                IndexedGeometry.fromPosColNorm pos col norm (Some idx) mode
+        open Impl       
+
+        let wireframePhiThetaSphere (sphere : Sphere3d) (level:int) (color:C4b)  =
+            phiThetaWithMode sphere level color IndexedGeometryMode.LineList
+        
+        let solidPhiThetaSphere (sphere : Sphere3d) (level:int) (color:C4b)  =
+            phiThetaWithMode sphere level color IndexedGeometryMode.TriangleList
+
+        let wireframeSubdivisionSphere (sphere : Sphere3d) level (color : C4b) =
+            subdivisionWithMode sphere level color IndexedGeometryMode.LineList
+
+        let solidSubdivisionSphere (sphere : Sphere3d) level (color : C4b) =
+            subdivisionWithMode sphere level color IndexedGeometryMode.TriangleList
 
     open Sphere
     
-    let wireframePhiThetaSphere (sphere : Sphere3d) (level:int) (color:C4b)  =
-        phiThetaWithMode sphere level color IndexedGeometryMode.LineList
+    let wireframePhiThetaSphere = wireframePhiThetaSphere
         
-    let solidPhiThetaSphere (sphere : Sphere3d) (level:int) (color:C4b)  =
-        phiThetaWithMode sphere level color IndexedGeometryMode.TriangleList
+    let solidPhiThetaSphere = solidPhiThetaSphere
 
-    let wireframeSubdivisionSphere (sphere : Sphere3d) level (color : C4b) =
-        Sphere.subdivisionWithMode sphere level color IndexedGeometryMode.LineList
+    let wireframeSubdivisionSphere = wireframeSubdivisionSphere
 
-    let solidSubdivisionSphere (sphere : Sphere3d) level (color : C4b) =
-        Sphere.subdivisionWithMode sphere level color IndexedGeometryMode.TriangleList
+    let solidSubdivisionSphere = solidSubdivisionSphere
 
     module Cylinder =
         
