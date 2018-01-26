@@ -63,21 +63,43 @@ module IGPrimitives =
 
                 debug false
             }
-        
+            
         let igs =
             [|
-                IndexedGeometryPrimitives.solidPhiThetaSphere (Sphere3d(V3d.OOO,0.5)) 12 (C4b(160,120,190))
-                IndexedGeometryPrimitives.solidPhiThetaSphere (Sphere3d(V3d.OOO,0.5)) 12 (C4b(160,120,190))
+                IndexedGeometryPrimitives.Sphere.solidPhiThetaSphere (Sphere3d(V3d.OOO,0.5)) 12 (C4b(160,120,190))
+                IndexedGeometryPrimitives.Sphere.wireframePhiThetaSphere (Sphere3d(V3d.OOO,0.5)) 12 (C4b(160,120,190))
                 IndexedGeometryPrimitives.Sphere.solidSubdivisionSphere (Sphere3d(V3d.OOO,0.5)) (2) ((C4b(120,0,240)))
-                IndexedGeometryPrimitives.solidSubdivisionSphere (Sphere3d(V3d.OOO,0.5)) (2) ((C4b(120,0,240)))
+                IndexedGeometryPrimitives.Sphere.wireframeSubdivisionSphere (Sphere3d(V3d.OOO,0.5)) (2) ((C4b(120,0,240)))
+                IndexedGeometryPrimitives.Quad.solidQuadrangle     V3d.OOO V3d.IOO V3d.IOI V3d.OOI (C4b(255,255,255)) V3d.OIO
+                IndexedGeometryPrimitives.Quad.wireframeQuadrangle V3d.OOO V3d.IOO V3d.IOI V3d.OOI (C4b(255,255,255)) V3d.OIO
+                IndexedGeometryPrimitives.Triangle.solidTrianglesWithColor [ Triangle3d(V3d(0.2,0.2,0.2),V3d(0.4,0.0,0.4),V3d(0.3,0.3,0.0))     ; Triangle3d(V3d(0.6,0.7,0.7),V3d(0.8,0.9,0.9),V3d(0.8,0.7,0.7)) ] (C4b(220,210,60))
+                IndexedGeometryPrimitives.Triangle.wireframeTrianglesWithColor [ Triangle3d(V3d(0.2,0.2,0.2),V3d(0.4,0.0,0.4),V3d(0.3,0.3,0.0)) ; Triangle3d(V3d(0.6,0.7,0.7),V3d(0.8,0.9,0.9),V3d(0.8,0.7,0.7)) ] (C4b(220,210,60))
+                IndexedGeometryPrimitives.Stuff.coordinateCross V3d.III
+                IndexedGeometryPrimitives.Box.solidBox (Box3d(V3d.OOO, V3d.III)) (C4b(240,150,220))
+                IndexedGeometryPrimitives.Box.wireBox (Box3d(V3d.OOO, V3d.III)) (C4b(240,150,220))
+                IndexedGeometryPrimitives.Torus.solidTorus (Torus3d(V3d.OOO, V3d.OOI, 0.8, 0.2)) (C4b(200,180,255)) 12 8
+                IndexedGeometryPrimitives.Torus.wireframeTorus (Torus3d(V3d.OOO, V3d.OOI, 0.8, 0.2)) (C4b(200,180,255)) 12 8
+                IndexedGeometryPrimitives.Cone.solidCone V3d.OOO V3d.OOI 1.0 0.25 12 (C4b(120, 130, 170))
+                IndexedGeometryPrimitives.Cone.wireframeCone V3d.OOO V3d.OOI 1.0 0.25 12 (C4b(120, 130, 170))
+                IndexedGeometryPrimitives.Sphere.wireframePhiThetaSphere (Sphere3d(V3d.OOO,0.5)) 1 (C4b(200,200,200))
+                IndexedGeometryPrimitives.Sphere.wireframePhiThetaSphere (Sphere3d(V3d.OOO,0.5)) 2 (C4b(200,200,200))
+                IndexedGeometryPrimitives.Sphere.wireframePhiThetaSphere (Sphere3d(V3d.OOO,0.5)) 3 (C4b(200,200,200))
+                IndexedGeometryPrimitives.Sphere.wireframePhiThetaSphere (Sphere3d(V3d.OOO,0.5)) 4 (C4b(200,200,200))
+                IndexedGeometryPrimitives.Sphere.wireframePhiThetaSphere (Sphere3d(V3d.OOO,0.5)) 5 (C4b(200,200,200))
+                IndexedGeometryPrimitives.Sphere.wireframePhiThetaSphere (Sphere3d(V3d.OOO,0.5)) 6 (C4b(200,200,200))
+                IndexedGeometryPrimitives.Tetrahedron.solidTetrahedron V3d.OOO 1.0 (C4b(26,100,240))
+                IndexedGeometryPrimitives.Tetrahedron.wireframeTetrahedron V3d.OOO 1.0 (C4b(26,100,240))
+                IndexedGeometryPrimitives.Cylinder.solidCylinder V3d.OOO V3d.OOI 1.0 0.25 0.15 16 (C4b(250, 100, 140))
+                IndexedGeometryPrimitives.Cylinder.wireframeCylinder V3d.OOO V3d.OOI 1.0 0.25 0.15 16 (C4b(250, 100, 140))
             |]
 
         let sg = 
             [ 
+                let perLine = 6
                 for i in 0..(igs.Length-1) do
                     yield igs.[i]
                            |> Sg.ofIndexedGeometry
-                           |> Sg.translate (float i * 1.5) 0.0 0.0
+                           |> Sg.translate (float (i%perLine) * 1.5) 0.0 (float (i/perLine) * 1.5)
             ]
                 |> Sg.ofList
                 |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero))
