@@ -330,7 +330,11 @@ type DevicePreparedRenderObjectExtensions private() =
         
             let result = prepareObject this renderPass ro
             result.IncrementReferenceCount()
-            result.Update(AdaptiveToken.Top, RenderToken.Empty)
+            for r in result.resources do r.Update(AdaptiveToken.Top) |> ignore
+//                match r with
+//                    | :? IResourceLocation<DescriptorSetBinding> -> ()
+//                    | _ -> r.Update(AdaptiveToken.Top) |> ignore
+
 
             let tcs = System.Threading.Tasks.TaskCompletionSource()
             device.CopyEngine.Enqueue [ CopyCommand.Callback (fun () -> tcs.SetResult ()) ]

@@ -784,7 +784,7 @@ module Resources =
             if x.OutOfDate then
                 
                 let bindings =
-                    bindings |> List.toArray |> Array.mapi (fun i b ->
+                    bindings |> List.toArray |> Array.map (fun b ->
                         match b with
                             | AdaptiveUniformBuffer(slot, b) ->
                                 UniformBuffer(slot, b.Update(AdaptiveToken.Top).handle)
