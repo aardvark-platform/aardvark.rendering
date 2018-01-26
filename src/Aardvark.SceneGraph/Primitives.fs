@@ -497,8 +497,7 @@ module SgPrimitives =
 
         let box' (color : C4b) (bounds : Box3d) =
             box ~~color ~~bounds
-
-
+            
         let wireBox (color : IMod<C4b>) (bounds : IMod<Box3d>) =
             let trafo = bounds |> Mod.map (fun box -> Trafo3d.Scale(box.Size) * Trafo3d.Translation(box.Min))
             let color = color |> Mod.map (fun c -> c.ToC4f().ToV4f())

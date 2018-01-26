@@ -89,6 +89,7 @@
     <Compile Include="Eigi.fs" />
     <Compile Include="Terrain.fs" />
     <Compile Include="LevelOfDetail.fs" />
+    <Compile Include="IGPrimitives.fs" />
     <Compile Include="Sponza.fs" />
     <Compile Include="Jpeg.fs" />
     <Compile Include="Program.fs" />
