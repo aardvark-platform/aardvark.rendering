@@ -770,102 +770,7 @@ and CopyEngine(family : DeviceQueueFamily) =
                                 |]
                             ) |> ignore
 
-//
-//                            
-//                    match copy.Cont with
-//                        | Some cont -> conts.Add cont
-//                        | None -> ()
-//
-//                    match copy.Kind with
-//                        | CopyCommandKind.BufferToBuffer ->
-//                            let src = VkBuffer(copy.Src)
-//                            let dst = VkBuffer(copy.Dst)
-//                            stream.CopyBuffer(src, dst, [| copy.BufferBufferInfo |]) |> ignore
-//
-//                            if copy.TransferOwnership then 
-//
-//                                let release =
-//                                    VkBufferMemoryBarrier(
-//                                        VkStructureType.BufferMemoryBarrier, 0n,
-//                                        VkAccessFlags.TransferWriteBit,
-//                                        VkAccessFlags.None,
-//                                        uint32 familyIndex,
-//                                        uint32 graphicsFamily,
-//                                        dst,
-//                                        copy.BufferBufferInfo.dstOffset, copy.BufferBufferInfo.size
-//                                    )
-//
-//                                stream.PipelineBarrier(
-//                                    VkPipelineStageFlags.TransferBit,
-//                                    VkPipelineStageFlags.BottomOfPipeBit,
-//                                    [||],
-//                                    [|release|],
-//                                    [||]
-//                                ) |> ignore
-//
-//                        | CopyCommandKind.ImageToBuffer ->
-//                            let src = VkImage(copy.Src)
-//                            let dst = VkBuffer(copy.Dst)
-//                            stream.CopyImageToBuffer(src, VkImageLayout.TransferSrcOptimal, dst, [| copy.BufferImageInfo |]) |> ignore
-//                                
-//                            
-//                            if copy.TransferOwnership then 
-//
-//                                let release =
-//                                    VkBufferMemoryBarrier(
-//                                        VkStructureType.BufferMemoryBarrier, 0n,
-//                                        VkAccessFlags.TransferWriteBit,
-//                                        VkAccessFlags.None,
-//                                        uint32 familyIndex,
-//                                        uint32 graphicsFamily,
-//                                        dst,
-//                                        copy.BufferBufferInfo.dstOffset, copy.BufferBufferInfo.size
-//                                    )
-//
-//                                stream.PipelineBarrier(
-//                                    VkPipelineStageFlags.TransferBit,
-//                                    VkPipelineStageFlags.BottomOfPipeBit,
-//                                    [||],
-//                                    [|release|],
-//                                    [||]
-//                                ) |> ignore
-//
-//                        | CopyCommandKind.BufferToImage ->
-//                            let src = VkBuffer(copy.Src)
-//                            let dst = VkImage(copy.Dst)
-//                            stream.CopyBufferToImage(src, dst, VkImageLayout.TransferDstOptimal, [| copy.BufferImageInfo |]) |> ignore
-//                                
-//                            if copy.TransferOwnership then 
-//                                let layers = copy.BufferImageInfo.imageSubresource
-//
-//                                let release =
-//                                    VkImageMemoryBarrier(
-//                                        VkStructureType.ImageMemoryBarrier, 0n,
-//                                        VkAccessFlags.TransferWriteBit,
-//                                        VkAccessFlags.None,
-//                                        VkImageLayout.TransferDstOptimal,
-//                                        VkImageLayout.TransferDstOptimal,
-//                                        uint32 familyIndex,
-//                                        uint32 graphicsFamily,
-//                                        dst,
-//                                        VkImageSubresourceRange(layers.aspectMask, layers.mipLevel, 1u, layers.baseArrayLayer, layers.layerCount)
-//                                    )
-//
-//                                stream.PipelineBarrier(
-//                                    VkPipelineStageFlags.TransferBit,
-//                                    VkPipelineStageFlags.BottomOfPipeBit,
-//                                    [||],
-//                                    [||],
-//                                    [| release |]
-//                                ) |> ignore
-//
-//                        | CopyCommandKind.ContOnly ->
-//                            ()
-//
-//
-//                        | _ ->
-//                            Log.warn "[Vulkan] invalid copy: %A" copy.Kind
-                    ()
+
 
                 stream.Run cmd.Handle
                 cmd.End()
@@ -1026,38 +931,40 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
     member x.Handle = handle
 
     member x.BindSparse(binds : VkBindSparseInfo[], fence : VkFence) =
-        if device.IsDeviceGroup then
-            let groupInfos =
-                binds |> Array.collect (fun b ->
-                    device.AllIndicesArr |> Array.map (fun i ->
-                        VkDeviceGroupBindSparseInfoKHX(
-                            VkStructureType.DeviceGroupBindSparseInfoKhx, 0n,
-                            uint32 i,
-                            uint32 i
-                        )
-                    )
-                )
-
-            groupInfos |> NativePtr.withA (fun pGroupInfos ->
-                let binds = 
-                    let mutable gi = 0
+        lock x (fun () ->
+            if device.IsDeviceGroup then
+                let groupInfos =
                     binds |> Array.collect (fun b ->
                         device.AllIndicesArr |> Array.map (fun i ->
-                            let mutable res = b
-                            res.pNext <- NativePtr.toNativeInt (NativePtr.add pGroupInfos gi)
-                            gi <- gi + 1
-                            res
+                            VkDeviceGroupBindSparseInfoKHX(
+                                VkStructureType.DeviceGroupBindSparseInfoKhx, 0n,
+                                uint32 i,
+                                uint32 i
+                            )
                         )
                     )
+
+                groupInfos |> NativePtr.withA (fun pGroupInfos ->
+                    let binds = 
+                        let mutable gi = 0
+                        binds |> Array.collect (fun b ->
+                            device.AllIndicesArr |> Array.map (fun i ->
+                                let mutable res = b
+                                res.pNext <- NativePtr.toNativeInt (NativePtr.add pGroupInfos gi)
+                                gi <- gi + 1
+                                res
+                            )
+                        )
                 
+                    binds |> NativePtr.withA (fun pBinds ->
+                        VkRaw.vkQueueBindSparse(handle, uint32 binds.Length, pBinds, fence)
+                    )
+                )
+            else
                 binds |> NativePtr.withA (fun pBinds ->
                     VkRaw.vkQueueBindSparse(handle, uint32 binds.Length, pBinds, fence)
                 )
-            )
-        else
-            binds |> NativePtr.withA (fun pBinds ->
-                VkRaw.vkQueueBindSparse(handle, uint32 binds.Length, pBinds, fence)
-            )
+        )
 
     member x.RunSynchronously(cmd : CommandBuffer) =
         if cmd.IsRecording then
@@ -1178,9 +1085,7 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
         let sem = device.CreateSemaphore()
         lock x (fun () ->
             let cnt = if cmd.IsEmpty then 0u else 1u
-            let mutable handle = cmd.Handle
-            let mutable semHandle = sem.Handle
-
+            
             match waitFor with
                 | [] ->
                     let mutable mask = device.AllMask
@@ -1196,6 +1101,9 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
                             None
 
                     groupInfo |> NativePtr.withOption (fun pnext ->
+                        let mutable handle = cmd.Handle
+                        let mutable semHandle = sem.Handle
+
                         let mutable submitInfo =
                             VkSubmitInfo(
                                 VkStructureType.SubmitInfo, NativePtr.toNativeInt pnext,
@@ -1228,6 +1136,9 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
                     mask |> NativePtr.withA (fun pMask ->
                         handles |> NativePtr.withA (fun pWaitFor ->
                             groupInfo |> NativePtr.withOption (fun pnext ->
+                                let mutable handle = cmd.Handle
+                                let mutable semHandle = sem.Handle
+
                                 let mutable submitInfo =
                                     VkSubmitInfo(
                                         VkStructureType.SubmitInfo, NativePtr.toNativeInt pnext,
@@ -1385,6 +1296,27 @@ and DeviceQueuePool internal(device : Device, queues : list<DeviceQueueFamily>) 
                 changed.Set() |> ignore
         )
 
+and DeviceTemporaryCommandPool(family : DeviceQueueFamily) =
+    let bag = ConcurrentBag<CommandPool>()
+
+    let mutable disposeInstalled = 0
+
+    let dispose() =
+        bag |> Seq.iter (fun c -> c.Destroy())
+
+    member x.Take() =
+        match bag.TryTake() with
+            | (true, pool) -> 
+                pool
+            | _ ->
+                if Interlocked.Exchange(&disposeInstalled, 1) = 0 then
+                    family.Device.OnDispose.Add dispose
+                { new CommandPool(family.Device, family.Index, family) with
+                    override x.Dispose() =
+                        bag.Add x
+                }
+
+
 
 and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues : list<DeviceQueue>) as this =
     let store = queues |> List.toArray
@@ -1392,12 +1324,18 @@ and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues :
     let mutable current = 0
 
     let defaultPool = new DeviceCommandPool(device, info.index, this)
+    let tempPool = new DeviceTemporaryCommandPool(this)
+
+
+    member x.TakeCommandPool() = tempPool.Take()
 
     member x.Device = device
     member x.Info = info
     member x.Index : int = info.index
     member x.Flags = info.flags
     member x.Queues = queues
+
+    [<Obsolete>]
     member x.DefaultCommandPool = defaultPool
     member x.CreateCommandPool() = new CommandPool(device, info.index, x)
 
@@ -1496,10 +1434,13 @@ and CommandPool internal(device : Device, familyIndex : int, queueFamily : Devic
     member x.QueueFamily = queueFamily
     member x.Handle = handle
 
-    member x.Dispose() =
+    member x.Destroy() =
         if handle.IsValid && device.Handle <> 0n then
             VkRaw.vkDestroyCommandPool(device.Handle, handle, NativePtr.zero)
+        
 
+    abstract member Dispose : unit -> unit
+    default x.Dispose() = x.Destroy()
     member x.CreateCommandBuffer(level : CommandBufferLevel) =
         new CommandBuffer(device, handle, queueFamily, level)
 
@@ -1833,8 +1774,10 @@ and Fence internal(device : Device, signaled : bool) =
         let handle = NativePtr.read pFence
         if handle.IsValid then
             let queue = device.ComputeFamily.GetQueue()
-            VkRaw.vkQueueSubmit(queue.Handle, 0u, NativePtr.zero, handle)
-                |> check "cannot signal fence"
+            lock queue (fun () ->
+                VkRaw.vkQueueSubmit(queue.Handle, 0u, NativePtr.zero, handle)
+                    |> check "cannot signal fence"
+            )
         else
             failf "cannot signal disposed fence" 
 
@@ -1892,28 +1835,30 @@ and Semaphore internal(device : Device) =
         if handle.IsValid then
             let queue = device.ComputeFamily.GetQueue()
 
-            let groupInfo =
-                if device.IsDeviceGroup then
-                    VkDeviceGroupSubmitInfoKHX(
-                        VkStructureType.DeviceGroupSubmitInfoKhx, 0n, 
-                        device.AllCount, device.AllIndices,
-                        0u, NativePtr.zero,
-                        device.AllCount,  device.AllIndices 
-                    ) |> Some
-                else
-                    None
+            lock queue (fun () ->
+                let groupInfo =
+                    if device.IsDeviceGroup then
+                        VkDeviceGroupSubmitInfoKHX(
+                            VkStructureType.DeviceGroupSubmitInfoKhx, 0n, 
+                            device.AllCount, device.AllIndices,
+                            0u, NativePtr.zero,
+                            device.AllCount,  device.AllIndices 
+                        ) |> Some
+                    else
+                        None
 
-            groupInfo |> NativePtr.withOption (fun pnext -> 
-                let mutable submitInfo =
-                    VkSubmitInfo(
-                        VkStructureType.SubmitInfo, NativePtr.toNativeInt pnext,
-                        0u, NativePtr.zero, NativePtr.zero,
-                        0u, NativePtr.zero,
-                        1u, &&handle
-                    )
+                groupInfo |> NativePtr.withOption (fun pnext -> 
+                    let mutable submitInfo =
+                        VkSubmitInfo(
+                            VkStructureType.SubmitInfo, NativePtr.toNativeInt pnext,
+                            0u, NativePtr.zero, NativePtr.zero,
+                            0u, NativePtr.zero,
+                            1u, &&handle
+                        )
 
-                VkRaw.vkQueueSubmit(queue.Handle, 1u, &&submitInfo, VkFence.Null)
-                    |> check "cannot signal fence"
+                    VkRaw.vkQueueSubmit(queue.Handle, 1u, &&submitInfo, VkFence.Null)
+                        |> check "cannot signal fence"
+                )
             )
         else
             failf "cannot signal disposed fence" 
@@ -2415,9 +2360,11 @@ and IQueueCommand =
     abstract member TryEnqueue : queue : DeviceQueue * waitFor : list<Semaphore> * disp : byref<Disposable> -> Option<Semaphore>
 
 and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
+    let mutable pool                : Option<CommandPool>   = None
     let mutable current             : Option<CommandBuffer> = None
     let disposables                 : List<Disposable>      = List()
     let semaphores                  : List<Semaphore>       = List()
+
 
     let mutable isEmpty = true
     let mutable refCount = 1
@@ -2443,6 +2390,12 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
             | Some b -> 
                 b.Dispose()
                 current <- None
+            | _ -> ()
+
+        match pool with
+            | Some p ->
+                p.Dispose()
+                pool <- None
             | _ -> ()
 
         refCount <- 1
@@ -2503,7 +2456,16 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
                 enqueue buffer cmd
                 
             | None ->
-                let buffer = queue.Family.DefaultCommandPool.CreateCommandBuffer CommandBufferLevel.Primary
+                
+                let pool =
+                    match pool with
+                        | Some p -> p
+                        | None ->
+                            let p = queue.Family.TakeCommandPool()
+                            pool <- Some p
+                            p
+
+                let buffer = pool.CreateCommandBuffer CommandBufferLevel.Primary
                 buffer.Begin CommandBufferUsage.OneTimeSubmit
                 current <- Some buffer
                 enqueue buffer cmd

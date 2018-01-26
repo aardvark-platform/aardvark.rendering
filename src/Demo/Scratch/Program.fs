@@ -844,7 +844,7 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
        
-    use app = new VulkanApplication(true)
+    use app = new VulkanApplication(false)
 
     let win = app.CreateSimpleRenderWindow()
 
@@ -860,8 +860,12 @@ let main argv =
 
     let rotor =
         let sw = System.Diagnostics.Stopwatch.StartNew()
-        win.Time |> Mod.map (fun _ ->
-            Trafo3d.RotationZ sw.Elapsed.TotalSeconds
+        let r = Mod.init 0.0
+        win.Time |> Mod.unsafeRegisterCallbackKeepDisposable (fun _ ->
+            transact (fun () -> r.Value <- sw.Elapsed.TotalSeconds)
+        ) |> ignore
+        r |> Mod.map (fun t ->
+            Trafo3d.RotationZ t
         )
 
     let viewTrafo =
@@ -869,14 +873,21 @@ let main argv =
 
     let realObjects = CSet.empty
 
+    let effect =
+        FShade.Effect.compose [
+            FShade.Effect.ofFunction DefaultSurfaces.trafo
+            FShade.Effect.ofFunction <| fun (v : Effects.Vertex) ->
+                fragment {
+                    let n = 0.5 * (Vec.normalize v.pos.XYZ * V3d.III)
+                    return V4d(n, 1.0)
+                }
+        ]
+
     let addThing(pos : V3d) =
-        let sphere = IndexedGeometryPrimitives.solidPhiThetaSphere (Sphere3d(V3d.Zero, 0.1)) 32 C4b.Red
+        let sphere = IndexedGeometryPrimitives.solidPhiThetaSphere (Sphere3d(V3d.Zero, 0.1)) 16 C4b.Red
         let sg =
             Sg.ofIndexedGeometry sphere
-                |> Sg.shader {
-                    do! DefaultSurfaces.trafo
-                    do! DefaultSurfaces.simpleLighting
-                }
+                |> Sg.effect [effect]
                 |> Sg.translate pos.X pos.Y pos.Z
                 |> Sg.viewTrafo viewTrafo
                 |> Sg.projTrafo projTrafo
@@ -889,9 +900,15 @@ let main argv =
         for o in objects do
             let test = app.Runtime.ResourceManager.PrepareRenderObjectAsync(unbox win.FramebufferSignature, o, id)
             test.ContinueWith(fun (t : Task<PreparedMultiRenderObject>) ->
-            
-                transact (fun () -> realObjects.UnionWith (Seq.cast t.Result.Children))
+                transact (fun () -> lock realObjects (fun () -> realObjects.UnionWith (Seq.cast t.Result.Children)))
             ) |> ignore
+
+    Async.Start <| 
+        async {
+            while true do
+                do! Async.Sleep 500
+                Log.line "count: %A" realObjects.Count
+        }
 
     addThing V3d.Zero
 
@@ -900,9 +917,9 @@ let main argv =
     let box = Box3d(-V3d.III * 5.0, V3d.III * 5.0)
     win.Keyboard.DownWithRepeats.Values.Add (fun k ->
         if k = Keys.Space then
-            for i in 1 .. 20 do
+            for i in 1 .. 100 do
                 Task.Factory.StartNew(fun () ->
-                    box |> rand.UniformV3d |> addThing
+                    rand.UniformV3dDirection() * 5.0 |> addThing
                 ) |> (fun _ -> ()) |> id
     )
 
