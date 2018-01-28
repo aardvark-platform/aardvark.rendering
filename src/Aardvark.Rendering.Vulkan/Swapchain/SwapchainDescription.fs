@@ -84,6 +84,7 @@ type GraphicsMode(format : Col.Format, bits : int, depthBits : int, stencilBits 
                         | _ -> None  
 
     let presentModeScore (mode : VkPresentModeKHR) =
+        
         match mode with
             | VkPresentModeKHR.VkPresentModeMailboxKhr -> 16
             | VkPresentModeKHR.VkPresentModeFifoKhr -> 8

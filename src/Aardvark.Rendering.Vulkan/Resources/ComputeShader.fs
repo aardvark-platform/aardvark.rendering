@@ -41,7 +41,7 @@ type BindingReference =
     | StorageImageRef of set : int * binding : int * info : ShaderSamplerType
 
 [<StructuredFormatDisplay("{AsString}")>]
-type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : DescriptorSet[], references : Map<string, list<BindingReference>>, imageArrays : MapExt<int * int, Option<ImageView * Sampler>[]>, buffers : List<UniformBuffer>) =
+type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : Map<string, list<BindingReference>>, imageArrays : MapExt<int * int, Option<ImageView * Sampler>[]>, buffers : List<UniformBuffer>) =
     
     
     static let rec prettyPrimitive (t : PrimitiveType) =
@@ -69,7 +69,7 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
                     |> sprintf "struct { %s }"
 
     
-    let device = pool.Device
+    let device = shader.Device
     let lockObj = obj()
     let mutable disposables : MapExt<int * int * int, IDisposable> = MapExt.empty
     let mutable dirtyBuffers = HSet.empty
@@ -192,7 +192,7 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
 
             for (set, desc) in MapExt.toSeq writes do   
                 let values = desc |> MapExt.toSeq |> Seq.map snd |> Seq.toArray
-                pool.Update(sets.[set], values)
+                sets.[set].Update(values)
         )
 
     let release() =
@@ -203,7 +203,7 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
             for b in buffers do device.Delete b
             buffers.Clear()
             disposables <- MapExt.empty
-            for s in sets do pool.Free s
+            for s in sets do device.Delete s
             NativePtr.free setHandles
         )   
 
@@ -275,7 +275,6 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
                 Command.Nop, ignore
     member x.References = references
     member x.Device = device
-    member x.DescriptorPool = pool
     member x.Set(ref : BindingReference, value : obj) = write ref value
     member x.Set(name : string, value : obj) = 
         match Map.tryFind name references with
@@ -953,7 +952,7 @@ module ComputeShader =
             | _ ->
                 Other
 
-    let newInputBinding (shader : ComputeShader) (pool : DescriptorPool) =
+    let newInputBinding (shader : ComputeShader) =
         let device = shader.Device
         let references = Dict<string, list<BindingReference>>()
         let setLayouts = shader.Layout.DescriptorSetLayouts
@@ -964,7 +963,7 @@ module ComputeShader =
 
         for si in 0 .. setLayouts.Length - 1 do
             let setLayout = setLayouts.[si]
-            let set = pool.Alloc setLayout
+            let set = device.CreateDescriptorSet setLayout
 
             let descriptors = List()
 
@@ -1015,8 +1014,8 @@ module ComputeShader =
 
                     | Other -> ()
 
-            pool.Update(set, CSharpList.toArray descriptors)
+            set.Update(CSharpList.toArray descriptors)
 
             sets.[si] <- set
 
-        new InputBinding(pool, shader, sets, Dict.toMap references, imageArrays, buffers)
+        new InputBinding(shader, sets, Dict.toMap references, imageArrays, buffers)

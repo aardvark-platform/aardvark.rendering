@@ -15,9 +15,9 @@ let main argv =
     // and may show it later.
     let win =
         window {
-            backend Backend.GL
+            backends [Backend.GL; Backend.Vulkan]
             display Display.Mono
-            debug false
+            debug true
             samples 8
         }
 
@@ -25,9 +25,9 @@ let main argv =
     // This time is a special value that can be used for animations which
     // will be evaluated when rendering the scene
     let dynamicTrafo =
-        let sw = System.Diagnostics.Stopwatch.StartNew()
-        win.Time |> Mod.map (fun _ ->
-            let t = sw.Elapsed.TotalSeconds
+        let startTime = System.DateTime.Now
+        win.Time |> Mod.map (fun t ->
+            let t = (t - startTime).TotalSeconds
             Trafo3d.RotationZ (0.5 * t)
         )
 

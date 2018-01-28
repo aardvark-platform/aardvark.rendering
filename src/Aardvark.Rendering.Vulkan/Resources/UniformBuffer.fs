@@ -90,6 +90,7 @@ type UniformBuffer =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module UniformBuffer =
+
     let create (layout : UniformBufferLayout) (device : Device) =
         match layout.size with
             | Fixed size ->
@@ -106,7 +107,8 @@ module UniformBuffer =
 
     let upload (b : UniformBuffer) (device : Device) =
         use t = device.Token
-        t.Enqueue
+
+        let upload =
             { new Command() with
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd = 
@@ -114,6 +116,13 @@ module UniformBuffer =
                     VkRaw.vkCmdUpdateBuffer(cmd.Handle, b.Handle, 0UL, uint64 b.Storage.Size, b.Storage.Pointer)
                     Disposable.Empty
             }
+
+        //Command.Sync(b, VkAccessFlags.TransferWriteBit, VkAccessFlags.UniformReadBit)
+
+        t.enqueue {
+            do! upload
+            do! Command.Sync(b, VkAccessFlags.TransferWriteBit, VkAccessFlags.UniformReadBit)
+        }
 
     let delete (b : UniformBuffer) (device : Device) =
         if b <> Unchecked.defaultof<_> then

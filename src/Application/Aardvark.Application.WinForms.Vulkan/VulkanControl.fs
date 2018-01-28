@@ -43,6 +43,7 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
         x.Padding <- Padding(0,0,0,0)
         x.Margin <- Padding(0,0,0,0)
         x.BorderStyle <- BorderStyle.None
+        
 
 
         surface <- device.CreateSurface(x)
@@ -74,8 +75,8 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
 type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode) as this =
     inherit VulkanControl(runtime.Device, graphicsMode)
     
-    static let messageLoop = MessageLoop()
-    static do messageLoop.Start()
+//    static let messageLoop = MessageLoop()
+//    static do messageLoop.Start()
 
     let mutable renderTask : IRenderTask = RenderTask.empty
     let mutable taskSubscription : IDisposable = null
@@ -83,13 +84,32 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
     let mutable needsRedraw = false
     let mutable renderContiuously = false
 
-    let time = Mod.custom(fun _ -> DateTime.Now)
+    let frameTime = RunningMean(10)
+    let frameWatch = System.Diagnostics.Stopwatch()
+
+    let timeWatch = System.Diagnostics.Stopwatch()
+    let baseTime = DateTime.Now.Ticks
+    do timeWatch.Start()
+
+    let now() = DateTime(timeWatch.Elapsed.Ticks + baseTime)
+    let nextFrameTime() = now() + TimeSpan.FromSeconds frameTime.Average
+
+//    do Async.Start <| 
+//        async {
+//            while true do
+//                do! Async.Sleep 500
+//                Log.line "frame-time: %.2fms" (1000.0 * frameTime.Average)
+//        }
+
+    let time = Mod.init (now()) //Mod.custom(fun _ -> now())
 
     let beforeRender = Event<unit>()
     let afterRender = Event<unit>()
 
     override x.OnLoad(desc : SwapchainDescription) =
         transact (fun () -> sizes.Value <- V2i(this.ClientSize.Width, this.ClientSize.Height))
+
+
         x.KeyDown.Add(fun e ->
             if e.KeyCode = System.Windows.Forms.Keys.End && e.Control then
                 renderContiuously <- not renderContiuously
@@ -103,9 +123,15 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
         if s <> sizes.Value then
             transact (fun () -> Mod.change sizes s)
 
+
+        frameWatch.Restart()
+        transact (fun () -> time.Value <- nextFrameTime())
         beforeRender.Trigger()
         renderTask.Run(RenderToken.Empty, fbo)
         afterRender.Trigger()
+        frameWatch.Stop()
+
+        frameTime.Add frameWatch.Elapsed.TotalSeconds
 
         //x.Invalidate()
         transact (fun () -> time.MarkOutdated())
@@ -127,7 +153,8 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
     member x.FramebufferSignature = x.RenderPass :> IFramebufferSignature
 
     member private x.ForceRedraw() =
-        messageLoop.Draw(x)
+        MessageLoop.Invalidate x |> ignore
+        //messageLoop.Draw(x)
 
     member x.RenderTask
         with get() = renderTask
@@ -169,7 +196,7 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
 
         member x.Samples = 1
         member x.Sizes = sizes :> IMod<_>
-        member x.Time = time
+        member x.Time = time :> IMod<_>
         member x.BeforeRender = beforeRender.Publish
         member x.AfterRender = afterRender.Publish
 
