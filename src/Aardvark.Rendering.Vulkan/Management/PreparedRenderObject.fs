@@ -330,10 +330,10 @@ type DevicePreparedRenderObjectExtensions private() =
         
             let result = prepareObject this renderPass ro
             for r in result.resources do 
+                let update = r.ReferenceCount = 0
                 r.Acquire()
-                match r with    
-                    | :? IResourceLocation<UniformBuffer> -> ()
-                    | r -> r.Update(AdaptiveToken.Top) |> ignore
+                if update then
+                    r.Update(AdaptiveToken.Top) |> ignore
 
             let tcs = System.Threading.Tasks.TaskCompletionSource()
             device.CopyEngine.Enqueue [ CopyCommand.Callback (fun () -> tcs.SetResult ()) ]
