@@ -28,8 +28,8 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
         Config.ContextFlags, 
         VSync = false
     ) 
-    static let messageLoop = MessageLoop()
-    static do messageLoop.Start()
+//    static let messageLoop = MessageLoop()
+//    static do messageLoop.Start()
 
     let ctx = runtime.Context
     let mutable loaded = false
@@ -68,9 +68,21 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
         )
     let mutable defaultOutput = OutputDescription.ofFramebuffer defaultFramebuffer
 
-    let avgFrameTime = RunningMean(10)
     let sizes = Mod.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
-    let time = Mod.custom (fun s -> DateTime.Now + TimeSpan.FromSeconds(avgFrameTime.Average))
+
+    let frameTime = RunningMean(10)
+    let frameWatch = System.Diagnostics.Stopwatch()
+
+    let timeWatch = System.Diagnostics.Stopwatch()
+    let baseTime = DateTime.Now.Ticks
+    do timeWatch.Start()
+
+    let now() = DateTime(timeWatch.Elapsed.Ticks + baseTime)
+    let nextFrameTime() = now() + TimeSpan.FromSeconds frameTime.Average
+
+    let time = Mod.init (now())
+
+
     let mutable needsRedraw = false
     let mutable first = true
     
@@ -118,7 +130,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
     member private x.ForceRedraw() =
         if renderContinuously then () 
-        else messageLoop.Draw x
+        else MessageLoop.Invalidate x |> ignore
 
     member x.RenderContinuously
         with get() = renderContinuously
@@ -197,8 +209,10 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
                             Log.warn "effective samples: %A" samples.[0]
 
                         let stopDispatcherProcessing = threadStealing.StopStealing()
-                        let sw = System.Diagnostics.Stopwatch()
-                        sw.Start()
+
+                        frameWatch.Restart()
+                        transact (fun () -> time.Value <- nextFrameTime())
+
                         if size <> sizes.Value then
                             transact (fun () -> Mod.change sizes size)
 
@@ -225,12 +239,8 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
                         
                         x.SwapBuffers()
                         //System.Threading.Thread.Sleep(200)
-                        sw.Stop()
-
-                        //Report.Line("{0:0.00}ms", sw.Elapsed.TotalMilliseconds)
-
-                        if not first then
-                            avgFrameTime.Add(sw.Elapsed.TotalSeconds)
+                        frameWatch.Stop()
+                        frameTime.Add frameWatch.Elapsed.TotalSeconds
 
                         transact (fun () -> time.MarkOutdated())
 
@@ -267,7 +277,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 //        base.OnResize(e)
 //        sizes.Emit <| V2i(base.ClientSize.Width, base.ClientSize.Height)
 
-    member x.Time = time
+    member x.Time = time :> IMod<_>
     member x.FramebufferSignature = fboSignature :> IFramebufferSignature
     
     member x.BeforeRender = beforeRender.Publish
@@ -276,7 +286,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
     interface IRenderTarget with
         member x.FramebufferSignature = fboSignature :> IFramebufferSignature
         member x.Runtime = runtime :> IRuntime
-        member x.Time = time
+        member x.Time = time :> IMod<_>
         member x.RenderTask
             with get() = x.RenderTask
             and set t = x.RenderTask <- t

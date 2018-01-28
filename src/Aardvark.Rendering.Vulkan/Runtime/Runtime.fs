@@ -95,18 +95,18 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     let manager = new ResourceManager(noUser, device)
 
-    let allPools = System.Collections.Generic.List<DescriptorPool>()
-    let threadedPools =
-        new ThreadLocal<DescriptorPool>(fun _ ->
-            let p = device.CreateDescriptorPool(1 <<< 18, 1 <<< 18)
-            lock allPools (fun () -> allPools.Add p)
-            p
-        )
-
-    do device.OnDispose.Add (fun _ -> 
-        allPools |> Seq.iter device.Delete
-        allPools.Clear()
-    )
+//    let allPools = System.Collections.Generic.List<DescriptorPool>()
+//    let threadedPools =
+//        new ThreadLocal<DescriptorPool>(fun _ ->
+//            let p = device.CreateDescriptorPool(1 <<< 18, 1 <<< 18)
+//            lock allPools (fun () -> allPools.Add p)
+//            p
+//        )
+//
+//    do device.OnDispose.Add (fun _ -> 
+//        allPools |> Seq.iter device.Delete
+//        allPools.Clear()
+//    )
 
     static let shaderStages =
         LookupTable.lookupTable [
@@ -169,7 +169,6 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     let onDispose = Event<unit>()
 
 
-    member x.DescriptorPool = manager.DescriptorPool
     member x.Device = device
     member x.ResourceManager = manager
     member x.ContextLock = device.Token :> IDisposable
@@ -598,7 +597,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             ComputeShader.ofFShade c device :> IComputeShader
 
         member x.NewInputBinding(c : IComputeShader) =
-            ComputeShader.newInputBinding (unbox c) threadedPools.Value :> IComputeShaderInputBinding
+            ComputeShader.newInputBinding (unbox c) :> IComputeShaderInputBinding
 
         member x.DeleteComputeShader (shader : IComputeShader) =
             ComputeShader.delete (unbox shader)

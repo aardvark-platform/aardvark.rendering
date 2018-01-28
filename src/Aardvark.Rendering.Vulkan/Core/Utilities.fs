@@ -88,6 +88,36 @@ module BaseLibExtensions =
                 | Some a -> [| a |] |> withA f
                 | None -> f NativePtr.zero
 
+    type NativeBuilder() =
+        member x.Bind(m : 'a[], f : nativeptr<'a> -> 'r) =
+            if m.Length = 0 then
+                f NativePtr.zero
+            else
+                let gc = GCHandle.Alloc(m, GCHandleType.Pinned)
+                try f (NativePtr.ofNativeInt (gc.AddrOfPinnedObject()))
+                finally gc.Free()
+                
+        member x.Bind(m : list<'a>, f : nativeptr<'a> -> 'r) =
+            x.Bind(List.toArray m, f)
+
+        member x.Bind(m : Option<'a>, f : nativeptr<'a> -> 'r) =
+            x.Bind(Option.toArray m, f)
+
+        member x.Return(v : 'a) = v
+        member x.Zero() = ()
+        member x.Combine(l : unit, r : unit -> 'a) = r()
+        member x.Delay(f : unit -> 'a) = f
+        member x.Run(f : unit -> 'a) = f()
+
+        member x.For(s : seq<'a>, f : 'a -> unit) =
+            for e in s do f e
+
+        member x.While(guard : unit -> bool, body : unit -> unit) =
+            while guard() do
+                body()
+
+    let native = NativeBuilder()
+
     type Version with
         member v.ToVulkan() =
             ((uint32 v.Major) <<< 22) ||| ((uint32 v.Minor) <<< 12) ||| (uint32 v.Build)
@@ -347,159 +377,7 @@ and private Composite(l : list<Disposable>) =
     inherit Disposable()
     override x.Dispose() = l |> List.iter Disposable.Dispose
 
-module MultimediaTimer =
-    open System.Security
 
-    module private Windows = 
-        type MultimediaTimerCallbackDel  = delegate of uint32 * uint32 * nativeint * uint32 * uint32 -> unit
-
-        [<DllImport("winmm.dll", SetLastError = true); SuppressUnmanagedCodeSecurity>]
-        extern uint32 timeSetEvent(uint32 msDelay, uint32 msResolution, nativeint callback, uint32& userCtx, uint32 eventType)
-            
-        [<DllImport("winmm.dll", SetLastError = true); SuppressUnmanagedCodeSecurity>]
-        extern void timeKillEvent(uint32 timer)
-
-        let start (interval : int) (callback : unit -> unit) =
-            let del = MultimediaTimerCallbackDel(fun _ _ _ _ _ -> callback())
-            let ptr = Marshal.PinDelegate del
-            let mutable user = 0u
-            let id = timeSetEvent(uint32 interval, 1u, ptr.Pointer, &user, 1u)
-            if id = 0u then
-                let err = Marshal.GetLastWin32Error()
-                ptr.Dispose()
-                failwithf "[Timer] could not start timer: %A" err
-            else
-                { new IDisposable with
-                    member x.Dispose() =
-                        timeKillEvent(id)
-                        ptr.Dispose() 
-                }
-              
-    type Timer(intervalInMS : int) =
-            
-        let sem = new SemaphoreSlim(0)
-        let obs = Microsoft.FSharp.Control.Event<unit>()
-
-        let mutable disp : Option<IDisposable> = None
-        let mutable cancel = new CancellationTokenSource()
-        let mutable thread = Unchecked.defaultof<Thread>
-
-        let callback () = sem.Release() |> ignore
-
-        let runner () =
-            try
-                while true do
-                    sem.Wait(cancel.Token)
-                    try obs.Trigger()
-                    with _ -> ()
-            with 
-                | :? OperationCanceledException -> ()
-
-        member x.Tick = obs.Publish
-
-        member x.Start() =
-            lock x (fun () ->
-                match disp with
-                    | Some _ -> ()
-                    | None ->
-                        cancel <- new CancellationTokenSource()
-
-                        let t = new Thread(ThreadStart(runner), IsBackground = true)
-                        t.Start()
-                        thread <- t
-
-                        let d = Windows.start intervalInMS callback
-                        disp <- Some d
-            )
-
-        member x.Stop() =
-            lock x (fun () ->
-                match disp with
-                    | Some d -> 
-                        d.Dispose()
-
-                        cancel.Cancel()
-                        thread.Join()
-
-                        disp <- None
-                    | None -> ()
-            )
-
-    type Sleeper() =
-        [<DefaultValue; ThreadStatic>]
-        static val mutable private s_stopwatch : System.Diagnostics.Stopwatch
-            
-        let ticksPerMillisecond = int64 TimeSpan.TicksPerMillisecond 
-
-        //let event = new System.Threading.AutoResetEvent(false)
-
-        let pulse = obj()
-
-        let callback() =
-            //event.Set() |> ignore
-            lock pulse (fun () ->
-                Monitor.PulseAll pulse
-            )
-                
-        let timer = Windows.start 1 callback
-
-
-        member x.Wait(ticks : int64) =
-            if isNull Sleeper.s_stopwatch then
-                Sleeper.s_stopwatch <- System.Diagnostics.Stopwatch()
-
-            let sw = Sleeper.s_stopwatch
-            if ticks >= ticksPerMillisecond then
-                sw.Restart()
-                //event.WaitOne() |> ignore
-                lock pulse (fun () -> Monitor.Wait pulse) |> ignore
-                sw.Stop()
-                let rem = ticks - sw.Elapsed.Ticks
-                x.Wait rem
-            elif ticks > 0L then
-                //Log.warn "ticks: %A" ticks
-                sw.Restart()
-                while sw.Elapsed.Ticks < ticks do
-                    Thread.SpinWait(1000)
-                    //Thread.Sleep(0)
-                sw.Stop()
-
-        member x.Wait(milliseconds : int) =
-            x.Wait(int64 milliseconds * ticksPerMillisecond)
-
-    type Trigger(ms : int) =
-        let ticksPerMillisecond = int64 TimeSpan.TicksPerMillisecond 
-        let pulse = obj()
-
-        let callback() =
-            lock pulse (fun () ->
-                Monitor.PulseAll pulse
-            )
-                
-        let timer = Windows.start ms callback
-        
-        member x.Wait() =
-            lock pulse (fun () ->
-                Monitor.Wait pulse |> ignore
-            )  
-
-        member x.Signal() =
-            lock pulse (fun () ->
-                Monitor.PulseAll pulse
-            )  
-            
-        member x.Dispose() =
-            timer.Dispose()
-
-        interface IDisposable with
-            member x.Dispose() = x.Dispose()
-
-
-    type private Sleeper<'a>() =
-        static let p = new Sleeper()
-        static member Wait(ms : int) = p.Wait(ms)
-
-    let msleep (ms : int) = Sleeper<unit>.Wait ms
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VkFormat =

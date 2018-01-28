@@ -122,6 +122,8 @@
     <Compile Include="PixImageCube.fs" />
     <Compile Include="Ordered.fs" />
     <Compile Include="Trie.fs" />
+    <Compile Include="TaskUtilities.fs" />
+    <Compile Include="Timer.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />

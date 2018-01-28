@@ -648,7 +648,7 @@ module GeometryPoolUtilities =
                 cmd.AppendCommand()
                 VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, &&copyInfo)
                 cmd.End()
-                let queue = device.TransferFamily.GetQueue()
+                let queue = device.TransferFamily
                 queue.RunSynchronously(cmd)
                 cmd.Dispose()
 

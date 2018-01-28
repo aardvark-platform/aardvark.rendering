@@ -858,14 +858,12 @@ let main argv =
             |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
             |> Mod.map CameraView.viewTrafo
 
+
     let rotor =
-        let sw = System.Diagnostics.Stopwatch.StartNew()
-        let r = Mod.init 0.0
-        win.Time |> Mod.unsafeRegisterCallbackKeepDisposable (fun _ ->
-            transact (fun () -> r.Value <- sw.Elapsed.TotalSeconds)
-        ) |> ignore
-        r |> Mod.map (fun t ->
-            Trafo3d.RotationZ t
+        let startTime = System.DateTime.Now
+        win.Time |> Mod.map (fun t ->
+            let t = (t - startTime).TotalSeconds
+            Trafo3d.RotationZ (0.5 * t)
         )
 
     let viewTrafo =
@@ -875,18 +873,30 @@ let main argv =
 
     let effect =
         FShade.Effect.compose [
-            FShade.Effect.ofFunction DefaultSurfaces.trafo
             FShade.Effect.ofFunction <| fun (v : Effects.Vertex) ->
-                fragment {
-                    let n = 0.5 * (Vec.normalize v.pos.XYZ * V3d.III)
-                    return V4d(n, 1.0)
+                vertex {
+                    let n = 0.5 * (Vec.normalize v.pos.XYZ + V3d.III)
+                    return { v with c = V4d(n, 1.0) }
                 }
+            FShade.Effect.ofFunction DefaultSurfaces.trafo
         ]
 
+    let prepared = System.Collections.Generic.List<PreparedMultiRenderObject>()
+    
+    let sphere = IndexedGeometryPrimitives.solidPhiThetaSphere (Sphere3d(V3d.Zero, 0.1)) 16 C4b.Red
+    let index = sphere.IndexArray |> unbox<int[]>
+    let vertices = sphere.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+    let normals = sphere.IndexedAttributes.[DefaultSemantic.Normals] |> unbox<V3f[]>
+
     let addThing(pos : V3d) =
-        let sphere = IndexedGeometryPrimitives.solidPhiThetaSphere (Sphere3d(V3d.Zero, 0.1)) 16 C4b.Red
+        //let sphere = IndexedGeometryPrimitives.solidPhiThetaSphere (Sphere3d(V3d.Zero, 0.1)) 1024 C4b.Red
+
+        let call = DrawCallInfo(FaceVertexCount = sphere.IndexArray.Length, InstanceCount = 1)
         let sg =
-            Sg.ofIndexedGeometry sphere
+            Sg.render IndexedGeometryMode.TriangleList call
+                |> Sg.vertexAttribute DefaultSemantic.Positions (Mod.init vertices)
+                |> Sg.vertexAttribute DefaultSemantic.Normals (Mod.init normals)
+                |> Sg.index (Mod.init index)
                 |> Sg.effect [effect]
                 |> Sg.translate pos.X pos.Y pos.Z
                 |> Sg.viewTrafo viewTrafo
@@ -900,8 +910,27 @@ let main argv =
         for o in objects do
             let test = app.Runtime.ResourceManager.PrepareRenderObjectAsync(unbox win.FramebufferSignature, o, id)
             test.ContinueWith(fun (t : Task<PreparedMultiRenderObject>) ->
+                lock prepared (fun () -> prepared.Add t.Result)
                 transact (fun () -> lock realObjects (fun () -> realObjects.UnionWith (Seq.cast t.Result.Children)))
             ) |> ignore
+
+    let removeThing() =
+        let last = 
+            lock prepared (fun () ->
+                if prepared.Count > 0 then
+                    let res = prepared.[prepared.Count - 1]
+                    prepared.RemoveAt(prepared.Count - 1)
+                    Some res
+                else
+                    None
+            )
+        match last with
+            | Some l ->
+                transact (fun () -> lock realObjects (fun () -> realObjects.ExceptWith (Seq.cast l.Children)))
+                for r in l.Children do
+                    for r in r.resources do r.Release()
+            | None ->
+                ()
 
     Async.Start <| 
         async {
@@ -917,14 +946,43 @@ let main argv =
     let box = Box3d(-V3d.III * 5.0, V3d.III * 5.0)
     win.Keyboard.DownWithRepeats.Values.Add (fun k ->
         if k = Keys.Space then
-            for i in 1 .. 100 do
-                Task.Factory.StartNew(fun () ->
+            Task.Factory.StartNew (fun () ->
+                Parallel.For(0, 400, fun _ ->
                     rand.UniformV3dDirection() * 5.0 |> addThing
-                ) |> (fun _ -> ()) |> id
+                ) |> ignore
+            ) |> ignore
+//            for i in 1 .. 5 do
+//                Task.Factory.StartNew(fun () ->
+//                    rand.UniformV3dDirection() * 5.0 |> addThing
+//                ) |> ignore
+
+        elif k = Keys.Enter then
+            Task.Factory.StartNew (fun () ->
+                Parallel.For(0, 400, fun _ ->
+                    removeThing()
+                ) |> ignore
+            ) |> ignore
     )
 
 
     let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, realObjects)
+
+//
+//    let filter =
+//        let mutable all = [||]
+//        { new System.Windows.Forms.IMessageFilter with
+//            member x.PreFilterMessage(msg : byref<System.Windows.Forms.Message>) =
+//                let forms = System.Windows.Forms.Application.OpenForms
+//                
+//                if forms.Count > 0 then
+//                    let n = Array.init forms.Count (fun i -> forms.[i])
+//                    Log.error "%X forms: %A" msg.Msg (n |> Array.map (fun f -> f.Text))
+//                    all <- n
+//
+//                false
+//        }
+//    System.Windows.Forms.Application.AddMessageFilter filter
+
 
     win.RenderTask <- task
     win.Run()

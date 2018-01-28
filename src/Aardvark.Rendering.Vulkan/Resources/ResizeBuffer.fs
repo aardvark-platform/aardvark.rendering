@@ -203,45 +203,21 @@ type SparseBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
             let commits = commit offset (offset + size - 1L)
 
             let binds =
-                commits
-                    |> List.toArray
-                    |> Array.map (fun (min, max, ptr) ->
-                        VkSparseMemoryBind(
-                            uint64 min, 
-                            uint64 (max - min + 1L),
-                            ptr.Memory.Handle,
-                            uint64 ptr.Offset,
-                            VkSparseMemoryBindFlags.None
-                        )
-                    )
-
-            if binds.Length > 0 then
-                let queue = device.TransferFamily.GetQueue()
-                let fence = device.CreateFence()
-
-                lock queue (fun () ->
-                    binds |> NativePtr.withA (fun pBinds ->
-
-                        let mutable bufferInfo =
-                            VkSparseBufferMemoryBindInfo(
-                                handle, 
-                                uint32 binds.Length, pBinds
-                            )
-                        let bindInfo =
-                            VkBindSparseInfo(
-                                VkStructureType.BindSparseInfo, 0n,
-                                0u, NativePtr.zero,
-                                1u, &&bufferInfo,
-                                0u, NativePtr.zero,
-                                0u, NativePtr.zero,
-                                0u, NativePtr.zero
-                            )
-
-                        queue.BindSparse([| bindInfo |], fence.Handle)
-                            |> check "could not bind buffer memory"
-                    )
+                commits |> List.map (fun (min, max, ptr) ->
+                    {
+                        buffer = handle
+                        offset = min
+                        size = (max - min + 1L)
+                        mem = ptr
+                    }
                 )
-                fence.Wait()
+
+            match binds with
+                | [] -> ()
+                | binds -> 
+                    device.TransferFamily.RunSynchronously(
+                        QueueCommand.BindSparse([], binds)
+                    )
         )
 
     member x.Decommit(offset : int64, size : int64) =
@@ -249,47 +225,21 @@ type SparseBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
             let decommits = decommit offset (offset + size - 1L)
 
             let unbinds =
-                decommits
-                    |> List.toArray
-                    |> Array.map (fun (min, max) ->
-                        VkSparseMemoryBind(
-                            uint64 min, 
-                            uint64 (max - min + 1L),
-                            VkDeviceMemory.Null,
-                            0UL,
-                            VkSparseMemoryBindFlags.None
-                        )
-                    )
-
-            if unbinds.Length > 0 then
-                let queue = device.TransferFamily.GetQueue()
-                let fence = device.CreateFence()
-
-                lock queue (fun () ->
-                    unbinds |> NativePtr.withA (fun pUnbinds ->
-
-                        let mutable bufferInfo =
-                            VkSparseBufferMemoryBindInfo(
-                                handle, 
-                                uint32 unbinds.Length, pUnbinds
-                            )
-
-                        let bindInfo =
-                            VkBindSparseInfo(
-                                VkStructureType.BindSparseInfo, 0n,
-                                0u, NativePtr.zero,
-                                1u, &&bufferInfo,
-                                0u, NativePtr.zero,
-                                0u, NativePtr.zero,
-                                0u, NativePtr.zero
-                            )
-
-                        queue.BindSparse([| bindInfo |], fence.Handle)
-                            |> check "could not bind buffer memory"
-                    )
+                decommits |> List.map (fun (min, max) ->
+                    {
+                        buffer = handle
+                        offset = min
+                        size = (max - min + 1L)
+                        mem = DevicePtr.Null
+                    }
                 )
-                fence.Wait()
 
+            match unbinds with
+                | [] -> ()
+                | unbinds -> 
+                    device.TransferFamily.RunSynchronously(
+                        QueueCommand.BindSparse([], unbinds)
+                    )
         )
 
 type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer, virtualSize : int64) =
@@ -314,13 +264,13 @@ type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
         let ptr = malloc additionalBytes
         memories.Add(offset, ptr)
 
-        VkSparseMemoryBind(
-            uint64 offset,
-            uint64 additionalBytes,
-            ptr.Memory.Handle,
-            uint64 ptr.Offset,
-            VkSparseMemoryBindFlags.None
-        )
+        {
+            buffer = handle
+            offset = offset
+            size = additionalBytes
+            mem = ptr
+        }
+
 
     let rec shrink (i : int) (freeBytes : int64) =
         if i < 0 || freeBytes <= 0L then 
@@ -333,13 +283,12 @@ type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
                 memories.RemoveAt i
 
                 let unbind =
-                    VkSparseMemoryBind(
-                        uint64 offset,
-                        uint64 size,
-                        VkDeviceMemory.Null,
-                        0UL,
-                        VkSparseMemoryBindFlags.None
-                    )
+                    {
+                        buffer = handle
+                        offset = offset
+                        size = size
+                        mem = DevicePtr.Null
+                    }
 
                 unbind :: shrink (i-1) (freeBytes - size)
 
@@ -349,13 +298,12 @@ type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
                 if not worked then failf "could not resize memory"
 
                 let unbind =
-                    VkSparseMemoryBind(
-                        uint64 (offset + newSize),
-                        uint64 freeBytes,
-                        VkDeviceMemory.Null,
-                        0UL,
-                        VkSparseMemoryBindFlags.None
-                    )
+                    {
+                        buffer = handle
+                        offset = offset + newSize
+                        size = freeBytes
+                        mem = DevicePtr.Null
+                    }
 
                 [unbind]
 
@@ -381,37 +329,8 @@ type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
 
                 match binds with
                     | [] -> ()
-                    | binds ->
-                        let binds = List.toArray binds
-                        let queue = device.TransferFamily.GetQueue()
-                        let fence = device.CreateFence()
-
-                        lock queue (fun () ->
-                            binds |> NativePtr.withA (fun pBinds ->
-
-                                let mutable bufferInfo =
-                                    VkSparseBufferMemoryBindInfo(
-                                        handle, 
-                                        uint32 binds.Length, pBinds
-                                    )
-
-                                let bindInfo =
-                                    VkBindSparseInfo(
-                                        VkStructureType.BindSparseInfo, 0n,
-                                        0u, NativePtr.zero,
-                                        1u, &&bufferInfo,
-                                        0u, NativePtr.zero,
-                                        0u, NativePtr.zero,
-                                        0u, NativePtr.zero
-                                    )
-
-                                queue.BindSparse([| bindInfo |], fence.Handle)
-                                    |> check "could not bind buffer memory"
-                            )
-                        )
-                        fence.Wait()
-
-
+                    | binds -> device.TransferFamily.RunSynchronously(QueueCommand.BindSparse([], binds))
+                       
                 capacity <- newCapacity
             )
 

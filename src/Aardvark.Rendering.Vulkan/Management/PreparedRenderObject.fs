@@ -325,21 +325,21 @@ type DevicePreparedRenderObjectExtensions private() =
         let device = this.Device
         let oldToken = device.UnsafeCurrentToken
         try
-            let newToken = new DeviceToken(device.GraphicsFamily.GetQueue(), ref None)
+            let newToken = new DeviceToken(device.GraphicsFamily, ref None)
             device.UnsafeSetToken (Some newToken)
         
             let result = prepareObject this renderPass ro
-            result.IncrementReferenceCount()
-            for r in result.resources do r.Update(AdaptiveToken.Top) |> ignore
-//                match r with
-//                    | :? IResourceLocation<DescriptorSetBinding> -> ()
-//                    | _ -> r.Update(AdaptiveToken.Top) |> ignore
-
+            for r in result.resources do 
+                r.Acquire()
+                match r with    
+                    | :? IResourceLocation<UniformBuffer> -> ()
+                    | r -> r.Update(AdaptiveToken.Top) |> ignore
 
             let tcs = System.Threading.Tasks.TaskCompletionSource()
             device.CopyEngine.Enqueue [ CopyCommand.Callback (fun () -> tcs.SetResult ()) ]
+
             tcs.Task.ContinueWith(fun (t : System.Threading.Tasks.Task<_>) ->
-                newToken.Dispose()
+                newToken.Dispose(4)
                 result
             )
         finally 
