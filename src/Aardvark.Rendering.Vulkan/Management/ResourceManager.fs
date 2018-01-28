@@ -37,6 +37,7 @@ type IResourceLocation =
     abstract member Acquire : unit -> unit
     abstract member Release : unit -> unit
     abstract member ReleaseAll : unit -> unit
+    abstract member ReferenceCount : int
     abstract member Key : list<obj>
     abstract member Owner : IResourceCache
     
@@ -105,6 +106,7 @@ type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
         )
         
     interface IResourceLocation with
+        member x.ReferenceCount = refCount
         member x.Update t = 
             let res = x.Update t
             { handle = res :> obj; version = res.version }
