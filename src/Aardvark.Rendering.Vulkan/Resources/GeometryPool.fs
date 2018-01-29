@@ -610,16 +610,6 @@ module GeometryPoolUtilities =
                 VkRaw.vkBindBufferMemory(device.Handle, buffer, bufferMem.Memory.Handle, uint64 bufferMem.Offset)
                     |> check "could not bind buffer memory"
 
-//                let mutable memPtr = 0n
-//                VkRaw.vkMapMemory(device.Handle, bufferMem.Handle, 0UL, uint64 bufferMem.Size, VkMemoryMapFlags.MinValue, &&memPtr)
-//                    |> check "could not map memory"
-
-//                let mutable all = VkMappedMemoryRange(VkStructureType.MappedMemoryRange, 0n, bufferMem.Handle, 0UL, uint64 bufferMem.Size)
-//                VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, &&all)
-//                    |> check "could not flush mapped range"
-
-                
-
                 buffer, bufferMem
             else
                 VkBuffer.Null, DevicePtr.Null
@@ -629,11 +619,9 @@ module GeometryPoolUtilities =
         member x.Dispose() =
             if scratchBuffer.IsValid then
                 device.Delete x
-                //VkRaw.vkUnmapMemory(device.Handle, scratchMem.Handle)
                 VkRaw.vkDestroyBuffer(device.Handle, scratchBuffer, NativePtr.zero)
                 scratchMem.Dispose()
                 scratchBuffer <- VkBuffer.Null
-                //scratchPtr <- 0n
 
         member x.Write(offset : int64, size : int64, data : nativeint) =
             rlock.Lock.Use(ResourceUsage.Access, fun () ->
@@ -642,15 +630,30 @@ module GeometryPoolUtilities =
                     Marshal.Copy(data, scratchPtr + nativeint offset, size)
                 )
 
-                let cmd = device.TransferFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
-                cmd.Begin(CommandBufferUsage.OneTimeSubmit)
-                let mutable copyInfo = VkBufferCopy(uint64 offset, uint64 offset, uint64 size)
-                cmd.AppendCommand()
-                VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, &&copyInfo)
-                cmd.End()
-                let queue = device.TransferFamily
-                queue.RunSynchronously(cmd)
-                cmd.Dispose()
+                match device.UploadMode with
+                    | UploadMode.Async ->
+                        let tcs = new System.Threading.Tasks.TaskCompletionSource<unit>()
+                        device.CopyEngine.Enqueue [
+                            CopyCommand.Copy(scratchBuffer, offset, handle, offset, size)
+                            CopyCommand.Callback(fun () -> tcs.SetResult())
+                        ]
+                        tcs.Task.Wait()
+
+                    | _ ->
+                        device.GraphicsFamily.RunSynchronously(
+                            QueueCommand.ExecuteCommand(
+                                [], [],
+                                { new Command() with
+                                    member x.Compatible = QueueFlags.All
+                                    member x.Enqueue(cmd) =
+                                        cmd.AppendCommand()
+                                        let mutable copyInfo = VkBufferCopy(uint64 offset, uint64 offset, uint64 size)
+                                        VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, &&copyInfo)
+                                        Disposable.Empty
+                                }
+                            )
+                        )
+
 
             )
 

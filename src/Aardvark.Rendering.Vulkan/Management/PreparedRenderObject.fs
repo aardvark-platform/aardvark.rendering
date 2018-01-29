@@ -329,42 +329,54 @@ type DevicePreparedRenderObjectExtensions private() =
             device.UnsafeSetToken (Some newToken)
         
             let result = prepareObject this renderPass ro
-            for r in result.resources do 
-                let update = r.ReferenceCount = 0
-                r.Acquire()
-                if update then
-                    r.Update(AdaptiveToken.Top) |> ignore
 
+            // get all "new" resources
+            let newResources = result.resources |> List.filter (fun r -> r.ReferenceCount = 0)
+
+            // acquire all resources (possibly causing a ref-count greater than 1 when used multiple times)
+            for r in result.resources do r.Acquire()
+
+            // update all "new" resources
+            for r in newResources do r.Update(AdaptiveToken.Top) |> ignore
+
+            // enqueue a callback to the CopyEngine tiggering on completion of
+            // all prior commands (possibly including more than the needed ones)
             let tcs = System.Threading.Tasks.TaskCompletionSource()
             device.CopyEngine.Enqueue [ CopyCommand.Callback (fun () -> tcs.SetResult ()) ]
 
-            tcs.Task.ContinueWith(fun (t : System.Threading.Tasks.Task<_>) ->
-                newToken.Dispose(4)
-                result
+            // when the copies are done continue syncing the token (using the graphics queue)
+            tcs.Task |> Task.bind (fun () ->
+                let task = newToken.SyncTask(4).AsTask
+
+                // when everything is synced properly dispose the token and return the object
+                task.ContinueWith(fun (t : System.Threading.Tasks.Task<_>) ->
+                    newToken.Dispose()
+                    result
+                )
             )
         finally 
             device.UnsafeSetToken oldToken
         
     [<Extension>]
-    static member PrepareRenderObjectAsync(this : ResourceManager, renderPass : RenderPass, ro : IRenderObject, hook : RenderObject -> RenderObject) =
+    static member PrepareRenderObjectAsync(this : ResourceManager, renderPass : RenderPass, ro : IRenderObject, hook : RenderObject -> RenderObject) : Task<PreparedMultiRenderObject> =
         match ro with
             | :? RenderObject as ro ->
-                DevicePreparedRenderObjectExtensions.PrepareRenderObjectAsync(this, renderPass, ro).ContinueWith(fun (t : Task<_>) -> new PreparedMultiRenderObject([t.Result]))
+                DevicePreparedRenderObjectExtensions.PrepareRenderObjectAsync(this, renderPass, ro)
+                    |> Task.mapInline (fun v -> new PreparedMultiRenderObject([v]))
 
             | :? MultiRenderObject as mo ->
-                let tasks = mo.Children |> List.map (fun o -> DevicePreparedRenderObjectExtensions.PrepareRenderObjectAsync(this, renderPass, o, hook))
-
-                let runner = 
-                    async {
-                        let res = System.Collections.Generic.List<_>()
-                        for t in tasks do
-                            let! (r : PreparedMultiRenderObject) = Async.AwaitTask t
-                            res.AddRange r.Children
-
-                        return new PreparedMultiRenderObject(CSharpList.toList res)
-                    }
-
-                Async.StartAsTask runner
+                match mo.Children with
+                    | [] -> 
+                        Task.FromResult(new PreparedMultiRenderObject([]))
+                    | [o] ->
+                        DevicePreparedRenderObjectExtensions.PrepareRenderObjectAsync(this, renderPass, o, hook)
+                    | children ->
+                        children 
+                        |> List.collectT (fun (o : IRenderObject) ->
+                            DevicePreparedRenderObjectExtensions.PrepareRenderObjectAsync(this, renderPass, o, hook) 
+                                |> Task.mapInline (fun o -> o.Children)
+                        )
+                        |> Task.mapInline (fun l -> new PreparedMultiRenderObject(l))
 
             | :? PreparedRenderObject as o ->
                 Task.FromResult (new PreparedMultiRenderObject([o]))

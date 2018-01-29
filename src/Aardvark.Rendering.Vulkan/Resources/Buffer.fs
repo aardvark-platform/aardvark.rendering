@@ -453,18 +453,32 @@ module Buffer =
             buffer.Size <- int64 size
             let deviceMem = buffer.Memory
 
-            let hostBuffer = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit deviceAlignedSize
-            hostBuffer.Memory.Mapped (fun dst -> writer dst)
+            match device.UploadMode with
+                | UploadMode.Direct ->
+                    buffer.Memory.Mapped (fun dst -> writer dst)
 
-            device.CopyEngine.Enqueue [
-                CopyCommand.Copy(hostBuffer.Handle, 0L, buffer.Handle, 0L, int64 size)
-                CopyCommand.Release(buffer.Handle, 0L, int64 size, device.GraphicsFamily.Index)
-                CopyCommand.Callback (fun () -> delete hostBuffer device)
-            ]
+                | UploadMode.Sync ->
+                    let hostBuffer = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit deviceAlignedSize
+                    hostBuffer.Memory.Mapped (fun dst -> writer dst)
+                    
+                    device.eventually {
+                        try do! Command.Copy(hostBuffer, buffer)
+                        finally delete hostBuffer device
+                    }
 
-            device.eventually {
-                do! Command.Acquire(buffer, 0L, int64 size)
-            }
+                | UploadMode.Async -> 
+                    let hostBuffer = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit deviceAlignedSize
+                    hostBuffer.Memory.Mapped (fun dst -> writer dst)
+
+                    device.CopyEngine.Enqueue [
+                        CopyCommand.Copy(hostBuffer.Handle, 0L, buffer.Handle, 0L, int64 size)
+                        CopyCommand.Release(buffer.Handle, 0L, int64 size, device.GraphicsFamily.Index)
+                        CopyCommand.Callback (fun () -> delete hostBuffer device)
+                    ]
+
+                    device.eventually {
+                        do! Command.Acquire(buffer, 0L, int64 size)
+                    }
 
             buffer
         else
