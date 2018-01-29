@@ -476,22 +476,17 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 size)
         let src = unbox<Buffer> src
 
-        let cmd = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
-        cmd.Begin(CommandBufferUsage.OneTimeSubmit)
-        cmd.Enqueue(Command.Copy(src, int64 srcOffset, temp, 0L, int64 size))
-        cmd.End()
+        let task = device.GraphicsFamily.Start(QueueCommand.ExecuteCommand([], [], Command.Copy(src, int64 srcOffset, temp, 0L, int64 size)))
 
-        let queue = device.GraphicsFamily.GetQueue()
-        match queue.StartFence(cmd) with
-            | Some fence ->
-                (fun () ->
-                    fence.Wait()
-                    temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, size))
-                    device.Delete temp
-                    cmd.Dispose()
-                )
-            | None ->
-                failwith ""
+        (fun () ->
+            task.Wait()
+            if task.IsFaulted then 
+                device.Delete temp
+                raise task.Exception
+            else
+                temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, size))
+                device.Delete temp
+        )
 
 
 

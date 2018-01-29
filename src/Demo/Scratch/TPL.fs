@@ -114,29 +114,22 @@ module TPL =
 
                 let stream = prog.GetType().GetProperty("Stream", BindingFlags.Instance ||| BindingFlags.NonPublic).GetValue(prog) |> unbox<VKVM.CommandStream>
 
-                let cmd = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+                let pool = device.GraphicsFamily.TakeCommandPool()
+                let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
                 cmd.Begin(CommandBufferUsage.SimultaneousUse)
                 cmd.AppendCommand()
                 stream.Run(cmd.Handle)
                 cmd.End()
-
-            
-                fun (queue : DeviceQueue) (fence : Fence) ->
-                    queue.Submit(cmd, fence) |> ignore
-
-            let fence = device.CreateFence()
-            let q = device.GraphicsFamily.GetQueue()
+                fun () -> device.GraphicsFamily.RunSynchronously(cmd)
 
             let sw = System.Diagnostics.Stopwatch()
             let mutable iter = 0
             while true do
                 computeRunning.Wait()
 
-                fence.Reset()
                 sw.Start()
                 //a.Upload data
-                copyCompute q fence
-                fence.Wait()
+                copyCompute()
                 sw.Stop()
                 iter <- iter + 1
 
@@ -145,9 +138,6 @@ module TPL =
                     Log.line "took: %A" t
                     iter <- 0
                     sw.Reset()
-
-
-
 
         let computeThread = Thread(ThreadStart(computeThread), IsBackground = true)
         computeThread.Start()

@@ -121,8 +121,7 @@ module Task =
                             | Completed v -> tcs.SetResult v
                     ) |> ignore
 
-        task.ContinueWith(System.Func<_,_>(cont)) |> ignore
-
+        task.ContinueWith(System.Action<_>(cont)) |> ignore
         tcs.Task
 
     let mapN (mapping : 'a[] -> 'b) (tasks : #seq<Task<'a>>) =
