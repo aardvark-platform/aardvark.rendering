@@ -514,6 +514,10 @@ and [<RequireQualifiedAccess>] CopyCommand =
         | CallbackCmd of (unit -> unit)
         | ReleaseBufferCmd of buffer : VkBuffer * offset : int64 * size : int64 * dstQueueFamily : uint32
         | ReleaseImageCmd of image : VkImage * range : VkImageSubresourceRange * srcLayout : VkImageLayout * dstLayout : VkImageLayout * dstQueueFamily : uint32
+        | TransformLayoutCmd of image : VkImage * range : VkImageSubresourceRange * srcLayout : VkImageLayout * dstLayout : VkImageLayout
+
+    static member TransformLayout(image : VkImage, range : VkImageSubresourceRange, srcLayout : VkImageLayout, dstLayout : VkImageLayout) =
+        CopyCommand.TransformLayoutCmd(image, range, srcLayout, dstLayout)
 
     static member Copy(src : VkBuffer, srcOffset : int64, dst : VkBuffer, dstOffset : int64, size : int64) =
         CopyCommand.BufferToBufferCmd(
@@ -678,6 +682,25 @@ and CopyEngine(family : DeviceQueueFamily) =
                                 |]
                             ) |> ignore
 
+                        | CopyCommand.TransformLayoutCmd(image, range, srcLayout, dstLayout) ->
+                            stream.PipelineBarrier(
+                                VkImageLayout.toSrcStageFlags srcLayout,
+                                VkImageLayout.toDstStageFlags dstLayout,
+                                [||],
+                                [||],
+                                [|
+                                    VkImageMemoryBarrier(
+                                        VkStructureType.ImageMemoryBarrier, 0n,
+                                        VkImageLayout.toAccessFlags srcLayout,
+                                        VkImageLayout.toAccessFlags dstLayout,
+                                        srcLayout, dstLayout,
+                                        uint32 familyIndex,
+                                        uint32 familyIndex,
+                                        image,
+                                        range
+                                    )
+                                |]
+                            ) |> ignore
 
 
                 stream.Run cmd.Handle
