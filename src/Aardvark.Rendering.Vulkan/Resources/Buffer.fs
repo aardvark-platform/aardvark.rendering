@@ -241,6 +241,9 @@ module BufferCommands =
 
 
             }
+            
+        static member Acquire(buffer : Buffer) =
+            Command.Acquire(buffer, 0L, buffer.Size)
 
         static member Sync(b : Buffer, src : VkAccessFlags, dst : VkAccessFlags) =
             { new Command() with
@@ -346,6 +349,23 @@ module BufferCommands =
                     VkRaw.vkCmdFillBuffer(cmd.Handle, b.Handle, uint64 offset, uint64 size, v)
                     Disposable.Empty
             }
+
+    type CopyCommand with
+        static member Copy(src : Buffer, srcOffset : int64, dst : Buffer, dstOffset : int64, size : int64) =
+            CopyCommand.Copy(src.Handle, srcOffset, dst.Handle, dstOffset, size)
+
+        static member Copy(src : Buffer, dst : Buffer, size : int64) =
+            CopyCommand.Copy(src.Handle, 0L, dst.Handle, 0L, size)
+
+        static member Copy(src : Buffer, dst : Buffer) =
+            CopyCommand.Copy(src.Handle, 0L, dst.Handle, 0L, min src.Size dst.Size)
+
+        static member Release(buffer : Buffer, offset : int64, size : int64, dstQueueFamily : DeviceQueueFamily) =
+            CopyCommand.Release(buffer.Handle, offset, size, dstQueueFamily.Index)
+
+        static member Release(buffer : Buffer, dstQueueFamily : DeviceQueueFamily) =
+            CopyCommand.Release(buffer, 0L, buffer.Size, dstQueueFamily)
+
 // =======================================================================
 // Resource functions for Device
 // =======================================================================
@@ -471,13 +491,13 @@ module Buffer =
                     hostBuffer.Memory.Mapped (fun dst -> writer dst)
 
                     device.CopyEngine.Enqueue [
-                        CopyCommand.Copy(hostBuffer.Handle, 0L, buffer.Handle, 0L, int64 size)
-                        CopyCommand.Release(buffer.Handle, 0L, int64 size, device.GraphicsFamily.Index)
+                        CopyCommand.Copy(hostBuffer, buffer, int64 size)
+                        CopyCommand.Release(buffer, device.GraphicsFamily)
                         CopyCommand.Callback (fun () -> delete hostBuffer device)
                     ]
 
                     device.eventually {
-                        do! Command.Acquire(buffer, 0L, int64 size)
+                        do! Command.Acquire buffer
                     }
 
             buffer

@@ -1568,7 +1568,7 @@ module DeviceTensorCommandExtensions =
             if src.Size <> dst.Size then failf "[TensorImage] mismatching sizes in copy %A vs %A" src.Size dst.Size
             Command.Copy(src, V3i.Zero, dst, src.Size)
 
-        static member Acquire(src : ImageSubresourceRange, srcQueue : int, srcLayout : VkImageLayout, dstLayout : VkImageLayout) =
+        static member Acquire(src : ImageSubresourceRange, srcLayout : VkImageLayout, dstLayout : VkImageLayout, srcQueue : DeviceQueueFamily) =
             { new Command() with
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue(cmd) =
@@ -1581,7 +1581,7 @@ module DeviceTensorCommandExtensions =
                             VkImageLayout.toAccessFlags dstLayout ,
                             srcLayout,
                             dstLayout,
-                            uint32 srcQueue,
+                            uint32 srcQueue.Index,
                             uint32 cmd.QueueFamily.Index,
                             src.Image.Handle,
                             src.VkImageSubresourceRange
@@ -1599,7 +1599,58 @@ module DeviceTensorCommandExtensions =
 
                     Disposable.Empty
             }
+            
+        static member Acquire(src : ImageSubresourceRange, layout : VkImageLayout, srcQueue : DeviceQueueFamily) =
+            Command.Acquire(src, layout, layout, srcQueue)
 
+    type CopyCommand with
+        
+        // upload
+        static member Copy(src : TensorImage, dst : ImageSubresource, dstOffset : V3i, size : V3i) =
+            CopyCommand.Copy(
+                src.Buffer.Handle, 0L,
+                dst.Image.Handle,
+                dst.Image.Layout,
+                dst.Image.Format,
+                VkBufferImageCopy(
+                    0UL, 0u, 0u,
+                    dst.VkImageSubresourceLayers,
+                    VkOffset3D(dstOffset.X, dstOffset.Y, dstOffset.Z),
+                    VkExtent3D(size.X, size.Y, size.Z)
+                )
+            )
+            
+        static member Copy(src : TensorImage, dst : ImageSubresource) =
+            CopyCommand.Copy(src, dst, V3i.Zero, src.Size)
+
+        // download
+        static member Copy(src : ImageSubresource, srcOffset : V3i, dst : TensorImage, size : V3i) =
+            CopyCommand.Copy(
+                src.Image.Handle,
+                src.Image.Layout,
+                dst.Buffer.Handle,
+                src.Image.Format,
+                VkBufferImageCopy(
+                    0UL, 0u, 0u,
+                    src.VkImageSubresourceLayers,
+                    VkOffset3D(srcOffset.X, srcOffset.Y, srcOffset.Z),
+                    VkExtent3D(size.X, size.Y, size.Z)
+                )
+            )
+            
+        static member Copy(src : ImageSubresource, dst : TensorImage) =
+            CopyCommand.Copy(src, V3i.Zero, dst, src.Size)
+
+
+        static member TransformLayout(img : ImageSubresourceRange, srcLayout : VkImageLayout, dstLayout : VkImageLayout) =
+            CopyCommand.TransformLayout(img.Image.Handle, img.VkImageSubresourceRange, srcLayout, dstLayout)
+
+        static member Release(img : ImageSubresourceRange, srcLayout : VkImageLayout, dstLayout : VkImageLayout, dstQueueFamily : DeviceQueueFamily) =
+            CopyCommand.Release(img.Image.Handle, img.VkImageSubresourceRange, srcLayout, dstLayout, dstQueueFamily.Index)
+
+        static member Release(img : ImageSubresourceRange, layout : VkImageLayout, dstQueueFamily : DeviceQueueFamily) =
+            CopyCommand.Release(img.Image.Handle, img.VkImageSubresourceRange, layout, layout, dstQueueFamily.Index)
+            
     module private MustCompile =
 
         let createImage (device : Device) =
@@ -2163,7 +2214,6 @@ module ``Image Command Extensions`` =
             }
 
 
-
 //
 //        static member Sync(img : ImageSubresourceRange) =
 //            if img.Image.IsNull then
@@ -2322,7 +2372,6 @@ module Image =
         alloc size mipMapLevels count samples dim vkfmt usage device
 
 
-    // TODO: check CopyEngine
     let ofPixImageMipMap (pi : PixImageMipMap) (info : TextureParams) (device : Device) =
         if pi.LevelCount <= 0 then failf "empty PixImageMipMap"
         
@@ -2367,38 +2416,21 @@ module Image =
 
         match device.UploadMode with
             | UploadMode.Async ->
-
-                let copies =
-                    tempImages |> List.mapi (fun level src ->
-                        CopyCommand.Copy(
-                            src.Buffer.Handle, 0L, 
-                            image.Handle, VkImageLayout.TransferDstOptimal, image.Format, 
-                            VkBufferImageCopy(
-                                0UL, 0u, 0u,
-                                image.[ImageAspect.Color, level, 0].VkImageSubresourceLayers,
-                                VkOffset3D(0,0,0),
-                                VkExtent3D(src.Size.X, src.Size.Y, src.Size.Z)
-                            )
-                        )
-                    )
-
-                let dstLayout = 
-                    if generateMipMaps then VkImageLayout.TransferDstOptimal
-                    else VkImageLayout.ShaderReadOnlyOptimal
+                let imageRange = image.[ImageAspect.Color]
+                image.Layout <- VkImageLayout.TransferDstOptimal
 
                 device.CopyEngine.Enqueue [
-                    yield CopyCommand.TransformLayout(image.Handle, image.[ImageAspect.Color].VkImageSubresourceRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
-                    yield! copies
-                    yield CopyCommand.Release(image.Handle, image.[ImageAspect.Color].VkImageSubresourceRange, VkImageLayout.TransferDstOptimal, dstLayout, device.GraphicsFamily.Index)
+                    yield CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
+                    yield! tempImages |> List.mapi (fun level src -> CopyCommand.Copy(src, imageRange.[level, 0]))
+                    yield CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
                     yield CopyCommand.Callback (fun () -> tempImages |> List.iter device.Delete)
                 ]
 
-                image.Layout <- dstLayout
                 device.eventually {
-                    do! Command.Acquire(image.[ImageAspect.Color], device.TransferFamily.Index, VkImageLayout.TransferDstOptimal, dstLayout)
+                    do! Command.Acquire(imageRange, VkImageLayout.TransferDstOptimal, device.TransferFamily)
                     if generateMipMaps then
                         do! Command.GenerateMipMaps image.[ImageAspect.Color]
-                        do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
+                    do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
                 }
 
             | _ ->
@@ -2424,7 +2456,7 @@ module Image =
 
         image
 
-    // TODO: CopyEngine
+    // TODO: check CopyEngine
     let ofPixVolume (pi : PixVolume) (info : TextureParams) (device : Device) =
         let format = pi.PixFormat
         let size = pi.Size
@@ -2450,31 +2482,53 @@ module Image =
                 (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit)
                 device
 
+        let temp = device.CreateTensorImage(pi.Size, expectedFormat, info.wantSrgb)
+        temp.Write(pi)
+
         
-        device.eventually {
-            let tempImages = List()
-            try
-                do! Command.TransformLayout(image, VkImageLayout.TransferDstOptimal)
+        match device.UploadMode with
+            | UploadMode.Async ->
+                let imageRange = image.[ImageAspect.Color]
+                image.Layout <- VkImageLayout.TransferDstOptimal
 
-                // upload the level 0
-                let temp = device.CreateTensorImage(pi.Size, expectedFormat, info.wantSrgb)
-                temp.Write(pi)
-                tempImages.Add temp
-                do! Command.Copy(temp, image.[ImageAspect.Color, 0, 0])
+                device.CopyEngine.Enqueue [
+                    CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
+                    CopyCommand.Copy(temp, imageRange.[0,0])
+                    CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)   
+                    CopyCommand.Callback(fun () -> device.Delete temp)
+                ]
 
-                // generate the mipMaps
-                if info.wantMipMaps then
-                    do! Command.GenerateMipMaps image.[ImageAspect.Color]
+                device.eventually {
+                    do! Command.Acquire(imageRange, VkImageLayout.TransferDstOptimal, device.TransferFamily)
+                    
+                    // generate the mipMaps
+                    if info.wantMipMaps then
+                        do! Command.GenerateMipMaps image.[ImageAspect.Color]
 
-                do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
+                    do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
+                }
 
-            finally
-                for t in tempImages do device.Delete t
-        }
+            | _ -> 
+                device.eventually {
+                    try
+                        do! Command.TransformLayout(image, VkImageLayout.TransferDstOptimal)
+
+                        // upload the level 0
+                        do! Command.Copy(temp, image.[ImageAspect.Color, 0, 0])
+
+                        // generate the mipMaps
+                        if info.wantMipMaps then
+                            do! Command.GenerateMipMaps image.[ImageAspect.Color]
+
+                        do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
+
+                    finally
+                        device.Delete temp
+                }
 
         image
         
-    // TODO: CopyEngine
+    // TODO: check CopyEngine
     let ofPixImageCube (pi : PixImageCube) (info : TextureParams) (device : Device) =
         let face0 = pi.MipMapArray.[0]
         if face0.LevelCount <= 0 then failf "empty PixImageMipMap"
@@ -2511,34 +2565,62 @@ module Image =
                 (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit)
                 device
 
-        
-        device.eventually {
-            let tempImages = List()
-            try
-                do! Command.TransformLayout(image, VkImageLayout.TransferDstOptimal)
+        let tempImages =
+            List.init uploadLevels (fun level ->
+                List.init 6 (fun face ->
+                    let data = pi.MipMapArray.[face].ImageArray.[level]
+                    let temp = device.CreateTensorImage(V3i(data.Size.X, data.Size.Y, 1), expectedFormat, info.wantSrgb)
+                    temp.Write(data, ImageTrafo.MirrorY)
+                    temp
+                )
+            )
 
-                // upload the levels
-                for level in 0 .. uploadLevels - 1 do
-                    for face in 0 .. 5 do
-                        let data = pi.MipMapArray.[face].ImageArray.[level]
-                        let temp = device.CreateTensorImage(V3i(data.Size.X, data.Size.Y, 1), expectedFormat, info.wantSrgb)
-                        temp.Write(data, ImageTrafo.MirrorY)
-                        tempImages.Add temp
-                        do! Command.Copy(temp, image.[ImageAspect.Color, level, face])
+        match device.UploadMode with
+            | UploadMode.Async ->
+                let imageRange = image.[ImageAspect.Color]
+                image.Layout <- VkImageLayout.TransferDstOptimal
+                device.CopyEngine.Enqueue [
+                    yield CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
+                    
+                    for (level, faces) in Seq.indexed tempImages do
+                        for (face, temp) in Seq.indexed faces do
+                            yield CopyCommand.Copy(temp, image.[ImageAspect.Color, level, face])
 
-                // generate the mipMaps
-                if generateMipMaps then
-                    do! Command.GenerateMipMaps image.[ImageAspect.Color]
+                    yield CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
+                    yield CopyCommand.Callback (fun () -> tempImages |> List.iter (List.iter device.Delete))
+                ]
 
-                do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
+                device.eventually {
+                    do! Command.Acquire(imageRange, VkImageLayout.TransferDstOptimal, device.TransferFamily)
+                    // generate the mipMaps
+                    if generateMipMaps then
+                        do! Command.GenerateMipMaps image.[ImageAspect.Color]
 
-            finally
-                for t in tempImages do device.Delete t
-        }
+                    do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
+                }
+
+            | _ -> 
+                device.eventually {
+                    try
+                        do! Command.TransformLayout(image, VkImageLayout.TransferDstOptimal)
+
+                        // upload the levels
+                        for (level, faces) in Seq.indexed tempImages do
+                            for (face, temp) in Seq.indexed faces do
+                                do! Command.Copy(temp, image.[ImageAspect.Color, level, face])
+                       
+                        // generate the mipMaps
+                        if generateMipMaps then
+                            do! Command.GenerateMipMaps image.[ImageAspect.Color]
+
+                        do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
+
+                    finally
+                        tempImages |> List.iter (List.iter device.Delete)
+                }
 
         image
  
-    // TODO: check CopyEngine
     let ofFile (file : string) (info : TextureParams) (device : Device) =
         if not (System.IO.File.Exists file) then failf "file does not exists: %A" file
 
@@ -2563,36 +2645,24 @@ module Image =
         
         match device.UploadMode with
             | UploadMode.Async ->
-                let entireImage = image.[ImageAspect.Color].VkImageSubresourceRange
-
-                let dstLayout = 
-                    if info.wantMipMaps then VkImageLayout.TransferDstOptimal
-                    else VkImageLayout.ShaderReadOnlyOptimal
-
+                let imageRange = image.[ImageAspect.Color]
+                
+                image.Layout <- VkImageLayout.TransferDstOptimal
                 device.CopyEngine.Enqueue [
-                    CopyCommand.TransformLayout(image.Handle, entireImage, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
-                    CopyCommand.Copy(
-                        temp.Buffer.Handle, 0L, 
-                        image.Handle, VkImageLayout.TransferDstOptimal, image.Format, 
-                        VkBufferImageCopy(
-                            0UL, 0u, 0u,
-                            image.[ImageAspect.Color, 0, 0].VkImageSubresourceLayers,
-                            VkOffset3D(0,0,0),
-                            VkExtent3D(temp.Size.X, temp.Size.Y, temp.Size.Z)
-                        )
-                    )
-                    CopyCommand.Release(image.Handle, entireImage, VkImageLayout.TransferDstOptimal, dstLayout, device.GraphicsFamily.Index)
+                    CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
+                    CopyCommand.Copy(temp, imageRange.[0,0])
+                    CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
                     CopyCommand.Callback(fun () -> device.Delete temp)
                 ]
                 
-                image.Layout <- dstLayout
                 device.eventually {
-                    do! Command.Acquire(image.[ImageAspect.Color], device.TransferFamily.Index, VkImageLayout.TransferDstOptimal, dstLayout)
+                    do! Command.Acquire(imageRange, VkImageLayout.TransferDstOptimal, device.TransferFamily)
 
                     // generate the mipMaps
                     if info.wantMipMaps then
                         do! Command.GenerateMipMaps image.[ImageAspect.Color]
-                        do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
+
+                    do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
 
                 }
 
@@ -2626,7 +2696,6 @@ module Image =
 
             | :? NullTexture as t ->
                 device |> ofPixImageMipMap (PixImageMipMap [| PixImage<byte>(Col.Format.RGBA, V2i.II) :> PixImage |]) TextureParams.empty
-                //Image(device, VkImage.Null, V3i.Zero, 1, 1, 1, TextureDimension.Texture2D, VkFormat.Undefined, DevicePtr.Null, VkImageLayout.ShaderReadOnlyOptimal)
 
             | :? PixTexture3d as t ->
                 device |> ofPixVolume t.PixVolume t.TextureParams
