@@ -106,6 +106,7 @@
     <Compile Include="Management\PreparedRenderObject.fs" />
     <Compile Include="Runtime\DebugReport.fs" />
     <Compile Include="Runtime\GraphicsCommands.fs" />
+    <Compile Include="Runtime\CommandTask.fs" />
     <Compile Include="Runtime\Compiler.fs" />
     <Compile Include="Runtime\RenderTask.fs" />
     <Compile Include="Runtime\Runtime.fs" />
