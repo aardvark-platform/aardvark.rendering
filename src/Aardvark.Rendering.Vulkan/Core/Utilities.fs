@@ -1703,3 +1703,49 @@ module VkFormat =
 
     let ofPixFormat (fmt : PixFormat) (t : TextureParams) =
         TextureFormat.ofPixFormat fmt t |> ofTextureFormat
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module VkImageLayout =
+    open KHRSwapchain
+
+    let toAccessFlags =
+        LookupTable.lookupTable [
+            VkImageLayout.Undefined,                        VkAccessFlags.None
+            VkImageLayout.General,                          VkAccessFlags.None
+            VkImageLayout.ColorAttachmentOptimal,           VkAccessFlags.ColorAttachmentWriteBit
+            VkImageLayout.DepthStencilAttachmentOptimal,    VkAccessFlags.DepthStencilAttachmentWriteBit
+            VkImageLayout.DepthStencilReadOnlyOptimal,      VkAccessFlags.DepthStencilAttachmentReadBit
+            VkImageLayout.ShaderReadOnlyOptimal,            VkAccessFlags.ShaderReadBit
+            VkImageLayout.TransferSrcOptimal,               VkAccessFlags.TransferReadBit
+            VkImageLayout.TransferDstOptimal,               VkAccessFlags.TransferWriteBit
+            VkImageLayout.Preinitialized,                   VkAccessFlags.HostWriteBit
+            VkImageLayout.PresentSrcKhr,                    VkAccessFlags.MemoryReadBit
+        ]
+        
+    let toSrcStageFlags =
+        LookupTable.lookupTable [
+            VkImageLayout.Undefined,                        VkPipelineStageFlags.HostBit
+            VkImageLayout.General,                          VkPipelineStageFlags.HostBit
+            VkImageLayout.ColorAttachmentOptimal,           VkPipelineStageFlags.ColorAttachmentOutputBit
+            VkImageLayout.DepthStencilAttachmentOptimal,    VkPipelineStageFlags.LateFragmentTestsBit
+            VkImageLayout.DepthStencilReadOnlyOptimal,      VkPipelineStageFlags.LateFragmentTestsBit
+            VkImageLayout.ShaderReadOnlyOptimal,            VkPipelineStageFlags.FragmentShaderBit
+            VkImageLayout.TransferSrcOptimal,               VkPipelineStageFlags.TransferBit
+            VkImageLayout.TransferDstOptimal,               VkPipelineStageFlags.TransferBit
+            VkImageLayout.Preinitialized,                   VkPipelineStageFlags.None
+            VkImageLayout.PresentSrcKhr,                    VkPipelineStageFlags.TransferBit
+        ]
+        
+    let toDstStageFlags =
+        LookupTable.lookupTable [
+            VkImageLayout.Undefined,                        VkPipelineStageFlags.HostBit
+            VkImageLayout.General,                          VkPipelineStageFlags.HostBit
+            VkImageLayout.ColorAttachmentOptimal,           VkPipelineStageFlags.ColorAttachmentOutputBit
+            VkImageLayout.DepthStencilAttachmentOptimal,    VkPipelineStageFlags.EarlyFragmentTestsBit
+            VkImageLayout.DepthStencilReadOnlyOptimal,      VkPipelineStageFlags.EarlyFragmentTestsBit
+            VkImageLayout.ShaderReadOnlyOptimal,            VkPipelineStageFlags.VertexShaderBit
+            VkImageLayout.TransferSrcOptimal,               VkPipelineStageFlags.TransferBit
+            VkImageLayout.TransferDstOptimal,               VkPipelineStageFlags.TransferBit
+            VkImageLayout.Preinitialized,                   VkPipelineStageFlags.None
+            VkImageLayout.PresentSrcKhr,                    VkPipelineStageFlags.TransferBit
+        ]
