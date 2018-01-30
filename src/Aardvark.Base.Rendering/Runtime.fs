@@ -64,11 +64,44 @@ module Management =
                 mcopy = fun _ _ _ _ _ -> ()
             }
 
+    type nref<'a>(value : 'a) =
+        static let mutable currentId = 0
+
+        let mutable value = value
+        let id = Interlocked.Increment(&currentId)
+
+        member private x.Id = id
+        member x.Value
+            with get() = value
+            and set v = value <- v
+
+        override x.GetHashCode() = id
+        override x.Equals o =
+            match o with
+                | :? nref<'a> as o -> id = o.Id
+                | _ -> false
+
+        interface IComparable with
+            member x.CompareTo o =
+                match o with
+                    | :? nref<'a> as o -> compare id o.Id
+                    | _ -> failwith "uncomparable"
+
+                    
+        interface IComparable<nref<'a>> with
+            member x.CompareTo o = compare id o.Id
+
+    let inline private (!) (r : nref<'a>) =
+        r.Value
+        
+    let inline private (:=) (r : nref<'a>) (value : 'a) =
+        r.Value <- value
 
     [<AllowNullLiteral>]
     type Block<'a> =
         class
-            val mutable public Parent : MemoryManager<'a>
+            val mutable public Parent : IMemoryManager<'a>
+            val mutable public Memory : nref<'a>
             val mutable public Next : Block<'a>
             val mutable public Prev : Block<'a>
             val mutable public Offset : nativeint
@@ -78,8 +111,8 @@ module Management =
             override x.ToString() =
                 sprintf "[%d,%d)" x.Offset (x.Offset + x.Size)
 
-            new(parent, o, s, f, p, n) = { Parent = parent; Offset = o; Size = s; IsFree = f; Prev = p; Next = n }
-            new(parent, o, s, f) = { Parent = parent; Offset = o; Size = s; IsFree = f; Prev = null; Next = null }
+            new(parent, m, o, s, f, p, n) = { Parent = parent; Memory = m; Offset = o; Size = s; IsFree = f; Prev = p; Next = n }
+            new(parent, m, o, s, f) = { Parent = parent; Memory = m; Offset = o; Size = s; IsFree = f; Prev = null; Next = null }
 
         end
 
@@ -95,7 +128,10 @@ module Management =
                     else
                         let c = compare l.Size r.Size
                         if c <> 0 then c
-                        else compare l.Offset r.Offset       
+                        else 
+                            let c = compare l.Offset r.Offset    
+                            if c <> 0 then c
+                            else compare l.Memory r.Memory   
             }
 
         let store = SortedSetExt<Block<'a>>(Seq.empty, comparer)
@@ -106,7 +142,7 @@ module Management =
 
 
         member x.TryGetGreaterOrEqual(size : nativeint) =
-            let query = Block(Unchecked.defaultof<_>, -1n, size, true)
+            let query = Block(Unchecked.defaultof<_>, Unchecked.defaultof<_>, -1n, size, true)
             let (_, _, r) = store.FindNeighbours(query)
             if r.HasValue then 
                 let r = r.Value
@@ -116,7 +152,7 @@ module Management =
                 None
 
         member x.TryGetAligned(align : nativeint, size : nativeint) =
-            let min = Block(Unchecked.defaultof<_>, -1n, size, true)
+            let min = Block(Unchecked.defaultof<_>, Unchecked.defaultof<_>, -1n, size, true)
             let view = store.GetViewBetween(min, null)
 
             let res = 
@@ -142,13 +178,16 @@ module Management =
         member x.Clear() =
             store.Clear()
 
+    and IMemoryManager<'a> =
+        interface end
+
     and MemoryManager<'a>(mem : Memory<'a>, initialCapacity : nativeint) as this =
         
         let free = FreeList<'a>()
         
-        let mutable store = mem.malloc initialCapacity
+        let store = nref <| mem.malloc initialCapacity
         let mutable capacity = initialCapacity
-        let mutable first = Block<'a>(this, 0n, initialCapacity, true)
+        let mutable first = Block<'a>(this, store, 0n, initialCapacity, true)
         let mutable last = first
         do free.Insert(first)
 
@@ -163,9 +202,9 @@ module Management =
             let oldCapacity = capacity
             if newCapacity <> oldCapacity then
                 ReaderWriterLock.write rw (fun () ->
-                    let o = store
+                    let o = !store
                     let n = mem.mrealloc o oldCapacity newCapacity
-                    store <- n
+                    store := n
                     capacity <- newCapacity
                     let o = ()
 
@@ -176,7 +215,7 @@ module Management =
                             last.Size <- last.Size + additional
                             free.Insert(last)
                         else
-                            let newFree = Block<'a>(this, oldCapacity, additional, true, last, null)
+                            let newFree = Block<'a>(this, store, oldCapacity, additional, true, last, null)
                             last.Next <- newFree
                             free.Insert(newFree)
                     else (* additional < 0 *)
@@ -207,7 +246,7 @@ module Management =
                         let alignedOffset = next align b.Offset
                         let alignedSize = b.Size - (alignedOffset - b.Offset)
                         if alignedOffset > b.Offset then
-                            let l = Block<'a>(x, b.Offset, alignedOffset - b.Offset, true, b.Prev, b)
+                            let l = Block<'a>(x, store, b.Offset, alignedOffset - b.Offset, true, b.Prev, b)
                             if isNull l.Prev then first <- l
                             else l.Prev.Next <- l
                             b.Prev <- l
@@ -216,7 +255,7 @@ module Management =
                             b.Size <- alignedSize        
                             
                         if alignedSize > size then
-                            let r = Block<'a>(x, alignedOffset + size, alignedSize - size, true, b, b.Next)
+                            let r = Block<'a>(x, store, alignedOffset + size, alignedSize - size, true, b, b.Next)
                             if isNull r.Next then last <- r
                             else r.Next.Prev <- r
                             b.Next <- r
@@ -236,7 +275,7 @@ module Management =
                 match free.TryGetGreaterOrEqual size with
                     | Some b ->
                         if b.Size > size then
-                            let rest = Block<'a>(x, b.Offset + size, b.Size - size, true, b, b.Next)
+                            let rest = Block<'a>(x, store, b.Offset + size, b.Size - size, true, b, b.Next)
                         
                             if isNull rest.Next then last <- rest
                             else rest.Next.Prev <- rest
@@ -257,7 +296,7 @@ module Management =
                 lock free (fun () ->
                     let old = b
                     
-                    let b = Block(x, b.Offset, b.Size, b.IsFree, b.Prev, b.Next)
+                    let b = Block(x, store, b.Offset, b.Size, b.IsFree, b.Prev, b.Next)
                     if isNull b.Prev then first <- b
                     else b.Prev.Next <- b
 
@@ -323,7 +362,7 @@ module Management =
                         if size = 0n then
                             x.Free(b)
                         else
-                            let r = Block(x, b.Offset + size, b.Size - size, false, b, b.Next)
+                            let r = Block(x, store, b.Offset + size, b.Size - size, false, b, b.Next)
                             b.Next <- r
                             if isNull r.Next then last <- r
                             else r.Next.Prev <- r
@@ -350,7 +389,7 @@ module Management =
 
                         else
                             let n = x.Alloc(align, size)
-                            mem.mcopy store b.Offset store n.Offset b.Size
+                            mem.mcopy !store b.Offset !store n.Offset b.Size
                             x.Free b
 
                             b.Prev <- n.Prev
@@ -374,12 +413,12 @@ module Management =
         member x.Use(b : Block<'a>, action : 'a -> nativeint -> nativeint -> 'r) =
             if b.IsFree then failwith "cannot use free block"
             ReaderWriterLock.read rw (fun () -> 
-                action store b.Offset b.Size
+                action !store b.Offset b.Size
             )
 
         member x.Dispose() =
             rw.Dispose()
-            mem.mfree store capacity
+            mem.mfree !store capacity
             first <- null
             last <- null
             free.Clear()
@@ -388,10 +427,213 @@ module Management =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
+        interface IMemoryManager<'a>
+
+    and ChunkedMemoryManager<'a>(mem : Memory<'a>, chunkSize : nativeint) as this =
+        
+        let free = FreeList<'a>()
+        let allocated = Dict<'a, nativeint>()
+        let mutable usedMemory = 0n
+
+        do
+            let store = mem.malloc chunkSize
+            free.Insert(Block<'a>(this, nref store, 0n, chunkSize, true))
+            allocated.Add (store, chunkSize) |> ignore
+            usedMemory <- chunkSize
+
+        static let next (align : nativeint) (v : nativeint) =
+            if v % align = 0n then v
+            else v + (align - v % align)
+
+        let rw = new ReaderWriterLockSlim()
+
+        let grow (additional : nativeint) =
+            let blockCap = max chunkSize additional
+            usedMemory <- usedMemory + blockCap
+            let newMem = mem.malloc blockCap
+            allocated.Add(newMem, blockCap) |> ignore
+            free.Insert(Block<'a>(this, nref newMem, 0n, blockCap, true))
+
+        let freed(block : Block<'a>) =
+            if isNull block.Prev && isNull block.Next then
+                match allocated.TryRemove !block.Memory with
+                    | (true, size) -> 
+                        usedMemory <- usedMemory - size
+                        mem.mfree !block.Memory size
+                    | _ ->
+                        failwith "bad inconsistent hate"
+            else
+                free.Insert(block)
+
+        member x.Alloc(align : nativeint, size : nativeint) =
+            lock free (fun () ->
+                match free.TryGetAligned(align, size) with
+                    | Some b ->
+                        let alignedOffset = next align b.Offset
+                        let alignedSize = b.Size - (alignedOffset - b.Offset)
+                        if alignedOffset > b.Offset then
+                            let l = Block<'a>(x, b.Memory, b.Offset, alignedOffset - b.Offset, true, b.Prev, b)
+                            if not (isNull l.Prev) then l.Prev.Next <- l
+                            b.Prev <- l
+                            free.Insert(l)
+                            b.Offset <- alignedOffset
+                            b.Size <- alignedSize        
+                            
+                        if alignedSize > size then
+                            let r = Block<'a>(x, b.Memory, alignedOffset + size, alignedSize - size, true, b, b.Next)
+                            if not (isNull r.Next) then r.Next.Prev <- r
+                            b.Next <- r
+                            free.Insert(r)
+                            b.Size <- size
+
+                        b.IsFree <- false
+                        b
+                    | None ->
+                        grow size
+                        x.Alloc(align, size)
+
+            )
+
+        member x.Alloc(size : nativeint) =
+            lock free (fun () ->
+                match free.TryGetGreaterOrEqual size with
+                    | Some b ->
+                        if b.Size > size then
+                            let rest = Block<'a>(x, b.Memory, b.Offset + size, b.Size - size, true, b, b.Next)
+                        
+                            if not (isNull rest.Next) then rest.Next.Prev <- rest
+                            b.Next <- rest
+
+                            free.Insert(rest)
+                            b.Size <- size
+
+                        b.IsFree <- false
+                        b
+                    | None ->
+                        grow size
+                        x.Alloc size
+            )
+
+        member x.Free(b : Block<'a>) =
+            if not b.IsFree then
+                lock free (fun () ->
+                    let old = b
+                    
+                    let b = Block(x, b.Memory, b.Offset, b.Size, b.IsFree, b.Prev, b.Next)
+                    if not (isNull b.Prev) then b.Prev.Next <- b
+
+                    if not (isNull b.Next) then b.Next.Prev <- b
+
+                    old.Next <- null
+                    old.Prev <- null
+                    old.IsFree <- true
+                    old.Offset <- -1n
+                    old.Size <- 0n
+
+
+                    let prev = b.Prev
+                    let next = b.Next
+                    if not (isNull prev) && prev.IsFree then
+                        free.Remove(prev) |> ignore
+                        
+                        b.Prev <- prev.Prev
+                        if not (isNull prev.Prev) then prev.Prev.Next <- b
+
+                        b.Offset <- prev.Offset
+                        b.Size <- b.Size + prev.Size
+
+                    if not (isNull next) && next.IsFree then
+                        free.Remove(next) |> ignore
+                        b.Next <- next.Next
+                        if not (isNull next.Next) then next.Next.Prev <- b
+                        b.Next <- next.Next
+
+                        b.Size <- b.Size + next.Size
+
+
+                    b.IsFree <- true
+                    freed(b)
+
+                )
+
+        member x.Realloc(b : Block<'a>, align : nativeint, size : nativeint) =
+            if b.Size <> size then
+                lock free (fun () ->
+                    if b.IsFree then
+                        let n = x.Alloc(align, size)
+
+                        b.Prev <- n.Prev
+                        b.Next <- n.Next
+                        b.Size <- n.Size
+                        b.Offset <- n.Offset
+                        b.IsFree <- false
+
+                        if not (isNull b.Prev) then b.Prev.Next <- b
+                        if not (isNull b.Next) then b.Next.Prev <- b
+
+                    elif b.Size > size then
+                        if size = 0n then
+                            x.Free(b)
+                        else
+                            let r = Block(x, b.Memory, b.Offset + size, b.Size - size, false, b, b.Next)
+                            b.Next <- r
+                            if not (isNull r.Next) then r.Next.Prev <- r
+                            x.Free(r)
+
+                    elif b.Size < size then
+                        let next = b.Next
+                        let missing = size - b.Size
+                        if not (isNull next) && next.IsFree && next.Size >= missing then
+                            free.Remove next |> ignore
+
+                            if missing < next.Size then
+                                next.Offset <- next.Offset + missing
+                                next.Size <- next.Size - missing
+                                b.Size <- size
+                                free.Insert(next)
+
+                            else
+                                b.Next <- next.Next
+                                if not (isNull b.Next) then b.Next.Prev <- b
+                                b.Size <- size
+
+
+                        else
+                            failwithf "[MemoryManager] cannot realloc when no mcopy given"
+                )
+
+        member x.Realloc(b : Block<'a>, size : nativeint) =
+            x.Realloc(b, 1n, size)
+
+        member x.Capactiy = lock free (fun () -> usedMemory)
+
+        member x.Use(b : Block<'a>, action : 'a -> nativeint -> nativeint -> 'r) =
+            if b.IsFree then failwith "cannot use free block"
+            ReaderWriterLock.read rw (fun () -> 
+                action !b.Memory b.Offset b.Size
+            )
+
+        member x.Dispose() =
+            rw.Dispose()
+            for (KeyValue(a, s)) in allocated do mem.mfree a s
+            allocated.Clear()
+            free.Clear()
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+            
+        interface IMemoryManager<'a>
+   
+
    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module MemoryManager =
         let createNop() = new MemoryManager<_>(Memory.nop, 16n) 
+
+   
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module ChunkedMemoryManager =
+        let createNop() = new ChunkedMemoryManager<_>(Memory.nop, 16n) 
 
 
 
