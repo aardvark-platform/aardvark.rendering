@@ -212,7 +212,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     member x.CompileRender (renderPass : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) =
         let set = EffectDebugger.Hook set
-        new RenderTask.DependentRenderTask(device, unbox renderPass, set, true, true) :> IRenderTask
+        new Temp.CommandTask(device, unbox renderPass, RuntimeCommand.Render set) :> IRenderTask
+        //new RenderTask.DependentRenderTask(device, unbox renderPass, set, true, true) :> IRenderTask
         //new RenderTasks.RenderTask(device, unbox renderPass, set, Mod.constant engine, shareTextures, shareBuffers) :> IRenderTask
 
     member x.CompileClear(signature : IFramebufferSignature, color : IMod<Map<Symbol, C4f>>, depth : IMod<Option<float>>) : IRenderTask =
