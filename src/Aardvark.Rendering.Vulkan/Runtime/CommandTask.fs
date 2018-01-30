@@ -238,32 +238,76 @@ module private RuntimeCommands =
                 effect
 
 
+        open Management
 
+        type BufferRange internal(block : Block<_>, buffers : Map<string, IBufferRange<byte>>) =
+            member x.Buffers = buffers
+            member internal x.Block = block
 
         type BufferMemoryManager(device : Device, instanceTypes : Map<string, Type>, vertexTypes : Map<string, Type>, instanceCount : int, vertexCount : int) =
             
+            let mem =
+                {
+                    malloc = fun size ->
+                        vertexTypes |> Map.map (fun name t ->
+                            let elementSize = Marshal.SizeOf t
+                            let sizeInBytes = int64 elementSize * int64 vertexCount
+                            let buffer = device.DeviceMemory |> Buffer.createConcurrent true (VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit) sizeInBytes
+                            (buffer, elementSize)
+                        )
+                    mfree = fun map _ ->
+                        map |> Map.iter (fun _ (b,_) -> Buffer.delete b device)
 
+                    mcopy = fun _ _ _ _ -> failf "cannot copy"
+                    mrealloc = fun _ _ _ -> failf "cannot copy"
+                }
 
-            let instanceManager = DeviceMemoryManager
-            let vertexManager = MemoryManager.createNop()
-
-            let vBuffers =
-                vertexTypes |> Map.map (fun name t ->
-                    let sizeInBytes = int64 (Marshal.SizeOf t) * int64 vertexCount
-                    device.DeviceMemory |> Buffer.createConcurrent true (VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit) sizeInBytes
-                )
-
-            let iBuffers =
-                instanceTypes |> Map.map (fun name t ->
-                    let sizeInBytes = int64 (Marshal.SizeOf t) * int64 instanceCount
-                    device.DeviceMemory |> Buffer.createConcurrent true (VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit) sizeInBytes
-                )
-
-            member x.TryAlloc(vertexCount : int) =
-                let index = instanceManager.Alloc(1n)
+            let vertexManager = new Management.ChunkedMemoryManager<_>(mem, nativeint vertexCount)
             
+            let mutable cpuIndirectBuffer = 
+                device.DeviceMemory |> Buffer.create (VkBufferUsageFlags.TransferSrcBit) (20L * int64 instanceCount)
+
+            let mutable indirectBuffer = 
+                device.DeviceMemory |> Buffer.createConcurrent true (VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.IndirectBufferBit) (20L * int64 instanceCount)
+
+            let mutable indirectBufferCount = 
+                0
+
+            let add (call : DrawCallInfo) =
+                cpuIndirectBuffer.Memory.Mapped (fun ptr ->
+                    let id = indirectBufferCount
+                    NativeInt.write (ptr + 20n * nativeint id) call
+                    indirectBufferCount <- id + 1
+                    id
+                )
+
+            let removeAt (index : int) =
+                let last = indirectBufferCount - 1
+                if last <> index then
+                    cpuIndirectBuffer.Memory.Mapped (fun ptr ->
+                        let lv = NativeInt.read (ptr + 20n * nativeint last)
+                        NativeInt.write (ptr + 20n * nativeint index) lv
+                    )
+
+                indirectBufferCount <- indirectBufferCount - 1
 
 
+
+
+            member x.Alloc(vertexCount : int) =
+                let block = vertexManager.Alloc(nativeint vertexCount)
+                let buffers = block.Memory.Value
+                let res = 
+                    buffers |> Map.map (fun name (b, elementSize) ->
+                        let offset = int block.Offset * elementSize
+                        let size = int block.Size * elementSize
+                        b.Coerce<byte>().[offset .. offset + size - 1]
+                    )
+
+                BufferRange(block, res)
+
+            member x.Free(r : BufferRange) =
+                vertexManager.Free(r.Block)
 
 
     [<AbstractClass>]
@@ -938,8 +982,7 @@ module private RuntimeCommands =
 
 
         let prepare (g : IndexedGeometry) =
-            state.uni
-            
+
             ()
 
 
