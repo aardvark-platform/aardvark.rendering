@@ -1578,7 +1578,7 @@ module DeviceTensorCommandExtensions =
                         VkImageMemoryBarrier(
                             VkStructureType.ImageMemoryBarrier, 0n,
                             VkAccessFlags.None,
-                            VkAccessFlags.ShaderReadBit,
+                            VkImageLayout.toAccessFlags dstLayout ,
                             srcLayout,
                             dstLayout,
                             uint32 srcQueue,
@@ -1590,7 +1590,7 @@ module DeviceTensorCommandExtensions =
                     VkRaw.vkCmdPipelineBarrier(
                         cmd.Handle,
                         VkPipelineStageFlags.TopOfPipeBit,
-                        VkPipelineStageFlags.TopOfPipeBit,
+                        VkImageLayout.toDstStageFlags dstLayout,
                         VkDependencyFlags.None,
                         0u, NativePtr.zero,
                         0u, NativePtr.zero,
