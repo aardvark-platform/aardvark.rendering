@@ -153,6 +153,11 @@ module private RuntimeCommands =
             let arr = HashSet.toArray r
             r.Clear()
             arr
+            
+        let consumeList (r : List<'a>) =
+            let arr = CSharpList.toArray r
+            r.Clear()
+            arr
 
         let dispose (d : #IDisposable) =
             d.Dispose()
@@ -240,30 +245,147 @@ module private RuntimeCommands =
 
         open Management
 
-        type BufferRange internal(block : Block<_>, buffers : Map<string, IBufferRange<byte>>) =
-            member x.Buffers = buffers
-            member internal x.Block = block
+        type BufferRange internal(buffer : Buffer, offset : int64, size : int64) =
+            member x.Buffer = buffer
+            member x.Offset = offset
+            member x.Size = size
 
-        type BufferMemoryManager(device : Device, instanceTypes : Map<string, Type>, vertexTypes : Map<string, Type>, instanceCount : int, vertexCount : int) =
+            interface IBufferRange with
+                member x.Buffer = buffer :> _
+                member x.Offset = nativeint offset
+                member x.Size = nativeint size
+
+        type GeometrySlot internal(device : Device, vertexSize : int, vertexBlock : Block<_>, vertexBuffers : Map<Symbol, BufferRange>, instanceId : int, instanceBlock : Block<_>, instanceBuffers : Map<string, BufferRange>) =
+            let totalVertexSize = int64 vertexBlock.Size * int64 vertexSize
             
-            let mem =
-                {
-                    malloc = fun size ->
-                        vertexTypes |> Map.map (fun name t ->
-                            let elementSize = Marshal.SizeOf t
-                            let sizeInBytes = int64 elementSize * int64 vertexCount
-                            let buffer = device.DeviceMemory |> Buffer.createConcurrent true (VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit) sizeInBytes
-                            (buffer, elementSize)
-                        )
-                    mfree = fun map _ ->
-                        map |> Map.iter (fun _ (b,_) -> Buffer.delete b device)
+            member x.VertexBuffers = vertexBuffers
+            member x.InstanceBuffers = instanceBuffers
+            member x.InstanceId = instanceId
 
-                    mcopy = fun _ _ _ _ -> failf "cannot copy"
-                    mrealloc = fun _ _ _ -> failf "cannot copy"
-                }
+            member internal x.VertexBlock = vertexBlock
+            member internal x.InstanceBlock = instanceBlock
 
-            let vertexManager = new Management.ChunkedMemoryManager<_>(mem, nativeint vertexCount)
+            member x.WriteVertexAttributes(geometry : IndexedGeometry) =
+                let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit totalVertexSize
+
+                let copies = List<CopyCommand>()
+
+                temp.Memory.Mapped (fun ptr ->
+                    let mutable ptr = ptr
+                    let mutable offset = 0L
+                    for (name, target) in Map.toSeq vertexBuffers do
+                        let size = target.Size
+                        match geometry.IndexedAttributes.TryGetValue name with
+                            | (true, src) ->
+                                let gc = GCHandle.Alloc(src, GCHandleType.Pinned)
+                                try Marshal.Copy(gc.AddrOfPinnedObject(), ptr, size)
+                                finally gc.Free()
+
+                                copies.Add(CopyCommand.Copy(temp, offset, target.Buffer, target.Offset, target.Size))
+
+                                ptr <- ptr + nativeint size
+                                offset <- offset + size
+
+                            | _ ->
+                                failf "no attribute %A" name
+
+                )
+
+                let tcs = System.Threading.Tasks.TaskCompletionSource()
+                copies.Add(CopyCommand.Callback tcs.SetResult)
+                device.CopyEngine.Enqueue copies
+
+                tcs.Task
+
+
+
+
+        type BufferMemoryManager(device : Device, instanceTypes : Map<string, Type>, vertexTypes : Map<Symbol, Type>, instanceCount : int, vertexCount : int) =
             
+            let freeBuffers = System.Collections.Generic.List<Buffer>()
+            let freeSlots = System.Collections.Generic.List<GeometrySlot>()
+            let vertexBuffers = Dict<int, Map<Symbol, Buffer * int>>()
+            let mutable instanceBuffers = Map.empty
+
+            let vertexSize =
+                vertexTypes |> Map.toSeq |> Seq.sumBy (fun (_,t) -> Marshal.SizeOf t)
+
+            let vertexManager = 
+                let mutable currentId = 0
+                let mem =
+                    {
+                        malloc = fun size ->
+                            let id = Interlocked.Increment(&currentId)
+                            let buffers = 
+                                vertexTypes |> Map.map (fun name t ->
+                                    let elementSize = Marshal.SizeOf t
+                                    let sizeInBytes = int64 elementSize * int64 vertexCount
+                                    let buffer = device.DeviceMemory |> Buffer.createConcurrent true (VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit) sizeInBytes
+                                    (buffer, elementSize)
+                                )
+                            vertexBuffers.[id] <- buffers
+                            (buffers, id)
+                        mfree = fun (map,id) _ ->
+                            lock freeBuffers (fun () -> 
+                                map |> Map.iter (fun _ (b,_) -> freeBuffers.Add b)
+                                vertexBuffers.Remove id |> ignore
+                            )
+
+                        mcopy = fun _ _ _ _ _ -> failf "cannot copy"
+                        mrealloc = fun _ _ _ -> failf "cannot realloc"
+                    }
+                
+                new Management.ChunkedMemoryManager<_>(mem, nativeint vertexCount)
+            
+            let instanceManager = 
+
+                let malloc (size : nativeint) =
+                    instanceTypes |> Map.map (fun name t ->
+                        let elementSize = Marshal.SizeOf t
+                        let sizeInBytes = int64 elementSize * int64 vertexCount
+                        let buffer = device.DeviceMemory |> Buffer.createConcurrent true (VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit) sizeInBytes
+                        (buffer, elementSize)
+                    )
+                    
+                let mfree (mem : Map<string, Buffer * int>) (size : nativeint) =
+                    lock freeBuffers (fun () -> mem |> Map.iter (fun _ (b,_) -> freeBuffers.Add b))
+
+                let mcopy (src : Map<string, Buffer * int>) (srcOffset : nativeint) (dst : Map<string, Buffer * int>) (dstOffset : nativeint) (size : nativeint) =
+                    let tcs = System.Threading.Tasks.TaskCompletionSource()
+                    let commands = 
+                        [
+                            for (name, (srcBuffer, elementSize)) in Map.toSeq src do
+                                let (dstBuffer, _) = dst.[name]
+                                let srcOffset = int64 srcOffset * int64 elementSize
+                                let dstOffset = int64 dstOffset * int64 elementSize
+                                let size = int64 size * int64 elementSize
+
+                                yield CopyCommand.Copy(srcBuffer, srcOffset, dstBuffer, dstOffset, size)
+
+                            yield CopyCommand.Callback(tcs.SetResult)
+                        ]
+
+                    device.CopyEngine.Enqueue commands
+                    tcs.Task.Wait()
+
+                let mrealloc (mem : Map<string, Buffer * int>) (oldSize : nativeint) (newSize : nativeint) =
+                    let n = malloc newSize
+                    let copySize = min oldSize newSize
+                    if copySize > 0n then
+                        mcopy mem 0n n 0n copySize
+
+                    mfree mem oldSize
+                    n
+
+                let mem =
+                    {
+                        malloc = malloc
+                        mfree = mfree
+                        mcopy = mcopy
+                        mrealloc = mrealloc
+                    }
+                new Management.MemoryManager<_>(mem, nativeint instanceCount)
+
             let mutable cpuIndirectBuffer = 
                 device.DeviceMemory |> Buffer.create (VkBufferUsageFlags.TransferSrcBit) (20L * int64 instanceCount)
 
@@ -285,29 +407,51 @@ module private RuntimeCommands =
                 let last = indirectBufferCount - 1
                 if last <> index then
                     cpuIndirectBuffer.Memory.Mapped (fun ptr ->
-                        let lv = NativeInt.read (ptr + 20n * nativeint last)
+                        let lv : DrawCallInfo = NativeInt.read (ptr + 20n * nativeint last)
                         NativeInt.write (ptr + 20n * nativeint index) lv
                     )
 
                 indirectBufferCount <- indirectBufferCount - 1
 
-
-
-
             member x.Alloc(vertexCount : int) =
-                let block = vertexManager.Alloc(nativeint vertexCount)
-                let buffers = block.Memory.Value
-                let res = 
+                let vertexBlock = vertexManager.Alloc(nativeint vertexCount)
+                let vertexBuffers = 
+                    let buffers,_ = vertexBlock.Memory.Value
                     buffers |> Map.map (fun name (b, elementSize) ->
-                        let offset = int block.Offset * elementSize
-                        let size = int block.Size * elementSize
-                        b.Coerce<byte>().[offset .. offset + size - 1]
+                        let offset = int64 vertexBlock.Offset * int64 elementSize
+                        let size = int64 vertexBlock.Size * int64 elementSize
+                        BufferRange(b, offset, size)
                     )
 
-                BufferRange(block, res)
 
-            member x.Free(r : BufferRange) =
-                vertexManager.Free(r.Block)
+                let instanceBlock = instanceManager.Alloc(1n)
+                let instanceBuffers =
+                    let buffers = instanceBlock.Memory.Value 
+                    buffers |> Map.map (fun name (b, elementSize) ->
+                        let offset = int64 instanceBlock.Offset * int64 elementSize
+                        let size = int64 instanceBlock.Size * int64 elementSize
+                        BufferRange(b, offset, size)
+                    )
+
+                GeometrySlot(device, vertexSize, vertexBlock, vertexBuffers, int instanceBlock.Offset, instanceBlock, instanceBuffers)
+
+            member x.Free(r : GeometrySlot) =
+                lock freeSlots (fun () -> freeSlots.Add r)
+
+            member x.Flush() =
+                let freeSlots = lock freeSlots (fun () -> consumeList freeSlots)
+                for r in freeSlots do
+                    vertexManager.Free(r.VertexBlock)
+                    instanceManager.Free(r.InstanceBlock)
+                    
+                let freeBuffers = lock freeBuffers (fun () -> consumeList freeBuffers)
+                for b in freeBuffers do
+                    Buffer.delete b device
+
+            member x.InstanceBuffers = instanceManager.UnsafePointer
+
+            member x.AllVertexBuffers =
+                vertexBuffers |> Dict.toList |> List.map snd
 
 
     [<AbstractClass>]
