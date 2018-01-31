@@ -481,10 +481,11 @@ type RuntimeCommand =
     | OrderedCmd of commands : alist<RuntimeCommand>
     | IfThenElseCmd of condition : IMod<bool> * ifTrue : RuntimeCommand * ifFalse : RuntimeCommand
 
-
+    | GeometriesSimpleCmd of effect : FShade.Effect * pipeline : PipelineState * geometries : aset<IndexedGeometry>
 
     static member Empty = RuntimeCommand.EmptyCmd
     
+
     static member Render(objects : aset<IRenderObject>) =
         RuntimeCommand.RenderCmd(objects)
         
@@ -502,6 +503,9 @@ type RuntimeCommand =
 
     static member Geometries(surface : Surface, pipeline : PipelineState, geometries : aset<Geometry>) =
         RuntimeCommand.GeometriesCmd(surface, pipeline, geometries)
+        
+    static member Geometries(surface : FShade.Effect, pipeline : PipelineState, geometries : aset<IndexedGeometry>) =
+        RuntimeCommand.GeometriesSimpleCmd(surface, pipeline, geometries)
 
     static member Geometries(effects : FShade.Effect[], activeEffect : IMod<int>, pipeline : PipelineState, geometries : aset<Geometry>) =
         let surface = 
