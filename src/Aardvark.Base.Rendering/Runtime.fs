@@ -424,6 +424,8 @@ module Management =
             free.Clear()
             capacity <- -1n
 
+        member x.UnsafePointer = store.Value
+
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
