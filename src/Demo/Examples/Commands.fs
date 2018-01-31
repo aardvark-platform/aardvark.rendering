@@ -23,47 +23,12 @@ module CommandTest =
         let runtime = app.Runtime
         let device = runtime.Device
 
-
-
         let cameraView  = DefaultCameraController.control win.Mouse win.Keyboard win.Time (CameraView.LookAt(3.0 * V3d.III, V3d.OOO, V3d.OOI))    
         let frustum     = win.Sizes    |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))       
         let viewTrafo   = cameraView    |> Mod.map CameraView.viewTrafo
         let projTrafo   = frustum       |> Mod.map Frustum.projTrafo        
 
-        
 
-        let sg1 =
-            Sg.box' C4b.Red Box3d.Unit
-                |> Sg.shader {
-                    do! DefaultSurfaces.trafo
-                    do! DefaultSurfaces.constantColor C4f.Red
-                    do! DefaultSurfaces.simpleLighting
-                }
-                |> Sg.viewTrafo viewTrafo
-                |> Sg.projTrafo projTrafo
-                
-        let sg2 =
-            Sg.unitSphere' 5 C4b.Red
-                |> Sg.shader {
-                    do! DefaultSurfaces.trafo
-                    do! DefaultSurfaces.constantColor C4f.Green
-                    do! DefaultSurfaces.simpleLighting
-                }
-                |> Sg.viewTrafo viewTrafo
-                |> Sg.projTrafo projTrafo
-
-        let condition = Mod.init true
-
-        win.Keyboard.DownWithRepeats.Values.Add (fun k ->
-            match k with    
-                | Keys.Space -> transact (fun () -> condition.Value <- not condition.Value)
-                | _ -> ()
-        )
-
-
-        let pos = Array.map (fun v -> v / 4.0f) [| V3f(-1.0f, -1.0f, 0.0f); V3f(1.0f, -1.0f, 0.0f); V3f(1.0f, 1.0f, 0.0f); V3f(-1.0f, 1.0f, 0.0f) |]
-        let n = Array.create 4 V3f.OOI
-        let index = [| 0;1;2; 0;2;3|]
 
         let box = Primitives.unitBox
         let pos = box.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]> |> Array.map (fun v -> v / 2.0f)
@@ -77,22 +42,24 @@ module CommandTest =
                     let idx = Aardvark.Base.BufferView(Mod.constant (ArrayBuffer index :> IBuffer), typeof<int>)
                     Some idx, index.Length
 
+        let rand = RandomSystem()
 
         let quadGeometry (offset : V3d) =
+            let color = rand.UniformC3f().ToC4d().ToV4d()
+
             IndexedGeometry(
                 Mode = IndexedGeometryMode.TriangleList,
+                SingleAttributes =
+                    SymDict.ofList [
+                        Symbol.Create "NodeColor", (Mod.constant color) :> obj
+                    ],
+
                 IndexedAttributes =
                     SymDict.ofList [
                         DefaultSemantic.Positions, pos |> Array.map (fun v -> V3d v + offset |> V3f) :> Array
                         DefaultSemantic.Normals, n :> Array
                     ]
             )
-//            {
-//                vertexAttributes    = Map.ofList [DefaultSemantic.Positions, Mod.constant (ArrayBuffer pos :> IBuffer); DefaultSemantic.Normals, Mod.constant (ArrayBuffer n :> IBuffer)]
-//                indices             = index
-//                uniforms            = Map.ofList ["ModelTrafo", Mod.constant (Trafo3d.Translation(offset)) :> IMod ]
-//                call                = Mod.constant [DrawCallInfo(FaceVertexCount = fvc, InstanceCount = 1)]
-//            }
 
         let state =
             {
@@ -114,7 +81,7 @@ module CommandTest =
 
                 geometryMode        = IndexedGeometryMode.TriangleList
                 vertexInputTypes    = Map.ofList [ DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Normals, typeof<V3f> ]
-                perGeometryUniforms = Map.empty // Map.ofList [ "ModelTrafo", typeof<Trafo3d> ]
+                perGeometryUniforms = Map.ofList [ "NodeColor", typeof<V4d> ]
             }
 
 
@@ -128,18 +95,23 @@ module CommandTest =
                 FShade.Effect.compose [
                     toEffect <| DefaultSurfaces.trafo
                     toEffect <| DefaultSurfaces.constantColor C4f.White
+                    toEffect <| fun (v : Effects.Vertex) ->
+                        fragment {
+                            let color : V4d = uniform?NodeColor
+                            return color
+                        }
                     toEffect <| DefaultSurfaces.simpleLighting
                 ]
             |]
 
 
         let geometries =
-            let size = 5
+            let size = 10
             ASet.ofList [
                 for x in -size .. size do
                     for y in -size .. size do
                         for z in -size .. size do
-                            yield quadGeometry (V3d(x,y,z))
+                            yield quadGeometry (V3d(float x, float y, float z))
                     
             ]
 
@@ -155,7 +127,7 @@ module CommandTest =
 
 
         //let cmd = RuntimeCommand.Geometries(effects, current, state, geometries)
-        let cmd = RuntimeCommand.Geometries(effects.[0], state, geometries)
+        let cmd = RuntimeCommand.Geometries(effects.[1], state, geometries)
 //
 //        let objects1 = sg1.RenderObjects()
 //        let objects2 = sg2.RenderObjects()
@@ -169,6 +141,8 @@ module CommandTest =
 
         win.RenderTask <- new Temp.CommandTask(device, unbox win.FramebufferSignature, cmd)
         win.Run()
+
+        win.Dispose()
   
 
 
