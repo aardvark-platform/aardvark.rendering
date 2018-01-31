@@ -79,12 +79,20 @@ module CommandTest =
 
 
         let quadGeometry (offset : V3d) =
-            {
-                vertexAttributes    = Map.ofList [DefaultSemantic.Positions, Mod.constant (ArrayBuffer pos :> IBuffer); DefaultSemantic.Normals, Mod.constant (ArrayBuffer n :> IBuffer)]
-                indices             = index
-                uniforms            = Map.ofList ["ModelTrafo", Mod.constant (Trafo3d.Translation(offset)) :> IMod ]
-                call                = Mod.constant [DrawCallInfo(FaceVertexCount = fvc, InstanceCount = 1)]
-            }
+            IndexedGeometry(
+                Mode = IndexedGeometryMode.TriangleList,
+                IndexedAttributes =
+                    SymDict.ofList [
+                        DefaultSemantic.Positions, pos |> Array.map (fun v -> V3d v + offset |> V3f) :> Array
+                        DefaultSemantic.Normals, n :> Array
+                    ]
+            )
+//            {
+//                vertexAttributes    = Map.ofList [DefaultSemantic.Positions, Mod.constant (ArrayBuffer pos :> IBuffer); DefaultSemantic.Normals, Mod.constant (ArrayBuffer n :> IBuffer)]
+//                indices             = index
+//                uniforms            = Map.ofList ["ModelTrafo", Mod.constant (Trafo3d.Translation(offset)) :> IMod ]
+//                call                = Mod.constant [DrawCallInfo(FaceVertexCount = fvc, InstanceCount = 1)]
+//            }
 
         let state =
             {
@@ -97,6 +105,7 @@ module CommandTest =
                 writeBuffers        = None
                 globalUniforms      = 
                     UniformProvider.ofList [
+                        "ModelTrafo", Mod.constant Trafo3d.Identity :> IMod
                         "ViewTrafo", viewTrafo :> IMod
                         "ProjTrafo", projTrafo :> IMod
                         "LightLocation", viewTrafo |> Mod.map (fun v -> v.Backward.C3.XYZ) :> IMod
@@ -105,7 +114,7 @@ module CommandTest =
 
                 geometryMode        = IndexedGeometryMode.TriangleList
                 vertexInputTypes    = Map.ofList [ DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Normals, typeof<V3f> ]
-                perGeometryUniforms = Map.ofList [ "ModelTrafo", typeof<Trafo3d> ]
+                perGeometryUniforms = Map.empty // Map.ofList [ "ModelTrafo", typeof<Trafo3d> ]
             }
 
 
@@ -145,7 +154,8 @@ module CommandTest =
         )
 
 
-        let cmd = RuntimeCommand.Geometries(effects, current, state, geometries)
+        //let cmd = RuntimeCommand.Geometries(effects, current, state, geometries)
+        let cmd = RuntimeCommand.Geometries(effects.[0], state, geometries)
 //
 //        let objects1 = sg1.RenderObjects()
 //        let objects2 = sg2.RenderObjects()
@@ -157,7 +167,7 @@ module CommandTest =
 //            )
 
 
-        win.RenderTask <- new RenderTask.CommandTask(device, unbox win.FramebufferSignature, cmd)
+        win.RenderTask <- new Temp.CommandTask(device, unbox win.FramebufferSignature, cmd)
         win.Run()
   
 
