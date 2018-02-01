@@ -271,19 +271,49 @@ module private RuntimeCommands =
                             | _ -> ()
                 )
 
+        type InstanceBufferSlot internal(manager : MemoryManager<_>, values : Map<string, int * IMod * UniformWriters.IWriter>[], dirtySet : HashSet<UniformWriter>, parent : IAdaptiveObject) =
+            
+            let mutable block = manager.Alloc(nativeint values.Length)
+            let writers = 
+                values |> Array.mapi (fun i values ->
+                    UniformWriter(block.Offset + nativeint i, values)
+                )
+            do
+                lock dirtySet (fun () -> 
+                    for w in writers do
+                        dirtySet.Add w |> ignore
+                )
 
-        type GeometrySlot internal(device : Device, vertexSize : int, vertexBlock : Block<_>, vertexBuffers : Map<Symbol, BufferRange>, instanceId : int, instanceSub : IDisposable) =
+
+            member x.Dispose() =
+                manager.Free block
+                let mutable foo = 0
+                lock dirtySet (fun () -> 
+                    for w in writers do 
+                        w.Outputs.Consume(&foo) |> ignore
+                        dirtySet.Remove w |> ignore
+                )
+                block <- Block<_>(manager, nref Unchecked.defaultof<_>, 0n, 0n, false)
+
+            member x.FirstInstance = 
+                int block.Offset
+
+            member x.InstanceCount =
+                int block.Size
+
+            interface IDisposable with
+                member x.Dispose() = x.Dispose()
+
+        type GeometrySlot internal(device : Device, vertexSize : int, vertexBlock : Block<_>, vertexBuffers : Map<Symbol, BufferRange>) =
             let totalVertexSize = int64 vertexBlock.Size * int64 vertexSize
 
             member x.BlockId = snd vertexBlock.Memory.Value
             member x.VertexBuffers = vertexBuffers
-            member x.InstanceId = instanceId
 
             member x.FirstVertex = int vertexBlock.Offset
             member x.VertexCount = int vertexBlock.Size
 
             member internal x.VertexBlock = vertexBlock
-            member internal x.InstanceSubscription = instanceSub
 
             member x.WriteVertexAttributes(geometry : IndexedGeometry) =
                 let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit totalVertexSize
@@ -311,11 +341,10 @@ module private RuntimeCommands =
 
                 )
 
-                let tcs = System.Threading.Tasks.TaskCompletionSource()
-                copies.Add(CopyCommand.Callback (fun () -> tcs.SetResult(); Buffer.delete temp device))
+                //let tcs = System.Threading.Tasks.TaskCompletionSource()
+                copies.Add(CopyCommand.Callback (fun () -> Buffer.delete temp device))
                 device.CopyEngine.Enqueue copies
 
-                tcs.Task
 
 
 
@@ -336,7 +365,7 @@ module private RuntimeCommands =
                     let copySize = min capacity newCapacity
 
                     let newCpuBuffer = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit (20L * int64 newCapacity)
-                    let newGpuBuffer = device.DeviceMemory |> Buffer.create (VkBufferUsageFlags.IndirectBufferBit ||| VkBufferUsageFlags.TransferDstBit) (20L * int64 capacity)
+                    let newGpuBuffer = device.DeviceMemory |> Buffer.create (VkBufferUsageFlags.IndirectBufferBit ||| VkBufferUsageFlags.TransferDstBit) (20L * int64 newCapacity)
 
                     cpuBuffer.Memory.Mapped(fun src ->
                         newCpuBuffer.Memory.Mapped (fun dst ->
@@ -352,6 +381,9 @@ module private RuntimeCommands =
                     gpuBufferDirty <- true
                     capacity <- newCapacity
 
+            let indices = Dict<DrawCallInfo, int>()
+
+
             member x.Add(call : DrawCallInfo) : IDisposable =
                 if count < capacity then
                     let id = count
@@ -360,18 +392,25 @@ module private RuntimeCommands =
                         NativeInt.write (ptr + nativeint id * 20n) call
                     )
                     gpuBufferDirty <- true
+                    indices.[call] <- id
 
                     { new IDisposable with
                         member x.Dispose() =
-                            let last = count - 1
-                            if last <> id then
-                                cpuBuffer.Memory.Mapped (fun ptr ->
-                                    let last : DrawCallInfo = NativeInt.read (ptr + nativeint last * 20n)
-                                    NativeInt.write (ptr + nativeint id * 20n) last
-                                )   
-                                gpuBufferDirty <- true
-
-                            count <- last
+                            match indices.TryRemove call with
+                                | (true, id) ->
+                                    let last = count - 1
+                                    if last <> id then
+                                        cpuBuffer.Memory.Mapped (fun ptr ->
+                                            let last : DrawCallInfo = NativeInt.read (ptr + nativeint last * 20n)
+                                            indices.[last] <- id
+                                            NativeInt.write (ptr + nativeint id * 20n) last
+                                        )   
+                                        gpuBufferDirty <- true
+                                
+                                    count <- last
+                                    resize (Fun.NextPowerOfTwo count)
+                                | _ ->
+                                    ()
                     }
 
                 else
@@ -389,6 +428,8 @@ module private RuntimeCommands =
 
             member x.Handle = gpuBuffer.Handle
             member x.Count = count
+            member x.Item 
+                with get v : DrawCallInfo = cpuBuffer.Memory.Mapped (fun ptr -> NativeInt.read (ptr + 20n * nativeint v))
 
             member x.Dispose() =
                 for d in consumeList dead do Buffer.delete d device
@@ -435,6 +476,7 @@ module private RuntimeCommands =
                     n
                 mcopy = fun src srcOffset dst dstOffset -> failf "asdasdasd"
             }
+
 
         type InstanceBufferPool(device : Device, types : Map<string, ShaderIOParameter * Type>, initialCapacity : int) =
             inherit AbstractResourceLocation<unit>(noOwner, [])
@@ -504,12 +546,8 @@ module private RuntimeCommands =
                     | :? UniformWriter as w -> lock dirty (fun () -> dirty.Add w |> ignore)
                     | _ -> ()
 
-            
-
             member x.NewSlot(values : Map<string, IMod>) =
-                let block = manager.Alloc 1n
-
-                let writers =
+                let values =
                     writers |> Map.map (fun name writer ->
                         match Map.tryFind name values with
                             | Some value -> 
@@ -518,21 +556,8 @@ module private RuntimeCommands =
                             | None -> failf "no uniform: %A" name
                     )
 
-                let writer = UniformWriter(block.Offset, writers)
-                lock dirty (fun () -> dirty.Add writer |> ignore)
-
-                // TODO: deadlock????
-                transact (fun () -> x.MarkOutdated())
-
-                let id = int block.Offset
-
-                id, { new IDisposable with
-                    member __.Dispose() = 
-                        manager.Free block
-                        lock dirty (fun () -> dirty.Remove writer |> ignore)
-                        writer.RemoveOutput x
-                }
-
+                new InstanceBufferSlot(manager, [|values|], dirty, x)
+                
             member x.Buffer = getBuffer()
 
 
@@ -570,16 +595,14 @@ module private RuntimeCommands =
 
                 { handle = (); version = 0}
 
-
-
-        type BufferMemoryManager(device : Device, instanceTypes : Map<string, ShaderIOParameter * Type>, vertexTypes : Map<Symbol, Type>, instanceWriters : Map<string, UniformWriters.IWriter>, instanceCount : int, vertexCount : int) =
+        type BufferMemoryManager(device : Device, vertexTypes : Map<Symbol, ShaderIOParameter * Type>, vertexCount : int) =
             
             let freeBuffers = System.Collections.Generic.List<Buffer>()
             let freeSlots = System.Collections.Generic.List<GeometrySlot>()
             let vertexBuffers = Dict<int, Map<Symbol, Buffer * int>>()
   
             let vertexSize =
-                vertexTypes |> Map.toSeq |> Seq.sumBy (fun (_,t) -> Marshal.SizeOf t)
+                vertexTypes |> Map.toSeq |> Seq.sumBy (fun (_,(_,t)) -> Marshal.SizeOf t)
 
 
             let vertexManager = 
@@ -589,7 +612,7 @@ module private RuntimeCommands =
                         malloc = fun size ->
                             let id = Interlocked.Increment(&currentId)
                             let buffers = 
-                                vertexTypes |> Map.map (fun name t ->
+                                vertexTypes |> Map.map (fun name (_,t) ->
                                     let elementSize = Marshal.SizeOf t
                                     let sizeInBytes = int64 elementSize * int64 vertexCount
                                     let buffer = device.DeviceMemory |> Buffer.createConcurrent true (VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit) sizeInBytes
@@ -608,11 +631,8 @@ module private RuntimeCommands =
                     }
                 
                 new Management.ChunkedMemoryManager<_>(mem, nativeint vertexCount)
-            
-            let instanceManager = new InstanceBufferPool(device, instanceTypes, instanceCount)
 
-
-            member x.Alloc(vertexCount : int, instanceValues : Map<string, IMod>) =
+            member x.Alloc(vertexCount : int) =
                 let vertexBlock = vertexManager.Alloc(nativeint vertexCount)
                 let vertexBuffers = 
                     let buffers,_ = vertexBlock.Memory.Value
@@ -622,9 +642,9 @@ module private RuntimeCommands =
                         BufferRange(b, offset, size)
                     )
 
-
-                let instanceId, uniformSub = instanceManager.NewSlot(instanceValues)
-                GeometrySlot(device, vertexSize, vertexBlock, vertexBuffers, instanceId, uniformSub)
+                    
+                let geometrySlot = GeometrySlot(device, vertexSize, vertexBlock, vertexBuffers)
+                geometrySlot
 
             member x.Free(r : GeometrySlot) =
                 lock freeSlots (fun () -> freeSlots.Add r)
@@ -633,20 +653,16 @@ module private RuntimeCommands =
                 let freeSlots = lock freeSlots (fun () -> consumeList freeSlots)
                 for r in freeSlots do
                     vertexManager.Free(r.VertexBlock)
-                    r.InstanceSubscription.Dispose()
                     
                 let freeBuffers = lock freeBuffers (fun () -> consumeList freeBuffers)
                 for b in freeBuffers do
                     Buffer.delete b device
-
-            member x.InstanceBufferResource = instanceManager
 
             member x.AllVertexBuffers =
                 vertexBuffers |> Dict.toList
 
             member x.Dispose() =
                 vertexManager.Dispose()
-                instanceManager.Kill()
                 for b in freeBuffers do Buffer.delete b device
                 freeBuffers.Clear()
                 freeSlots.Clear()
@@ -1205,15 +1221,6 @@ module private RuntimeCommands =
 
         let toDelete = System.Collections.Generic.List<GeometryCommand>()
 
-
-//            let innerCompiler =
-//                let user = 
-//                    { new IResourceUser with 
-//                        member x.AddLocked(_) = () 
-//                        member x.RemoveLocked(_) = ()
-//                    }
-//                { compiler with resources = ResourceLocationSet user }
-
         let prepare pipeline (g : Geometry) =
             use t = compiler.manager.Device.Token
             let cmd = new GeometryCommand(compiler, pipeline, g)
@@ -1289,12 +1296,17 @@ module private RuntimeCommands =
             //innerCompiler.resources.Update(token) |> ignore
             ()
 
-    and SimpleLodCommand(compiler : Compiler, effect : FShade.Effect, state : PipelineState, set : aset<IndexedGeometry>) =
+    and Reader<'a> = AdaptiveToken -> hset<'a> -> hdeltaset<'a>
+
+    and IndirectDrawCommand(compiler : Compiler, effect : FShade.Effect, state : PipelineState, newReader : unit -> IOpReader<hdeltaset<IndexedGeometry>>) =
         inherit PreparedCommand()
+
+
 
         static let noDisposable = { new IDisposable with member x.Dispose() = () }
 
-        let reader = set.GetReader()
+
+        let reader = newReader()
 
         // entry and exit streams for the entire GroupedCommand
         let first = new VKVM.CommandStream()
@@ -1341,11 +1353,20 @@ module private RuntimeCommands =
                 sems.[s.location] <- Symbol.Create s.name
             sems
 
-        let vertexChunkSize = 32768
+        let vertexChunkSize = 1048576
         let initialInstanceCount = 16384
-        let initialIndirectBufferSize = 1024
-        let manager = new BufferMemoryManager(compiler.manager.Device, instanceInputs, Map.map (constF snd) vertexInputs, instanceWriters, initialInstanceCount, vertexChunkSize)
-        let slots = Dict<IndexedGeometry, GeometrySlot * IDisposable>()
+        let initialIndirectBufferSize = 2048
+
+//        
+//        let vertexChunkSize = 36
+//        let initialInstanceCount = 16384
+//        let initialIndirectBufferSize = 2
+
+        let vertexManager = new BufferMemoryManager(compiler.manager.Device, vertexInputs, vertexChunkSize)
+        let instanceManager = new InstanceBufferPool(compiler.manager.Device, instanceInputs, initialInstanceCount)
+
+
+        let slots = Dict<IndexedGeometry, GeometrySlot * InstanceBufferSlot * IDisposable>()
 
         let indirectBuffers = Dict<int, ResizableIndirectBuffer>()
 
@@ -1356,27 +1377,29 @@ module private RuntimeCommands =
                 let (KeyValue(_,att)) = g.IndexedAttributes |> Seq.head
                 att.Length
 
-            let uniforms =
-                instanceInputs |> Map.map (fun name _ ->
-                    match g.SingleAttributes.TryGetValue (Symbol.Create name) with
-                        | (true, (:? IMod as a)) -> a
-                        | _ -> failf "asdasdasd"
-                )
+            let vSlot = vertexManager.Alloc(fvc)
+            vSlot.WriteVertexAttributes(g)
 
-            let slot = manager.Alloc(fvc, uniforms)
-            let result = 
-                slot.WriteVertexAttributes(g)
+            let uSlot = 
+                let uniforms =
+                    instanceInputs |> Map.map (fun name _ ->
+                        match g.SingleAttributes.TryGetValue (Symbol.Create name) with
+                            | (true, (:? IMod as a)) -> a
+                            | _ -> failf "asdasdasd"
+                    )
+                
+                instanceManager.NewSlot(uniforms)
 
-            slot, result
+            vSlot, uSlot
 
         let remove (g : IndexedGeometry) =
             match slots.TryGetValue g with
-                | (true, (slot, activation)) ->
+                | (true, (vSlot, uSlot, activation)) ->
+                    uSlot.Dispose()
+                    vertexManager.Free vSlot
                     activation.Dispose()
-                    manager.Free slot
                 | _ ->
                     ()
-
 
         let init (stream : VKVM.CommandStream) =
             if not initialized then
@@ -1387,7 +1410,7 @@ module private RuntimeCommands =
                 for r in descritorSetResources do compiler.resources.Add r
                 compiler.resources.Add descritorSet
 
-                compiler.resources.Add manager.InstanceBufferResource
+                compiler.resources.Add instanceManager
 
                 // adjust the first-command to bind the pipeline
                 first.IndirectBindPipeline(pipeline.ppPipeline.Pointer) |> ignore
@@ -1396,6 +1419,9 @@ module private RuntimeCommands =
                 // the main-stream just needs to call the first stream
                 stream.Clear()
                 stream.Call(first) |> ignore
+        
+        let getIndirect (blockId : int) =
+            indirectBuffers.GetOrCreate(blockId, fun _ -> new ResizableIndirectBuffer(compiler.manager.Device, initialIndirectBufferSize))
 
 
         override x.Free() = 
@@ -1403,11 +1429,12 @@ module private RuntimeCommands =
                 compiler.resources.Remove pipeline.ppPipeline
                 for r in descritorSetResources do compiler.resources.Remove r
                 compiler.resources.Remove descritorSet
-                compiler.resources.Remove manager.InstanceBufferResource
+                compiler.resources.Remove instanceManager
 
             first.Dispose()
             drawStream.Dispose()
-            manager.Dispose()
+            vertexManager.Dispose()
+            instanceManager.Kill()
             for b in indirectBuffers.Values do b.Dispose()
 
             indirectBuffers.Clear()
@@ -1417,47 +1444,63 @@ module private RuntimeCommands =
         override x.Compile(token : AdaptiveToken, stream : VKVM.CommandStream) =
             init stream
 
+
             let deltas = reader.GetOperations token
+            Log.startTimed "processing %d deltas" deltas.Count
+
+            let mutable adds = 0
+            let mutable rems = 0
 
             for op in deltas do
                 match op with
                     | Add(_,g) ->
-                        let slot, task = prepare g
-                        let indirectBuffer = 
-                            indirectBuffers.GetOrCreate(slot.BlockId, fun _ -> new ResizableIndirectBuffer(compiler.manager.Device, initialIndirectBufferSize))
+                        inc &adds
 
-                        let mutable call =
-                            DrawCallInfo(
-                                FaceVertexCount = slot.VertexCount,
-                                InstanceCount = 1,
-                                FirstIndex = slot.FirstVertex,
-                                FirstInstance = slot.InstanceId
-                            )
+                        let vSlot, uSlot = prepare g
+                        let indirectBuffer = getIndirect vSlot.BlockId
 
-                        // crazy non-indexed shit
-                        //Fun.Swap(&call.FirstInstance, &call.BaseVertex)
+                        let rem = 
+                            indirectBuffer.Add <|
+                                DrawCallInfo(
+                                    FaceVertexCount = vSlot.VertexCount,
+                                    InstanceCount = uSlot.InstanceCount,
+                                    FirstIndex = vSlot.FirstVertex,
+                                    FirstInstance = uSlot.FirstInstance
+                                )
 
-                        let rem = indirectBuffer.Add call
-                        slots.[g] <- (slot, rem)
-                        task.Result
+                        slots.[g] <- (vSlot, uSlot, rem)
 
                     | Rem(_,g) ->
+                        inc &rems
+
                         remove g
 
 
-            manager.Flush()
+            if deltas.Count > 0 then
+                transact (fun () -> instanceManager.MarkOutdated())
 
+            if adds > 0 then Log.line "%d adds" adds
+            if rems > 0 then Log.line "%d removes" rems
+            let tcs = TaskCompletionSource()
+            compiler.manager.Device.CopyEngine.Enqueue(CopyCommand.Callback tcs.SetResult)
+            tcs.Task.Wait()
+            Log.stop()
+            
+            vertexManager.Flush()
+
+            Log.start "creating commands"
             drawStream.Clear()
-            for (blockId, vbo) in manager.AllVertexBuffers do
-                let ibo = manager.InstanceBufferResource
-       
+            let mutable drawCount = 0
+            let mutable totalCount = 0
+            for (blockId, vbo) in vertexManager.AllVertexBuffers do
+
                 let buffers = Array.zeroCreate slotSems.Length
                 let offsets = Array.zeroCreate slotSems.Length
 
                 for slot in 0 .. slotSems.Length - 1 do
                     let sem = slotSems.[slot]
                     
-                    match Map.tryFind (string sem) ibo.Buffer with
+                    match Map.tryFind (string sem) instanceManager.Buffer with
                         | Some buffer -> 
                             buffers.[slot] <- buffer.Handle
                         | None ->
@@ -1466,13 +1509,30 @@ module private RuntimeCommands =
                                     buffers.[slot] <- b.Handle
                                 | _ -> ()
                     
+
                 let indirect = indirectBuffers.[blockId]
-                indirect.Upload()
+                if indirect.Count > 0 then
+                    drawStream.BindVertexBuffers(0u, buffers, offsets) |> ignore
+                    if indirect.Count = 1 then
+                        let drawCall = indirect.[0]
+                        drawStream.Draw(uint32 drawCall.FaceVertexCount, uint32 drawCall.InstanceCount, 
+                                        uint32 drawCall.FirstIndex, uint32 drawCall.FirstInstance) |> ignore
+                    else 
+                        indirect.Upload()
 
-                drawStream.BindVertexBuffers(0u, buffers, offsets) |> ignore
-                drawStream.DrawIndirect(indirect.Handle, 0UL, uint32 indirect.Count, 20u) |> ignore
+//                        for a in 0 .. indirect.Count - 1 do
+//                            let drawCall = indirect.[a]
+//                            drawStream.Draw(uint32 drawCall.FaceVertexCount, uint32 drawCall.InstanceCount, 
+//                                        uint32 drawCall.FirstIndex, uint32 drawCall.FirstInstance) |> ignore
 
+                        drawStream.DrawIndirect(indirect.Handle, 0UL, uint32 indirect.Count, 20u) |> ignore
 
+                inc &drawCount
+                totalCount <- totalCount + indirect.Count
+            Log.line "%d calls" drawCount
+            Log.line "%d instances" totalCount
+            Log.stop()
+    
 
 
     and Compiler =
@@ -1516,7 +1576,7 @@ module private RuntimeCommands =
                         :> PreparedCommand
                         
                 | RuntimeCommand.GeometriesSimpleCmd(effect, state, geometries) ->
-                    new SimpleLodCommand(x, effect, state, geometries)
+                    new IndirectDrawCommand(x, effect, state, fun () -> geometries.GetReader() :> _)
                         :> PreparedCommand
 
                 | RuntimeCommand.DispatchCmd _  ->

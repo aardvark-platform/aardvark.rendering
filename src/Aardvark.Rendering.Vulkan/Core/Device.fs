@@ -2356,9 +2356,12 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                     |> check "could not bind sparse memory"
         }
 
-    let acquireNextImage (queue : DeviceQueue) (swapchain : VkSwapchainKHR) (buffer : ref<uint32>) (fence : Fence) =
-        VkRaw.vkAcquireNextImageKHR(queue.Device.Handle, swapchain, ~~~0UL, VkSemaphore.Null, fence.Handle, &&buffer.contents)
-            |> check "could not acquire Swapchain Image"
+    let rec acquireNextImage (queue : DeviceQueue) (swapchain : VkSwapchainKHR) (buffer : ref<uint32>) (fence : Fence) =
+        let res  =VkRaw.vkAcquireNextImageKHR(queue.Device.Handle, swapchain, ~~~0UL, VkSemaphore.Null, fence.Handle, &&buffer.contents)
+        if res <> VkResult.VkSuccess then
+            System.Diagnostics.Debugger.Launch() |> ignore
+            acquireNextImage queue swapchain buffer fence
+            //|> check "could not acquire Swapchain Image"
 
     let present (queue : DeviceQueue) (swapchain : VkSwapchainKHR) (buffer : ref<uint32>) =
         let mutable handle = swapchain

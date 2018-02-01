@@ -19,6 +19,7 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
     let mutable swapchainDescription : SwapchainDescription = Unchecked.defaultof<_>
     let mutable swapchain : Swapchain = Unchecked.defaultof<_>
     let mutable loaded = false
+    let mutable isInvalid = true
 
     member x.SwapChainDescription = 
         if not x.IsHandleCreated then x.CreateHandle()
@@ -31,6 +32,11 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
     abstract member OnLoad : SwapchainDescription -> unit
     abstract member OnUnload : unit -> unit
     abstract member OnRenderFrame : RenderPass * Framebuffer -> bool
+    
+    member x.IsInvalid = isInvalid
+
+    interface IInvalidateControl with
+        member x.IsInvalid = x.IsInvalid
 
     override x.OnHandleCreated(e) =
         base.OnHandleCreated e
@@ -53,6 +59,7 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
         loaded <- true
 
     override x.OnPaint(e) =
+        isInvalid <- true
         base.OnPaint(e)
 
         if loaded then
@@ -62,7 +69,9 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
                         x.OnRenderFrame(swapchainDescription.renderPass, framebuffer)
                     )
                 )
-            if invalidate then x.Invalidate()
+            isInvalid <- invalidate
+            if invalidate then 
+                x.Invalidate()
 
     override x.Dispose(d) =
         if loaded then
@@ -93,8 +102,14 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
     let baseTime = DateTime.Now.Ticks
     do timeWatch.Start()
 
+
+
     let now() = DateTime(timeWatch.Elapsed.Ticks + baseTime)
-    let nextFrameTime() = now() + TimeSpan.FromSeconds frameTime.Average
+    let nextFrameTime() = 
+        if frameTime.Count >= 10 then
+            now() + TimeSpan.FromSeconds frameTime.Average
+        else
+            now()
 
 //    do Async.Start <| 
 //        async {
@@ -107,6 +122,7 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
 
     let beforeRender = Event<unit>()
     let afterRender = Event<unit>()
+    let mutable first = true
 
     override x.OnLoad(desc : SwapchainDescription) =
         transact (fun () -> sizes.Value <- V2i(this.ClientSize.Width, this.ClientSize.Height))
@@ -136,10 +152,13 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
         afterRender.Trigger()
         frameWatch.Stop()
 
-        frameTime.Add frameWatch.Elapsed.TotalSeconds
+        if not first then
+            frameTime.Add frameWatch.Elapsed.TotalSeconds
 
         //x.Invalidate()
         transact (fun () -> time.MarkOutdated())
+
+        first <- false
         renderContiuously
 
     override x.OnUnload() =
@@ -155,6 +174,7 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
     member x.Sizes = sizes :> IMod<_>
 
     member x.FramebufferSignature = x.RenderPass :> IFramebufferSignature
+
 
     member private x.ForceRedraw() =
         if not renderContiuously then

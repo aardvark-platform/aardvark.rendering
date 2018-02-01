@@ -78,8 +78,11 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
     do timeWatch.Start()
 
     let now() = DateTime(timeWatch.Elapsed.Ticks + baseTime)
-    let nextFrameTime() = now() + TimeSpan.FromSeconds frameTime.Average
-
+    let nextFrameTime() = 
+        if frameTime.Count >= 10 then
+            now() + TimeSpan.FromSeconds frameTime.Average
+        else
+            now()
     let time = Mod.init (now())
 
 
@@ -108,29 +111,13 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
         and set v = autoInvalidate <- v
 
 
-    interface IControl with
+
+    interface IInvalidateControl with
         member x.IsInvalid = needsRedraw
-        member x.Invalidate() =
-            if not x.IsDisposed && not renderContinuously then
-                if not needsRedraw then
-                    needsRedraw <- true
-                    x.Invalidate()
-
-        member x.Paint() =
-            if not x.IsDisposed && not renderContinuously then
-                use g = x.CreateGraphics()
-                use e = new PaintEventArgs(g, x.ClientRectangle)
-                x.InvokePaint(x, e)
-
-        member x.Invoke f =
-            if not x.IsDisposed then 
-                base.Invoke (new System.Action(f)) |> ignore
-            else
-                f()
 
     member private x.ForceRedraw() =
-        if renderContinuously then () 
-        else MessageLoop.Invalidate x |> ignore
+        if not renderContinuously then 
+            MessageLoop.Invalidate x |> ignore
 
     member x.RenderContinuously
         with get() = renderContinuously
@@ -185,7 +172,6 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
     member x.Render() = 
         let mutable initial = false
         if loaded then
-            needsRedraw <- false
             if isNull contextHandle || contextHandle.Handle.IsDisposed then
                 contextHandle <- ContextHandle(base.Context, base.WindowInfo) 
                 contextHandle.AttachDebugOutputIfNeeded(enableDebug)
@@ -240,7 +226,8 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
                         x.SwapBuffers()
                         //System.Threading.Thread.Sleep(200)
                         frameWatch.Stop()
-                        frameTime.Add frameWatch.Elapsed.TotalSeconds
+                        if not first then
+                            frameTime.Add frameWatch.Elapsed.TotalSeconds
 
                         transact (fun () -> time.MarkOutdated())
 
@@ -266,6 +253,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
             afterRender.Trigger()
 
+            needsRedraw <- renderContinuously
             if renderContinuously then
                 x.Invalidate()
         

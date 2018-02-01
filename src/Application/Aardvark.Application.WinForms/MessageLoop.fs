@@ -32,6 +32,8 @@ type RunningMean(maxCount : int) =
         values.[index] <- v
         index <- (index + 1) % maxCount
               
+    member x.Count = count
+
     member x.Average =
         if count = 0 then 0.0
         else sum / float count  
@@ -139,6 +141,9 @@ type RunningMean(maxCount : int) =
 //        x.EnqueuePeriodic(f, 1)
 //
 
+type IInvalidateControl =
+    abstract member IsInvalid : bool
+
 type private MessageLoopImpl() =
     let mutable running = true
     let trigger = new MultimediaTimer.Trigger(1)
@@ -159,7 +164,10 @@ type private MessageLoopImpl() =
                     | h :: _ ->
                         stopwatch.Restart()
                         h.Invoke(new System.Action(fun () ->
-                            for ctrl in controls do ctrl.Refresh()
+                            for ctrl in controls do 
+                                let ic = unbox<IInvalidateControl> ctrl
+                                if not ic.IsInvalid then
+                                    ctrl.Refresh()
                         )) |> ignore
                         stopwatch.Stop()
 
