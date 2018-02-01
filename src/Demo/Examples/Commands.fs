@@ -18,7 +18,7 @@ open FShade.Imperative
 
 module CommandTest =
     let run() =
-        use app = new VulkanApplication(true)
+        use app = new VulkanApplication(false)
         let win = app.CreateSimpleRenderWindow(8)
         let runtime = app.Runtime
         let device = runtime.Device
@@ -43,6 +43,9 @@ module CommandTest =
                     Some idx, index.Length
 
         let rand = RandomSystem()
+
+        //let randomGeo
+
 
         let quadGeometry (offset : V3d) =
             let color = rand.UniformC3f().ToC4d().ToV4d()
@@ -105,15 +108,39 @@ module CommandTest =
             |]
 
 
-        let geometries =
-            let size = 10
-            ASet.ofList [
+        let mutable oida =
+            let size = 20
+            [
                 for x in -size .. size do
                     for y in -size .. size do
                         for z in -size .. size do
                             yield quadGeometry (V3d(float x, float y, float z))
                     
-            ]
+            ] |> System.Collections.Generic.Stack
+
+        let mutable urdar = System.Collections.Generic.Stack()
+
+        let geometries = CSet.ofSeq oida
+
+        let mutable up = false
+
+        win.Keyboard.DownWithRepeats.Values.Add (fun k ->
+            match k with
+                | Keys.M ->
+                    transact (fun () -> 
+                        for a in 0 .. 1000 do
+                            if oida.Count > 0 then
+                                let newJOne = oida.Pop()
+                                urdar.Push newJOne
+                                if up then geometries.Add newJOne |> ignore
+                                else geometries.Remove newJOne |> ignore
+                            else 
+                                up <- not up
+                                Fun.Swap(&oida,&urdar)
+                    )
+                | _ ->
+                    ()
+        )
 
         let current = Mod.init 0
 

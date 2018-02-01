@@ -437,11 +437,11 @@ module Management =
         let allocated = Dict<'a, nativeint>()
         let mutable usedMemory = 0n
 
-        do
-            let store = mem.malloc chunkSize
-            free.Insert(Block<'a>(this, nref store, 0n, chunkSize, true))
-            allocated.Add (store, chunkSize) |> ignore
-            usedMemory <- chunkSize
+//        do
+//            let store = mem.malloc chunkSize
+//            free.Insert(Block<'a>(this, nref store, 0n, chunkSize, true))
+//            allocated.Add (store, chunkSize) |> ignore
+//            usedMemory <- chunkSize
 
         static let next (align : nativeint) (v : nativeint) =
             if v % align = 0n then v
