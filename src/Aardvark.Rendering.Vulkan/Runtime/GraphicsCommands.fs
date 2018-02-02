@@ -73,7 +73,7 @@ module ``Graphics Commands`` =
                     cmd.AppendCommand()
                     let scissors =
                         scissors |> Array.map (fun b ->
-                            VkRect2D(VkOffset2D(b.Min.X, b.Min.X), VkExtent2D(1 + b.SizeX, 1 + b.SizeY))
+                            VkRect2D(VkOffset2D(b.Min.X, b.Min.Y), VkExtent2D(1 + b.SizeX, 1 + b.SizeY))
                         )
 
                     scissors |> NativePtr.withA (fun pScissors ->
