@@ -2108,58 +2108,22 @@ module ``Image Command Extensions`` =
             { new Command() with
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue(cmd) =
-                    let mutable info =
-                        VkQueryPoolCreateInfo(
-                            VkStructureType.QueryPoolCreateInfo, 0n,
-                            VkQueryPoolCreateFlags.MinValue,
-                            VkQueryType.Timestamp,
-                            2u,
-                            VkQueryPipelineStatisticFlags.None
-                        )
+
                         
                     let device = img.Image.Device
-                    let mutable pool = VkQueryPool.Null
-                    VkRaw.vkCreateQueryPool(device.Handle, &&info, NativePtr.zero, &&pool)
-                        |> check "could not create QueryPool"
+
                     let mutable totalSize = 0L
 
                     if img.Image.PeerHandles.Length > 0 then
                         cmd.AppendCommand()
                         let device = img.Image.Device
 
-
-//                        let mutable info =
-//                            VkImageMemoryBarrier(
-//                                VkStructureType.ImageMemoryBarrier, 0n,
-//                                VkAccessFlags.ColorAttachmentWriteBit,
-//                                VkAccessFlags.TransferReadBit,
-//                                VkImageLayout.TransferSrcOptimal,
-//                                VkImageLayout.TransferSrcOptimal,
-//                                VK_QUEUE_FAMILY_IGNORED,
-//                                VK_QUEUE_FAMILY_IGNORED,
-//                                img.Image.Handle,
-//                                img.Image.[img.Aspect].VkImageSubresourceRange
-//                            )
-
-//                        VkRaw.vkCmdPipelineBarrier(
-//                            cmd.Handle,
-//                            VkPipelineStageFlags.TopOfPipeBit,
-//                            VkPipelineStageFlags.TransferBit,
-//                            VkDependencyFlags.DeviceGroupBitKhx,
-//                            0u, NativePtr.zero,
-//                            0u, NativePtr.zero, 
-//                            0u, NativePtr.zero
-//                        )
-
-
                         let baseImage = img.Image
                         let deviceIndices = baseImage.Device.AllIndicesArr
                         
                         for di in deviceIndices do
-                            
                             VkRaw.vkCmdSetDeviceMaskKHX(cmd.Handle, 1u <<< int di)
-                            if di = 0u then
-                                VkRaw.vkCmdWriteTimestamp(cmd.Handle, VkPipelineStageFlags.BottomOfPipeBit, pool, 0u)
+
                             let srcSlices, srcRange = ranges.[int di]
 
                             for ci in 0 .. baseImage.PeerHandles.Length - 1 do
@@ -2184,9 +2148,6 @@ module ``Image Command Extensions`` =
                                     1u, &&copy
                                 )
 
-                            if di = 0u then
-                                VkRaw.vkCmdWriteTimestamp(cmd.Handle, VkPipelineStageFlags.BottomOfPipeBit, pool, 1u)
-
                         VkRaw.vkCmdSetDeviceMaskKHX(cmd.Handle, baseImage.Device.AllMask)
 
                         VkRaw.vkCmdPipelineBarrier(
@@ -2199,18 +2160,7 @@ module ``Image Command Extensions`` =
                             0u, NativePtr.zero // wrongness
                         )
 
-                    Disposable.Custom (fun () ->
-                        let data : nativeptr<int64> = NativePtr.alloc 2
-                        VkRaw.vkGetQueryPoolResults(device.Handle, pool, 0u, 2u, 8UL * 2UL, NativePtr.toNativeInt data, 0UL, VkQueryResultFlags.D64Bit ||| VkQueryResultFlags.WaitBit)
-                            |> check "vkGetQueryPoolResults"
-
-                        let t0 = NativePtr.get data 0 
-                        let t1 = NativePtr.get data 1
-                        let dt = MicroTime(t1 - t0)
-                        //Log.line "bandwidth: %AGBit/s" (float totalSize / (134217728.0 * dt.TotalSeconds))
-                        NativePtr.free data
-                        ()
-                    )
+                    Disposable.Empty
             }
 
 

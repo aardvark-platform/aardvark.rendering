@@ -671,6 +671,10 @@ module private RuntimeCommands =
             interface IDisposable with
                 member x.Dispose() = x.Dispose()
 
+        let startThread (name : string) (run : unit -> unit) =
+            let thread = Thread(ThreadStart(run), IsBackground = true, Name = name)
+            thread.Start()
+            thread
 
     [<AbstractClass>]
     type PreparedCommand() =
@@ -1366,7 +1370,8 @@ module private RuntimeCommands =
         let instanceManager = new InstanceBufferPool(compiler.manager.Device, instanceInputs, initialInstanceCount)
 
 
-        let slots = Dict<IndexedGeometry, GeometrySlot * InstanceBufferSlot * IDisposable>()
+        let slots = Dict<IndexedGeometry, GeometrySlot * InstanceBufferSlot>()
+        let activations = Dict<GeometrySlot * InstanceBufferSlot, IDisposable>()
 
         let indirectBuffers = Dict<int, ResizableIndirectBuffer>()
 
@@ -1391,15 +1396,15 @@ module private RuntimeCommands =
                 instanceManager.NewSlot(uniforms)
 
             vSlot, uSlot
-
-        let remove (g : IndexedGeometry) =
-            match slots.TryGetValue g with
-                | (true, (vSlot, uSlot, activation)) ->
-                    uSlot.Dispose()
-                    vertexManager.Free vSlot
-                    activation.Dispose()
-                | _ ->
-                    ()
+//
+//        let remove (g : IndexedGeometry) =
+//            match slots.TryGetValue g with
+//                | (true, (vSlot, uSlot, activation)) ->
+//                    uSlot.Dispose()
+//                    vertexManager.Free vSlot
+//                    activation.Dispose()
+//                | _ ->
+//                    ()
 
         let init (stream : VKVM.CommandStream) =
             if not initialized then
@@ -1423,6 +1428,112 @@ module private RuntimeCommands =
         let getIndirect (blockId : int) =
             indirectBuffers.GetOrCreate(blockId, fun _ -> new ResizableIndirectBuffer(compiler.manager.Device, initialIndirectBufferSize))
 
+        //let deltaQueue = ConcurrentDeltaPriorityQueue<IndexedGeometry, int>(fun _ -> 1)
+        let active = History<hrefset<_>, hdeltaset<_>>(HRefSet.traceNoRefCount)
+        let activeReader = active.NewReader()
+
+        let deltaLock = obj()
+        let mutable pendingDeltas = HDeltaSet.empty
+
+
+        let puller =
+            startThread "Puller" <| fun () ->
+                let pending = MVar.create ()
+                let o = AdaptiveObject()
+                let s = o.AddMarkingCallback (MVar.put pending)
+
+                while true do
+                    MVar.take pending
+                    let ops = 
+                        o.EvaluateAlways AdaptiveToken.Top (fun token ->
+                            reader.GetOperations token
+                        )
+
+                    lock deltaLock (fun () ->
+                        pendingDeltas <- HDeltaSet.combine pendingDeltas ops
+                        Monitor.PulseAll deltaLock
+                    )
+                    //deltaQueue.EnqueueMany ops
+
+        let processor =
+            startThread "Processor" <| fun () ->
+                let deltaBatchSize = 200
+
+                while true do
+                    let ops = 
+                        lock deltaLock (fun () ->
+                            while pendingDeltas.Count = 0 do
+                                Monitor.Wait deltaLock |> ignore
+
+                            let mine = Seq.atMost deltaBatchSize pendingDeltas |> Seq.toList
+                            for op in mine do pendingDeltas <- HDeltaSet.remove op pendingDeltas
+                            mine
+                        )
+
+                    let activeOps =
+                        ops |> List.map (fun op ->
+                            match op with
+                                | Add(_,g) ->
+                                    let vSlot, uSlot = prepare g
+                                    slots.[g] <- (vSlot, uSlot)
+                                    Add(vSlot, uSlot)
+
+                                | Rem(_,g) ->
+                                    match slots.TryRemove g with
+                                        | (true, (vSlot, uSlot)) ->
+                                            uSlot.Dispose()
+                                            vertexManager.Free vSlot
+                                            Rem(vSlot, uSlot)
+                                        | _ ->
+                                            failf "asdasdasdasdasdasdasdasd"
+                                    
+
+                        )
+
+                    let tcs = TaskCompletionSource()
+                    compiler.manager.Device.CopyEngine.Enqueue [
+                        CopyCommand.Callback (fun () -> tcs.SetResult())
+                    ]
+                    tcs.Task.Result
+
+                    
+                    transact (fun () ->
+                        lock active (fun _ -> 
+                            active.Perform (HDeltaSet.ofList activeOps) |> ignore
+                        )
+                    )
+//
+//
+//                    for op in ops do
+//                        match op with
+//                            | Add(_,g) ->
+//                                let vSlot, uSlot = prepare g
+//                                slots.[g] <- (vSlot, uSlot)
+//
+//                                let tcs = TaskCompletionSource()
+//                                compiler.manager.Device.CopyEngine.Enqueue [
+//                                    CopyCommand.Callback (fun () -> tcs.SetResult())
+//                                ]
+//                                tcs.Task.Result
+//
+//                                transact (fun () -> active.Add(vSlot, uSlot) |> ignore)
+//
+//                                ()
+//                            | Rem(_,g) ->
+//                                match slots.TryRemove g with
+//                                    | (true, (vSlot, uSlot)) ->
+//                                        uSlot.Dispose()
+//                                        vertexManager.Free vSlot
+//
+//                                        transact (fun () -> active.Remove(vSlot, uSlot) |> ignore)
+//
+//                                    | _ ->
+//                                        ()
+
+
+                ()
+
+
 
         override x.Free() = 
             if initialized then
@@ -1444,19 +1555,24 @@ module private RuntimeCommands =
         override x.Compile(token : AdaptiveToken, stream : VKVM.CommandStream) =
             init stream
 
+            let deltas = activeReader.GetOperations token
 
-            let deltas = reader.GetOperations token
-            Log.startTimed "processing %d deltas" deltas.Count
+
+            let f (a : list<int>) = ()
+
+            let a = [] :> seq<int>
+            
+            f a
+
 
             let mutable adds = 0
             let mutable rems = 0
 
             for op in deltas do
                 match op with
-                    | Add(_,g) ->
+                    | Add(_,(vSlot, uSlot)) ->
                         inc &adds
 
-                        let vSlot, uSlot = prepare g
                         let indirectBuffer = getIndirect vSlot.BlockId
 
                         let rem = 
@@ -1468,27 +1584,24 @@ module private RuntimeCommands =
                                     FirstInstance = uSlot.FirstInstance
                                 )
 
-                        slots.[g] <- (vSlot, uSlot, rem)
+                        activations.[(vSlot, uSlot)] <- rem
 
-                    | Rem(_,g) ->
+                    | Rem(_,t) ->
                         inc &rems
 
-                        remove g
+                        match activations.TryGetValue t with
+                            | (true, activation) ->
+                                activation.Dispose()
+                            | _ ->
+                                ()
 
 
             if deltas.Count > 0 then
                 transact (fun () -> instanceManager.MarkOutdated())
 
-            if adds > 0 then Log.line "%d adds" adds
-            if rems > 0 then Log.line "%d removes" rems
-            let tcs = TaskCompletionSource()
-            compiler.manager.Device.CopyEngine.Enqueue(CopyCommand.Callback tcs.SetResult)
-            tcs.Task.Wait()
-            Log.stop()
-            
+
             vertexManager.Flush()
 
-            Log.start "creating commands"
             drawStream.Clear()
             let mutable drawCount = 0
             let mutable totalCount = 0
@@ -1509,29 +1622,28 @@ module private RuntimeCommands =
                                     buffers.[slot] <- b.Handle
                                 | _ -> ()
                     
+                match indirectBuffers.TryGetValue blockId with
+                    | (true, indirect) -> 
+                        if indirect.Count > 0 then
+                            drawStream.BindVertexBuffers(0u, buffers, offsets) |> ignore
+                            if indirect.Count = 1  then
+                                let drawCall = indirect.[0]
+                                drawStream.Draw(uint32 drawCall.FaceVertexCount, uint32 drawCall.InstanceCount, 
+                                                uint32 drawCall.FirstIndex, uint32 drawCall.FirstInstance) |> ignore
+                            else 
+                                //indirect.Upload()
 
-                let indirect = indirectBuffers.[blockId]
-                if indirect.Count > 0 then
-                    drawStream.BindVertexBuffers(0u, buffers, offsets) |> ignore
-                    if indirect.Count = 1 then
-                        let drawCall = indirect.[0]
-                        drawStream.Draw(uint32 drawCall.FaceVertexCount, uint32 drawCall.InstanceCount, 
-                                        uint32 drawCall.FirstIndex, uint32 drawCall.FirstInstance) |> ignore
-                    else 
-                        indirect.Upload()
+                                for a in 0 .. indirect.Count - 1 do
+                                    let drawCall = indirect.[a]
+                                    drawStream.Draw(uint32 drawCall.FaceVertexCount, uint32 drawCall.InstanceCount, 
+                                                uint32 drawCall.FirstIndex, uint32 drawCall.FirstInstance) |> ignore
 
-//                        for a in 0 .. indirect.Count - 1 do
-//                            let drawCall = indirect.[a]
-//                            drawStream.Draw(uint32 drawCall.FaceVertexCount, uint32 drawCall.InstanceCount, 
-//                                        uint32 drawCall.FirstIndex, uint32 drawCall.FirstInstance) |> ignore
+                                ///drawStream.DrawIndirect(indirect.Handle, 0UL, uint32 indirect.Count, 20u) |> ignore
 
-                        drawStream.DrawIndirect(indirect.Handle, 0UL, uint32 indirect.Count, 20u) |> ignore
-
-                inc &drawCount
-                totalCount <- totalCount + indirect.Count
-            Log.line "%d calls" drawCount
-            Log.line "%d instances" totalCount
-            Log.stop()
+                        inc &drawCount
+                        totalCount <- totalCount + indirect.Count
+                    | _ ->
+                        ()
     
 
 
@@ -1643,19 +1755,22 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
                 | :? Framebuffer as fbo -> fbo
                 | fbo -> failwithf "unsupported framebuffer: %A" fbo
    
+        let ranges =
+            let range = 
+                { 
+                    frMin = desc.viewport.Min; 
+                    frMax = desc.viewport.Max;
+                    frLayers = Range1i(0,renderPass.LayerCount-1)
+                }
+            range.Split(int device.AllCount)
+            
+
         let sc =
             if device.AllCount > 1u then
                 if renderPass.LayerCount > 1 then
                     [| desc.viewport |]
                 else
-                    let range = 
-                        { 
-                            frMin = desc.viewport.Min; 
-                            frMax = desc.viewport.Max;
-                            frLayers = Range1i(0,renderPass.LayerCount-1)
-                        }
-                    range.Split(int device.AllCount) 
-                        |> Array.map (fun { frMin = min; frMax = max } -> Box2i(min, max))
+                    ranges |> Array.map (fun { frMin = min; frMax = max } -> Box2i(min, max))
                         
             else
                 [| desc.viewport |]
@@ -1724,6 +1839,32 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
             do! Command.BeginPass(renderPass, fbo, false)
             do! Command.Execute [inner]
             do! Command.EndPass
+
+            if ranges.Length > 1 then
+                let deviceCount = int device.AllCount
+                    
+                for (sem,a) in Map.toSeq fbo.Attachments do
+                    if sem <> DefaultSemantic.Depth then 
+                        do! Command.TransformLayout(a.Image, VkImageLayout.TransferSrcOptimal)
+                        let img = a.Image
+                        let layers = a.ArrayRange
+                        let layerCount = 1 + layers.Max - layers.Min
+                        
+                        let aspect =
+                            match VkFormat.toImageKind img.Format with
+                                | ImageKind.Depth -> ImageAspect.Depth
+                                | ImageKind.DepthStencil  -> ImageAspect.DepthStencil
+                                | _ -> ImageAspect.Color 
+
+                        let subResource = img.[aspect, a.MipLevelRange.Min]
+                        let ranges =
+                            ranges |> Array.map (fun { frMin = min; frMax = max; frLayers = layers} ->
+                                layers, Box3i(V3i(min,0), V3i(max, 0))
+                            )
+
+                        ()
+                        do! Command.SyncPeers(subResource, ranges)
+
 
             for i in 0 .. fbo.ImageViews.Length - 1 do
                 let img = fbo.ImageViews.[i].Image
