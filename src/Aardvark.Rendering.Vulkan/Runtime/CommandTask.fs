@@ -353,6 +353,7 @@ module private RuntimeCommands =
             let mutable count = 0
             let mutable capacity = initialCount
 
+            let mutable ids = Marshal.AllocHGlobal (4n * nativeint initialCount)
             let mutable cpuBuffer = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit (20L * int64 capacity)
             let mutable gpuBuffer = device.DeviceMemory |> Buffer.create (VkBufferUsageFlags.IndirectBufferBit ||| VkBufferUsageFlags.TransferDstBit) (20L * int64 capacity)
             let mutable gpuBufferDirty = false
@@ -373,6 +374,7 @@ module private RuntimeCommands =
                         )
                     )
 
+                    ids <- Marshal.ReAllocHGlobal(ids, 4n * nativeint newCapacity)
                     Buffer.delete cpuBuffer device
                     dead.Add gpuBuffer
 
@@ -381,36 +383,44 @@ module private RuntimeCommands =
                     gpuBufferDirty <- true
                     capacity <- newCapacity
 
-            let indices = Dict<DrawCallInfo, int>()
+            let indices = IntDict<int>()
 
+            let mutable currentId = 0
 
             member x.Add(call : DrawCallInfo) : IDisposable =
                 if count < capacity then
-                    let id = count
+                    let cid = Interlocked.Increment(&currentId)
+
+                    let location = count
                     count <- count + 1
                     cpuBuffer.Memory.Mapped (fun ptr ->
-                        NativeInt.write (ptr + nativeint id * 20n) call
+                        NativeInt.write (ptr + nativeint location * 20n) call
                     )
+                    NativeInt.write (ids + nativeint location * 4n) cid
+
                     gpuBufferDirty <- true
-                    indices.[call] <- id
+                    indices.[cid] <- location
 
                     { new IDisposable with
                         member x.Dispose() =
-                            match indices.TryRemove call with
-                                | (true, id) ->
+                            match indices.TryRemove cid with
+                                | (true, location) ->
                                     let last = count - 1
-                                    if last <> id then
+                                    if last <> location then
                                         cpuBuffer.Memory.Mapped (fun ptr ->
+                                            let cid : int = NativeInt.read (ids + nativeint last * 4n)
                                             let last : DrawCallInfo = NativeInt.read (ptr + nativeint last * 20n)
-                                            indices.[last] <- id
-                                            NativeInt.write (ptr + nativeint id * 20n) last
+
+                                            indices.[cid] <- location
+                                            NativeInt.write (ptr + nativeint location * 20n) last
+                                            NativeInt.write (ids + nativeint location * 4n) cid
                                         )   
                                         gpuBufferDirty <- true
                                 
                                     count <- last
                                     resize (Fun.NextPowerOfTwo count)
                                 | _ ->
-                                    ()
+                                    Log.error "could not remove call"
                     }
 
                 else
@@ -435,6 +445,7 @@ module private RuntimeCommands =
                 for d in consumeList dead do Buffer.delete d device
                 Buffer.delete cpuBuffer device
                 Buffer.delete gpuBuffer device
+                Marshal.FreeHGlobal ids
                 capacity <- 0
                 
             interface IDisposable with
@@ -447,34 +458,37 @@ module private RuntimeCommands =
                 member x.Remove _ = ()
             }
 
-        let vulkanHostMem (elementSizes : Map<string, int>) (device : Device) =
+        let vulkanHostMem (elementSizes : Map<string, int>) (dead : List<Buffer>) (device : Device) =
             let malloc (size : nativeint) =
                 elementSizes |> Map.map (fun _ es ->
                     device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit (int64 size * int64 es)
                 )
-            let mfree (buffer : Map<string, Buffer>) (size : nativeint) =
-                buffer |> Map.iter (fun _ buffer -> Buffer.delete buffer device)
 
+            let mfree (buffer : Map<string, Buffer>) (size : nativeint) =
+                lock dead (fun () -> buffer |> Map.iter (fun _ b -> dead.Add b))
+                //buffer |> Map.iter (fun _ buffer -> Buffer.delete buffer device)
+
+            let mcopy (src : Map<string, Buffer>) (srcOffset : nativeint) (dst : Map<string, Buffer>) (dstOffset : nativeint) (size : nativeint) =
+                for (name, es) in Map.toSeq elementSizes do
+                    let src = src.[name]
+                    let dst = dst.[name]
+                    src.Memory.Mapped(fun src ->
+                        dst.Memory.Mapped(fun dst ->
+                            Marshal.Copy(src + nativeint es * srcOffset, dst + nativeint es * dstOffset, nativeint es * size)
+                        )
+                    )
+
+            let mrealloc (o : Map<string, Buffer>) (oSize : nativeint) (nSize : nativeint) =
+                let n = malloc nSize
+                mcopy o 0n n 0n (min oSize nSize)
+                mfree o oSize
+                n
+                
             {
                 malloc = malloc
                 mfree = mfree
-
-                mrealloc = fun o oSize nSize ->
-                    let n = malloc nSize
-                    let copy = min oSize nSize
-                    if copy > 0n then
-                        for (name, es) in Map.toSeq elementSizes do
-                            let o = o.[name]
-                            let n = n.[name]
-                            o.Memory.Mapped(fun src ->
-                                n.Memory.Mapped(fun dst ->
-                                    Marshal.Copy(src, dst, nativeint es * copy)
-                                )
-                            )
-                    mfree o oSize
-
-                    n
-                mcopy = fun src srcOffset dst dstOffset -> failf "asdasdasd"
+                mrealloc = mrealloc
+                mcopy = mcopy
             }
 
 
@@ -501,13 +515,13 @@ module private RuntimeCommands =
                     |> Seq.sumBy (fun (_,(i,_)) -> PrimitiveType.sizeof i.shaderType) 
                     |> int64
 
-            let manager = new Management.MemoryManager<_>(vulkanHostMem elementSizes device, nativeint initialCapacity)
+            let dead = List<Buffer>()
+
+            let manager = new Management.MemoryManager<_>(vulkanHostMem elementSizes dead device, nativeint initialCapacity)
 
 
             let mutable bufferCapacity = 0
             let mutable buffer : Map<string, Buffer> = Map.empty
-            let dead = List<Buffer>()
-
             let getBuffer() =
                 if manager.Capactiy <> nativeint bufferCapacity then
                     let newCapacity = manager.Capactiy
@@ -520,7 +534,7 @@ module private RuntimeCommands =
                                 device.DeviceMemory
                         )
 
-                    buffer |> Map.iter (constF dead.Add)
+                    lock dead (fun () -> buffer |> Map.iter (constF dead.Add))
                     buffer <- newBuffer
                     bufferCapacity <- int newCapacity
                     newBuffer
@@ -557,13 +571,13 @@ module private RuntimeCommands =
                     )
 
                 new InstanceBufferSlot(manager, [|values|], dirty, x)
-                
+
             member x.Buffer = getBuffer()
 
 
             member x.Kill() =
                 manager.Dispose()
-                for d in consumeList dead do Buffer.delete d device
+                for d in lock dead (fun () -> consumeList dead) do Buffer.delete d device
 
             override x.Create() =
                 ()
@@ -574,24 +588,26 @@ module private RuntimeCommands =
 
             override x.GetHandle(token : AdaptiveToken) =
                 use t = device.Token
-                for d in consumeList dead do Buffer.delete d device
+                for d in lock dead (fun () -> consumeList dead) do Buffer.delete d device
 
                 // write all uniforms into manager.UnsafePointer
                 let dirty = lock dirty (fun () -> consume dirty)
+                manager.Use (fun ptr ->
+                    if dirty.Length > 0 then
+                        ptr |> map (fun ptrs ->
+                            for d in dirty do d.Write(token, ptrs)
+                        )
 
-                if dirty.Length > 0 then
-                    manager.UnsafePointer |> map (fun ptrs ->
-                        for d in dirty do d.Write(token, ptrs)
-                    )
+                    assert (not (Map.isEmpty buffer))
 
-                let buffer = getBuffer()
+                    t.enqueue {
+                        for (name, es) in Map.toSeq elementSizes do
+                            let buffer = buffer.[name]
+                            let host = ptr.[name]
+                            do! Command.Copy(host, 0L, buffer, 0L, min host.Size buffer.Size)
+                    }
 
-                t.enqueue {
-                    for (name, es) in Map.toSeq elementSizes do
-                        let buffer = buffer.[name]
-                        let host = manager.UnsafePointer.[name]
-                        do! Command.Copy(host, 0L, buffer, 0L, int64 manager.Capactiy * int64 es)
-                }
+                )
 
                 { handle = (); version = 0}
 
@@ -1305,11 +1321,6 @@ module private RuntimeCommands =
     and IndirectDrawCommand(compiler : Compiler, effect : FShade.Effect, state : PipelineState, newReader : unit -> IOpReader<hdeltaset<IndexedGeometry>>) =
         inherit PreparedCommand()
 
-
-
-        static let noDisposable = { new IDisposable with member x.Dispose() = () }
-
-
         let reader = newReader()
 
         // entry and exit streams for the entire GroupedCommand
@@ -1428,8 +1439,7 @@ module private RuntimeCommands =
         let getIndirect (blockId : int) =
             indirectBuffers.GetOrCreate(blockId, fun _ -> new ResizableIndirectBuffer(compiler.manager.Device, initialIndirectBufferSize))
 
-        //let deltaQueue = ConcurrentDeltaPriorityQueue<IndexedGeometry, int>(fun _ -> 1)
-        let active = History<hrefset<_>, hdeltaset<_>>(HRefSet.traceNoRefCount)
+        let active = History<hrefset<_>, hdeltaset<_>>(HRefSet.trace)
         let activeReader = active.NewReader()
 
         let deltaLock = obj()
@@ -1453,87 +1463,87 @@ module private RuntimeCommands =
                         pendingDeltas <- HDeltaSet.combine pendingDeltas ops
                         Monitor.PulseAll deltaLock
                     )
-                    //deltaQueue.EnqueueMany ops
 
         let processor =
             startThread "Processor" <| fun () ->
-                let deltaBatchSize = 200
+                let remComplexity = 20
+                let deltaBatchComplexity = 10000
+
+                use signal = new MultimediaTimer.Trigger(16)
 
                 while true do
+                    signal.Wait()
+
                     let ops = 
                         lock deltaLock (fun () ->
-                            while pendingDeltas.Count = 0 do
-                                Monitor.Wait deltaLock |> ignore
+                            let mutable rest = pendingDeltas
+                            let mutable taken = HDeltaSet.empty
+                            let mutable complexity = 0
+                            use e = (pendingDeltas :> seq<_>).GetEnumerator()
+                            while complexity < deltaBatchComplexity && e.MoveNext() do
+                                let op = e.Current
+                                let opComplexity = 
+                                    match op with
+                                        | Add(_,g) -> g.FaceVertexCount
+                                        | _ -> remComplexity
 
-                            let mine = Seq.atMost deltaBatchSize pendingDeltas |> Seq.toList
-                            for op in mine do pendingDeltas <- HDeltaSet.remove op pendingDeltas
-                            mine
+                                complexity <- complexity + opComplexity
+                                taken <- HDeltaSet.add op taken
+                                rest <- HDeltaSet.remove op rest
+
+                            pendingDeltas <- rest
+                            taken
+//                            let mine = Seq.atMost deltaBatchSize pendingDeltas |> Seq.toList
+//                            for op in mine do pendingDeltas <- HDeltaSet.remove op pendingDeltas
+//                            mine
                         )
 
-                    let activeOps =
-                        ops |> List.map (fun op ->
-                            match op with
-                                | Add(_,g) ->
-                                    let vSlot, uSlot = prepare g
-                                    slots.[g] <- (vSlot, uSlot)
-                                    Add(vSlot, uSlot)
+                    if not (HDeltaSet.isEmpty ops) then
+                        let activeOps =
+                            ops |> HDeltaSet.map (fun op ->
+                                match op with
+                                    | Add(_,g) ->
+                                        let vSlot, uSlot = prepare g
+                                        slots.[g] <- (vSlot, uSlot)
+                                        Add(vSlot, uSlot)
 
-                                | Rem(_,g) ->
-                                    match slots.TryRemove g with
-                                        | (true, (vSlot, uSlot)) ->
-                                            uSlot.Dispose()
-                                            vertexManager.Free vSlot
-                                            Rem(vSlot, uSlot)
-                                        | _ ->
-                                            failf "asdasdasdasdasdasdasdasd"
+                                    | Rem(_,g) ->
+                                        match slots.TryRemove g with
+                                            | (true, (vSlot, uSlot)) ->
+                                                uSlot.Dispose()
+                                                vertexManager.Free vSlot
+                                                Rem(vSlot, uSlot)
+                                            | _ ->
+                                                failf "asdasdasdasdasdasdasdasd"
                                     
 
-                        )
-
-                    let tcs = TaskCompletionSource()
-                    compiler.manager.Device.CopyEngine.Enqueue [
-                        CopyCommand.Callback (fun () -> tcs.SetResult())
-                    ]
-                    tcs.Task.Result
+                            )
 
                     
-                    transact (fun () ->
-                        lock active (fun _ -> 
-                            active.Perform (HDeltaSet.ofList activeOps) |> ignore
+                        compiler.manager.Device.CopyEngine.Wait()
+
+                        transact (fun () ->
+                            lock active (fun _ -> 
+                                active.Perform activeOps |> ignore
+                            )
                         )
-                    )
-//
-//
-//                    for op in ops do
-//                        match op with
-//                            | Add(_,g) ->
-//                                let vSlot, uSlot = prepare g
-//                                slots.[g] <- (vSlot, uSlot)
-//
-//                                let tcs = TaskCompletionSource()
-//                                compiler.manager.Device.CopyEngine.Enqueue [
-//                                    CopyCommand.Callback (fun () -> tcs.SetResult())
-//                                ]
-//                                tcs.Task.Result
-//
-//                                transact (fun () -> active.Add(vSlot, uSlot) |> ignore)
-//
-//                                ()
-//                            | Rem(_,g) ->
-//                                match slots.TryRemove g with
-//                                    | (true, (vSlot, uSlot)) ->
-//                                        uSlot.Dispose()
-//                                        vertexManager.Free vSlot
-//
-//                                        transact (fun () -> active.Remove(vSlot, uSlot) |> ignore)
-//
-//                                    | _ ->
-//                                        ()
-
-
                 ()
 
-
+//        let validator =
+//            startThread "Validator" <| fun () ->
+//                while true do
+//                    Thread.Sleep 1000
+//
+//                    let slots = lock slots (fun () -> slots.Values |> Seq.toArray) |> HRefSet.ofArray
+//                    let active = lock active (fun () -> active.State)
+//
+//                    let diff = HRefSet.computeDelta slots active
+//                    if diff.Count > 0 then
+//                        Log.error "diff: %A" diff
+//
+//
+//
+//                ()
 
         override x.Free() = 
             if initialized then
@@ -1556,13 +1566,6 @@ module private RuntimeCommands =
             init stream
 
             let deltas = activeReader.GetOperations token
-
-
-            let f (a : list<int>) = ()
-
-            let a = [] :> seq<int>
-            
-            f a
 
 
             let mutable adds = 0
@@ -1589,11 +1592,11 @@ module private RuntimeCommands =
                     | Rem(_,t) ->
                         inc &rems
 
-                        match activations.TryGetValue t with
+                        match activations.TryRemove t with
                             | (true, activation) ->
                                 activation.Dispose()
                             | _ ->
-                                ()
+                                Log.error "not activated"
 
 
             if deltas.Count > 0 then

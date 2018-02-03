@@ -416,6 +416,11 @@ module Management =
                 action !store b.Offset b.Size
             )
 
+        member x.Use(action : 'a -> 'r) =
+            ReaderWriterLock.read rw (fun () -> 
+                action !store
+            )
+
         member x.Dispose() =
             rw.Dispose()
             mem.mfree !store capacity

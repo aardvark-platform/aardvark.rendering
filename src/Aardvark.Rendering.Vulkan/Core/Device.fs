@@ -794,6 +794,24 @@ and CopyEngine(family : DeviceQueueFamily) =
 
         if size > 0L then () // trigger.Signal()
 
+    member x.Wait() =
+        let l = obj()
+        let mutable finished = false
+
+        let signal() =
+            lock l (fun () ->
+                finished <- true
+                Monitor.Pulse l
+            )
+
+        let wait() =
+            lock l (fun () ->
+                while not finished do
+                    Monitor.Wait l |> ignore
+            )
+        x.Enqueue [CopyCommand.Callback signal]
+        wait()
+
     member x.Enqueue(c : CopyCommand) =
         x.Enqueue (Seq.singleton c)
           
