@@ -486,6 +486,7 @@ and IRuntime =
     abstract member DeleteFramebufferSignature : IFramebufferSignature -> unit
 
     abstract member AssembleEffect : FShade.Effect * IFramebufferSignature -> BackendSurface
+    abstract member AssembleModule : FShade.Effect * IFramebufferSignature -> FShade.Imperative.Module
 
     abstract member PrepareSurface : IFramebufferSignature * ISurface -> IBackendSurface
     abstract member PrepareRenderObject : IFramebufferSignature * IRenderObject -> IPreparedRenderObject

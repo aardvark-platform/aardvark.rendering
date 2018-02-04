@@ -362,6 +362,10 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
 
         member x.OnDispose = onDispose.Publish
+
+        member x.AssembleModule (effect : Effect, signature : IFramebufferSignature) =
+            signature.Link(effect, Range1d(-1.0, 1.0), false)
+
         member x.AssembleEffect (effect : Effect, signature : IFramebufferSignature) =
             let key = effect.Id, signature.ExtractSemantics()
             shaderCache.GetOrAdd(key,fun _ -> 
