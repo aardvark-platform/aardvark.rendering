@@ -1625,6 +1625,7 @@ module TextureExtensions =
     type Col.Format with
         static member Stencil = unbox<Col.Format> (Int32.MaxValue)
         static member Depth = unbox<Col.Format> (Int32.MaxValue - 1)
+        static member DepthStencil = unbox<Col.Format> (Int32.MaxValue - 2)
 
     let internal toPixelType =
         lookupTable [
@@ -1655,6 +1656,7 @@ module TextureExtensions =
             Col.Format.NormalUV, PixelFormat.Rg
             Col.Format.Stencil, PixelFormat.StencilIndex
             Col.Format.Depth, PixelFormat.DepthComponent
+            Col.Format.DepthStencil, PixelFormat.DepthComponent
         ]
 
     let toUntypedPixelFormat =
