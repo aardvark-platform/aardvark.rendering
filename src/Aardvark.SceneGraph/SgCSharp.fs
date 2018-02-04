@@ -53,6 +53,10 @@ type SceneGraphExtensions =
     static member Surface(sg : ISg, surface : Surface) = Sg.SurfaceApplicator(surface, sg) :> ISg
 
     [<Extension>]
+    static member Surface(sg : ISg, creator : Func<FShade.EffectConfig, FShade.EffectInputLayout*IMod<FShade.Imperative.Module>>) = 
+        Sg.SurfaceApplicator(Surface.FShade (fun cfg -> creator.Invoke(cfg)), sg) :> ISg
+
+    [<Extension>]
     static member FillMode(sg : ISg, mode : IEvent<FillMode>) = Sg.FillModeApplicator(mode, sg) :> ISg
 
     [<Extension>]

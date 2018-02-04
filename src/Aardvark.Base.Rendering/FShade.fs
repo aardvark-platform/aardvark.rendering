@@ -480,3 +480,7 @@ type FShadeRuntimeExtensions private() =
             newPrep :> ISurface
         )
 
+    [<Extension>]
+    static member Link (this : IFramebufferSignature, e : Effect, depthRange : Range1d, flip : bool) =
+        this.Link(e, depthRange, flip)
+
