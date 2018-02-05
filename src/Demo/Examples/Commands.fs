@@ -30,6 +30,19 @@ module CommandTest =
 
 
 
+        let rotor =
+            let startTime = System.DateTime.Now
+            win.Time |> Mod.map (fun t ->
+                let t = (t - startTime).TotalSeconds
+                Trafo3d.RotationZ (0.5 * t)
+            )
+
+        let viewTrafo =
+            Mod.map2 (*) rotor viewTrafo
+
+
+
+
         let box = Primitives.unitBox
         let pos = box.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]> |> Array.map (fun v -> v / 2.0f)
         let n = box.IndexedAttributes.[DefaultSemantic.Normals] |> unbox<V3f[]>

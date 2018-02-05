@@ -1372,10 +1372,6 @@ module private RuntimeCommands =
         let initialInstanceCount = 16384
         let initialIndirectBufferSize = 2048
 
-//        
-//        let vertexChunkSize = 36
-//        let initialInstanceCount = 16384
-//        let initialIndirectBufferSize = 2
 
         let vertexManager = new BufferMemoryManager(compiler.manager.Device, vertexInputs, vertexChunkSize)
         let instanceManager = new InstanceBufferPool(compiler.manager.Device, instanceInputs, initialInstanceCount)
@@ -1407,15 +1403,7 @@ module private RuntimeCommands =
                 instanceManager.NewSlot(uniforms)
 
             vSlot, uSlot
-//
-//        let remove (g : IndexedGeometry) =
-//            match slots.TryGetValue g with
-//                | (true, (vSlot, uSlot, activation)) ->
-//                    uSlot.Dispose()
-//                    vertexManager.Free vSlot
-//                    activation.Dispose()
-//                | _ ->
-//                    ()
+
 
         let init (stream : VKVM.CommandStream) =
             if not initialized then
@@ -1445,37 +1433,38 @@ module private RuntimeCommands =
         let deltaLock = obj()
         let mutable pendingDeltas = HDeltaSet.empty
 
+        let mutable running = true
+        let pending = MVar.create ()
 
         let puller =
             startThread "Puller" <| fun () ->
-                let pending = MVar.create ()
                 let o = AdaptiveObject()
-                let s = o.AddMarkingCallback (MVar.put pending)
+                use s = o.AddMarkingCallback (MVar.put pending)
 
-                while true do
+                while running do
                     MVar.take pending
-                    let ops = 
-                        o.EvaluateAlways AdaptiveToken.Top (fun token ->
-                            reader.GetOperations token
-                        )
+                    if running then
+                        let ops = 
+                            o.EvaluateAlways AdaptiveToken.Top (fun token ->
+                                reader.GetOperations token
+                            )
 
-                    lock deltaLock (fun () ->
-                        pendingDeltas <- HDeltaSet.combine pendingDeltas ops
-                        Monitor.PulseAll deltaLock
-                    )
+                        lock deltaLock (fun () ->
+                            pendingDeltas <- HDeltaSet.combine pendingDeltas ops
+                            Monitor.PulseAll deltaLock
+                        )
 
         let processor =
             startThread "Processor" <| fun () ->
                 let remComplexity = 20
                 let deltaBatchComplexity = 10000
 
-                use signal = new MultimediaTimer.Trigger(16)
-
-                while true do
-                    signal.Wait()
-
+                while running do
                     let ops = 
                         lock deltaLock (fun () ->
+                            while running && HDeltaSet.isEmpty pendingDeltas do
+                                Monitor.Wait deltaLock |> ignore
+
                             let mutable rest = pendingDeltas
                             let mutable taken = HDeltaSet.empty
                             let mutable complexity = 0
@@ -1498,7 +1487,7 @@ module private RuntimeCommands =
 //                            mine
                         )
 
-                    if not (HDeltaSet.isEmpty ops) then
+                    if running && not (HDeltaSet.isEmpty ops) then
                         let activeOps =
                             ops |> HDeltaSet.map (fun op ->
                                 match op with
@@ -1529,23 +1518,23 @@ module private RuntimeCommands =
                         )
                 ()
 
-//        let validator =
-//            startThread "Validator" <| fun () ->
-//                while true do
-//                    Thread.Sleep 1000
-//
-//                    let slots = lock slots (fun () -> slots.Values |> Seq.toArray) |> HRefSet.ofArray
-//                    let active = lock active (fun () -> active.State)
-//
-//                    let diff = HRefSet.computeDelta slots active
-//                    if diff.Count > 0 then
-//                        Log.error "diff: %A" diff
-//
-//
-//
-//                ()
+        let shutdown() =
+            if running then
+                Log.startTimed "[IndirectDraw] shutdown"
+                running <- false
+                MVar.put pending ()
+                puller.Join()
+                Log.line "[IndirectDraw] puller joined"
+
+                lock deltaLock (fun () -> Monitor.PulseAll deltaLock)
+                processor.Join()
+                Log.line "[IndirectDraw] processor joined"
+
+                Log.stop()
+
 
         override x.Free() = 
+            shutdown()
             if initialized then
                 compiler.resources.Remove pipeline.ppPipeline
                 for r in descritorSetResources do compiler.resources.Remove r
