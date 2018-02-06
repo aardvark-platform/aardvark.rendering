@@ -136,7 +136,7 @@ module LodTreeLoader =
                 for (KeyValue(_,c)) in current.children do
                     destroy state c
 
-            let rec load<'s, 'a, 'b when 's :> LodTreeNode<'s, 'a> and 's : not struct> (state : LoadTraversal<'s, 'a, 'b>) (ready : MVar<unit>) (current : Option<LoadedNode<'s, 'a, 'b>>) (node : Option<'s>) =
+            let rec load<'s, 'a, 'b when 's :> LodTreeNode<'s, 'a> and 's : not struct> (state : LoadTraversal<'s, 'a, 'b>) (ready : unit -> unit) (current : Option<LoadedNode<'s, 'a, 'b>>) (node : Option<'s>) =
                 let node =
                     match node with
                         | Some n when state.visible n -> Some n
@@ -152,7 +152,7 @@ module LodTreeLoader =
                         let task = 
                             n.Load |> Option.map (fun load -> 
                                 let task = LoadTask.Start(load, state.prepare, state.destroy)
-                                task.OnCompleted.Add ready.Put
+                                task.OnCompleted.Add ready
                                 task
                             )
 
@@ -168,7 +168,7 @@ module LodTreeLoader =
 
                     | Some o, None ->
                         destroy state o
-                        ready.Put()
+                        ready()
 
                         None
 
@@ -182,13 +182,13 @@ module LodTreeLoader =
                                 match o.task with
                                     | Some t -> 
                                         t.Cancel()
-                                        ready.Put()
+                                        ready()
                                     | None ->
                                         ()
 
                                 n.Load |> Option.map (fun load -> 
                                     let task = LoadTask.Start(load, state.prepare, state.destroy)
-                                    task.OnCompleted.Add ready.Put
+                                    task.OnCompleted.Add ready
                                     task
                                 )
 
@@ -211,7 +211,9 @@ module LodTreeLoader =
 
                 let mutable current = None
 
-                let readyState = MVar.create()
+                let readyLock = obj()
+                let mutable readyCount = 0
+
                 let dead = System.Collections.Generic.List<'b>()
 
                 let traversal (token : AdaptiveToken) =
@@ -222,11 +224,22 @@ module LodTreeLoader =
                         descend         = tree.descend.GetValue token
                     }
         
+                let trigger() =
+                    lock readyLock (fun () ->
+                        inc &readyCount
+                    )
+
                 override x.Mark() =
-                    MVar.put readyState ()
+                    trigger()
+                    //MVar.put readyState ()
                     true
 
-                member x.ReadyState = readyState
+                member x.TakeReady() =
+                    lock readyLock (fun () ->
+                        let c = readyCount
+                        readyCount <- 0
+                        c
+                    )
 
                 member x.KillUnused() =
                     let dead = 
@@ -241,7 +254,7 @@ module LodTreeLoader =
                     let root = tree.root.GetValue token
                     let traversal = traversal token
 
-                    let c = load traversal readyState current root
+                    let c = load traversal trigger current root
                     current <- c
                     c
 
@@ -301,30 +314,33 @@ module LodTreeLoader =
                         true
 
                     | Some o, Some n ->
-                        let selfChanged = 
-                            match o.pvalue, n.pvalue with
-                                | Some o, Some n when not (Unchecked.equals o n) ->
-                                    state.revoke o
-                                    state.invoke n
-                                    true
-                                | None, Some n ->
-                                    state.invoke n
-                                    true
-                                | Some o, None ->
-                                    state.revoke o
-                                    true
-                                | _ ->
-                                    false
+                        if o == n then
+                            false
+                        else
+                            let selfChanged = 
+                                match o.pvalue, n.pvalue with
+                                    | Some o, Some n when not (Unchecked.equals o n) ->
+                                        state.revoke o
+                                        state.invoke n
+                                        true
+                                    | None, Some n ->
+                                        state.invoke n
+                                        true
+                                    | Some o, None ->
+                                        state.revoke o
+                                        true
+                                    | _ ->
+                                        false
 
-                        let mutable changed = selfChanged
+                            let mutable changed = selfChanged
 
-                        let merge _ o n =
-                            let c = delta state o n
-                            changed <- changed || c
-                            None
+                            let merge _ o n =
+                                let c = delta state o n
+                                changed <- changed || c
+                                None
 
-                        MapExt.choose2 merge o.pchildren n.pchildren |> ignore
-                        changed
+                            MapExt.choose2 merge o.pchildren n.pchildren |> ignore
+                            changed
 
         type Loader<'s, 'a, 'b when 's :> LodTreeNode<'s, 'a> and 's : not struct>(tree : LodTreeView<'s, 'a>, config : LodTreeLoaderConfig<'a, 'b>) =
 
@@ -339,25 +355,26 @@ module LodTreeLoader =
              
 
             let run (o : obj) =
+                use delay = new MultimediaTimer.Trigger(5)
+
                 let mutable current = None
                 while true do
-                    MVar.take loaded.ReadyState
+                    delay.Wait()
+                    let v = loaded.GetValue AdaptiveToken.Top
 
+                    let cnt = loaded.TakeReady()
+                    if cnt <> 0 then
+                        try
+                            let n = PreparedTree.snapshot tree.showInner v
+                            let changed = PreparedTree.delta prep current n
+                            current <- n
 
-                    try
-                        let v = loaded.GetValue AdaptiveToken.Top
+                            if changed then
+                                config.flush()
 
-
-                        let n = PreparedTree.snapshot tree.showInner v
-                        let changed = PreparedTree.delta prep current n
-                        current <- n
-
-                        if changed then
-                            config.flush()
-
-                        loaded.KillUnused()
-                    with e ->
-                        Log.error "Loader faulted: %A" e
+                            loaded.KillUnused()
+                        with e ->
+                            Log.error "Loader faulted: %A" e
                     
 
             let thread = Thread(ThreadStart(run), IsBackground = true)

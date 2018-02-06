@@ -4,9 +4,10 @@
 
 #include "commands.h"
 #include <stdio.h>
+#include <tuple>
+#include <unordered_set>
 
 #define get(t,v) ((t##Command*)(v)) 
-
 #define getptr(t,v,r) (r*)(((char*)((t##Command*)data)->v) + (intptr_t)data) 
 
 typedef struct {
@@ -449,11 +450,26 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 	}
 }
 
+#undef get
+#undef getptr
+
 DllExport(void) vmRun(VkCommandBuffer buffer, CommandFragment* fragment)
 {
+#ifdef _DEBUG
+	std::unordered_set<CommandFragment*> set;
+#endif
+
 	CommandState state = { nullptr };
 	while (fragment)
 	{
+#ifdef _DEBUG
+		auto res = set.insert(fragment);
+		if (!std::get<1>(res)) {
+			printf("[VKVM] loop detected!!!!!!!\n");
+			break;
+		}
+#endif
+
 		auto ptr = (char*)fragment->Commands;
 
 		for (int i = 0; i < (int)fragment->CommandCount; i++)

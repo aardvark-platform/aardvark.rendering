@@ -2047,7 +2047,7 @@ let main args =
 
 
         
-    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load (Path.combine ["..";"..";"data";"eigi";"eigi.dae"])
+    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load (Path.combine ["..";"..";"data";"aardvark";"aardvark.obj"])
     let sg = 
         Sg.AdapterNode(scene) 
             |> normalizeTo (Box3d(-V3d.III, V3d.III))
@@ -2132,7 +2132,7 @@ let main args =
     let afterAfterMain = RenderPass.after "blubb" RenderPassOrder.Arbitrary afterMain
     let final = RenderPass.after "blubber" RenderPassOrder.Arbitrary afterAfterMain
     
-    let debug = Mod.init false
+    let debug = Mod.init true
 
     let mesh =
         sg  |> TriangleSet.ofSg
@@ -2232,7 +2232,7 @@ let main args =
             app.Runtime.CompileRender(ctrl.FramebufferSignature, { BackendConfiguration.Default with useDebugOutput = false }, sg)
         ]
 
-    ctrl.RenderTask <- task |> DefaultOverlays.withStatistics
+    ctrl.RenderTask <- task // |> DefaultOverlays.withStatistics
 
     f.Run()
     0

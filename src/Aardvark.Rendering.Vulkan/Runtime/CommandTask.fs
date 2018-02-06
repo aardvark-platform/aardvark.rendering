@@ -701,13 +701,18 @@ module private RuntimeCommands =
         let mutable prev : Option<PreparedCommand> = None
         let mutable next : Option<PreparedCommand> = None
 
+        let mutable isDisposed = false
+
+        let check () = if isDisposed then failf "using disposed command"
+
         member x.Prev
-            with get() = prev
-            and set p = prev <- p
+            with get() = check(); prev
+            and set p = check(); prev <- p
 
         member x.Next 
-            with get() = next
+            with get() = check(); next
             and set n =
+                check(); 
                 next <- n
                 match n with
                     | Some n ->
@@ -727,16 +732,21 @@ module private RuntimeCommands =
         abstract member Compile : AdaptiveToken * VKVM.CommandStream -> unit
         abstract member Free : unit -> unit
 
-        member x.Stream = stream
+        member x.Stream = check(); stream
 
         member x.Update(t : AdaptiveToken) =
+            check()
             x.EvaluateIfNeeded t () (fun t ->
                 x.Compile(t, stream)
             ) 
 
         member x.Dispose() =
+            check()
+            isDisposed <- true
             x.Free()
             stream.Dispose()
+            prev <- None
+            next <- None
 
         interface IDisposable with
             member x.Dispose() = x.Dispose()
@@ -1097,7 +1107,7 @@ module private RuntimeCommands =
                     stream.Call(newCmd.Stream) |> ignore
 
     /// Rendering a single Geometry using the given PreparedPipelineState
-    and GeometryCommand(compiler : Compiler, pipeline : PreparedPipelineState, geometry : Geometry) =
+    and GeometryCommand(compiler : Compiler, pipeline : PreparedPipelineState, geometry : Geometry, async : bool) =
         inherit PreparedCommand()
 
         static let alwaysActive =
@@ -1107,11 +1117,15 @@ module private RuntimeCommands =
 
         let mutable prepared : Option<PreparedGeometry> = None
 
+        member x.Prepared = prepared
+
         override x.Free() =
             match prepared with
                 | Some pg ->
-                    for r in pg.pgResources do
-                        compiler.resources.Remove r
+                    if async then
+                        for r in pg.pgResources do r.Release()
+                    else
+                        for r in pg.pgResources do compiler.resources.Remove r
                     prepared <- None
                 | None ->
                     ()
@@ -1121,9 +1135,12 @@ module private RuntimeCommands =
             let pg = compiler.manager.PrepareGeometry(pipeline, geometry)
             prepared <- Some pg
 
-            let updateResources = pg.pgResources |> List.filter (fun r -> r.ReferenceCount = 0)
-            for r in pg.pgResources do compiler.resources.Add r
-            for r in updateResources do r.Update(AdaptiveToken.Top) |> ignore
+            if async then
+                let updateResources = pg.pgResources |> List.filter (fun r -> r.ReferenceCount = 0)
+                for r in pg.pgResources do r.Acquire()
+                for r in updateResources do r.Update(AdaptiveToken.Top) |> ignore
+            else
+                for r in pg.pgResources do compiler.resources.Add r
                 
             stream.IndirectBindDescriptorSets(pg.pgDescriptors.Pointer) |> ignore
 
@@ -1173,7 +1190,7 @@ module private RuntimeCommands =
             
         let add (token : AdaptiveToken) (pipeline : PreparedPipelineState) (g : Geometry) =
             // create and update a GeometryCommand
-            let cmd = new GeometryCommand(compiler, pipeline, g)
+            let cmd = new GeometryCommand(compiler, pipeline, g, false)
             cmd.Update token
 
             // store it in the cache
@@ -1230,15 +1247,51 @@ module private RuntimeCommands =
             let ops = reader.GetOperations token
             ops |> HDeltaSet.iter (add token pipeline) (remove)
 
+    and BindPipelineCommand(compiler : Compiler, surface : Aardvark.Base.Surface, state : PipelineState) =
+        inherit PreparedCommand()
+        
+        let mutable preparedPipeline : Option<PreparedPipelineState> = None
+            
+        member x.PreparedPipeline = preparedPipeline
+
+        override x.Free() =
+            match preparedPipeline with
+                | Some p -> 
+                    compiler.resources.Remove p.ppPipeline
+                    preparedPipeline <- None
+                | None -> 
+                    ()
+
+        override x.Compile(_, stream : VKVM.CommandStream) =
+            let pipeline = compiler.manager.PreparePipelineState(compiler.renderPass, surface, state)
+            compiler.resources.Add pipeline.ppPipeline
+            preparedPipeline <- Some pipeline
+
+            stream.Clear()
+            stream.IndirectBindPipeline(pipeline.ppPipeline.Pointer) |> ignore
+
+
     and LodTreeCommand(compiler : Compiler, surface : Aardvark.Base.Surface, state : PipelineState, loader : LodTreeLoader<Geometry>) as this =
         inherit PreparedCommand()
 
-        let mutable preparedPipeline : Option<PreparedPipelineState> = None
-            
-        let first = new VKVM.CommandStream()
-        let mutable last = first
+        let first = new BindPipelineCommand(compiler, surface, state)
+        let mutable last = first :> PreparedCommand
 
+        let mutable running = false
         let mutable thread = { new IDisposable with member x.Dispose() = () }
+
+        let hinig = List<GeometryCommand>()
+
+        let disposer =
+            startThread "Disposer" <| fun () ->
+                while true do
+                    let hinig = 
+                        lock hinig (fun () -> 
+                            while hinig.Count = 0 do
+                                Monitor.Wait hinig |> ignore
+                            consumeList hinig
+                        )
+                    for h in hinig do h.Dispose()
 
         let toDelete = System.Collections.Generic.List<GeometryCommand>()
 
@@ -1250,13 +1303,14 @@ module private RuntimeCommands =
                 let token = new DeviceToken(device.GraphicsFamily, ref None) //compiler.manager.Device.Token
                 device.UnsafeSetToken (Some token)
             
-                let cmd = new GeometryCommand(compiler, pipeline, g)
+                let cmd = new GeometryCommand(compiler, pipeline, g, true)
                 cmd.Update(AdaptiveToken.Top)
 
                 let task = device.CopyEngine.WaitTask()
 
                 task |> Task.bind (fun () ->
                     token.SyncTask(4).AsTask |> Task.map (fun () ->
+                        token.Dispose()
                         cmd
                     )
                 )
@@ -1266,27 +1320,58 @@ module private RuntimeCommands =
         let delete (cmd : GeometryCommand) =
             lock toDelete (fun () -> toDelete.Add cmd)
 
+        let activeSet = HashSet<GeometryCommand>()
+
+        let mutable activeDelta = HDeltaSet.empty
+
+
         let activate (cmd : GeometryCommand) =
             lock first (fun () ->
-                let s = cmd.Stream
-                s.Next <- None
-                last.Next <- Some s
-                last <- s
+                activeDelta <- HDeltaSet.add (Add cmd) activeDelta
             )
 
         let deactivate (cmd : GeometryCommand) =
             lock first (fun () ->
-                let s = cmd.Stream
-                let prev = s.Prev.Value
-
-                match s.Next with
-                    | Some n ->
-                        prev.Next <- Some n
-                    | None ->
-                        last <- prev
-                        prev.Next <- None
-
+                activeDelta <- HDeltaSet.add (Rem cmd) activeDelta
             )
+
+        let realActivate (cmd : GeometryCommand) =
+            match cmd.Prepared with
+                | Some pg ->
+                    for r in pg.pgResources do
+                        compiler.resources.Add r
+                | None ->
+                    failf "invalid GeometryCommand (not prepared)"
+
+            if not (activeSet.Add cmd) then Log.error "double add"
+
+            cmd.Next <- None
+            cmd.Prev <- Some last
+
+            last.Next <- Some (cmd :> PreparedCommand)
+            last <- cmd
+
+        let realDeactivate (cmd : GeometryCommand) =
+            match cmd.Prepared with
+                | Some pg ->
+                    for r in pg.pgResources do compiler.resources.Remove r
+                | None ->
+                    failf "invalid GeometryCommand (not prepared)"
+
+            if not (activeSet.Remove cmd) then Log.error "double free"
+                
+            let prev = 
+                match cmd.Prev with
+                    | Some p -> p
+                    | None -> failf "asdasdasdasd"
+
+            match cmd.Next with
+                | Some n -> 
+                    prev.Next <- Some n
+                    n.Prev <- Some prev
+                | None -> 
+                    prev.Next <- None
+                    last <- prev
 
         let flush() =
             Log.line "flush"
@@ -1306,28 +1391,28 @@ module private RuntimeCommands =
 
         override x.Compile(token, stream) =
             Log.line "update"
-            match preparedPipeline with
-                | None -> 
-                    let pipeline = compiler.manager.PreparePipelineState(compiler.renderPass, surface, state)
-                    compiler.resources.Add pipeline.ppPipeline
-                    first.IndirectBindPipeline(pipeline.ppPipeline.Pointer) |> ignore
-                    preparedPipeline <- Some pipeline
+            first.Update(token)
 
-                    stream.Clear()
-                    stream.Call(first) |> ignore
-                    thread <- loader.Start (config pipeline)
+            if not running then 
+                running <- true
+                 
+                stream.Clear()
+                stream.Call(first.Stream) |> ignore
+                thread <- loader.Start (config first.PreparedPipeline.Value)
 
-                    ()
-                | Some _ ->
-                    ()
-                            
-            let dead =
-                lock toDelete (fun () -> 
-                    let arr = CSharpList.toArray toDelete
-                    toDelete.Clear()
-                    arr
+   
+            let activeDelta =
+                lock first (fun () ->
+                    let res = activeDelta
+                    activeDelta <- HDeltaSet.empty
+                    res
                 )
-            for d in dead do d.Dispose()
+
+            activeDelta |> HDeltaSet.iter realActivate realDeactivate
+       
+            
+            let dead = lock toDelete (fun () -> consumeList toDelete)
+            lock hinig (fun () -> hinig.AddRange dead; Monitor.PulseAll hinig)
 
             //innerCompiler.resources.Update(token) |> ignore
             ()
