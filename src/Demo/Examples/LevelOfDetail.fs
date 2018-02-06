@@ -77,7 +77,7 @@ module LevelOfDetail =
 
         let loaderCfg =
             {
-                prepare     = fun b -> existing.Add b |> ignore; b
+                prepare     = fun b -> existing.Add b |> ignore; Task.FromResult b
                 delete      = fun b -> existing.Remove b |> ignore
                 activate    = boxes.Add >> ignore
                 deactivate  = boxes.Remove >> ignore
@@ -206,263 +206,267 @@ module LevelOfDetail =
 
         ()
 
+    open Aardvark.Application
 
     let run() =
-
-        let vk = new VulkanApplication(true)
-        let gl = new OpenGlApplication(true)
-
-        
-
-        let rgl = gl.Runtime :> IRuntime
-        let rvk = vk.Runtime :> IRuntime
-
-        let testImage = PixImage<byte>(Col.Format.RGBA, V2i(1024, 1024))
-        let ref = PixImage<byte>(Col.Format.RGBA, V2i(1024, 1024))
-
-        let tgl = rgl.CreateTexture(V3i(1024, 1024, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 0, 1, 1)
-        let tvk = rvk.CreateTexture(V3i(1024, 1024, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 0, 1, 1)
-        let lgl = tgl.[Color, 0, 0]
-        let lvk = tvk.[Color, 0, 0]
-
-        let img = tcGradient 1024 1024
-        rgl.Copy(img, lgl)
-        rvk.Copy(img, lvk)
-        ref.Set(img)
-
-        rgl.Copy(lgl, testImage)
-        let equal = img.Volume.InnerProduct(testImage.Volume, (=), true, (&&))
-        printfn "GL: %A" equal
-        
-        rvk.Copy(lvk, testImage)
-        let equal = img.Volume.InnerProduct(testImage.Volume, (=), true, (&&))
-        printfn "VK: %A" equal
-
-        
-        let img = tcGradient 512 512
-        rgl.Copy(img, lgl, V2i(512, 512), V2i(512, 512))
-        rvk.Copy(img, lvk, V2i(512, 512), V2i(512, 512))
-        ref.SubImage(V2i(512, 512), V2i(512,512)).Set img
-
-
-        let img = PixImage.Create @"E:\Development\WorkDirectory\DataSVN\cliffs_color.jpg"
-        let img = img.Transformed(ImageTrafo.Rot180) 
-        lgl.[123.., 235..] <- img
-        lvk.[123.., 235..] <- img
-        ref.SubImage(V2i(123,235), img.Size).Set(img.ToPixImage<byte>(Col.Format.RGBA))
-
-
-        rgl.Copy(lgl, testImage)
-        testImage.SaveAsImage @"C:\Users\schorsch\Desktop\gl.png"
-
-        rvk.Copy(lvk, testImage)
-        testImage.SaveAsImage @"C:\Users\schorsch\Desktop\vulkan.png"
-
-        ref.SaveAsImage @"C:\Users\schorsch\Desktop\ref.png"
-
-
-        let fgl = rgl.CreateTexture(V3i(640, 640, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 0, 1, 1)
-        let fvk = rvk.CreateTexture(V3i(640, 640, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 0, 1, 1)
-        rgl.Copy(lgl, V3i(15, 37, 0), fgl.[TextureAspect.Color, 0, 0], V3i.Zero, fgl.Size)
-        rvk.Copy(lvk, V3i(15, 37, 0), fvk.[TextureAspect.Color, 0, 0], V3i.Zero, fvk.Size)
-
-        
-        let testImage = PixImage<byte>(Col.Format.RGBA, V2i(640, 640))
-        rgl.Copy(fgl.[TextureAspect.Color, 0, 0], testImage)
-        testImage.SaveAsImage @"C:\Users\schorsch\Desktop\gl2.png"
-
-        rvk.Copy(fvk.[TextureAspect.Color, 0, 0], testImage)
-        testImage.SaveAsImage @"C:\Users\schorsch\Desktop\vulkan2.png"
-
-        ref.SubImage(V2i(15, 37), V2i(640, 640)).Copy().SaveAsImage @"C:\Users\schorsch\Desktop\ref2.png"
-
-
-
-
-
-        let cgl = new RenderControl(Width = 1024, Height = 1024)
-        let cvk = new RenderControl(Width = 1024, Height = 1024)
-
-        let form = new System.Windows.Forms.Form()
-        form.ClientSize <- Drawing.Size(1024, 1024)
-
-        let splitter = new SplitContainer(Dock = DockStyle.Fill)
-        form.Controls.Add(splitter)
-        splitter.Panel1.Controls.Add cgl
-        splitter.Panel2.Controls.Add cvk
-        splitter.SplitterMoved.Add (fun e ->
-            cvk.Left <- -e.SplitX - splitter.SplitterWidth
-        )
-
-        splitter.Resize.Add (fun e ->
-            cgl.Size <- splitter.Size
-            cvk.Size <- splitter.Size
-        )
-
-        vk.Initialize(cvk)
-        gl.Initialize(cgl)
-
-
-        let sg =
-            Sg.fullScreenQuad
-                |> Sg.diffuseTexture (Mod.constant (tgl :> ITexture))
-                |> Sg.shader {
-                    do! DefaultSurfaces.diffuseTexture
-                }
-        cgl.RenderTask <- rgl.CompileRender(cgl.FramebufferSignature, sg)
-        
-        let sg =
-            Sg.fullScreenQuad
-                |> Sg.diffuseTexture (Mod.constant (tvk :> ITexture))
-                |> Sg.shader {
-                    do! DefaultSurfaces.diffuseTexture
-                }
-        cvk.RenderTask <- rvk.CompileRender(cvk.FramebufferSignature, sg)
-
-        System.Windows.Forms.Application.Run(form)
-
-        Environment.Exit 0
-
-
-
 //
-//
-//
-//        let view =
-//            CameraView.lookAt (V3d(6,6,6)) V3d.Zero V3d.OOI
-//                |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
-//                |> Mod.map CameraView.viewTrafo
-//
-//        let proj =
-//            win.Sizes 
-//                |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
-//                |> Mod.map Frustum.projTrafo
-//
-//
-//        let mutable frozen = false
-//        let views = DefaultingModRef (view |> Mod.map Array.singleton)
-//        let projs = DefaultingModRef (proj |> Mod.map Array.singleton)
-//
-//        let toggleFreeze() =
-//            transact (fun () ->
-//                if frozen then
-//                    views.Reset()
-//                    projs.Reset()
-//                else
-//                    views.Value <- Mod.force views
-//                    projs.Value <- Mod.force projs
-//                frozen <- not frozen
-//            )
-//
-//        win.Keyboard.KeyDown(Keys.Space).Values.Add toggleFreeze
-//
-//
-//
-//        let tree = GeometryTree(Box3d(-10.0 * V3d.III, 10.0 * V3d.III))
-//
-//
-//        let viewProj = Mod.map2 (Array.map2 (*)) views projs
-//
-//
-//        let visible =
-//            viewProj |> Mod.map (fun (vps : Trafo3d[]) (node : GeometryTree) ->
-//                vps |> Array.exists (ViewProjection.intersects node.Bounds)
-//            )
-//
-//        let descend =
-//            viewProj |> Mod.map (fun (vps : Trafo3d[]) (node : GeometryTree) ->
-//                let projectedLength (b : Box3d) (t : Trafo3d) =
-//                    let ssb = b.ComputeCorners() |> Array.map (t.Forward.TransformPosProj) |> Box3d
-//                    max ssb.Size.X ssb.Size.Y
-//
-//                let len = vps |> Array.map (projectedLength node.Bounds) |> Array.max
-//                len > 1.0
-//            )
-//            
-//
-//
-////        let active = CSet.empty
-////
-////        let mutable pending = ref HDeltaSet.empty
-////
-////        let flush () =
-////            transact (fun () ->
-////                let pending = !Interlocked.Exchange(&pending, ref HDeltaSet.empty)
-////                for d in pending do
-////                    match d with
-////                        | Add(_,v) -> active.Add v |> ignore
-////                        | Rem(_,v) -> active.Remove v |> ignore
-////            )
-////
-////        let activate (g : Geometry) =
-////            pending := HDeltaSet.add (Add g) !pending
-////            //transact (fun () -> active.Add g |> ignore)
-////            
-////        let deactivate (g : Geometry) =
-////            pending := HDeltaSet.add (Rem g) !pending
-////            //transact (fun () -> active.Remove g |> ignore)
+//        let vk = new VulkanApplication(true)
+//        let gl = new OpenGlApplication(true)
 //
 //        
-//        let treeView = 
-//            { 
-//                root = Mod.constant (Some tree)
-//                visible = visible
-//                descend = descend
-//                showInner = true
+//
+//        let rgl = gl.Runtime :> IRuntime
+//        let rvk = vk.Runtime :> IRuntime
+//
+//        let testImage = PixImage<byte>(Col.Format.RGBA, V2i(1024, 1024))
+//        let ref = PixImage<byte>(Col.Format.RGBA, V2i(1024, 1024))
+//
+//        let tgl = rgl.CreateTexture(V3i(1024, 1024, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 0, 1, 1)
+//        let tvk = rvk.CreateTexture(V3i(1024, 1024, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 0, 1, 1)
+//        let lgl = tgl.[Color, 0, 0]
+//        let lvk = tvk.[Color, 0, 0]
+//
+//        let img = tcGradient 1024 1024
+//        rgl.Copy(img, lgl)
+//        rvk.Copy(img, lvk)
+//        ref.Set(img)
+//
+//        rgl.Copy(lgl, testImage)
+//        let equal = img.Volume.InnerProduct(testImage.Volume, (=), true, (&&))
+//        printfn "GL: %A" equal
+//        
+//        rvk.Copy(lvk, testImage)
+//        let equal = img.Volume.InnerProduct(testImage.Volume, (=), true, (&&))
+//        printfn "VK: %A" equal
+//
+//        
+//        let img = tcGradient 512 512
+//        rgl.Copy(img, lgl, V2i(512, 512), V2i(512, 512))
+//        rvk.Copy(img, lvk, V2i(512, 512), V2i(512, 512))
+//        ref.SubImage(V2i(512, 512), V2i(512,512)).Set img
+//
+//
+//        let img = PixImage.Create @"E:\Development\WorkDirectory\DataSVN\cliffs_color.jpg"
+//        let img = img.Transformed(ImageTrafo.Rot180) 
+//        lgl.[123.., 235..] <- img
+//        lvk.[123.., 235..] <- img
+//        ref.SubImage(V2i(123,235), img.Size).Set(img.ToPixImage<byte>(Col.Format.RGBA))
+//
+//
+//        rgl.Copy(lgl, testImage)
+//        testImage.SaveAsImage @"C:\Users\schorsch\Desktop\gl.png"
+//
+//        rvk.Copy(lvk, testImage)
+//        testImage.SaveAsImage @"C:\Users\schorsch\Desktop\vulkan.png"
+//
+//        ref.SaveAsImage @"C:\Users\schorsch\Desktop\ref.png"
+//
+//
+//        let fgl = rgl.CreateTexture(V3i(640, 640, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 0, 1, 1)
+//        let fvk = rvk.CreateTexture(V3i(640, 640, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 0, 1, 1)
+//        rgl.Copy(lgl, V3i(15, 37, 0), fgl.[TextureAspect.Color, 0, 0], V3i.Zero, fgl.Size)
+//        rvk.Copy(lvk, V3i(15, 37, 0), fvk.[TextureAspect.Color, 0, 0], V3i.Zero, fvk.Size)
+//
+//        
+//        let testImage = PixImage<byte>(Col.Format.RGBA, V2i(640, 640))
+//        rgl.Copy(fgl.[TextureAspect.Color, 0, 0], testImage)
+//        testImage.SaveAsImage @"C:\Users\schorsch\Desktop\gl2.png"
+//
+//        rvk.Copy(fvk.[TextureAspect.Color, 0, 0], testImage)
+//        testImage.SaveAsImage @"C:\Users\schorsch\Desktop\vulkan2.png"
+//
+//        ref.SubImage(V2i(15, 37), V2i(640, 640)).Copy().SaveAsImage @"C:\Users\schorsch\Desktop\ref2.png"
+//
+//
+//
+//
+//
+//        let cgl = new RenderControl(Width = 1024, Height = 1024)
+//        let cvk = new RenderControl(Width = 1024, Height = 1024)
+//
+//        let form = new System.Windows.Forms.Form()
+//        form.ClientSize <- Drawing.Size(1024, 1024)
+//
+//        let splitter = new SplitContainer(Dock = DockStyle.Fill)
+//        form.Controls.Add(splitter)
+//        splitter.Panel1.Controls.Add cgl
+//        splitter.Panel2.Controls.Add cvk
+//        splitter.SplitterMoved.Add (fun e ->
+//            cvk.Left <- -e.SplitX - splitter.SplitterWidth
+//        )
+//
+//        splitter.Resize.Add (fun e ->
+//            cgl.Size <- splitter.Size
+//            cvk.Size <- splitter.Size
+//        )
+//
+//        vk.Initialize(cvk)
+//        gl.Initialize(cgl)
+//
+//
+//        let sg =
+//            Sg.fullScreenQuad
+//                |> Sg.diffuseTexture (Mod.constant (tgl :> ITexture))
+//                |> Sg.shader {
+//                    do! DefaultSurfaces.diffuseTexture
+//                }
+//        cgl.RenderTask <- rgl.CompileRender(cgl.FramebufferSignature, sg)
+//        
+//        let sg =
+//            Sg.fullScreenQuad
+//                |> Sg.diffuseTexture (Mod.constant (tvk :> ITexture))
+//                |> Sg.shader {
+//                    do! DefaultSurfaces.diffuseTexture
+//                }
+//        cvk.RenderTask <- rvk.CompileRender(cvk.FramebufferSignature, sg)
+//
+//        System.Windows.Forms.Application.Run(form)
+//
+//        Environment.Exit 0
+//
+
+
+
+
+        let app = new VulkanApplication(true)
+        let win = app.CreateSimpleRenderWindow 1
+
+        let view =
+            CameraView.lookAt (V3d(6,6,6)) V3d.Zero V3d.OOI
+                |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
+                |> Mod.map CameraView.viewTrafo
+
+        let proj =
+            win.Sizes 
+                |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
+                |> Mod.map Frustum.projTrafo
+
+
+        let mutable frozen = false
+        let views = DefaultingModRef (view |> Mod.map Array.singleton)
+        let projs = DefaultingModRef (proj |> Mod.map Array.singleton)
+
+        let toggleFreeze() =
+            transact (fun () ->
+                if frozen then
+                    views.Reset()
+                    projs.Reset()
+                else
+                    views.Value <- Mod.force views
+                    projs.Value <- Mod.force projs
+                frozen <- not frozen
+            )
+
+        win.Keyboard.KeyDown(Keys.Space).Values.Add toggleFreeze
+
+
+
+        let tree = GeometryTree(Box3d(-10.0 * V3d.III, 10.0 * V3d.III))
+
+
+        let viewProj = Mod.map2 (Array.map2 (*)) views projs
+
+
+        let visible =
+            viewProj |> Mod.map (fun (vps : Trafo3d[]) (node : GeometryTree) ->
+                vps |> Array.exists (ViewProjection.intersects node.Bounds)
+            )
+
+        let descend =
+            viewProj |> Mod.map (fun (vps : Trafo3d[]) (node : GeometryTree) ->
+                let projectedLength (b : Box3d) (t : Trafo3d) =
+                    let ssb = b.ComputeCorners() |> Array.map (t.Forward.TransformPosProj) |> Box3d
+                    max ssb.Size.X ssb.Size.Y
+
+                let len = vps |> Array.map (projectedLength node.Bounds) |> Array.max
+                len > 1.0
+            )
+            
+
+
+//        let active = CSet.empty
+//
+//        let mutable pending = ref HDeltaSet.empty
+//
+//        let flush () =
+//            transact (fun () ->
+//                let pending = !Interlocked.Exchange(&pending, ref HDeltaSet.empty)
+//                for d in pending do
+//                    match d with
+//                        | Add(_,v) -> active.Add v |> ignore
+//                        | Rem(_,v) -> active.Remove v |> ignore
+//            )
+//
+//        let activate (g : Geometry) =
+//            pending := HDeltaSet.add (Add g) !pending
+//            //transact (fun () -> active.Add g |> ignore)
+//            
+//        let deactivate (g : Geometry) =
+//            pending := HDeltaSet.add (Rem g) !pending
+//            //transact (fun () -> active.Remove g |> ignore)
+
+        
+        let treeView = 
+            { 
+                root = Mod.constant (Some tree)
+                visible = visible
+                descend = descend
+                showInner = true
+            }
+
+        let loader = LodTreeLoader.create treeView
+//
+//        let thread = 
+//            loader |> LodTreeLoader.start {
+//                prepare     = id
+//                delete      = ignore
+//                activate    = activate
+//                deactivate  = deactivate
+//                flush       = flush
 //            }
-//
-//        let loader = LodTreeLoader.create treeView
-////
-////        let thread = 
-////            loader |> LodTreeLoader.start {
-////                prepare     = id
-////                delete      = ignore
-////                activate    = activate
-////                deactivate  = deactivate
-////                flush       = flush
-////            }
-//
-//        let runtime = win.Runtime |> unbox<Runtime>
-//        let device = runtime.Device
-//
-//        let effect =
-//            FShade.Effect.compose [
-//                toEffect DefaultSurfaces.trafo
-//                toEffect (DefaultSurfaces.constantColor C4f.Red)
-//                toEffect DefaultSurfaces.simpleLighting
-//            ]
-//
-//
-//        let surface = Aardvark.Base.Surface.FShadeSimple effect
-//
-//        let state =
-//            {
-//                depthTest           = Mod.constant DepthTestMode.LessOrEqual
-//                cullMode            = Mod.constant CullMode.None
-//                blendMode           = Mod.constant BlendMode.None
-//                fillMode            = Mod.constant FillMode.Fill
-//                stencilMode         = Mod.constant StencilMode.Disabled
-//                multisample         = Mod.constant true
-//                writeBuffers        = None
-//                globalUniforms      = 
-//                    UniformProvider.ofList [
-//                        "ViewTrafo", view :> IMod
-//                        "ProjTrafo", proj :> IMod
-//                        "LightLocation", view |> Mod.map (fun v -> v.Backward.C3.XYZ) :> IMod
-//                        "CameraLocation", view |> Mod.map (fun v -> v.Backward.C3.XYZ) :> IMod
-//                    ]
-//
-//                geometryMode        = IndexedGeometryMode.TriangleList
-//                vertexInputTypes    = Map.ofList [ DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Normals, typeof<V3f> ]
-//                perGeometryUniforms = Map.ofList [ "ModelTrafo", typeof<Trafo3d> ]
-//            }
-//
-//        let task = new RenderTask.CommandTask(device, unbox win.FramebufferSignature, RuntimeCommand.LodTree(surface, state, loader))
-//
-//
-//        win.RenderTask <- task
-//
-//
-//
-//
-//        win.Run()
+
+        let runtime = win.Runtime |> unbox<Runtime>
+        let device = runtime.Device
+
+        let effect =
+            FShade.Effect.compose [
+                toEffect DefaultSurfaces.trafo
+                toEffect (DefaultSurfaces.constantColor C4f.Red)
+                toEffect DefaultSurfaces.simpleLighting
+            ]
+
+
+        let surface = Aardvark.Base.Surface.FShadeSimple effect
+
+
+        let state =
+            {
+                depthTest           = Mod.constant DepthTestMode.LessOrEqual
+                cullMode            = Mod.constant CullMode.None
+                blendMode           = Mod.constant BlendMode.None
+                fillMode            = Mod.constant FillMode.Fill
+                stencilMode         = Mod.constant StencilMode.Disabled
+                multisample         = Mod.constant true
+                writeBuffers        = None
+                globalUniforms      = 
+                    UniformProvider.ofList [
+                        "ViewTrafo", view :> IMod
+                        "ProjTrafo", proj :> IMod
+                        "LightLocation", view |> Mod.map (fun v -> v.Backward.C3.XYZ) :> IMod
+                        "CameraLocation", view |> Mod.map (fun v -> v.Backward.C3.XYZ) :> IMod
+                    ]
+
+                geometryMode        = IndexedGeometryMode.TriangleList
+                vertexInputTypes    = Map.ofList [ DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Normals, typeof<V3f> ]
+                perGeometryUniforms = Map.ofList [ "ModelTrafo", typeof<Trafo3d> ]
+            }
+
+        let task = new Temp.CommandTask(device, unbox win.FramebufferSignature, RuntimeCommand.LodTree(surface, state, loader))
+
+
+        win.RenderTask <- task
+
+
+
+
+        win.Run()
