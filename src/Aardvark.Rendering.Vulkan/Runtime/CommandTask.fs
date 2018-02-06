@@ -1121,8 +1121,9 @@ module private RuntimeCommands =
             let pg = compiler.manager.PrepareGeometry(pipeline, geometry)
             prepared <- Some pg
 
-            for r in pg.pgResources do
-                compiler.resources.Add r
+            let updateResources = pg.pgResources |> List.filter (fun r -> r.ReferenceCount = 0)
+            for r in pg.pgResources do compiler.resources.Add r
+            for r in updateResources do r.Update(AdaptiveToken.Top) |> ignore
                 
             stream.IndirectBindDescriptorSets(pg.pgDescriptors.Pointer) |> ignore
 
@@ -1242,10 +1243,25 @@ module private RuntimeCommands =
         let toDelete = System.Collections.Generic.List<GeometryCommand>()
 
         let prepare pipeline (g : Geometry) =
-            use t = compiler.manager.Device.Token
-            let cmd = new GeometryCommand(compiler, pipeline, g)
-            cmd.Update(AdaptiveToken.Top)
-            cmd
+            let device = compiler.manager.Device
+
+            let old = device.UnsafeCurrentToken
+            try
+                let token = new DeviceToken(device.GraphicsFamily, ref None) //compiler.manager.Device.Token
+                device.UnsafeSetToken (Some token)
+            
+                let cmd = new GeometryCommand(compiler, pipeline, g)
+                cmd.Update(AdaptiveToken.Top)
+
+                let task = device.CopyEngine.WaitTask()
+
+                task |> Task.bind (fun () ->
+                    token.SyncTask(4).AsTask |> Task.map (fun () ->
+                        cmd
+                    )
+                )
+            finally
+                device.UnsafeSetToken old
 
         let delete (cmd : GeometryCommand) =
             lock toDelete (fun () -> toDelete.Add cmd)

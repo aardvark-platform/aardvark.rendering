@@ -812,6 +812,11 @@ and CopyEngine(family : DeviceQueueFamily) =
         x.Enqueue [CopyCommand.Callback signal]
         wait()
 
+    member x.WaitTask() =
+        let tcs = System.Threading.Tasks.TaskCompletionSource()
+        x.Enqueue(CopyCommand.Callback tcs.SetResult)
+        tcs.Task
+
     member x.Enqueue(c : CopyCommand) =
         x.Enqueue (Seq.singleton c)
           

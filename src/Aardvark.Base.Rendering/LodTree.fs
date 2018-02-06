@@ -26,7 +26,7 @@ type LodTreeView<'s, 'a when 's :> LodTreeNode<'s, 'a>> =
 
 type LodTreeLoaderConfig<'a, 'b> =
     {
-        prepare     : 'a -> 'b
+        prepare     : 'a -> Task<'b>
         delete      : 'b -> unit
         activate    : 'b -> unit
         deactivate  : 'b -> unit
@@ -41,10 +41,10 @@ module LodTreeLoader =
     [<AutoOpen>]
     module private Helpers = 
         module Async =
-            let atomically (data : Async<'a>) (create : 'a -> 'b) (destroy : 'b -> unit) =
+            let atomically (data : Async<'a>) (create : 'a -> Task<'b>) (destroy : 'b -> unit) =
                 async {
-                    let mutable res = None
-                    let! _ = Async.OnCancel(fun () -> Option.iter destroy res)
+                    let mutable res : Option<Task<'b>> = None
+                    let! _ = Async.OnCancel(fun () -> match res with | Some t -> t.ContinueWith (fun (t : Task<_>) -> destroy t.Result) |> ignore | _ -> ())
                 
                     let! data = data
                     let create v =
@@ -52,7 +52,7 @@ module LodTreeLoader =
                         res <- Some r
                         r
 
-                    return create data
+                    return! Async.AwaitTask <| create data
                 }
 
         [<AbstractClass>]
@@ -62,14 +62,14 @@ module LodTreeLoader =
             abstract member Cancel : unit -> unit
             abstract member OnCompleted : Microsoft.FSharp.Control.IEvent<unit>
 
-            static member Start(data : Async<'a>, invoke : 'a -> 'b, revoke : 'b -> unit) =
+            static member Start(data : Async<'a>, invoke : 'a -> Task<'b>, revoke : 'b -> unit) =
                 LoadTask<'a, 'b>(data, invoke, revoke) :> LoadTask<_>
 
         and [<AbstractClass>] LoadTask<'a>() =
             inherit LoadTask()
             abstract member Value : 'a
 
-        and private LoadTask<'a, 'b>(computation : Async<'a>, invoke : 'a -> 'b, revoke : 'b -> unit) =
+        and private LoadTask<'a, 'b>(computation : Async<'a>, invoke : 'a -> Task<'b>, revoke : 'b -> unit) =
             inherit LoadTask<'b>()
 
             let cancel = new CancellationTokenSource()
@@ -115,7 +115,7 @@ module LodTreeLoader =
 
         type LoadTraversal<'i, 'a, 'b> =
             {
-                prepare         : 'a -> 'b
+                prepare         : 'a -> Task<'b>
                 destroy         : 'b -> unit
                 visible         : 'i -> bool
                 descend         : 'i -> bool
@@ -206,7 +206,7 @@ module LodTreeLoader =
                         }
 
 
-            type LoadedTree<'s, 'a, 'b when 's :> LodTreeNode<'s, 'a> and 's : not struct>(create : 'a -> 'b, destroy : 'b -> unit, tree : LodTreeView<'s, 'a>) =
+            type LoadedTree<'s, 'a, 'b when 's :> LodTreeNode<'s, 'a> and 's : not struct>(create : 'a -> Task<'b>, destroy : 'b -> unit, tree : LodTreeView<'s, 'a>) =
                 inherit Mod.AbstractMod<Option<LoadedNode<'s, 'a, 'b>>>()
 
                 let mutable current = None

@@ -1295,7 +1295,7 @@ let main args =
     //Examples.Tessellation.run()
     //Examples.Stereo.runNew()
     //Examples.ComputeShader.run()
-    Examples.CommandTest.run()
+    Examples.LevelOfDetail.run()
     //Examples.Wobble.run()
     //Examples.GeometryComposition.run()
     //Examples.Eigi.run()
