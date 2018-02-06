@@ -124,6 +124,8 @@ module LevelOfDetail =
 
     open Aardvark.Rendering.Vulkan
 
+    let sphere = Primitives.unitBox //IndexedGeometryPrimitives.solidPhiThetaSphere (Sphere3d(V3d.Zero, 1.0)) 6 C4b.Red
+    let rand = RandomSystem()
     type GeometryTree(bounds : Box3d) =
         let children = 
             lazy (
@@ -145,9 +147,9 @@ module LevelOfDetail =
         let data =
             async {
                 do! Async.SwitchToThreadPool()
-                let sphere = Primitives.unitSphere 5
+                let color = rand.UniformC3f().ToV4d()
                 let trafo = Trafo3d.Scale(0.5 * bounds.Size) * Trafo3d.Translation(bounds.Center)
-                let uniforms = Map.ofList ["ModelTrafo", Mod.constant trafo :> IMod]
+                let uniforms = Map.ofList ["ModelTrafo", Mod.constant trafo :> IMod; "NodeColor", Mod.constant color :> IMod]
 
                 return Geometry.ofIndexedGeometry uniforms sphere
             }
@@ -182,7 +184,7 @@ module LevelOfDetail =
         let win = app.CreateSimpleRenderWindow(8)
 
         let view =
-            CameraView.lookAt (V3d(6,6,6)) V3d.Zero V3d.OOI
+            CameraView.lookAt (V3d(60,60,60)) V3d.Zero V3d.OOI
                 |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
                 |> Mod.map CameraView.viewTrafo
 
@@ -328,11 +330,11 @@ module LevelOfDetail =
 
 
 
-        let app = new VulkanApplication(true)
+        let app = new VulkanApplication(false)
         let win = app.CreateSimpleRenderWindow 1
 
         let view =
-            CameraView.lookAt (V3d(6,6,6)) V3d.Zero V3d.OOI
+            CameraView.lookAt (V3d(60,60,60)) V3d.Zero V3d.OOI
                 |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
                 |> Mod.map CameraView.viewTrafo
 
@@ -411,10 +413,111 @@ module LevelOfDetail =
                 root = Mod.constant (Some tree)
                 visible = visible
                 descend = descend
-                showInner = true
+                showInner = false
             }
 
         let loader = LodTreeLoader.create treeView
+
+        let device = app.Runtime.Device
+
+        let createLinearImage (size : V2i) (format : VkFormat) =
+            let mutable info =
+                VkImageCreateInfo(
+                    VkStructureType.ImageCreateInfo, 0n,
+                    VkImageCreateFlags.None,
+                    VkImageType.D2d,
+                    format,
+                    VkExtent3D(size.X, size.Y, 1),
+                    1u,
+                    1u,
+                    VkSampleCountFlags.D1Bit,
+                    VkImageTiling.Linear,
+                    VkImageUsageFlags.TransferSrcBit,
+                    VkSharingMode.Exclusive,
+                    0u, NativePtr.zero,
+                    VkImageLayout.Preinitialized
+                )
+
+            let mutable img = VkImage.Null
+
+            VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, &&img) |> ignore
+            let mutable reqs = VkMemoryRequirements()
+            VkRaw.vkGetImageMemoryRequirements(device.Handle, img, &&reqs)
+            let mem = device.HostMemory.Alloc(int64 reqs.alignment, int64 reqs.size)
+            VkRaw.vkBindImageMemory(device.Handle, img, mem.Memory.Handle, uint64 mem.Offset) |> ignore
+
+
+            new Aardvark.Rendering.Vulkan.Image(device, img, V3i(size,1), 1, 1, 1, TextureDimension.Texture2D, format, mem, VkImageLayout.Preinitialized)
+
+        let createOptimalImage (size : V2i) (levels : int) (format : VkFormat) =
+            let mutable info =
+                VkImageCreateInfo(
+                    VkStructureType.ImageCreateInfo, 0n,
+                    VkImageCreateFlags.None,
+                    VkImageType.D2d,
+                    format,
+                    VkExtent3D(size.X, size.Y, 1),
+                    uint32 levels,
+                    1u,
+                    VkSampleCountFlags.D1Bit,
+                    VkImageTiling.Linear,
+                    VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit,
+                    VkSharingMode.Exclusive,
+                    0u, NativePtr.zero,
+                    VkImageLayout.Undefined
+                )
+
+            let mutable img = VkImage.Null
+
+            VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, &&img) |> ignore
+            let mutable reqs = VkMemoryRequirements()
+            VkRaw.vkGetImageMemoryRequirements(device.Handle, img, &&reqs)
+            let mem = device.Alloc(reqs, true)
+            VkRaw.vkBindImageMemory(device.Handle, img, mem.Memory.Handle, uint64 mem.Offset) |> ignore
+
+
+            new Aardvark.Rendering.Vulkan.Image(device, img, V3i(size,1), levels, 1, 1, TextureDimension.Texture2D, format, mem, VkImageLayout.Undefined)
+
+        let size = V2i(128, 128)
+        let format = VkFormat.R8g8b8a8Unorm
+
+        let hostVisible = createLinearImage size format
+        hostVisible.Memory.Mapped(fun ptr ->
+            ()
+        )
+
+
+
+        hostVisible.Memory.MappedTensor4<byte>(V4i(size.X, size.Y, 1, 4), fun ptr ->
+            let pi = PixImage<byte>(Col.Format.RGBA, size)
+            pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
+                let c = c / 16L
+                if (c.X + c.Y) % 2L = 0L then
+                    C4b.White
+                else
+                    C4b.Gray
+            ) |> ignore
+
+            NativeVolume.using pi.Volume  (fun src ->
+                NativeVolume.copy src ptr.[*,*,0,*]
+            )
+        )
+
+        let img = createOptimalImage size 1 format
+
+        device.perform {
+            do! Command.Copy(hostVisible.[ImageAspect.Color, 0, 0], V3i.Zero, img.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(size, 1))
+        }
+
+        device.Delete hostVisible
+
+        let tex = Mod.constant (img :> ITexture)
+
+        //let tex = DefaultTextures.checkerboard
+
+
+
+
 //
 //        let thread = 
 //            loader |> LodTreeLoader.start {
@@ -432,7 +535,14 @@ module LevelOfDetail =
             FShade.Effect.compose [
                 toEffect DefaultSurfaces.trafo
                 toEffect (DefaultSurfaces.constantColor C4f.Red)
-                toEffect DefaultSurfaces.simpleLighting
+                toEffect (DefaultSurfaces.diffuseTexture)
+
+                toEffect <| fun (v : Effects.Vertex) ->
+                    FShade.ShaderBuilders.fragment {
+                        return v.c * FShade.Imperative.ExpressionExtensions.ShaderIO.ReadInput<V4d>(FShade.Imperative.ParameterKind.Uniform, "NodeColor")
+                    }
+
+                //toEffect DefaultSurfaces.simpleLighting
             ]
 
 
@@ -450,6 +560,7 @@ module LevelOfDetail =
                 writeBuffers        = None
                 globalUniforms      = 
                     UniformProvider.ofList [
+                        "DiffuseColorTexture", tex :> IMod
                         "ViewTrafo", view :> IMod
                         "ProjTrafo", proj :> IMod
                         "LightLocation", view |> Mod.map (fun v -> v.Backward.C3.XYZ) :> IMod
@@ -457,8 +568,8 @@ module LevelOfDetail =
                     ]
 
                 geometryMode        = IndexedGeometryMode.TriangleList
-                vertexInputTypes    = Map.ofList [ DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Normals, typeof<V3f> ]
-                perGeometryUniforms = Map.ofList [ "ModelTrafo", typeof<Trafo3d> ]
+                vertexInputTypes    = Map.ofList [ DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Normals, typeof<V3f>; DefaultSemantic.DiffuseColorCoordinates, typeof<V2f> ]
+                perGeometryUniforms = Map.ofList [ "ModelTrafo", typeof<Trafo3d>; "NodeColor", typeof<V4d> ]
             }
 
         let task = new Temp.CommandTask(device, unbox win.FramebufferSignature, RuntimeCommand.LodTree(surface, state, loader))

@@ -832,7 +832,8 @@ module VKVM =
                 update (fun h ->
                     let mutable h = h
                     let ptr = 
-                        if h.Commands = 0n then Marshal.AllocHGlobal(newCapacity)
+                        if h.Commands = 0n then 
+                            Marshal.AllocHGlobal(newCapacity)
                         else 
                             let n = Marshal.AllocHGlobal(newCapacity)
                             Marshal.Copy(h.Commands, n, length)
