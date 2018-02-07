@@ -445,6 +445,14 @@ module VkFormat =
             TextureFormat.Rg16ui, VkFormat.R16g16Uint
             TextureFormat.Rg32i, VkFormat.R32g32Sint
             TextureFormat.Rg32ui, VkFormat.R32g32Uint
+
+
+            // TODO: check
+            TextureFormat.CompressedRgbS3tcDxt1Ext, VkFormat.Bc1RgbUnormBlock
+            TextureFormat.CompressedRgbaS3tcDxt1Ext, VkFormat.Bc1RgbaUnormBlock
+            TextureFormat.CompressedRgbaS3tcDxt3Ext, VkFormat.Bc2UnormBlock
+            TextureFormat.CompressedRgbaS3tcDxt5Ext, VkFormat.Bc3UnormBlock
+
 //                TextureFormat.CompressedRgbS3tcDxt1Ext, VkFormat.
 //                TextureFormat.CompressedRgbaS3tcDxt1Ext, VkFormat.
 //                TextureFormat.CompressedRgbaS3tcDxt3Ext, VkFormat.

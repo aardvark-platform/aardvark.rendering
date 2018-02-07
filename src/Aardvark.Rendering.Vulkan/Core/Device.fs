@@ -511,6 +511,7 @@ and [<RequireQualifiedAccess>] CopyCommand =
         | BufferToBufferCmd of src : VkBuffer * dst : VkBuffer * info : VkBufferCopy
         | BufferToImageCmd of src : VkBuffer * dst : VkImage * dstLayout : VkImageLayout * info : VkBufferImageCopy * size : int64
         | ImageToBufferCmd of src : VkImage * srcLayout : VkImageLayout * dst : VkBuffer * info : VkBufferImageCopy * size : int64
+        | ImageToImageCmd of src : VkImage * srcLayout : VkImageLayout * dst : VkImage * dstLayout : VkImageLayout * info : VkImageCopy * size : int64
         | CallbackCmd of (unit -> unit)
         | ReleaseBufferCmd of buffer : VkBuffer * offset : int64 * size : int64 * dstQueueFamily : uint32
         | ReleaseImageCmd of image : VkImage * range : VkImageSubresourceRange * srcLayout : VkImageLayout * dstLayout : VkImageLayout * dstQueueFamily : uint32
@@ -642,6 +643,9 @@ and CopyEngine(family : DeviceQueueFamily) =
 
                         | CopyCommand.ImageToBufferCmd(src, srcLayout, dst, info, size) ->
                             stream.CopyImageToBuffer(src, srcLayout, dst, [| info |]) |> ignore
+
+                        | CopyCommand.ImageToImageCmd(src, srcLayout, dst, dstLayout, info, size) ->
+                            stream.CopyImage(src, srcLayout, dst, dstLayout, [| info |]) |> ignore
 
                         | CopyCommand.ReleaseBufferCmd(buffer, offset, size, dstQueue) ->
                             stream.PipelineBarrier(

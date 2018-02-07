@@ -88,6 +88,7 @@
     <Compile Include="ImageFormat.fs" />
     <Compile Include="Volumes.fs" />
     <Compile Include="TPL.fs" />
+    <Compile Include="DDS.fs" />
     <Compile Include="Program.fs" />
     <None Include="paket.references" />
   </ItemGroup>
@@ -146,6 +147,21 @@
     <ProjectReference Include="..\..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj">
       <Name>Aardvark.SceneGraph</Name>
       <Project>{b9ef48e4-7e73-4ddf-805a-d7324d907cb8}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Application\Aardvark.Application.OpenVR.Vulkan\Aardvark.Application.OpenVR.Vulkan.fsproj">
+      <Name>Aardvark.Application.OpenVR.Vulkan</Name>
+      <Project>{fb047d5e-d49a-462e-baa0-b058ce06cfc9}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Application\Aardvark.Application.OpenVR\Aardvark.Application.OpenVR.fsproj">
+      <Name>Aardvark.Application.OpenVR</Name>
+      <Project>{7aaac578-443f-4120-ba74-3732cce920e8}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Application\Aardvark.Application.Utilities\Aardvark.Application.Utilities.fsproj">
+      <Name>Aardvark.Application.Utilities</Name>
+      <Project>{3322678a-22da-4c84-b2bf-33b0d2f8c80c}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj">

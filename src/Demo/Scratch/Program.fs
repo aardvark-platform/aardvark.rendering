@@ -841,6 +841,9 @@ let test () =
 [<EntryPoint>]
 let main argv = 
  
+    Scratch.DDSTest.run()
+    Environment.Exit 0
+
     Ag.initialize()
     Aardvark.Init()
        
