@@ -2257,6 +2257,32 @@ module Image =
         let memalign = int64 reqs.alignment |> Alignment.next device.BufferImageGranularity
         let memsize = int64 reqs.size |> Alignment.next device.BufferImageGranularity
 
+
+//        let mutable resource = VkImageSubresource(VkImageAspectFlags.ColorBit, 0u, 0u)
+//        let mutable layout = VkSubresourceLayout()
+//
+//        VkRaw.vkGetImageSubresourceLayout(device.Handle, handle, &&resource, &&layout)
+//
+//
+//
+//        let blocks = int64 reqs.size / 16L
+//        let blocksX = int64 (Fun.Ceiling(float size.X / 4.0)) //(Alignment.next (int64 size.X) 4L / 4L)
+//        let blocksY = int64 (Fun.Ceiling(float size.Y / 4.0)) //(Alignment.next (int64 size.Y) 4L / 4L)
+//        let expectedBlocks = blocksX * blocksY
+//
+//        let vkX = blocks / blocksY
+//
+//        if blocksX % 2L <> 0L then
+//            Log.warn "is bad %A????" size
+//            Log.warn "%A" layout
+//
+//        if vkX <> blocksX then
+//            Log.warn "bad: %A %A %A" size blocksX vkX
+//
+
+
+
+
         if device.HostMemory.Mask &&& reqs.memoryTypeBits = 0u then
             VkRaw.vkDestroyImage(device.Handle, handle, NativePtr.zero)
             failf "cannot create linear image in host-memory"
@@ -2629,33 +2655,111 @@ module Image =
                 }
 
         image
+  
+  
+    [<AutoOpen>]
+    module private Helpers = 
+
+        type nativeptr<'a when 'a : unmanaged> with
+            member x.Item
+                with inline get(i : int) = NativePtr.get x i
+                and inline set(i : int) (v : 'a) = NativePtr.set x i v
+
+        let inline (++) (ptr : nativeptr<'a>) (i : int) =
+            NativePtr.add ptr i
+
+        module NativePtr =
+            let inline swap (l : nativeptr<'a>) (r : nativeptr<'a>) =
+                let t = NativePtr.read l
+                NativePtr.write l (NativePtr.read r)
+                NativePtr.write r t
+
+        let flipDXT1Block (data : nativeptr<byte>) =
+            NativePtr.swap (data ++ 4) (data ++ 7) 
+            NativePtr.swap (data ++ 5) (data ++ 6) 
+
+        let flipDXT5Block (block : nativeptr<byte>) =
+            // From Chromium (source was buggy)
+            let line_0_1 = uint32 block.[2] + 256u * (uint32 block.[3] + 256u * uint32 block.[4]);
+            let line_2_3 = uint32 block.[5] + 256u * (uint32 block.[6] + 256u * uint32 block.[7]);
+            // swap lines 0 and 1 in line_0_1.
+            let line_1_0 = ((line_0_1 &&& 0x000fffu) <<< 12) ||| ((line_0_1 &&& 0xfff000u) >>> 12);
+            // swap lines 2 and 3 in line_2_3.
+            let line_3_2 = ((line_2_3 &&& 0x000fffu) <<< 12) |||  ((line_2_3 &&& 0xfff000u) >>> 12);
+            block.[2] <- byte (line_3_2 &&& 0xffu)
+            block.[3] <- byte ((line_3_2 &&& 0xff00u) >>> 8)
+            block.[4] <- byte ((line_3_2 &&& 0xff0000u) >>> 16)
+            block.[5] <- byte (line_1_0 &&& 0xffu)
+            block.[6] <- byte ((line_1_0 &&& 0xff00u) >>> 8)
+            block.[7] <- byte ((line_1_0 &&& 0xff0000u) >>> 16)
+
+            flipDXT1Block (block ++ 8)
+
+        let ceilDiv (v : int64) (d : int64) =
+            if v % d = 0L then v / d
+            else 1L + v / d
     
     let ofNativeImage (image : INativeTexture) (device : Device) =
         if image.Count <> 1 then failf "NativeTexture layering not implemented"
         if image.Dimension <> TextureDimension.Texture2D then failf "NativeTexture: only 2D textures implemented atm."
 
 
+        let levels = image.MipMapLevels
         let size = image.[0,0].Size
 
         let format = VkFormat.ofTextureFormat image.Format
         let isCompressed = VkFormat.sizeInBytes format < 0
 
         let result =
-            alloc size image.MipMapLevels image.Count 1 image.Dimension format (VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit) device
+            alloc size levels image.Count 1 image.Dimension format (VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit) device
 
 
         if isCompressed then
             let levels =
-                Array.init image.MipMapLevels (fun level ->
+                Array.init levels (fun level ->
                     let srcLevel = image.[0, level]
                     let temp = allocLinear srcLevel.Size.XY format VkImageUsageFlags.TransferSrcBit device
+
+                    let mutable resource = VkImageSubresource(VkImageAspectFlags.ColorBit, 0u, 0u)
+                    let mutable layout = VkSubresourceLayout()
+                    VkRaw.vkGetImageSubresourceLayout(device.Handle, temp.Handle, &&resource, &&layout)
+                    let vkRowPitch = int64 layout.rowPitch
+
+                    // TODO: get from VkFormat
+                    let blockSize = 4 
+                    let blockBytes = 16L
+
+                    let rowBlocks = 
+                        if srcLevel.Size.X % blockSize = 0 then srcLevel.Size.X / blockSize
+                        else 1 + srcLevel.Size.X / blockSize
+                    let rowPitch = blockBytes * int64 rowBlocks
 
                     if temp.Memory.Size < srcLevel.SizeInBytes then
                         failf "NativeTexture invalid memory-size"
 
                     temp.Memory.Mapped(fun dst ->
                         srcLevel.Use(fun src ->
-                            Marshal.Copy(src, dst, srcLevel.SizeInBytes)
+//                            
+//                            if rowPitch = vkRowPitch then
+//                                Marshal.Copy(src, dst, srcLevel.SizeInBytes)
+//                            else
+                            let rows = 
+                                if srcLevel.Size.Y % blockSize = 0 then srcLevel.Size.Y / blockSize
+                                else 1 + srcLevel.Size.Y / blockSize
+
+                            let cols = 
+                                if srcLevel.Size.X % blockSize = 0 then srcLevel.Size.X / blockSize
+                                else 1 + srcLevel.Size.X / blockSize
+                                    
+                            let mutable src = src
+                            let mutable dst = dst + nativeint vkRowPitch * nativeint (rows - 1)
+                            for r in 0 .. rows - 1 do
+                                Marshal.Copy(src, dst, rowPitch)
+                                src <- src + nativeint rowPitch
+                                for x in 0 .. cols - 1 do
+                                    Helpers.flipDXT5Block <| NativePtr.ofNativeInt (dst + 16n * nativeint x)
+                                dst <- dst - nativeint vkRowPitch
+
                         )
                     )
 

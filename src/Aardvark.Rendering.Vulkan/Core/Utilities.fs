@@ -1740,7 +1740,7 @@ module VkImageLayout =
             VkImageLayout.ShaderReadOnlyOptimal,            VkPipelineStageFlags.FragmentShaderBit
             VkImageLayout.TransferSrcOptimal,               VkPipelineStageFlags.TransferBit
             VkImageLayout.TransferDstOptimal,               VkPipelineStageFlags.TransferBit
-            VkImageLayout.Preinitialized,                   VkPipelineStageFlags.None
+            VkImageLayout.Preinitialized,                   VkPipelineStageFlags.HostBit
             VkImageLayout.PresentSrcKhr,                    VkPipelineStageFlags.TransferBit
         ]
         
@@ -1754,6 +1754,6 @@ module VkImageLayout =
             VkImageLayout.ShaderReadOnlyOptimal,            VkPipelineStageFlags.VertexShaderBit
             VkImageLayout.TransferSrcOptimal,               VkPipelineStageFlags.TransferBit
             VkImageLayout.TransferDstOptimal,               VkPipelineStageFlags.TransferBit
-            VkImageLayout.Preinitialized,                   VkPipelineStageFlags.None
+            VkImageLayout.Preinitialized,                   VkPipelineStageFlags.HostBit
             VkImageLayout.PresentSrcKhr,                    VkPipelineStageFlags.TransferBit
         ]
