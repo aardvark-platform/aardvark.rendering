@@ -160,11 +160,12 @@ module DDS =
 
     type Header =
         {
-            ddsHeader       : DDSHeader
-            dxHeader        : Option<DX10Header>
-            format          : TextureFormat
-            dataRanges      : Range1l[]
-            isCompressed    : bool
+            ddsHeader           : DDSHeader
+            dxHeader            : Option<DX10Header>
+            format              : TextureFormat
+            dataRanges          : Range1l[]
+            isCompressed        : bool
+            blockSizeInBytes    : int64
         }
 
         member x.mipMapLevels = x.dataRanges.Length
@@ -329,13 +330,13 @@ module DDS =
                 match format with
                     // 8 bytes per block
                     | TextureFormat.CompressedRgbS3tcDxt1Ext | TextureFormat.CompressedRgbaS3tcDxt1Ext ->
-                        int64 blocksX * int64 blocksY * 8L
+                        8L, int64 blocksX * int64 blocksY * 8L
 
                     // 16 bytes per block      
                     | TextureFormat.CompressedRgbaS3tcDxt3Ext | TextureFormat.CompressedRgbaS3tcDxt5Ext
                     | TextureFormat.CompressedRedRgtc1 | TextureFormat.CompressedSignedRedRgtc1
                     | TextureFormat.CompressedRgRgtc2 | TextureFormat.CompressedSignedRgRgtc2 ->  
-                        int64 blocksX * int64 blocksY * 16L
+                        16L, int64 blocksX * int64 blocksY * 16L
 
                     | _ ->
                         failwith "bad compressed format"
@@ -348,7 +349,7 @@ module DDS =
 
                 let totalSize = rowSize * int64 height
 
-                totalSize
+                0L, totalSize
 
         let private ofHeader (header : DDSHeader) (dx : Option<DX10Header>) =
             let levels =
@@ -357,12 +358,13 @@ module DDS =
 
             match tryGetTextureFormat header dx with
                 | Some (isCompressed, fmt) -> 
-                    let levelSizes = Array.init levels (fun l -> getDataSize l fmt header)
+                    let blockSize, _ = getDataSize 0 fmt header
+                    let levelSizes = Array.init levels (fun l -> getDataSize l fmt header |> snd)
                     let levelOffset = Array.scan (+) 0L levelSizes |> Array.take levels
 
                     let levelRanges = Array.map2 (fun o s -> Range1l(o, o + s - 1L)) levelOffset levelSizes
 
-                    Some { ddsHeader = header; dxHeader = dx; format = fmt; dataRanges = levelRanges; isCompressed = isCompressed }
+                    Some { ddsHeader = header; dxHeader = dx; format = fmt; dataRanges = levelRanges; isCompressed = isCompressed; blockSizeInBytes = blockSize }
                 | None ->
                     None
 
@@ -449,7 +451,8 @@ module DDS =
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module Image =
-        
+       
+
         let tryOfPtr (basePtr : nativeint) (size : nativeint) =
             let mutable ptr = basePtr
             match Header.tryOfPtr(&ptr) with
@@ -503,30 +506,72 @@ module DDSTest =
     open Aardvark.Base.Rendering
     open Aardvark.Base.Incremental
 
+    module DiffuseTexture = 
+        open FShade
+
+        let diffuseSampler =
+            sampler2d {
+                texture uniform?DiffuseColorTexture
+                filter Filter.MinMagMipPoint
+                addressU WrapMode.Wrap
+                addressV WrapMode.Wrap
+            }
+
+        let diffuseTexture (v : Effects.Vertex) =
+            fragment {
+                let level : int = uniform?TexLevel
+                let texColor = diffuseSampler.SampleLevel(v.tc, float level)
+                return texColor
+            }
+
+
     let run() =
         Ag.initialize()
         Aardvark.Init()
 
-        let file = "texture.dds"
+        let file = "supa.dds"
         let img = DDS.Image.ofFile file
 
 
+        let win =
+            window {
+                backend Backend.Vulkan
+                debug true
+                display Display.Mono
+            }
+
+        let level = Mod.init 0
+        win.Keyboard.KeyDown(Keys.Space).Values.Add (fun () ->
+            transact (fun () ->
+                let n = (level.Value + 1) % img.MipMapLevels
+                level.Value <- n
+                Log.line "level: %d" n
+            )
+        )
+
+        let cubes =
+            Sg.ofList [
+            
+                Sg.box' C4b.White Box3d.Unit
+                    |> Sg.diffuseTexture (Mod.constant (img :> ITexture))
+
+                Sg.box' C4b.White Box3d.Unit
+                    |> Sg.translate 2.0 0.0 0.0
+                    |> Sg.diffuseTexture (Mod.constant (FileTexture(@"C:\Users\steinlechner\Desktop\badImageFormat.png", TextureParams.mipmapped) :> ITexture))
+            ]
+
         let sg =
-            Sg.box' C4b.White Box3d.Unit
-                |> Sg.diffuseTexture (Mod.constant (img :> ITexture))
+            cubes
+                |> Sg.uniform "TexLevel" level
                 |> Sg.shader {
                     do! DefaultSurfaces.trafo
-                    do! DefaultSurfaces.diffuseTexture
+                    do! DiffuseTexture.diffuseTexture
                 }
+                
 
+        win.Scene <- sg
+        win.Run()
 
-
-        show {
-            backend Backend.Vulkan
-            debug true
-            display Display.Mono
-            scene sg
-        }
 
 
     let runLoad() =
