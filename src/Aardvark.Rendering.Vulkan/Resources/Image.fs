@@ -1605,6 +1605,26 @@ module DeviceTensorCommandExtensions =
 
     type CopyCommand with
         
+
+        static member Copy(src : ImageSubresourceLayers, srcOffset : V3i, dst : ImageSubresourceLayers, dstOffset : V3i, size : V3i) =
+            CopyCommand.ImageToImageCmd(
+                src.Image.Handle,
+                VkImageLayout.TransferSrcOptimal,
+                dst.Image.Handle,
+                VkImageLayout.TransferDstOptimal,
+                VkImageCopy(
+                    src.VkImageSubresourceLayers,
+                    VkOffset3D(srcOffset.X, srcOffset.Y, srcOffset.Z),
+                    dst.VkImageSubresourceLayers,
+                    VkOffset3D(dstOffset.X, dstOffset.Y, dstOffset.Z),
+                    VkExtent3D(size.X, size.Y, size.Z)
+                ), 
+                0L
+            )
+
+        static member Copy(src : ImageSubresourceLayers, dst : ImageSubresourceLayers) =
+            CopyCommand.Copy(src, V3i.Zero, dst, V3i.Zero, src.Size)
+
         // upload
         static member Copy(src : TensorImage, dst : ImageSubresource, dstOffset : V3i, size : V3i) =
             CopyCommand.Copy(
@@ -2210,6 +2230,46 @@ module Image =
     open KHXDeviceGroup
     open KHRBindMemory2
 
+    let allocLinear (size : V2i) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
+        let mutable info =
+            VkImageCreateInfo(
+                VkStructureType.ImageCreateInfo, 0n,
+                VkImageCreateFlags.None,
+                VkImageType.D2d,
+                fmt,
+                VkExtent3D(uint32 size.X, uint32 size.Y, 1u),
+                1u,
+                1u,
+                VkSampleCountFlags.D1Bit,
+                VkImageTiling.Linear,
+                usage,
+                VkSharingMode.Exclusive,
+                0u, NativePtr.zero,
+                VkImageLayout.Preinitialized
+            ) 
+
+        let mutable handle = VkImage.Null
+        VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, &&handle)
+            |> check "could not create image"
+
+        let mutable reqs = VkMemoryRequirements()
+        VkRaw.vkGetImageMemoryRequirements(device.Handle, handle, &&reqs)
+        let memalign = int64 reqs.alignment |> Alignment.next device.BufferImageGranularity
+        let memsize = int64 reqs.size |> Alignment.next device.BufferImageGranularity
+
+        if device.HostMemory.Mask &&& reqs.memoryTypeBits = 0u then
+            VkRaw.vkDestroyImage(device.Handle, handle, NativePtr.zero)
+            failf "cannot create linear image in host-memory"
+
+        let ptr = device.HostMemory.Alloc(memalign, memsize)
+
+        VkRaw.vkBindImageMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
+            |> check "could not bind image memory"
+
+        let result = Image(device, handle, V3i(size, 1), 1, 1, 1, TextureDimension.Texture2D, fmt, ptr, VkImageLayout.Preinitialized)
+        
+        result
+
     let alloc (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
         if device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt) = VkFormatFeatureFlags.None then
             failf "bad image format %A" fmt
@@ -2320,7 +2380,6 @@ module Image =
     let create (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : TextureFormat) (usage : VkImageUsageFlags) (device : Device) =
         let vkfmt = VkFormat.ofTextureFormat fmt
         alloc size mipMapLevels count samples dim vkfmt usage device
-
 
     let ofPixImageMipMap (pi : PixImageMipMap) (info : TextureParams) (device : Device) =
         if pi.LevelCount <= 0 then failf "empty PixImageMipMap"
@@ -2570,7 +2629,69 @@ module Image =
                 }
 
         image
- 
+    
+    let ofNativeImage (image : INativeTexture) (device : Device) =
+        if image.Count <> 1 then failf "NativeTexture layering not implemented"
+        if image.Dimension <> TextureDimension.Texture2D then failf "NativeTexture: only 2D textures implemented atm."
+
+
+        let size = image.[0,0].Size
+
+        let format = VkFormat.ofTextureFormat image.Format
+        let isCompressed = VkFormat.sizeInBytes format < 0
+
+        let result =
+            alloc size image.MipMapLevels image.Count 1 image.Dimension format (VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit) device
+
+
+        if isCompressed then
+            let levels =
+                Array.init image.MipMapLevels (fun level ->
+                    let srcLevel = image.[0, level]
+                    let temp = allocLinear srcLevel.Size.XY format VkImageUsageFlags.TransferSrcBit device
+
+                    if temp.Memory.Size < srcLevel.SizeInBytes then
+                        failf "NativeTexture invalid memory-size"
+
+                    temp.Memory.Mapped(fun dst ->
+                        srcLevel.Use(fun src ->
+                            Marshal.Copy(src, dst, srcLevel.SizeInBytes)
+                        )
+                    )
+
+                    temp
+                )
+
+            match device.UploadMode with
+                | UploadMode.Async ->
+                    device.CopyEngine.Enqueue [
+                        yield CopyCommand.TransformLayout(result.[ImageAspect.Color], VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
+
+                        for level in 0 .. levels.Length - 1 do
+                            let src = levels.[level]
+
+                            yield CopyCommand.TransformLayout(src.[ImageAspect.Color], VkImageLayout.Preinitialized, VkImageLayout.TransferSrcOptimal)
+                            yield CopyCommand.Copy(src.[ImageAspect.Color, 0, 0], result.[ImageAspect.Color, level, 0])
+                               
+                        yield CopyCommand.Release(result.[ImageAspect.Color], VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
+                        yield CopyCommand.Callback (fun () -> levels |> Array.iter (fun i -> delete i device))
+                    ]
+
+                    result.Layout <- VkImageLayout.TransferDstOptimal
+                    device.eventually {
+                        do! Command.Acquire(result.[ImageAspect.Color], VkImageLayout.TransferDstOptimal, device.TransferFamily)
+                        do! Command.TransformLayout(result, VkImageLayout.ShaderReadOnlyOptimal)
+                    }
+
+                    result
+
+                | _ ->
+                    failf "NativeTexture sync upload not implemented"
+
+
+        else
+            failf "uncompressed NativeTexture not implemented"
+
     let ofFile (file : string) (info : TextureParams) (device : Device) =
         if not (System.IO.File.Exists file) then failf "file does not exists: %A" file
 
@@ -2636,6 +2757,8 @@ module Image =
                 }
         image
 
+
+
     let ofTexture (t : ITexture) (device : Device) =
         match t with
             | :? PixTexture2d as t ->
@@ -2654,7 +2777,7 @@ module Image =
                 device |> ofFile t.FileName t.TextureParams
 
             | :? INativeTexture as nt ->
-                failf "please implement INativeTexture upload"
+                device |> ofNativeImage nt
 
             | :? BitmapTexture as bt ->
                 failf "BitmapTexture considered obsolete"
