@@ -284,6 +284,9 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.AssembleEffect (effect : FShade.Effect, signature : IFramebufferSignature) =
             failwith ""
 
+        member x.AssembleModule (effect : FShade.Effect, signature : IFramebufferSignature) =
+            failwith ""
+
         member x.ResourceManager = failwith "not implemented"
 
         member x.CreateFramebufferSignature(a,b,c,d) = 
