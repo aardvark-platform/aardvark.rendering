@@ -517,11 +517,105 @@ module DDSTest =
                 addressV WrapMode.Wrap
             }
 
+        [<GLSLIntrinsic("fract({0})")>]
+        let fract (v : V2d) : V2d =
+            onlyInShaderCode "frac"
+
+        [<GLSLIntrinsic("smoothstep({0}, {1}, {2})")>]
+        let smooth (edge0 : float) (edge1 : float) (x : float) : 'a =
+            onlyInShaderCode "smooth"
+
+        [<ReflectedDefinition>]
+        let solveX (p : V2d) (dpx : V2d) (dpy : V2d) (nx : float) =
+            let v = dpx.Y * (nx - p.X) / (dpy.X * dpx.Y - dpx.X * dpy.Y)
+            let u = dpy.Y * (nx - p.X) / (dpx.X * dpy.Y - dpy.X * dpx.Y)
+            sqrt (u*u + v*v)
+            
+        [<ReflectedDefinition>]
+        let solveY (p : V2d) (dpx : V2d) (dpy : V2d) (ny : float) =
+            let u = dpy.X * (ny - p.Y) / (dpx.Y * dpy.X - dpx.X * dpy.Y)
+            let v = dpx.X * (ny - p.Y) / (dpx.X * dpy.Y - dpy.X * dpx.Y)
+            sqrt (u*u + v*v)
+
+
         let diffuseTexture (v : Effects.Vertex) =
             fragment {
                 let level : int = uniform?TexLevel
-                let texColor = diffuseSampler.SampleLevel(v.tc, float level)
-                return texColor
+
+                let s = diffuseSampler.GetSize level
+                let pos = v.tc * V2d s
+
+                let p = pos
+                let dpx = ddx v.tc * V2d s
+                let dpy = ddy v.tc * V2d s
+
+                let nx = ceil pos.X
+                let px = floor pos.X
+                let ny = ceil pos.Y
+                let py = floor pos.Y
+
+                
+                // p.Y + u * dpx.Y + v * dpy.Y = ny
+                //       u * dpx.X + v * dpy.X = 0
+                
+
+                //               u * dpx.Y * dpy.X + v * dpy.Y * dpy.X = dpy.X * (ny - p.Y)
+                //               u * dpx.X * dpy.Y + v * dpy.X * dpy.Y = 0
+
+
+                // u  = dpy.X * (ny - p.Y) / (dpx.Y * dpy.X - dpx.X * dpy.Y)
+                
+
+
+
+                
+                // p.Y * dpx.X + u * dpx.X * dpx.Y + v * dpx.X * dpy.Y = ny * dpx.X
+                //               u * dpx.X * dpx.Y + v * dpy.X * dpx.Y = 0
+
+                // v = dpx.X * (ny - p.Y) / (dpx.X * dpy.Y - dpy.X * dpx.Y)
+
+
+
+
+                // p.X + u * dpx.X + v * dpy.X = nx
+                //       u * dpx.Y + v * dpy.Y = 0
+
+                
+                // p.X * dpx.Y + u * dpx.X * dpx.Y + v * dpy.X * dpx.Y = nx * dpx.Y
+                //               u * dpx.X * dpx.Y + v * dpx.X * dpy.Y = 0
+                
+
+                // p.X * dpy.Y + u * dpx.X * dpy.Y + v * dpy.X * dpy.Y = nx * dpy.Y
+                //               u * dpy.X * dpx.Y + v * dpy.X * dpy.Y = 0
+
+                
+
+                // v = dpx.Y * (nx - p.X) / (dpy.X * dpx.Y - dpx.X * dpy.Y)
+                // u = dpy.Y * (nx - p.X) / (dpx.X * dpy.Y - dpy.X * dpx.Y)
+                
+                let grad = max (max (abs dpx.X) (abs dpx.Y)) (max (abs dpy.X) (abs dpy.Y))
+
+                let alpha = 
+                    if grad > 1.0 then 0.0
+                    else smooth 0.0 1.0 (1.0 - grad)
+
+
+                let dx = min (solveX p dpx dpy nx) (solveX p dpx dpy px)
+                let dy = min (solveY p dpx dpy ny) (solveY p dpx dpy py)
+                let dist = min dx dy
+                let texColor = diffuseSampler.Read(V2i pos, level)
+
+                //let dist = dist / 2.0c
+
+                let borderColor =
+                    (1.0 - alpha) * texColor + alpha * (V4d(V3d.III - texColor.XYZ, 1.0))
+
+
+                if dist < 1.0 then
+                    let f = dist //smooth 0.0 1.0 dist 
+                    return texColor * f + borderColor * (1.0 - f)
+                else
+                    return texColor
             }
 
 
@@ -529,7 +623,7 @@ module DDSTest =
         Ag.initialize()
         Aardvark.Init()
 
-        let file = "supa.dds"
+        let file = "texture.dds"
         let img = DDS.Image.ofFile file
 
 
@@ -551,13 +645,12 @@ module DDSTest =
 
         let cubes =
             Sg.ofList [
-            
                 Sg.box' C4b.White Box3d.Unit
                     |> Sg.diffuseTexture (Mod.constant (img :> ITexture))
 
                 Sg.box' C4b.White Box3d.Unit
                     |> Sg.translate 2.0 0.0 0.0
-                    |> Sg.diffuseTexture (Mod.constant (FileTexture(@"C:\Users\steinlechner\Desktop\badImageFormat.png", TextureParams.mipmapped) :> ITexture))
+                    |> Sg.diffuseTexture (Mod.constant (FileTexture(file, TextureParams.mipmapped) :> ITexture))
             ]
 
         let sg =
