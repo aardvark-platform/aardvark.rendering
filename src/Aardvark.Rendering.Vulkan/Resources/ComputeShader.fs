@@ -132,6 +132,11 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
                                 let view = device.CreateOutputImageView(r.Image, r.BaseLevel, r.LevelCount, r.BaseSlice, r.SliceCount)
                                 view, Some { new IDisposable with member x.Dispose() = device.Delete view }
 
+                            | :? ITextureRange as r ->
+                                let image = r.Texture |> unbox<Image>
+                                let view = device.CreateOutputImageView(image, r.Levels.Min, 1 + r.Levels.Max - r.Levels.Min, r.Slices.Min, 1 + r.Slices.Max - r.Slices.Min)
+                                view, Some { new IDisposable with member x.Dispose() = device.Delete view }
+
                             | _ -> 
                                 failf "invalid storage image argument: %A" value
 
@@ -149,6 +154,12 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
 
                             | :? ITexture as tex ->
                                 let image = device.CreateImage tex
+                                let view = device.CreateInputImageView(image, info, VkComponentMapping.Identity)
+                                content.[index] <- Some (view, sampler)
+                                Some { new IDisposable with member x.Dispose() = device.Delete image; device.Delete view }
+
+                            | :? ITextureRange as r ->
+                                let image = r.Texture |> unbox<Image>
                                 let view = device.CreateInputImageView(image, info, VkComponentMapping.Identity)
                                 content.[index] <- Some (view, sampler)
                                 Some { new IDisposable with member x.Dispose() = device.Delete image; device.Delete view }
@@ -333,6 +344,7 @@ module ``Compute Commands`` =
 
                         Disposable.Empty
                 }
+
         static member DispatchIndirect (b : Buffer) =
             { new Command() with
                 override x.Compatible = QueueFlags.Compute
@@ -351,6 +363,46 @@ module ``Compute Commands`` =
         static member Dispatch (sizeX : int, sizeY : int, sizeZ : int) = Command.Dispatch(V3i(sizeX, sizeY, sizeZ))
         static member Dispatch (sizeX : int, sizeY : int) = Command.Dispatch(V3i(sizeX, sizeY, 1))
          
+        static member ImageBarrier(img : ImageSubresourceRange, src : VkAccessFlags, dst : VkAccessFlags) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue cmd =
+                    
+                    let mutable imageMemoryBarrier =
+                        VkImageMemoryBarrier(
+                            VkStructureType.ImageMemoryBarrier, 0n,
+                            src, dst,
+                            VkImageLayout.General, VkImageLayout.General,
+                            VK_QUEUE_FAMILY_IGNORED,
+                            VK_QUEUE_FAMILY_IGNORED,
+                            img.Image.Handle,
+                            img.VkImageSubresourceRange
+                        )
+
+                    let srcStage =
+                        match src with
+                            | VkAccessFlags.TransferReadBit | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
+                            | _ -> VkPipelineStageFlags.ComputeShaderBit
+                            
+                    let dstStage =
+                        match dst with
+                            | VkAccessFlags.TransferReadBit | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
+                            | _ -> VkPipelineStageFlags.ComputeShaderBit
+
+                    cmd.AppendCommand()
+                    VkRaw.vkCmdPipelineBarrier(
+                        cmd.Handle, 
+                        srcStage,
+                        dstStage,
+                        VkDependencyFlags.None,
+                        0u, NativePtr.zero,
+                        0u, NativePtr.zero,
+                        1u, &&imageMemoryBarrier
+                    )
+
+                    Disposable.Empty
+            }
+
     module TextureLayout = 
         let toImageLayout =
             LookupTable.lookupTable [
@@ -369,10 +421,10 @@ module ``Compute Commands`` =
 
         let private accessFlags =
             LookupTable.lookupTable [
-                BufferAccess.ShaderRead, VkAccessFlags.ShaderReadBit
-                BufferAccess.ShaderWrite, VkAccessFlags.ShaderWriteBit
-                BufferAccess.TransferRead, VkAccessFlags.TransferReadBit
-                BufferAccess.TransferWrite, VkAccessFlags.TransferWriteBit
+                ResourceAccess.ShaderRead, VkAccessFlags.ShaderReadBit
+                ResourceAccess.ShaderWrite, VkAccessFlags.ShaderWriteBit
+                ResourceAccess.TransferRead, VkAccessFlags.TransferReadBit
+                ResourceAccess.TransferWrite, VkAccessFlags.TransferWriteBit
             ]
 
         [<AutoOpen>]
@@ -548,6 +600,34 @@ module ``Compute Commands`` =
                     let value = BitConverter.ToUInt32(pattern, 0)
                     x.FillBuffer(b.Handle, uint64 offset, uint64 size, value)
 
+                member x.ImageBarrier(img : ImageSubresourceRange, src : VkAccessFlags, dst : VkAccessFlags) =
+
+                    let srcStage =
+                        match src with
+                            | VkAccessFlags.TransferReadBit | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
+                            | _ -> VkPipelineStageFlags.ComputeShaderBit
+                            
+                    let dstStage =
+                        match dst with
+                            | VkAccessFlags.TransferReadBit | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
+                            | _ -> VkPipelineStageFlags.ComputeShaderBit
+
+                    x.PipelineBarrier(
+                        srcStage, dstStage,
+                        [||],
+                        [||],
+                        [|
+                            VkImageMemoryBarrier(
+                                VkStructureType.ImageMemoryBarrier, 0n,
+                                src, dst,
+                                VkImageLayout.General, VkImageLayout.General,
+                                VK_QUEUE_FAMILY_IGNORED,
+                                VK_QUEUE_FAMILY_IGNORED,
+                                img.Image.Handle,
+                                img.VkImageSubresourceRange
+                            )
+                        |]
+                    )
 
             type ComputeProgram(stream : VKVM.CommandStream, state : CompilerState) =
                 inherit ComputeProgram<unit>()
@@ -730,6 +810,10 @@ module ``Compute Commands`` =
                 | ComputeCommand.SyncBufferCmd(b, src, dst) ->
                     Command.Sync(unbox b, accessFlags src, accessFlags dst)
 
+                | ComputeCommand.SyncImageCmd(i, src, dst) ->
+                    let i = unbox<Image> i
+                    Command.ImageBarrier(i.[ImageAspect.Color], accessFlags src, accessFlags dst)
+
                 | ComputeCommand.SetBufferCmd(b, pattern) ->
                     Command.SetBuffer(unbox b.Buffer, int64 b.Offset, int64 b.Size, pattern)
 
@@ -813,6 +897,10 @@ module ``Compute Commands`` =
             
                     | ComputeCommand.SyncBufferCmd(b, src, dst) ->
                         stream.Sync(unbox b, accessFlags src, accessFlags dst) |> ignore
+                        
+                    | ComputeCommand.SyncImageCmd(i, src, dst) ->
+                        let i = unbox<Image> i
+                        stream.ImageBarrier(i.[ImageAspect.Color], accessFlags src, accessFlags dst) |> ignore
 
                     | ComputeCommand.SetBufferCmd(b, value) ->
                         stream.SetBuffer(unbox b.Buffer, int64 b.Offset, int64 b.Size, value) |> ignore

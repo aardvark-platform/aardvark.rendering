@@ -325,8 +325,13 @@ type private GLCompute(ctx : Context) =
                 input.Bind(boundThings)
             | ComputeCommand.DispatchCmd groups ->
                 GL.DispatchCompute(groups.X, groups.Y, groups.Z)
+
             | ComputeCommand.SyncBufferCmd _ -> 
                 GL.MemoryBarrier(MemoryBarrierFlags.BufferUpdateBarrierBit ||| MemoryBarrierFlags.ClientMappedBufferBarrierBit ||| MemoryBarrierFlags.ShaderStorageBarrierBit)
+
+             | ComputeCommand.SyncImageCmd _ -> 
+                GL.MemoryBarrier(MemoryBarrierFlags.ShaderImageAccessBarrierBit ||| MemoryBarrierFlags.ShaderStorageBarrierBit ||| MemoryBarrierFlags.TextureFetchBarrierBit ||| MemoryBarrierFlags.TextureUpdateBarrierBit)
+
             | ComputeCommand.TransformLayoutCmd _ ->
                 ()
 
