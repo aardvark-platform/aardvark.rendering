@@ -2674,30 +2674,46 @@ module Image =
                 NativePtr.write l (NativePtr.read r)
                 NativePtr.write r t
 
-        let flipDXT1Block (data : nativeptr<byte>) =
-            NativePtr.swap (data ++ 4) (data ++ 7) 
-            NativePtr.swap (data ++ 5) (data ++ 6) 
+        let mirrorCopyDXT1 (src : nativeptr<byte>) (dst : nativeptr<byte>) =
+            dst.[0] <- src.[0]
+            dst.[1] <- src.[1]
+            dst.[2] <- src.[2]
+            dst.[3] <- src.[3]
+            dst.[7] <- src.[4]
+            dst.[6] <- src.[5]
+            dst.[5] <- src.[6]
+            dst.[4] <- src.[7]
 
-        let flipDXT5Block (block : nativeptr<byte>) =
-            // From Chromium (source was buggy)
-            let line_0_1 = uint32 block.[2] + 256u * (uint32 block.[3] + 256u * uint32 block.[4]);
-            let line_2_3 = uint32 block.[5] + 256u * (uint32 block.[6] + 256u * uint32 block.[7]);
-            // swap lines 0 and 1 in line_0_1.
+        let mirrorCopyDXT3 (src : nativeptr<byte>) (dst : nativeptr<byte>) =
+            dst.[6] <- src.[0]
+            dst.[7] <- src.[1]
+            dst.[4] <- src.[2]
+            dst.[5] <- src.[3]
+            dst.[2] <- src.[4]
+            dst.[3] <- src.[5]
+            dst.[0] <- src.[6]
+            dst.[1] <- src.[7]
+            mirrorCopyDXT1 (src ++ 8) (dst ++ 8)
+
+        let mirrorCopyDXT5 (src : nativeptr<byte>) (dst : nativeptr<byte>) =
+            let line_0_1 = uint32 src.[2] + 256u * (uint32 src.[3] + 256u * uint32 src.[4]);
+            let line_2_3 = uint32 src.[5] + 256u * (uint32 src.[6] + 256u * uint32 src.[7]);
             let line_1_0 = ((line_0_1 &&& 0x000fffu) <<< 12) ||| ((line_0_1 &&& 0xfff000u) >>> 12);
-            // swap lines 2 and 3 in line_2_3.
             let line_3_2 = ((line_2_3 &&& 0x000fffu) <<< 12) |||  ((line_2_3 &&& 0xfff000u) >>> 12);
-            block.[2] <- byte (line_3_2 &&& 0xffu)
-            block.[3] <- byte ((line_3_2 &&& 0xff00u) >>> 8)
-            block.[4] <- byte ((line_3_2 &&& 0xff0000u) >>> 16)
-            block.[5] <- byte (line_1_0 &&& 0xffu)
-            block.[6] <- byte ((line_1_0 &&& 0xff00u) >>> 8)
-            block.[7] <- byte ((line_1_0 &&& 0xff0000u) >>> 16)
+            dst.[0] <- src.[0]
+            dst.[1] <- src.[1]
+            dst.[2] <- byte (line_3_2 &&& 0xffu)
+            dst.[3] <- byte ((line_3_2 &&& 0xff00u) >>> 8)
+            dst.[4] <- byte ((line_3_2 &&& 0xff0000u) >>> 16)
+            dst.[5] <- byte (line_1_0 &&& 0xffu)
+            dst.[6] <- byte ((line_1_0 &&& 0xff00u) >>> 8)
+            dst.[7] <- byte ((line_1_0 &&& 0xff0000u) >>> 16)
 
-            flipDXT1Block (block ++ 8)
+            mirrorCopyDXT1 (src ++ 8) (dst ++ 8)
 
-        let ceilDiv (v : int64) (d : int64) =
-            if v % d = 0L then v / d
-            else 1L + v / d
+        let inline ceilDiv (v : ^a) (d : ^a) : ^a =
+            if v % d = LanguagePrimitives.GenericZero then v / d
+            else LanguagePrimitives.GenericOne + v / d
     
     let ofNativeImage (image : INativeTexture) (device : Device) =
         if image.Count <> 1 then failf "NativeTexture layering not implemented"
@@ -2708,13 +2724,14 @@ module Image =
         let size = image.[0,0].Size
 
         let format = VkFormat.ofTextureFormat image.Format
-        let isCompressed = VkFormat.sizeInBytes format < 0
+        let compressionMode = TextureFormat.compressionMode image.Format
+
 
         let result =
             alloc size levels image.Count 1 image.Dimension format (VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit) device
 
 
-        if isCompressed then
+        if compressionMode <> CompressionMode.None then
             let levels =
                 Array.init levels (fun level ->
                     let srcLevel = image.[0, level]
@@ -2725,14 +2742,12 @@ module Image =
                     VkRaw.vkGetImageSubresourceLayout(device.Handle, temp.Handle, &&resource, &&layout)
                     let vkRowPitch = int64 layout.rowPitch
 
-                    // TODO: get from VkFormat
-                    let blockSize = 4 
-                    let blockBytes = 16L
+                    let blockSize = CompressionMode.blockSize compressionMode
+                    let blockBytes = CompressionMode.blockSizeInBytes compressionMode |> int64
 
-                    let rowBlocks = 
-                        if srcLevel.Size.X % blockSize = 0 then srcLevel.Size.X / blockSize
-                        else 1 + srcLevel.Size.X / blockSize
-                    let rowPitch = blockBytes * int64 rowBlocks
+                    let blocksX = ceilDiv srcLevel.Size.X blockSize.X
+                    let blocksY = ceilDiv srcLevel.Size.Y blockSize.Y
+                    let rowPitch = blockBytes * int64 blocksX
 
                     if temp.Memory.Size < srcLevel.SizeInBytes then
                         failf "NativeTexture invalid memory-size"
@@ -2743,22 +2758,38 @@ module Image =
 //                            if rowPitch = vkRowPitch then
 //                                Marshal.Copy(src, dst, srcLevel.SizeInBytes)
 //                            else
-                            let rows = 
-                                if srcLevel.Size.Y % blockSize = 0 then srcLevel.Size.Y / blockSize
-                                else 1 + srcLevel.Size.Y / blockSize
-
-                            let cols = 
-                                if srcLevel.Size.X % blockSize = 0 then srcLevel.Size.X / blockSize
-                                else 1 + srcLevel.Size.X / blockSize
-                                    
                             let mutable src = src
-                            let mutable dst = dst + nativeint vkRowPitch * nativeint (rows - 1)
-                            for r in 0 .. rows - 1 do
-                                Marshal.Copy(src, dst, rowPitch)
-                                src <- src + nativeint rowPitch
-                                for x in 0 .. cols - 1 do
-                                    Helpers.flipDXT5Block <| NativePtr.ofNativeInt (dst + 16n * nativeint x)
-                                dst <- dst - nativeint vkRowPitch
+                            let mutable dst = dst + nativeint vkRowPitch * nativeint (blocksY - 1)
+                            let blockJmp = nativeint blockBytes
+                            let dstJmp = nativeint -vkRowPitch - nativeint rowPitch
+
+                            match compressionMode with
+                                | CompressionMode.BC1 ->
+                                    for r in 0 .. blocksY - 1 do
+                                        for x in 0 .. blocksX - 1 do
+                                            Helpers.mirrorCopyDXT1 (NativePtr.ofNativeInt src) (NativePtr.ofNativeInt dst)
+                                            src <- src + blockJmp
+                                            dst <- dst + blockJmp
+                                        dst <- dst + dstJmp
+
+                                | CompressionMode.BC2 ->
+                                    for r in 0 .. blocksY - 1 do
+                                        for x in 0 .. blocksX - 1 do
+                                            Helpers.mirrorCopyDXT3 (NativePtr.ofNativeInt src) (NativePtr.ofNativeInt dst)
+                                            src <- src + blockJmp
+                                            dst <- dst + blockJmp
+                                        dst <- dst + dstJmp
+
+                                | CompressionMode.BC3 ->
+                                    for r in 0 .. blocksY - 1 do
+                                        for x in 0 .. blocksX - 1 do
+                                            Helpers.mirrorCopyDXT5 (NativePtr.ofNativeInt src) (NativePtr.ofNativeInt dst)
+                                            src <- src + blockJmp
+                                            dst <- dst + blockJmp
+                                        dst <- dst + dstJmp
+
+                                | _ ->
+                                    failf "compression %A not implemented" compressionMode
 
                         )
                     )
