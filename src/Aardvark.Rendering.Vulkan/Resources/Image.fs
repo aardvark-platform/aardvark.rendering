@@ -2438,7 +2438,7 @@ module Image =
                 mipMapLevels 1 1 
                 TextureDimension.Texture2D 
                 textureFormat 
-                (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit)
+                (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.StorageBit)
                 device
 
         let tempImages = 
@@ -2514,7 +2514,7 @@ module Image =
                 mipMapLevels 1 1 
                 TextureDimension.Texture3D 
                 textureFormat 
-                (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit)
+                (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.StorageBit)
                 device
 
         let temp = device.CreateTensorImage(pi.Size, expectedFormat, info.wantSrgb)
@@ -2597,7 +2597,7 @@ module Image =
                 mipMapLevels 6 1 
                 TextureDimension.TextureCube 
                 textureFormat 
-                (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit)
+                (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.StorageBit)
                 device
 
         let tempImages =
@@ -2728,7 +2728,7 @@ module Image =
 
 
         let result =
-            alloc size levels image.Count 1 image.Dimension format (VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit) device
+            alloc size levels image.Count 1 image.Dimension format (VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.StorageBit) device
 
 
         if compressionMode <> CompressionMode.None then
@@ -2846,7 +2846,7 @@ module Image =
                 mipMapLevels 1 1 
                 TextureDimension.Texture2D 
                 textureFormat 
-                (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit)
+                (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.StorageBit)
                 device
         
         match device.UploadMode with

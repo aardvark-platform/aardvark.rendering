@@ -300,11 +300,13 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                 VkImageUsageFlags.DepthStencilAttachmentBit ||| 
                 VkImageUsageFlags.TransferSrcBit ||| 
                 VkImageUsageFlags.TransferDstBit |||
+                VkImageUsageFlags.StorageBit |||
                 VkImageUsageFlags.SampledBit
             else 
                 VkImageUsageFlags.ColorAttachmentBit ||| 
                 VkImageUsageFlags.TransferSrcBit ||| 
                 VkImageUsageFlags.TransferDstBit |||
+                VkImageUsageFlags.StorageBit |||
                 VkImageUsageFlags.SampledBit
 
         let slices = max 1 slices
@@ -337,11 +339,13 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                 VkImageUsageFlags.DepthStencilAttachmentBit ||| 
                 VkImageUsageFlags.TransferSrcBit ||| 
                 VkImageUsageFlags.TransferDstBit |||
+                VkImageUsageFlags.StorageBit |||
                 VkImageUsageFlags.SampledBit
             else 
                 VkImageUsageFlags.ColorAttachmentBit ||| 
                 VkImageUsageFlags.TransferSrcBit ||| 
                 VkImageUsageFlags.TransferDstBit |||
+                VkImageUsageFlags.StorageBit |||
                 VkImageUsageFlags.SampledBit
 
         let img = device.CreateImage(V3i(size.X, size.Y, 1), levels, count, samples, TextureDimension.Texture2D, format, usage) 

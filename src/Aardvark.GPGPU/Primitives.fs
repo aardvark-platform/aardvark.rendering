@@ -302,13 +302,13 @@ module private Kernels =
                 dst.[dstOffset + id * dstDelta] <- (%map) id src.[srcOffset + id * srcDelta]
         }
 
-    [<Inline>]
+    [<ReflectedDefinition; Inline>]
     let mk2d (dim : int) (x : int) (y : int) =
         if dim = 0 then V2i(x,y)
         else V2i(y,x)
 
-    [<LocalSize(X = halfScanSize)>]
-    let scanImageKernel2d (dim : int) (add : Expr<V4d -> V4d -> V4d>) (outputImage : Image2d<Formats.r32f>) =
+    [<LocalSize(X = halfScanSize, Y = 1)>]
+    let scanImageKernel2dTexture (add : Expr<V4d -> V4d -> V4d>) (dim : int) (outputImage : Image2d<Formats.rgba32f>) =
         compute {
             let mem : V4d[] = allocateShared scanSize
             let gid = getGlobalId().X
@@ -316,57 +316,148 @@ module private Kernels =
             let inputSize = inputImage2d.Size.[dim]
             let y = getGlobalId().Y
 
-            if y < inputImage2d.Size.[1 - dim] then
-                let gid0 = gid
-                let lid0 =  getLocalId().X
+            let gid0 = gid
+            let lid0 =  getLocalId().X
 
-                let lai = lid0
-                let lbi = lid0 + halfScanSize
-                let ai  = 2 * gid0 - lid0 
-                let bi  = ai + halfScanSize 
+            let lai = lid0
+            let lbi = lid0 + halfScanSize
+            let ai  = 2 * gid0 - lid0 
+            let bi  = ai + halfScanSize 
 
-                if ai < inputSize then mem.[lai] <- inputImage2d.[mk2d dim ai y]
-                if bi < inputSize then mem.[lbi] <- inputImage2d.[mk2d dim bi y]
+            if ai < inputSize then mem.[lai] <- inputImage2d.[mk2d dim ai y]
+            if bi < inputSize then mem.[lbi] <- inputImage2d.[mk2d dim bi y]
 
-                let lgid = 2 * gid0
-                let rgid = lgid + 1
-                let llid = 2 * lid0
-                let rlid = llid + 1
+            let lgid = 2 * gid0
+            let rgid = lgid + 1
+            let llid = 2 * lid0
+            let rlid = llid + 1
 
-                let mutable offset = 1
-                let mutable d = halfScanSize
-                while d > 0 do
-                    barrier()
-                    if lid0 < d then
-                        let ai = offset * (llid + 1) - 1
-                        let bi = offset * (rlid + 1) - 1
-                        mem.[bi] <- (%add) mem.[ai] mem.[bi]
-                    d <- d >>> 1
-                    offset <- offset <<< 1
-
-                d <- 2
-                offset <- offset >>> 1
-
-                while d < scanSize do
-                    offset <- offset >>> 1
-                    barrier()
-                    if lid0 < d - 1 then
-                        let ai = offset*(llid + 2) - 1
-                        let bi = offset*(rlid + 2) - 1
-
-                        mem.[bi] <- (%add) mem.[bi] mem.[ai]
-
-                    d <- d <<< 1
+            let mutable offset = 1
+            let mutable d = halfScanSize
+            while d > 0 do
                 barrier()
+                if lid0 < d then
+                    let ai = offset * (llid + 1) - 1
+                    let bi = offset * (rlid + 1) - 1
+                    mem.[bi] <- (%add) mem.[ai] mem.[bi]
+                d <- d >>> 1
+                offset <- offset <<< 1
 
-                if lgid < inputSize then
-                    outputImage.[mk2d dim lgid y] <- mem.[llid]
-                    //(%write) outputImage lgid y mem.[llid]
+            d <- 2
+            offset <- offset >>> 1
 
-                if rgid < inputSize then
-                    outputImage.[mk2d dim rgid y] <- mem.[rlid]
-                    //(%write) outputImage rgid y mem.[rlid]
+            while d < scanSize do
+                offset <- offset >>> 1
+                barrier()
+                if lid0 < d - 1 then
+                    let ai = offset*(llid + 2) - 1
+                    let bi = offset*(rlid + 2) - 1
+
+                    mem.[bi] <- (%add) mem.[bi] mem.[ai]
+
+                d <- d <<< 1
+            barrier()
+
+            if lgid < inputSize then
+                outputImage.[mk2d dim lgid y] <- mem.[llid]
+                //(%write) outputImage lgid y mem.[llid]
+
+            if rgid < inputSize then
+                outputImage.[mk2d dim rgid y] <- mem.[rlid]
+                //(%write) outputImage rgid y mem.[rlid]
         }
+
+
+    [<LocalSize(X = halfScanSize, Y = 1)>]
+    let scanImageKernel2d (add : Expr<V4d -> V4d -> V4d>) (dimension : int) (inOutImage : Image2d<Formats.rgba32f>) =
+        compute {
+            let Offset : int = uniform?Arguments?Offset
+            let Delta : int = uniform?Arguments?Delta
+            let Size : int = uniform?Arguments?Size
+            
+            let mem : V4d[] = allocateShared scanSize
+            let gid = getGlobalId().X
+            let group = getWorkGroupId().X
+            //let inputSize = inOutImage.Size.[dimension]
+            let y = getGlobalId().Y
+
+            let gid0 = gid
+            let lid0 =  getLocalId().X
+
+            let lai = lid0
+            let lbi = lid0 + halfScanSize
+            let ai  = 2 * gid0 - lid0 
+            let bi  = ai + halfScanSize 
+
+            if ai < Size then mem.[lai] <- inOutImage.[mk2d dimension (Offset + ai * Delta) y]
+            if bi < Size then mem.[lbi] <- inOutImage.[mk2d dimension (Offset + bi * Delta) y]
+
+            let lgid = 2 * gid0
+            let rgid = lgid + 1
+            let llid = 2 * lid0
+            let rlid = llid + 1
+
+            let mutable offset = 1
+            let mutable d = halfScanSize
+            while d > 0 do
+                barrier()
+                if lid0 < d then
+                    let ai = offset * (llid + 1) - 1
+                    let bi = offset * (rlid + 1) - 1
+                    mem.[bi] <- (%add) mem.[ai] mem.[bi]
+                d <- d >>> 1
+                offset <- offset <<< 1
+
+            d <- 2
+            offset <- offset >>> 1
+
+            while d < scanSize do
+                offset <- offset >>> 1
+                barrier()
+                if lid0 < d - 1 then
+                    let ai = offset*(llid + 2) - 1
+                    let bi = offset*(rlid + 2) - 1
+
+                    mem.[bi] <- (%add) mem.[bi] mem.[ai]
+
+                d <- d <<< 1
+            barrier()
+
+            if lgid < Size then
+                inOutImage.[mk2d dimension (Offset + lgid * Delta) y] <- mem.[llid]
+                //(%write) outputImage lgid y mem.[llid]
+
+            if rgid < Size then
+                inOutImage.[mk2d dimension (Offset + rgid * Delta) y] <- mem.[rlid]
+                //(%write) outputImage rgid y mem.[rlid]
+        }
+
+
+    [<LocalSize(X = halfScanSize)>]
+    let fixupImageKernel2d (add : Expr<V4d -> V4d -> V4d>) (dimension : int) (inOutImage : Image2d<Formats.rgba32f>) =
+        compute {
+            let inputOffset : int = uniform?Arguments?inputOffset
+            let inputDelta : int = uniform?Arguments?inputDelta
+            let outputOffset : int = uniform?Arguments?outputOffset
+            let outputDelta : int = uniform?Arguments?outputDelta
+            let groupSize : int = uniform?Arguments?groupSize
+            let count : int = uniform?Arguments?count
+
+            let y = getGlobalId().Y
+            let id = getGlobalId().X + groupSize
+
+            if id < count then
+                let block = id / groupSize - 1
+              
+                let iid = inputOffset + block * inputDelta
+                let oid = outputOffset + id * outputDelta
+
+                if id % groupSize <> groupSize - 1 then
+                    let oc = mk2d dimension oid y
+                    inOutImage.[oc] <- (%add) inOutImage.[mk2d dimension iid y] inOutImage.[oc]
+
+        }
+
 
 
 
@@ -885,43 +976,147 @@ type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d
         if v % d = 0 then v / d
         else 1 + v / d
 
-    let scanX   = runtime.CreateComputeShader (Kernels.scanImageKernel2d 0 add)
-    let scanY   = runtime.CreateComputeShader (Kernels.scanImageKernel2d 1 add)
+    let scanTexture = runtime.CreateComputeShader (Kernels.scanImageKernel2dTexture add)
+    let scan = runtime.CreateComputeShader (Kernels.scanImageKernel2d add)
+    let fixup = runtime.CreateComputeShader(Kernels.fixupImageKernel2d add)
 
     let release() =
-        runtime.DeleteComputeShader scanX
-        runtime.DeleteComputeShader scanY
+        runtime.DeleteComputeShader scanTexture
+        runtime.DeleteComputeShader scan
 
-    let rec build (args : HashSet<IComputeShaderInputBinding>) (input : ITexture) (output : ITextureSubResource) =
-        let size = output.Size
-        if size.X <= Kernels.scanSize && size.Y <= Kernels.scanSize then
-            
-            let xInput = runtime.NewInputBinding(scanX)
-            xInput.["InputTexture"] <- input
-            xInput.["outputImage"] <- output
-            xInput.Flush()
+    let rec buildX (args : HashSet<IComputeShaderInputBinding>) (image : ITextureSubResource) (offset : int) (delta : int) (count : int) =
+        
+        if count <= 1 then
+            []
+        else
+            let input = runtime.NewInputBinding(scan)
+            input.["inOutImage"] <- image
+            input.["dimension"] <- 0
+            input.["Offset"] <- offset
+            input.["Size"] <- count
+            input.["Delta"] <- delta
+            input.Flush()
 
-            let yInput = runtime.NewInputBinding(scanX)
-            xInput.["InputTexture"] <- input
-            xInput.["outputImage"] <- output
-            xInput.Flush()
+            args.Add input |> ignore
 
             [
-                ComputeCommand.Bind scanX
-                ComputeCommand.SetInput xInput
-                ComputeCommand.Dispatch(V2i(ceilDiv size.X Kernels.scanSize, size.Y))
+                yield ComputeCommand.Sync(image.Texture)
+
+                yield ComputeCommand.Bind scan
+                yield ComputeCommand.SetInput input
+                yield ComputeCommand.Dispatch(V2i(ceilDiv count Kernels.scanSize, image.Size.Y))
+
+                let innerOffset = offset + (Kernels.scanSize - 1) * delta
+                let innerDelta = delta * Kernels.scanSize
+                let innerCount = 1 + count / Kernels.scanSize
+                yield! buildX args image innerOffset innerDelta innerCount // was y
+
+
+                if innerCount > 1 then 
+                    let args1 = runtime.NewInputBinding fixup
+                    args1.["inOutImage"] <- image
+                    args1.["dimension"] <- 0
+                    args1.["inputOffset"] <- innerOffset
+                    args1.["inputDelta"] <- innerDelta
+                    args1.["outputOffset"] <- offset
+                    args1.["outputDelta"] <- delta
+                    args1.["count"] <- count
+                    args1.["groupSize"] <- Kernels.scanSize
+                    args1.Flush()
+                    args.Add args1 |> ignore
+
+                    if count > Kernels.scanSize then
+                        // fix the shit
+                        yield ComputeCommand.Sync(image.Texture)
+                        yield ComputeCommand.Bind fixup
+                        yield ComputeCommand.SetInput args1
+                        yield ComputeCommand.Dispatch(V2i(ceilDiv (count - Kernels.scanSize) Kernels.halfScanSize, image.Size.Y))
+
+                    ()
+
+            ]
+
+
+    let rec buildY (args : HashSet<IComputeShaderInputBinding>) (image : ITextureSubResource) (offset : int) (delta : int) (count : int) =
+        
+        if count <= 1 then
+            []
+        else
+            let input = runtime.NewInputBinding(scan)
+            input.["inOutImage"] <- image
+            input.["dimension"] <- 1
+            input.["Offset"] <- offset
+            input.["Size"] <- count
+            input.["Delta"] <- delta
+            input.Flush()
+
+            args.Add input |> ignore
+
+            [
+                yield ComputeCommand.Sync(image.Texture)
+
+                yield ComputeCommand.Bind scan
+                yield ComputeCommand.SetInput input
+                yield ComputeCommand.Dispatch(V2i(ceilDiv count Kernels.scanSize, image.Size.X))
+
+                let innerOffset = offset + (Kernels.scanSize - 1)  * delta
+                let innerDelta = delta * Kernels.scanSize
+                let innerCount = 1 + count / Kernels.scanSize
+                yield! buildY args image innerOffset innerDelta innerCount
+
+                if innerCount > 1 then
+                    let args1 = runtime.NewInputBinding fixup
+                    args1.["inOutImage"] <- image
+                    args1.["dimension"] <- 1
+                    args1.["inputOffset"] <- innerOffset
+                    args1.["inputDelta"] <- innerDelta
+                    args1.["outputOffset"] <- offset
+                    args1.["outputDelta"] <- delta
+                    args1.["count"] <- count
+                    args1.["groupSize"] <- Kernels.scanSize
+                    args1.Flush()
+                    args.Add args1 |> ignore
+
+                    if count > Kernels.scanSize then
+                        // fix the shit
+                        yield ComputeCommand.Sync(image.Texture)
+                        yield ComputeCommand.Bind fixup
+                        yield ComputeCommand.SetInput args1
+                        yield ComputeCommand.Dispatch(V2i(ceilDiv (count - Kernels.scanSize) Kernels.halfScanSize, image.Size.X))
 
             ]
 
 
 
-        else
-            failwith ""
+
+        
+
+    let rec build (args : HashSet<IComputeShaderInputBinding>) (input : ITextureSubResource) (output : ITextureSubResource) =
+        let xInput = runtime.NewInputBinding(scanTexture)
+        xInput.["InputTexture"] <- input.Texture
+        xInput.["outputImage"] <- output
+        xInput.["dim"] <- 0
+        xInput.Flush()
+
+        [
+            yield ComputeCommand.TransformLayout(input.Texture, TextureLayout.ShaderRead)
+            yield ComputeCommand.TransformLayout(output.Texture, TextureLayout.ShaderReadWrite)
+
+            yield ComputeCommand.Bind scanTexture
+            yield ComputeCommand.SetInput xInput
+            yield ComputeCommand.Dispatch(V2i(ceilDiv input.Size.X Kernels.scanSize, input.Size.Y))
+
+            yield ComputeCommand.Sync(output.Texture)
+
+            let innerCount = 1 + input.Size.X / Kernels.scanSize
+            yield! buildX args output (Kernels.scanSize  - 1) Kernels.scanSize innerCount
+            yield! buildY args output 0 1 input.Size.Y
+        ]
 
 
 
         
-    member x.Compile (input : ITexture, output : ITextureSubResource) =
+    member x.Compile (input : ITextureSubResource, output : ITextureSubResource) =
         let args = System.Collections.Generic.HashSet<IComputeShaderInputBinding>()
         let cmd = build args input output
         let prog = runtime.Compile cmd
@@ -932,7 +1127,7 @@ type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d
         )
         prog
         
-    member x.Run (input : ITexture, output : ITextureSubResource) =
+    member x.Run (input : ITextureSubResource, output : ITextureSubResource) =
         let args = System.Collections.Generic.HashSet<IComputeShaderInputBinding>()
         let cmd = build args input output
         runtime.Run cmd
@@ -1005,7 +1200,7 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
         let scanner = getScanner add
         scanner.Compile(input, output)
         
-    member x.CompileScan(add : Expr<V4d -> V4d -> V4d>, input : ITexture, output : ITextureSubResource) =
+    member x.CompileScan(add : Expr<V4d -> V4d -> V4d>, input : ITextureSubResource, output : ITextureSubResource) =
         let scanner = getImageScanner2d add
         scanner.Compile(input, output)
 
@@ -1029,7 +1224,7 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
         let scanner = getScanner add
         scanner.Run(input, output)
         
-    member x.Scan(add : Expr<V4d -> V4d -> V4d>, input : ITexture, output : ITextureSubResource) =
+    member x.Scan(add : Expr<V4d -> V4d -> V4d>, input : ITextureSubResource, output : ITextureSubResource) =
         let scanner = getImageScanner2d add
         scanner.Run(input, output)
 
