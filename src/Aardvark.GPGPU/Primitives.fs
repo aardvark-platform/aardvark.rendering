@@ -302,6 +302,74 @@ module private Kernels =
                 dst.[dstOffset + id * dstDelta] <- (%map) id src.[srcOffset + id * srcDelta]
         }
 
+    [<Inline>]
+    let mk2d (dim : int) (x : int) (y : int) =
+        if dim = 0 then V2i(x,y)
+        else V2i(y,x)
+
+    [<LocalSize(X = halfScanSize)>]
+    let scanImageKernel2d (dim : int) (add : Expr<V4d -> V4d -> V4d>) (outputImage : Image2d<Formats.r32f>) =
+        compute {
+            let mem : V4d[] = allocateShared scanSize
+            let gid = getGlobalId().X
+            let group = getWorkGroupId().X
+            let inputSize = inputImage2d.Size.[dim]
+            let y = getGlobalId().Y
+
+            if y < inputImage2d.Size.[1 - dim] then
+                let gid0 = gid
+                let lid0 =  getLocalId().X
+
+                let lai = lid0
+                let lbi = lid0 + halfScanSize
+                let ai  = 2 * gid0 - lid0 
+                let bi  = ai + halfScanSize 
+
+                if ai < inputSize then mem.[lai] <- inputImage2d.[mk2d dim ai y]
+                if bi < inputSize then mem.[lbi] <- inputImage2d.[mk2d dim bi y]
+
+                let lgid = 2 * gid0
+                let rgid = lgid + 1
+                let llid = 2 * lid0
+                let rlid = llid + 1
+
+                let mutable offset = 1
+                let mutable d = halfScanSize
+                while d > 0 do
+                    barrier()
+                    if lid0 < d then
+                        let ai = offset * (llid + 1) - 1
+                        let bi = offset * (rlid + 1) - 1
+                        mem.[bi] <- (%add) mem.[ai] mem.[bi]
+                    d <- d >>> 1
+                    offset <- offset <<< 1
+
+                d <- 2
+                offset <- offset >>> 1
+
+                while d < scanSize do
+                    offset <- offset >>> 1
+                    barrier()
+                    if lid0 < d - 1 then
+                        let ai = offset*(llid + 2) - 1
+                        let bi = offset*(rlid + 2) - 1
+
+                        mem.[bi] <- (%add) mem.[bi] mem.[ai]
+
+                    d <- d <<< 1
+                barrier()
+
+                if lgid < inputSize then
+                    outputImage.[mk2d dim lgid y] <- mem.[llid]
+                    //(%write) outputImage lgid y mem.[llid]
+
+                if rgid < inputSize then
+                    outputImage.[mk2d dim rgid y] <- mem.[rlid]
+                    //(%write) outputImage rgid y mem.[rlid]
+        }
+
+
+
 
 type private Map<'a, 'b when 'a : unmanaged and 'b : unmanaged>(runtime : IComputeRuntime, map : Expr<int -> 'a -> 'b>) =
     
@@ -811,6 +879,72 @@ type private Add<'a>() =
 
     static member Expr = add
 
+type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d>) =
+
+    static let ceilDiv (v : int) (d : int) =
+        if v % d = 0 then v / d
+        else 1 + v / d
+
+    let scanX   = runtime.CreateComputeShader (Kernels.scanImageKernel2d 0 add)
+    let scanY   = runtime.CreateComputeShader (Kernels.scanImageKernel2d 1 add)
+
+    let release() =
+        runtime.DeleteComputeShader scanX
+        runtime.DeleteComputeShader scanY
+
+    let rec build (args : HashSet<IComputeShaderInputBinding>) (input : ITexture) (output : ITextureSubResource) =
+        let size = output.Size
+        if size.X <= Kernels.scanSize && size.Y <= Kernels.scanSize then
+            
+            let xInput = runtime.NewInputBinding(scanX)
+            xInput.["InputTexture"] <- input
+            xInput.["outputImage"] <- output
+            xInput.Flush()
+
+            let yInput = runtime.NewInputBinding(scanX)
+            xInput.["InputTexture"] <- input
+            xInput.["outputImage"] <- output
+            xInput.Flush()
+
+            [
+                ComputeCommand.Bind scanX
+                ComputeCommand.SetInput xInput
+                ComputeCommand.Dispatch(V2i(ceilDiv size.X Kernels.scanSize, size.Y))
+
+            ]
+
+
+
+        else
+            failwith ""
+
+
+
+        
+    member x.Compile (input : ITexture, output : ITextureSubResource) =
+        let args = System.Collections.Generic.HashSet<IComputeShaderInputBinding>()
+        let cmd = build args input output
+        let prog = runtime.Compile cmd
+        
+        prog.OnDispose(fun () ->
+            for a in args do a.Dispose()
+            args.Clear()
+        )
+        prog
+        
+    member x.Run (input : ITexture, output : ITextureSubResource) =
+        let args = System.Collections.Generic.HashSet<IComputeShaderInputBinding>()
+        let cmd = build args input output
+        runtime.Run cmd
+        for a in args do a.Dispose()
+        args.Clear()
+  
+    member x.Dispose() =
+        release()
+
+    
+
+
 [<AbstractClass>]
 type private Existential<'r>() =
     static let visitMeth = typeof<Existential<'r>>.GetMethod "Visit"
@@ -833,6 +967,9 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
     let reduceCache = ExpressionCache()
     let mapReduceCache = ExpressionCache()
     let mapReduceImageCache = ExpressionCache()
+    
+    let scanImage2dCache = ExpressionCache()
+
 
 
     let getMapper (map : Expr<int -> 'a -> 'b>) = mapCache.GetOrCreate(map, fun map -> new Map<'a, 'b>(runtime, map))
@@ -843,6 +980,8 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
             let reducer = getReducer add
             new MapReduce<'a, 'b>(runtime, reducer, map, add)
         )
+        
+    let getImageScanner2d (add : Expr<V4d -> V4d -> V4d>) = scanImage2dCache.GetOrCreate(add, fun add -> new ScanImage2d(runtime, add))
 
     let getImageMapReducer (map : Expr<V3i -> V4f -> 'b>) (add : Expr<'b -> 'b -> 'b>) =
         mapReduceCache.GetOrCreate(map, add, fun map add -> 
@@ -865,6 +1004,10 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
     member x.CompileScan(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, output : IBufferVector<'a>) =
         let scanner = getScanner add
         scanner.Compile(input, output)
+        
+    member x.CompileScan(add : Expr<V4d -> V4d -> V4d>, input : ITexture, output : ITextureSubResource) =
+        let scanner = getImageScanner2d add
+        scanner.Compile(input, output)
 
     member x.CompileFold(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>) =
         let reducer = getReducer add
@@ -884,6 +1027,10 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
 
     member x.Scan(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, output : IBufferVector<'a>) =
         let scanner = getScanner add
+        scanner.Run(input, output)
+        
+    member x.Scan(add : Expr<V4d -> V4d -> V4d>, input : ITexture, output : ITextureSubResource) =
+        let scanner = getImageScanner2d add
         scanner.Run(input, output)
 
     member x.Fold(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>) =
