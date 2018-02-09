@@ -231,6 +231,8 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
                         Disposable.Empty
                 }
 
+    let missingNames = HashSet (Map.toSeq references |> Seq.map fst)
+
     member private x.AsString =
         references 
             |> Map.toSeq 
@@ -289,7 +291,9 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
     member x.Set(ref : BindingReference, value : obj) = write ref value
     member x.Set(name : string, value : obj) = 
         match Map.tryFind name references with
-            | Some refs -> for r in refs do write r value
+            | Some refs -> 
+                missingNames.Remove name |> ignore
+                for r in refs do write r value
             | None -> () //failf "invalid reference %A" name
 
     member x.Item
@@ -298,8 +302,12 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
     member x.Item
         with set (ref : BindingReference) (value : obj) = x.Set(ref, value)
 
-    member x.Flush() = flush()
-    member x.Bind = bind
+    member x.Flush() =
+        if missingNames.Count > 0 then
+            Log.warn "[Vulkan] missing inputs for compute shader: %A" (Seq.toList missingNames) 
+        flush()
+    member x.Bind = 
+        bind
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

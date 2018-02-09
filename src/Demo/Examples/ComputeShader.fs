@@ -208,47 +208,56 @@ module ComputeShader =
         let par = ParallelPrimitives(runtime)
 
         let checkerboardPix = 
-            let pi = PixImage<byte>(Col.Format.RGBA, V2i(256,256))
-            pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
-                let c = c / 16L
-                if (c.X + c.Y) % 2L = 0L then
-                    C4b.White
+            let pi = PixVolume<byte>(Col.Format.RGBA, V3i(64,64,64))
+            pi.GetVolume<C4b>().SetByCoord(fun (c : V3l) ->
+                let c = c / 8L
+                if (c.X + c.Y + c.Z) % 2L = 0L then
+                    if c.X = 0L && c.Y = 0L && c.Z = 0L then
+                        C4b.Red
+                    else
+                        C4b.White
                 else
                     C4b.Black
             ) |> ignore
             pi
 
-        let checkerboard = 
-            PixTexture2d(PixImageMipMap [| checkerboardPix :> PixImage |], true) :> ITexture
+        //checkerboardPix.SaveAsImage @"input.png"
+
+        let checkerboard =
+            PixTexture3d(checkerboardPix, TextureParams.empty)  :> ITexture
+            //PixTexture2d( [| checkerboardPix :> PixImage |], false) :> ITexture
 
         let img = runtime.PrepareTexture(checkerboard)
-        let dst = runtime.CreateTexture(img.Size.XY, TextureFormat.Rgba32f, 1, 1)
-
+        let dst = runtime.CreateTexture(img.Size, TextureDimension.Texture3D, TextureFormat.Rgba32f, 1, 1, 1)
 
         par.Scan(<@ (+) @>, img.[TextureAspect.Color, 0, 0], dst.[TextureAspect.Color, 0, 0])
 
         
-        let img = runtime.Download(dst) |> unbox<PixImage<float32>>
-        let mat = img.GetMatrix<C4f>()
-        let mutable maxColor = V4f.Zero
-
-
-        mat.ForeachIndex(fun (i : int64) ->
-            let c = mat.[i].ToV4f()
-            maxColor <- V4f.Max(maxColor, c)
-        ) |> ignore
-
-
-        mat.SetByIndex (fun (i : int64) ->
-            let c = mat.[i].ToV4f()
-            (c / maxColor).ToC4f()
-        ) |> ignore
-
-
-
-
-        img.ToPixImage<byte>(Col.Format.RGB).SaveAsImage @"sepp.png"
-
+//
+//        
+//
+//
+//        let img = runtime.Download(dst) |> unbox<PixImage<float32>>
+//        let mat = img.GetMatrix<C4f>()
+//
+//        let diffImg = PixImage<byte>(Col.Format.RGBA, img.Size)
+//        let diffMat = diffImg.GetMatrix<C4b>()
+//
+//
+//        Log.line "diff oida"
+//        diffMat.SetByCoord(fun (c : V2l) ->
+//            let x = c.X
+//            let y = c.Y
+//            let px  = if x > 0L then mat.[x - 1L, y].ToV4f() else V4f.Zero
+//            let py  = if y < mat.Size.Y - 1L then mat.[x, y + 1L].ToV4f() else V4f.Zero
+//            let pxy = if x > 0L && y < mat.Size.Y - 1L then mat.[x - 1L, y + 1L].ToV4f() else V4f.Zero
+//            let s   = mat.[x, y].ToV4f()
+//
+//            let v = s - px - py + pxy
+//
+//            v.ToC4f().ToC4b()
+//        ) |> ignore
+//        diffImg.SaveAsImage @"sepp.png"
 
 
         Environment.Exit 0
