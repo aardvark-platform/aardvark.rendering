@@ -63,17 +63,17 @@ let parallelFilter<'a when 'a : unmanaged> (par : ParallelPrimitives) (arr : 'a[
     runtime.Run [
         // create bits for all entries: (0: false, 1: true)
         ComputeCommand.Execute mapper
-        ComputeCommand.Sync(bits.Buffer,BufferAccess.ShaderWrite,BufferAccess.ShaderRead)
+        ComputeCommand.Sync(bits.Buffer,ResourceAccess.ShaderWrite,ResourceAccess.ShaderRead)
 
         // download the bits (just for showing the values)
         #if DEBUG
         ComputeCommand.Copy(bits, bitsCPU)
-        ComputeCommand.Sync(bits.Buffer,BufferAccess.TransferRead,BufferAccess.ShaderRead)
+        ComputeCommand.Sync(bits.Buffer,ResourceAccess.TransferRead,ResourceAccess.ShaderRead)
         #endif 
 
         // perform an inclusive scan on the bits (since the bits are no longer needed we can use the identical buffer as output here)
         ComputeCommand.Execute scanner
-        ComputeCommand.Sync(bits.Buffer,BufferAccess.ShaderWrite,BufferAccess.ShaderRead)
+        ComputeCommand.Sync(bits.Buffer,ResourceAccess.ShaderWrite,ResourceAccess.ShaderRead)
 
         // download the bits (just for showing the values)
         #if DEBUG

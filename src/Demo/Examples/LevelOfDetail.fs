@@ -19,6 +19,9 @@ open Aardvark.SceneGraph.IO
 open System.Threading
 open System.Threading.Tasks
 
+#nowarn "9"
+#nowarn "51"
+
 
 module LevelOfDetail =
 
