@@ -127,14 +127,14 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
         else
             debugCallbackInstalled <- true
             x.Use (fun () ->
-                GL.SetupDebugOutput()
-                if enable then 
+                
+                let works = GL.SetupDebugOutput()
+                if enable && works then 
                     GL.Enable(EnableCap.DebugOutput)
-                    GL.Enable(EnableCap.DebugOutputSynchronous)
+                    // GL.Enable(EnableCap.DebugOutputSynchronous)
                     
                     let str = "debug output enabled"
                     GL.DebugMessageInsert(DebugSourceExternal.DebugSourceApplication, DebugType.DebugTypeOther, 1234, DebugSeverity.DebugSeverityLow, str.Length, str)
-
             )
 
     member x.AttachDebugOutputIfNeeded() =
@@ -176,6 +176,7 @@ module ContextHandle =
     
         
         let handle = new ContextHandle(context, window.WindowInfo)
+
         if enableDebug then
             handle.AttachDebugOutputIfNeeded(true)
 
