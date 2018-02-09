@@ -235,9 +235,7 @@ module private Kernels =
                 outputData.[group] <- mem.[0]
 
         }
-
-
-      
+ 
     let inputImage3d =
         sampler3d {
             texture uniform?InputTexture
@@ -373,9 +371,6 @@ module private Kernels =
                 //(%write) outputImage rgid y mem.[rlid]
         }
 
-
-
-
     [<LocalSize(X = halfScanSize, Y = 1, Z = 1)>]
     let scan3dKernel (add : Expr<'a -> 'a -> 'a>) (read : Expr<V3i -> 'a>) (write : Expr<V3i -> 'a -> unit>) (dimension : int) =
         compute {
@@ -439,7 +434,7 @@ module private Kernels =
         }
 
     [<LocalSize(X = halfScanSize)>]
-    let fixup3dKernel (add : Expr<'a -> 'a -> 'a>) (dimension : int) (readInput : Expr<V3i -> 'a>) (addToOutput : Expr<V3i -> 'a -> unit>) =
+    let fixup3dKernel (add : Expr<'a -> 'a -> 'a>) (readInput : Expr<V3i -> 'a>) (addToOutput : Expr<V3i -> 'a -> unit>) (dimension : int) =
         compute {
             let inputOffset : int = uniform?Arguments?inputOffset
             let inputDelta : int = uniform?Arguments?inputDelta
@@ -557,6 +552,36 @@ module private Kernels =
         }
 
 
+module private ImageIO =
+    open FShade
+
+    let inputSampler2d =
+        sampler2d {
+            texture uniform?inputTexture
+            filter Filter.MinMagMipPoint
+        }
+        
+    let inputSampler3d =
+        sampler3d {
+            texture uniform?inputTexture
+            filter Filter.MinMagMipPoint
+        }
+
+    type UniformScope with
+        member x.ImageHeight : int = x?Arguments?imageHeight
+        member x.Image2d : Image2d<Formats.rgba32f> = x?inOutImage
+        member x.Image3d : Image3d<Formats.rgba32f> = x?inOutImage
+
+
+    let writeImage2d                                    = <@ fun (c : V3i) (v : V4d) -> uniform.Image2d.[c.XY] <- v @>
+    let readSampler2d                                   = <@ fun (c : V3i) -> inputSampler2d.[c.XY] @>
+    let readImage2d                                     = <@ fun (c : V3i) -> uniform.Image2d.[c.XY] @>
+    let addToImage2d (add : Expr<V4d -> V4d -> V4d>)    = <@ fun (c : V3i) (v : V4d) -> uniform.Image2d.[c.XY] <- (%add) v uniform.Image2d.[c.XY] @>
+
+    let writeImage3d                                    = <@ fun (c : V3i) (v : V4d) -> uniform.Image3d.[c] <- v @>
+    let readSampler3d                                   = <@ fun (c : V3i) -> inputSampler3d.[c] @>
+    let readImage3d                                     = <@ fun (c : V3i) -> uniform.Image3d.[c] @>
+    let addToImage3d (add : Expr<V4d -> V4d -> V4d>)    = <@ fun (c : V3i) (v : V4d) -> uniform.Image3d.[c] <- (%add) v uniform.Image3d.[c] @>
 
 
 
@@ -1076,9 +1101,32 @@ type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d
         if v % d = 0 then v / d
         else 1 + v / d
 
-    let scanTexture = runtime.CreateComputeShader (Kernels.scanImageKernel2dTexture add)
-    let scan = runtime.CreateComputeShader (Kernels.scanImageKernel2d add)
-    let fixup = runtime.CreateComputeShader(Kernels.fixupImageKernel2d add)
+    let scanTexture2d     = lazy (runtime.CreateComputeShader (Kernels.scan3dKernel add ImageIO.readSampler2d ImageIO.writeImage2d))
+    let scan2d            = lazy (runtime.CreateComputeShader (Kernels.scan3dKernel add ImageIO.readImage2d ImageIO.writeImage2d))
+    let fixup2d           = lazy (runtime.CreateComputeShader (Kernels.fixup3dKernel add ImageIO.readImage2d (ImageIO.addToImage2d add)))
+    
+    let scanTexture3d     = lazy (runtime.CreateComputeShader (Kernels.scan3dKernel add ImageIO.readSampler3d ImageIO.writeImage3d))
+    let scan3d            = lazy (runtime.CreateComputeShader (Kernels.scan3dKernel add ImageIO.readImage3d ImageIO.writeImage3d))
+    let fixup3d           = lazy (runtime.CreateComputeShader (Kernels.fixup3dKernel add ImageIO.readImage3d (ImageIO.addToImage3d add)))
+
+    let scanTexture =
+        LookupTable.lookupTable [
+            2, scanTexture2d
+            3, scanTexture3d
+        ]
+
+    let scan =
+        LookupTable.lookupTable [
+            2, scan2d
+            3, scan3d
+        ]
+
+    let fixup =
+        LookupTable.lookupTable [
+            2, fixup2d
+            3, fixup3d
+        ]
+
 
     let next (range : ScanRange) =
         // (Kernels.scanSize - 1) + x * Kernels.scanSize <= range.count - 1
@@ -1092,10 +1140,14 @@ type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d
 
 
     let release() =
-        runtime.DeleteComputeShader scanTexture
-        runtime.DeleteComputeShader scan
+        if scanTexture2d.IsValueCreated then runtime.DeleteComputeShader scanTexture2d.Value
+        if scan2d.IsValueCreated then runtime.DeleteComputeShader scan2d.Value
+        if fixup2d.IsValueCreated then runtime.DeleteComputeShader fixup2d.Value
 
-    let scanBlocks (args : HashSet<IComputeShaderInputBinding>) (dim : int) (image : ITextureSubResource) (range : ScanRange) =
+
+    let scanBlocks (args : HashSet<IComputeShaderInputBinding>) (imgDim : int) (dim : int) (image : ITextureSubResource) (range : ScanRange) =
+        let scan = scan(imgDim).Value
+
         let input = runtime.NewInputBinding(scan)
         input.["inOutImage"] <- image
         input.["dimension"] <- dim
@@ -1119,7 +1171,9 @@ type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d
             ComputeCommand.Dispatch(V3i(ceilDiv range.count Kernels.scanSize, rest.X, rest.Y))
         ]
 
-    let repair (args : HashSet<IComputeShaderInputBinding>) (dim : int) (image : ITextureSubResource) (range : ScanRange) =
+    let repair (args : HashSet<IComputeShaderInputBinding>) (imgDim : int) (dim : int) (image : ITextureSubResource) (range : ScanRange) =
+        let fixup = fixup(imgDim).Value
+
         let innerRange = next range
 
         let args1 = runtime.NewInputBinding fixup
@@ -1149,31 +1203,40 @@ type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d
             ComputeCommand.Dispatch(V3i(ceilDiv (range.count - Kernels.scanSize) Kernels.halfScanSize, rest.X, rest.Y))
         ]
 
-
-
-    let rec buildDim (args : HashSet<IComputeShaderInputBinding>) (dim : int) (image : ITextureSubResource) (range : ScanRange) =
+    let rec buildDim (args : HashSet<IComputeShaderInputBinding>) (imgDim : int) (dim : int) (image : ITextureSubResource) (range : ScanRange) =
         
         if range.count <= 1 then
             []
         else
             [
-                yield! scanBlocks args dim image range
+                yield! scanBlocks args imgDim dim image range
 
                 let innerRange = next range
-                yield! buildDim args dim image innerRange
+                yield! buildDim args imgDim dim image innerRange
 
                 if range.count > Kernels.scanSize then
-                    yield! repair args dim image range
+                    yield! repair args imgDim dim image range
 
             ]
 
         
 
     let rec build (args : HashSet<IComputeShaderInputBinding>) (input : ITextureSubResource) (output : ITextureSubResource) =
+        let imageDim = 
+            match input.Texture.Dimension with
+                | TextureDimension.Texture2D -> 2
+                | TextureDimension.Texture3D -> 3
+                | d -> failwithf "invalid texture dimension in scan: %A" d
+
+        let scanTexture = scanTexture(imageDim).Value
+
         let xInput = runtime.NewInputBinding(scanTexture)
-        xInput.["InputTexture"] <- input.Texture
-        xInput.["outputImage"] <- output
-        xInput.["dim"] <- 0
+        xInput.["inputTexture"] <- input.Texture
+        xInput.["inOutImage"] <- output
+        xInput.["dimension"] <- 0
+        xInput.["Offset"] <- 0
+        xInput.["Size"] <- input.Size.X
+        xInput.["Delta"] <- 1
         xInput.Flush()
 
         [
@@ -1182,16 +1245,17 @@ type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d
 
             yield ComputeCommand.Bind scanTexture
             yield ComputeCommand.SetInput xInput
-            yield ComputeCommand.Dispatch(V2i(ceilDiv input.Size.X Kernels.scanSize, input.Size.Y))
+            yield ComputeCommand.Dispatch(V3i(ceilDiv input.Size.X Kernels.scanSize, input.Size.Y, input.Size.Z))
             yield ComputeCommand.Sync(output.Texture)
 
             let xRange = { offset = 0; delta = 1; count = input.Size.X }
-            yield! buildDim args 0 output (next xRange)
+            yield! buildDim args imageDim 0 output (next xRange)
             if xRange.count > Kernels.scanSize then
-                yield! repair args 0 output xRange
+                yield! repair args imageDim 0 output xRange
 
-            let yRange = { offset = 0; delta = 1; count = input.Size.Y }
-            yield! buildDim args 1 output yRange
+            for dim in 1 .. imageDim-1 do
+                let dimRange = { offset = 0; delta = 1; count = input.Size.[dim] }
+                yield! buildDim args imageDim dim output dimRange
         ]
 
 
