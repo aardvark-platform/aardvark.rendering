@@ -86,7 +86,8 @@ module Error =
 
     exception OpenGLException of ErrorCode * string
 
-
+    
+    
     let private debug (debugSource : DebugSource) (debugType : DebugType) (id : int) (severity : DebugSeverity) (length : int) (message : nativeint) (userParam : nativeint) =
          let message = Marshal.PtrToStringAnsi(message,length)
          match severity with
@@ -105,6 +106,19 @@ module Error =
                 Report.Line(4, "[GL:{0}] {1}", userParam, message)
 
     let private debugHandler = DebugProc debug
+    let private debugGC = Marshal.PinDelegate debugHandler
+
+    type private GLDebugMessageCallbackDel = delegate of callback : nativeint * userData : nativeint -> unit
+
+
+    let private suffixes = [""; "EXT"; "KHR"; "NV"; "AMD"]
+    type IGraphicsContextInternal with
+        member x.TryGetAddress (name : string) =
+            suffixes |> List.tryPick (fun s ->
+                let ptr = x.GetAddress(name + s)
+                if ptr <> 0n then Some ptr
+                else None
+            )
 
     // in release the literal value of CheckErrors in combination
     // with this inline function leads to a complete elimination of
@@ -119,11 +133,24 @@ module Error =
 
         static member SetupDebugOutput() =
             let ctx = GraphicsContext.CurrentContext |> unbox<IGraphicsContextInternal>
-            GL.DebugMessageCallback(debugHandler,ctx.Context.Handle)
-            let arr : uint32[] = null
-            let severity = DebugSeverityControl.DontCare //DebugSeverityControl.DebugSeverityHigh ||| DebugSeverityControl.DebugSeverityMedium 
-            GL.DebugMessageControl(DebugSourceControl.DontCare, DebugTypeControl.DontCare, severity, 0, arr, true)
-            GL.Check "DebugMessageControl"
+
+            match ctx.TryGetAddress("glDebugMessageCallback") with
+                | Some ptr ->
+                    Report.BeginTimed(4, "[GL] setting up debug callback")
+                    let del = Marshal.GetDelegateForFunctionPointer(ptr, typeof<GLDebugMessageCallbackDel>) |> unbox<GLDebugMessageCallbackDel>
+                    del.Invoke(debugGC.Pointer, ctx.Context.Handle)
+                    
+                    Report.End(4) |> ignore
+                    let arr : uint32[] = null
+                    let severity = DebugSeverityControl.DontCare //DebugSeverityControl.DebugSeverityHigh ||| DebugSeverityControl.DebugSeverityMedium 
+            
+                    Report.BeginTimed(4, "[GL] debug message control")
+                    GL.DebugMessageControl(DebugSourceControl.DontCare, DebugTypeControl.DontCare, severity, 0, arr, true)
+                    GL.Check "DebugMessageControl"
+                    Report.End(4) |> ignore
+                    true
+                | _ ->
+                    false
 
     type GLTimer private() =
         let counter = GL.GenQuery()
