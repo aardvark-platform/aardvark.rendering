@@ -14,6 +14,11 @@ open Aardvark.Base.ShaderReflection
 open Aardvark.Rendering.Text
 open System.Runtime.InteropServices
 open Aardvark.SceneGraph
+open Microsoft.FSharp.NativeInterop
+
+#nowarn "9"
+#nowarn "51"
+
 
 module ComputeShader =
 
@@ -185,34 +190,592 @@ module ComputeShader =
 
 
 
+    module Detector =
+        open FShade
 
+
+        let inputSampler =
+            sampler2d {
+                texture uniform?DiffuseColorTexture
+                filter Filter.MinMagMipLinear
+            }
+
+        [<ReflectedDefinition>]
+        let sampleBox (l : V2i) (h : V2i) =
+            let l = l - V2i.II
+
+            let s = inputSampler.Size
+            let l = V2i(max -1 l.X, max -1 l.Y)
+            let h = V2i(clamp 0 (s.X - 1) h.X, clamp 0 (s.Y - 1) h.Y)
+            
+            let v11 = inputSampler.[h]
+            let v01 = if l.X > 0 then inputSampler.[V2i(l.X, h.Y)] else V4d.Zero
+            let v10 = if l.Y > 0 then inputSampler.[V2i(h.X, l.Y)] else V4d.Zero
+            let v00 = if l.X > 0 && l.Y > 0 then inputSampler.[l] else V4d.Zero
+            
+            let area = (h.X - l.X) * (h.Y - l.Y)
+
+            (v11 - v01 - v10 + v00) / (float area)
+            
+        [<ReflectedDefinition; Inline>]
+        let sample (p : V2i) (s : int) =
+            sampleBox (p - s * V2i.II) (p + s * V2i.II)
+
+        [<ReflectedDefinition>]
+        let hsv2rgb (h : float) (s : float) (v : float) =
+            let s = clamp 0.0 1.0 s
+            let v = clamp 0.0 1.0 v
+
+            let h = h % 1.0
+            let h = if h < 0.0 then h + 1.0 else h
+            let hi = floor ( h * 6.0 ) |> int
+            let f = h * 6.0 - float hi
+            let p = v * (1.0 - s)
+            let q = v * (1.0 - s * f)
+            let t = v * (1.0 - s * ( 1.0 - f ))
+            match hi with
+                | 1 -> V3d(q,v,p)
+                | 2 -> V3d(p,v,t)
+                | 3 -> V3d(p,q,v)
+                | 4 -> V3d(t,p,v)
+                | 5 -> V3d(v,p,q)
+                | _ -> V3d(v,t,p)
+
+     
+        [<GLSLIntrinsic("floatBitsToInt({0})")>]
+        let floatBitsToInt (v : float) : int = onlyInShaderCode "floatBitsToInt"
+        
+        [<GLSLIntrinsic("intBitsToFloat({0})")>]
+        let intBitsToFloat (v : int) : float = onlyInShaderCode "intBitsToFloat"
+
+        [<GLSLIntrinsic("atomicAdd({0}, {1})")>]
+        let atomicAdd (l : int) (v : int) : int = onlyInShaderCode "atomicAdd"
+
+        let hashV2i (key : V2i) =
+            key.X * 57 + key.Y
+
+        let getAverage (key : V2i) =
+            let store : V4i[]   = uniform?StorageBuffer?AverageStore
+            let slots : int[]   = uniform?StorageBuffer?AverageInfo
+            let storeSize : int = uniform?AverageStoreSize
+
+            let hash = hashV2i key
+
+            let id = abs hash % storeSize
+            let mutable i = slots.[id]
+            let mutable data = store.[i]
+
+            if data.XY = key then
+                 intBitsToFloat data.W
+            else
+                while data.XY <> key && data.Z >= 0 do
+                    let n = data.Z
+                    i <- n
+                    data <- store.[n]
+                if data.XY = key then
+                    intBitsToFloat data.W
+                else
+                    -1.0
+        
+        let newSlot() =
+            let free : int[]   = uniform?StorageBuffer?AverageFree
+            atomicAdd free.[0] 1
+
+        let setAverage (key : V2i) (value : float) =
+            let store : V4i[]   = uniform?StorageBuffer?AverageStore
+            let slots : int[]   = uniform?StorageBuffer?AverageInfo
+            let storeSize : int = uniform?AverageStoreSize
+
+            let hash = hashV2i key
+            let id = abs hash % storeSize
+            let mutable i = slots.[id]
+            let mutable data = store.[i]
+
+            if data.XY = key then
+                store.[i] <- V4i(data.X, data.Y, data.Z, floatBitsToInt value)
+            else
+                if data.Z >= 0 then
+                    ()
+                else
+                    let s = newSlot()
+                    store.[i] <- V4i(data.X, data.Y, s, data.W)
+                    store.[s] <- V4i(key.X, key.Y, -1, floatBitsToInt value)
+                    
+        [<LocalSize(X = 8, Y = 8)>]
+        let initRegions (regions : IntImage2d<Formats.r32i>) (colors : Image2d<Formats.r16>) (regionSum : IntImage2d<Formats.r32i>) (regionCount : IntImage2d<Formats.r32i>) (collapseImg : IntImage2d<Formats.r32i>) =
+            compute {
+                let size = regions.Size
+                let id = getGlobalId().XY
+                if id.X < size.X && id.Y < size.Y then
+                    regions.[id] <- V4i(id.Y * size.X + id.X, 0, 0, 0)
+                    regionSum.[id] <- V4i(floatBitsToInt colors.[id].X, 0, 0, 0)
+                    regionCount.[id] <- V4i(1, 0, 0, 0)
+                    collapseImg.[id] <- V4i(0,0,0,0)
+            }
+
+
+        [<LocalSize(X = 64)>]
+        let regionMerge (colors : Image2d<Formats.r16>) (regions : IntImage2d<Formats.r32i>) (regionSum : IntImage2d<Formats.r32i>) (regionCount : IntImage2d<Formats.r32i>) (collapseImg : IntImage2d<Formats.r32i>) =
+            compute {
+                let threshold : float = uniform?Threshold
+                let solvedSize : int = uniform?SolvedSize
+                let dim : int = uniform?Dimension
+                let size = colors.Size
+
+                let id = getGlobalId().XY
+
+                let lid =
+                    if dim = 0 then V2i(id.Y * solvedSize * 2 + (solvedSize - 1), id.X)
+                    else V2i(id.X, id.Y * solvedSize * 2 + (solvedSize - 1))
+
+                let rid = 
+                    if dim = 0 then lid + V2i.IO
+                    else lid + V2i.OI
+
+
+                if rid.X < size.X && rid.Y < size.Y then
+                    let lr = regions.[lid].X
+                    let rr = regions.[rid].X
+
+                    let lRegion = V2i(lr % size.X, lr / size.X)
+                    let rRegion = V2i(rr % size.X, rr / size.X)
+
+                    let lAvg = intBitsToFloat regionSum.[lRegion].X / float regionCount.[lRegion].X
+                    let rAvg = intBitsToFloat regionSum.[rRegion].X / float regionCount.[lRegion].X
+
+                    let lValue = colors.[lid].X
+                    let rValue = colors.[rid].X
+
+                    let distance = min (abs (lValue - rAvg)) (abs (rValue - lAvg))
+                    if distance < threshold then
+                        
+
+
+
+                        let mutable srcI = rr
+                        let mutable src = rRegion
+                        let mutable dst = lr
+
+                        let mutable finished = false
+                        let mutable o = collapseImg.[src].X
+                            
+                        while not finished && srcI <> dst do
+                            if o = dst + 1 then
+                                finished <- true
+
+                            elif o <> 0 && o < dst + 1 then
+                                // dst -> o
+                                srcI <- dst
+                                src <- V2i(dst % size.X, dst / size.X)
+                                dst <- o - 1
+                                o <- collapseImg.[src].X
+
+                            else
+                                let r = collapseImg.AtomicCompareExchange(src, o, dst + 1)
+                                if r = o then
+                                    if r = 0 then
+                                        finished <- true
+                                    else
+                                        let r = r - 1
+                                        // r -> dst
+                                        srcI <- r
+                                        src <- V2i(r % size.X, r / size.X)
+                                        
+                                else
+                                    o <- r
+
+
+                    ()
+
+            }
+            
+        [<LocalSize(X = 8, Y = 8)>]
+        let sanitize  (regions : IntImage2d<Formats.r32i>) (collapseImg : IntImage2d<Formats.r32i>) =
+            compute {
+                let id = getGlobalId().XY
+                let size = regions.Size
+
+                if id.X < size.X && id.Y < size.Y then
+                    let r = regions.[id].X
+                    let rc = V2i(r % size.X, r / size.X)
+
+                    let mutable last = 0
+                    let mutable dst = collapseImg.[rc].X
+                    while dst <> 0 do
+                        last <- dst
+                        dst <- collapseImg.[V2i((dst - 1) % size.X, (dst - 1) / size.X)].X
+                    
+                    if last <> 0 then
+                        regions.[id] <- V4i(last - 1, 0, 0, 0)
+            }
+
+        [<LocalSize(X = 8, Y = 8)>]
+        let sanitizeAverage (regionSum : IntImage2d<Formats.r32i>) (regionCount : IntImage2d<Formats.r32i>) (collapseImg : IntImage2d<Formats.r32i>) =
+            compute {
+                let size = regionSum.Size
+                let rc = getGlobalId().XY
+
+                if rc.X < size.X && rc.Y < size.Y then
+                    let r = rc.Y * size.X + rc.X
+                    let mutable last = 0
+                    let mutable dst = collapseImg.[rc].X
+                    while dst <> 0 do
+                        last <- dst
+                        dst <- collapseImg.[V2i((dst - 1) % size.X, (dst - 1) / size.X)].X
+                        
+                    if last <> 0 then
+                        let dstI = last - 1
+                        let dst = V2i(dstI % size.X, dstI / size.X)
+
+                        let srcSum = intBitsToFloat regionSum.[rc].X
+                        let srcCnt = regionCount.[rc].X
+
+
+                        regionCount.AtomicAdd(dst, srcCnt) |> ignore
+
+                        let mutable o = regionSum.[dst].X
+                        let mutable n = intBitsToFloat o + srcSum
+                        let mutable r = regionSum.AtomicCompareExchange(dst, o, floatBitsToInt n)
+                        while r <> o do
+                            o <- r
+                            n <- intBitsToFloat o + srcSum
+                            r <- regionSum.AtomicCompareExchange(dst, o, floatBitsToInt n)
+
+                    collapseImg.[rc] <- V4i(0,0,0,0)
+
+                    ()
+
+
+
+            }
+
+        let detect (v : Effects.Vertex) =
+            fragment {
+                
+                let s = inputSampler.Size
+                let minSize : int = uniform?MinSize
+                let maxSize : int = uniform?MaxSize
+                let p = v.tc * V2d s |> V2i
+//
+//                let avg = sampleBox (p - 20 * V2i.II) (p + 20 * V2i.II)
+//                let v = sampleBox p p
+//
+//                let r = v.X / avg.X
+//
+//                return V4d(r,r,r,1.0)
+
+                
+                let mutable sum = 0.0
+                let mutable cnt = 0.0
+                let s2 = float maxSize * float maxSize
+
+                for x in -maxSize .. maxSize do
+                    for y in -maxSize .. maxSize do
+                        let d = V2i(x,y)
+                        let l2 = Vec.dot (V2d d) (V2d d)
+                        let w = exp (-l2 / (2.0 * s2))
+                        let v = inputSampler.[(p + d)]
+                        sum <- sum + v.X * w
+                        cnt <- cnt + w
+                                
+                let avg = sum / cnt
+
+                
+                let mutable sum = 0.0
+                let mutable cnt = 0.0
+
+
+                let minSize = float minSize / 10.0
+
+                let s2 = minSize * minSize
+                for x in -3 .. 3 do
+                    for y in -3 .. 3 do
+                        let d = V2i(x,y)
+                        let l2 = Vec.dot (V2d d) (V2d d)
+                        let w = exp (-l2 / (2.0 * s2))
+                        let v = inputSampler.[(p + d)]
+                        sum <- sum + v.X * w
+                        cnt <- cnt + w
+                                
+                let v = sum / float cnt
+
+
+                if v > avg then
+                    return V4d.OOOI
+                else
+                    return V4d.IOOI
+
+//
+//
+//
+//                let mutable minValue = 10000.0
+//                let mutable maxValue = -10000.0
+//                let mutable minFilter = -1
+//                let mutable maxFilter = -1
+//                
+//                let mutable initial = sample p 2
+//                let mutable last = initial
+//                for f in 3 .. 1 .. 50 do
+//                    let res = sample p f
+//
+//                    let slope = res.X - last.X
+//                    last <- res
+//
+//                    if slope > maxValue then
+//                        maxValue <- slope
+//                        maxFilter <- f
+//
+//                    if slope < minValue then
+//                        minValue <- slope
+//                        minFilter <- f
+//
+//                if maxFilter > minSize && maxFilter < maxSize then
+//                    return V4d.OIOI
+//                else
+//                    return V4d(initial.X, initial.X, initial.X, 1.0)
+//                    let d = float maxFilter / 50.0
+//
+//                    return V4d(hsv2rgb d 1.0 1.0, 1.0)
+
+//
+//                let s = maxFilter - minFilter
+//                if s > 2 && s < filter then
+//                    let d = float (s - 2) / (float filter - 2.0)
+//                    return V4d(0.0, d, 0.0, 1.0)
+//                else
+//                    let r = sampleBox (p - 2 * V2i.II) (p + 2 * V2i.II)
+//                    return V4d(r.X,r.X,r.X,1.0)
+
+            }
+            
+    let inline ceilDiv v a =
+        if v % a = LanguagePrimitives.GenericZero then v / a
+        else LanguagePrimitives.GenericOne + v / a
 
     let run() =
-        use app = new VulkanApplication(true)
+        let env = Environment.GetCommandLineArgs()
+
+        let mutable path = "116.png"
+        let mutable threshold = 0.1
+        for i in 0 .. env.Length - 2 do
+            if env.[i] = "-t" then
+                match System.Double.TryParse(env.[i+1]) with
+                    | (true, v) ->
+                        threshold <- v
+                    | _ ->
+                        ()
+            if env.[i] = "-i" then
+                path <- env.[i+1]
+
+
+        
+
+        use app = new VulkanApplication(false)
         //use app = new OpenGlApplication(true)
         let runtime = app.Runtime :> IRuntime
-        let win = app.CreateSimpleRenderWindow(8) 
-        let run() = win.Run()
-        let view = 
-            CameraView.lookAt (V3d(4,4,4)) V3d.Zero V3d.OOI
-                |> DefaultCameraController.control win.Mouse win.Keyboard win.Time 
-                |> Mod.map CameraView.viewTrafo
-        let proj =
-            win.Sizes 
-                |> Mod.map (fun s -> Frustum.perspective 60.0 0.05 1000.0 (float s.X / float s.Y))
-                |> Mod.map Frustum.projTrafo
-                :> IMod
-        let win = win :> IRenderTarget
-        let subscribe (f : unit -> unit) = ()
+        let win = app.CreateSimpleRenderWindow(1) 
+
         
         let par = ParallelPrimitives(runtime)
 
+
+        let dataImg     = PixImage.Create(path).ToPixImage<uint16>(Col.Format.Gray) //PixImage<uint16>(Col.Format.Gray, Volume<uint16>(data, 4L, 4L, 1L))
+        let size        = dataImg.Size
+
+
+
+
+        let img         = runtime.CreateTexture(size, TextureFormat.R16, 1, 1)
+
+        let sum         = runtime.CreateTexture(size, TextureFormat.R32i, 1, 1)
+        let cnt         = runtime.CreateTexture(size, TextureFormat.R32i, 1, 1)
+        let regions     = runtime.CreateTexture(size, TextureFormat.R32i, 1, 1)
+        let collapse    = runtime.CreateTexture(size, TextureFormat.R32i, 1, 1)
+
+        runtime.Upload(img, 0, 0, dataImg)
+
+
+
+        let initRegions = runtime.CreateComputeShader Detector.initRegions
+        let regionMerge = runtime.CreateComputeShader Detector.regionMerge
+        let sanitize = runtime.CreateComputeShader Detector.sanitize
+        let sanitizeAvg = runtime.CreateComputeShader Detector.sanitizeAverage
+
+        let initIn = runtime.NewInputBinding initRegions
+        initIn.["regions"] <- regions.[TextureAspect.Color, 0, 0]
+        initIn.["colors"] <- img.[TextureAspect.Color, 0, 0]
+        initIn.["regionSum"] <- sum.[TextureAspect.Color, 0, 0]
+        initIn.["regionCount"] <- cnt.[TextureAspect.Color, 0, 0]
+        initIn.["collapseImg"] <- collapse.[TextureAspect.Color, 0, 0]
+        initIn.Flush()
+
+
+        let merges (size : V2i) =
+            let rec merges (s : V2i) (size : V2i) =
+                if s.X < size.X && s.Y < size.Y then
+                    (s.X, 0) :: (s.Y, 1) :: merges (2 * s) size
+
+                elif s.X < size.X then
+                    (s.X, 0) :: merges (V2i(s.X * 2, s.Y)) size 
+
+                elif s.Y < size.Y then
+                    (s.Y, 1) :: merges (V2i(s.X, 2 * s.Y)) size
+                else
+                    []
+
+            merges V2i.II size
+
+        let merges = merges size
+
+        printfn "threshold: %f" threshold
+        for (s,dim) in merges do
+            printfn "merge(%d, %d)" s dim
+
+        let mergeInputs =
+            merges |> List.map (fun (solvedSize, dim) ->
+                let mergeIn = runtime.NewInputBinding regionMerge
+                mergeIn.["Dimension"] <- dim
+                mergeIn.["SolvedSize"] <- solvedSize
+                mergeIn.["Threshold"] <- threshold
+                mergeIn.["colors"] <- img.[TextureAspect.Color, 0, 0]
+                mergeIn.["regions"] <- regions.[TextureAspect.Color, 0, 0]
+                mergeIn.["regionSum"] <- sum.[TextureAspect.Color, 0, 0]
+                mergeIn.["regionCount"] <- cnt.[TextureAspect.Color, 0, 0]
+                mergeIn.["collapseImg"] <- collapse.[TextureAspect.Color, 0, 0]
+                mergeIn.Flush()
+
+
+                let groups =
+                    if dim = 0 then V2i(ceilDiv size.Y 64, ceilDiv (size.X - solvedSize) (2 * solvedSize))
+                    else V2i(ceilDiv size.X 64, ceilDiv (size.Y - solvedSize) (2 * solvedSize))
+
+
+                mergeIn, groups
+            )
+
+        
+        let sanitizeIn = runtime.NewInputBinding sanitize
+        sanitizeIn.["regions"] <- regions.[TextureAspect.Color, 0, 0]
+        sanitizeIn.["collapseImg"] <- collapse.[TextureAspect.Color, 0, 0]
+        sanitizeIn.Flush()
+
+        
+        let sanitizeAvgIn = runtime.NewInputBinding sanitizeAvg
+        sanitizeAvgIn.["regionSum"] <- sum.[TextureAspect.Color, 0, 0]
+        sanitizeAvgIn.["regionCount"] <- cnt.[TextureAspect.Color, 0, 0]
+        sanitizeAvgIn.["collapseImg"] <- collapse.[TextureAspect.Color, 0, 0]
+        sanitizeAvgIn.Flush()
+
+
+
+        let prog = 
+            runtime.Compile [
+                yield ComputeCommand.TransformLayout(img, TextureLayout.ShaderReadWrite)
+                yield ComputeCommand.TransformLayout(regions, TextureLayout.ShaderReadWrite)
+                yield ComputeCommand.TransformLayout(sum, TextureLayout.ShaderReadWrite)
+                yield ComputeCommand.TransformLayout(cnt, TextureLayout.ShaderReadWrite)
+                yield ComputeCommand.TransformLayout(collapse, TextureLayout.ShaderReadWrite)
+
+                yield ComputeCommand.Bind initRegions
+                yield ComputeCommand.SetInput initIn
+                yield ComputeCommand.Dispatch (V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
+                yield ComputeCommand.Sync regions
+                yield ComputeCommand.Sync sum
+                yield ComputeCommand.Sync cnt
+                // TODO: init sum and cnt
+
+
+                for mergeIn, groupCount in mergeInputs do
+                    yield ComputeCommand.Bind regionMerge
+                    yield ComputeCommand.SetInput mergeIn
+                    yield ComputeCommand.Dispatch groupCount
+
+                    yield ComputeCommand.Sync collapse
+
+                    yield ComputeCommand.Bind sanitize
+                    yield ComputeCommand.SetInput sanitizeIn
+                    yield ComputeCommand.Dispatch (V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
+
+                    yield ComputeCommand.Bind sanitizeAvg
+                    yield ComputeCommand.SetInput sanitizeAvgIn
+                    yield ComputeCommand.Dispatch (V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
+
+                    yield ComputeCommand.Sync regions
+                    yield ComputeCommand.Sync sum
+                    yield ComputeCommand.Sync cnt
+
+
+                yield ComputeCommand.TransformLayout(img, TextureLayout.ShaderRead)
+                yield ComputeCommand.TransformLayout(regions, TextureLayout.ShaderRead)
+                yield ComputeCommand.TransformLayout(sum, TextureLayout.ShaderRead)
+                yield ComputeCommand.TransformLayout(cnt, TextureLayout.ShaderRead)
+                yield ComputeCommand.TransformLayout(collapse, TextureLayout.ShaderRead)
+            ]
+
+        prog.Run()
+
+        Log.line "started"
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        for i in 1 .. 10 do
+            prog.Run()
+        sw.Stop()
+        Log.line "took: %A" (sw.MicroTime / 10.0)
+        printfn "done"
+        
+//        let sumImg = PixImage<int32>(Col.Format.Gray, 4L, 4L)
+//        runtime.Download(sum, 0, 0, sumImg) 
+//        let cntImg = PixImage<int32>(Col.Format.Gray, 4L, 4L)
+//        runtime.Download(cnt, 0, 0, cntImg) 
+//
+//        let div (s : int) (c : int) =
+//            let mutable s = s
+//            let s : float32 = NativePtr.read (NativePtr.cast &&s)
+//            s / float32 c
+
+//        let avg = Array.map2 div sumImg.Volume.Data cntImg.Volume.Data
+//
+//
+//        printfn "avg:      %A" avg
+
+        let regionsImg = PixImage<int32>(Col.Format.Gray, regions.Size.XY)
+        runtime.Download(regions, 0, 0, regionsImg) 
+
+
+        let result = PixImage<byte>(Col.Format.RGBA, regionsImg.Size)
+
+        let cache = IntDict<C4b>()
+        let rand = RandomSystem()
+
+        let cache = IntDict<C4b>()
+        let getColor (r : int) =
+            cache.GetOrCreate(r, fun _ ->
+                rand.UniformC3f().ToC4b()
+            )
+            //HSVf(float32 (0.5 * float remap.[r] / float maxRegion), 1.0f, 1.0f).ToC3f().ToC4b()
+
+        result.GetMatrix<C4b>().SetMap(regionsImg.GetChannel(0L), fun (r : int) -> getColor r) |> ignore
+        result.SaveAsImage @"result.png"
+
+
+        //printfn "regions:  %A" regionsImg.Volume.Data
+//        
+//        let dst = PixImage<int32>(Col.Format.Gray, 4L, 4L)
+//        runtime.Download(collapse, 0, 0, dst) 
+//        printfn "collapse: %A" dst.Volume.Data
+        
+        Environment.Exit 0
+
+
+
+
+
+
         let checkerboardPix = 
-            let pi = PixVolume<byte>(Col.Format.RGBA, V3i(64,64,64))
-            pi.GetVolume<C4b>().SetByCoord(fun (c : V3l) ->
+            let pi = PixImage<byte>(Col.Format.RGBA, V2i(512,512))
+            pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
                 let c = c / 8L
-                if (c.X + c.Y + c.Z) % 2L = 0L then
-                    if c.X = 0L && c.Y = 0L && c.Z = 0L then
+                if (c.X + c.Y) % 2L = 0L then
+                    if c.X = 0L && c.Y = 0L then
                         C4b.Red
                     else
                         C4b.White
@@ -223,15 +786,51 @@ module ComputeShader =
 
         //checkerboardPix.SaveAsImage @"input.png"
 
+
         let checkerboard =
-            PixTexture3d(checkerboardPix, TextureParams.empty)  :> ITexture
-            //PixTexture2d( [| checkerboardPix :> PixImage |], false) :> ITexture
+            //PixTexture2d(checkerboardPix, TextureParams.empty)  :> ITexture
+            //PixTexture2d(PixImageMipMap [| checkerboardPix :> PixImage |], false) :> ITexture
+
+            FileTexture(@"116.png", TextureParams.empty) :> ITexture
 
         let img = runtime.PrepareTexture(checkerboard)
-        let dst = runtime.CreateTexture(img.Size, TextureDimension.Texture3D, TextureFormat.Rgba32f, 1, 1, 1)
+        let dst = runtime.CreateTexture(img.Size, TextureDimension.Texture2D, TextureFormat.Rgba32f, 1, 1, 1)
+//
+//        par.Scan(<@ (+) @>, img.[TextureAspect.Color, 0, 0], dst.[TextureAspect.Color, 0, 0])
+//
+//        
+        let minSize = Mod.init 0
+        let maxSize = Mod.init 0
 
-        par.Scan(<@ (+) @>, img.[TextureAspect.Color, 0, 0], dst.[TextureAspect.Color, 0, 0])
 
+        win.Mouse.Scroll.Values.Add (fun d ->
+            let d = sign d |> int
+
+            if win.Keyboard.IsDown(Keys.LeftShift).GetValue() then
+                transact (fun () ->
+                    minSize.Value <- minSize.Value + d
+                    Log.line "min: %A" minSize.Value
+                )
+            else
+                transact (fun () ->
+                    maxSize.Value <- maxSize.Value + d
+                    Log.line "max: %A" maxSize.Value
+                )
+
+        )
+
+
+        let sg =
+            Sg.fullScreenQuad
+                |> Sg.diffuseTexture (Mod.constant (img :> ITexture))
+                |> Sg.uniform "MinSize" minSize
+                |> Sg.uniform "MaxSize" maxSize
+                |> Sg.shader {
+                    do! Detector.detect
+                }
+        
+        win.RenderTask <- Sg.compile app.Runtime win.FramebufferSignature sg
+        win.Run()
         
 //
 //        
@@ -429,148 +1028,4 @@ module ComputeShader =
         Environment.Exit 0
 
 
-//        let app = new VulkanVRApplicationLayered(false)
-//        let runtime = app.Runtime :> IRuntime
-//        let win = app :> IRenderTarget
-//        let view = app.Info.viewTrafos
-//        let proj = app.Info.projTrafos :> IMod
-//        let run () = app.Run()
-//        let subscribe (f : unit -> unit) =
-//            app.Controllers |> Array.iter (fun c ->
-//                c.Axis |> Array.iter (fun a -> 
-//                    a.Press.Add (f)
-//                )
-//            )
-
-        let update = runtime.CreateComputeShader Shaders.updateAcceleration
-        let step = runtime.CreateComputeShader Shaders.step
-
-        let rand = RandomSystem()
-        let particeCount = 1000
-        let positions = runtime.CreateBuffer<V4f>(Array.init particeCount (fun _ -> V4d(rand.UniformV3dDirection() * 3.0, 1.0) |> V4f))
-        let velocities = runtime.CreateBuffer<V4f>(Array.zeroCreate particeCount)
-        let accelerations = runtime.CreateBuffer<V4f>(Array.zeroCreate particeCount)
-        let masses = runtime.CreateBuffer<float32>(Array.init particeCount (fun _ -> 1.0f))
-
-        positions.Upload([| V4f(-1.0f, 0.5f, 0.0f, 1.0f);  V4f(1.0f, -0.5f, 0.0f, 1.0f); |])
-        masses.Upload([| 150.0f; 150.0f |])
-        velocities.Upload([| V4f(0.2f, 0.0f, 0.0f, 1.0f); V4f(-0.2f, 0.0f, 0.0f, 1.0f) |])
-
-
-        subscribe (fun () ->
-            positions.Upload(Array.init particeCount (fun _ -> V4d(rand.UniformV3dDirection() * 3.0, 1.0) |> V4f))
-            velocities.Upload(Array.zeroCreate particeCount)
-            positions.Upload([| V4f(-1.0f, 0.5f, 0.0f, 1.0f);  V4f(1.0f, -0.5f, 0.0f, 1.0f); |])
-            velocities.Upload([| V4f(0.2f, 0.0f, 0.0f, 1.0f); V4f(-0.2f, 0.0f, 0.0f, 1.0f) |])
-        )
-
-        
-        let updateInputs = runtime.NewInputBinding update
-        updateInputs.["pos"] <- positions
-        updateInputs.["acc"] <- accelerations
-        updateInputs.["masses"] <- masses
-        updateInputs.["n"] <- particeCount
-        updateInputs.Flush()
-
-        let stepInputs = runtime.NewInputBinding step
-        stepInputs.["pos"] <- positions
-        stepInputs.["vel"] <- velocities
-        stepInputs.["acc"] <- accelerations
-        stepInputs.["n"] <- particeCount
-        stepInputs.["dt"] <- 0.0
-        stepInputs.Flush()
-
-        let groupSize = 
-            if particeCount % update.LocalSize.X = 0 then 
-                particeCount / update.LocalSize.X
-            else
-                1 + particeCount / update.LocalSize.X
-
-        let compiled = false
-
-        let commands =
-            [
-                ComputeCommand.Bind update
-                ComputeCommand.SetInput updateInputs
-                ComputeCommand.Dispatch groupSize
-
-                ComputeCommand.Bind step
-                ComputeCommand.SetInput stepInputs
-                ComputeCommand.Dispatch groupSize
-            ]
-
-
-        let program =
-            runtime.Compile commands
-
-        let magic =
-            let sw = System.Diagnostics.Stopwatch()
-
-            win.Time |> Mod.map (fun _ ->
-                let dt = sw.Elapsed.TotalSeconds
-                sw.Restart()
-
-                if dt < 0.2 then
-                    let maxStep = 0.01
-                    let mutable t = 0.0
-                    while t < dt do
-                        let rdt = min maxStep (dt - t)
-                        stepInputs.["dt"] <-rdt
-                        stepInputs.Flush()
-                        if compiled then
-                            program.Run()
-                        else
-                            runtime.Run commands
-                        t <- t + rdt
-                
-                else
-                    printfn "bad: %A" dt
-
-                0.0
-                ///positions :> IBuffer
-
-            )
-
-
-
-        let u (n : String) (m : IMod) (s : ISg) =
-            Sg.UniformApplicator(n, m, s) :> ISg
-
-        let sphere = Primitives.unitSphere 5
-        let pos = sphere.IndexedAttributes.[DefaultSemantic.Positions]
-        let norm = sphere.IndexedAttributes.[DefaultSemantic.Normals]
-
-        let call = DrawCallInfo(FaceVertexCount = pos.Length, InstanceCount = particeCount)
-        
-        let instanceBuffer (name : Symbol) (view : BufferView) (s : ISg) =
-            Sg.InstanceAttributeApplicator(name, view, s) :> ISg
-
-        win.RenderTask <-
-            Sg.render IndexedGeometryMode.TriangleList call
-                |> Sg.vertexBuffer DefaultSemantic.Positions (BufferView(Mod.constant (ArrayBuffer pos :> IBuffer), typeof<V3f>))
-                |> Sg.vertexBuffer DefaultSemantic.Normals (BufferView(Mod.constant (ArrayBuffer norm :> IBuffer), typeof<V3f>))
-                |> instanceBuffer (Symbol.Create "Offset") (BufferView(Mod.constant (positions :> IBuffer), typeof<V4f>))
-                |> instanceBuffer (Symbol.Create "Mass") (BufferView(Mod.constant (masses :> IBuffer), typeof<float32>))
-                |> Sg.translate 0.0 0.0 1.0
-                |> Sg.shader {
-                    do! Shaders.instanceOffset
-                    do! DefaultSurfaces.trafo
-                    //do! DefaultSurfaces.constantColor C4f.Red
-                    do! DefaultSurfaces.simpleLighting
-                }
-                |> u "ViewTrafo" view
-                |> u "ProjTrafo" proj
-                |> Sg.viewTrafo view //(view |> Mod.map (Array.item 0))
-                |> Sg.uniform "Scale" (Mod.constant 0.05)
-                |> Sg.uniform "Magic" magic
-                |> Sg.compile runtime win.FramebufferSignature
-
-        run()
-        positions.Dispose()
-        accelerations.Dispose()
-        velocities.Dispose()
-        updateInputs.Dispose()
-        stepInputs.Dispose()
-        runtime.DeleteComputeShader update
-        runtime.DeleteComputeShader step
 
