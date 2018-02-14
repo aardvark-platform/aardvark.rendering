@@ -21,7 +21,7 @@ type Buffer =
         val mutable public Memory : DevicePtr
         val mutable public Size : int64
         val mutable public RefCount : int
-
+        val mutable public Usage : VkBufferUsageFlags
 
         interface IBackendBuffer with
             member x.Runtime = x.Device.Runtime :> IBufferRuntime
@@ -31,7 +31,7 @@ type Buffer =
 
         member x.AddReference() = Interlocked.Increment(&x.RefCount) |> ignore
 
-        new(device, handle, memory, size) = { inherit Resource<_>(device, handle); Memory = memory; Size = size; RefCount = 1 }
+        new(device, handle, memory, size, usage) = { inherit Resource<_>(device, handle); Memory = memory; Size = size; RefCount = 1; Usage = usage }
     end
 
 type BufferView =
@@ -196,6 +196,55 @@ module BufferCommands =
         static member inline Copy(src : Buffer, dst : Buffer) = 
             Command.Copy(src, 0L, dst, 0L, min src.Size dst.Size)
 
+        static member Acquire(buffer : Buffer, offset : int64, size : int64) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue cmd =
+                    cmd.AppendCommand()
+
+
+                    let access, stage =
+                        if buffer.Usage.HasFlag VkBufferUsageFlags.IndexBufferBit then 
+                            VkAccessFlags.IndexReadBit, VkPipelineStageFlags.VertexInputBit
+                        elif buffer.Usage.HasFlag VkBufferUsageFlags.VertexBufferBit then
+                            VkAccessFlags.VertexAttributeReadBit, VkPipelineStageFlags.VertexInputBit
+                        elif buffer.Usage.HasFlag VkBufferUsageFlags.IndirectBufferBit then
+                            VkAccessFlags.IndirectCommandReadBit, VkPipelineStageFlags.DrawIndirectBit
+                        else
+                            failwith ""
+                            
+                            
+
+                    let mutable barrier =
+                        VkBufferMemoryBarrier(
+                            VkStructureType.BufferMemoryBarrier, 0n,
+                            VkAccessFlags.None,
+                            access,
+                            uint32 buffer.Device.TransferFamily.Index,
+                            uint32 buffer.Device.GraphicsFamily.Index,
+                            buffer.Handle,
+                            uint64 offset,
+                            uint64 size
+                        )
+
+                    VkRaw.vkCmdPipelineBarrier(
+                        cmd.Handle,
+                        VkPipelineStageFlags.TopOfPipeBit,
+                        stage,
+                        VkDependencyFlags.None,
+                        0u, NativePtr.zero,
+                        0u, NativePtr.zero,
+                        0u, NativePtr.zero
+                    )
+
+                    Disposable.Empty
+
+
+            }
+            
+        static member Acquire(buffer : Buffer) =
+            Command.Acquire(buffer, 0L, buffer.Size)
+
         static member Sync(b : Buffer, src : VkAccessFlags, dst : VkAccessFlags) =
             { new Command() with
                 member x.Compatible = QueueFlags.All
@@ -300,6 +349,23 @@ module BufferCommands =
                     VkRaw.vkCmdFillBuffer(cmd.Handle, b.Handle, uint64 offset, uint64 size, v)
                     Disposable.Empty
             }
+
+    type CopyCommand with
+        static member Copy(src : Buffer, srcOffset : int64, dst : Buffer, dstOffset : int64, size : int64) =
+            CopyCommand.Copy(src.Handle, srcOffset, dst.Handle, dstOffset, size)
+
+        static member Copy(src : Buffer, dst : Buffer, size : int64) =
+            CopyCommand.Copy(src.Handle, 0L, dst.Handle, 0L, size)
+
+        static member Copy(src : Buffer, dst : Buffer) =
+            CopyCommand.Copy(src.Handle, 0L, dst.Handle, 0L, min src.Size dst.Size)
+
+        static member Release(buffer : Buffer, offset : int64, size : int64, dstQueueFamily : DeviceQueueFamily) =
+            CopyCommand.Release(buffer.Handle, offset, size, dstQueueFamily.Index)
+
+        static member Release(buffer : Buffer, dstQueueFamily : DeviceQueueFamily) =
+            CopyCommand.Release(buffer, 0L, buffer.Size, dstQueueFamily)
+
 // =======================================================================
 // Resource functions for Device
 // =======================================================================
@@ -348,7 +414,7 @@ module Buffer =
                 emptyBuffers.TryRemove(key) |> ignore
             )   
 
-            new Buffer(device, handle, ptr, 256L)
+            new Buffer(device, handle, ptr, 256L, usage)
         )
 
     let createConcurrent (conc : bool) (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
@@ -380,7 +446,7 @@ module Buffer =
             |> check "could not bind buffer-memory"
 
 
-        new Buffer(device, handle, ptr, size)
+        new Buffer(device, handle, ptr, size, flags)
 
     let inline create  (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
         createConcurrent false flags size memory
@@ -390,6 +456,13 @@ module Buffer =
 
     let inline alloc (flags : VkBufferUsageFlags) (size : int64) (device : Device) =
         allocConcurrent false flags size device
+        
+    let delete (buffer : Buffer) (device : Device) =
+        if Interlocked.Decrement(&buffer.RefCount) = 0 then
+            if buffer.Handle.IsValid && buffer.Size > 0L then
+                VkRaw.vkDestroyBuffer(device.Handle, buffer.Handle, NativePtr.zero)
+                buffer.Handle <- VkBuffer.Null
+                buffer.Memory.Dispose()
 
     let internal ofWriter (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit) (device : Device) =
         if size > 0n then
@@ -399,14 +472,33 @@ module Buffer =
             let buffer = device |> alloc flags deviceAlignedSize
             buffer.Size <- int64 size
             let deviceMem = buffer.Memory
-        
-            let hostPtr = device.HostMemory.Alloc(align, deviceAlignedSize)
-            hostPtr.Mapped (fun dst -> writer dst)
 
-            device.eventually {
-                try do! Command.Copy(hostPtr, 0L, buffer, 0L, int64 size)
-                finally hostPtr.Dispose()
-            }
+            match device.UploadMode with
+                | UploadMode.Direct ->
+                    buffer.Memory.Mapped (fun dst -> writer dst)
+
+                | UploadMode.Sync ->
+                    let hostBuffer = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit deviceAlignedSize
+                    hostBuffer.Memory.Mapped (fun dst -> writer dst)
+                    
+                    device.eventually {
+                        try do! Command.Copy(hostBuffer, buffer)
+                        finally delete hostBuffer device
+                    }
+
+                | UploadMode.Async -> 
+                    let hostBuffer = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit deviceAlignedSize
+                    hostBuffer.Memory.Mapped (fun dst -> writer dst)
+
+                    device.CopyEngine.Enqueue [
+                        CopyCommand.Copy(hostBuffer, buffer, int64 size)
+                        CopyCommand.Release(buffer, device.GraphicsFamily)
+                        CopyCommand.Callback (fun () -> delete hostBuffer device)
+                    ]
+
+                    device.eventually {
+                        do! Command.Acquire buffer
+                    }
 
             buffer
         else
@@ -426,13 +518,6 @@ module Buffer =
             try do! Command.Copy(hostPtr, 0L, buffer, 0L, buffer.Size)
             finally hostPtr.Dispose()
         }
-
-    let delete (buffer : Buffer) (device : Device) =
-        if Interlocked.Decrement(&buffer.RefCount) = 0 then
-            if buffer.Handle.IsValid && buffer.Size > 0L then
-                VkRaw.vkDestroyBuffer(device.Handle, buffer.Handle, NativePtr.zero)
-                buffer.Handle <- VkBuffer.Null
-                buffer.Memory.Dispose()
 
     let rec tryUpdate (data : IBuffer) (buffer : Buffer) =
         match data with 

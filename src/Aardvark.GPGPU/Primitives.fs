@@ -235,9 +235,7 @@ module private Kernels =
                 outputData.[group] <- mem.[0]
 
         }
-
-
-      
+ 
     let inputImage3d =
         sampler3d {
             texture uniform?InputTexture
@@ -301,6 +299,290 @@ module private Kernels =
             if id < srcCnt then
                 dst.[dstOffset + id * dstDelta] <- (%map) id src.[srcOffset + id * srcDelta]
         }
+
+    [<ReflectedDefinition; Inline>]
+    let mk2d (dim : int) (x : int) (y : int) =
+        if dim = 0 then V2i(x,y)
+        else V2i(y,x)
+        
+    [<ReflectedDefinition; Inline>]
+    let mk3d (dim : int) (x : int) (yz : V2i) =
+        if dim = 0 then V3i(x, yz.X, yz.Y)
+        elif dim = 1 then V3i(yz.X, x, yz.Y)
+        else V3i(yz.X, yz.Y, x)
+
+    [<LocalSize(X = halfScanSize, Y = 1)>]
+    let scanImageKernel2dTexture (add : Expr<V4d -> V4d -> V4d>) (dim : int) (outputImage : Image2d<Formats.rgba32f>) =
+        compute {
+            let mem : V4d[] = allocateShared scanSize
+            let gid = getGlobalId().X
+            let group = getWorkGroupId().X
+            let inputSize = inputImage2d.Size.[dim]
+            let y = getGlobalId().Y
+
+            let gid0 = gid
+            let lid0 =  getLocalId().X
+
+            let lai = lid0
+            let lbi = lid0 + halfScanSize
+            let ai  = 2 * gid0 - lid0 
+            let bi  = ai + halfScanSize 
+
+            if ai < inputSize then mem.[lai] <- inputImage2d.[mk2d dim ai y]
+            if bi < inputSize then mem.[lbi] <- inputImage2d.[mk2d dim bi y]
+
+            let lgid = 2 * gid0
+            let rgid = lgid + 1
+            let llid = 2 * lid0
+            let rlid = llid + 1
+
+            let mutable offset = 1
+            let mutable d = halfScanSize
+            while d > 0 do
+                barrier()
+                if lid0 < d then
+                    let ai = offset * (llid + 1) - 1
+                    let bi = offset * (rlid + 1) - 1
+                    mem.[bi] <- (%add) mem.[ai] mem.[bi]
+                d <- d >>> 1
+                offset <- offset <<< 1
+
+            d <- 2
+            offset <- offset >>> 1
+
+            while d < scanSize do
+                offset <- offset >>> 1
+                barrier()
+                if lid0 < d - 1 then
+                    let ai = offset*(llid + 2) - 1
+                    let bi = offset*(rlid + 2) - 1
+
+                    mem.[bi] <- (%add) mem.[bi] mem.[ai]
+
+                d <- d <<< 1
+            barrier()
+
+            if lgid < inputSize then
+                outputImage.[mk2d dim lgid y] <- mem.[llid]
+                //(%write) outputImage lgid y mem.[llid]
+
+            if rgid < inputSize then
+                outputImage.[mk2d dim rgid y] <- mem.[rlid]
+                //(%write) outputImage rgid y mem.[rlid]
+        }
+
+    [<LocalSize(X = halfScanSize, Y = 1, Z = 1)>]
+    let scan3dKernel (add : Expr<'a -> 'a -> 'a>) (read : Expr<V3i -> 'a>) (write : Expr<V3i -> 'a -> unit>) (dimension : int) =
+        compute {
+            let Offset : int = uniform?Arguments?Offset
+            let Delta : int = uniform?Arguments?Delta
+            let Size : int = uniform?Arguments?Size
+            
+            let mem : 'a[] = allocateShared scanSize
+            let gid = getGlobalId().X
+            let group = getWorkGroupId().X
+            //let inputSize = inOutImage.Size.[dimension]
+            let yz = getGlobalId().YZ
+
+            let gid0 = gid
+            let lid0 =  getLocalId().X
+
+            let lai = lid0
+            let lbi = lid0 + halfScanSize
+            let ai  = 2 * gid0 - lid0 
+            let bi  = ai + halfScanSize 
+
+            if ai < Size then mem.[lai] <- (%read) (mk3d dimension (Offset + ai * Delta) yz) 
+            if bi < Size then mem.[lbi] <- (%read) (mk3d dimension (Offset + bi * Delta) yz)
+
+            let lgid = 2 * gid0
+            let rgid = lgid + 1
+            let llid = 2 * lid0
+            let rlid = llid + 1
+
+            let mutable offset = 1
+            let mutable d = halfScanSize
+            while d > 0 do
+                barrier()
+                if lid0 < d then
+                    let ai = offset * (llid + 1) - 1
+                    let bi = offset * (rlid + 1) - 1
+                    mem.[bi] <- (%add) mem.[ai] mem.[bi]
+                d <- d >>> 1
+                offset <- offset <<< 1
+
+            d <- 2
+            offset <- offset >>> 1
+
+            while d < scanSize do
+                offset <- offset >>> 1
+                barrier()
+                if lid0 < d - 1 then
+                    let ai = offset*(llid + 2) - 1
+                    let bi = offset*(rlid + 2) - 1
+
+                    mem.[bi] <- (%add) mem.[bi] mem.[ai]
+
+                d <- d <<< 1
+            barrier()
+
+            if lgid < Size then
+                (%write) (mk3d dimension (Offset + lgid * Delta) yz) mem.[llid]
+
+            if rgid < Size then
+                (%write) (mk3d dimension (Offset + rgid * Delta) yz) mem.[rlid]
+        }
+
+    [<LocalSize(X = halfScanSize)>]
+    let fixup3dKernel (add : Expr<'a -> 'a -> 'a>) (readInput : Expr<V3i -> 'a>) (addToOutput : Expr<V3i -> 'a -> unit>) (dimension : int) =
+        compute {
+            let inputOffset : int = uniform?Arguments?inputOffset
+            let inputDelta : int = uniform?Arguments?inputDelta
+            let outputOffset : int = uniform?Arguments?outputOffset
+            let outputDelta : int = uniform?Arguments?outputDelta
+            let groupSize : int = uniform?Arguments?groupSize
+            let count : int = uniform?Arguments?count
+
+            let yz = getGlobalId().YZ
+            let id = getGlobalId().X + groupSize
+
+            if id < count then
+                let block = id / groupSize - 1
+              
+                let iid = inputOffset + block * inputDelta
+                let oid = outputOffset + id * outputDelta
+
+                if id % groupSize <> groupSize - 1 then
+                    let v = (%readInput) (mk3d dimension iid yz)
+                    (%addToOutput) (mk3d dimension oid yz) v
+//                    let oc = mk2d dimension oid y
+//                    inOutImage.[oc] <- (%add) inOutImage.[mk2d dimension iid y] inOutImage.[oc]
+
+        }
+
+
+    [<LocalSize(X = halfScanSize, Y = 1)>]
+    let scanImageKernel2d (add : Expr<V4d -> V4d -> V4d>) (dimension : int) (inOutImage : Image2d<Formats.rgba32f>) =
+        compute {
+            let Offset : int = uniform?Arguments?Offset
+            let Delta : int = uniform?Arguments?Delta
+            let Size : int = uniform?Arguments?Size
+            
+            let mem : V4d[] = allocateShared scanSize
+            let gid = getGlobalId().X
+            let group = getWorkGroupId().X
+            //let inputSize = inOutImage.Size.[dimension]
+            let y = getGlobalId().Y
+
+            let gid0 = gid
+            let lid0 =  getLocalId().X
+
+            let lai = lid0
+            let lbi = lid0 + halfScanSize
+            let ai  = 2 * gid0 - lid0 
+            let bi  = ai + halfScanSize 
+
+            if ai < Size then mem.[lai] <- inOutImage.[mk2d dimension (Offset + ai * Delta) y]
+            if bi < Size then mem.[lbi] <- inOutImage.[mk2d dimension (Offset + bi * Delta) y]
+
+            let lgid = 2 * gid0
+            let rgid = lgid + 1
+            let llid = 2 * lid0
+            let rlid = llid + 1
+
+            let mutable offset = 1
+            let mutable d = halfScanSize
+            while d > 0 do
+                barrier()
+                if lid0 < d then
+                    let ai = offset * (llid + 1) - 1
+                    let bi = offset * (rlid + 1) - 1
+                    mem.[bi] <- (%add) mem.[ai] mem.[bi]
+                d <- d >>> 1
+                offset <- offset <<< 1
+
+            d <- 2
+            offset <- offset >>> 1
+
+            while d < scanSize do
+                offset <- offset >>> 1
+                barrier()
+                if lid0 < d - 1 then
+                    let ai = offset*(llid + 2) - 1
+                    let bi = offset*(rlid + 2) - 1
+
+                    mem.[bi] <- (%add) mem.[bi] mem.[ai]
+
+                d <- d <<< 1
+            barrier()
+
+            if lgid < Size then
+                inOutImage.[mk2d dimension (Offset + lgid * Delta) y] <- mem.[llid]
+                //(%write) outputImage lgid y mem.[llid]
+
+            if rgid < Size then
+                inOutImage.[mk2d dimension (Offset + rgid * Delta) y] <- mem.[rlid]
+                //(%write) outputImage rgid y mem.[rlid]
+        }
+
+
+    [<LocalSize(X = halfScanSize)>]
+    let fixupImageKernel2d (add : Expr<V4d -> V4d -> V4d>) (dimension : int) (inOutImage : Image2d<Formats.rgba32f>) =
+        compute {
+            let inputOffset : int = uniform?Arguments?inputOffset
+            let inputDelta : int = uniform?Arguments?inputDelta
+            let outputOffset : int = uniform?Arguments?outputOffset
+            let outputDelta : int = uniform?Arguments?outputDelta
+            let groupSize : int = uniform?Arguments?groupSize
+            let count : int = uniform?Arguments?count
+
+            let y = getGlobalId().Y
+            let id = getGlobalId().X + groupSize
+
+            if id < count then
+                let block = id / groupSize - 1
+              
+                let iid = inputOffset + block * inputDelta
+                let oid = outputOffset + id * outputDelta
+
+                if id % groupSize <> groupSize - 1 then
+                    let oc = mk2d dimension oid y
+                    inOutImage.[oc] <- (%add) inOutImage.[mk2d dimension iid y] inOutImage.[oc]
+
+        }
+
+
+module private ImageIO =
+    open FShade
+
+    let inputSampler2d =
+        sampler2d {
+            texture uniform?inputTexture
+            filter Filter.MinMagMipPoint
+        }
+        
+    let inputSampler3d =
+        sampler3d {
+            texture uniform?inputTexture
+            filter Filter.MinMagMipPoint
+        }
+
+    type UniformScope with
+        member x.ImageHeight : int = x?Arguments?imageHeight
+        member x.Image2d : Image2d<Formats.rgba32f> = x?inOutImage
+        member x.Image3d : Image3d<Formats.rgba32f> = x?inOutImage
+
+
+    let writeImage2d                                    = <@ fun (c : V3i) (v : V4d) -> uniform.Image2d.[c.XY] <- v @>
+    let readSampler2d                                   = <@ fun (c : V3i) -> inputSampler2d.[c.XY] @>
+    let readImage2d                                     = <@ fun (c : V3i) -> uniform.Image2d.[c.XY] @>
+    let addToImage2d (add : Expr<V4d -> V4d -> V4d>)    = <@ fun (c : V3i) (v : V4d) -> uniform.Image2d.[c.XY] <- (%add) v uniform.Image2d.[c.XY] @>
+
+    let writeImage3d                                    = <@ fun (c : V3i) (v : V4d) -> uniform.Image3d.[c] <- v @>
+    let readSampler3d                                   = <@ fun (c : V3i) -> inputSampler3d.[c] @>
+    let readImage3d                                     = <@ fun (c : V3i) -> uniform.Image3d.[c] @>
+    let addToImage3d (add : Expr<V4d -> V4d -> V4d>)    = <@ fun (c : V3i) (v : V4d) -> uniform.Image3d.[c] <- (%add) v uniform.Image3d.[c] @>
+
 
 
 type private Map<'a, 'b when 'a : unmanaged and 'b : unmanaged>(runtime : IComputeRuntime, map : Expr<int -> 'a -> 'b>) =
@@ -811,6 +1093,198 @@ type private Add<'a>() =
 
     static member Expr = add
 
+type private ScanRange = { offset : int; delta : int; count : int }
+
+type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d>) =
+
+    static let ceilDiv (v : int) (d : int) =
+        if v % d = 0 then v / d
+        else 1 + v / d
+
+    let scanTexture2d     = lazy (runtime.CreateComputeShader (Kernels.scan3dKernel add ImageIO.readSampler2d ImageIO.writeImage2d))
+    let scan2d            = lazy (runtime.CreateComputeShader (Kernels.scan3dKernel add ImageIO.readImage2d ImageIO.writeImage2d))
+    let fixup2d           = lazy (runtime.CreateComputeShader (Kernels.fixup3dKernel add ImageIO.readImage2d (ImageIO.addToImage2d add)))
+    
+    let scanTexture3d     = lazy (runtime.CreateComputeShader (Kernels.scan3dKernel add ImageIO.readSampler3d ImageIO.writeImage3d))
+    let scan3d            = lazy (runtime.CreateComputeShader (Kernels.scan3dKernel add ImageIO.readImage3d ImageIO.writeImage3d))
+    let fixup3d           = lazy (runtime.CreateComputeShader (Kernels.fixup3dKernel add ImageIO.readImage3d (ImageIO.addToImage3d add)))
+
+    let scanTexture =
+        LookupTable.lookupTable [
+            2, scanTexture2d
+            3, scanTexture3d
+        ]
+
+    let scan =
+        LookupTable.lookupTable [
+            2, scan2d
+            3, scan3d
+        ]
+
+    let fixup =
+        LookupTable.lookupTable [
+            2, fixup2d
+            3, fixup3d
+        ]
+
+
+    let next (range : ScanRange) =
+        // (Kernels.scanSize - 1) + x * Kernels.scanSize <= range.count - 1
+        // x * Kernels.scanSize <= range.count - 1 - Kernels.scanSize + 1
+        // x <= (range.count - Kernels.scanSize) / Kernels.scanSize
+        let innerCount = 1 + (range.count - Kernels.scanSize) / Kernels.scanSize
+        let innerDelta = range.delta * Kernels.scanSize
+        let innerOffset = range.offset + range.delta * (Kernels.scanSize - 1)
+        { offset = innerOffset; delta = innerDelta; count = innerCount }
+
+
+
+    let release() =
+        if scanTexture2d.IsValueCreated then runtime.DeleteComputeShader scanTexture2d.Value
+        if scan2d.IsValueCreated then runtime.DeleteComputeShader scan2d.Value
+        if fixup2d.IsValueCreated then runtime.DeleteComputeShader fixup2d.Value
+
+
+    let scanBlocks (args : HashSet<IComputeShaderInputBinding>) (imgDim : int) (dim : int) (image : ITextureSubResource) (range : ScanRange) =
+        let scan = scan(imgDim).Value
+
+        let input = runtime.NewInputBinding(scan)
+        input.["inOutImage"] <- image
+        input.["dimension"] <- dim
+        input.["Offset"] <- range.offset
+        input.["Size"] <- range.count
+        input.["Delta"] <- range.delta
+        input.Flush()
+        args.Add input |> ignore
+        
+        let rest =
+            match dim with
+                | 0 -> image.Size.YZ
+                | 1 -> image.Size.XZ
+                | 2 -> image.Size.XY
+                | _ -> failwith "[GPGPU] invalid dimension"
+
+        [
+            ComputeCommand.Sync(image.Texture)
+            ComputeCommand.Bind scan
+            ComputeCommand.SetInput input
+            ComputeCommand.Dispatch(V3i(ceilDiv range.count Kernels.scanSize, rest.X, rest.Y))
+        ]
+
+    let repair (args : HashSet<IComputeShaderInputBinding>) (imgDim : int) (dim : int) (image : ITextureSubResource) (range : ScanRange) =
+        let fixup = fixup(imgDim).Value
+
+        let innerRange = next range
+
+        let args1 = runtime.NewInputBinding fixup
+        args1.["inOutImage"] <- image
+        args1.["dimension"] <- dim
+        args1.["inputOffset"] <- innerRange.offset
+        args1.["inputDelta"] <- innerRange.delta
+        args1.["outputOffset"] <- range.offset
+        args1.["outputDelta"] <- range.delta
+        args1.["count"] <- range.count
+        args1.["groupSize"] <- Kernels.scanSize
+        args1.Flush()
+        args.Add args1 |> ignore
+
+        let rest =
+            match dim with
+                | 0 -> image.Size.YZ
+                | 1 -> image.Size.XZ
+                | 2 -> image.Size.XY
+                | _ -> failwith "[GPGPU] invalid dimension"
+
+        [
+            // fix the shit
+            ComputeCommand.Sync(image.Texture)
+            ComputeCommand.Bind fixup
+            ComputeCommand.SetInput args1
+            ComputeCommand.Dispatch(V3i(ceilDiv (range.count - Kernels.scanSize) Kernels.halfScanSize, rest.X, rest.Y))
+        ]
+
+    let rec buildDim (args : HashSet<IComputeShaderInputBinding>) (imgDim : int) (dim : int) (image : ITextureSubResource) (range : ScanRange) =
+        
+        if range.count <= 1 then
+            []
+        else
+            [
+                yield! scanBlocks args imgDim dim image range
+
+                let innerRange = next range
+                yield! buildDim args imgDim dim image innerRange
+
+                if range.count > Kernels.scanSize then
+                    yield! repair args imgDim dim image range
+
+            ]
+
+        
+
+    let rec build (args : HashSet<IComputeShaderInputBinding>) (input : ITextureSubResource) (output : ITextureSubResource) =
+        let imageDim = 
+            match input.Texture.Dimension with
+                | TextureDimension.Texture2D -> 2
+                | TextureDimension.Texture3D -> 3
+                | d -> failwithf "invalid texture dimension in scan: %A" d
+
+        let scanTexture = scanTexture(imageDim).Value
+
+        let xInput = runtime.NewInputBinding(scanTexture)
+        xInput.["inputTexture"] <- input.Texture
+        xInput.["inOutImage"] <- output
+        xInput.["dimension"] <- 0
+        xInput.["Offset"] <- 0
+        xInput.["Size"] <- input.Size.X
+        xInput.["Delta"] <- 1
+        xInput.Flush()
+
+        [
+            yield ComputeCommand.TransformLayout(input.Texture, TextureLayout.ShaderRead)
+            yield ComputeCommand.TransformLayout(output.Texture, TextureLayout.ShaderReadWrite)
+
+            yield ComputeCommand.Bind scanTexture
+            yield ComputeCommand.SetInput xInput
+            yield ComputeCommand.Dispatch(V3i(ceilDiv input.Size.X Kernels.scanSize, input.Size.Y, input.Size.Z))
+            yield ComputeCommand.Sync(output.Texture)
+
+            let xRange = { offset = 0; delta = 1; count = input.Size.X }
+            yield! buildDim args imageDim 0 output (next xRange)
+            if xRange.count > Kernels.scanSize then
+                yield! repair args imageDim 0 output xRange
+
+            for dim in 1 .. imageDim-1 do
+                let dimRange = { offset = 0; delta = 1; count = input.Size.[dim] }
+                yield! buildDim args imageDim dim output dimRange
+        ]
+
+
+
+        
+    member x.Compile (input : ITextureSubResource, output : ITextureSubResource) =
+        let args = System.Collections.Generic.HashSet<IComputeShaderInputBinding>()
+        let cmd = build args input output
+        let prog = runtime.Compile cmd
+        
+        prog.OnDispose(fun () ->
+            for a in args do a.Dispose()
+            args.Clear()
+        )
+        prog
+        
+    member x.Run (input : ITextureSubResource, output : ITextureSubResource) =
+        let args = System.Collections.Generic.HashSet<IComputeShaderInputBinding>()
+        let cmd = build args input output
+        runtime.Run cmd
+        for a in args do a.Dispose()
+        args.Clear()
+  
+    member x.Dispose() =
+        release()
+
+    
+
+
 [<AbstractClass>]
 type private Existential<'r>() =
     static let visitMeth = typeof<Existential<'r>>.GetMethod "Visit"
@@ -833,6 +1307,9 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
     let reduceCache = ExpressionCache()
     let mapReduceCache = ExpressionCache()
     let mapReduceImageCache = ExpressionCache()
+    
+    let scanImage2dCache = ExpressionCache()
+
 
 
     let getMapper (map : Expr<int -> 'a -> 'b>) = mapCache.GetOrCreate(map, fun map -> new Map<'a, 'b>(runtime, map))
@@ -843,6 +1320,8 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
             let reducer = getReducer add
             new MapReduce<'a, 'b>(runtime, reducer, map, add)
         )
+        
+    let getImageScanner2d (add : Expr<V4d -> V4d -> V4d>) = scanImage2dCache.GetOrCreate(add, fun add -> new ScanImage2d(runtime, add))
 
     let getImageMapReducer (map : Expr<V3i -> V4f -> 'b>) (add : Expr<'b -> 'b -> 'b>) =
         mapReduceCache.GetOrCreate(map, add, fun map add -> 
@@ -865,6 +1344,10 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
     member x.CompileScan(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, output : IBufferVector<'a>) =
         let scanner = getScanner add
         scanner.Compile(input, output)
+        
+    member x.CompileScan(add : Expr<V4d -> V4d -> V4d>, input : ITextureSubResource, output : ITextureSubResource) =
+        let scanner = getImageScanner2d add
+        scanner.Compile(input, output)
 
     member x.CompileFold(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>) =
         let reducer = getReducer add
@@ -884,6 +1367,10 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
 
     member x.Scan(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, output : IBufferVector<'a>) =
         let scanner = getScanner add
+        scanner.Run(input, output)
+        
+    member x.Scan(add : Expr<V4d -> V4d -> V4d>, input : ITextureSubResource, output : ITextureSubResource) =
+        let scanner = getImageScanner2d add
         scanner.Run(input, output)
 
     member x.Fold(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>) =

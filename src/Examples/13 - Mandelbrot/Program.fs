@@ -11,6 +11,7 @@ module Shader =
         {
             [<Position>] pos    : V4d
             [<TexCoord>] tc     : V2d
+            [<SamplePosition>] s     : V2d
         }
 
     type UniformScope with
@@ -26,12 +27,13 @@ module Shader =
             addressV WrapMode.Wrap
         }
 
+
     let mandelbrot (v : Vertex) =
         fragment {
             let scale = uniform.Scale
             let center = uniform.Center
             let size = uniform.ViewportSize
-            let aspect = float size.X / float size.Y
+            let aspect = float size.X / float size.Y + 0.0001 * v.s.X
             let iter = uniform.Iterations
 
             let c = V2d(aspect * (2.0 * v.tc.X - 1.0), (2.0 * v.tc.Y - 1.0)) * scale - center
@@ -71,7 +73,7 @@ let main argv =
             backend Backend.GL
             display Display.Mono
             debug false
-            samples 1
+            samples 9
         }
 
     let texture = 
@@ -90,7 +92,7 @@ let main argv =
 
     let sg = 
         Sg.fullScreenQuad
-            |> Sg.uniform "Iterations" (Mod.constant 500)
+            |> Sg.uniform "Iterations" (Mod.constant 1000)
             |> Sg.uniform "Scale" scale //(Mod.constant 2.2)
             |> Sg.uniform "Center" (Mod.constant <| center)
             |> Sg.uniform "TransferFunction" (Mod.constant texture)

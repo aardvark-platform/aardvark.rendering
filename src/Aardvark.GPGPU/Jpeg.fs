@@ -1361,7 +1361,7 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
             yield! dctCommand
             yield! codewordCommand
             
-            yield ComputeCommand.Sync(codewordBuffer.Buffer, BufferAccess.ShaderWrite, BufferAccess.ShaderRead)
+            yield ComputeCommand.Sync(codewordBuffer.Buffer, ResourceAccess.ShaderWrite, ResourceAccess.ShaderRead)
             yield ComputeCommand.Execute scan
             yield! assembleCommand
 

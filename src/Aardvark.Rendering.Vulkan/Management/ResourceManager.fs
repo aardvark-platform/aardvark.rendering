@@ -37,6 +37,7 @@ type IResourceLocation =
     abstract member Acquire : unit -> unit
     abstract member Release : unit -> unit
     abstract member ReleaseAll : unit -> unit
+    abstract member ReferenceCount : int
     abstract member Key : list<obj>
     abstract member Owner : IResourceCache
     
@@ -105,6 +106,7 @@ type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
         )
         
     interface IResourceLocation with
+        member x.ReferenceCount = refCount
         member x.Update t = 
             let res = x.Update t
             { handle = res :> obj; version = res.version }
@@ -469,30 +471,20 @@ module Resources =
     type UniformBufferResource(owner : IResourceCache, key : list<obj>, device : Device, layout : UniformBufferLayout, writers : list<IMod * UniformWriters.IWriter>) =
         inherit AbstractResourceLocation<UniformBuffer>(owner, key)
         
-        let mutable handle : Option<UniformBuffer> = None
+        let mutable handle : UniformBuffer = Unchecked.defaultof<_>
         let mutable version = 0
 
+        member x.Handle = handle
+
         override x.Create() =
-            ()
+            handle <- device.CreateUniformBuffer(layout)
 
         override x.Destroy() =
-            match handle with
-                | Some b -> 
-                    device.Delete b
-                    handle <- None
-                | _ -> ()
+            device.Delete handle
+            handle <- Unchecked.defaultof<_>
                 
         override x.GetHandle(token : AdaptiveToken) =
             if x.OutOfDate then
-                let handle =
-                    match handle with
-                        | Some h -> h
-                        | None ->
-                            let h = device.CreateUniformBuffer(layout)
-                            handle <- Some h
-                            h
-
-
                 for (m,w) in writers do
                     w.Write(token, m, handle.Storage.Pointer)
 
@@ -501,9 +493,7 @@ module Resources =
                 inc &version
                 { handle = handle; version = version }
             else
-                match handle with
-                    | Some h -> { handle = h; version = version }
-                    | None -> failwith "[Resource] inconsistent state"
+                { handle = handle; version = version }
 
     type ImageResource(owner : IResourceCache, key : list<obj>, device : Device, input : IMod<ITexture>) =
         inherit ImmutableResourceLocation<ITexture, Image>(
@@ -737,14 +727,14 @@ module Resources =
             DrawCall.Direct(indexed, List.toArray calls)
 
 
-    type DescriptorSetResource(owner : IResourceCache, key : list<obj>, pool : DescriptorPool, layout : DescriptorSetLayout, bindings : list<AdaptiveDescriptor>) =
+    type DescriptorSetResource(owner : IResourceCache, key : list<obj>, layout : DescriptorSetLayout, bindings : list<AdaptiveDescriptor>) =
         inherit AbstractResourceLocation<DescriptorSet>(owner, key)
 
-        let mutable handle = None
+        let mutable handle : Option<DescriptorSet> = None
         let mutable version = 0
 
         let mutable state = [||]
-
+        let device = layout.Device
         override x.Create() =
             for b in bindings do
                 match b with
@@ -776,7 +766,7 @@ module Resources =
 
             match handle with
                 | Some set -> 
-                    pool.Free set
+                    device.Delete set
                     handle <- None
                 | _ -> ()
 
@@ -784,10 +774,15 @@ module Resources =
             if x.OutOfDate then
                 
                 let bindings =
-                    bindings |> List.toArray |> Array.mapi (fun i b ->
+                    bindings |> List.toArray |> Array.map (fun b ->
                         match b with
                             | AdaptiveUniformBuffer(slot, b) ->
-                                UniformBuffer(slot, b.Update(AdaptiveToken.Top).handle)
+                                let handle =
+                                    match b with
+                                        | :? UniformBufferResource as b -> b.Handle
+                                        | b -> b.Update(AdaptiveToken.Top).handle
+
+                                UniformBuffer(slot,  handle)
                                 
                             | AdaptiveStorageBuffer(slot, b) ->
                                 let buffer = b.Update(token).handle
@@ -811,12 +806,12 @@ module Resources =
                     match handle with
                         | Some h -> h
                         | None ->
-                            let h = pool.Alloc(layout)
+                            let h = device.CreateDescriptorSet(layout)
                             handle <- Some h
                             h
 
                 if bindings <> state then
-                    pool.Update(handle, bindings)
+                    handle.Update(bindings)
                     state <- bindings
                     inc &version
 
@@ -1126,7 +1121,7 @@ module Resources =
 
 open Resources
 type ResourceManager(user : IResourceUser, device : Device) =
-    let descriptorPool = device.CreateDescriptorPool(1 <<< 22, 1 <<< 22)
+    //let descriptorPool = device.CreateDescriptorPool(1 <<< 22, 1 <<< 22)
 
     let bufferCache             = ResourceLocationCache<Buffer>(user)
     let indirectBufferCache     = ResourceLocationCache<IndirectBuffer>(user)
@@ -1157,7 +1152,6 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.ResourceUser = user
 
     member x.Dispose() =
-        device.Delete descriptorPool
         bufferCache.Clear()
 
         indirectBufferCache.Clear()
@@ -1185,7 +1179,6 @@ type ResourceManager(user : IResourceUser, device : Device) =
 
 
     member x.Device = device
-    member x.DescriptorPool = descriptorPool
 
 //    member x.CreateRenderPass(signature : Map<Symbol, AttachmentSignature>) =
 //        device.CreateRenderPass(signature)
@@ -1318,7 +1311,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
                 uniformBufferCache.GetOrCreate(key, fun cache key -> UniformBufferResource(cache, key, device, layout, writers)) |> Choice2Of2
 
     member x.CreateDescriptorSet(layout : DescriptorSetLayout, bindings : list<AdaptiveDescriptor>) =
-        descriptorSetCache.GetOrCreate([layout :> obj; bindings :> obj], fun cache key -> new DescriptorSetResource(cache, key, descriptorPool, layout, bindings))
+        descriptorSetCache.GetOrCreate([layout :> obj; bindings :> obj], fun cache key -> new DescriptorSetResource(cache, key, layout, bindings))
         
     member x.CreateVertexInputState(program : PipelineInfo, mode : IMod<Map<Symbol, VertexInputDescription>>) =
         vertexInputCache.GetOrCreate([program :> obj; mode :> obj], fun cache key -> new VertexInputStateResource(cache, key, program, mode))

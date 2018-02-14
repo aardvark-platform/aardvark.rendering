@@ -23,15 +23,15 @@ module Sponza =
         
         let win = 
             window {
-                display Display.Stereo
-                samples 1
-                backend Backend.Vulkan
+                display Display.Mono
+                samples 8
+                backends [Backend.GL; Backend.Vulkan]
 
                 debug false
             }
 
         let sg = 
-            Aardvark.SceneGraph.IO.Loader.Assimp.loadFrom @"C:\Users\steinlechner\Desktop\Sponza bunt\sponza_cm.obj" Loader.Assimp.defaultFlags
+            Aardvark.SceneGraph.IO.Loader.Assimp.loadFrom @"E:\Development\WorkDirectory\Sponza bunt\sponza_cm.obj" Loader.Assimp.defaultFlags
                 |> Sg.adapter
                 |> Sg.scale (0.01)
                 |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero))
@@ -40,13 +40,13 @@ module Sponza =
                     do! DefaultSurfaces.diffuseTexture
                     do! DefaultSurfaces.simpleLighting
 
-                    do! fun (v : Effects.Vertex) ->
-                        fragment {
-                            let mutable a = cos(v.tc.X)
-                            for i in 1 .. 2000 do
-                                a <- a * sin(float i) * cos(float i)
-                            return v.c * (1.0 + a)
-                        }
+//                    do! fun (v : Effects.Vertex) ->
+//                        fragment {
+//                            let mutable a = cos(v.tc.X)
+//                            for i in 1 .. 2000 do
+//                                a <- a * sin(float i) * cos(float i)
+//                            return v.c * (1.0 + a)
+//                        }
 
                 }
 

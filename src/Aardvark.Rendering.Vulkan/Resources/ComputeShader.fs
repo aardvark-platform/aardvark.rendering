@@ -41,7 +41,7 @@ type BindingReference =
     | StorageImageRef of set : int * binding : int * info : ShaderSamplerType
 
 [<StructuredFormatDisplay("{AsString}")>]
-type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : DescriptorSet[], references : Map<string, list<BindingReference>>, imageArrays : MapExt<int * int, Option<ImageView * Sampler>[]>, buffers : List<UniformBuffer>) =
+type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : Map<string, list<BindingReference>>, imageArrays : MapExt<int * int, Option<ImageView * Sampler>[]>, buffers : List<UniformBuffer>) =
     
     
     static let rec prettyPrimitive (t : PrimitiveType) =
@@ -69,7 +69,7 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
                     |> sprintf "struct { %s }"
 
     
-    let device = pool.Device
+    let device = shader.Device
     let lockObj = obj()
     let mutable disposables : MapExt<int * int * int, IDisposable> = MapExt.empty
     let mutable dirtyBuffers = HSet.empty
@@ -132,6 +132,11 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
                                 let view = device.CreateOutputImageView(r.Image, r.BaseLevel, r.LevelCount, r.BaseSlice, r.SliceCount)
                                 view, Some { new IDisposable with member x.Dispose() = device.Delete view }
 
+                            | :? ITextureRange as r ->
+                                let image = r.Texture |> unbox<Image>
+                                let view = device.CreateOutputImageView(image, r.Levels.Min, 1 + r.Levels.Max - r.Levels.Min, r.Slices.Min, 1 + r.Slices.Max - r.Slices.Min)
+                                view, Some { new IDisposable with member x.Dispose() = device.Delete view }
+
                             | _ -> 
                                 failf "invalid storage image argument: %A" value
 
@@ -149,6 +154,12 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
 
                             | :? ITexture as tex ->
                                 let image = device.CreateImage tex
+                                let view = device.CreateInputImageView(image, info, VkComponentMapping.Identity)
+                                content.[index] <- Some (view, sampler)
+                                Some { new IDisposable with member x.Dispose() = device.Delete image; device.Delete view }
+
+                            | :? ITextureRange as r ->
+                                let image = r.Texture |> unbox<Image>
                                 let view = device.CreateInputImageView(image, info, VkComponentMapping.Identity)
                                 content.[index] <- Some (view, sampler)
                                 Some { new IDisposable with member x.Dispose() = device.Delete image; device.Delete view }
@@ -192,7 +203,7 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
 
             for (set, desc) in MapExt.toSeq writes do   
                 let values = desc |> MapExt.toSeq |> Seq.map snd |> Seq.toArray
-                pool.Update(sets.[set], values)
+                sets.[set].Update(values)
         )
 
     let release() =
@@ -203,7 +214,7 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
             for b in buffers do device.Delete b
             buffers.Clear()
             disposables <- MapExt.empty
-            for s in sets do pool.Free s
+            for s in sets do device.Delete s
             NativePtr.free setHandles
         )   
 
@@ -219,6 +230,8 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
                             VkRaw.vkCmdUpdateBuffer(cmd.Handle, b.Handle, 0UL, uint64 b.Storage.Size, b.Storage.Pointer)
                         Disposable.Empty
                 }
+
+    let missingNames = HashSet (Map.toSeq references |> Seq.map fst)
 
     member private x.AsString =
         references 
@@ -275,11 +288,12 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
                 Command.Nop, ignore
     member x.References = references
     member x.Device = device
-    member x.DescriptorPool = pool
     member x.Set(ref : BindingReference, value : obj) = write ref value
     member x.Set(name : string, value : obj) = 
         match Map.tryFind name references with
-            | Some refs -> for r in refs do write r value
+            | Some refs -> 
+                missingNames.Remove name |> ignore
+                for r in refs do write r value
             | None -> () //failf "invalid reference %A" name
 
     member x.Item
@@ -288,8 +302,12 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
     member x.Item
         with set (ref : BindingReference) (value : obj) = x.Set(ref, value)
 
-    member x.Flush() = flush()
-    member x.Bind = bind
+    member x.Flush() =
+        if missingNames.Count > 0 then
+            Log.warn "[Vulkan] missing inputs for compute shader: %A" (Seq.toList missingNames) 
+        flush()
+    member x.Bind = 
+        bind
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -334,6 +352,7 @@ module ``Compute Commands`` =
 
                         Disposable.Empty
                 }
+
         static member DispatchIndirect (b : Buffer) =
             { new Command() with
                 override x.Compatible = QueueFlags.Compute
@@ -352,6 +371,46 @@ module ``Compute Commands`` =
         static member Dispatch (sizeX : int, sizeY : int, sizeZ : int) = Command.Dispatch(V3i(sizeX, sizeY, sizeZ))
         static member Dispatch (sizeX : int, sizeY : int) = Command.Dispatch(V3i(sizeX, sizeY, 1))
          
+        static member ImageBarrier(img : ImageSubresourceRange, src : VkAccessFlags, dst : VkAccessFlags) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue cmd =
+                    
+                    let mutable imageMemoryBarrier =
+                        VkImageMemoryBarrier(
+                            VkStructureType.ImageMemoryBarrier, 0n,
+                            src, dst,
+                            VkImageLayout.General, VkImageLayout.General,
+                            VK_QUEUE_FAMILY_IGNORED,
+                            VK_QUEUE_FAMILY_IGNORED,
+                            img.Image.Handle,
+                            img.VkImageSubresourceRange
+                        )
+
+                    let srcStage =
+                        match src with
+                            | VkAccessFlags.TransferReadBit | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
+                            | _ -> VkPipelineStageFlags.ComputeShaderBit
+                            
+                    let dstStage =
+                        match dst with
+                            | VkAccessFlags.TransferReadBit | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
+                            | _ -> VkPipelineStageFlags.ComputeShaderBit
+
+                    cmd.AppendCommand()
+                    VkRaw.vkCmdPipelineBarrier(
+                        cmd.Handle, 
+                        srcStage,
+                        dstStage,
+                        VkDependencyFlags.None,
+                        0u, NativePtr.zero,
+                        0u, NativePtr.zero,
+                        1u, &&imageMemoryBarrier
+                    )
+
+                    Disposable.Empty
+            }
+
     module TextureLayout = 
         let toImageLayout =
             LookupTable.lookupTable [
@@ -370,10 +429,10 @@ module ``Compute Commands`` =
 
         let private accessFlags =
             LookupTable.lookupTable [
-                BufferAccess.ShaderRead, VkAccessFlags.ShaderReadBit
-                BufferAccess.ShaderWrite, VkAccessFlags.ShaderWriteBit
-                BufferAccess.TransferRead, VkAccessFlags.TransferReadBit
-                BufferAccess.TransferWrite, VkAccessFlags.TransferWriteBit
+                ResourceAccess.ShaderRead, VkAccessFlags.ShaderReadBit
+                ResourceAccess.ShaderWrite, VkAccessFlags.ShaderWriteBit
+                ResourceAccess.TransferRead, VkAccessFlags.TransferReadBit
+                ResourceAccess.TransferWrite, VkAccessFlags.TransferWriteBit
             ]
 
         [<AutoOpen>]
@@ -549,6 +608,34 @@ module ``Compute Commands`` =
                     let value = BitConverter.ToUInt32(pattern, 0)
                     x.FillBuffer(b.Handle, uint64 offset, uint64 size, value)
 
+                member x.ImageBarrier(img : ImageSubresourceRange, src : VkAccessFlags, dst : VkAccessFlags) =
+
+                    let srcStage =
+                        match src with
+                            | VkAccessFlags.TransferReadBit | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
+                            | _ -> VkPipelineStageFlags.ComputeShaderBit
+                            
+                    let dstStage =
+                        match dst with
+                            | VkAccessFlags.TransferReadBit | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
+                            | _ -> VkPipelineStageFlags.ComputeShaderBit
+
+                    x.PipelineBarrier(
+                        srcStage, dstStage,
+                        [||],
+                        [||],
+                        [|
+                            VkImageMemoryBarrier(
+                                VkStructureType.ImageMemoryBarrier, 0n,
+                                src, dst,
+                                VkImageLayout.General, VkImageLayout.General,
+                                VK_QUEUE_FAMILY_IGNORED,
+                                VK_QUEUE_FAMILY_IGNORED,
+                                img.Image.Handle,
+                                img.VkImageSubresourceRange
+                            )
+                        |]
+                    )
 
             type ComputeProgram(stream : VKVM.CommandStream, state : CompilerState) =
                 inherit ComputeProgram<unit>()
@@ -731,6 +818,10 @@ module ``Compute Commands`` =
                 | ComputeCommand.SyncBufferCmd(b, src, dst) ->
                     Command.Sync(unbox b, accessFlags src, accessFlags dst)
 
+                | ComputeCommand.SyncImageCmd(i, src, dst) ->
+                    let i = unbox<Image> i
+                    Command.ImageBarrier(i.[ImageAspect.Color], accessFlags src, accessFlags dst)
+
                 | ComputeCommand.SetBufferCmd(b, pattern) ->
                     Command.SetBuffer(unbox b.Buffer, int64 b.Offset, int64 b.Size, pattern)
 
@@ -814,6 +905,10 @@ module ``Compute Commands`` =
             
                     | ComputeCommand.SyncBufferCmd(b, src, dst) ->
                         stream.Sync(unbox b, accessFlags src, accessFlags dst) |> ignore
+                        
+                    | ComputeCommand.SyncImageCmd(i, src, dst) ->
+                        let i = unbox<Image> i
+                        stream.ImageBarrier(i.[ImageAspect.Color], accessFlags src, accessFlags dst) |> ignore
 
                     | ComputeCommand.SetBufferCmd(b, value) ->
                         stream.SetBuffer(unbox b.Buffer, int64 b.Offset, int64 b.Size, value) |> ignore
@@ -953,7 +1048,7 @@ module ComputeShader =
             | _ ->
                 Other
 
-    let newInputBinding (shader : ComputeShader) (pool : DescriptorPool) =
+    let newInputBinding (shader : ComputeShader) =
         let device = shader.Device
         let references = Dict<string, list<BindingReference>>()
         let setLayouts = shader.Layout.DescriptorSetLayouts
@@ -964,7 +1059,7 @@ module ComputeShader =
 
         for si in 0 .. setLayouts.Length - 1 do
             let setLayout = setLayouts.[si]
-            let set = pool.Alloc setLayout
+            let set = device.CreateDescriptorSet setLayout
 
             let descriptors = List()
 
@@ -1015,8 +1110,8 @@ module ComputeShader =
 
                     | Other -> ()
 
-            pool.Update(set, CSharpList.toArray descriptors)
+            set.Update(CSharpList.toArray descriptors)
 
             sets.[si] <- set
 
-        new InputBinding(pool, shader, sets, Dict.toMap references, imageArrays, buffers)
+        new InputBinding(shader, sets, Dict.toMap references, imageArrays, buffers)

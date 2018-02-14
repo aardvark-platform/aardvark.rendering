@@ -14,6 +14,11 @@ open Aardvark.Base.ShaderReflection
 open Aardvark.Rendering.Text
 open System.Runtime.InteropServices
 open Aardvark.SceneGraph
+open Microsoft.FSharp.NativeInterop
+
+#nowarn "9"
+#nowarn "51"
+
 
 module ComputeShader =
 
@@ -183,29 +188,266 @@ module ComputeShader =
 
 
 
+    type ViewMode =
+        | Size = 0
+        | Deviation = 1
+        | Regions = 2
+
+    module Detector =
+        open FShade
+
+        [<ReflectedDefinition>]
+        let hsv2rgb (h : float) (s : float) (v : float) =
+            let s = clamp 0.0 1.0 s
+            let v = clamp 0.0 1.0 v
+
+            let h = h % 1.0
+            let h = if h < 0.0 then h + 1.0 else h
+            let hi = floor ( h * 6.0 ) |> int
+            let f = h * 6.0 - float hi
+            let p = v * (1.0 - s)
+            let q = v * (1.0 - s * f)
+            let t = v * (1.0 - s * ( 1.0 - f ))
+            match hi with
+                | 1 -> V3d(q,v,p)
+                | 2 -> V3d(p,v,t)
+                | 3 -> V3d(p,q,v)
+                | 4 -> V3d(t,p,v)
+                | 5 -> V3d(v,p,q)
+                | _ -> V3d(v,t,p)
+
+        let inputTexture =
+            sampler2d {
+                texture uniform?InputTexture
+            }
+
+        let infoTexture =
+            sampler2d {
+                texture uniform?ResultTexture
+            }
+
+        let regionTexture =
+            intSampler2d {
+                texture uniform?RegionTexture
+            }
+
+        let randomColors =
+            sampler2d {
+                texture uniform?RandomColors
+            }
+
+        let showOutput (v : Effects.Vertex) =
+            fragment {
+                let mode : ViewMode = uniform?Mode
+                let threshold : float = uniform?Threshold
+                let fade : float = uniform?Fade
 
 
+                let size = infoTexture.Size
+                let p = V2i (V2d size * v.tc)
+
+                let inValue = V3d.III * inputTexture.[p].X
+
+                let mutable color = inValue
+
+                match mode with
+                    | ViewMode.Regions ->
+                        let rCode = regionTexture.[p].X
+                        let rCoord = V2i(rCode % size.X, rCode / size.X)
+                        let rColor = randomColors.[rCoord]
+
+                        color <- rColor.XYZ
+
+                    | ViewMode.Size ->
+                        let value = infoTexture.[p]
+
+                        let avg = value.X
+                        let dev = value.Y
+                        let cnt = packUnorm2x16 value.ZW
+
+                        let area = float cnt / float (size.X * size.Y)
+                        let cc = hsv2rgb (area * 0.5) 1.0 1.0
+
+                        color <- cc
+
+                    | _ ->
+                        let value = infoTexture.[p]
+
+                        let avg = value.X
+                        let dev = value.Y
+                        //let cnt = packUnorm2x16 value.ZW
+                        
+                        let rDev = dev / threshold
+                        let cc = hsv2rgb (rDev * 0.5) 1.0 1.0
+                        color <- cc
 
 
+                let final = (1.0 - fade) * inValue + (fade) * color
+                return V4d(final, 1.0)
+            }
+
+   
     let run() =
-        use app = new VulkanApplication(true)
+        let env = Environment.GetCommandLineArgs()
+
+        let mutable path = "116.png"
+        let mutable threshold = 0.01
+        for i in 0 .. env.Length - 2 do
+            if env.[i] = "-t" then
+                match System.Double.TryParse(env.[i+1]) with
+                    | (true, v) ->
+                        threshold <- v
+                    | _ ->
+                        ()
+            if env.[i] = "-i" then
+                path <- env.[i+1]
+
+
+        
+
+        use app = new VulkanApplication(false)
         //use app = new OpenGlApplication(true)
         let runtime = app.Runtime :> IRuntime
-        let win = app.CreateSimpleRenderWindow(8) 
-        let run() = win.Run()
-        let view = 
-            CameraView.lookAt (V3d(4,4,4)) V3d.Zero V3d.OOI
-                |> DefaultCameraController.control win.Mouse win.Keyboard win.Time 
-                |> Mod.map CameraView.viewTrafo
-        let proj =
-            win.Sizes 
-                |> Mod.map (fun s -> Frustum.perspective 60.0 0.05 1000.0 (float s.X / float s.Y))
-                |> Mod.map Frustum.projTrafo
-                :> IMod
-        let win = win :> IRenderTarget
-        let subscribe (f : unit -> unit) = ()
+        let win = app.CreateSimpleRenderWindow(1) 
+
         
         let par = ParallelPrimitives(runtime)
+
+
+        let dataImg     = PixImage.Create(path).ToPixImage<uint16>(Col.Format.Gray) //PixImage<uint16>(Col.Format.Gray, Volume<uint16>(data, 4L, 4L, 1L))
+        let size        = dataImg.Size
+
+        use merge = new RegionMerge(runtime, SegmentMergeMode.AvgToAvg)
+        use instance = merge.NewInstance size
+
+
+        let randomColors =
+            let rand = RandomSystem()
+            let img = PixImage<byte>(Col.Format.RGBA, size)
+            img.GetMatrix<C4b>().SetByIndex (fun (i : int64) ->
+                rand.UniformC3f().ToC4b()
+            ) |> ignore
+
+            PixTexture2d(PixImageMipMap [| img :> PixImage|], TextureParams.empty) :> ITexture
+
+
+        let img         = runtime.CreateTexture(size, TextureFormat.R16, 1, 1)
+        let res         = runtime.CreateTexture(size, TextureFormat.Rgba16, 1, 1)
+        let regions     = runtime.CreateTexture(size, TextureFormat.R32i, 1, 1)
+        runtime.Upload(img, 0, 0, dataImg)
+
+        
+        let fade = Mod.init 1.0
+        let mode = Mod.init ViewMode.Regions
+        let threshold = Mod.init 0.01
+
+        let textures =
+            threshold |> Mod.map (fun threshold ->
+                instance.Run(img, res, regions, threshold)
+                res :> ITexture, regions :> ITexture
+            )
+
+        let info = textures |> Mod.map fst
+        let regionIds = textures |> Mod.map snd
+
+
+        win.Keyboard.KeyDown(Keys.M).Values.Add(fun _ ->
+            transact (fun () ->
+                mode.Value <- 
+                    match mode.Value with
+                        | ViewMode.Deviation -> ViewMode.Regions
+                        | ViewMode.Regions -> ViewMode.Size
+                        | _ -> ViewMode.Deviation
+            )
+        )
+
+        win.Keyboard.DownWithRepeats.Values.Add (fun k ->
+            match k with
+                | Keys.Add ->
+                    transact (fun () ->
+                        threshold.Value <- threshold.Value + 0.001
+                        Log.line "threshold: %A" threshold.Value
+                    )
+                | Keys.Subtract ->
+                    transact (fun () ->
+                        threshold.Value <- threshold.Value - 0.001
+                        Log.line "threshold: %A" threshold.Value
+                    )
+                | _ ->
+                    ()
+        )
+
+
+        win.Mouse.Scroll.Values.Add (fun delta ->
+            transact (fun () ->
+                let s = sign delta
+                fade.Value <- clamp 0.0 1.0 (fade.Value + float s * 0.05)
+                Log.line "fade: %A" fade.Value
+            )
+        )
+
+
+        let sg = 
+            Sg.fullScreenQuad
+                |> Sg.uniform "Mode" (mode |> Mod.map int)
+                |> Sg.uniform "Threshold" threshold
+                |> Sg.uniform "Fade" fade
+                |> Sg.texture (Symbol.Create "RandomColors") (Mod.constant randomColors)
+                |> Sg.texture (Symbol.Create "InputTexture") (Mod.constant (img :> ITexture))
+                |> Sg.texture (Symbol.Create "ResultTexture") info
+                |> Sg.texture (Symbol.Create "RegionTexture") regionIds
+                |> Sg.shader {
+                    do! Detector.showOutput
+                }
+
+        win.RenderTask <- Sg.compile win.Runtime win.FramebufferSignature sg
+        win.Run()
+        
+//        let sumImg = PixImage<int32>(Col.Format.Gray, 4L, 4L)
+//        runtime.Download(sum, 0, 0, sumImg) 
+//        let cntImg = PixImage<int32>(Col.Format.Gray, 4L, 4L)
+//        runtime.Download(cnt, 0, 0, cntImg) 
+//
+//        let div (s : int) (c : int) =
+//            let mutable s = s
+//            let s : float32 = NativePtr.read (NativePtr.cast &&s)
+//            s / float32 c
+
+//        let avg = Array.map2 div sumImg.Volume.Data cntImg.Volume.Data
+//
+//
+//        printfn "avg:      %A" avg
+//
+//        let regionsImg = PixImage<int32>(Col.Format.Gray, regions.Size.XY)
+//        runtime.Download(regions, 0, 0, regionsImg) 
+//
+//
+//        let result = PixImage<byte>(Col.Format.RGBA, regionsImg.Size)
+//
+//        let cache = IntDict<C4b>()
+//        let rand = RandomSystem()
+//
+//        let cache = IntDict<C4b>()
+//        let getColor (r : int) =
+//            cache.GetOrCreate(r, fun _ ->
+//                rand.UniformC3f().ToC4b()
+//            )
+//            //HSVf(float32 (0.5 * float remap.[r] / float maxRegion), 1.0f, 1.0f).ToC3f().ToC4b()
+//
+//        result.GetMatrix<C4b>().SetMap(regionsImg.GetChannel(0L), fun (r : int) -> getColor r) |> ignore
+//        result.SaveAsImage @"result.png"
+
+
+        //printfn "regions:  %A" regionsImg.Volume.Data
+//        
+//        let dst = PixImage<int32>(Col.Format.Gray, 4L, 4L)
+//        runtime.Download(collapse, 0, 0, dst) 
+//        printfn "collapse: %A" dst.Volume.Data
+        
+        Environment.Exit 0
+
+
+
 
 
 //
@@ -372,148 +614,4 @@ module ComputeShader =
         Environment.Exit 0
 
 
-//        let app = new VulkanVRApplicationLayered(false)
-//        let runtime = app.Runtime :> IRuntime
-//        let win = app :> IRenderTarget
-//        let view = app.Info.viewTrafos
-//        let proj = app.Info.projTrafos :> IMod
-//        let run () = app.Run()
-//        let subscribe (f : unit -> unit) =
-//            app.Controllers |> Array.iter (fun c ->
-//                c.Axis |> Array.iter (fun a -> 
-//                    a.Press.Add (f)
-//                )
-//            )
-
-        let update = runtime.CreateComputeShader Shaders.updateAcceleration
-        let step = runtime.CreateComputeShader Shaders.step
-
-        let rand = RandomSystem()
-        let particeCount = 1000
-        let positions = runtime.CreateBuffer<V4f>(Array.init particeCount (fun _ -> V4d(rand.UniformV3dDirection() * 3.0, 1.0) |> V4f))
-        let velocities = runtime.CreateBuffer<V4f>(Array.zeroCreate particeCount)
-        let accelerations = runtime.CreateBuffer<V4f>(Array.zeroCreate particeCount)
-        let masses = runtime.CreateBuffer<float32>(Array.init particeCount (fun _ -> 1.0f))
-
-        positions.Upload([| V4f(-1.0f, 0.5f, 0.0f, 1.0f);  V4f(1.0f, -0.5f, 0.0f, 1.0f); |])
-        masses.Upload([| 150.0f; 150.0f |])
-        velocities.Upload([| V4f(0.2f, 0.0f, 0.0f, 1.0f); V4f(-0.2f, 0.0f, 0.0f, 1.0f) |])
-
-
-        subscribe (fun () ->
-            positions.Upload(Array.init particeCount (fun _ -> V4d(rand.UniformV3dDirection() * 3.0, 1.0) |> V4f))
-            velocities.Upload(Array.zeroCreate particeCount)
-            positions.Upload([| V4f(-1.0f, 0.5f, 0.0f, 1.0f);  V4f(1.0f, -0.5f, 0.0f, 1.0f); |])
-            velocities.Upload([| V4f(0.2f, 0.0f, 0.0f, 1.0f); V4f(-0.2f, 0.0f, 0.0f, 1.0f) |])
-        )
-
-        
-        let updateInputs = runtime.NewInputBinding update
-        updateInputs.["pos"] <- positions
-        updateInputs.["acc"] <- accelerations
-        updateInputs.["masses"] <- masses
-        updateInputs.["n"] <- particeCount
-        updateInputs.Flush()
-
-        let stepInputs = runtime.NewInputBinding step
-        stepInputs.["pos"] <- positions
-        stepInputs.["vel"] <- velocities
-        stepInputs.["acc"] <- accelerations
-        stepInputs.["n"] <- particeCount
-        stepInputs.["dt"] <- 0.0
-        stepInputs.Flush()
-
-        let groupSize = 
-            if particeCount % update.LocalSize.X = 0 then 
-                particeCount / update.LocalSize.X
-            else
-                1 + particeCount / update.LocalSize.X
-
-        let compiled = false
-
-        let commands =
-            [
-                ComputeCommand.Bind update
-                ComputeCommand.SetInput updateInputs
-                ComputeCommand.Dispatch groupSize
-
-                ComputeCommand.Bind step
-                ComputeCommand.SetInput stepInputs
-                ComputeCommand.Dispatch groupSize
-            ]
-
-
-        let program =
-            runtime.Compile commands
-
-        let magic =
-            let sw = System.Diagnostics.Stopwatch()
-
-            win.Time |> Mod.map (fun _ ->
-                let dt = sw.Elapsed.TotalSeconds
-                sw.Restart()
-
-                if dt < 0.2 then
-                    let maxStep = 0.01
-                    let mutable t = 0.0
-                    while t < dt do
-                        let rdt = min maxStep (dt - t)
-                        stepInputs.["dt"] <-rdt
-                        stepInputs.Flush()
-                        if compiled then
-                            program.Run()
-                        else
-                            runtime.Run commands
-                        t <- t + rdt
-                
-                else
-                    printfn "bad: %A" dt
-
-                0.0
-                ///positions :> IBuffer
-
-            )
-
-
-
-        let u (n : String) (m : IMod) (s : ISg) =
-            Sg.UniformApplicator(n, m, s) :> ISg
-
-        let sphere = Primitives.unitSphere 5
-        let pos = sphere.IndexedAttributes.[DefaultSemantic.Positions]
-        let norm = sphere.IndexedAttributes.[DefaultSemantic.Normals]
-
-        let call = DrawCallInfo(FaceVertexCount = pos.Length, InstanceCount = particeCount)
-        
-        let instanceBuffer (name : Symbol) (view : BufferView) (s : ISg) =
-            Sg.InstanceAttributeApplicator(name, view, s) :> ISg
-
-        win.RenderTask <-
-            Sg.render IndexedGeometryMode.TriangleList call
-                |> Sg.vertexBuffer DefaultSemantic.Positions (BufferView(Mod.constant (ArrayBuffer pos :> IBuffer), typeof<V3f>))
-                |> Sg.vertexBuffer DefaultSemantic.Normals (BufferView(Mod.constant (ArrayBuffer norm :> IBuffer), typeof<V3f>))
-                |> instanceBuffer (Symbol.Create "Offset") (BufferView(Mod.constant (positions :> IBuffer), typeof<V4f>))
-                |> instanceBuffer (Symbol.Create "Mass") (BufferView(Mod.constant (masses :> IBuffer), typeof<float32>))
-                |> Sg.translate 0.0 0.0 1.0
-                |> Sg.shader {
-                    do! Shaders.instanceOffset
-                    do! DefaultSurfaces.trafo
-                    //do! DefaultSurfaces.constantColor C4f.Red
-                    do! DefaultSurfaces.simpleLighting
-                }
-                |> u "ViewTrafo" view
-                |> u "ProjTrafo" proj
-                |> Sg.viewTrafo view //(view |> Mod.map (Array.item 0))
-                |> Sg.uniform "Scale" (Mod.constant 0.05)
-                |> Sg.uniform "Magic" magic
-                |> Sg.compile runtime win.FramebufferSignature
-
-        run()
-        positions.Dispose()
-        accelerations.Dispose()
-        velocities.Dispose()
-        updateInputs.Dispose()
-        stepInputs.Dispose()
-        runtime.DeleteComputeShader update
-        runtime.DeleteComputeShader step
 

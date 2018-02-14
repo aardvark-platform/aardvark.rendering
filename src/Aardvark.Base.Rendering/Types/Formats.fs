@@ -82,6 +82,15 @@ type RenderbufferFormat =
     | Rgb8i = 36239
     | Rgb10A2ui = 36975
 
+
+type CompressionMode =
+    | None = 0
+    | BC1 = 1
+    | BC2 = 2
+    | BC3 = 3
+    | BC4 = 4
+    | BC5 = 5
+
 type TextureFormat =
     | Bgr8 = 1234
     | Bgra8 = 1235
@@ -295,6 +304,11 @@ module TextureFormat =
             TextureFormat.SrgbAlpha
             TextureFormat.Srgb8
             TextureFormat.Srgb8Alpha8
+
+            TextureFormat.CompressedSrgbS3tcDxt1Ext
+            TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext
+            TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext
+            TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext
         ]
 
     let isSrgb (fmt : TextureFormat) =
@@ -354,6 +368,16 @@ module TextureFormat =
             PixFormat(typeof<float32>, Col.Format.RGBA), (fun _ -> TextureFormat.Rgba32f)   
             PixFormat(typeof<float32>, Col.Format.RGB), (fun _ -> TextureFormat.Rgb32f)
             PixFormat(typeof<float32>, Col.Format.Gray), (fun _ -> TextureFormat.R32f)
+
+            PixFormat(typeof<int32>, Col.Format.Gray), (fun _ -> TextureFormat.R32i)
+            PixFormat(typeof<int32>, Col.Format.NormalUV), (fun _ -> TextureFormat.Rg32i)
+            PixFormat(typeof<int32>, Col.Format.RGB), (fun _ -> TextureFormat.Rgb32i)
+            PixFormat(typeof<int32>, Col.Format.RGBA), (fun _ -> TextureFormat.Rgba32i)
+            
+            PixFormat(typeof<uint32>, Col.Format.Gray), (fun _ -> TextureFormat.R32ui)
+            PixFormat(typeof<uint32>, Col.Format.NormalUV), (fun _ -> TextureFormat.Rg32ui)
+            PixFormat(typeof<uint32>, Col.Format.RGB), (fun _ -> TextureFormat.Rgb32ui)
+            PixFormat(typeof<uint32>, Col.Format.RGBA), (fun _ -> TextureFormat.Rgba32ui)
         ]
         
     let toDownloadFormat =
@@ -369,6 +393,17 @@ module TextureFormat =
             TextureFormat.DepthComponent32f, PixFormat.FloatGray
             TextureFormat.R16, PixFormat.UShortGray
             TextureFormat.Rgba16f, PixFormat(typeof<float16>, Col.Format.RGBA)
+
+            TextureFormat.R32i, PixFormat(typeof<int>, Col.Format.Gray)
+            TextureFormat.Rg32i, PixFormat(typeof<int>, Col.Format.NormalUV)
+            TextureFormat.Rgb32i, PixFormat(typeof<int>, Col.Format.RGB)
+            TextureFormat.Rgba32i, PixFormat(typeof<int>, Col.Format.RGBA)
+
+            TextureFormat.R32ui, PixFormat(typeof<uint32>, Col.Format.Gray)
+            TextureFormat.Rg32ui, PixFormat(typeof<uint32>, Col.Format.NormalUV)
+            TextureFormat.Rgb32ui, PixFormat(typeof<uint32>, Col.Format.RGB)
+            TextureFormat.Rgba32ui, PixFormat(typeof<uint32>, Col.Format.RGBA)
+
         ]
 
     let pixelSizeInBits =
@@ -529,6 +564,56 @@ module TextureFormat =
         if s < 0 then -1
         elif s % 8 = 0 then s / 8
         else failwithf "[TextureFormat] ill-aligned size %A" s
+
+    let private compressionModes =
+        Dictionary.ofList [
+            TextureFormat.CompressedRgbS3tcDxt1Ext, CompressionMode.BC1
+            TextureFormat.CompressedRgbaS3tcDxt1Ext, CompressionMode.BC1
+            TextureFormat.CompressedSrgbS3tcDxt1Ext, CompressionMode.BC1
+            TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext, CompressionMode.BC1
+
+            TextureFormat.CompressedRgbaS3tcDxt3Ext, CompressionMode.BC2
+            TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext, CompressionMode.BC2
+
+            TextureFormat.CompressedRgbaS3tcDxt5Ext, CompressionMode.BC3
+            TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext, CompressionMode.BC3
+
+            TextureFormat.CompressedRedRgtc1, CompressionMode.BC4
+            TextureFormat.CompressedSignedRedRgtc1, CompressionMode.BC4
+
+            TextureFormat.CompressedRgRgtc2, CompressionMode.BC5
+            TextureFormat.CompressedSignedRgRgtc2, CompressionMode.BC5
+        ]
+
+    let compressionMode (fmt : TextureFormat) =
+        match compressionModes.TryGetValue fmt with
+            | (true, mode) -> mode
+            | _ -> CompressionMode.None
+
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module CompressionMode =
+    let blockSize =
+        LookupTable.lookupTable [
+            CompressionMode.None, V2i.II
+            CompressionMode.BC1, V2i(4,4)
+            CompressionMode.BC2, V2i(4,4)
+            CompressionMode.BC3, V2i(4,4)
+            CompressionMode.BC4, V2i(4,4)
+            CompressionMode.BC5, V2i(4,4)
+        ]
+
+    let blockSizeInBytes =
+        LookupTable.lookupTable [
+            CompressionMode.None, 0
+            CompressionMode.BC1, 8
+            CompressionMode.BC2, 16
+            CompressionMode.BC3, 16
+            CompressionMode.BC4, 8
+            CompressionMode.BC5, 16
+
+        ]
+
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module PixFormat =

@@ -361,6 +361,14 @@ module PrimitiveType =
             | ShaderType.Matrix(comp, dim) -> PrimitiveType.Matrix(ofShaderType comp, dim)
             | _ -> failf "cannot convert type %A to PrimitiveType" t 
 
+    let rec sizeof (t : PrimitiveType) =
+        match t with
+            | PrimitiveType.Bool -> 4
+            | PrimitiveType.Float w -> w / 8
+            | PrimitiveType.Int(w,_) -> w / 8
+            | PrimitiveType.Vector(t, d) -> sizeof t * d
+            | PrimitiveType.Matrix(v, d) -> sizeof v * d
+
 type Size =
     | Fixed of int
     | Dynamic

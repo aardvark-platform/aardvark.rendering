@@ -832,7 +832,8 @@ module VKVM =
                 update (fun h ->
                     let mutable h = h
                     let ptr = 
-                        if h.Commands = 0n then Marshal.AllocHGlobal(newCapacity)
+                        if h.Commands = 0n then 
+                            Marshal.AllocHGlobal(newCapacity)
                         else 
                             let n = Marshal.AllocHGlobal(newCapacity)
                             Marshal.Copy(h.Commands, n, length)
@@ -1518,6 +1519,8 @@ module VKVM =
                 for i in 0 .. bCount - 1 do NativePtr.set bPtr i bufferBarriers.[i]
                 for i in 0 .. iCount - 1 do NativePtr.set iPtr i imageBarriers.[i]
             )
+
+
 
         member x.BeginQuery(pool : VkQueryPool, query : uint32, flags : VkQueryControlFlags) =
             let mutable cmd =

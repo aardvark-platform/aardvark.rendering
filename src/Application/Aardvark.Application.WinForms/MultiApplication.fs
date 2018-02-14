@@ -95,24 +95,23 @@ and MultiFramebufferSignature(runtime : IRuntime, signatures : IFramebufferSigna
 
 and private NAryTimeMod(inputs : IMod<DateTime>[]) =
     inherit Mod.AbstractMod<DateTime>()
-//
-//    let all = inputs |> Seq.map (fun m -> m.Id) |> Set.ofSeq
-//    let mutable missing = all
 
-//    override x.InputChanged(_,o) =
-//        Interlocked.Change(&missing, Set.remove o.Id) |> ignore
-//
-//    override x.Mark() =
-//        if Set.isEmpty missing then
-//            missing <- all
-//            true
-//        else
-//            false
+    let all = inputs |> Seq.map (fun m -> m.Id) |> Set.ofSeq
+    let mutable missing = all
+
+    override x.InputChanged(_,o) =
+        Interlocked.Change(&missing, Set.remove o.Id) |> ignore
+        
+    override x.Mark() =
+        if Set.isEmpty missing then
+            missing <- all
+            true
+        else
+            x.OutOfDate <- false
+            false
 
     override x.Compute(t) =
-        for i in inputs do
-            i.GetValue t |> ignore
-        DateTime.Now
+        inputs |> Seq.map (fun i -> i.GetValue t) |> Seq.max
 
 
 and SplitControl(runtime : IRuntime, count : int, samples : int) as this =
