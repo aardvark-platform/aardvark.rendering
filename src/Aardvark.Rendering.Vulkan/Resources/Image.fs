@@ -2717,8 +2717,7 @@ module Image =
     
     let ofNativeImage (image : INativeTexture) (device : Device) =
         if image.Count <> 1 then failf "NativeTexture layering not implemented"
-        if image.Dimension <> TextureDimension.Texture2D then failf "NativeTexture: only 2D textures implemented atm."
-
+        
 
         let levels = image.MipMapLevels
         let size = image.[0,0].Size
@@ -2732,6 +2731,8 @@ module Image =
 
 
         if compressionMode <> CompressionMode.None then
+            if image.Dimension <> TextureDimension.Texture2D then failf "NativeTexture: only 2D textures implemented atm."
+
             let levels =
                 Array.init levels (fun level ->
                     let srcLevel = image.[0, level]
@@ -2825,7 +2826,57 @@ module Image =
 
 
         else
-            failf "uncompressed NativeTexture not implemented"
+            match device.UploadMode with
+                | UploadMode.Async ->
+                    let tempImages =
+                        Array.init image.MipMapLevels (fun level ->
+                            let data = image.[0, level]
+                            let buffer = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit data.SizeInBytes
+
+                            buffer.Memory.Mapped (fun dst ->
+                                data.Use (fun src ->
+                                    Marshal.Copy(src, dst, data.SizeInBytes)
+                                )  
+                            )
+                            buffer, data.Size
+                        ) 
+
+                    device.CopyEngine.Enqueue [
+
+                        yield CopyCommand.TransformLayout(result.[ImageAspect.Color], VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
+
+                        for level in 0 .. tempImages.Length - 1 do
+                            let src, size = tempImages.[level]
+                            let dst = result.[ImageAspect.Color, level, 0]
+                            yield CopyCommand.Copy(
+                                src.Handle, 0L, 
+                                result.Handle, VkImageLayout.TransferDstOptimal, result.Format,
+                                VkBufferImageCopy(
+                                    0UL,
+                                    0u, 0u, 
+                                    dst.VkImageSubresourceLayers,
+                                    VkOffset3D(0,0,0),
+                                    VkExtent3D(size.X, size.Y, size.Z)
+                                )
+                            )
+
+                            
+                        yield CopyCommand.Release(result.[ImageAspect.Color], VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
+                        yield CopyCommand.Callback(fun () -> tempImages |> Array.iter (fst >> device.Delete))
+                    ]
+
+                    result.Layout <- VkImageLayout.TransferDstOptimal
+
+                    device.eventually {
+                        do! Command.Acquire(result.[ImageAspect.Color], VkImageLayout.TransferDstOptimal, device.TransferFamily)
+                        do! Command.TransformLayout(result, VkImageLayout.ShaderReadOnlyOptimal)
+                    }
+
+                    result
+
+                | _ ->
+                    
+                    failf "synchronous upload of NativeTexture not implemented"
 
     let ofFile (file : string) (info : TextureParams) (device : Device) =
         if not (System.IO.File.Exists file) then failf "file does not exists: %A" file
