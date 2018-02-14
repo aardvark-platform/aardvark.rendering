@@ -95,18 +95,18 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     let manager = new ResourceManager(noUser, device)
 
-    let allPools = System.Collections.Generic.List<DescriptorPool>()
-    let threadedPools =
-        new ThreadLocal<DescriptorPool>(fun _ ->
-            let p = device.CreateDescriptorPool(1 <<< 18, 1 <<< 18)
-            lock allPools (fun () -> allPools.Add p)
-            p
-        )
-
-    do device.OnDispose.Add (fun _ -> 
-        allPools |> Seq.iter device.Delete
-        allPools.Clear()
-    )
+//    let allPools = System.Collections.Generic.List<DescriptorPool>()
+//    let threadedPools =
+//        new ThreadLocal<DescriptorPool>(fun _ ->
+//            let p = device.CreateDescriptorPool(1 <<< 18, 1 <<< 18)
+//            lock allPools (fun () -> allPools.Add p)
+//            p
+//        )
+//
+//    do device.OnDispose.Add (fun _ -> 
+//        allPools |> Seq.iter device.Delete
+//        allPools.Clear()
+//    )
 
     static let shaderStages =
         LookupTable.lookupTable [
@@ -169,7 +169,6 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     let onDispose = Event<unit>()
 
 
-    member x.DescriptorPool = manager.DescriptorPool
     member x.Device = device
     member x.ResourceManager = manager
     member x.ContextLock = device.Token :> IDisposable
@@ -213,7 +212,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     member x.CompileRender (renderPass : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) =
         let set = EffectDebugger.Hook set
-        new RenderTask.DependentRenderTask(device, unbox renderPass, set, true, true) :> IRenderTask
+        new Temp.CommandTask(device, unbox renderPass, RuntimeCommand.Render set) :> IRenderTask
+        //new RenderTask.DependentRenderTask(device, unbox renderPass, set, true, true) :> IRenderTask
         //new RenderTasks.RenderTask(device, unbox renderPass, set, Mod.constant engine, shareTextures, shareBuffers) :> IRenderTask
 
     member x.CompileClear(signature : IFramebufferSignature, color : IMod<Map<Symbol, C4f>>, depth : IMod<Option<float>>) : IRenderTask =
@@ -300,11 +300,13 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                 VkImageUsageFlags.DepthStencilAttachmentBit ||| 
                 VkImageUsageFlags.TransferSrcBit ||| 
                 VkImageUsageFlags.TransferDstBit |||
+                VkImageUsageFlags.StorageBit |||
                 VkImageUsageFlags.SampledBit
             else 
                 VkImageUsageFlags.ColorAttachmentBit ||| 
                 VkImageUsageFlags.TransferSrcBit ||| 
                 VkImageUsageFlags.TransferDstBit |||
+                VkImageUsageFlags.StorageBit |||
                 VkImageUsageFlags.SampledBit
 
         let slices = max 1 slices
@@ -337,11 +339,13 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                 VkImageUsageFlags.DepthStencilAttachmentBit ||| 
                 VkImageUsageFlags.TransferSrcBit ||| 
                 VkImageUsageFlags.TransferDstBit |||
+                VkImageUsageFlags.StorageBit |||
                 VkImageUsageFlags.SampledBit
             else 
                 VkImageUsageFlags.ColorAttachmentBit ||| 
                 VkImageUsageFlags.TransferSrcBit ||| 
                 VkImageUsageFlags.TransferDstBit |||
+                VkImageUsageFlags.StorageBit |||
                 VkImageUsageFlags.SampledBit
 
         let img = device.CreateImage(V3i(size.X, size.Y, 1), levels, count, samples, TextureDimension.Texture2D, format, usage) 
@@ -477,22 +481,17 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 size)
         let src = unbox<Buffer> src
 
-        let cmd = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
-        cmd.Begin(CommandBufferUsage.OneTimeSubmit)
-        cmd.Enqueue(Command.Copy(src, int64 srcOffset, temp, 0L, int64 size))
-        cmd.End()
+        let task = device.GraphicsFamily.Start(QueueCommand.ExecuteCommand([], [], Command.Copy(src, int64 srcOffset, temp, 0L, int64 size)))
 
-        let queue = device.GraphicsFamily.GetQueue()
-        match queue.StartFence(cmd) with
-            | Some fence ->
-                (fun () ->
-                    fence.Wait()
-                    temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, size))
-                    device.Delete temp
-                    cmd.Dispose()
-                )
-            | None ->
-                failwith ""
+        (fun () ->
+            task.Wait()
+            if task.IsFaulted then 
+                device.Delete temp
+                raise task.Exception
+            else
+                temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, size))
+                device.Delete temp
+        )
 
 
 
@@ -598,7 +597,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             ComputeShader.ofFShade c device :> IComputeShader
 
         member x.NewInputBinding(c : IComputeShader) =
-            ComputeShader.newInputBinding (unbox c) threadedPools.Value :> IComputeShaderInputBinding
+            ComputeShader.newInputBinding (unbox c) :> IComputeShaderInputBinding
 
         member x.DeleteComputeShader (shader : IComputeShader) =
             ComputeShader.delete (unbox shader)

@@ -12,26 +12,6 @@ open Aardvark.Rendering.Vulkan
 #nowarn "9"
 #nowarn "51"
  
-[<AbstractClass>]
-type QueueCommand() =
-    abstract member Compatible : QueueFlags
-    abstract member Enqueue : DeviceQueue * list<Semaphore> -> Option<Semaphore> * Disposable
-    interface IQueueCommand with
-        member x.Compatible = x.Compatible
-        member x.TryEnqueue(queue, waitFor, disp) =
-            let (s,d) = x.Enqueue(queue, waitFor)
-            disp <- d
-            s
-//
-//    static member Wait(sem : Aardvark.Rendering.Vulkan.Semaphore) =
-//        { new QueueCommand() with
-//            member x.Compatible = QueueFlags.All
-//            member x.Enqueue(queue, waitFor) =
-//                let waitFor = sem :: waitFor
-//                queue.Wait sem
-//                Disposable.Empty
-//        }
-
 
 [<AbstractClass>]
 type Command() =
@@ -141,6 +121,41 @@ type Command() =
                 cmd.WaitAll([| e |], dstFlags)
                 Disposable.Empty
         }
+//
+//[<AbstractClass>]
+//type QueueCommand() =
+//    abstract member Compatible : QueueFlags
+//    abstract member Enqueue : DeviceQueue * list<Semaphore> * Option<Semaphore> * Option<Fence> -> Disposable
+//    interface IQueueCommand with
+//        member x.Compatible = x.Compatible
+//        member x.TryEnqueue(queue, waitFor, disp, sem, fence) =
+//            disp <- x.Enqueue(queue, waitFor, sem, fence)
+//            true
+//
+//    static member Submit(cmds : list<CommandBuffer>) =
+//        { new IQueueCommand with
+//            member x.Compatible = QueueFlags.All
+//            member x.TryEnqueue(queue, waitFor, disp, sem, fence) =
+//                queue.Submit(cmds, waitFor, Option.toList sem, fence)
+//                true
+//        }
+//
+//    static member Submit(cmd : CommandBuffer) =
+//        QueueCommand.Submit [cmd]
+// 
+//    static member Submit(cmd : Command) =
+//        { new IQueueCommand with
+//            member x.Compatible = QueueFlags.All
+//            member x.TryEnqueue(queue, waitFor, disp, sem, fence) =
+//                let pool = queue.Family.TakeCommandPool()
+//                let cb = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
+//                let d = cmd.Enqueue(cb)
+//                disp <- Disposable.Custom (fun () -> d.Dispose(); cb.Dispose(); pool.Dispose())
+//                queue.Submit([cb], waitFor, Option.toList sem, fence)
+//                true
+//        }       
+//
+//   
 
 [<AbstractClass; Sealed; Extension>]
 type CommandBufferExtensions private() =
@@ -157,8 +172,9 @@ type CommandBufferExtensions private() =
             failf "could not enqueue command"
 
     [<Extension>]
-    static member RunSynchronously(this : DeviceQueue, cmd : ICommand) =
-        use buffer = this.Family.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+    static member RunSynchronously(this : DeviceQueueFamily, cmd : ICommand) =
+        use pool = this.TakeCommandPool()
+        use buffer = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
         buffer.Begin(CommandBufferUsage.OneTimeSubmit)
         CommandBufferExtensions.Enqueue(buffer, cmd)
         buffer.End()
@@ -171,24 +187,7 @@ type CommandBufferExtensions private() =
         CommandBufferExtensions.Enqueue(buffer, cmd)
         buffer.End()
         buffer
-//
-//    [<Extension>]
-//    static member Start(this : DeviceQueue, cmd : ICommand) =
-//        if not (isNull cmd) then
-//            use buffer = this.Family.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
-//            buffer.Begin(CommandBufferUsage.OneTimeSubmit)
-//            CommandBufferExtensions.Enqueue(buffer, cmd)
-//            buffer.End()
-//            this.Start(buffer)
 
-
-    [<Extension>]
-    static member RunSynchronously(this : DeviceQueueFamily, cmd : ICommand) =
-        use buffer = this.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
-        buffer.Begin(CommandBufferUsage.OneTimeSubmit)
-        CommandBufferExtensions.Enqueue(buffer, cmd)
-        buffer.End()
-        this.RunSynchronously(buffer)
 
 
 

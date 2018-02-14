@@ -395,8 +395,8 @@ module RasterizerState =
 
     let private toVkCullMode =
         LookupTable.lookupTable [
-            CullMode.Clockwise, VkCullModeFlags.FrontBit
-            CullMode.CounterClockwise, VkCullModeFlags.BackBit
+            CullMode.Clockwise, VkCullModeFlags.BackBit
+            CullMode.CounterClockwise, VkCullModeFlags.FrontBit
             CullMode.None, VkCullModeFlags.None
         ]
 

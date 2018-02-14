@@ -31,10 +31,12 @@ type DescriptorSet =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DescriptorSet =
-    let alloc (layout : DescriptorSetLayout) (pool : DescriptorPool) =
+
+    let tryAlloc (layout : DescriptorSetLayout) (pool : DescriptorPool) =
         lock pool (fun () ->
-            let worked = Interlocked.Change(&pool.SetCount, fun c -> if c <= 0 then 0, false else c-1, true)
-            if worked then
+            let canWork = Interlocked.Change(&pool.SetCount, fun c -> if c <= 0 then 0, false else c-1, true)
+            
+            if canWork then
                 let mutable info =
                     VkDescriptorSetAllocateInfo(
                         VkStructureType.DescriptorSetAllocateInfo, 0n, 
@@ -44,13 +46,21 @@ module DescriptorSet =
                     )
 
                 let mutable handle = VkDescriptorSet.Null
-                VkRaw.vkAllocateDescriptorSets(pool.Device.Handle, &&info, &&handle)
-                    |> check "could not allocate DescriptorSet"
+                let res = VkRaw.vkAllocateDescriptorSets(pool.Device.Handle, &&info, &&handle)
 
-                DescriptorSet(pool.Device, pool, layout, handle)
+                if res = VkResult.VkErrorFragmentedPool then
+                    None
+                else
+                    res |> check "could not allocate DescriptorSet"
+                    Some (DescriptorSet(pool.Device, pool, layout, handle))
             else
-                failf "cannot allocate DescriptorSet (out of slots)"
+                None
         )
+
+    let alloc (layout : DescriptorSetLayout) (pool : DescriptorPool) =
+        match tryAlloc layout pool with
+            | Some d -> d
+            | None -> failf "cannot allocate DescriptorSet (out of slots)"
 
     let free (desc : DescriptorSet) (pool : DescriptorPool) =
         lock pool (fun () ->
@@ -59,6 +69,7 @@ module DescriptorSet =
                     |> check "could not free DescriptorSet"
 
                 desc.Handle <- VkDescriptorSet.Null
+                Interlocked.Increment(&pool.SetCount) |> ignore
         )
 
     let update (descriptors : array<Descriptor>) (set : DescriptorSet) (pool : DescriptorPool) =
@@ -180,9 +191,69 @@ module DescriptorSet =
 
         let pWrites = NativePtr.pushStackArray writes
         VkRaw.vkUpdateDescriptorSets(device.Handle, uint32 writes.Length, pWrites, 0u, NativePtr.zero) 
+   
+type private DescriptorPoolBag(device : Device, perPool : int, resourcesPerPool : int) =
+    inherit RefCountedResource()
+
+    let pools = System.Collections.Generic.HashSet<DescriptorPool>()
+    let partialSet = System.Collections.Generic.HashSet<DescriptorPool>()
+    let mutable partial = []
+
+    let createNew() =
+        let pool = device.CreateDescriptorPool(perPool, resourcesPerPool)
+        pools.Add pool |> ignore
+        partialSet.Add pool |> ignore
+        partial <- pool :: partial
+        Log.line "[Vulkan] using %d descriptor pools" pools.Count
+
+    member x.CreateDescriptorSet(layout : DescriptorSetLayout) =
+        lock pools (fun () ->
+            match partial with
+                | [] ->
+                    createNew()
+                    x.CreateDescriptorSet(layout)
+                | h :: t ->
+                    match DescriptorSet.tryAlloc layout h with
+                        | Some set -> 
+                            set
+                        | None ->
+                            partialSet.Remove h |> ignore
+                            partial <- t
+                            x.CreateDescriptorSet(layout)
+        )
+                
+    member x.Delete (set : DescriptorSet) =
+        lock pools (fun () ->
+            let pool = set.Pool
+            if pools.Contains pool then
+                lock pool (fun () ->
+                    DescriptorSet.free set pool
+                    if pool.SetCount = perPool then
+                        if partialSet.Remove pool then partial <- List.filter (fun p -> p <> pool) partial
+                        DescriptorPool.delete pool device
+                        pools.Remove pool |> ignore
+                        Log.line "[Vulkan] using %d descriptor pools" pools.Count
+
+                    else
+                        if partialSet.Add pool then
+                            partial <- pool :: partial
+                )
+            else
+                failf "cannot free non-pooled DescriptorSet using pool"
+        )
+       
+    member x.Update(set : DescriptorSet, values : array<Descriptor>) =
+        set.Pool |> DescriptorSet.update values set
+        
+    override x.Destroy() =
+        pools |> Seq.iter (fun p -> device.Delete p)
+        pools.Clear()
+        partial <- []
             
 [<AbstractClass; Sealed; Extension>]
 type ContextDescriptorSetExtensions private() =
+    static let DescriptorPoolBag = Symbol.Create "DescriptorPoolBag"
+
     [<Extension>]
     static member inline Alloc(this : DescriptorPool, layout : DescriptorSetLayout) =
         this |> DescriptorSet.alloc layout
@@ -194,3 +265,19 @@ type ContextDescriptorSetExtensions private() =
     [<Extension>]
     static member inline Free(this : DescriptorPool, set : DescriptorSet) =
         this |> DescriptorSet.free set
+
+        
+    [<Extension>]
+    static member CreateDescriptorSet(this : Device, layout : DescriptorSetLayout) =
+        let bag = this.GetCached(DescriptorPoolBag, 0, fun _ -> new DescriptorPoolBag(this, 1024, 1024))
+        bag.CreateDescriptorSet layout
+        
+    [<Extension>]
+    static member Delete(this : Device, set : DescriptorSet) =
+        let bag = this.GetCached(DescriptorPoolBag, 0, fun _ -> new DescriptorPoolBag(this, 1024, 1024))
+        bag.Delete set
+
+    [<Extension>]
+    static member Update(set : DescriptorSet, values : array<Descriptor>) =
+        set.Pool |> DescriptorSet.update values set
+        

@@ -202,7 +202,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
         fImg <- nfImg
         fbo <- nFbo
 
-        let queue = device.GraphicsFamily.GetQueue().Handle
+        let queue = device.GraphicsFamily.Queues |> List.head
 
         let fTex = 
             VRVulkanTextureData_t(
@@ -210,7 +210,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
                 m_pDevice = device.Handle,
                 m_pPhysicalDevice = device.PhysicalDevice.Handle,
                 m_pInstance = device.Instance.Handle,
-                m_pQueue = queue,
+                m_pQueue = queue.Handle,
                 m_nQueueFamilyIndex = uint32 device.GraphicsFamily.Index,
                 m_nWidth = uint32 fImg.Size.X, 
                 m_nHeight = uint32 fImg.Size.Y,

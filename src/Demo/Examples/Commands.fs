@@ -18,52 +18,30 @@ open FShade.Imperative
 
 module CommandTest =
     let run() =
-        use app = new VulkanApplication(true)
+        use app = new VulkanApplication(false)
         let win = app.CreateSimpleRenderWindow(8)
         let runtime = app.Runtime
         let device = runtime.Device
-
-
 
         let cameraView  = DefaultCameraController.control win.Mouse win.Keyboard win.Time (CameraView.LookAt(3.0 * V3d.III, V3d.OOO, V3d.OOI))    
         let frustum     = win.Sizes    |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))       
         let viewTrafo   = cameraView    |> Mod.map CameraView.viewTrafo
         let projTrafo   = frustum       |> Mod.map Frustum.projTrafo        
 
-        
-
-        let sg1 =
-            Sg.box' C4b.Red Box3d.Unit
-                |> Sg.shader {
-                    do! DefaultSurfaces.trafo
-                    do! DefaultSurfaces.constantColor C4f.Red
-                    do! DefaultSurfaces.simpleLighting
-                }
-                |> Sg.viewTrafo viewTrafo
-                |> Sg.projTrafo projTrafo
-                
-        let sg2 =
-            Sg.unitSphere' 5 C4b.Red
-                |> Sg.shader {
-                    do! DefaultSurfaces.trafo
-                    do! DefaultSurfaces.constantColor C4f.Green
-                    do! DefaultSurfaces.simpleLighting
-                }
-                |> Sg.viewTrafo viewTrafo
-                |> Sg.projTrafo projTrafo
-
-        let condition = Mod.init true
-
-        win.Keyboard.DownWithRepeats.Values.Add (fun k ->
-            match k with    
-                | Keys.Space -> transact (fun () -> condition.Value <- not condition.Value)
-                | _ -> ()
-        )
 
 
-        let pos = Array.map (fun v -> v / 4.0f) [| V3f(-1.0f, -1.0f, 0.0f); V3f(1.0f, -1.0f, 0.0f); V3f(1.0f, 1.0f, 0.0f); V3f(-1.0f, 1.0f, 0.0f) |]
-        let n = Array.create 4 V3f.OOI
-        let index = [| 0;1;2; 0;2;3|]
+        let rotor =
+            let startTime = System.DateTime.Now
+            win.Time |> Mod.map (fun t ->
+                let t = (t - startTime).TotalSeconds
+                Trafo3d.RotationZ (0.5 * t)
+            )
+
+        let viewTrafo =
+            Mod.map2 (*) rotor viewTrafo
+
+
+
 
         let box = Primitives.unitBox
         let pos = box.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]> |> Array.map (fun v -> v / 2.0f)
@@ -77,14 +55,27 @@ module CommandTest =
                     let idx = Aardvark.Base.BufferView(Mod.constant (ArrayBuffer index :> IBuffer), typeof<int>)
                     Some idx, index.Length
 
+        let rand = RandomSystem()
+
+        //let randomGeo
+
 
         let quadGeometry (offset : V3d) =
-            {
-                vertexAttributes    = Map.ofList [DefaultSemantic.Positions, Mod.constant (ArrayBuffer pos :> IBuffer); DefaultSemantic.Normals, Mod.constant (ArrayBuffer n :> IBuffer)]
-                indices             = index
-                uniforms            = Map.ofList ["ModelTrafo", Mod.constant (Trafo3d.Translation(offset)) :> IMod ]
-                call                = Mod.constant [DrawCallInfo(FaceVertexCount = fvc, InstanceCount = 1)]
-            }
+            let color = rand.UniformC3f().ToC4d().ToV4d()
+
+            IndexedGeometry(
+                Mode = IndexedGeometryMode.TriangleList,
+                SingleAttributes =
+                    SymDict.ofList [
+                        Symbol.Create "NodeColor", (Mod.constant color) :> obj
+                    ],
+
+                IndexedAttributes =
+                    SymDict.ofList [
+                        DefaultSemantic.Positions, pos |> Array.map (fun v -> V3d v + offset |> V3f) :> Array
+                        DefaultSemantic.Normals, n :> Array
+                    ]
+            )
 
         let state =
             {
@@ -97,6 +88,7 @@ module CommandTest =
                 writeBuffers        = None
                 globalUniforms      = 
                     UniformProvider.ofList [
+                        "ModelTrafo", Mod.constant Trafo3d.Identity :> IMod
                         "ViewTrafo", viewTrafo :> IMod
                         "ProjTrafo", projTrafo :> IMod
                         "LightLocation", viewTrafo |> Mod.map (fun v -> v.Backward.C3.XYZ) :> IMod
@@ -105,7 +97,7 @@ module CommandTest =
 
                 geometryMode        = IndexedGeometryMode.TriangleList
                 vertexInputTypes    = Map.ofList [ DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Normals, typeof<V3f> ]
-                perGeometryUniforms = Map.ofList [ "ModelTrafo", typeof<Trafo3d> ]
+                perGeometryUniforms = Map.ofList [ "NodeColor", typeof<V4d> ]
             }
 
 
@@ -119,20 +111,49 @@ module CommandTest =
                 FShade.Effect.compose [
                     toEffect <| DefaultSurfaces.trafo
                     toEffect <| DefaultSurfaces.constantColor C4f.White
+                    toEffect <| fun (v : Effects.Vertex) ->
+                        fragment {
+                            let color : V4d = uniform?NodeColor
+                            return color
+                        }
                     toEffect <| DefaultSurfaces.simpleLighting
                 ]
             |]
 
 
-        let geometries =
-            let size = 5
-            ASet.ofList [
+        let mutable oida =
+            let size = 20
+            [
                 for x in -size .. size do
                     for y in -size .. size do
                         for z in -size .. size do
-                            yield quadGeometry (V3d(x,y,z))
+                            yield quadGeometry (V3d(float x, float y, float z))
                     
-            ]
+            ] |> System.Collections.Generic.Stack
+
+        let mutable urdar = System.Collections.Generic.Stack()
+
+        let geometries = CSet.ofSeq oida
+
+        let mutable up = false
+
+        win.Keyboard.DownWithRepeats.Values.Add (fun k ->
+            match k with
+                | Keys.M ->
+                    transact (fun () -> 
+                        for a in 0 .. 1000 do
+                            if oida.Count > 0 then
+                                let newJOne = oida.Pop()
+                                urdar.Push newJOne
+                                if up then geometries.Add newJOne |> ignore
+                                else geometries.Remove newJOne |> ignore
+                            else 
+                                up <- not up
+                                Fun.Swap(&oida,&urdar)
+                    )
+                | _ ->
+                    ()
+        )
 
         let current = Mod.init 0
 
@@ -145,7 +166,8 @@ module CommandTest =
         )
 
 
-        let cmd = RuntimeCommand.Geometries(effects, current, state, geometries)
+        //let cmd = RuntimeCommand.Geometries(effects, current, state, geometries)
+        let cmd = RuntimeCommand.Geometries(effects.[1], state, geometries)
 //
 //        let objects1 = sg1.RenderObjects()
 //        let objects2 = sg2.RenderObjects()
@@ -157,8 +179,10 @@ module CommandTest =
 //            )
 
 
-        win.RenderTask <- new RenderTask.CommandTask(device, unbox win.FramebufferSignature, cmd)
+        win.RenderTask <- new Temp.CommandTask(device, unbox win.FramebufferSignature, cmd)
         win.Run()
+
+        win.Dispose()
   
 
 

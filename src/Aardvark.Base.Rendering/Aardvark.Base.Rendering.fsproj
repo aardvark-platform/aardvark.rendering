@@ -83,6 +83,7 @@
     <Compile Include="Resources\Buffers.fs" />
     <Compile Include="Resources\Textures.fs" />
     <Compile Include="Compute.fs" />
+    <Compile Include="Timer.fs" />
     <Compile Include="LodTree.fs" />
     <Compile Include="RenderObject.fs" />
     <Compile Include="BackendConfiguration.fs" />
@@ -122,6 +123,7 @@
     <Compile Include="PixImageCube.fs" />
     <Compile Include="Ordered.fs" />
     <Compile Include="Trie.fs" />
+    <Compile Include="TaskUtilities.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />

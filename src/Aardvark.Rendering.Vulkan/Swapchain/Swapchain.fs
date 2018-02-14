@@ -245,48 +245,9 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 resolvedImage <- newResolvedImage
                 currentBuffer := 0u
 
-    static let presentCommand(handle : VkSwapchainKHR, currentBuffer : uint32)  =
-        { new QueueCommand() with
-            member x.Compatible = QueueFlags.Graphics
-            member x.Enqueue(queue, waitFor) =
-                lock queue (fun () -> 
-                    let mutable handle = handle
-                    let mutable currentBuffer = currentBuffer
-                    let mutable result = VkResult.VkSuccess
 
-                    let arr = List.toArray (waitFor |> List.map (fun s -> s.Handle))
-                    arr |> NativePtr.withA (fun pWaitFor ->
-                        let mutable info =
-                            VkPresentInfoKHR(
-                                VkStructureType.PresentInfoKHR, 0n, 
-                                uint32 arr.Length, pWaitFor,
-                                1u, &&handle,
-                                &&currentBuffer,
-                                &&result
-                            )
-
-                        VkRaw.vkQueuePresentKHR(queue.Handle, &&info) |> check "could not swap buffers"
-                    )
-                    queue.WaitIdle()
-                )
-                None, Disposable.Empty
-        }
-
-    static let acquireNextImage(handle : VkSwapchainKHR, currentBuffer : ref<uint32>) =
-        { new QueueCommand() with
-            member x.Compatible = QueueFlags.Graphics
-            member x.Enqueue(queue, waitFor) =
-                let sem = queue.Device.CreateSemaphore()
-                let mutable c = !currentBuffer
-                VkRaw.vkAcquireNextImageKHR(queue.Device.Handle, handle, ~~~0UL, sem.Handle, VkFence.Null, &&c)
-                    |> check "could not acquire Swapchain Image"
-                currentBuffer := c
-
-                Some sem, Disposable.Empty
-        }
-
-    member x.Present = presentCommand(handle, !currentBuffer)
-    member x.AcquireNextImage = acquireNextImage(handle, currentBuffer)
+    member x.Present = QueueCommand.Present(handle, currentBuffer)
+    member x.AcquireNextImage = QueueCommand.AcquireNextImage(handle, currentBuffer)
 
     member x.Size = update(); size
     member x.Description = description

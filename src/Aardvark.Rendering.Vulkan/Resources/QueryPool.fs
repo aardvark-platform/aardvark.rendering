@@ -117,14 +117,14 @@ type DeviceQueryPoolExtensions private() =
         pool |> QueryPool.get
 
 
-type StopwatchPool(pool : DescriptorPool, handle : VkQueryPool, count : int, accumulate : ComputeShader) =
-    let device = pool.Device
+type StopwatchPool(handle : VkQueryPool, count : int, accumulate : ComputeShader) =
+    let device = accumulate.Device
     let stampCount = 2 * count
     let values = device.CreateBuffer(VkBufferUsageFlags.StorageBufferBit ||| VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit, int64 sizeof<int64> * int64 count)
     let stamps = device.CreateBuffer(VkBufferUsageFlags.StorageBufferBit ||| VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit, int64 sizeof<int64> * int64 stampCount)
 
     let accumulateIn = 
-        let i = pool |> ComputeShader.newInputBinding accumulate
+        let i = ComputeShader.newInputBinding accumulate
         i.["stamps"] <- stamps
         i.["values"] <- values
         i.Flush()
@@ -255,7 +255,7 @@ module StopwatchPool =
             |> check "could not create query pool"
 
         let shader = device |> ComputeShader.ofFunction Kernels.accumulate
-        new StopwatchPool(pool, handle, count, shader)
+        new StopwatchPool(handle, count, shader)
 
     let delete (pool : StopwatchPool) =
         pool.Dispose()

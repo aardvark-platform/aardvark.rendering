@@ -50,8 +50,11 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Utilities.fs" />
+    <Compile Include="TDistr.fs" />
     <Compile Include="Primitives.fs" />
     <Compile Include="Jpeg.fs" />
+    <Compile Include="Segmentation.fs" />
   </ItemGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>

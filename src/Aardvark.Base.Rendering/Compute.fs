@@ -19,7 +19,7 @@ type TextureLayout =
     | ShaderWrite       = 5
     | ShaderReadWrite   = 6
 
-type BufferAccess =
+type ResourceAccess =
     | ShaderRead    = 1
     | ShaderWrite   = 2
     | TransferRead  = 3
@@ -82,9 +82,9 @@ and [<RequireQualifiedAccess>]
     | DownloadBufferCmd of src : IBufferRange * dst : HostMemory
     | UploadBufferCmd of src : HostMemory * dst : IBufferRange
     | SetBufferCmd of buffer : IBufferRange * pattern : byte[]
-    | SyncBufferCmd of buffer : IBackendBuffer * src : BufferAccess * dst : BufferAccess
+    | SyncBufferCmd of buffer : IBackendBuffer * src : ResourceAccess * dst : ResourceAccess
+    | SyncImageCmd of image : IBackendTexture * src : ResourceAccess * dst : ResourceAccess
     | TransformLayoutCmd of tex : IBackendTexture * layout : TextureLayout
-
     | ExecuteCmd of ComputeProgram<unit>
 
     | CopyImageCmd of src : IFramebufferOutput * srcOffset : V3i * dst : IFramebufferOutput * dstOffset : V3i * size : V3i
@@ -93,9 +93,13 @@ and [<RequireQualifiedAccess>]
     static member Execute (other : ComputeProgram<unit>) =
         ComputeCommand.ExecuteCmd other
 
-    static member Sync b = ComputeCommand.SyncBufferCmd(b, BufferAccess.ShaderWrite, BufferAccess.ShaderRead)
+    static member Sync b = ComputeCommand.SyncBufferCmd(b, ResourceAccess.ShaderWrite, ResourceAccess.ShaderRead)
     
     static member Sync(b, s, d) = ComputeCommand.SyncBufferCmd(b, s, d)
+        
+    static member Sync(i, s, d) = ComputeCommand.SyncImageCmd(i, s, d)
+    
+    static member Sync(i) = ComputeCommand.SyncImageCmd(i, ResourceAccess.ShaderWrite, ResourceAccess.ShaderRead)
 
     static member Zero(b) = ComputeCommand.SetBufferCmd(b, [| 0uy; 0uy; 0uy; 0uy |])
 

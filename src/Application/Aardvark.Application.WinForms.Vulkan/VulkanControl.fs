@@ -19,6 +19,7 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
     let mutable swapchainDescription : SwapchainDescription = Unchecked.defaultof<_>
     let mutable swapchain : Swapchain = Unchecked.defaultof<_>
     let mutable loaded = false
+    let mutable isInvalid = true
 
     member x.SwapChainDescription = 
         if not x.IsHandleCreated then x.CreateHandle()
@@ -30,7 +31,12 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
 
     abstract member OnLoad : SwapchainDescription -> unit
     abstract member OnUnload : unit -> unit
-    abstract member OnRenderFrame : RenderPass * Framebuffer -> unit
+    abstract member OnRenderFrame : RenderPass * Framebuffer -> bool
+    
+    member x.IsInvalid = isInvalid
+
+    interface IInvalidateControl with
+        member x.IsInvalid = x.IsInvalid
 
     override x.OnHandleCreated(e) =
         base.OnHandleCreated e
@@ -43,6 +49,7 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
         x.Padding <- Padding(0,0,0,0)
         x.Margin <- Padding(0,0,0,0)
         x.BorderStyle <- BorderStyle.None
+        
 
 
         surface <- device.CreateSurface(x)
@@ -52,14 +59,19 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
         loaded <- true
 
     override x.OnPaint(e) =
+        isInvalid <- true
         base.OnPaint(e)
 
         if loaded then
-            swapchain.RenderFrame(fun framebuffer ->
-                Aardvark.Base.Incremental.EvaluationUtilities.evaluateTopLevel (fun () ->
-                    x.OnRenderFrame(swapchainDescription.renderPass, framebuffer)
+            let invalidate = 
+                swapchain.RenderFrame(fun framebuffer ->
+                    Aardvark.Base.Incremental.EvaluationUtilities.evaluateTopLevel (fun () ->
+                        x.OnRenderFrame(swapchainDescription.renderPass, framebuffer)
+                    )
                 )
-            )
+            isInvalid <- invalidate
+            if invalidate then 
+                x.Invalidate()
 
     override x.Dispose(d) =
         if loaded then
@@ -74,8 +86,8 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
 type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode) as this =
     inherit VulkanControl(runtime.Device, graphicsMode)
     
-    static let messageLoop = MessageLoop()
-    static do messageLoop.Start()
+//    static let messageLoop = MessageLoop()
+//    static do messageLoop.Start()
 
     let mutable renderTask : IRenderTask = RenderTask.empty
     let mutable taskSubscription : IDisposable = null
@@ -83,17 +95,46 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
     let mutable needsRedraw = false
     let mutable renderContiuously = false
 
-    let time = Mod.custom(fun _ -> DateTime.Now)
+    let frameTime = RunningMean(10)
+    let frameWatch = System.Diagnostics.Stopwatch()
+
+    let timeWatch = System.Diagnostics.Stopwatch()
+    let baseTime = DateTime.Now.Ticks
+    do timeWatch.Start()
+
+
+
+    let now() = DateTime(timeWatch.Elapsed.Ticks + baseTime)
+    let nextFrameTime() = 
+        if frameTime.Count >= 10 then
+            now() + TimeSpan.FromSeconds frameTime.Average
+        else
+            now()
+
+//    do Async.Start <| 
+//        async {
+//            while true do
+//                do! Async.Sleep 500
+//                Log.line "frame-time: %.2fms" (1000.0 * frameTime.Average)
+//        }
+
+    let time = Mod.init (now()) //Mod.custom(fun _ -> now())
 
     let beforeRender = Event<unit>()
     let afterRender = Event<unit>()
+    let mutable first = true
 
     override x.OnLoad(desc : SwapchainDescription) =
         transact (fun () -> sizes.Value <- V2i(this.ClientSize.Width, this.ClientSize.Height))
+
+
         x.KeyDown.Add(fun e ->
             if e.KeyCode = System.Windows.Forms.Keys.End && e.Control then
                 renderContiuously <- not renderContiuously
-                x.Invalidate()
+                if renderContiuously then
+                    x.Invalidate()
+                else
+                    MessageLoop.Invalidate x |> ignore
                 e.Handled <- true
         )
 
@@ -103,14 +144,22 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
         if s <> sizes.Value then
             transact (fun () -> Mod.change sizes s)
 
+
+        frameWatch.Restart()
+        transact (fun () -> time.Value <- nextFrameTime())
         beforeRender.Trigger()
         renderTask.Run(RenderToken.Empty, fbo)
         afterRender.Trigger()
+        frameWatch.Stop()
+
+        if not first then
+            frameTime.Add frameWatch.Elapsed.TotalSeconds
 
         //x.Invalidate()
         transact (fun () -> time.MarkOutdated())
-        if renderContiuously then
-            x.Invalidate()
+
+        first <- false
+        renderContiuously
 
     override x.OnUnload() =
         if not (isNull taskSubscription) then
@@ -126,8 +175,11 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
 
     member x.FramebufferSignature = x.RenderPass :> IFramebufferSignature
 
+
     member private x.ForceRedraw() =
-        messageLoop.Draw(x)
+        if not renderContiuously then
+            MessageLoop.Invalidate x |> ignore
+        //messageLoop.Draw(x)
 
     member x.RenderTask
         with get() = renderTask
@@ -138,25 +190,6 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
 
             renderTask <- t
             taskSubscription <- t.AddMarkingCallback x.ForceRedraw
-
-    interface IControl with
-        member x.IsInvalid = needsRedraw
-        member x.Invalidate() =
-            if not x.IsDisposed && not renderContiuously then
-                if not needsRedraw then
-                    needsRedraw <- true
-                    x.Invalidate()
-
-        member x.Paint() =
-            if not x.IsDisposed && not renderContiuously then
-                use g = x.CreateGraphics()
-                use e = new System.Windows.Forms.PaintEventArgs(g, x.ClientRectangle)
-                x.InvokePaint(x, e)
-
-        member x.Invoke f =
-            if not x.IsDisposed then
-                try base.Invoke (new System.Action(f)) |> ignore
-                with _ -> ()
 
     member x.BeforeRender = beforeRender.Publish
     member x.AfterRender = afterRender.Publish
@@ -169,7 +202,7 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
 
         member x.Samples = 1
         member x.Sizes = sizes :> IMod<_>
-        member x.Time = time
+        member x.Time = time :> IMod<_>
         member x.BeforeRender = beforeRender.Publish
         member x.AfterRender = afterRender.Publish
 
