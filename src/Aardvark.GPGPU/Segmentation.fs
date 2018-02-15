@@ -215,9 +215,35 @@ module SegmentationShaders =
 
 
         }
+           
+    [<LocalSize(X = 8, Y = 8)>]
+    let calculateSurfaceArea (regions : IntImage2d<Formats.r32i>) (regionSurfaces : IntImage2d<Formats.r32i>) =
+        compute {
+            let id = getGlobalId().XY
+            let size = regions.Size
+
+            if id.X < size.X && id.Y < size.Y then
+                let r = regions.[id].X
+                let rc = storageCoord2d r size 
+
+                let mutable area = 4
+
+                let nl = regions.[id - V2i.IO].X
+                let nr = regions.[id + V2i.IO].X
+                let nt = regions.[id - V2i.OI].X
+                let nb = regions.[id + V2i.OI].X
+
+                if id.X > 0 && nl = r then area <- area - 1
+                if id.X < size.X - 1 && nr = r then area <- area - 1
+                if id.Y > 0 && nt = r then area <- area - 1
+                if id.Y < size.Y - 1 && nb = r then area <- area - 1
+
+                let res = regionSurfaces.AtomicAdd(rc, area)
+                regions.[id] <- V4i(r + (res * 0), 0, 0, 0)
+        }
             
     [<LocalSize(X = 8, Y = 8)>]
-    let writeToOutput (result : Image2d<Formats.rgba16>) (regionSum : IntImage2d<Formats.r32i>) (regionSumSq : IntImage2d<Formats.r32i>) (regionCount : IntImage2d<Formats.r32i>) (regions : IntImage2d<Formats.r32i>) =
+    let writeToOutput (result : Image2d<Formats.rgba16>) (regionSum : IntImage2d<Formats.r32i>) (regionSumSq : IntImage2d<Formats.r32i>) (regionCount : IntImage2d<Formats.r32i>) (regions : IntImage2d<Formats.r32i>) (regionSurfaces : IntImage2d<Formats.r32i>) =
         compute {
             let id = getGlobalId().XY
             let size = regions.Size
@@ -230,14 +256,16 @@ module SegmentationShaders =
                 let sum     = intBitsToFloat regionSum.[rCoord].X
                 let sumSq   = intBitsToFloat regionSumSq.[rCoord].X
                 let cnt     = regionCount.[rCoord].X
-                    
+                let surface = regionSurfaces.[rCoord].X
 
                 let avg = sum / float cnt
                 let dev = sumSq / float cnt - (avg * avg) |> sqrt
-                let area = float cnt / float (size.X * size.Y)
+
+                let rSurface = float surface / 10.0  /// float (6 * cnt)
+
 
                 let hl = unpackUnorm2x16 (uint32 cnt)
-                result.[id] <- V4d(avg, dev, hl.X, hl.Y)
+                result.[id] <- V4d(avg, rSurface, hl.X, hl.Y)
 
                     
                 ()
@@ -430,9 +458,32 @@ module SegmentationShaders =
 
 
         }
+  
+    [<LocalSize(X = 4, Y = 4, Z = 4)>]
+    let calculateSurfaceArea3d (regions : IntImage3d<Formats.r32i>) (regionSurfaces : IntImage3d<Formats.r32i>) =
+        compute {
+            let id = getGlobalId()
+            let size = regions.Size
+
+            if id.X < size.X && id.Y < size.Y && id.Z < size.Z then
+                let r = regions.[id].X
+                let rc = storageCoord3d r size 
+
+                let mutable area = 6
+                if id.X > 0 && regions.[id - V3i.IOO].X = r then area <- area - 1
+                if id.X < size.X - 1 && regions.[id + V3i.IOO].X = r then area <- area - 1
+                if id.Y > 0 && regions.[id - V3i.OIO].X = r then area <- area - 1
+                if id.Y < size.Y - 1 && regions.[id + V3i.OIO].X = r then area <- area - 1
+                if id.Z > 0 && regions.[id - V3i.OOI].X = r then area <- area - 1
+                if id.Z < size.Z - 1 && regions.[id + V3i.OOI].X = r then area <- area - 1
+
+                if area > 0 then
+                    let r = regionSurfaces.AtomicAdd(rc, area)
+                    ()
+        }
             
     [<LocalSize(X = 4, Y = 4, Z = 4)>]
-    let writeToOutput3d (result : Image3d<Formats.rgba16>) (regionSum : IntImage3d<Formats.r32i>) (regionSumSq : IntImage3d<Formats.r32i>) (regionCount : IntImage3d<Formats.r32i>) (regions : IntImage3d<Formats.r32i>) =
+    let writeToOutput3d (result : Image3d<Formats.rgba16>) (regionSum : IntImage3d<Formats.r32i>) (regionSumSq : IntImage3d<Formats.r32i>) (regionCount : IntImage3d<Formats.r32i>) (regions : IntImage3d<Formats.r32i>) (regionSurfaces : IntImage3d<Formats.r32i>) =
         compute {
             let id = getGlobalId()
             let size = regions.Size
@@ -445,14 +496,14 @@ module SegmentationShaders =
                 let sum     = intBitsToFloat regionSum.[rCoord].X
                 let sumSq   = intBitsToFloat regionSumSq.[rCoord].X
                 let cnt     = regionCount.[rCoord].X
-                    
+                let surface = regionSurfaces.[rCoord].X
 
                 let avg = sum / float cnt
                 let dev = sumSq / float cnt - (avg * avg) |> sqrt
-                let area = float cnt / float (size.X * size.Y)
+                let rSurface = float surface / float (6 * cnt)
 
                 let hl = unpackUnorm2x16 (uint32 cnt)
-                result.[id] <- V4d(avg, dev, hl.X, hl.Y)
+                result.[id] <- V4d(avg, rSurface, hl.X, hl.Y)
 
                     
                 ()
@@ -536,8 +587,61 @@ module SegmentationShaders =
             @>
         ]
 
-type RegionMerge(runtime : IRuntime, mergeMode : SegmentMergeMode) =
-        
+type internal RegionMergeKernels2d(runtime : IRuntime, mergeMode : SegmentMergeMode) =
+    let initRegions = runtime.CreateComputeShader SegmentationShaders.initRegions
+    let regionMerge = runtime.CreateComputeShader (SegmentationShaders.regionMerge SegmentationShaders.distanceFunction.[mergeMode])
+    let sanitize = runtime.CreateComputeShader SegmentationShaders.sanitize
+    let sanitizeAvg = runtime.CreateComputeShader SegmentationShaders.sanitizeAverage
+    let writeOut = runtime.CreateComputeShader SegmentationShaders.writeToOutput
+    let calculateSurface = runtime.CreateComputeShader SegmentationShaders.calculateSurfaceArea
+    
+    member x.Runtime = runtime
+    member x.InitRegions = initRegions
+    member x.RegionMerge = regionMerge
+    member x.Sanitize = sanitize
+    member x.SanitizeAvg = sanitizeAvg
+    member x.CalculateSurface = calculateSurface
+    member x.WriteOut = writeOut
+    
+    member x.Dispose() =
+        runtime.DeleteComputeShader initRegions
+        runtime.DeleteComputeShader regionMerge
+        runtime.DeleteComputeShader sanitize
+        runtime.DeleteComputeShader sanitizeAvg
+        runtime.DeleteComputeShader calculateSurface
+        runtime.DeleteComputeShader writeOut
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
+type internal RegionMergeKernels3d(runtime : IRuntime, mergeMode : SegmentMergeMode) =
+    let initRegions = runtime.CreateComputeShader SegmentationShaders.initRegions3d
+    let regionMerge = runtime.CreateComputeShader (SegmentationShaders.regionMerge3d SegmentationShaders.distanceFunction.[mergeMode])
+    let sanitize = runtime.CreateComputeShader SegmentationShaders.sanitize3d
+    let sanitizeAvg = runtime.CreateComputeShader SegmentationShaders.sanitizeAverage3d
+    let writeOut = runtime.CreateComputeShader SegmentationShaders.writeToOutput3d
+    let calculateSurface = runtime.CreateComputeShader SegmentationShaders.calculateSurfaceArea3d
+    
+    member x.Runtime = runtime
+    member x.InitRegions = initRegions
+    member x.RegionMerge = regionMerge
+    member x.Sanitize = sanitize
+    member x.SanitizeAvg = sanitizeAvg
+    member x.CalculateSurface = calculateSurface
+    member x.WriteOut = writeOut
+    
+    member x.Dispose() =
+        runtime.DeleteComputeShader initRegions
+        runtime.DeleteComputeShader regionMerge
+        runtime.DeleteComputeShader sanitize
+        runtime.DeleteComputeShader sanitizeAvg
+        runtime.DeleteComputeShader calculateSurface
+        runtime.DeleteComputeShader writeOut
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
+type RegionMerge (runtime : IRuntime, mergeMode : SegmentMergeMode) =
 
     let tDistr = 
         let img = PixImage<float32>(Col.Format.Gray, Volume<float32>(TDistribution.Data, V3i(500, 128, 1)))
@@ -545,50 +649,26 @@ type RegionMerge(runtime : IRuntime, mergeMode : SegmentMergeMode) =
         runtime.Upload(tex, 0, 0, img)
         tex
 
-    let initRegions = runtime.CreateComputeShader SegmentationShaders.initRegions
-    let regionMerge = runtime.CreateComputeShader (SegmentationShaders.regionMerge SegmentationShaders.distanceFunction.[mergeMode])
-    let sanitize = runtime.CreateComputeShader SegmentationShaders.sanitize
-    let sanitizeAvg = runtime.CreateComputeShader SegmentationShaders.sanitizeAverage
-    let writeOut = runtime.CreateComputeShader SegmentationShaders.writeToOutput
-
-    let initRegions3d = runtime.CreateComputeShader SegmentationShaders.initRegions3d
-    let regionMerge3d = runtime.CreateComputeShader (SegmentationShaders.regionMerge3d SegmentationShaders.distanceFunction.[mergeMode])
-    let sanitize3d = runtime.CreateComputeShader SegmentationShaders.sanitize3d
-    let sanitizeAvg3d = runtime.CreateComputeShader SegmentationShaders.sanitizeAverage3d
-    let writeOut3d = runtime.CreateComputeShader SegmentationShaders.writeToOutput3d
-        
+    let kernels2d = lazy (new RegionMergeKernels2d(runtime, mergeMode))
+    let kernels3d = lazy (new RegionMergeKernels3d(runtime, mergeMode))
 
     member x.TDistrTexture = tDistr
     member x.Runtime = runtime
-    member internal x.InitRegions = initRegions
-    member internal x.RegionMerge = regionMerge
-    member internal x.Sanitize = sanitize
-    member internal x.SanitizeAvg = sanitizeAvg
-    member internal x.WriteOut = writeOut
-
-    member internal x.InitRegions3d = initRegions3d
-    member internal x.RegionMerge3d = regionMerge3d
-    member internal x.Sanitize3d = sanitize3d
-    member internal x.SanitizeAvg3d = sanitizeAvg3d
-    member internal x.WriteOut3d = writeOut3d
-
+ 
     member x.NewInstance(size : V2i) =
-        new RegionMergeInstance2d(x, size)
+        new RegionMergeInstance2d(kernels2d.Value, tDistr, size)
         
     member x.NewInstance(size : V3i) =
-        new RegionMergeInstance3d(x, size)
+        new RegionMergeInstance3d(kernels3d.Value, tDistr, size)
         
     member x.Dispose() =
-        runtime.DeleteComputeShader initRegions
-        runtime.DeleteComputeShader regionMerge
-        runtime.DeleteComputeShader sanitize
-        runtime.DeleteComputeShader sanitizeAvg
-        runtime.DeleteComputeShader writeOut
+        if kernels2d.IsValueCreated then kernels2d.Value.Dispose()
+        if kernels3d.IsValueCreated then kernels3d.Value.Dispose()
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-and RegionMergeInstance3d(parent : RegionMerge, size : V3i) =  
+and RegionMergeInstance3d internal(parent : RegionMergeKernels3d, tDistr : IBackendTexture, size : V3i) =  
     static let buildMerges (size : V3i) =
         let rec merges (s : V3i) (size : V3i) =
             match s.X < size.X, s.Y < size.Y, s.Z < size.Z with
@@ -620,11 +700,12 @@ and RegionMergeInstance3d(parent : RegionMerge, size : V3i) =
         merges V3i.III size
 
     let runtime = parent.Runtime
-    let initRegions = parent.InitRegions3d
-    let regionMerge = parent.RegionMerge3d
-    let sanitize = parent.Sanitize3d
-    let sanitizeAvg = parent.SanitizeAvg3d
-    let writeOut = parent.WriteOut3d
+    let initRegions = parent.InitRegions
+    let regionMerge = parent.RegionMerge
+    let sanitize = parent.Sanitize
+    let sanitizeAvg = parent.SanitizeAvg
+    let surface = parent.CalculateSurface
+    let writeOut = parent.WriteOut
 
      
     let sum         = runtime.CreateTexture(size, TextureDimension.Texture3D, TextureFormat.R32i, 1, 1, 1)
@@ -655,7 +736,7 @@ and RegionMergeInstance3d(parent : RegionMerge, size : V3i) =
             mergeIn.["regionSumSq"] <- sumSq.[TextureAspect.Color, 0, 0]
             mergeIn.["regionCount"] <- cnt.[TextureAspect.Color, 0, 0]
             mergeIn.["collapseImg"] <- collapse.[TextureAspect.Color, 0, 0]
-            mergeIn.["TDistr"] <- parent.TDistrTexture
+            mergeIn.["TDistr"] <- tDistr
             mergeIn.Flush()
 
 
@@ -684,12 +765,21 @@ and RegionMergeInstance3d(parent : RegionMerge, size : V3i) =
         binding.Flush()
         binding
 
+    
+    let surfaceIn =
+        let binding = runtime.NewInputBinding surface
+        binding.["regions"] <- regions.[TextureAspect.Color, 0, 0]
+        binding.["regionSurfaces"] <- collapse.[TextureAspect.Color, 0, 0]
+        binding.Flush()
+        binding
+
     let writeOutIn = 
         let binding = runtime.NewInputBinding writeOut
         binding.["regions"] <- regions.[TextureAspect.Color, 0, 0]
         binding.["regionSum"] <- sum.[TextureAspect.Color, 0, 0]
         binding.["regionSumSq"] <- sumSq.[TextureAspect.Color, 0, 0]
         binding.["regionCount"] <- cnt.[TextureAspect.Color, 0, 0]
+        binding.["regionSurfaces"] <- collapse.[TextureAspect.Color, 0, 0]
         binding.Flush()
         binding
             
@@ -755,6 +845,12 @@ and RegionMergeInstance3d(parent : RegionMerge, size : V3i) =
                 yield ComputeCommand.Sync sum
                 yield ComputeCommand.Sync sumSq
                 yield ComputeCommand.Sync cnt
+                
+
+            yield ComputeCommand.Bind surface
+            yield ComputeCommand.SetInput surfaceIn
+            yield ComputeCommand.Dispatch (V3i(ceilDiv size.X 4, ceilDiv size.Y 4, ceilDiv size.Z 4))
+            yield ComputeCommand.Sync collapse 
 
 
             yield ComputeCommand.Bind writeOut
@@ -814,7 +910,7 @@ and RegionMergeInstance3d(parent : RegionMerge, size : V3i) =
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-and RegionMergeInstance2d(parent : RegionMerge, size : V2i) =  
+and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBackendTexture, size : V2i) =  
     static let buildMerges (size : V2i) =
         let rec merges (s : V2i) (size : V2i) =
             if s.X < size.X && s.Y < size.Y then
@@ -836,6 +932,7 @@ and RegionMergeInstance2d(parent : RegionMerge, size : V2i) =
     let sanitize = parent.Sanitize
     let sanitizeAvg = parent.SanitizeAvg
     let writeOut = parent.WriteOut
+    let surface = parent.CalculateSurface
         
     let sum         = runtime.CreateTexture(size, TextureFormat.R32i, 1, 1)
     let sumSq       = runtime.CreateTexture(size, TextureFormat.R32i, 1, 1)
@@ -866,7 +963,7 @@ and RegionMergeInstance2d(parent : RegionMerge, size : V2i) =
             mergeIn.["regionSumSq"] <- sumSq.[TextureAspect.Color, 0, 0]
             mergeIn.["regionCount"] <- cnt.[TextureAspect.Color, 0, 0]
             mergeIn.["collapseImg"] <- collapse.[TextureAspect.Color, 0, 0]
-            mergeIn.["TDistr"] <- parent.TDistrTexture
+            mergeIn.["TDistr"] <- tDistr
             mergeIn.Flush()
 
 
@@ -894,12 +991,20 @@ and RegionMergeInstance2d(parent : RegionMerge, size : V2i) =
         binding.Flush()
         binding
 
+    let surfaceIn =
+        let binding = runtime.NewInputBinding surface
+        binding.["regions"] <- regions.[TextureAspect.Color, 0, 0]
+        binding.["regionSurfaces"] <- collapse.[TextureAspect.Color, 0, 0]
+        binding.Flush()
+        binding
+
     let writeOutIn = 
         let binding = runtime.NewInputBinding writeOut
         binding.["regions"] <- regions.[TextureAspect.Color, 0, 0]
         binding.["regionSum"] <- sum.[TextureAspect.Color, 0, 0]
         binding.["regionSumSq"] <- sumSq.[TextureAspect.Color, 0, 0]
         binding.["regionCount"] <- cnt.[TextureAspect.Color, 0, 0]
+        binding.["regionSurfaces"] <- collapse.[TextureAspect.Color, 0, 0]
         binding.Flush()
         binding
             
@@ -968,6 +1073,11 @@ and RegionMergeInstance2d(parent : RegionMerge, size : V2i) =
                 yield ComputeCommand.Sync cnt
 
 
+            yield ComputeCommand.Bind surface
+            yield ComputeCommand.SetInput surfaceIn
+            yield ComputeCommand.Dispatch (V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
+            yield ComputeCommand.Sync collapse 
+
             yield ComputeCommand.Bind writeOut
             yield ComputeCommand.SetInput writeOutIn
             yield ComputeCommand.Dispatch (V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
@@ -1007,6 +1117,10 @@ and RegionMergeInstance2d(parent : RegionMerge, size : V2i) =
                 ComputeCommand.TransformLayout(outputRegions, TextureLayout.ShaderRead)
             ]
 
+            let img = PixImage<int>(Col.Format.Gray, collapse.Size.XY)
+            runtime.Download(collapse, 0, 0, img)
+            let res = img.Volume.Data |> Array.sum
+            Log.warn "%A" res
         )
 
     member x.Dispose() =

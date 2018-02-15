@@ -273,13 +273,11 @@ module ComputeShader =
                     | _ ->
                         let value = infoTexture.[p]
 
-                        let avg = value.X
-                        let dev = value.Y
+                        let rSurface = value.Y
                         //let cnt = packUnorm2x16 value.ZW
                         
-                        let rDev = dev / threshold
-                        let cc = hsv2rgb (rDev * 0.5) 1.0 1.0
-                        color <- cc
+                        //let cc = hsv2rgb (rSurface * 100.0) 1.0 1.0
+                        color <- V3d(rSurface, rSurface, rSurface)
 
 
                 let final = (1.0 - fade) * inValue + (fade) * color
