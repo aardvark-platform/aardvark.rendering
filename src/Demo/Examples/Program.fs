@@ -1292,9 +1292,10 @@ let main args =
 
     //Aardvark.Application.OpenVR.UnhateTest.run()
 
+    Examples.ImageProcessingExample.run() |> ignore
     //Examples.Tessellation.run()
     //Examples.Stereo.runNew()
-    Examples.ComputeShader.run()
+    //Examples.ComputeShader.run()
     //Examples.LevelOfDetail.run()
     //Examples.Wobble.run()
     //Examples.GeometryComposition.run()
@@ -1306,19 +1307,19 @@ let main args =
     System.Environment.Exit 0
 
     //colorLockTest()
-    let app,win =
-        if useVulkan then
-            let app = new Aardvark.Application.WinForms.VulkanApplication()
-            let win = app.CreateSimpleRenderWindow()
-            app :> Aardvark.Application.IApplication,win :> Aardvark.Application.IRenderWindow
-        else
-            let app = new Aardvark.Application.WinForms.OpenGlApplication()
-            let win = app.CreateGameWindow()
-            app:> Aardvark.Application.IApplication,win :> Aardvark.Application.IRenderWindow
-    CullingTest.run app win |> ignore
-    //CullingTest.runInstanced () |> ignore
-    //CullingTest.runStructural app win|> ignore
-    System.Environment.Exit 0
+//    let app,win =
+//        if useVulkan then
+//            let app = new Aardvark.Application.WinForms.VulkanApplication()
+//            let win = app.CreateSimpleRenderWindow()
+//            app :> Aardvark.Application.IApplication,win :> Aardvark.Application.IRenderWindow
+//        else
+//            let app = new Aardvark.Application.WinForms.OpenGlApplication()
+//            let win = app.CreateGameWindow()
+//            app:> Aardvark.Application.IApplication,win :> Aardvark.Application.IRenderWindow
+//    CullingTest.run app win |> ignore
+//    //CullingTest.runInstanced () |> ignore
+//    //CullingTest.runStructural app win|> ignore
+//    System.Environment.Exit 0
 
 
     //Examples.Tutorial.run()
@@ -1332,12 +1333,12 @@ let main args =
 
 
 
-    Ag.initialize()
-    Aardvark.Init()
-    
-    Interactive.Renderer <- Vulkan
-    
-    Aardvark.Rendering.GL.RuntimeConfig.SupressSparseBuffers <- false
+//    Ag.initialize()
+//    Aardvark.Init()
+//    
+//    Interactive.Renderer <- Vulkan
+//    
+//    Aardvark.Rendering.GL.RuntimeConfig.SupressSparseBuffers <- false
     //Examples.PostProcessing.run()
 
     //Examples.CommandTest.run()

@@ -2310,6 +2310,7 @@ module Image =
 
         let flags =
             if dim = TextureDimension.TextureCube then VkImageCreateFlags.CubeCompatibleBit
+
             else VkImageCreateFlags.None
 
         let flags =
