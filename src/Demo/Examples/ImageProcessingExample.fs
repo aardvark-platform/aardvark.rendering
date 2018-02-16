@@ -12,8 +12,29 @@ module ImageProcessingShader =
     open FShade
     open Aardvark.Base.Rendering.Effects
 
-    // Shader that can be used for Gauss or for Box-Filter
+    // Box Filter
     (********************************************************************************************************)
+    [<LocalSize(X = 8, Y = 8)>]
+    let box (radius : int) (input : FShade.Image2d<Formats.r32f>) (output : Image2d<Formats.r32f>) =
+        compute {
+            let rc = getGlobalId().XY
+            let size = input.Size
+            if rc.X < size.X && rc.Y < size.Y then
+                let mutable c = V4d.Zero
+                let hr = radius / 2
+                let r = radius |> float
+                let w = 1.0 / (r * r)
+                for i in -hr .. hr do
+                    for j in -hr .. hr do
+                        let rcn = rc + V2i(i, j)
+                        c <- c + w * input.[rcn]
+                output.[rc] <- c
+        }
+
+
+    // Gauss Filter
+    (********************************************************************************************************)
+
     [<LocalSize(X = 8, Y = 8)>]
     let gaussX (weights : float[]) (radius : int) (input : FShade.Image2d<Formats.r32f>) (output : Image2d<Formats.r32f>) =
         compute {
@@ -46,7 +67,7 @@ module ImageProcessingShader =
                 output.[rc] <- c
         }
 
-    // HighPass Filter that uses either a Gauss or a Box filter
+    // HighPass Filter
     (********************************************************************************************************)
     [<LocalSize(X = 8, Y = 8)>]
     let highPassX (weights : float[]) (radius : int) (input : FShade.Image2d<Formats.r32f>) (output : Image2d<Formats.r32f>) =
@@ -61,7 +82,7 @@ module ImageProcessingShader =
                     let rcn = rc + V2i(i, 0)
                     let w = weights.[i + halfRadius]
                     c <- c + w * input.[rcn]
-                let res = input.[rc] - c + 0.5
+                let res = input.[rc] - c + 0.5 // including an offset
                 output.[rc] <- res //input.[rc] + res
         }
 
@@ -107,17 +128,14 @@ module ImageProcessing =
         if v % d = 0 then v / d
         else 1 + v / d
 
-    type Processor(radius : int) =
+    type Processor() =
 
         let app = new VulkanApplication()
         let rt = app.Runtime
         let irt = rt :> IComputeRuntime
 
-        let testFile = @"c:/users/schimkowitsch/Pictures/Frans Hals - Laughing Cavalier.png"
+        let testFile = @"..\..\data\testTexture1.jpg"
 
-        let _radius = radius
-        let rr = (1.0 / (float radius)) |> float32
-        let sigma = 6.0
         let mutable size = V2i(0,0)
 
         let loadTexture (file : string) : IBackendTexture =
@@ -143,20 +161,30 @@ module ImageProcessing =
         let highPassX : IComputeShader = irt.CreateComputeShader(ImageProcessingShader.highPassX)
         let highPassY : IComputeShader = irt.CreateComputeShader(ImageProcessingShader.highPassY)
 
+        (*
+         * Calculating Sigma depending on the kernel size
+         * Refactored calculation of weights
+         * 
+         * Source for formulas: OpenCV documentation at:
+         * https://docs.opencv.org/2.4/modules/imgproc/doc/filtering.html?highlight=gaussianblur#gaussianblur
+         * 16.02.2018
+         *)
+        let calculateGaussWeights (r) : float32[] =
+            let rf = (r |> float32)
+            let sf = 0.3f * ((rf - 1.0f) * 0.5f - 1.0f) + 0.8f
+            let tf = -0.5f / (sf * sf)
+            let hf = (rf - 1.0f) * 0.5f
 
-        let calculateWeights (r) : float32[] =
-            [| for i in 0..(r-1) do yield (1.0 / (float r)) |> float32 |] // simple box shader
-//            let half = radius / 2
-//            let res =
-//                [|
-//                    for i in 0 .. (radius-1) do
-//                        let x = abs (i - half)
-//                        yield exp (-float (x * x)) / (2.0 * sigma * sigma)
-//                |]
-//            let sum = Array.sum res
-//            res |> Array.map (fun v -> (v / sum) |> float32)
-        
-        let weightsBuffer = rt.CreateBuffer<float32>(radius |> calculateWeights)
+            let res : float32[] =
+                Array.init r
+                    (fun i -> 
+                        let x = (float32 i) - hf
+                        exp (tf * x * x)
+                    )
+            let sum = Array.sum res
+            let w = res |> Array.map (fun v -> (v / sum))
+            w
+
 
         let executeProgram2(f : unit -> unit, inputTex : IBackendTexture, shader : IComputeShader, radius : int, useOutputTexture : bool, deleteInputTex : bool) =
             let output = 
@@ -164,8 +192,8 @@ module ImageProcessing =
                 else rt.CreateTexture(size, TextureFormat.R32f, 1, 1, 1)
 
             let input = irt.NewInputBinding(shader)
-            let w = calculateWeights radius
-            let wBuffer : IBuffer<float32> = rt.CreateBuffer<float32>(w) // gets destroyed 
+            let w = calculateGaussWeights radius
+            let wBuffer : IBuffer<float32> = rt.CreateBuffer<float32>(w)
             input.["input"]   <- inputTex
             input.["output"]  <- output
             input.["weights"] <- wBuffer
@@ -187,16 +215,17 @@ module ImageProcessing =
             (f, output)
 
 
-        member x.ExecuteProgram(radius : int) =
+        member x.GetFilteredImage(radius : int) =
             let f0 : unit -> unit = (fun _ -> ())
             let fX, res1 = executeProgram2(f0, inputImage, gaussShaderX, radius, false, false)
             let fY, res2 = executeProgram2(fX, res1, gaussShaderY, radius, true, true)
             fY()
             (res2 :> ITexture)
 
+        member x.GetUnfilteredImage() = inputImage :> ITexture
         member x.GetApp() = app
 
-        new () = new Processor(15)
+
 
         member x.Dispose() = 
             irt.DeleteComputeShader gaussShaderX
@@ -216,15 +245,22 @@ module ImageProcessingExample =
     let run () = 
     
         let proc = new Processor()
-        let radius = Mod.init 15
-        let tex = radius |> Mod.map(fun r -> proc.ExecuteProgram r)
+        let radius = Mod.init 5
+        let useFilter = Mod.init true
+        let tex = Mod.map2(fun r uf ->
+                                if uf then
+                                    proc.GetFilteredImage(r)
+                                else
+                                    proc.GetUnfilteredImage()
+                          ) radius useFilter
 
         use app = proc.GetApp()
         let win = app.CreateSimpleRenderWindow(samples = 1)
 
-        win.Keyboard.KeyDown(Keys.U).Values.Subscribe(fun _ -> transact(fun _ -> radius.Value <- if radius.Value < 55 then radius.Value + 5 else radius.Value)) |> ignore
-        win.Keyboard.KeyDown(Keys.J).Values.Subscribe(fun _ -> transact(fun _ -> radius.Value <- if radius.Value > 5 then radius.Value - 5 else radius.Value)) |> ignore
-
+        win.Keyboard.KeyDown(Keys.U).Values.Subscribe(fun _ -> transact(fun _ -> radius.Value <- if radius.Value < 55 then radius.Value + 2 else radius.Value)) |> ignore
+        win.Keyboard.KeyDown(Keys.J).Values.Subscribe(fun _ -> transact(fun _ -> radius.Value <- if radius.Value > 1 then radius.Value - 2 else radius.Value)) |> ignore
+        win.Keyboard.KeyDown(Keys.O).Values.Subscribe(fun _ -> transact(fun _ -> useFilter.Value <- (not useFilter.Value))) |> ignore
+        
         let initialView = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
         let frustum = win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
 
