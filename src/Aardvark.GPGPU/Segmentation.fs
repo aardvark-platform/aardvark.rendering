@@ -208,7 +208,12 @@ module SegmentationShaders =
                         n <- intBitsToFloat o + srcSumSq
                         r <- regionSumSq.AtomicCompareExchange(dst, o, floatBitsToInt n)
 
-                collapseImg.[rc] <- V4i(0,0,0,0)
+
+
+                    regionSum.[rc] <- V4i.Zero
+                    regionSumSq.[rc] <- V4i.Zero
+                    regionCount.[rc] <- V4i.Zero
+                    collapseImg.[rc] <- V4i(0,0,0,0)
 
                 ()
 
@@ -228,18 +233,28 @@ module SegmentationShaders =
 
                 let mutable area = 4
 
-                let nl = regions.[id - V2i.IO].X
-                let nr = regions.[id + V2i.IO].X
-                let nt = regions.[id - V2i.OI].X
-                let nb = regions.[id + V2i.OI].X
+                if id.X > 0 && regions.[id - V2i.IO].X = r then area <- area - 1
+                if id.X < size.X - 1 && regions.[id + V2i.IO].X = r then area <- area - 1
+                if id.Y > 0 && regions.[id - V2i.OI].X = r then area <- area - 1
+                if id.Y < size.Y - 1 && regions.[id + V2i.OI].X = r then area <- area - 1
+                if area > 0 then
+                    let res = regionSurfaces.AtomicAdd(rc, area)
+                    ()
+        }
+       
+       
+    [<LocalSize(X = 8, Y = 8)>]
+    let compactRegions (regionCounts : IntImage2d<Formats.r32i>) =
+        compute {
+            let id = getGlobalId().XY
+            let size = regionCounts.Size
 
-                if id.X > 0 && nl = r then area <- area - 1
-                if id.X < size.X - 1 && nr = r then area <- area - 1
-                if id.Y > 0 && nt = r then area <- area - 1
-                if id.Y < size.Y - 1 && nb = r then area <- area - 1
+            if id.X < size.X && id.Y < size.Y then
+//                let r = regions.[id].X
+//                let rc = storageCoord2d r size 
 
-                let res = regionSurfaces.AtomicAdd(rc, area)
-                regions.[id] <- V4i(r + (res * 0), 0, 0, 0)
+                ()
+
         }
             
     [<LocalSize(X = 8, Y = 8)>]
@@ -261,7 +276,13 @@ module SegmentationShaders =
                 let avg = sum / float cnt
                 let dev = sumSq / float cnt - (avg * avg) |> sqrt
 
-                let rSurface = float surface / 10.0  /// float (6 * cnt)
+
+                let worst =
+                    if cnt <= 1 then 4
+                    elif cnt = 2 then 6
+                    else cnt * 3
+
+                let rSurface = float surface /  float worst
 
 
                 let hl = unpackUnorm2x16 (uint32 cnt)
@@ -500,7 +521,12 @@ module SegmentationShaders =
 
                 let avg = sum / float cnt
                 let dev = sumSq / float cnt - (avg * avg) |> sqrt
-                let rSurface = float surface / float (6 * cnt)
+
+                let worst =
+                    if cnt <= 1 then 6
+                    else cnt * 5
+
+                let rSurface = float surface / float worst
 
                 let hl = unpackUnorm2x16 (uint32 cnt)
                 result.[id] <- V4d(avg, rSurface, hl.X, hl.Y)
@@ -1116,11 +1142,6 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
                 ComputeCommand.TransformLayout(regions, TextureLayout.ShaderReadWrite)
                 ComputeCommand.TransformLayout(outputRegions, TextureLayout.ShaderRead)
             ]
-
-            let img = PixImage<int>(Col.Format.Gray, collapse.Size.XY)
-            runtime.Download(collapse, 0, 0, img)
-            let res = img.Volume.Data |> Array.sum
-            Log.warn "%A" res
         )
 
     member x.Dispose() =

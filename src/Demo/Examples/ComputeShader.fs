@@ -276,9 +276,8 @@ module ComputeShader =
                         let rSurface = value.Y
                         //let cnt = packUnorm2x16 value.ZW
                         
-                        //let cc = hsv2rgb (rSurface * 100.0) 1.0 1.0
-                        color <- V3d(rSurface, rSurface, rSurface)
-
+                        let cc = hsv2rgb (rSurface * 0.333333333) 1.0 1.0
+                        color <- cc
 
                 let final = (1.0 - fade) * inValue + (fade) * color
                 return V4d(final, 1.0)
