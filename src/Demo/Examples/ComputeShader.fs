@@ -273,10 +273,9 @@ module ComputeShader =
                     | _ ->
                         let value = infoTexture.[p]
 
-                        let rSurface = value.Y
-                        //let cnt = packUnorm2x16 value.ZW
-                        
-                        let cc = hsv2rgb (rSurface * 0.333333333) 1.0 1.0
+
+                    
+                        let cc = hsv2rgb (value.Y * 0.333333333) 1.0 1.0
                         color <- cc
 
                 let final = (1.0 - fade) * inValue + (fade) * color
@@ -336,14 +335,15 @@ module ComputeShader =
         
         let fade = Mod.init 1.0
         let mode = Mod.init ViewMode.Regions
-        let threshold = Mod.init 0.01
+        let threshold = Mod.init 0.036
+        let alpha = Mod.init 1.6
 
         let textures =
-            threshold |> Mod.map (fun threshold ->
-                instance.Run(img, res, regions, threshold)
+            Mod.map2 (fun threshold alpha ->
+                instance.Run(img, res, regions, threshold, alpha)
                 res :> ITexture, regions :> ITexture
-            )
-
+            ) threshold alpha
+             
         let info = textures |> Mod.map fst
         let regionIds = textures |> Mod.map snd
 
@@ -369,6 +369,16 @@ module ComputeShader =
                     transact (fun () ->
                         threshold.Value <- threshold.Value - 0.001
                         Log.line "threshold: %A" threshold.Value
+                    )
+                | Keys.Multiply ->
+                    transact (fun () ->
+                        alpha.Value <- alpha.Value + 0.01
+                        Log.line "alpha: %A" alpha.Value
+                    )
+                | Keys.Divide ->
+                    transact (fun () ->
+                        alpha.Value <- alpha.Value - 0.01
+                        Log.line "alpha: %A" alpha.Value
                     )
                 | _ ->
                     ()

@@ -99,14 +99,16 @@ module SegmentationShaders =
                 let lAvg = lSum / float lCnt
                 let rAvg = rSum / float rCnt
 
-                let lVar = if lCnt < 2 then 0.0 else (lSumSq + lSum*lSum * (1.0 - 2.0 / float lCnt)) / (float lCnt - 1.0)
-                let rVar = if rCnt < 2 then 0.0 else (rSumSq + rSum*rSum * (1.0 - 2.0 / float rCnt)) / (float rCnt - 1.0)
+                let lVar = if lCnt < 2 then 0.0 else (lSumSq - float lCnt*lAvg*lAvg) / (float (lCnt - 1))
+                let rVar = if rCnt < 2 then 0.0 else (rSumSq - float rCnt*rAvg*rAvg) / (float (rCnt - 1))
 
                 let lValue = colors.[lid].X
                 let rValue = colors.[rid].X
 
                 let lRegionInfo = { average = lAvg; variance = lVar; count = lCnt }
                 let rRegionInfo = { average = rAvg; variance = rVar; count = rCnt }
+
+   
                 let identical = (%identical) lRegionInfo lValue rRegionInfo rValue
 
                 if identical then
@@ -237,8 +239,14 @@ module SegmentationShaders =
                 if id.X < size.X - 1 && regions.[id + V2i.IO].X = r then area <- area - 1
                 if id.Y > 0 && regions.[id - V2i.OI].X = r then area <- area - 1
                 if id.Y < size.Y - 1 && regions.[id + V2i.OI].X = r then area <- area - 1
+
+
+
                 if area > 0 then
-                    let res = regionSurfaces.AtomicAdd(rc, area)
+                    let res = regionSurfaces.AtomicAdd(rc, 1)
+                    ()
+                else
+                    let res = regionSurfaces.AtomicAdd(rc, -3)
                     ()
         }
        
@@ -273,16 +281,14 @@ module SegmentationShaders =
                 let cnt     = regionCount.[rCoord].X
                 let surface = regionSurfaces.[rCoord].X
 
+
+              
                 let avg = sum / float cnt
-                let dev = sumSq / float cnt - (avg * avg) |> sqrt
+                let var = if cnt < 2 then 0.0 else (sumSq - float cnt*avg*avg) / (float (cnt - 1))
+                let dev = var |> sqrt
 
 
-                let worst =
-                    if cnt <= 1 then 4
-                    elif cnt = 2 then 6
-                    else cnt * 3
-
-                let rSurface = float surface /  float worst
+                let rSurface = float surface /  float cnt
 
 
                 let hl = unpackUnorm2x16 (uint32 cnt)
@@ -363,8 +369,8 @@ module SegmentationShaders =
                 let lAvg = lSum / float lCnt
                 let rAvg = rSum / float rCnt
 
-                let lVar = if lCnt < 2 then 0.0 else (lSumSq + lSum*lSum * (1.0 - 2.0 / float lCnt)) / (float lCnt - 1.0)
-                let rVar = if rCnt < 2 then 0.0 else (rSumSq + rSum*rSum * (1.0 - 2.0 / float rCnt)) / (float rCnt - 1.0)
+                let lVar = if lCnt < 2 then 0.0 else (lSumSq - float lCnt*lAvg*lAvg) / (float (lCnt - 1))
+                let rVar = if rCnt < 2 then 0.0 else (rSumSq - float rCnt*rAvg*rAvg) / (float (rCnt - 1))
 
                 let lValue = colors.[lid].X
                 let rValue = colors.[rid].X
@@ -499,7 +505,10 @@ module SegmentationShaders =
                 if id.Z < size.Z - 1 && regions.[id + V3i.OOI].X = r then area <- area - 1
 
                 if area > 0 then
-                    let r = regionSurfaces.AtomicAdd(rc, area)
+                    let r = regionSurfaces.AtomicAdd(rc, 1)
+                    ()
+                else
+                    let r = regionSurfaces.AtomicAdd(rc, -3)
                     ()
         }
             
@@ -520,19 +529,14 @@ module SegmentationShaders =
                 let surface = regionSurfaces.[rCoord].X
 
                 let avg = sum / float cnt
-                let dev = sumSq / float cnt - (avg * avg) |> sqrt
+                let var = if cnt < 2 then 0.0 else (sumSq - float cnt*avg*avg) / (float (cnt - 1))
+                let dev = sqrt var
 
-                let worst =
-                    if cnt <= 1 then 6
-                    else cnt * 5
-
-                let rSurface = float surface / float worst
+                let rSurface = float surface / float cnt
 
                 let hl = unpackUnorm2x16 (uint32 cnt)
                 result.[id] <- V4d(avg, rSurface, hl.X, hl.Y)
 
-                    
-                ()
 
 
         }
@@ -571,45 +575,58 @@ module SegmentationShaders =
             @>
             
             SegmentMergeMode.TTest,
-            <@ fun (lRegion : RegionInfo) (lValue : float) (rRegion : RegionInfo) (rValue : float) ->
+            <@ fun (lRegion : RegionInfo) (_ : float) (rRegion : RegionInfo) (_ : float) ->
                 
-                let alpha : float = uniform?Threshold
+                let threshold : float = uniform?Threshold
+                let alpha : float = uniform?Alpha
 
-                if lRegion.count < 2 && rRegion.count < 2 then
+                let minCnt = if alpha < 0.0 then 100000000 else 2
+
+
+                if lRegion.count < minCnt || rRegion.count < minCnt then
                     let d = abs (lRegion.average - rRegion.average)
-                    d < alpha
-
-                elif lRegion.count < 2 then
-
-                    let test = abs (rRegion.average - lRegion.average) / sqrt (lRegion.variance)
-
-
-
-                    let test = abs (rRegion.average - lRegion.average) / sqrt (rRegion.variance / float rRegion.count)
-                    let ny = float (rRegion.count - 1)
-                    let t = tInv alpha ny
-                    test >= t
-
-
-                elif rRegion.count < 2 then
-                    let test = abs (lRegion.average - rRegion.average) / sqrt (lRegion.variance / float lRegion.count)
-                    let ny = float (lRegion.count - 1)
-                    let t = tInv alpha ny
-                    test >= t
-
+                    d < threshold
 
                 else
-                    let v1 = lRegion.variance
-                    let v2 = rRegion.variance
-                    let N1 = float lRegion.count
-                    let N2 = float rRegion.count
+                    let dGroups = abs (lRegion.average - rRegion.average)
+                    let maxVar = max lRegion.variance rRegion.variance
 
-                    let a = (v1 / N1 + v2 / N2)
-                    let test = (lRegion.average - rRegion.average) / a
-                    let ny = (a * a) / (v1*v1 / (N1*N1*(N1 - 1.0)) + (v2*v2 / (N2*N2*(N2-1.0))))
+                    (dGroups / sqrt maxVar) < alpha
 
-                    let t = tInv alpha ny
-                    test >= t
+
+                     
+
+
+
+
+
+
+//                elif lRegion.count < minCnt then
+//                    let test = abs (rRegion.average - lRegion.average) / sqrt (rRegion.variance / float rRegion.count)
+//                    let ny = float (rRegion.count - 1)
+//                    let t = tInv alpha ny
+//                    test <= t
+//
+//
+//                elif rRegion.count < minCnt then
+//                    let test = abs (lRegion.average - rRegion.average) / sqrt (lRegion.variance / float lRegion.count)
+//                    let ny = float (lRegion.count - 1)
+//                    let t = tInv alpha ny
+//                    test <= t
+//
+//
+//                else
+//                    let v1 = lRegion.variance
+//                    let v2 = rRegion.variance
+//                    let N1 = float lRegion.count
+//                    let N2 = float rRegion.count
+//
+//                    let a = (v1 / N1 + v2 / N2)
+//                    let test = (lRegion.average - rRegion.average) / a
+//                    let ny = (a * a) / (v1*v1 / (N1*N1*(N1 - 1.0)) + (v2*v2 / (N2*N2*(N2-1.0))))
+//
+//                    let t = tInv alpha ny
+//                    test <= t
             @>
         ]
 
@@ -984,6 +1001,7 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
             mergeIn.["Dimension"] <- dim
             mergeIn.["SolvedSize"] <- solvedSize
             mergeIn.["Threshold"] <- 0.01
+            mergeIn.["Alpha"] <- 0.05
             mergeIn.["regions"] <- regions.[TextureAspect.Color, 0, 0]
             mergeIn.["regionSum"] <- sum.[TextureAspect.Color, 0, 0]
             mergeIn.["regionSumSq"] <- sumSq.[TextureAspect.Color, 0, 0]
@@ -1037,13 +1055,16 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
     let mutable currentInput = None
     let mutable currentOutput = None
     let mutable currentThreshold = 0.01
+    let mutable currentAlpha = 0.05
 
-    let setThreshold (value : float) =
-        if currentThreshold <> value then
+    let setThreshold (value : float) (alpha : float) =
+        if currentThreshold <> value || currentAlpha <> alpha then
             for m,_ in mergeInputs do 
                 m.["Threshold"] <- value
+                m.["Alpha"] <- alpha
                 m.Flush()
             currentThreshold <- value
+            currentAlpha <- alpha
 
     let setIO (input : IBackendTexture) (output : IBackendTexture)=
         if currentInput <> Some input then
@@ -1109,11 +1130,12 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
             yield ComputeCommand.Dispatch (V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
                 
         ]
+        
 
-    member x.Run(input : IBackendTexture, output : IBackendTexture, threshold : float) =
+    member x.Run(input : IBackendTexture, output : IBackendTexture, threshold : float, alpha : float) =
         lock x (fun () ->
             setIO input output
-            setThreshold threshold
+            setThreshold threshold alpha
 
             runtime.Run [
                 ComputeCommand.TransformLayout(input, TextureLayout.ShaderReadWrite)
@@ -1125,10 +1147,10 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
 
         )
 
-    member x.Run(input : IBackendTexture, output : IBackendTexture, outputRegions : IBackendTexture, threshold : float) =
+    member x.Run(input : IBackendTexture, output : IBackendTexture, outputRegions : IBackendTexture, threshold : float, alpha : float) =
         lock x (fun () ->
             setIO input output
-            setThreshold threshold
+            setThreshold threshold alpha
 
             runtime.Run [
                 ComputeCommand.TransformLayout(input, TextureLayout.ShaderReadWrite)
@@ -1143,6 +1165,12 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
                 ComputeCommand.TransformLayout(outputRegions, TextureLayout.ShaderRead)
             ]
         )
+
+    member x.Run(input : IBackendTexture, output : IBackendTexture, threshold : float) =
+        x.Run(input, output, threshold, currentAlpha)
+        
+    member x.Run(input : IBackendTexture, output : IBackendTexture, outputRegions : IBackendTexture, threshold : float) =
+        x.Run(input, output, outputRegions, threshold, currentAlpha)
 
     member x.Dispose() =
         runtime.DeleteTexture sum
