@@ -341,6 +341,63 @@ module ComputeShader =
         let textures =
             Mod.map2 (fun threshold alpha ->
                 instance.Run(img, res, regions, threshold, alpha)
+
+                let (image, buffer) = instance.RunBuffer(img, threshold, alpha)
+
+                let data = buffer.Download()
+
+                let validate() = 
+                    let img = PixImage<int>(Col.Format.Gray, image.Size.XY)
+                    runtime.Download(image, 0, 0, img) 
+
+
+                    let unused = Seq.init data.Length id |> HashSet.ofSeq
+                    let bad = System.Collections.Generic.HashSet<int>()
+
+                    for rid in img.Volume.Data do
+                        if rid >= data.Length then bad.Add rid |> ignore
+                        unused.Remove rid |> ignore
+
+                    let usedPixels = data |> Array.sumBy (fun i -> i.Count)
+                    let totalPixels = img.Size.X * img.Size.Y
+
+                    if usedPixels <> totalPixels then   
+                        Log.warn "bad region counts: %A (total: %A)" usedPixels totalPixels
+
+                    let emptyRegions = data |> Array.filter (fun i -> i.Count <= 0)
+                    
+                    if emptyRegions.Length > 0 then   
+                        Log.warn "empty regions: %A" emptyRegions
+
+
+
+
+
+                    let bad = bad |> Seq.toList
+                    let unused = unused |> Seq.toList
+
+                    match bad, unused with
+                        | [], [] -> ()
+                        | bad, unused ->
+                            Log.warn "bad:    %A" bad
+                            Log.warn "unused: %A" unused
+                            for u in unused do
+                                Log.warn "%d: %A" u data.[u]
+
+
+                //validate()
+                
+
+
+                data.QuickSortDescending(fun d -> d.Count)
+                Log.start "regions: %A" data.Length
+                for i in 0 .. min 10 (data.Length - 1) do
+                    Log.line "%d: %A" i data.[i]
+                Log.stop()
+
+                buffer.Dispose()
+                runtime.DeleteTexture image
+
                 res :> ITexture, regions :> ITexture
             ) threshold alpha
              

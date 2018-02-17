@@ -18,6 +18,45 @@ type SegmentMergeMode =
     | TTest
 
 
+[<StructLayout(LayoutKind.Sequential); StructuredFormatDisplay("{AsString}")>]
+type RegionStats =
+    struct 
+        val mutable public StoreI : V4i
+        val mutable public StoreF : V4f
+
+        member inline x.Count = x.StoreI.X
+        member inline x.SurfaceCount = x.StoreI.Y
+        member inline x.Average = x.StoreF.X
+        member inline x.StdDev = x.StoreF.Y
+        member inline x.FirstTexel = x.StoreI.ZW
+
+        member private x.AsString = x.ToString()
+
+        [<ReflectedDefinition>]
+        new(storeI, storeF) = { StoreI = storeI; StoreF = storeF }
+
+        override x.ToString() =
+            sprintf "{ Count = %A; SurfaceCount = %A; Average = %A; StdDev = %A; FirstTexel = %A }" x.Count x.SurfaceCount x.Average x.StdDev x.FirstTexel
+
+    end
+
+[<AutoOpen>]
+module RegionStatsExts =
+    type RegionStats with
+        member inline x.Count = x.StoreI.X
+        member inline x.Average = x.StoreF.X
+        member inline x.StdDev = x.StoreF.Y
+        member inline x.SurfaceArea = x.StoreF.Z
+
+//    [<ReflectedDefinition>]
+//    let mkRegionStats (count : int) (avg : float32) (dev : float32) (surface : float32) =
+//        let mutable res = Unchecked.defaultof<RegionStats>
+//        res.StoreI.X <- count
+//        res.StoreF.X <- avg
+//        res.StoreF.Y <- dev
+//        res.StoreF.Z <- surface
+//        res
+
 
 module SegmentationShaders =
     open FShade
@@ -177,47 +216,46 @@ module SegmentationShaders =
             let rc = getGlobalId().XY
 
             if rc.X < size.X && rc.Y < size.Y then
-                let mutable last = 0
-                let mutable dst = collapseImg.[rc].X
-                while dst <> 0 do
-                    last <- dst
-                    dst <- collapseImg.[storageCoord2d (dst - 1) size].X 
+                let srcCnt = regionCount.[rc].X
+                if srcCnt > 0 then
+                    let mutable last = 0
+                    let mutable dst = collapseImg.[rc].X
+                    while dst <> 0 do
+                        last <- dst
+                        dst <- collapseImg.[storageCoord2d (dst - 1) size].X 
                         
-                if last <> 0 then
-                    let dstI = last - 1
-                    let dst = storageCoord2d dstI size
+                    if last <> 0 then
+                        let dstI = last - 1
+                        let dst = storageCoord2d dstI size
 
-                    let srcSum = intBitsToFloat regionSum.[rc].X
-                    let srcSumSq = intBitsToFloat regionSumSq.[rc].X
-                    let srcCnt = regionCount.[rc].X
+                        let srcSum = intBitsToFloat regionSum.[rc].X
+                        let srcSumSq = intBitsToFloat regionSumSq.[rc].X
 
 
-                    regionCount.AtomicAdd(dst, srcCnt) |> ignore
+                        regionCount.AtomicAdd(dst, srcCnt) |> ignore
 
-                    let mutable o = regionSum.[dst].X
-                    let mutable n = intBitsToFloat o + srcSum
-                    let mutable r = regionSum.AtomicCompareExchange(dst, o, floatBitsToInt n)
-                    while r <> o do
-                        o <- r
-                        n <- intBitsToFloat o + srcSum
-                        r <- regionSum.AtomicCompareExchange(dst, o, floatBitsToInt n)
+                        let mutable o = regionSum.[dst].X
+                        let mutable n = intBitsToFloat o + srcSum
+                        let mutable r = regionSum.AtomicCompareExchange(dst, o, floatBitsToInt n)
+                        while r <> o do
+                            o <- r
+                            n <- intBitsToFloat o + srcSum
+                            r <- regionSum.AtomicCompareExchange(dst, o, floatBitsToInt n)
                             
-                    let mutable o = regionSumSq.[dst].X
-                    let mutable n = intBitsToFloat o + srcSumSq
-                    let mutable r = regionSumSq.AtomicCompareExchange(dst, o, floatBitsToInt n)
-                    while r <> o do
-                        o <- r
-                        n <- intBitsToFloat o + srcSumSq
-                        r <- regionSumSq.AtomicCompareExchange(dst, o, floatBitsToInt n)
+                        let mutable o = regionSumSq.[dst].X
+                        let mutable n = intBitsToFloat o + srcSumSq
+                        let mutable r = regionSumSq.AtomicCompareExchange(dst, o, floatBitsToInt n)
+                        while r <> o do
+                            o <- r
+                            n <- intBitsToFloat o + srcSumSq
+                            r <- regionSumSq.AtomicCompareExchange(dst, o, floatBitsToInt n)
 
 
 
-                    regionSum.[rc] <- V4i.Zero
-                    regionSumSq.[rc] <- V4i.Zero
-                    regionCount.[rc] <- V4i.Zero
-                    collapseImg.[rc] <- V4i(0,0,0,0)
+                        regionCount.[rc] <- V4i.Zero
+                        //collapseImg.[rc] <- V4i.Zero
 
-                ()
+                    ()
 
 
 
@@ -245,26 +283,75 @@ module SegmentationShaders =
                 if area > 0 then
                     let res = regionSurfaces.AtomicAdd(rc, 1)
                     ()
-                else
-                    let res = regionSurfaces.AtomicAdd(rc, -3)
-                    ()
+//                else
+//                    let res = regionSurfaces.AtomicAdd(rc, -3)
+//                    ()
         }
        
-       
+
+
     [<LocalSize(X = 8, Y = 8)>]
-    let compactRegions (regionCounts : IntImage2d<Formats.r32i>) =
+    let allocateCompactRegions (regionCounts : IntImage2d<Formats.r32i>) (remapImage : IntImage2d<Formats.r32i>) (denseIds : int[]) (denseIdCount : int[]) =
         compute {
             let id = getGlobalId().XY
             let size = regionCounts.Size
 
             if id.X < size.X && id.Y < size.Y then
-//                let r = regions.[id].X
-//                let rc = storageCoord2d r size 
+
+                let cnt = regionCounts.[id].X
+                if cnt > 0 then
+                    let r = newColor2d id size
+                    
+                    // allocate a slot
+                    let resId = atomicAdd denseIdCount.[0] 1
+                    denseIds.[resId] <- r
+
+                    // store the remapping-id
+                    remapImage.[id] <- V4i(resId, 0, 0, 0)
+
 
                 ()
 
         }
             
+    [<LocalSize(X = 64)>]
+    let storeCompactRegions (store : RegionStats[]) (denseIds : int[]) (count : int) (regionSum : IntImage2d<Formats.r32i>) (regionSumSq : IntImage2d<Formats.r32i>) (regionCount : IntImage2d<Formats.r32i>) (regionSurfaces : IntImage2d<Formats.r32i>) =
+        compute {
+            let size = regionSum.Size
+            let id = getGlobalId().X
+            if id < count then
+                let oCode = denseIds.[id]
+                let oRegion = storageCoord2d oCode size
+
+                let cnt = regionCount.[oRegion].X
+                let surface = regionSurfaces.[oRegion].X
+                let sum = intBitsToFloat regionSum.[oRegion].X
+                let sumSq = intBitsToFloat regionSumSq.[oRegion].X
+
+                let avg = sum / float cnt
+                let var = if cnt < 2 then 0.0 else (sumSq - float cnt*avg*avg) / (float (cnt - 1))
+                let dev = var |> sqrt
+                let mutable res = Unchecked.defaultof<RegionStats>
+                res.StoreI <- V4i(cnt, surface, oRegion.X, oRegion.Y)
+                res.StoreF <- V4f(float32 avg, float32 dev, 0.0f, 0.0f)
+                store.[id] <- res
+
+        }
+
+    [<LocalSize(X = 8, Y = 8)>]
+    let remapRegions (remapImage : IntImage2d<Formats.r32i>) (regions : IntImage2d<Formats.r32i>) =
+        compute {
+            let id = getGlobalId().XY
+            let size = regions.Size
+
+            if id.X < size.X && id.Y < size.Y then
+                let oCode = regions.[id].X
+                let oRegion = storageCoord2d oCode size
+                let nCode = remapImage.[oRegion].X
+                regions.[id] <- V4i(nCode, 0, 0, 0)
+        }
+
+
     [<LocalSize(X = 8, Y = 8)>]
     let writeToOutput (result : Image2d<Formats.rgba16>) (regionSum : IntImage2d<Formats.r32i>) (regionSumSq : IntImage2d<Formats.r32i>) (regionCount : IntImage2d<Formats.r32i>) (regions : IntImage2d<Formats.r32i>) (regionSurfaces : IntImage2d<Formats.r32i>) =
         compute {
@@ -299,9 +386,7 @@ module SegmentationShaders =
 
 
         }
-
-
-        
+    
         
     [<ReflectedDefinition>]
     let newColor3d (coord : V3i) (size : V3i) =
@@ -638,6 +723,10 @@ type internal RegionMergeKernels2d(runtime : IRuntime, mergeMode : SegmentMergeM
     let writeOut = runtime.CreateComputeShader SegmentationShaders.writeToOutput
     let calculateSurface = runtime.CreateComputeShader SegmentationShaders.calculateSurfaceArea
     
+    let allocateCompactRegions = runtime.CreateComputeShader SegmentationShaders.allocateCompactRegions
+    let remapRegions = runtime.CreateComputeShader SegmentationShaders.remapRegions
+    let storeCompactRegions = runtime.CreateComputeShader SegmentationShaders.storeCompactRegions
+   
     member x.Runtime = runtime
     member x.InitRegions = initRegions
     member x.RegionMerge = regionMerge
@@ -646,6 +735,10 @@ type internal RegionMergeKernels2d(runtime : IRuntime, mergeMode : SegmentMergeM
     member x.CalculateSurface = calculateSurface
     member x.WriteOut = writeOut
     
+    member x.AllocateCompactRegions = allocateCompactRegions
+    member x.StoreCompactRegions = storeCompactRegions
+    member x.RemapRegions = remapRegions
+
     member x.Dispose() =
         runtime.DeleteComputeShader initRegions
         runtime.DeleteComputeShader regionMerge
@@ -653,6 +746,9 @@ type internal RegionMergeKernels2d(runtime : IRuntime, mergeMode : SegmentMergeM
         runtime.DeleteComputeShader sanitizeAvg
         runtime.DeleteComputeShader calculateSurface
         runtime.DeleteComputeShader writeOut
+        runtime.DeleteComputeShader allocateCompactRegions
+        runtime.DeleteComputeShader storeCompactRegions
+        runtime.DeleteComputeShader remapRegions
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -982,6 +1078,10 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
     let cnt         = runtime.CreateTexture(size, TextureFormat.R32i, 1, 1)
     let regions     = runtime.CreateTexture(size, TextureFormat.R32i, 1, 1)
     let collapse    = runtime.CreateTexture(size, TextureFormat.R32i, 1, 1)
+    let remap       = runtime.CreateTexture(size, TextureFormat.R32i, 1, 1)
+
+    let compactIds      = runtime.CreateBuffer<RegionStats>(size.X * size.Y)
+    let compactIdCount  = runtime.CreateBuffer<int>(1)
 
     let initIn = 
         let binding = runtime.NewInputBinding initRegions
@@ -1052,6 +1152,35 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
         binding.Flush()
         binding
             
+
+    let allocateCompactRegionsIn =
+        let binding = runtime.NewInputBinding parent.AllocateCompactRegions
+        binding.["regionCounts"] <- cnt.[TextureAspect.Color, 0, 0]
+        binding.["remapImage"] <- remap.[TextureAspect.Color, 0, 0]
+        binding.["denseIds"] <- compactIds
+        binding.["denseIdCount"] <- compactIdCount
+        binding.Flush()
+        binding
+
+    let remapRegionsIn =
+        let binding = runtime.NewInputBinding parent.RemapRegions
+        binding.["regions"] <- regions.[TextureAspect.Color, 0, 0]
+        binding.["remapImage"] <- remap.[TextureAspect.Color, 0, 0]
+        binding.Flush()
+        binding
+
+    let storeCompactRegionsIn =
+        let binding = runtime.NewInputBinding parent.StoreCompactRegions
+        binding.["denseIds"] <- compactIds
+        binding.["count"] <- 0
+        binding.["regionSum"] <- sum.[TextureAspect.Color, 0, 0]
+        binding.["regionSumSq"] <- sumSq.[TextureAspect.Color, 0, 0]
+        binding.["regionCount"] <- cnt.[TextureAspect.Color, 0, 0]
+        binding.["regionSurfaces"] <- collapse.[TextureAspect.Color, 0, 0]
+        binding.Flush()
+        binding
+
+
     let mutable currentInput = None
     let mutable currentOutput = None
     let mutable currentThreshold = 0.01
@@ -1083,7 +1212,8 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
 
     let program = 
         runtime.Compile [
-
+        
+            yield ComputeCommand.TransformLayout(remap, TextureLayout.ShaderReadWrite)
             yield ComputeCommand.TransformLayout(regions, TextureLayout.ShaderReadWrite)
             yield ComputeCommand.TransformLayout(sum, TextureLayout.ShaderReadWrite)
             yield ComputeCommand.TransformLayout(sumSq, TextureLayout.ShaderReadWrite)
@@ -1100,6 +1230,9 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
 
 
             for mergeIn, groupCount in mergeInputs do
+              
+                
+                
                 yield ComputeCommand.Bind regionMerge
                 yield ComputeCommand.SetInput mergeIn
                 yield ComputeCommand.Dispatch groupCount
@@ -1125,12 +1258,76 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
             yield ComputeCommand.Dispatch (V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
             yield ComputeCommand.Sync collapse 
 
-            yield ComputeCommand.Bind writeOut
-            yield ComputeCommand.SetInput writeOutIn
+
+            
+            yield ComputeCommand.Zero(compactIdCount)
+            yield ComputeCommand.Sync(compactIdCount.Buffer)
+            yield ComputeCommand.Sync cnt
+
+            yield ComputeCommand.Bind parent.AllocateCompactRegions
+            yield ComputeCommand.SetInput allocateCompactRegionsIn
             yield ComputeCommand.Dispatch (V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
+
+
                 
         ]
         
+
+//    [<LocalSize(X = 8, Y = 8)>]
+//    let allocateCompactRegions (regionCounts : IntImage2d<Formats.r32i>) (remapImage : IntImage2d<Formats.r32i>) (denseIds : int[]) (denseIdCount : int[])
+//    [<LocalSize(X = 64)>]
+//    let storeCompactRegions (store : RegionStats[]) (denseIds : int[]) (count : int) (regionSum : IntImage2d<Formats.r32i>) (regionSumSq : IntImage2d<Formats.r32i>) (regionCount : IntImage2d<Formats.r32i>) (regionSurfaces : IntImage2d<Formats.r32i>)
+//    [<LocalSize(X = 8, Y = 8)>]
+//    let remapRegions (remapImage : IntImage2d<Formats.r32i>) (regions : IntImage2d<Formats.r32i>) 
+
+
+
+    member x.RunBuffer(input : IBackendTexture, threshold : float, alpha : float) =
+        lock x (fun () ->
+            setIO input input
+            setThreshold threshold alpha
+
+            runtime.Run [
+                ComputeCommand.TransformLayout(input, TextureLayout.ShaderReadWrite)
+                ComputeCommand.Execute program
+                ComputeCommand.TransformLayout(input, TextureLayout.ShaderRead)
+            ]
+
+            let regionCount = compactIdCount.Download().[0]
+            let resultBuffer    = runtime.CreateBuffer<RegionStats>(regionCount)
+            let resultImage     = runtime.CreateTexture(input.Size.XY, TextureFormat.R32i, 1, 1)
+            storeCompactRegionsIn.["store"] <- resultBuffer
+            storeCompactRegionsIn.["count"] <- regionCount
+            storeCompactRegionsIn.Flush()
+
+            runtime.Run [
+                
+                ComputeCommand.Sync(compactIds.Buffer)
+                ComputeCommand.Sync(compactIdCount.Buffer)
+                ComputeCommand.Sync remap
+
+                ComputeCommand.Bind parent.StoreCompactRegions
+                ComputeCommand.SetInput storeCompactRegionsIn
+                ComputeCommand.Dispatch (ceilDiv regionCount 64)
+
+                
+
+
+                ComputeCommand.Bind parent.RemapRegions
+                ComputeCommand.SetInput remapRegionsIn
+                ComputeCommand.Dispatch (V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
+                
+                ComputeCommand.Sync resultBuffer.Buffer
+
+                ComputeCommand.TransformLayout (regions, TextureLayout.TransferRead)
+                ComputeCommand.TransformLayout (resultImage, TextureLayout.TransferWrite)
+                ComputeCommand.Copy(regions.[TextureAspect.Color, 0, 0], V3i.Zero, resultImage.[TextureAspect.Color, 0, 0], V3i.Zero, V3i(size, 1))
+                ComputeCommand.TransformLayout (regions, TextureLayout.ShaderReadWrite)
+            ]
+
+
+            resultImage, resultBuffer
+        )
 
     member x.Run(input : IBackendTexture, output : IBackendTexture, threshold : float, alpha : float) =
         lock x (fun () ->
@@ -1141,6 +1338,11 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
                 ComputeCommand.TransformLayout(input, TextureLayout.ShaderReadWrite)
                 ComputeCommand.TransformLayout(output, TextureLayout.ShaderReadWrite)
                 ComputeCommand.Execute program
+
+                ComputeCommand.Bind writeOut
+                ComputeCommand.SetInput writeOutIn
+                ComputeCommand.Dispatch (V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
+
                 ComputeCommand.TransformLayout(input, TextureLayout.ShaderRead)
                 ComputeCommand.TransformLayout(output, TextureLayout.ShaderRead)
             ]
@@ -1156,6 +1358,11 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
                 ComputeCommand.TransformLayout(input, TextureLayout.ShaderReadWrite)
                 ComputeCommand.TransformLayout(output, TextureLayout.ShaderReadWrite)
                 ComputeCommand.Execute program
+
+                ComputeCommand.Bind writeOut
+                ComputeCommand.SetInput writeOutIn
+                ComputeCommand.Dispatch (V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
+
                 ComputeCommand.TransformLayout(input, TextureLayout.ShaderRead)
                 ComputeCommand.TransformLayout(output, TextureLayout.ShaderRead)
                 ComputeCommand.TransformLayout(regions, TextureLayout.TransferRead)
