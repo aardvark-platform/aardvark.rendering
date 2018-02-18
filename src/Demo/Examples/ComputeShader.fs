@@ -315,7 +315,7 @@ module ComputeShader =
 
         use merge = new RegionMerge(runtime, SegmentMergeMode.AvgToAvg)
         use instance = merge.NewInstance size
-
+        use instance2 = merge.NewInstance (V2i(256, 256))
 
         let randomColors =
             let rand = RandomSystem()
@@ -340,10 +340,12 @@ module ComputeShader =
 
         let textures =
             Mod.map2 (fun threshold alpha ->
+
+
                 instance.Run(img, res, regions, threshold, alpha)
 
-                let (image, buffer) = instance.RunBuffer(img, threshold, alpha)
-
+                let (buffer, image) = instance2.RunBuffer2(img, threshold, alpha)
+      
                 let data = buffer.Download()
 
                 let validate() = 
@@ -385,7 +387,7 @@ module ComputeShader =
                                 Log.warn "%d: %A" u data.[u]
 
 
-                //validate()
+                validate()
                 
 
 
