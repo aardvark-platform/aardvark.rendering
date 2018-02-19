@@ -322,8 +322,7 @@ module SegmentationShaders =
             if id < count then
                 let oCode = denseIds.[id]
     
-                let info = infos.[oCode]
-                store.[offset + id] <- info
+                store.[offset + id] <- V4i(infos.[oCode].XYZ, 0)
                 
 //                let cnt = info.X
 //                let sum = intBitsToFloat info.Y
@@ -841,11 +840,9 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
                     mergeIn.Flush()
 
 
-                    Log.warn "%d: %d" dim solvedSize
-
                     let groups =
-                        if dim = 0 then V2i(ceilDiv size.Y 64, ceilDiv (size.X - solvedSize) (2 * solvedSize))
-                        else V2i(ceilDiv size.X 64, ceilDiv (size.Y - solvedSize) (2 * solvedSize))
+                        if dim = 0 then V2i(ceilDiv inputSize.Y 64, ceilDiv (inputSize.X - solvedSize) (2 * solvedSize))
+                        else V2i(ceilDiv inputSize.X 64, ceilDiv (inputSize.Y - solvedSize) (2 * solvedSize))
 
                     mergeIn, groups
                 )
@@ -856,33 +853,64 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
             toRegionStatsIn.["stats"] <- statBuffer
             toRegionStatsIn.Flush()
 
-            runtime.Run [
-                for mergeIn, groupCount in remainingMerges do
-                    yield ComputeCommand.Bind regionMerge
-                    yield ComputeCommand.SetInput mergeIn
-                    yield ComputeCommand.Dispatch groupCount
+            match remainingMerges with
+                | [] ->
+                    runtime.Run [
+                        yield ComputeCommand.Bind parent.ToRegionStats
+                        yield ComputeCommand.SetInput toRegionStatsIn
+                        yield ComputeCommand.Dispatch (ceilDiv resultBuffer.Count 64)
                 
-                    yield ComputeCommand.Sync resultBuffer.Buffer
+                        yield ComputeCommand.TransformLayout(input, TextureLayout.ShaderRead)
+                        yield ComputeCommand.TransformLayout(resultImage, TextureLayout.ShaderRead)
+                    ]
 
-                    yield ComputeCommand.Bind sanitize
-                    yield ComputeCommand.SetInput sanitizeIn
-                    yield ComputeCommand.Dispatch (V2i(ceilDiv inputSize.X 8, ceilDiv inputSize.Y 8))
+                | _ -> 
+                    let sanitizeIn = 
+                        let binding = runtime.NewInputBinding sanitize
+                        binding.["Offset"] <- V2i.Zero
+                        binding.["regions"] <- resultImage.[TextureAspect.Color, 0, 0]
+                        binding.["infos"] <- resultBuffer
+                        binding.Flush()
+                        binding
 
-                    yield ComputeCommand.Bind sanitizeAvg
-                    yield ComputeCommand.SetInput sanitizeAvgIn
-                    yield ComputeCommand.Dispatch (ceilDiv resultBuffer.Count 64)
+                    let sanitizeAvgIn = 
+                        let binding = runtime.NewInputBinding sanitizeAvg
+                        binding.["infos"] <- resultBuffer
+                        binding.["RegionCount"] <- resultBuffer.Count
+                        binding.Flush()
+                        binding
 
-                    yield ComputeCommand.Sync resultImage
-                    yield ComputeCommand.Sync resultBuffer.Buffer
+                    runtime.Run [
+                        for mergeIn, groupCount in remainingMerges do
+                            yield ComputeCommand.Bind regionMerge
+                            yield ComputeCommand.SetInput mergeIn
+                            yield ComputeCommand.Dispatch groupCount
+                
+                            yield ComputeCommand.Sync resultBuffer.Buffer
+
+                            yield ComputeCommand.Bind sanitize
+                            yield ComputeCommand.SetInput sanitizeIn
+                            yield ComputeCommand.Dispatch (V2i(ceilDiv inputSize.X 8, ceilDiv inputSize.Y 8))
+
+                            yield ComputeCommand.Bind sanitizeAvg
+                            yield ComputeCommand.SetInput sanitizeAvgIn
+                            yield ComputeCommand.Dispatch (ceilDiv resultBuffer.Count 64)
+
+                            yield ComputeCommand.Sync resultImage
+                            yield ComputeCommand.Sync resultBuffer.Buffer
                     
-                yield ComputeCommand.Bind parent.ToRegionStats
-                yield ComputeCommand.SetInput toRegionStatsIn
-                yield ComputeCommand.Dispatch (ceilDiv resultBuffer.Count 64)
+                        yield ComputeCommand.Bind parent.ToRegionStats
+                        yield ComputeCommand.SetInput toRegionStatsIn
+                        yield ComputeCommand.Dispatch (ceilDiv resultBuffer.Count 64)
                 
                 
-                yield ComputeCommand.TransformLayout(input, TextureLayout.ShaderRead)
-                yield ComputeCommand.TransformLayout(resultImage, TextureLayout.ShaderRead)
-            ]
+                        yield ComputeCommand.TransformLayout(input, TextureLayout.ShaderRead)
+                        yield ComputeCommand.TransformLayout(resultImage, TextureLayout.ShaderRead)
+                    ]
+
+                    sanitizeIn.Dispose()
+                    sanitizeAvgIn.Dispose()
+                    remainingMerges |> List.iter (fun (i,_) -> i.Dispose())
 
             resultBuffer.Dispose()
 

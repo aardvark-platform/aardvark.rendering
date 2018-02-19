@@ -303,7 +303,7 @@ module ComputeShader =
 
         
 
-        use app = new VulkanApplication(true)
+        use app = new VulkanApplication(false)
         //use app = new OpenGlApplication(true)
         let runtime = app.Runtime :> IRuntime
         let win = app.CreateSimpleRenderWindow(1) 
@@ -419,7 +419,7 @@ module ComputeShader =
                         Log.line "%d: %A" i data.[i]
                     Log.stop()
 
-                validate()
+                //validate()
 
                 Log.stop()
 
