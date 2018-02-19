@@ -17,15 +17,13 @@ module TextureCombinationShader =
     let textureComposer (weight : float) (blend : int) (inputL : FShade.Image2d<Formats.r32f>) (inputR : FShade.Image2d<Formats.r32f>) (output : FShade.Image2d<Formats.r32f>) =
         compute {
             let rc = getGlobalId().XY
-            let size = inputL.Size // inputL.Size = inputR.Size = output.Size
+            let size = inputR.Size // inputL.Size = inputR.Size = output.Size
             if rc.X < size.X && rc.Y < size.Y then
                 let cl = inputL.[rc].X
-                let cr = inputR.[rc].X
+                let cr = inputR.[rc].X * weight
 
                 let c =
-                    if cr < 0.0001 then cl
-                    elif cl < 0.0001 then cr
-                    elif blend = 1 then // Add
+                    if blend = 1 then // Add
                         (cl + cr) |> clamp 0.0 1.0
                     elif blend = 2 then // Sub
                         (cl - cr) |> clamp 0.0 1.0
@@ -36,9 +34,8 @@ module TextureCombinationShader =
                     else // Normal
                         cr
 
-                output.[rc] <- V4d(c, c, c, 1.0)
+                output.[rc] <- V4d(V3d(c), 1.0)
         }
-
 
 module ImageProcessingShader =
     open FShade
@@ -58,26 +55,29 @@ module ImageProcessingShader =
             let size = input.Size
             if rc.X < size.X && rc.Y < size.Y then
                 let mutable c = V4d.Zero
-                let r = radius |> float
-                let w = 1.0 / (r * r)
+                if input.[rc].X <> 0.0 then
+                    
+                    let r = radius |> float
+                    let w = 1.0 / (r * r)
 
-                if (radius % 2) = 1 then // is odd
-                    let h = radius / 2
-                    for i in -h .. h do
-                        for j in -h .. h do
-                            let rcn = rc + V2i(i, j)
-                            let c0 = input.[rcn]
-                            c <- c + w * c0
-                else // is even
-                    let h = radius / 2 - 1
-                    for i in 0 .. (radius - 1) do
-                        for j in 0 .. (radius - 1) do
-                            let rc1 = rc + V2i(i - h, j - h)
-                            let rc2 = rc1 - V2i(0, 1)
-                            let rc3 = rc1 - V2i(1, 0)
-                            let rc4 = rc1 - V2i(1, 1)
-                            let c0 = (input.[rc1] + input.[rc2] + input.[rc3] + input.[rc4]) * 0.25
-                            c <- c + w * c0
+                    if (radius % 2) = 1 then // is odd
+                        let h = radius / 2
+                        for i in -h .. h do
+                            for j in -h .. h do
+                                let rcn = rc + V2i(i, j)
+                                let c0 = input.[rcn]
+                                c <- c + w * c0
+                    else // is even
+                        let h = radius / 2 - 1
+                        for i in 0 .. (radius - 1) do
+                            for j in 0 .. (radius - 1) do
+                                let rc1 = rc + V2i(i - h, j - h)
+                                let rc2 = rc1 - V2i(0, 1)
+                                let rc3 = rc1 - V2i(1, 0)
+                                let rc4 = rc1 - V2i(1, 1)
+                                let c0 = (input.[rc1] + input.[rc2] + input.[rc3] + input.[rc4]) * 0.25
+                                c <- c + w * c0
+                else c <- input.[rc]
                 output.[rc] <- c
         }
 
@@ -90,26 +90,27 @@ module ImageProcessingShader =
 
             if rc.X < size.X && rc.Y < size.Y then
                 let mutable c = V4d.Zero
+                if input.[rc].X <> 0.0 then
 
-                if (radius % 2) = 1 then // is odd
-                    let h = radius / 2
-                    for i in -h .. h do
-                        let u = V2i(i, 0) // V2i(0, i)
-                        let rcn = rc + u
-                        let w = weights.[i + h]
-                        let c0 = input.[rcn]
-                        c <- c + w * c0
-                else // is even
-                    let h = radius / 2 - 1
-                    for i in 0 .. (radius - 1) do
-                        let (i0,i1) = (i - h, i - h - 1)
-                        let (u1,u2) = (V2i(i0, 0), V2i(i1, 0)) // else (V2i(0, i0), V2i(0, i1))
-                        let rc1 = rc + u1
-                        let rc2 = rc + u2
-                        let c0 = (input.[rc1] + input.[rc2]) * 0.5
-                        let w = weights.[i]
-                        c <- c + w * c0
-
+                    if (radius % 2) = 1 then // is odd
+                        let h = radius / 2
+                        for i in -h .. h do
+                            let u = V2i(i, 0) // V2i(0, i)
+                            let rcn = rc + u
+                            let w = weights.[i + h]
+                            let c0 = input.[rcn]
+                            c <- c + w * c0
+                    else // is even
+                        let h = radius / 2 - 1
+                        for i in 0 .. (radius - 1) do
+                            let (i0,i1) = (i - h, i - h - 1)
+                            let (u1,u2) = (V2i(i0, 0), V2i(i1, 0)) // else (V2i(0, i0), V2i(0, i1))
+                            let rc1 = rc + u1
+                            let rc2 = rc + u2
+                            let c0 = (input.[rc1] + input.[rc2]) * 0.5
+                            let w = weights.[i]
+                            c <- c + w * c0
+                else c <- input.[rc]
                 output.[rc] <- c
         }
 
@@ -118,29 +119,29 @@ module ImageProcessingShader =
         compute {
             let rc = getGlobalId().XY
             let size = input.Size
-
             if rc.X < size.X && rc.Y < size.Y then
                 let mutable c = V4d.Zero
-
-                if (radius % 2) = 1 then // is odd
-                    let h = radius / 2
-                    for i in -h .. h do
-                        let u = V2i(0, i)
-                        let rcn = rc + u
-                        let w = weights.[i + h]
-                        let c0 = input.[rcn]
-                        c <- c + w * c0
-                else // is even
-                    let h = radius / 2 - 1
-                    for i in 0 .. (radius - 1) do
-                        let (i0,i1) = (i - h, i - h - 1)
-                        let (u1,u2) = (V2i(0, i0), V2i(0, i1))
-                        let rc1 = rc + u1
-                        let rc2 = rc + u2
-                        let c0 = (input.[rc1] + input.[rc2]) * 0.5
-                        let w = weights.[i]
-                        c <- c + w * c0
-
+                if input.[rc].X <> 0.0 then
+                    
+                    if (radius % 2) = 1 then // is odd
+                        let h = radius / 2
+                        for i in -h .. h do
+                            let u = V2i(0, i)
+                            let rcn = rc + u
+                            let w = weights.[i + h]
+                            let c0 = input.[rcn]
+                            c <- c + w * c0
+                    else // is even
+                        let h = radius / 2 - 1
+                        for i in 0 .. (radius - 1) do
+                            let (i0,i1) = (i - h, i - h - 1)
+                            let (u1,u2) = (V2i(0, i0), V2i(0, i1))
+                            let rc1 = rc + u1
+                            let rc2 = rc + u2
+                            let c0 = (input.[rc1] + input.[rc2]) * 0.5
+                            let w = weights.[i]
+                            c <- c + w * c0
+                else c <- input.[rc]
                 output.[rc] <- c
         }
 
@@ -152,27 +153,30 @@ module ImageProcessingShader =
 
             if rc.X < size.X && rc.Y < size.Y then
                 let mutable c = V4d.Zero
+                if input.[rc].X <> 0.0 then
 
-                if (radius % 2) = 1 then // is odd
-                    let h = radius / 2
-                    for i in -h .. h do
-                        let u = V2i(i, 0)
-                        let rcn = rc + u
-                        let w = weights.[i + h]
-                        let c0 = input.[rcn]
-                        c <- c + w * c0
-                else // is even
-                    let h = radius / 2 - 1
-                    for i in 0 .. (radius - 1) do
-                        let (i0,i1) = (i - h, i - h - 1)
-                        let (u1,u2) = (V2i(i0, 0), V2i(i1, 0))
-                        let rc1 = rc + u1
-                        let rc2 = rc + u2
-                        let c0 = (input.[rc1] + input.[rc2]) * 0.5
-                        let w = weights.[i]
-                        c <- c + w * c0
+                    if (radius % 2) = 1 then // is odd
+                        let h = radius / 2
+                        for i in -h .. h do
+                            let u = V2i(i, 0)
+                            let rcn = rc + u
+                            let w = weights.[i + h]
+                            let c0 = input.[rcn]
+                            c <- c + w * c0
+                    else // is even
+                        let h = radius / 2 - 1
+                        for i in 0 .. (radius - 1) do
+                            let (i0,i1) = (i - h, i - h - 1)
+                            let (u1,u2) = (V2i(i0, 0), V2i(i1, 0))
+                            let rc1 = rc + u1
+                            let rc2 = rc + u2
+                            let c0 = (input.[rc1] + input.[rc2]) * 0.5
+                            let w = weights.[i]
+                            c <- c + w * c0
+                    c <- c - V4d(V3d(0.5), 0.0)
+                else c <- input.[rc]
 
-                output.[rc] <- input.[rc] - c + 0.5
+                output.[rc] <- input.[rc] - c
         }
 
     [<LocalSize(X = 8, Y = 8)>]
@@ -183,27 +187,29 @@ module ImageProcessingShader =
 
             if rc.X < size.X && rc.Y < size.Y then
                 let mutable c = V4d.Zero
+                if input.[rc].X <> 0.0 then
 
-                if (radius % 2) = 1 then // is odd
-                    let h = radius / 2
-                    for i in -h .. h do
-                        let u = V2i(0, i)
-                        let rcn = rc + u
-                        let w = weights.[i + h]
-                        let c0 = input.[rcn]
-                        c <- c + w * c0
-                else // is even
-                    let h = radius / 2 - 1
-                    for i in 0 .. (radius - 1) do
-                        let (i0,i1) = (i - h, i - h - 1)
-                        let (u1,u2) = (V2i(0, i0), V2i(0, i1))
-                        let rc1 = rc + u1
-                        let rc2 = rc + u2
-                        let c0 = (input.[rc1] + input.[rc2]) * 0.5
-                        let w = weights.[i]
-                        c <- c + w * c0
-
-                output.[rc] <- input.[rc] - c + 0.5
+                    if (radius % 2) = 1 then // is odd
+                        let h = radius / 2
+                        for i in -h .. h do
+                            let u = V2i(0, i)
+                            let rcn = rc + u
+                            let w = weights.[i + h]
+                            let c0 = input.[rcn]
+                            c <- c + w * c0
+                    else // is even
+                        let h = radius / 2 - 1
+                        for i in 0 .. (radius - 1) do
+                            let (i0,i1) = (i - h, i - h - 1)
+                            let (u1,u2) = (V2i(0, i0), V2i(0, i1))
+                            let rc1 = rc + u1
+                            let rc2 = rc + u2
+                            let c0 = (input.[rc1] + input.[rc2]) * 0.5
+                            let w = weights.[i]
+                            c <- c + w * c0
+                    c <- c - V4d(V3d(0.5), 0.0)
+                else c <- input.[rc]
+                output.[rc] <- input.[rc] - c
         }
     (********************************************************************************************************)
 
@@ -226,50 +232,70 @@ module ImageProcessingShader =
         }
     (********************************************************************************************************)
 
-module ImageProcessing =
-    open Aardvark.Rendering.Vulkan
 
+module Helper =
     let ceilDiv (v : int) (d : int) =
         if v % d = 0 then v / d
         else 1 + v / d
 
-    type Processor() =
 
-        let app = new VulkanApplication()
+
+
+module ImageComposing =
+    open Aardvark.Rendering.Vulkan
+    open Helper
+
+    type Composer(app : VulkanApplication, size : V2i) =
+        let rt = app.Runtime
+        let irt = rt :> IComputeRuntime
+        let composeShader = irt.CreateComputeShader(TextureCombinationShader.textureComposer)
+
+        member x.Compose (f1: unit -> bool, input1 : IBackendTexture) (f2: unit -> bool, input2 : IBackendTexture) (weight : float) (blend : int) =
+            let output = rt.CreateTexture(size, TextureFormat.R32f, 1, 1, 1)
+            let f = (fun () ->
+                    let deleteInput1 = f1()
+                    let deleteInput2 = f2()
+
+                    let input = irt.NewInputBinding(composeShader)
+                    input.["inputL"] <- input1
+                    input.["inputR"] <- input2
+                    input.["output"] <- output
+                    input.["blend"]  <- blend
+                    input.["weight"] <- weight
+                    input.Flush()
+            
+                    irt.Run [
+                                ComputeCommand.Bind composeShader
+                                ComputeCommand.SetInput input
+                                ComputeCommand.Dispatch(V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
+                                ComputeCommand.Sync output
+                            ]
+                    if deleteInput1 then rt.DeleteTexture input1
+                    if deleteInput2 then rt.DeleteTexture input2
+                    input.Dispose()
+                    true)
+            f, output
+
+        member x.Dispose() =
+            irt.DeleteComputeShader composeShader
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+
+module ImageProcessing =
+    open Aardvark.Rendering.Vulkan
+    open Helper
+
+    type Processor(app : VulkanApplication, size : V2i) =
+
         let rt = app.Runtime
         let irt = rt :> IComputeRuntime
 
-        let testFile1 = @"..\..\data\testTexture1.jpg"
-        let testFile2 = @"..\..\data\testTexture2.jpg"
-
-        let mutable size = V2i(0,0)
-
-        let loadTexture (file : string) : IBackendTexture =
-            let img = PixImage.Create(file).ToPixImage<byte>(Col.Format.BGR)
-            size <- img.Size
-            let a = PixImage<float32>(Col.Format.Gray, size)
-            let b = img.GetMatrix<C3b>()
-            b.ForeachCoord(fun (c : V2l) ->
-                let v = b.[c].ToC3f()
-                a.Volume.[V3l(c,0L)] <- (v.R + v.G + v.B) / 3.0f
-            )
-            let tex = rt.CreateTexture(size, TextureFormat.R32f, 1, 1, 1)
-            rt.Upload(tex, 0, 0, a) 
-            tex
-
-        let inputImage = testFile1 |> loadTexture
-        let mutable outputImage : IBackendTexture = rt.CreateTexture(size, TextureFormat.R32f, 1, 1, 1)
-
-        (********************************************************************************************************
-         * Filter Stuff
-         ********************************************************************************************************)
-        // Filter Shader
         let gaussShaderX : IComputeShader = irt.CreateComputeShader(ImageProcessingShader.gaussX)
         let gaussShaderY : IComputeShader = irt.CreateComputeShader(ImageProcessingShader.gaussY)
         let highPassX : IComputeShader = irt.CreateComputeShader(ImageProcessingShader.highPassX)
         let highPassY : IComputeShader = irt.CreateComputeShader(ImageProcessingShader.highPassY)
         let boxShader : IComputeShader = irt.CreateComputeShader(ImageProcessingShader.box)
-
 
 
         (*
@@ -297,10 +323,9 @@ module ImageProcessing =
             w
 
         // commands for gauss or highpass
-        let GaussHighPassFunc (id : string) (shader : IComputeShader) (intex : IBackendTexture) (outtex : IBackendTexture) (radius : int) (f : unit -> bool) : (unit -> bool) = 
+        let GaussHighPassFunc (weights : IBuffer<float32>) (delBuffer : bool) (shader : IComputeShader) (intex : IBackendTexture) (outtex : IBackendTexture) (radius : int) (f : unit -> bool) : (unit -> bool) = 
             (fun () ->
-                let w = calculateGaussWeights radius
-                let weights : IBuffer<float32> = rt.CreateBuffer<float32>(w)
+                let deleteInput = f()
 
                 let input = irt.NewInputBinding(shader)
                 input.["input"]   <- intex
@@ -308,8 +333,7 @@ module ImageProcessing =
                 input.["radius"]  <- radius
                 input.["weights"] <- weights
                 input.Flush()
-                let deleteInput = f()
-                printfn "Calling function: %A" id
+                
                 irt.Run [
                             ComputeCommand.Bind shader
                             ComputeCommand.SetInput input
@@ -317,20 +341,20 @@ module ImageProcessing =
                             ComputeCommand.Sync outtex
                         ]
                 if deleteInput then rt.DeleteTexture intex
-                rt.DeleteBuffer (weights.Buffer)
+                if delBuffer then rt.DeleteBuffer (weights.Buffer)
                 input.Dispose()
                 true
             )
 
-        let BoxFunc (id : string) (intex : IBackendTexture) (outtex : IBackendTexture) (radius : int) (f : unit -> bool) : (unit -> bool) =
+        let BoxFunc (intex : IBackendTexture) (outtex : IBackendTexture) (radius : int) (f : unit -> bool) : (unit -> bool) =
             (fun () ->
+                let deleteInput = f()
                 let input = irt.NewInputBinding(boxShader)
                 input.["input"]   <- intex
                 input.["output"]  <- outtex
                 input.["radius"]  <- radius
                 input.Flush()
-                let deleteInput = f()
-                printfn "Calling function: %A" id
+                
                 irt.Run [
                             ComputeCommand.Bind boxShader
                             ComputeCommand.SetInput input
@@ -342,115 +366,251 @@ module ImageProcessing =
                 true
             )
 
-        let GaussFilterProgram (radius : int) (f0 : unit -> bool) (inputTex : IBackendTexture) = 
+        member x.GaussFilterProgram (radius : int) (f0 : unit -> bool, inputTex : IBackendTexture) = 
             let outputX = rt.CreateTexture(size, TextureFormat.R32f, 1, 1, 1)
             let outputY = rt.CreateTexture(size, TextureFormat.R32f, 1, 1, 1)
-            let fx = f0 |> GaussHighPassFunc ("gauss X") gaussShaderX inputTex outputX radius // inputTex gets deleted or not depeding on f0
-            let fy = fx |> GaussHighPassFunc ("gauss Y") gaussShaderY outputX outputY radius // outputX gets deleted here! --> outputY gets deleted when fy is called
+            let w = calculateGaussWeights radius
+            let weights : IBuffer<float32> = rt.CreateBuffer<float32>(w)
+            let fx = f0 |> GaussHighPassFunc weights false gaussShaderX inputTex outputX radius // inputTex gets deleted or not depeding on f0
+            let fy = fx |> GaussHighPassFunc weights true  gaussShaderY outputX  outputY radius // outputX gets deleted here! --> outputY gets deleted when fy is called
             (fy, outputY)
 
-        let HighPassFilterProgram (radius : int) (f0 : unit -> bool) (inputTex : IBackendTexture) =
+
+        member x.HighPassFilterProgram (radius : int) (f0 : unit -> bool, inputTex : IBackendTexture) =
             let outputX = rt.CreateTexture(size, TextureFormat.R32f, 1, 1, 1)
             let outputY = rt.CreateTexture(size, TextureFormat.R32f, 1, 1, 1)
-            let fx = f0 |> GaussHighPassFunc ("highpass X") highPassX inputTex outputX radius // inputTex gets deleted or not depeding on f0
-            let fy = fx |> GaussHighPassFunc ("highpass Y") highPassY outputX outputY radius // outputX gets deleted here! --> outputY gets deleted when fy is called
+            let w = calculateGaussWeights radius
+            let weights : IBuffer<float32> = rt.CreateBuffer<float32>(w)
+            let fx = f0 |> GaussHighPassFunc weights false highPassX inputTex outputX radius // inputTex gets deleted or not depeding on f0
+            let fy = fx |> GaussHighPassFunc weights true  highPassY outputX  outputY radius // outputX gets deleted here! --> outputY gets deleted when fy is called
             (fy, outputY)
 
-        let BoxFilterProgram (radius : int) (f0 : unit -> bool) (inputTex : IBackendTexture) =
+
+        member x.BoxFilterProgram (radius : int) (f0 : unit -> bool, inputTex : IBackendTexture) =
             let output = rt.CreateTexture(size, TextureFormat.R32f, 1, 1, 1)
-            let f1 = f0 |> BoxFunc ("box") inputTex output radius
+            let f1 = f0 |> BoxFunc inputTex output radius
             (f1, output)
 
-
-        let Programm (radius : int) (func) = 
-            let f0 : unit -> bool = 
-                (fun _ ->
-                    printfn "Calling function: f0";
-                    false
-                )
-            let f1, output = func radius f0 inputImage
-            f1() |> ignore
-            rt.DeleteTexture outputImage
-            outputImage <- output
-            (outputImage :> ITexture)
-
-        member x.GetBoxFilteredImage(radius : int) = BoxFilterProgram |> Programm radius 
-        member x.GetGaussFilteredImage(radius : int) = GaussFilterProgram |> Programm radius
-        member x.GetHighPassFilteredImage(radius : int) = HighPassFilterProgram |> Programm radius
-
-        
-
-
-
-        member x.GetUnfilteredImage() = inputImage :> ITexture
-        member x.GetApp() = app
-
-
-        member x.Dispose() = 
+        member x.Dispose() =
             irt.DeleteComputeShader gaussShaderX
             irt.DeleteComputeShader gaussShaderY
             irt.DeleteComputeShader highPassX
             irt.DeleteComputeShader highPassY
-            rt.DeleteTexture inputImage
-            rt.DeleteTexture outputImage
+            irt.DeleteComputeShader boxShader
 
         interface IDisposable with
             member x.Dispose() = x.Dispose()
+
+
+module Image = 
+    open ImageProcessing
+    open ImageComposing
+
+    type Image(app : VulkanApplication, quadSize : V2i) =
+
+        let testFile1 = @"..\..\data\testTexture1.jpg"
+        let testFile2 = @"..\..\data\testTexture2.jpg"
+        let rt = app.Runtime
+        ///////////////////////////////////////////////////////////////////////////////
+        let mutable testsize = V2i(0,0)
+        let loadTexture (file : string) : IBackendTexture =
+            let img = PixImage.Create(file).ToPixImage<byte>(Col.Format.BGR)
+            testsize <- img.Size
+            let a = PixImage<float32>(Col.Format.Gray, testsize)
+            let b = img.GetMatrix<C3b>()
+            b.ForeachCoord(fun (c : V2l) ->
+                let v = b.[c].ToC3f()
+                a.Volume.[V3l(c,0L)] <- (v.R + v.G + v.B) / 3.0f
+            )
+            let tex = rt.CreateTexture(testsize, TextureFormat.R32f, 1, 1, 1)
+            rt.Upload(tex, 0, 0, a) 
+            tex
+
+        let testFile3 = @"..\..\data\testTexture3.jpg"
+        let testFile4 = @"..\..\data\testTexture4.jpg"
+        let inputImage1 = testFile3 |> loadTexture
+        let inputImage2 = testFile4 |> loadTexture
+        ///////////////////////////////////////////////////////////////////////////////
+
+        let indi = [| 0; 1; 2;  0; 2; 3;  0; 3; 4|]
+        let uv1 =  [| V2f(0.0, 0.0); V2f(0.5, 0.0); V2f(0.9, 0.4); V2f(0.7, 0.8); V2f(0.2, 0.5)|]
+        let uv2 =  [| V2f(0.3, 0.0); V2f(0.8, 0.1); V2f(0.5, 0.9); V2f(0.2, 0.5); V2f(0.1, 0.2)|]
+
+        let s = testsize
+        let xf = s.X |> float32
+        let yf = s.Y |> float32
+        let uv2set (v : V2f) = V2f(v.X * xf, v.Y * yf)
+
+        let set1 = uv1 |> Array.map(uv2set)
+        let set2 = uv2 |> Array.map(uv2set)
+
+
+        
+        
+        let sign = rt.CreateFramebufferSignature [DefaultSemantic.Colors, {format = RenderbufferFormat.R32f; samples = 1}; ]
+        let tex1 = rt.CreateTexture(s, TextureFormat.R32f, 1, 1, 1)
+        let tex2 = rt.CreateTexture(s, TextureFormat.R32f, 1, 1, 1)
+        let fbo1 = rt.CreateFramebuffer(sign, Map.ofList[DefaultSemantic.Colors, ({texture = tex1; slice = 0; level = 0} :> IFramebufferOutput)])
+        let fbo2 = rt.CreateFramebuffer(sign, Map.ofList[DefaultSemantic.Colors, ({texture = tex2; slice = 0; level = 0} :> IFramebufferOutput)])
+
+        let clear = rt.CompileClear(sign, C4f.Black |> Mod.constant, 1.0 |> Mod.constant)
+
+        let sg (view : IMod<Trafo3d>) (proj : IMod<Trafo3d>) (tex : string) (set : V2f[]) (uv : V2f[]) =
+            Sg.draw (IndexedGeometryMode.TriangleList)
+            |> Sg.vertexAttribute DefaultSemantic.Positions (set |> Mod.constant)
+            |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (uv |> Mod.constant)
+            |> Sg.index (indi |> Mod.constant)
+            |> Sg.viewTrafo (view)
+            |> Sg.projTrafo (proj)
+            |> Sg.diffuseFileTexture' tex true
+            |> Sg.effect [
+                DefaultSurfaces.trafo                  |> toEffect
+                ImageProcessingShader.myDiffuseTexture |> toEffect
+            ]
+
+        let runBaseTask (view : IMod<Trafo3d>) (proj : IMod<Trafo3d>) (texture : int) =
+            if texture = 1 then
+                let f = (fun () -> 
+                    let task = rt.CompileRender(sign, sg view proj testFile1 set1 uv1)
+                    clear.Run(null, fbo1 |> OutputDescription.ofFramebuffer)
+                    task.Run(null, fbo1 |> OutputDescription.ofFramebuffer)
+                    false)
+                f, tex1
+            else
+                let f = (fun () -> 
+                    let task = rt.CompileRender(sign, sg view proj testFile2 set2 uv2)
+                    clear.Run(null, fbo2 |> OutputDescription.ofFramebuffer)
+                    task.Run(null, fbo2 |> OutputDescription.ofFramebuffer)
+                    false)
+                f, tex2
+        
+
+
+
+        let processor = new Processor(app, testsize)
+        let composer = new Composer(app, testsize)
+
+        let bla (f : unit -> bool, t : IBackendTexture) =
+            f() |> ignore
+            t
+
+        member x.Test (view) (proj) : IBackendTexture =
+//            let l0 = runBaseTask view proj 1
+//            let r0 = runBaseTask view proj 2
+
+//            let l1 = processor.GaussFilterProgram 5 l0
+//            let r1 = processor.HighPassFilterProgram 15 r0
+            let f0 = (fun () -> false)
+            let l0 = (f0, inputImage1)
+            let r0 = (f0, inputImage2)
+
+            let f1 = (fun () -> 
+                        let task1 = rt.CompileRender(sign, sg view proj testFile3 set1 uv1)
+                        clear.Run(null, fbo1 |> OutputDescription.ofFramebuffer)
+                        task1.Run(null, fbo1 |> OutputDescription.ofFramebuffer)
+                        false
+                     )
+            let f2 = (fun () ->
+                        let task2 = rt.CompileRender(sign, sg view proj testFile4 set2 uv2)
+                        clear.Run(null, fbo2 |> OutputDescription.ofFramebuffer)
+                        task2.Run(null, fbo2 |> OutputDescription.ofFramebuffer)
+                        false
+                     )
+
+            let l1 = (f2, tex2)
+            let r1 = (f1, tex1)
+
+            let r2 = processor.HighPassFilterProgram 15 r1
+            let l2 = processor.GaussFilterProgram 15 l1
+
+            let res = composer.Compose l2 r2 1.0 1
+
+            bla res
+
+
+
+        member x.Dispose() =
+            rt.DeleteTexture tex1
+            rt.DeleteTexture tex2
+            rt.DeleteFramebuffer fbo1
+            rt.DeleteFramebuffer fbo2
+            rt.DeleteFramebufferSignature sign
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+
+
 
 
 module ImageProcessingExample = 
     open ImageProcessing
 
     let run () = 
-    
-        let proc = new Processor()
+        let app = new VulkanApplication()
+
         let useFilter = Mod.init true
         let chooseFilter = Mod.init 0
         let ucFilter = Mod.map2 (fun u c -> (u, c)) useFilter chooseFilter
         let radius = Mod.init 5
-        let tex = Mod.map2(fun r (uf, cf) ->
-                                if uf then
-                                    if cf = 0 then proc.GetGaussFilteredImage(r)
-                                    elif cf = 1 then proc.GetHighPassFilteredImage(r)
-                                    else proc.GetBoxFilteredImage(r)
-                                else
-                                    proc.GetUnfilteredImage()
-                          ) radius ucFilter
 
-        use app = proc.GetApp()
+        
+        
+
+//        let tex = Mod.map2(fun r (uf, cf) ->
+//                                if uf then
+//                                    if cf = 0 then proc.GetGaussFilteredImage(r)
+//                                    elif cf = 1 then proc.GetHighPassFilteredImage(r)
+//                                    else proc.GetBoxFilteredImage(r)
+//                                else
+//                                    proc.GetUnfilteredImage()
+//                          ) radius ucFilter
+
         let win = app.CreateSimpleRenderWindow(samples = 1)
 
-        win.Keyboard.KeyDown(Keys.U).Values.Subscribe(fun _ -> transact(fun _ -> radius.Value <- if radius.Value < 55 then radius.Value + 1 else radius.Value
-                                                                                 printfn "%A" radius.Value)) |> ignore
-        win.Keyboard.KeyDown(Keys.J).Values.Subscribe(fun _ -> transact(fun _ -> radius.Value <- if radius.Value > 1 then radius.Value - 1 else radius.Value
-                                                                                 printfn "%A" radius.Value)) |> ignore
-        win.Keyboard.KeyDown(Keys.O).Values.Subscribe(fun _ -> transact(fun _ -> useFilter.Value <- (not useFilter.Value))) |> ignore
-        win.Keyboard.KeyDown(Keys.T).Values.Subscribe(fun _ ->
-                                                        transact(fun _ ->
-                                                                    let mutable x = chooseFilter.Value + 1
-                                                                    if x > 2 then x <- 0
-                                                                    chooseFilter.Value <-x
-                                                                )) |> ignore
+//        win.Keyboard.KeyDown(Keys.U).Values.Subscribe(fun _ -> transact(fun _ -> radius.Value <- if radius.Value < 55 then radius.Value + 1 else radius.Value
+//                                                                                 printfn "%A" radius.Value)) |> ignore
+//        win.Keyboard.KeyDown(Keys.J).Values.Subscribe(fun _ -> transact(fun _ -> radius.Value <- if radius.Value > 1 then radius.Value - 1 else radius.Value
+//                                                                                 printfn "%A" radius.Value)) |> ignore
+//        win.Keyboard.KeyDown(Keys.O).Values.Subscribe(fun _ -> transact(fun _ -> useFilter.Value <- (not useFilter.Value))) |> ignore
+//        win.Keyboard.KeyDown(Keys.T).Values.Subscribe(fun _ ->
+//                                                        transact(fun _ ->
+//                                                                    let mutable x = chooseFilter.Value + 1
+//                                                                    if x > 2 then x <- 0
+//                                                                    chooseFilter.Value <-x
+//                                                                )) |> ignore
 
         
         let initialView = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
-        let frustum = win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
+        let proj = win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y)) |> Mod.map Frustum.projTrafo
+        let view = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView |> Mod.map CameraView.viewTrafo
 
-        let cameraView = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
+        let x = 1920
+        let y = 1080
+
+        let xh = x / 2
+        let yh = y / 2
+        let imageTest = new Image.Image(app, V2i(x, y))
+
+        let orthoview = Mod.constant(CameraView.lookAt (V3d(xh, yh, 20)) (V3d(xh, yh, 0)) V3d.OIO |> CameraView.viewTrafo)
+        let orthoproj = Mod.constant (Frustum.ortho (Box3d (-xh |> float, -yh |> float, -10.0, xh |> float, yh |> float, 30.0)) |> Frustum.orthoTrafo)
+
+        let tex = imageTest.Test orthoview orthoproj :> ITexture
+
 
         let quadSg =
             let quad =
+                let x = x
+                let y = y
                 IndexedGeometry(
                     Mode = IndexedGeometryMode.TriangleList,
                     IndexArray = ([|0;1;2; 0;2;3|] :> System.Array),
                     IndexedAttributes =
                         SymDict.ofList [
-                            DefaultSemantic.Positions,                  [| V3f(-1,-1,0); V3f(1,-1,0); V3f(1,1,0); V3f(-1,1,0) |] :> Array
+                            DefaultSemantic.Positions,                  [| V3f(0,0,0); V3f(x,0,0); V3f(x,y,0); V3f(0,y,0) |] :> Array
                             DefaultSemantic.Normals,                    [| V3f.OOI; V3f.OOI; V3f.OOI; V3f.OOI |] :> Array
                             DefaultSemantic.DiffuseColorCoordinates,    [| V2f.OO; V2f.IO; V2f.II; V2f.OI |] :> Array
                         ]
                 )
-                
             quad |> Sg.ofIndexedGeometry
 
         let sg =
@@ -459,9 +619,9 @@ module ImageProcessingExample =
                         DefaultSurfaces.trafo                  |> toEffect
                         ImageProcessingShader.myDiffuseTexture |> toEffect
                     ]
-                |> Sg.diffuseTexture (tex)
-                |> Sg.viewTrafo (cameraView  |> Mod.map CameraView.viewTrafo )
-                |> Sg.projTrafo (frustum |> Mod.map Frustum.projTrafo    )
+                |> Sg.diffuseTexture' (tex)
+                |> Sg.viewTrafo (orthoview)
+                |> Sg.projTrafo (orthoproj)
 
 
         let renderTask = app.Runtime.CompileRender(win.FramebufferSignature, sg)
