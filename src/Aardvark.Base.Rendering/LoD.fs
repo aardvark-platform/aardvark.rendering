@@ -4,6 +4,14 @@ open System.Collections.Generic
 open Aardvark.Base
 open Aardvark.Base.Incremental
 
+type ILodDataNode =
+    abstract member Id : obj
+    abstract member Level : int
+    abstract member Bounds : Box3d
+    abstract member Inner : bool
+    abstract member ShouldRender : bool
+    abstract member LocalPointCount : int64
+
 [<CustomEquality; NoComparison>]
 type LodDataNode =
     {
@@ -22,18 +30,26 @@ type LodDataNode =
             | :? LodDataNode as o -> x.id.Equals(o.id)
             | _ -> false
 
+    interface ILodDataNode with
+        member x.Id = x.id
+        member x.Bounds = x.bounds
+        member x.Inner = x.inner
+        member x.Level = x.level
+        member x.ShouldRender = x.render
+        member x.LocalPointCount = x.pointCountNode
+
 type ILodData =
     abstract member BoundingBox : Box3d
-    abstract member Traverse : (LodDataNode -> bool) -> unit
+    abstract member Traverse : (ILodDataNode -> bool) -> unit
     abstract member Dependencies : list<IMod>
-    abstract member GetData : node : LodDataNode -> Async<Option<IndexedGeometry>>
+    abstract member GetData : node : ILodDataNode -> Async<Option<IndexedGeometry>>
 
 module LodData =
     
-    type Decider = Trafo3d -> Trafo3d -> V2i -> LodDataNode -> bool
+    type Decider = Trafo3d -> Trafo3d -> V2i -> ILodDataNode -> bool
     
-    let defaultLodDecider (targetPixelDistance : float) (viewTrafo : Trafo3d) (projTrafo : Trafo3d) (viewPortSize : V2i) (node : LodDataNode )  =
-        let bounds = node.bounds
+    let defaultLodDecider (targetPixelDistance : float) (viewTrafo : Trafo3d) (projTrafo : Trafo3d) (viewPortSize : V2i) (node : ILodDataNode )  =
+        let bounds = node.Bounds
 
         let vp = viewTrafo * projTrafo
 
@@ -48,9 +64,46 @@ module LodData =
                       
             npp.ComputeArea()
 
-        let averagePointDistanceInPixels = sqrt (nearPlaneAreaInPixels / float node.pointCountNode)
+        let averagePointDistanceInPixels = sqrt (nearPlaneAreaInPixels / float node.LocalPointCount)
 
         averagePointDistanceInPixels > targetPixelDistance
+
+    type SetRasterizer = FastHull3d -> (ILodDataNode -> bool) -> ((ILodDataNode -> bool)->unit) -> ISet<ILodDataNode>
+
+    let defaultRasterizeSet (cameraHull : FastHull3d) (lodDecider : ILodDataNode -> bool) (traverse : (ILodDataNode -> bool) -> unit) =
+        
+        let result = HashSet<ILodDataNode>()
+
+        let continueTraversal (node : ILodDataNode) =
+            if cameraHull.Intersects(node.Bounds) then
+                if node.Inner then
+                    if lodDecider node then
+                        if node.ShouldRender then result.Add node |> ignore
+                        true
+                    else
+                        false
+                else
+                    result.Add node |> ignore
+                    false
+            else
+                false
+        
+        traverse continueTraversal
+
+        result :> ISet<_>
+        
+    let rasterize viewTrafo projTrafo decider (x : ILodData) (rasterizeSet : SetRasterizer) =
+        // create a FastHull3d for the (extended) camera
+        let hull = viewTrafo * projTrafo |> ViewProjection.toFastHull3d
+
+        let result = rasterizeSet hull decider x.Traverse
+
+        // traverse the ILodData building a set of nodes in view respecting
+        // the given nearPlaneDistance in [(-1,-1) x (1,1)] space
+        //x.Traverse( traverser )
+
+        // return the resulting node-set
+        result
 
 [<AutoOpen>]
 module ``Lod Data Extensions`` =
@@ -76,31 +129,8 @@ module ``Lod Data Extensions`` =
         frustum
 
     type ILodData with
-        member x.Rasterize(viewTrafo : Trafo3d, projTrafo : Trafo3d, decider : LodDataNode -> bool) =
-            let result = HashSet<LodDataNode>()
-            
-            // create a FastHull3d for the (extended) camera
-            let hull = viewTrafo * projTrafo |> ViewProjection.toFastHull3d
-
-            // traverse the ILodData building a set of nodes in view respecting
-            // the given nearPlaneDistance in [(-1,-1) x (1,1)] space
-            x.Traverse(fun node ->
-                if hull.Intersects(node.bounds) then
-                    if node.inner then
-                        if decider node then
-                            if node.render then result.Add node |> ignore
-                            true
-                        else
-                            false
-                    else
-                        result.Add node |> ignore
-                        false
-                else
-                    false
-            )
-
-            // return the resulting node-set
-            result :> ISet<_>
+        member x.Rasterize(viewTrafo : Trafo3d, projTrafo : Trafo3d, decider : ILodDataNode -> bool, rasterizeSet : LodData.SetRasterizer) =
+            LodData.rasterize viewTrafo projTrafo decider x rasterizeSet
             
 open System
 open System.Threading

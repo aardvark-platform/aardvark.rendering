@@ -307,6 +307,10 @@ type PointCloudInfo =
         /// decider function
         lodDecider : IMod<LodData.Decider>
 
+        /// rasterizer function
+        lodRasterizer : IMod<LodData.SetRasterizer>
+
+        /// freeze LOD loading?
         freeze : IMod<bool>
 
         /// an optional custom view trafo
@@ -473,6 +477,9 @@ module PointCloudRenderObjectSemantics =
             let decider = 
                 config.lodDecider
 
+            let rasterizer = 
+                config.lodRasterizer
+
             let view : IMod<Trafo3d> = 
                 match config.customView with
                     | Some view -> view
@@ -510,14 +517,15 @@ module PointCloudRenderObjectSemantics =
                     let view,proj = vp.GetValue(token)
                     let size = size.GetValue(token)
                     let decider = decider.GetValue(token)
+                    let rasterizer = rasterizer.GetValue(token)
 
                     for d in data.Dependencies do d.GetValue token |> ignore
 
-                    view, proj, size, decider
+                    view, proj, size, decider, rasterizer
                 )
 
-            let rasterize (view : Trafo3d, proj : Trafo3d, size : V2i, decider : LodData.Decider) =
-                data.Rasterize(view, proj, decider view proj size)
+            let rasterize (view : Trafo3d, proj : Trafo3d, size : V2i, decider : LodData.Decider, rasterizer : LodData.SetRasterizer) =
+                data.Rasterize(view, proj, decider view proj size,rasterizer)
 
             let pool = runtime.CreateGeometryPool(config.attributeTypes)
             let mutable refCount = 0
@@ -561,7 +569,7 @@ module PointCloudRenderObjectSemantics =
                 |> AttributeProvider.onDispose release
 
             let loadedGeometries = 
-                let load (ct : CancellationToken) (node : LodDataNode) =
+                let load (ct : CancellationToken) (node : ILodDataNode) =
                     let geometry = Async.RunSynchronously(data.GetData(node), cancellationToken = ct)
 
                     use __ = runtime.ContextLock
@@ -579,16 +587,23 @@ module PointCloudRenderObjectSemantics =
                         | Some ptr -> pool.Free ptr
                         | None -> ()
                         
-                dependencies |> Loader.load rasterize {
+
+                let rasterize = rasterize
+                let dependencies = dependencies 
+                let paramse = {
                     continueLoader      = fun _ -> !oru
                     load                = load
                     unload              = unload
-                    priority            = fun op -> if op.Count < 0 then -op.Value.level else op.Value.level
+                    priority            = fun op -> if op.Count < 0 then -op.Value.Level else op.Value.Level
                     numThreads          = 4
                     submitDelay         = TimeSpan.FromMilliseconds 120.0
                     progressInterval    = TimeSpan.FromSeconds 1.0
                     progress            = progress
                 }
+                
+                let load = Loader.load
+
+                load rasterize paramse dependencies
 
             let drawCallBuffer = 
                 let add (set : RangeSet) (v : LoadedGeometry) =

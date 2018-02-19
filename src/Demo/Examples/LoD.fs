@@ -120,10 +120,10 @@ module LoD =
 
             member x.Dependencies = []
 
-            member x.GetData (cell : LodDataNode) =
+            member x.GetData (cell : ILodDataNode) =
                 async {
                     //do! Async.SwitchToThreadPool()
-                    let box = cell.bounds
+                    let box = cell.Bounds
 
                     let points =
                         [|
@@ -276,6 +276,7 @@ module LoD =
     let cloud =
         pointCloud data {
             lodDecider              = Mod.constant (LodData.defaultLodDecider 5.0)
+            lodRasterizer           = Mod.constant (LodData.defaultRasterizeSet)
             freeze                  = Mod.constant false
             maxReuseRatio           = 0.5
             minReuseCount           = 1L <<< 20
