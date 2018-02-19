@@ -316,7 +316,7 @@ module ComputeShader =
         let size        = dataImg.Size
 
         use merge = new RegionMerge(runtime, SegmentMergeMode.AvgToAvg)
-        use instance = merge.NewInstance (V2i(512, 512))
+        use instance = merge.NewInstance size
 
         let randomColors =
             let rand = RandomSystem()
