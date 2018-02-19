@@ -269,7 +269,7 @@ module ComputeShader =
                         let stats = uniform.RegionStats.[rCode]
                         let avg = RegionStats.average stats |> float
                         let stats = uniform.RegionStats.[rCode]
-                        color <- hsv2rgb avg 1.0 1.0
+                        color <- V3d.III * avg //hsv2rgb avg 1.0 1.0
                         
 
                     | _ ->
@@ -313,7 +313,7 @@ module ComputeShader =
 
 
         let dataImg     = PixImage.Create(path).ToPixImage<uint16>(Col.Format.Gray) //PixImage<uint16>(Col.Format.Gray, Volume<uint16>(data, 4L, 4L, 1L))
-
+        
 //        let dataIcmg =
 //            let img = PixImage<uint16>(Col.Format.Gray, V2i(64,64))
 //            img.GetChannel(0L).SetByCoord (fun (c : V2l) ->
@@ -330,7 +330,7 @@ module ComputeShader =
         let size        = dataImg.Size
 
         use merge = new RegionMerge(runtime, SegmentMergeMode.AvgToAvg)
-        use instance = merge.NewInstance (V2i(512,512))
+        use instance = merge.NewInstance (V2i(1024,1024)) //(V2i(3333,2384))
 
         let randomColors =
             let rand = RandomSystem()
@@ -344,40 +344,48 @@ module ComputeShader =
 
         let img         = runtime.CreateTexture(size, TextureFormat.R16, 1, 1)
         runtime.Upload(img, 0, 0, dataImg)
-
+        let resultImage = runtime.CreateTexture(img.Size.XY, TextureFormat.R32i, 1, 1)
         
         let fade = Mod.init 1.0
         let mode = Mod.init ViewMode.Regions
-        let threshold = Mod.init 0.036
+        let threshold = Mod.init 0.2
         let alpha = Mod.init 1.6
 
-        let mutable old : Option<IBuffer<RegionStats> * IBackendTexture> = None
+        let mutable old : Option<IBuffer<RegionStats>> = None
 
         let textures =
             Mod.map2 (fun threshold alpha ->
 
                 match old with
-                    | Some (b,t) ->
+                    | Some (b) ->
                         b.Dispose()
-                        runtime.DeleteTexture t
                     | None ->
                         ()
 
                 Log.start "detecting regions"
                 let sw = System.Diagnostics.Stopwatch.StartNew()
-                let (buffer, image) = instance.Run(img, threshold, alpha)
+                let tempBuffers = 
+                    Array.init 10 (fun _ ->
+                        instance.Run(img, resultImage, threshold, alpha)
+                    )
                 sw.Stop()
+                tempBuffers |> Array.iter (fun b -> b.Dispose())
+                Log.line "took:    %A" (sw.MicroTime / 10.0)
+                
+                //let sw = System.Diagnostics.Stopwatch.StartNew()
+                let (buffer) = instance.Run(img, resultImage, threshold, alpha)
+                //sw.Stop()
 
-                old <- Some (buffer, image)
+                old <- Some (buffer)
 
-                Log.line "took:    %A" sw.MicroTime
+                //Log.line "took:    %A" (sw.MicroTime)
                 Log.line "regions: %A" buffer.Count
 
                 let validate() = 
                     let data = buffer.Download()
 
-                    let img = PixImage<int>(Col.Format.Gray, image.Size.XY)
-                    runtime.Download(image, 0, 0, img) 
+                    let img = PixImage<int>(Col.Format.Gray, resultImage.Size.XY)
+                    runtime.Download(resultImage, 0, 0, img) 
 
 
                     let unused = Seq.init data.Length id |> HashSet.ofSeq
@@ -424,7 +432,7 @@ module ComputeShader =
                 Log.stop()
 
 
-                buffer.Buffer :> IBuffer, image :> ITexture
+                buffer.Buffer :> IBuffer, resultImage :> ITexture
             ) threshold alpha
              
         let info = textures |> Mod.map fst
@@ -443,12 +451,12 @@ module ComputeShader =
             match k with
                 | Keys.Add ->
                     transact (fun () ->
-                        threshold.Value <- threshold.Value + 0.001
+                        threshold.Value <- threshold.Value + 0.01
                         Log.line "threshold: %A" threshold.Value
                     )
                 | Keys.Subtract ->
                     transact (fun () ->
-                        threshold.Value <- threshold.Value - 0.001
+                        threshold.Value <- threshold.Value - 0.01
                         Log.line "threshold: %A" threshold.Value
                     )
                 | Keys.Multiply ->

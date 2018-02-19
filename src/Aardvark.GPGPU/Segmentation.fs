@@ -72,6 +72,22 @@ module RegionStats =
 module SegmentationShaders =
     open FShade
 
+    [<StructLayout(LayoutKind.Explicit, Size = 24)>]
+    type Config =
+        struct
+            [<FieldOffset(0)>]
+            val mutable public Offset : V2i
+           
+            [<FieldOffset(8)>]
+            val mutable public Threshold : float32
+
+            [<FieldOffset(12)>]
+            val mutable public Alpha : float32
+
+            new(o,t,a) = { Offset = o; Threshold = t; Alpha = a }
+
+        end
+
 
     [<GLSLIntrinsic("floatBitsToInt({0})")>]
     let floatBitsToInt (v : float) : int = onlyInShaderCode "floatBitsToInt"
@@ -101,9 +117,9 @@ module SegmentationShaders =
         V2i(color % size.X, color / size.X)
 
     [<LocalSize(X = 8, Y = 8)>]
-    let initRegions (regions : IntImage2d<Formats.r32i>) (colors : Image2d<Formats.r16>) (infos : V4i[]) =
+    let initRegions (config : Config[]) (regions : IntImage2d<Formats.r32i>) (colors : Image2d<Formats.r16>) (infos : V4i[]) =
         compute {
-            let offset : V2i = uniform?Offset
+            let offset = config.[0].Offset
             let blockSize : V2i = uniform?BlockSize
             let size = colors.Size
 
@@ -123,12 +139,13 @@ module SegmentationShaders =
         }
 
     [<LocalSize(X = 64)>]
-    let regionMerge (identical : Expr<RegionInfo -> float -> RegionInfo -> float -> bool>) (colors : Image2d<Formats.r16>) (regions : IntImage2d<Formats.r32i>) (infos : V4i[]) =
+    let regionMerge (identical : Expr<Config -> RegionInfo -> float -> RegionInfo -> float -> bool>) (config : Config[])  (colors : Image2d<Formats.r16>) (regions : IntImage2d<Formats.r32i>) (infos : V4i[]) =
         compute {
             let solvedSize : int = uniform?SolvedSize
             let dim : int = uniform?Dimension
             let colorSize = colors.Size
-            let offset : V2i = uniform?Offset
+            let cfg = config.[0]
+            let offset = cfg.Offset
             let blockSize : V2i = uniform?BlockSize
 
             let id = getGlobalId().XY
@@ -172,7 +189,7 @@ module SegmentationShaders =
                     let rRegionInfo = { average = rAvg; variance = rVar; count = rCnt }
 
    
-                    let identical = (%identical) lRegionInfo lValue rRegionInfo rValue
+                    let identical = (%identical) cfg lRegionInfo lValue rRegionInfo rValue
 
                     if identical then
                         
@@ -218,10 +235,10 @@ module SegmentationShaders =
         }
             
     [<LocalSize(X = 8, Y = 8)>]
-    let sanitize (regions : IntImage2d<Formats.r32i>) (infos : V4i[]) =
+    let sanitize (config : Config[]) (regions : IntImage2d<Formats.r32i>) (infos : V4i[]) =
         compute {
             let regionSize = regions.Size
-            let offset : V2i = uniform?Offset
+            let offset = config.[0].Offset
             let id = offset + getGlobalId().XY
 
             if id.X < regionSize.X && id.Y < regionSize.Y then
@@ -341,11 +358,11 @@ module SegmentationShaders =
 
 
     [<LocalSize(X = 8, Y = 8)>]
-    let remapRegions (infos : V4i[]) (regions : IntImage2d<Formats.r32i>) =
+    let remapRegions (config : Config[]) (infos : V4i[]) (regions : IntImage2d<Formats.r32i>) =
         compute {
             let id = getGlobalId().XY
             let regionSize = regions.Size
-            let offset : V2i = uniform?Offset
+            let offset = config.[0].Offset
 
             let cid = offset + id
 
@@ -394,22 +411,20 @@ module SegmentationShaders =
     let distanceFunction =
         Map.ofList [
             SegmentMergeMode.ValueToAvg, 
-            <@ fun (lRegion : RegionInfo) (lValue : float) (rRegion : RegionInfo) (rValue : float) ->
-                let threshold : float = uniform?Threshold
-                min (abs (lValue - lRegion.average)) (abs (rValue - rRegion.average)) < threshold
+            <@ fun (config : Config) (lRegion : RegionInfo) (lValue : float) (rRegion : RegionInfo) (rValue : float) ->
+                min (abs (lValue - lRegion.average)) (abs (rValue - rRegion.average)) < float config.Threshold
             @>
 
             SegmentMergeMode.AvgToAvg,
-            <@ fun (lRegion : RegionInfo) (lValue : float) (rRegion : RegionInfo) (rValue : float) ->
-                let threshold : float = uniform?Threshold
-                abs (rRegion.average - lRegion.average) < threshold
+            <@ fun (config : Config) (lRegion : RegionInfo) (lValue : float) (rRegion : RegionInfo) (rValue : float) ->
+                abs (rRegion.average - lRegion.average) < float config.Threshold
             @>
             
             SegmentMergeMode.TTest,
-            <@ fun (lRegion : RegionInfo) (_ : float) (rRegion : RegionInfo) (_ : float) ->
+            <@ fun (config : Config) (lRegion : RegionInfo) (_ : float) (rRegion : RegionInfo) (_ : float) ->
                 
-                let threshold : float = uniform?Threshold
-                let alpha : float = uniform?Alpha
+                let threshold = float config.Threshold
+                let alpha = float config.Alpha
 
                 let minCnt = if alpha < 0.0 then 100000000 else 2
 
@@ -540,7 +555,7 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
     let sanitize = parent.Sanitize
     let sanitizeAvg = parent.SanitizeAvg
         
-
+    let config          = runtime.CreateBuffer<SegmentationShaders.Config> [| SegmentationShaders.Config(V2i.Zero, 0.01f, 0.01f) |]
     let regions         = runtime.CreateTexture(V2i.II, TextureFormat.R32i, 1, 1)
     let compactIdCount  = runtime.CreateBuffer<int>(1)
 
@@ -550,9 +565,9 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
     let initIn = 
         let binding = runtime.NewInputBinding initRegions
         binding.["regions"] <- regions.[TextureAspect.Color, 0, 0]
-        binding.["Offset"] <- V2i.Zero
-        binding.["BlockSize"] <- size
+        binding.["config"] <- config
         binding.["infos"] <- infos
+        binding.["BlockSize"] <- size
         binding.Flush()
         binding
 
@@ -561,14 +576,12 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
             let mergeIn = runtime.NewInputBinding regionMerge
             
             mergeIn.["Dimension"] <- dim
-            mergeIn.["Offset"] <- V2i.Zero
+            mergeIn.["config"] <- config
             mergeIn.["SolvedSize"] <- solvedSize
-            mergeIn.["Threshold"] <- 0.01
-            mergeIn.["Alpha"] <- 0.05
             mergeIn.["regions"] <- regions.[TextureAspect.Color, 0, 0]
-            mergeIn.["BlockSize"] <- size
             mergeIn.["infos"] <- infos
             mergeIn.["TDistr"] <- tDistr
+            mergeIn.["BlockSize"] <- size
             mergeIn.Flush()
 
 
@@ -582,7 +595,7 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
 
     let sanitizeIn = 
         let binding = runtime.NewInputBinding sanitize
-        binding.["Offset"] <- V2i.Zero
+        binding.["config"] <- config
         binding.["regions"] <- regions.[TextureAspect.Color, 0, 0]
         binding.["infos"] <- infos
         binding.Flush()
@@ -607,7 +620,7 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
 
     let remapRegionsIn =
         let binding = runtime.NewInputBinding parent.RemapRegions
-        binding.["Offset"] <- V2i.Zero
+        binding.["config"] <- config
         binding.["regions"] <- regions.[TextureAspect.Color, 0, 0]
         binding.["infos"] <- infos
         binding.Flush()
@@ -630,29 +643,21 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
         binding.Flush()
         binding
         
-
+    let mutable currentConfig = SegmentationShaders.Config(V2i.Zero, 0.01f, 0.01f)
     let mutable currentInput = None
-    let mutable currentThreshold = 0.01
-    let mutable currentAlpha = 0.05
-    let mutable currentOffset = V2i.Zero
     let mutable currentRegions = regions
 
-
+    let setConfig (cfg : SegmentationShaders.Config) =
+        if currentConfig <> cfg then
+            currentConfig <- cfg
+            config.Upload [| cfg |]
+        
     let setOffset (v : V2i) =
-        if v <> currentOffset then
-            currentOffset <- v
-            initIn.["Offset"] <- v
-            initIn.Flush()
+        if v <> currentConfig.Offset then
+            let cfg = SegmentationShaders.Config(v, currentConfig.Threshold, currentConfig.Alpha)
+            currentConfig <- cfg
+            config.Upload [| cfg |]
 
-            for (m,_) in mergeInputs do
-                m.["Offset"] <- v
-                m.Flush()
-
-            sanitizeIn.["Offset"] <- v
-            sanitizeIn.Flush()
-
-            remapRegionsIn.["Offset"] <- v
-            remapRegionsIn.Flush()
 
     let setRegions (r : IBackendTexture) =
         if r <> currentRegions then
@@ -672,13 +677,11 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
         
 
     let setThreshold (value : float) (alpha : float) =
-        if currentThreshold <> value || currentAlpha <> alpha then
-            for m,_ in mergeInputs do 
-                m.["Threshold"] <- value
-                m.["Alpha"] <- alpha
-                m.Flush()
-            currentThreshold <- value
-            currentAlpha <- alpha
+        if currentConfig.Threshold <> float32 value || currentConfig.Alpha <> float32 alpha then
+            let cfg = SegmentationShaders.Config(currentConfig.Offset, float32 value, float32 alpha)
+            currentConfig <- cfg
+            config.Upload [| cfg |]
+
 
     let setInput (input : IBackendTexture) =
         if currentInput <> Some input then
@@ -729,11 +732,41 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
 //    [<LocalSize(X = 8, Y = 8)>]
 //    let remapRegions (remapImage : IntImage2d<Formats.r32i>) (regions : IntImage2d<Formats.r32i>) 
 
+    let program =  
+        runtime.Compile [
+            yield ComputeCommand.Bind initRegions
+            yield ComputeCommand.SetInput initIn
+            yield ComputeCommand.Dispatch (V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
+            yield ComputeCommand.Sync infos.Buffer
 
-    member x.Run(input : IBackendTexture, threshold : float, alpha : float) =
+            for mergeIn, groupCount in mergeInputs do
+                yield ComputeCommand.Bind regionMerge
+                yield ComputeCommand.SetInput mergeIn
+                yield ComputeCommand.Dispatch groupCount
+                
+                yield ComputeCommand.Sync infos.Buffer
+
+                yield ComputeCommand.Bind sanitize
+                yield ComputeCommand.SetInput sanitizeIn
+                yield ComputeCommand.Dispatch (V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
+
+                yield ComputeCommand.Bind sanitizeAvg
+                yield ComputeCommand.SetInput sanitizeAvgIn
+                yield ComputeCommand.Dispatch (ceilDiv (size.X * size.Y) 64)
+
+                yield ComputeCommand.Sync infos.Buffer
+
+            yield ComputeCommand.Bind parent.AllocateCompactRegions
+            yield ComputeCommand.SetInput allocateCompactRegionsIn
+            yield ComputeCommand.Dispatch (ceilDiv (size.X * size.Y) 64)
+
+        ]
+
+
+    member x.Run(input : IBackendTexture, resultImage : IBackendTexture, threshold : float, alpha : float) =
         lock x (fun () ->
             let inputSize = input.Size.XY
-            let resultImage = runtime.CreateTexture(input.Size.XY, TextureFormat.R32i, 1, 1)
+            
             setInput input
             setRegions resultImage
             setThreshold threshold alpha
@@ -742,12 +775,11 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
 
             let mutable resultBuffer : Option<IBuffer<V4i>> = None
             let mutable currentCount = 0
-            compactIdCount.Upload [| 0 |]
 
-            
             runtime.Run [
                 ComputeCommand.TransformLayout(input, TextureLayout.ShaderReadWrite)
                 ComputeCommand.TransformLayout(resultImage, TextureLayout.ShaderReadWrite)
+                ComputeCommand.Zero compactIdCount
             ]
 
             for bx in 0 .. blocks.X - 1 do
@@ -758,37 +790,7 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
                     allocateCompactRegionsIn.["Offset"] <- currentCount
                     allocateCompactRegionsIn.Flush()
 
-                    runtime.Run [
-                        yield ComputeCommand.Bind initRegions
-                        yield ComputeCommand.SetInput initIn
-                        yield ComputeCommand.Dispatch (V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
-                        yield ComputeCommand.Sync resultImage
-                        yield ComputeCommand.Sync infos.Buffer
-
-                        for mergeIn, groupCount in mergeInputs do
-                            yield ComputeCommand.Bind regionMerge
-                            yield ComputeCommand.SetInput mergeIn
-                            yield ComputeCommand.Dispatch groupCount
-                
-                            yield ComputeCommand.Sync infos.Buffer
-
-                            yield ComputeCommand.Bind sanitize
-                            yield ComputeCommand.SetInput sanitizeIn
-                            yield ComputeCommand.Dispatch (V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
-
-                            yield ComputeCommand.Bind sanitizeAvg
-                            yield ComputeCommand.SetInput sanitizeAvgIn
-                            yield ComputeCommand.Dispatch (ceilDiv (size.X * size.Y) 64)
-
-                            yield ComputeCommand.Sync resultImage
-                            yield ComputeCommand.Sync infos.Buffer
-
-                        yield ComputeCommand.Bind parent.AllocateCompactRegions
-                        yield ComputeCommand.SetInput allocateCompactRegionsIn
-                        yield ComputeCommand.Dispatch (ceilDiv (size.X * size.Y) 64)
-
-                    ]
-
+                    program.Run()
 
                     let newCnt = compactIdCount.Download().[0]
                     let n = runtime.CreateBuffer<V4i>(newCnt)
@@ -828,15 +830,13 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
                     let mergeIn = runtime.NewInputBinding regionMerge
             
                     mergeIn.["Dimension"] <- dim
-                    mergeIn.["Offset"] <- V2i.Zero
+                    mergeIn.["config"] <- config
                     mergeIn.["SolvedSize"] <- solvedSize
-                    mergeIn.["Threshold"] <- threshold
-                    mergeIn.["Alpha"] <- alpha
                     mergeIn.["regions"] <- resultImage.[TextureAspect.Color, 0, 0]
-                    mergeIn.["BlockSize"] <- inputSize
                     mergeIn.["infos"] <- resultBuffer
                     mergeIn.["colors"] <- input.[TextureAspect.Color, 0, 0]
                     mergeIn.["TDistr"] <- tDistr
+                    mergeIn.["BlockSize"] <- inputSize
                     mergeIn.Flush()
 
 
@@ -852,7 +852,7 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
             toRegionStatsIn.["count"] <- resultBuffer.Count
             toRegionStatsIn.["stats"] <- statBuffer
             toRegionStatsIn.Flush()
-
+            
             match remainingMerges with
                 | [] ->
                     runtime.Run [
@@ -865,9 +865,11 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
                     ]
 
                 | _ -> 
+                    setOffset V2i.Zero
+
                     let sanitizeIn = 
                         let binding = runtime.NewInputBinding sanitize
-                        binding.["Offset"] <- V2i.Zero
+                        binding.["config"] <- config
                         binding.["regions"] <- resultImage.[TextureAspect.Color, 0, 0]
                         binding.["infos"] <- resultBuffer
                         binding.Flush()
@@ -915,7 +917,7 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, tDistr : IBack
             resultBuffer.Dispose()
 
             //resultBuffer.Value
-            statBuffer, resultImage
+            statBuffer
 
         )
 
