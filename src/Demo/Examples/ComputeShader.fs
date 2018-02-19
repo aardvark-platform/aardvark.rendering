@@ -313,10 +313,24 @@ module ComputeShader =
 
 
         let dataImg     = PixImage.Create(path).ToPixImage<uint16>(Col.Format.Gray) //PixImage<uint16>(Col.Format.Gray, Volume<uint16>(data, 4L, 4L, 1L))
+
+//        let dataIcmg =
+//            let img = PixImage<uint16>(Col.Format.Gray, V2i(64,64))
+//            img.GetChannel(0L).SetByCoord (fun (c : V2l) ->
+//                let c = c / 8L
+//                let id = c.X + c.Y
+//                if id &&& 1L = 0L then 32767us
+//                else 65535us
+//            ) |> ignore
+//            img
+//
+
+
+
         let size        = dataImg.Size
 
         use merge = new RegionMerge(runtime, SegmentMergeMode.AvgToAvg)
-        use instance = merge.NewInstance size
+        use instance = merge.NewInstance (V2i(512,512))
 
         let randomColors =
             let rand = RandomSystem()
@@ -329,8 +343,6 @@ module ComputeShader =
 
 
         let img         = runtime.CreateTexture(size, TextureFormat.R16, 1, 1)
-        let res         = runtime.CreateTexture(size, TextureFormat.Rgba16, 1, 1)
-        let regions     = runtime.CreateTexture(size, TextureFormat.R32i, 1, 1)
         runtime.Upload(img, 0, 0, dataImg)
 
         
@@ -407,7 +419,7 @@ module ComputeShader =
                         Log.line "%d: %A" i data.[i]
                     Log.stop()
 
-                //validate()
+                validate()
 
                 Log.stop()
 
