@@ -316,7 +316,7 @@ module ComputeShader =
         let size        = dataImg.Size
 
         use merge = new RegionMerge(runtime, SegmentMergeMode.AvgToAvg)
-        use instance = merge.NewInstance (V2i(256, 256))
+        use instance = merge.NewInstance (V2i(512, 512))
 
         let randomColors =
             let rand = RandomSystem()
@@ -351,12 +351,19 @@ module ComputeShader =
                     | None ->
                         ()
 
+                Log.start "detecting regions"
+                let sw = System.Diagnostics.Stopwatch.StartNew()
                 let (buffer, image) = instance.Run(img, threshold, alpha)
+                sw.Stop()
+
                 old <- Some (buffer, image)
 
-                let data = buffer.Download()
+                Log.line "took:    %A" sw.MicroTime
+                Log.line "regions: %A" buffer.Count
 
                 let validate() = 
+                    let data = buffer.Download()
+
                     let img = PixImage<int>(Col.Format.Gray, image.Size.XY)
                     runtime.Download(image, 0, 0, img) 
 
@@ -394,15 +401,16 @@ module ComputeShader =
                             for u in unused do
                                 Log.warn "%d: %A" u data.[u]
 
+                    data.QuickSortDescending(fun d -> d.Count)
+                    Log.start "regions: %A" data.Length
+                    for i in 0 .. min 10 (data.Length - 1) do
+                        Log.line "%d: %A" i data.[i]
+                    Log.stop()
 
-                validate()
-                
+                //validate()
 
-                data.QuickSortDescending(fun d -> d.Count)
-                Log.start "regions: %A" data.Length
-                for i in 0 .. min 10 (data.Length - 1) do
-                    Log.line "%d: %A" i data.[i]
                 Log.stop()
+
 
                 buffer.Buffer :> IBuffer, image :> ITexture
             ) threshold alpha
