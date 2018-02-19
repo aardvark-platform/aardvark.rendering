@@ -192,6 +192,7 @@ module ComputeShader =
         | Size = 0
         | Deviation = 1
         | Regions = 2
+        | Average = 3
 
     module Detector =
         open FShade
@@ -221,11 +222,6 @@ module ComputeShader =
                 texture uniform?InputTexture
             }
 
-        let infoTexture =
-            sampler2d {
-                texture uniform?ResultTexture
-            }
-
         let regionTexture =
             intSampler2d {
                 texture uniform?RegionTexture
@@ -236,46 +232,52 @@ module ComputeShader =
                 texture uniform?RandomColors
             }
 
+        type UniformScope with
+            member x.RegionStats : RegionStats[] = uniform?StorageBuffer?RegionStats
+
         let showOutput (v : Effects.Vertex) =
             fragment {
+                
                 let mode : ViewMode = uniform?Mode
                 let threshold : float = uniform?Threshold
                 let fade : float = uniform?Fade
 
 
-                let size = infoTexture.Size
+                let size = inputTexture.Size
                 let p = V2i (V2d size * v.tc)
 
                 let inValue = V3d.III * inputTexture.[p].X
 
                 let mutable color = inValue
-
+                let rCode = regionTexture.[p].X
                 match mode with
                     | ViewMode.Regions ->
-                        let rCode = regionTexture.[p].X
                         let rCoord = V2i(rCode % size.X, rCode / size.X)
                         let rColor = randomColors.[rCoord]
-
                         color <- rColor.XYZ
 
                     | ViewMode.Size ->
-                        let value = infoTexture.[p]
+                        let stats = uniform.RegionStats.[rCode]
+                        let cnt = RegionStats.count stats
 
-                        let avg = value.X
-                        let dev = value.Y
-                        let cnt = packUnorm2x16 value.ZW
-
-                        let area = float cnt / float (size.X * size.Y)
+                        let area = float cnt / float (256 * 256) |> clamp 0.0 1.0
                         let cc = hsv2rgb (area * 0.5) 1.0 1.0
 
                         color <- cc
 
+                    | ViewMode.Average ->
+                        let stats = uniform.RegionStats.[rCode]
+                        let avg = RegionStats.average stats |> float
+                        let stats = uniform.RegionStats.[rCode]
+                        color <- hsv2rgb avg 1.0 1.0
+                        
+
                     | _ ->
-                        let value = infoTexture.[p]
+                        let stats = uniform.RegionStats.[rCode]
+                        let dev = RegionStats.stddev stats |> float
 
 
-                    
-                        let cc = hsv2rgb (value.Y * 0.333333333) 1.0 1.0
+                        let cc = hsv2rgb (dev * 10.0 * 0.333333333) 1.0 1.0
                         color <- cc
 
                 let final = (1.0 - fade) * inValue + (fade) * color
@@ -301,7 +303,7 @@ module ComputeShader =
 
         
 
-        use app = new VulkanApplication(false)
+        use app = new VulkanApplication(true)
         //use app = new OpenGlApplication(true)
         let runtime = app.Runtime :> IRuntime
         let win = app.CreateSimpleRenderWindow(1) 
@@ -314,8 +316,7 @@ module ComputeShader =
         let size        = dataImg.Size
 
         use merge = new RegionMerge(runtime, SegmentMergeMode.AvgToAvg)
-        use instance = merge.NewInstance size
-        use instance2 = merge.NewInstance (V2i(256, 256))
+        use instance = merge.NewInstance (V2i(256, 256))
 
         let randomColors =
             let rand = RandomSystem()
@@ -338,14 +339,21 @@ module ComputeShader =
         let threshold = Mod.init 0.036
         let alpha = Mod.init 1.6
 
+        let mutable old : Option<IBuffer<RegionStats> * IBackendTexture> = None
+
         let textures =
             Mod.map2 (fun threshold alpha ->
 
+                match old with
+                    | Some (b,t) ->
+                        b.Dispose()
+                        runtime.DeleteTexture t
+                    | None ->
+                        ()
 
-                instance.Run(img, res, regions, threshold, alpha)
+                let (buffer, image) = instance.Run(img, threshold, alpha)
+                old <- Some (buffer, image)
 
-                let (buffer, image) = instance2.RunBuffer2(img, threshold, alpha)
-      
                 let data = buffer.Download()
 
                 let validate() = 
@@ -390,17 +398,13 @@ module ComputeShader =
                 validate()
                 
 
-
                 data.QuickSortDescending(fun d -> d.Count)
                 Log.start "regions: %A" data.Length
                 for i in 0 .. min 10 (data.Length - 1) do
                     Log.line "%d: %A" i data.[i]
                 Log.stop()
 
-                buffer.Dispose()
-                runtime.DeleteTexture image
-
-                res :> ITexture, regions :> ITexture
+                buffer.Buffer :> IBuffer, image :> ITexture
             ) threshold alpha
              
         let info = textures |> Mod.map fst
@@ -409,11 +413,9 @@ module ComputeShader =
 
         win.Keyboard.KeyDown(Keys.M).Values.Add(fun _ ->
             transact (fun () ->
-                mode.Value <- 
-                    match mode.Value with
-                        | ViewMode.Deviation -> ViewMode.Regions
-                        | ViewMode.Regions -> ViewMode.Size
-                        | _ -> ViewMode.Deviation
+                let newMode = unbox<ViewMode> ((int mode.Value + 1) % 4)
+                mode.Value <- newMode
+                Log.line "mode: %A" newMode
             )
         )
 
@@ -460,7 +462,7 @@ module ComputeShader =
                 |> Sg.uniform "Fade" fade
                 |> Sg.texture (Symbol.Create "RandomColors") (Mod.constant randomColors)
                 |> Sg.texture (Symbol.Create "InputTexture") (Mod.constant (img :> ITexture))
-                |> Sg.texture (Symbol.Create "ResultTexture") info
+                |> Sg.uniform "RegionStats" info
                 |> Sg.texture (Symbol.Create "RegionTexture") regionIds
                 |> Sg.shader {
                     do! Detector.showOutput
