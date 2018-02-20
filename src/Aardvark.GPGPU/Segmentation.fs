@@ -275,15 +275,14 @@ module SegmentationShaders =
         }
            
            
+
     [<LocalSize(X = 64)>]
     let regionsValid (infos : V4i[]) (valid : int[]) =
         compute {
             let count : int = uniform?RegionCount
-            let offset : int = uniform?Offset
-
             let id = getGlobalId().X
             if id < count then
-                let cnt = infos.[offset + id].X
+                let cnt = infos.[id].X
                 valid.[id] <- (if cnt > 0 then 1 else 0)
         }
         
@@ -291,7 +290,6 @@ module SegmentationShaders =
     let copyRegionsScanned (src : V4i[]) (dst : V4i[]) (scannedValid : int[]) =
         compute {
             let count : int = uniform?RegionCount
-            let srcOffset : int = uniform?SrcOffset
             let regionOffset : int = uniform?RegionOffset
 
             let id = getGlobalId().X
@@ -300,7 +298,7 @@ module SegmentationShaders =
                 let self = scannedValid.[id]
 
                 if self > last then
-                    dst.[regionOffset + last] <- V4i(src.[srcOffset + id].XYZ, 0)
+                    dst.[regionOffset + last] <- V4i(src.[id].XYZ, 0)
         }
 
     [<LocalSize(X = 8, Y = 8)>]
@@ -321,10 +319,10 @@ module SegmentationShaders =
                     regions.[cid] <- V4i(regionOffset + last, 0, 0, 0)
         }
 
+
     [<LocalSize(X = 64)>]
     let allocateCompactRegions (infos : V4i[]) (denseIds : int[]) (denseIdCount : int[]) =
         compute {
-            let offset : int = uniform?Offset
             let count : int = uniform?RegionCount
             let id = getGlobalId().X
 
@@ -333,41 +331,37 @@ module SegmentationShaders =
                 if cnt > 0 then
                     // allocate a slot
                     let resId = atomicAdd denseIdCount.[0] 1
-                    denseIds.[resId - offset] <- id
-
-
-
-                    // store the remapping-id
-                    infos.[id].W <- resId
-                    //remapImage.[id] <- V4i(resId, 0, 0, 0)
-
-
-                ()
+                    denseIds.[id] <- resId
+                else
+                    denseIds.[id] <- -1
 
         }
-            
+
     [<LocalSize(X = 64)>]
     let storeCompactRegions (store : V4i[]) (denseIds : int[]) (count : int) (infos : V4i[]) =
         compute {
-            let offset : int = uniform?Offset
             let id = getGlobalId().X
             if id < count then
-                let oCode = denseIds.[id]
-                store.[offset + id] <- V4i(infos.[oCode].XYZ, 0)
+                let denseId = denseIds.[id]
+                if denseId <> -1 then
+                    store.[denseId] <- V4i(infos.[id].XYZ, 0)
         }
 
     [<LocalSize(X = 8, Y = 8)>]
-    let remapRegions (config : Config[]) (infos : V4i[]) (regions : IntImage2d<Formats.r32i>) =
+    let remapRegions (denseIds : int[]) (regions : IntImage2d<Formats.r32i>) =
         compute {
             let id = getGlobalId().XY
             let regionSize = regions.Size
-            let offset = config.[0].Offset
+            let offset : V2i = uniform?Offset
 
             let cid = offset + id
 
             if cid.X < regionSize.X && cid.Y < regionSize.Y then
                 let oCode = regions.[cid].X
-                let nCode =  infos.[oCode].W
+                let denseId = denseIds.[oCode]
+                let nCode =
+                    if denseId < 0 then oCode
+                    else denseIds.[oCode]
                 regions.[cid] <- V4i(nCode, 0, 0, 0)
         }
         
@@ -571,20 +565,17 @@ type RegionMerge (runtime : IRuntime, mergeMode : SegmentMergeMode) =
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-and RegionCompactor2d internal(parent : RegionMergeKernels2d, par : ParallelPrimitives, blockSize : V2i) =
+and RegionCompactor2d internal(parent : RegionMergeKernels2d, par : ParallelPrimitives, blockSize : V2i, initialCapacity : int) =
     let runtime = parent.Runtime
 
-    static let minCapacity = 65536
-
     let valid = runtime.CreateBuffer<int>(blockSize.X * blockSize.Y)
-    let mutable store = runtime.CreateBuffer<V4i>(minCapacity)
+    let mutable store = runtime.CreateBuffer<V4i>(initialCapacity)
     let mutable count = 0
     let scanValid = par.CompileScan(<@ (+) @>, valid, valid)
 
     let regionsValidIn =
         let binding = runtime.NewInputBinding parent.RegionsValid
         binding.["valid"] <- valid
-        binding.["Offset"] <- 0
         binding.["RegionCount"] <- valid.Count
         binding
         
@@ -592,7 +583,6 @@ and RegionCompactor2d internal(parent : RegionMergeKernels2d, par : ParallelPrim
         let binding = runtime.NewInputBinding parent.CopyRegionsScanned
         binding.["scannedValid"] <- valid
         binding.["RegionCount"] <- valid.Count
-        binding.["SrcOffset"] <- 0
         binding.["RegionOffset"] <- 0
         binding.["dst"] <- store
         binding
@@ -625,92 +615,178 @@ and RegionCompactor2d internal(parent : RegionMergeKernels2d, par : ParallelPrim
     let mutable lastInfos = None
 
     member x.Clear() =
-        if store.Count > minCapacity then
+        if store.Count > initialCapacity then
             store.Dispose()
-            store <- runtime.CreateBuffer<V4i>(minCapacity)
+            store <- runtime.CreateBuffer<V4i>(initialCapacity)
         count <- 0
 
     member x.AddRange(infos : IBufferRange<V4i>, regions : IBackendTexture, imageOffset : V2i) =
 
-        if lastInfos <> Some infos then
+        let subInfos =
             if infos.Count > valid.Count then
-                failwithf "[RegionCompactor] large infos not implemented"
+                [0 .. valid.Count .. infos.Count - 1] |> List.map (fun o -> 
+                    let size = min valid.Count (infos.Count - o)
+                    infos.[o..o+size-1]
+                )
+            else
+                [infos]
+        for infos in subInfos do
+            if lastInfos <> Some infos then
+                if infos.Count > valid.Count then
+                    failwithf "[RegionCompactor] large infos not implemented"
 
-            let offset = int (infos.Offset / nativeint sizeof<V4i>)
-            lastInfos <- Some infos
-            regionsValidIn.["Offset"] <- offset
-            regionsValidIn.["infos"] <- infos
-            regionsValidIn.["RegionCount"] <- infos.Count
-            regionsValidIn.Flush()
+                let offset = int (infos.Offset / nativeint sizeof<V4i>)
+                lastInfos <- Some infos
+                regionsValidIn.["infos"] <- infos
+                regionsValidIn.["RegionCount"] <- infos.Count
+                regionsValidIn.Flush()
             
-            copyRegionsScannedIn.["src"] <- infos
-            copyRegionsScannedIn.["SrcOffset"] <- offset
-            copyRegionsScannedIn.["RegionCount"] <- infos.Count
-            copyRegionsScannedIn.Flush()
+                copyRegionsScannedIn.["src"] <- infos
+                copyRegionsScannedIn.["RegionCount"] <- infos.Count
+                copyRegionsScannedIn.Flush()
 
-        runScan.Run()
+            runScan.Run()
 
-        let additional = 
-            let last = infos.Count - 1 
-            valid.[last .. last].Download().[0]
+            let additional = 
+                let last = infos.Count - 1 
+                valid.[last .. last].Download().[0]
 
-        let newCount = count + additional
+            let newCount = count + additional
 
-        if newCount > store.Count then
-            let newCapacity = Fun.NextPowerOfTwo newCount
-            let newStore = runtime.CreateBuffer<V4i>(newCapacity)
-            runtime.Run [
-                ComputeCommand.Copy(store.[0..count-1], newStore.[0..count-1])
-            ]
+            if newCount > store.Count then
+                let newCapacity = Fun.NextPowerOfTwo newCount
+                let newStore = runtime.CreateBuffer<V4i>(newCapacity)
+                if count > 0 then
+                    runtime.Run [
+                        ComputeCommand.Copy(store.[0..count-1], newStore.[0..count-1])
+                    ]
 
-            store.Dispose()
-            store <- newStore
+                store.Dispose()
+                store <- newStore
 
         
-        copyRegionsScannedIn.["dst"] <- store
-        copyRegionsScannedIn.["RegionOffset"] <- count
-        copyRegionsScannedIn.Flush()
+            copyRegionsScannedIn.["dst"] <- store
+            copyRegionsScannedIn.["RegionOffset"] <- count
+            copyRegionsScannedIn.Flush()
 
-        remapRegionsScannedIn.["regions"] <- regions.[TextureAspect.Color, 0, 0]
-        remapRegionsScannedIn.["ImageOffset"] <- imageOffset
-        remapRegionsScannedIn.["RegionOffset"] <- count
-        remapRegionsScannedIn.Flush()
+            remapRegionsScannedIn.["regions"] <- regions.[TextureAspect.Color, 0, 0]
+            remapRegionsScannedIn.["ImageOffset"] <- imageOffset
+            remapRegionsScannedIn.["RegionOffset"] <- count
+            remapRegionsScannedIn.Flush()
 
-        runtime.Run [
-            ComputeCommand.Execute copy
+            runtime.Run [
+                ComputeCommand.Execute copy
             
-            ComputeCommand.Bind parent.RemapRegionsScanned
-            ComputeCommand.SetInput remapRegionsScannedIn
-            ComputeCommand.Dispatch (V2i(ceilDiv blockSize.X 8, ceilDiv blockSize.Y 8))
+                ComputeCommand.Bind parent.RemapRegionsScanned
+                ComputeCommand.SetInput remapRegionsScannedIn
+                ComputeCommand.Dispatch (V2i(ceilDiv blockSize.X 8, ceilDiv blockSize.Y 8))
+            ]
+            count <- newCount
+
+    member x.Buffer = store.[0..count-1]
+
+and RegionCompactor2dAtomic internal(parent : RegionMergeKernels2d, par : ParallelPrimitives, blockSize : V2i, initialCapacity : int) =
+    let runtime = parent.Runtime
+
+    let counter = runtime.CreateBuffer<int>(1)
+    let mutable store = runtime.CreateBuffer<V4i>(initialCapacity)
+    let mutable denseIds = runtime.CreateBuffer<int>(blockSize.X * blockSize.Y)
+  
+
+    let allocRegionsIn =
+        let binding = runtime.NewInputBinding parent.AllocateCompactRegions
+        binding.["denseIds"] <- denseIds
+        binding.["denseIdCount"] <- counter
+        binding.["RegionCount"] <- 0
+        binding
+        
+    let storeRegionsIn =
+        let binding = runtime.NewInputBinding parent.StoreCompactRegions
+        binding.["store"] <- store
+        binding.["denseIds"] <- denseIds
+        binding.["count"] <- 0
+
+        binding
+
+    let remapIn =
+        let binding = runtime.NewInputBinding parent.RemapRegions
+        binding.["denseIds"] <- denseIds
+
+        binding
+
+    let alloc =
+        runtime.Compile [
+            ComputeCommand.Bind parent.AllocateCompactRegions
+            ComputeCommand.SetInput allocRegionsIn
+            ComputeCommand.Dispatch(ceilDiv denseIds.Count 64)
         ]
-        count <- newCount
 
-
-    member x.ToBuffer() =
-        let res = runtime.CreateBuffer<V4i>(count)
-        runtime.Run [
-            ComputeCommand.Copy(store.[0..count-1], res)
+    let flush = 
+        runtime.Compile [
+            ComputeCommand.Bind parent.StoreCompactRegions
+            ComputeCommand.SetInput storeRegionsIn
+            ComputeCommand.Dispatch(ceilDiv denseIds.Count 64)
         ]
-        res
-//
-//    member x.Allocate() =
-//        runScan.Run()
-//        let last = valid.Count - 1 
-//        valid.[last .. last].Download().[0]
-//
-//    member x.CopyTo(dst : IBufferRange<V4i>, regions : IBackendTexture, imageOffset : V2i) =
-//        let offset = dst.Offset / nativeint sizeof<V4i> |> int
-//        copyRegionsScannedIn.["dst"] <- dst.Buffer
-//        copyRegionsScannedIn.["RegionOffset"] <- offset
-//        copyRegionsScannedIn.Flush()
-//
-//        remapRegionsScannedIn.["regions"] <- regions.[TextureAspect.Color, 0, 0]
-//        remapRegionsScannedIn.["ImageOffset"] <- imageOffset
-//        remapRegionsScannedIn.["RegionOffset"] <- offset
-//        remapRegionsScannedIn.Flush()
-//        copy
+
+    let remap = 
+        runtime.Compile [
+            ComputeCommand.Bind parent.RemapRegions
+            ComputeCommand.SetInput remapIn
+            ComputeCommand.Dispatch(V2i(ceilDiv blockSize.X 8, ceilDiv blockSize.Y 8))
+        ]
+
+    member x.AddRange(infos : IBufferRange<V4i>, regions : IBackendTexture, imageOffset : V2i)  =
+        let subInfos =
+            if infos.Count > denseIds.Count then
+                [0 .. denseIds.Count .. infos.Count - 1] |> List.map (fun o -> 
+                    let size = min denseIds.Count (infos.Count - o)
+                    infos.[o..o+size-1]
+                )
+            else
+                [infos]
+
+        for infos in subInfos do
+            let offset = counter.Download().[0]
+
+            allocRegionsIn.["infos"] <- infos
+            allocRegionsIn.["RegionCount"] <- infos.Count
+            allocRegionsIn.Flush()
+
+            alloc.Run()
+
+            let newCnt = counter.Download().[0]
+            if newCnt > store.Count then
+                let newCapacity = Fun.NextPowerOfTwo newCnt
+                let newStore = runtime.CreateBuffer<V4i>(newCapacity)
+                if offset > 0 then
+                    runtime.Run [
+                        ComputeCommand.Copy(store.[0..offset-1], newStore.[0..offset-1])
+                    ]
+
+                store.Dispose()
+                store <- newStore
 
 
+            storeRegionsIn.["infos"] <- infos
+            storeRegionsIn.["count"] <- infos.Count
+            storeRegionsIn.["store"] <- store
+            storeRegionsIn.Flush()
+            flush.Run()
+
+            remapIn.["regions"] <- regions
+            remapIn.["Offset"] <- imageOffset
+            remapIn.Flush()
+            remap.Run()
+
+    member x.Clear() =
+        if store.Count > initialCapacity then
+            store.Dispose()
+            store <- runtime.CreateBuffer<V4i>(initialCapacity)
+        counter.Upload [| 0 |]
+
+    member x.Buffer =
+        let cnt = counter.Download().[0]
+        store.[0 .. cnt - 1]
 
 and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, par : ParallelPrimitives, tDistr : IBackendTexture, size : V2i) =  
     static let rec createMerges (s : V2i) (size : V2i) =
@@ -733,7 +809,7 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, par : Parallel
     let regions         = runtime.CreateTexture(V2i.II, TextureFormat.R32i, 1, 1)
 
     let infos           = runtime.CreateBuffer<V4i>(size.X * size.Y)
-    let compactor       = RegionCompactor2d(parent, par, size)
+    let compactor       = RegionCompactor2dAtomic(parent, par, size, 65536)
 
     let initIn = 
         let binding = runtime.NewInputBinding parent.InitRegions
@@ -888,7 +964,7 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, par : Parallel
                     program.Run()
                     compactor.AddRange(infos, resultImage, o)
        
-            let resultBuffer = compactor.ToBuffer()
+            let resultBuffer = compactor.Buffer
             let remainingMerges = 
                 createMerges size inputSize  |> List.map (fun (solvedSize, dim) ->
                     let mergeIn = runtime.NewInputBinding parent.RegionMerge
@@ -897,7 +973,7 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, par : Parallel
                     mergeIn.["config"] <- config
                     mergeIn.["SolvedSize"] <- solvedSize
                     mergeIn.["regions"] <- resultImage.[TextureAspect.Color, 0, 0]
-                    mergeIn.["infos"] <- resultBuffer
+                    mergeIn.["infos"] <- resultBuffer.Buffer
                     mergeIn.["colors"] <- input.[TextureAspect.Color, 0, 0]
                     mergeIn.["TDistr"] <- tDistr
                     mergeIn.["BlockSize"] <- inputSize
@@ -912,7 +988,7 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, par : Parallel
                 )
 
             let statBuffer = runtime.CreateBuffer<RegionStats>(resultBuffer.Count)
-            toRegionStatsIn.["infos"] <- resultBuffer
+            toRegionStatsIn.["infos"] <- resultBuffer.Buffer
             toRegionStatsIn.["count"] <- resultBuffer.Count
             toRegionStatsIn.["stats"] <- statBuffer
             toRegionStatsIn.Flush()
@@ -932,7 +1008,7 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, par : Parallel
                         yield ComputeCommand.Bind parent.CalculateSurfaceArea
                         yield ComputeCommand.SetInput calculateSurfaceAreaIn
                         yield ComputeCommand.Dispatch(V2i(ceilDiv inputSize.X 8, ceilDiv inputSize.Y 8))
-                
+                        
                         yield ComputeCommand.TransformLayout(input, TextureLayout.ShaderRead)
                         yield ComputeCommand.TransformLayout(resultImage, TextureLayout.ShaderRead)
                     ]
@@ -991,10 +1067,7 @@ and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, par : Parallel
                     sanitizeAvgIn.Dispose()
                     remainingMerges |> List.iter (fun (i,_) -> i.Dispose())
 
-
-
-
-            resultBuffer.Dispose()
+            compactor.Clear()
 
             //resultBuffer.Value
             statBuffer

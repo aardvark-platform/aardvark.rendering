@@ -354,7 +354,7 @@ module ComputeShader =
         
         let fade = Mod.init 1.0
         let mode = Mod.init ViewMode.Regions
-        let threshold = Mod.init 0.04
+        let threshold = Mod.init 0.016
         let alpha = Mod.init 1.6
 
         let mutable old : Option<IBuffer<RegionStats>> = None
@@ -454,6 +454,7 @@ module ComputeShader =
             )
         )
 
+
         win.Keyboard.DownWithRepeats.Values.Add (fun k ->
             match k with
                 | Keys.Add ->
@@ -476,6 +477,19 @@ module ComputeShader =
                         alpha.Value <- alpha.Value - 0.01
                         Log.line "alpha: %A" alpha.Value
                     )
+                | Keys.S -> 
+                    Log.start "detecting regions"
+                    let t = Mod.force threshold
+                    let a = Mod.force alpha
+                    let sw = System.Diagnostics.Stopwatch.StartNew()
+                    let tempBuffers = 
+                        Array.init 200 (fun _ ->
+                            instance.Run(img, resultImage, t , a)
+                        )
+                    sw.Stop()
+                    tempBuffers |> Array.iter (fun b -> b.Dispose())
+                    Log.line "took:    %A" (sw.MicroTime / 200)
+                    Log.stop()
                 | _ ->
                     ()
         )
