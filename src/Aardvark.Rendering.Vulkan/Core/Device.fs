@@ -320,7 +320,7 @@ type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExt
             UploadMode.Direct 
         else
             match transferFamily with
-                | Some _ -> UploadMode.Async
+                | Some _ -> UploadMode.Sync
                 | None -> UploadMode.Sync
 
     let copyEngine = 

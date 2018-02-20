@@ -23,7 +23,9 @@ module TextureCombinationShader =
                 let cr = inputR.[rc].X * weight
 
                 let c =
-                    if blend = 1 then // Add
+                    if cl < 0.0001 then cr
+                    elif cr < 0.0001 then cl
+                    elif blend = 1 then // Add
                         (cl + cr) |> clamp 0.0 1.0
                     elif blend = 2 then // Sub
                         (cl - cr) |> clamp 0.0 1.0
@@ -220,7 +222,7 @@ module ImageProcessingShader =
     let private diffuseSampler =
         sampler2d {
             texture uniform?DiffuseColorTexture
-            filter Filter.MinMagMipLinear
+            filter Filter.MinMagLinear
             addressU WrapMode.Wrap
             addressV WrapMode.Wrap
         }
@@ -245,13 +247,14 @@ module ImageComposing =
     open Aardvark.Rendering.Vulkan
     open Helper
 
-    type Composer(app : VulkanApplication, size : V2i) =
+    type Composer(app : IApplication, size : V2i) =
         let rt = app.Runtime
         let irt = rt :> IComputeRuntime
         let composeShader = irt.CreateComputeShader(TextureCombinationShader.textureComposer)
 
         member x.Compose (f1: unit -> bool, input1 : IBackendTexture) (f2: unit -> bool, input2 : IBackendTexture) (weight : float) (blend : int) =
-            let output = rt.CreateTexture(size, TextureFormat.R32f, 1, 1, 1)
+            let output = rt.CreateTexture(size, TextureFormat.R32f, 1, 1)
+          
             let f = (fun () ->
                     let deleteInput1 = f1()
                     let deleteInput2 = f2()
@@ -265,10 +268,14 @@ module ImageComposing =
                     input.Flush()
             
                     irt.Run [
+                                ComputeCommand.TransformLayout(output,TextureLayout.ShaderWrite)
+                                ComputeCommand.TransformLayout(input1,TextureLayout.ShaderRead)
+                                ComputeCommand.TransformLayout(input2,TextureLayout.ShaderRead)
                                 ComputeCommand.Bind composeShader
                                 ComputeCommand.SetInput input
                                 ComputeCommand.Dispatch(V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
-                                ComputeCommand.Sync output
+                                //ComputeCommand.Sync output
+                                ComputeCommand.TransformLayout(output,TextureLayout.ShaderRead)
                             ]
                     if deleteInput1 then rt.DeleteTexture input1
                     if deleteInput2 then rt.DeleteTexture input2
@@ -286,7 +293,7 @@ module ImageProcessing =
     open Aardvark.Rendering.Vulkan
     open Helper
 
-    type Processor(app : VulkanApplication, size : V2i) =
+    type Processor(app : IApplication, size : V2i) =
 
         let rt = app.Runtime
         let irt = rt :> IComputeRuntime
@@ -335,10 +342,17 @@ module ImageProcessing =
                 input.Flush()
                 
                 irt.Run [
+                            ComputeCommand.TransformLayout(intex,TextureLayout.ShaderRead)
+                            ComputeCommand.TransformLayout(outtex,TextureLayout.ShaderWrite)
+
                             ComputeCommand.Bind shader
                             ComputeCommand.SetInput input
                             ComputeCommand.Dispatch(V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
-                            ComputeCommand.Sync outtex
+                            //ComputeCommand.Sync outtex
+                            ComputeCommand.TransformLayout(outtex,TextureLayout.ShaderRead)
+
+//                            ComputeCommand.TransformLayout(outtex,TextureLayout.TransferRead)
+//                            ComputeCommand.TransformLayout(outtex,TextureLayout.ShaderRead)
                         ]
                 if deleteInput then rt.DeleteTexture intex
                 if delBuffer then rt.DeleteBuffer (weights.Buffer)
@@ -356,10 +370,16 @@ module ImageProcessing =
                 input.Flush()
                 
                 irt.Run [
+                            ComputeCommand.TransformLayout(intex,TextureLayout.ShaderRead)
+                            ComputeCommand.TransformLayout(outtex,TextureLayout.ShaderWrite)
+
                             ComputeCommand.Bind boxShader
                             ComputeCommand.SetInput input
                             ComputeCommand.Dispatch(V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
-                            ComputeCommand.Sync outtex
+                            //ComputeCommand.Sync outtex
+
+                            ComputeCommand.TransformLayout(outtex,TextureLayout.ShaderRead)
+
                         ]
                 if deleteInput then rt.DeleteTexture intex
                 input.Dispose()
@@ -367,8 +387,8 @@ module ImageProcessing =
             )
 
         member x.GaussFilterProgram (radius : int) (f0 : unit -> bool, inputTex : IBackendTexture) = 
-            let outputX = rt.CreateTexture(size, TextureFormat.R32f, 1, 1, 1)
-            let outputY = rt.CreateTexture(size, TextureFormat.R32f, 1, 1, 1)
+            let outputX = rt.CreateTexture(size, TextureFormat.R32f, 1, 1)
+            let outputY = rt.CreateTexture(size, TextureFormat.R32f, 1, 1)
             let w = calculateGaussWeights radius
             let weights : IBuffer<float32> = rt.CreateBuffer<float32>(w)
             let fx = f0 |> GaussHighPassFunc weights false gaussShaderX inputTex outputX radius // inputTex gets deleted or not depeding on f0
@@ -377,8 +397,8 @@ module ImageProcessing =
 
 
         member x.HighPassFilterProgram (radius : int) (f0 : unit -> bool, inputTex : IBackendTexture) =
-            let outputX = rt.CreateTexture(size, TextureFormat.R32f, 1, 1, 1)
-            let outputY = rt.CreateTexture(size, TextureFormat.R32f, 1, 1, 1)
+            let outputX = rt.CreateTexture(size, TextureFormat.R32f, 1, 1)
+            let outputY = rt.CreateTexture(size, TextureFormat.R32f, 1, 1)
             let w = calculateGaussWeights radius
             let weights : IBuffer<float32> = rt.CreateBuffer<float32>(w)
             let fx = f0 |> GaussHighPassFunc weights false highPassX inputTex outputX radius // inputTex gets deleted or not depeding on f0
@@ -387,7 +407,7 @@ module ImageProcessing =
 
 
         member x.BoxFilterProgram (radius : int) (f0 : unit -> bool, inputTex : IBackendTexture) =
-            let output = rt.CreateTexture(size, TextureFormat.R32f, 1, 1, 1)
+            let output = rt.CreateTexture(size, TextureFormat.R32f, 1, 1)
             let f1 = f0 |> BoxFunc inputTex output radius
             (f1, output)
 
@@ -406,7 +426,7 @@ module Image =
     open ImageProcessing
     open ImageComposing
 
-    type Image(app : VulkanApplication, quadSize : V2i) =
+    type Image(app : IApplication, quadSize : V2i) =
 
         let testFile1 = @"..\..\data\testTexture1.jpg"
         let testFile2 = @"..\..\data\testTexture2.jpg"
@@ -422,7 +442,7 @@ module Image =
                 let v = b.[c].ToC3f()
                 a.Volume.[V3l(c,0L)] <- (v.R + v.G + v.B) / 3.0f
             )
-            let tex = rt.CreateTexture(testsize, TextureFormat.R32f, 1, 1, 1)
+            let tex = rt.CreateTexture(testsize, TextureFormat.R32f, 1, 1)
             rt.Upload(tex, 0, 0, a) 
             tex
 
@@ -435,6 +455,8 @@ module Image =
         let indi = [| 0; 1; 2;  0; 2; 3;  0; 3; 4|]
         let uv1 =  [| V2f(0.0, 0.0); V2f(0.5, 0.0); V2f(0.9, 0.4); V2f(0.7, 0.8); V2f(0.2, 0.5)|]
         let uv2 =  [| V2f(0.3, 0.0); V2f(0.8, 0.1); V2f(0.5, 0.9); V2f(0.2, 0.5); V2f(0.1, 0.2)|]
+        let uv3 =  [| V2f(0.0, 0.0); V2f(0.6, 0.1); V2f(0.7, 0.7); V2f(0.4, 0.7); V2f(0.2, 0.2)|]
+        let uv4 =  [| V2f(0.5, 0.1); V2f(0.6, 0.1); V2f(0.7, 0.9); V2f(0.4, 0.3); V2f(0.4, 0.2)|]
 
         let s = testsize
         let xf = s.X |> float32
@@ -443,15 +465,19 @@ module Image =
 
         let set1 = uv1 |> Array.map(uv2set)
         let set2 = uv2 |> Array.map(uv2set)
-
-
+        let set3 = uv3 |> Array.map(uv2set)
+        let set4 = uv4 |> Array.map(uv2set)
         
-        
+
         let sign = rt.CreateFramebufferSignature [DefaultSemantic.Colors, {format = RenderbufferFormat.R32f; samples = 1}; ]
-        let tex1 = rt.CreateTexture(s, TextureFormat.R32f, 1, 1, 1)
-        let tex2 = rt.CreateTexture(s, TextureFormat.R32f, 1, 1, 1)
+        let tex1 = rt.CreateTexture(s, TextureFormat.R32f, 1, 1)
+        let tex2 = rt.CreateTexture(s, TextureFormat.R32f, 1, 1)
+        let tex3 = rt.CreateTexture(s, TextureFormat.R32f, 1, 1)
+        let tex4 = rt.CreateTexture(s, TextureFormat.R32f, 1, 1)
         let fbo1 = rt.CreateFramebuffer(sign, Map.ofList[DefaultSemantic.Colors, ({texture = tex1; slice = 0; level = 0} :> IFramebufferOutput)])
         let fbo2 = rt.CreateFramebuffer(sign, Map.ofList[DefaultSemantic.Colors, ({texture = tex2; slice = 0; level = 0} :> IFramebufferOutput)])
+        let fbo3 = rt.CreateFramebuffer(sign, Map.ofList[DefaultSemantic.Colors, ({texture = tex3; slice = 0; level = 0} :> IFramebufferOutput)])
+        let fbo4 = rt.CreateFramebuffer(sign, Map.ofList[DefaultSemantic.Colors, ({texture = tex4; slice = 0; level = 0} :> IFramebufferOutput)])
 
         let clear = rt.CompileClear(sign, C4f.Black |> Mod.constant, 1.0 |> Mod.constant)
 
@@ -462,7 +488,7 @@ module Image =
             |> Sg.index (indi |> Mod.constant)
             |> Sg.viewTrafo (view)
             |> Sg.projTrafo (proj)
-            |> Sg.diffuseFileTexture' tex true
+            |> Sg.diffuseFileTexture' tex false
             |> Sg.effect [
                 DefaultSurfaces.trafo                  |> toEffect
                 ImageProcessingShader.myDiffuseTexture |> toEffect
@@ -486,7 +512,6 @@ module Image =
         
 
 
-
         let processor = new Processor(app, testsize)
         let composer = new Composer(app, testsize)
 
@@ -495,35 +520,70 @@ module Image =
             t
 
         member x.Test (view) (proj) : IBackendTexture =
-//            let l0 = runBaseTask view proj 1
-//            let r0 = runBaseTask view proj 2
+//            let f0 = (fun () -> false)
+//            let l00 = (f0, inputImage1)
+//            let r11 = (f0, inputImage2)
+//            let r22 = (f0, inputImage1)
+//            let r33 = (f0, inputImage2)
 
-//            let l1 = processor.GaussFilterProgram 5 l0
-//            let r1 = processor.HighPassFilterProgram 15 r0
-            let f0 = (fun () -> false)
-            let l0 = (f0, inputImage1)
-            let r0 = (f0, inputImage2)
+            let t = testFile4
 
-            let f1 = (fun () -> 
-                        let task1 = rt.CompileRender(sign, sg view proj testFile3 set1 uv1)
+            let f01 = (fun () ->
+                        let task = rt.CompileRender(sign, sg view proj t set1 uv1)
                         clear.Run(null, fbo1 |> OutputDescription.ofFramebuffer)
-                        task1.Run(null, fbo1 |> OutputDescription.ofFramebuffer)
+                        task.Run(null, fbo1 |> OutputDescription.ofFramebuffer)
                         false
                      )
-            let f2 = (fun () ->
-                        let task2 = rt.CompileRender(sign, sg view proj testFile4 set2 uv2)
+            let f02 = (fun () ->
+                        let task = rt.CompileRender(sign, sg view proj t set2 uv2)
                         clear.Run(null, fbo2 |> OutputDescription.ofFramebuffer)
-                        task2.Run(null, fbo2 |> OutputDescription.ofFramebuffer)
+                        task.Run(null, fbo2 |> OutputDescription.ofFramebuffer)
                         false
                      )
 
-            let l1 = (f2, tex2)
-            let r1 = (f1, tex1)
+            let f03 = (fun () ->
+                        let task = rt.CompileRender(sign, sg view proj t set3 uv3)
+                        clear.Run(null, fbo3 |> OutputDescription.ofFramebuffer)
+                        task.Run(null, fbo3 |> OutputDescription.ofFramebuffer)
+                        false
+                     )
+            let f04 = (fun () ->
+                        let task = rt.CompileRender(sign, sg view proj t set4 uv4)
+                        clear.Run(null, fbo4 |> OutputDescription.ofFramebuffer)
+                        task.Run(null, fbo4 |> OutputDescription.ofFramebuffer)
+                        false
+                     )
 
-            let r2 = processor.HighPassFilterProgram 15 r1
-            let l2 = processor.GaussFilterProgram 15 l1
+            let r01 = (f01, tex1) // r11 //
+            let r02 = (f02, tex2) // l00 //
+            let r03 = (f03, tex3) // r22 // 
+            let r04 = (f04, tex4) // r33 //
 
-            let res = composer.Compose l2 r2 1.0 1
+            (* Group 1 - Composition only *)
+//            let l1 = r01
+//
+//            let l0 = r02
+//            let r0 = r03
+//            let r1 = composer.Compose l0 r0 0.5 2 // Sub
+//
+//            let l2 = composer.Compose l1 r1 1.0 1 // Add
+//            let r2 = r04
+
+
+            (* Group 2 - Composition and Filtering *)
+
+            let l01 = r01
+            let l11 = processor.GaussFilterProgram 5 l01
+
+            let l00_ = r02
+            let r00_ = r03
+            let l11_ = composer.Compose l00_ r00_ 0.5 2 // Sub
+            let r11 = processor.GaussFilterProgram 10 l11_
+
+            let l2 = composer.Compose l11 r11 1.0 1 // Add
+            let r2 = r04
+
+            let res = composer.Compose l2 r2 1.0 3 // Min
 
             bla res
 
@@ -532,8 +592,12 @@ module Image =
         member x.Dispose() =
             rt.DeleteTexture tex1
             rt.DeleteTexture tex2
+            rt.DeleteTexture tex3
+            rt.DeleteTexture tex4
             rt.DeleteFramebuffer fbo1
             rt.DeleteFramebuffer fbo2
+            rt.DeleteFramebuffer fbo3
+            rt.DeleteFramebuffer fbo4
             rt.DeleteFramebufferSignature sign
 
         interface IDisposable with
@@ -546,7 +610,7 @@ module ImageProcessingExample =
     open ImageProcessing
 
     let run () = 
-        let app = new VulkanApplication()
+        let app = new VulkanApplication(true)
 
         let useFilter = Mod.init true
         let chooseFilter = Mod.init 0

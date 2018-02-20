@@ -140,7 +140,11 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
                                     let t = l.Texture |> unbox<Texture>
                                     let isLayered = l.Slices.Min <> l.Slices.Max
                                     inputImages.[slot] <- (t, l.Level, isLayered, l.Slices.Min)
+//                                | :? IBackendTexture as l -> 
+//                                    l.
+//                                    failwith ""
                                 | _ ->
+                                    
                                     failwithf "[GL] bad image texture: %A" value
                         | Texture slot ->
                             let (target, t, s) = inputSamplers.[slot]
