@@ -405,7 +405,7 @@ type IBufferRuntimeExtensions private() =
         let gc = GCHandle.Alloc(dst, GCHandleType.Pinned)
         try
             let ptr = gc.AddrOfPinnedObject()
-            IBufferRuntimeExtensions.Download(x.Buffer, nativeint srcIndex * nsa<'a>, ptr + nsa<'a> * nativeint dstIndex, nsa<'a> * nativeint count)
+            IBufferRuntimeExtensions.Download(x.Buffer, x.Offset + nativeint srcIndex * nsa<'a>, ptr + nsa<'a> * nativeint dstIndex, nsa<'a> * nativeint count)
         finally
             gc.Free()
             
@@ -433,7 +433,7 @@ type IBufferRuntimeExtensions private() =
     [<Extension>]
     static member GetSlice(x : IBufferRange<'a>, min : Option<int>, max : Option<int>) =
         let min = defaultArg min 0
-        let max = defaultArg max (x.Count - 1 - min)
+        let max = defaultArg max (x.Count - 1) 
         checkRange x min max
         RuntimeBufferRange<'a>(x.Buffer, x.Offset + nativeint min * nsa<'a>, 1 + max - min) :> IBufferRange<_>
         

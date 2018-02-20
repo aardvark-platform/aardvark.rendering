@@ -193,6 +193,7 @@ module ComputeShader =
         | Deviation = 1
         | Regions = 2
         | Average = 3
+        | Surface = 4
 
     module Detector =
         open FShade
@@ -258,7 +259,7 @@ module ComputeShader =
 
                     | ViewMode.Size ->
                         let stats = uniform.RegionStats.[rCode]
-                        let cnt = RegionStats.count stats
+                        let cnt = stats.Count
 
                         let area = float cnt / float (256 * 256) |> clamp 0.0 1.0
                         let cc = hsv2rgb (area * 0.5) 1.0 1.0
@@ -267,17 +268,22 @@ module ComputeShader =
 
                     | ViewMode.Average ->
                         let stats = uniform.RegionStats.[rCode]
-                        let avg = RegionStats.average stats |> float
+                        let avg = stats.Average |> float
                         let stats = uniform.RegionStats.[rCode]
                         color <- V3d.III * avg //hsv2rgb avg 1.0 1.0
                         
+                    | ViewMode.Surface ->
+                        let stats = uniform.RegionStats.[rCode]
+                        let rSurface = float stats.SurfaceCount / float stats.Count
+                        let cc = hsv2rgb (rSurface * 0.333333) 1.0 1.0
+                        color <- cc
 
                     | _ ->
                         let stats = uniform.RegionStats.[rCode]
-                        let dev = RegionStats.stddev stats |> float
+                        let dev = stats.StdDev |> float
 
 
-                        let cc = hsv2rgb (dev * 10.0 * 0.333333333) 1.0 1.0
+                        let cc = hsv2rgb (dev * 30.0 * 0.333333333) 1.0 1.0
                         color <- cc
 
                 let final = (1.0 - fade) * inValue + (fade) * color
@@ -330,7 +336,7 @@ module ComputeShader =
         let size        = dataImg.Size
 
         use merge = new RegionMerge(runtime, SegmentMergeMode.AvgToAvg)
-        use instance = merge.NewInstance (V2i(1024,1024)) //(V2i(3333,2384))
+        use instance = merge.NewInstance size //(V2i(1024,1024)) //(V2i(3333,2384))
 
         let randomColors =
             let rand = RandomSystem()
@@ -348,7 +354,7 @@ module ComputeShader =
         
         let fade = Mod.init 1.0
         let mode = Mod.init ViewMode.Regions
-        let threshold = Mod.init 0.2
+        let threshold = Mod.init 0.04
         let alpha = Mod.init 1.6
 
         let mutable old : Option<IBuffer<RegionStats>> = None
@@ -438,10 +444,11 @@ module ComputeShader =
         let info = textures |> Mod.map fst
         let regionIds = textures |> Mod.map snd
 
-
+        let viewModes = Enum.GetValues(typeof<ViewMode>) |> unbox<ViewMode[]>
         win.Keyboard.KeyDown(Keys.M).Values.Add(fun _ ->
             transact (fun () ->
-                let newMode = unbox<ViewMode> ((int mode.Value + 1) % 4)
+                let id = viewModes.IndexOf mode.Value
+                let newMode = viewModes.[(id + 1) % viewModes.Length]
                 mode.Value <- newMode
                 Log.line "mode: %A" newMode
             )
@@ -451,12 +458,12 @@ module ComputeShader =
             match k with
                 | Keys.Add ->
                     transact (fun () ->
-                        threshold.Value <- threshold.Value + 0.01
+                        threshold.Value <- threshold.Value + 0.001
                         Log.line "threshold: %A" threshold.Value
                     )
                 | Keys.Subtract ->
                     transact (fun () ->
-                        threshold.Value <- threshold.Value - 0.01
+                        threshold.Value <- threshold.Value - 0.001
                         Log.line "threshold: %A" threshold.Value
                     )
                 | Keys.Multiply ->
