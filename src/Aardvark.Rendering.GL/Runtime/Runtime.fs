@@ -416,6 +416,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             ()
 
         member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = x.Download(t, level, slice, target)
+        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume) = x.Download(t, level, slice, target)
         member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) = x.Upload(t, level, slice, source)
         member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = x.DownloadStencil(t, level, slice, target)
         member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = x.DownloadDepth(t, level, slice, target)
@@ -755,6 +756,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) =
         ctx.Download(unbox<Texture> t, level, slice, target)
+        
+    member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume) : unit =
+       failwith "[GL] Volume download not implemented"
 
     member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) =
         ctx.DownloadStencil(unbox<Texture> t, level, slice, target)

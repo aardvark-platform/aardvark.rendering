@@ -330,7 +330,7 @@ module ComputeShader =
         
         let par = ParallelPrimitives(runtime)
 
-        let path, size = @"C:\volumes\OGI_006.raw", V3i(667,465,512)
+        let path, size = @"OGI_006.raw", V3i(667,465,512)
 
         let data = File.readAllBytes path
         let nativeData =
@@ -374,7 +374,7 @@ module ComputeShader =
 
 
         use merge = new RegionMerge(runtime, SegmentMergeMode.AvgToAvg)
-        use instance = merge.NewInstance img.Size //(V3i(256, 256, 256)) //(V2i(3333,2384))
+        use instance = merge.NewInstance (V3i(256, 256, 256)) //(V2i(3333,2384))
 
         let randomColors =
             let rand = RandomSystem()

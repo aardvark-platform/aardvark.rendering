@@ -1078,7 +1078,7 @@ and RegionCompactor3d internal(parent : RegionMergeKernels3d, par : ParallelPrim
             store <- runtime.CreateBuffer<V4i>(initialCapacity)
         count <- 0
 
-    member x.AddRange(infos : IBufferRange<V4i>, regions : IBackendTexture, imageOffset : V3i) =
+    member x.AddRange(infos : IBufferRange<V4i>, regions : IBackendTexture, imageOffset : V3i, imageSize : V3i) =
 
         let subInfos =
             if infos.Count > valid.Count then
@@ -1088,6 +1088,7 @@ and RegionCompactor3d internal(parent : RegionMergeKernels3d, par : ParallelPrim
                 )
             else
                 [infos]
+
         for infos in subInfos do
             if lastInfos <> Some infos then
                 if infos.Count > valid.Count then
@@ -1137,11 +1138,18 @@ and RegionCompactor3d internal(parent : RegionMergeKernels3d, par : ParallelPrim
             
                 ComputeCommand.Bind parent.RemapRegionsScanned
                 ComputeCommand.SetInput remapRegionsScannedIn
-                ComputeCommand.Dispatch (V3i(ceilDiv blockSize.X 4, ceilDiv blockSize.Y 4, ceilDiv blockSize.Z 4))
+                ComputeCommand.Dispatch (V3i(ceilDiv imageSize.X 4, ceilDiv imageSize.Y 4, ceilDiv imageSize.Z 4))
             ]
             count <- newCount
 
     member x.Buffer = store.[0..count-1]
+
+    member x.ClearAndGetBuffer() =
+        let old = store
+        let oldCount = count
+        store <- runtime.CreateBuffer<V4i>(initialCapacity)
+        count <- 0
+        old, oldCount
 
 
 and RegionMergeInstance2d internal(parent : RegionMergeKernels2d, par : ParallelPrimitives, tDistr : IBackendTexture, size : V2i) =  
@@ -1470,7 +1478,11 @@ and RegionMergeInstance3d internal(parent : RegionMergeKernels3d, par : Parallel
             | false, false, false ->
                 []
 
+
     static let buildMerges (size : V3i) = createMerges V3i.III size
+
+
+
 
     let runtime = parent.Runtime
         
@@ -1479,6 +1491,82 @@ and RegionMergeInstance3d internal(parent : RegionMergeKernels3d, par : Parallel
 
     let infos           = runtime.CreateBuffer<V4i>(size.X * size.Y * size.Z)
     let compactor       = RegionCompactor3d(parent, par, size, 65536)
+
+    
+    let createMergeProgram (s : V3i) (size : V3i) (infos : IBufferRange<V4i>) (colors : IBackendTexture) (regions : IBackendTexture) =
+        let runtime = infos.Buffer.Runtime |> unbox<IRuntime>
+        
+        let inputs = 
+            createMerges s size |> List.map (fun (solved,dim) ->
+                let mergeIn = runtime.NewInputBinding parent.RegionMerge
+                
+
+
+                mergeIn.["Dimension"] <- dim
+                mergeIn.["colors"] <- colors.[TextureAspect.Color, 0, 0]
+                mergeIn.["config"] <- config
+                mergeIn.["SolvedSize"] <- solved
+                mergeIn.["regions"] <- regions.[TextureAspect.Color, 0, 0]
+                mergeIn.["infos"] <- infos
+                mergeIn.["TDistr"] <- tDistr
+                mergeIn.["BlockSize"] <- size
+                mergeIn.Flush()
+
+                let groups =
+                    if dim = 0 then V3i(ceilDiv size.Y 8, ceilDiv size.Z 8, ceilDiv (size.X - solved) (2 * solved))
+                    elif dim = 1 then V3i(ceilDiv size.X 8, ceilDiv size.Z 8, ceilDiv (size.Y - solved) (2 * solved))
+                    else V3i(ceilDiv size.X 8, ceilDiv size.Y 8, ceilDiv (size.Z - solved) (2 * solved))
+
+
+                mergeIn, groups
+            )
+        match inputs with
+            | [] -> 
+                None
+            | _ -> 
+                let sanitizeIn = 
+                    let binding = runtime.NewInputBinding parent.Sanitize
+                    binding.["config"] <- config
+                    binding.["regions"] <- regions.[TextureAspect.Color, 0, 0]
+                    binding.["infos"] <- infos
+                    binding.Flush()
+                    binding
+            
+                let sanitizeAvgIn = 
+                    let binding = runtime.NewInputBinding parent.SanitizeAvg
+                    binding.["infos"] <- infos
+                    binding.["RegionCount"] <- infos.Count
+                    binding.Flush()
+                    binding
+
+                let program = 
+                    runtime.Compile [
+                        for mergeIn, groupCount in inputs do
+                            yield ComputeCommand.Bind parent.RegionMerge
+                            yield ComputeCommand.SetInput mergeIn
+                            yield ComputeCommand.Dispatch groupCount
+                
+                            yield ComputeCommand.Sync infos.Buffer
+
+                            yield ComputeCommand.Bind parent.Sanitize
+                            yield ComputeCommand.SetInput sanitizeIn
+                            yield ComputeCommand.Dispatch (V3i(ceilDiv size.X 4, ceilDiv size.Y 4, ceilDiv size.Z 4))
+
+                            yield ComputeCommand.Bind parent.SanitizeAvg
+                            yield ComputeCommand.SetInput sanitizeAvgIn
+                            yield ComputeCommand.Dispatch (ceilDiv (size.X * size.Y * size.Z) 64)
+
+                            yield ComputeCommand.Sync infos.Buffer
+                    ]
+
+                program.OnDispose (fun () ->
+                    sanitizeIn.Dispose()
+                    sanitizeAvgIn.Dispose()
+                    inputs |> List.iter (fun (i,_) -> i.Dispose())
+                )
+
+                Some program
+
 
     let initIn = 
         let binding = runtime.NewInputBinding parent.InitRegions
@@ -1500,7 +1588,6 @@ and RegionMergeInstance3d internal(parent : RegionMergeKernels3d, par : Parallel
             mergeIn.["infos"] <- infos
             mergeIn.["TDistr"] <- tDistr
             mergeIn.["BlockSize"] <- size
-            mergeIn.Flush()
 
 
             let groups =
@@ -1511,6 +1598,9 @@ and RegionMergeInstance3d internal(parent : RegionMergeKernels3d, par : Parallel
 
             mergeIn, groups
         )
+
+
+
 
     let sanitizeIn = 
         let binding = runtime.NewInputBinding parent.Sanitize
@@ -1609,6 +1699,58 @@ and RegionMergeInstance3d internal(parent : RegionMergeKernels3d, par : Parallel
 
         ]
 
+    let validate (regionStats : IBuffer<RegionStats>) (image : IBackendTexture) =
+        let regionStats = regionStats.Download()
+        
+        let regionTotal = regionStats |> Array.sumBy (fun r -> r.Count)
+        let imageTotal = image.Size.X * image.Size.Y * image.Size.Z
+
+        if regionTotal <> imageTotal then
+            Log.warn "[Segmentation] bad counts: { regions = %A; image = %A }" regionTotal imageTotal
+        
+        let vol = PixVolume<int>(Col.Format.Gray, image.Size)
+        runtime.Download(image, 0, 0, vol)
+        let cpuRegions = Array.init regionStats.Length (fun i -> RegionStats(0, 0, i, 0.0f, 0.0f))
+        let unused = HashSet<int> [0 .. regionStats.Length - 1]
+        let bad = Dict<int, ref<int>>()
+
+        vol.Tensor4.Data |> Array.iter (fun r ->
+            if r >= 0 && r < cpuRegions.Length then
+                unused.Remove r |> ignore
+                inc &cpuRegions.[r].Count
+            else
+                let ref = bad.GetOrCreate(r, fun _ -> ref 0)
+                inc &ref.contents
+        )
+
+        let bad = bad |> Dict.toList |> List.map (fun (r,c) -> r,!c)
+        for (code, count) in bad do
+            Log.warn "[Segmentation] bad region: { id = %A; count = %A }" code count
+
+        if unused.Count > 0 then
+            for u in Seq.atMost 10 unused do
+                Log.warn "[Segmentation] unused region: { id = %A; count = %A }" u regionStats.[u].Count
+            Log.warn "[Segmentation] unused regions: %A" unused.Count
+
+        let mutable wrongCount = 0
+        for i in 0 .. regionStats.Length - 1 do
+            let cpu = cpuRegions.[i].Count
+            let gpu = regionStats.[i].Count
+            if cpu <> gpu then
+                if wrongCount < 10 then
+                    Log.warn "[Segmentation] bad count for region %A: { cpu = %A; gpu = %A }" i cpu gpu 
+                wrongCount <- wrongCount + 1
+        if wrongCount > 0 then
+            Log.warn "[Segmentation] wrong regions: %A" wrongCount
+
+
+        
+
+
+
+
+        ()
+
 
     member x.Run(input : IBackendTexture, resultImage : IBackendTexture, threshold : float, alpha : float) =
         lock x (fun () ->
@@ -1633,32 +1775,24 @@ and RegionMergeInstance3d internal(parent : RegionMergeKernels3d, par : Parallel
                         let o = V3i(bx,by,bz) * size
                         setOffset o
                         program.Run()
-                        compactor.AddRange(infos, resultImage, o)
+                        compactor.AddRange(infos, resultImage, o, size)
        
-            let resultBuffer = compactor.Buffer
-            let remainingMerges = 
-                createMerges size inputSize  |> List.map (fun (solvedSize, dim) ->
-                    let mergeIn = runtime.NewInputBinding parent.RegionMerge
-            
-                    mergeIn.["Dimension"] <- dim
-                    mergeIn.["config"] <- config
-                    mergeIn.["SolvedSize"] <- solvedSize
-                    mergeIn.["regions"] <- resultImage.[TextureAspect.Color, 0, 0]
-                    mergeIn.["infos"] <- resultBuffer.Buffer
-                    mergeIn.["colors"] <- input.[TextureAspect.Color, 0, 0]
-                    mergeIn.["TDistr"] <- tDistr
-                    mergeIn.["BlockSize"] <- inputSize
-                    mergeIn.Flush()
+       
+            setOffset V3i.Zero
 
-                    
-                    let groups =
-                        if dim = 0 then V3i(ceilDiv size.Y 8, ceilDiv size.Z 8, ceilDiv (size.X - solvedSize) (2 * solvedSize))
-                        elif dim = 1 then V3i(ceilDiv size.X 8, ceilDiv size.Z 8, ceilDiv (size.Y - solvedSize) (2 * solvedSize))
-                        else V3i(ceilDiv size.X 8, ceilDiv size.Y 8, ceilDiv (size.Z - solvedSize) (2 * solvedSize))
+            let resultBuffer = 
+                let resultBuffer = compactor.Buffer
+                match createMergeProgram size inputSize resultBuffer input resultImage with 
+                    | Some p -> 
+                        p.Run() 
+                        p.Dispose()
+                        let old, oldCount = compactor.ClearAndGetBuffer()
+                        compactor.AddRange(old.[0..oldCount-1], resultImage, V3i.Zero, inputSize)
+                        old.Dispose()
+                        compactor.Buffer
 
-
-                    mergeIn, groups
-                )
+                    | _ -> 
+                        compactor.Buffer
 
             let statBuffer = runtime.CreateBuffer<RegionStats>(resultBuffer.Count)
             toRegionStatsIn.["infos"] <- resultBuffer.Buffer
@@ -1670,79 +1804,28 @@ and RegionMergeInstance3d internal(parent : RegionMergeKernels3d, par : Parallel
             calculateSurfaceAreaIn.["stats"] <- statBuffer
             calculateSurfaceAreaIn.Flush()
 
-            match remainingMerges with
-                | [] ->
-                    runtime.Run [
-                        yield ComputeCommand.Bind parent.ToRegionStats
-                        yield ComputeCommand.SetInput toRegionStatsIn
-                        yield ComputeCommand.Dispatch (ceilDiv resultBuffer.Count 64)
 
-                        yield ComputeCommand.Sync statBuffer.Buffer
-                        yield ComputeCommand.Bind parent.CalculateSurfaceArea
-                        yield ComputeCommand.SetInput calculateSurfaceAreaIn
-                        yield ComputeCommand.Dispatch(V3i(ceilDiv inputSize.X 4, ceilDiv inputSize.Y 4, ceilDiv inputSize.Z 4))
-                        
-                        yield ComputeCommand.TransformLayout(input, TextureLayout.ShaderRead)
-                        yield ComputeCommand.TransformLayout(resultImage, TextureLayout.ShaderRead)
-                    ]
 
-                | _ -> 
-                    setOffset V3i.Zero
 
-                    let sanitizeIn = 
-                        let binding = runtime.NewInputBinding parent.Sanitize
-                        binding.["config"] <- config
-                        binding.["regions"] <- resultImage.[TextureAspect.Color, 0, 0]
-                        binding.["infos"] <- resultBuffer
-                        binding.Flush()
-                        binding
-
-                    let sanitizeAvgIn = 
-                        let binding = runtime.NewInputBinding parent.SanitizeAvg
-                        binding.["infos"] <- resultBuffer
-                        binding.["RegionCount"] <- resultBuffer.Count
-                        binding.Flush()
-                        binding
-
-                    runtime.Run [
-                        for mergeIn, groupCount in remainingMerges do
-                            yield ComputeCommand.Bind parent.RegionMerge
-                            yield ComputeCommand.SetInput mergeIn
-                            yield ComputeCommand.Dispatch groupCount
+            runtime.Run [
+                yield ComputeCommand.Bind parent.ToRegionStats
+                yield ComputeCommand.SetInput toRegionStatsIn
+                yield ComputeCommand.Dispatch (ceilDiv resultBuffer.Count 64)
                 
-                            yield ComputeCommand.Sync resultBuffer.Buffer
-
-                            yield ComputeCommand.Bind parent.Sanitize
-                            yield ComputeCommand.SetInput sanitizeIn
-                            yield ComputeCommand.Dispatch (V3i(ceilDiv inputSize.X 4, ceilDiv inputSize.Y 4,  ceilDiv inputSize.Z 4))
-
-                            yield ComputeCommand.Bind parent.SanitizeAvg
-                            yield ComputeCommand.SetInput sanitizeAvgIn
-                            yield ComputeCommand.Dispatch (ceilDiv resultBuffer.Count 64)
-
-                            yield ComputeCommand.Sync resultImage
-                            yield ComputeCommand.Sync resultBuffer.Buffer
-                    
-                        yield ComputeCommand.Bind parent.ToRegionStats
-                        yield ComputeCommand.SetInput toRegionStatsIn
-                        yield ComputeCommand.Dispatch (ceilDiv resultBuffer.Count 64)
+                yield ComputeCommand.Sync statBuffer.Buffer
+                yield ComputeCommand.Bind parent.CalculateSurfaceArea
+                yield ComputeCommand.SetInput calculateSurfaceAreaIn
+                yield ComputeCommand.Dispatch(V3i(ceilDiv inputSize.X 4, ceilDiv inputSize.Y 4, ceilDiv inputSize.Z 4))
                 
-                        yield ComputeCommand.Sync statBuffer.Buffer
-                        yield ComputeCommand.Bind parent.CalculateSurfaceArea
-                        yield ComputeCommand.SetInput calculateSurfaceAreaIn
-                        yield ComputeCommand.Dispatch(V3i(ceilDiv inputSize.X 4, ceilDiv inputSize.Y 4, ceilDiv inputSize.Z 4))
-                
-                        yield ComputeCommand.TransformLayout(input, TextureLayout.ShaderRead)
-                        yield ComputeCommand.TransformLayout(resultImage, TextureLayout.ShaderRead)
-                    ]
-
-                    sanitizeIn.Dispose()
-                    sanitizeAvgIn.Dispose()
-                    remainingMerges |> List.iter (fun (i,_) -> i.Dispose())
+                yield ComputeCommand.TransformLayout(input, TextureLayout.ShaderRead)
+                yield ComputeCommand.TransformLayout(resultImage, TextureLayout.ShaderRead)
+            ]
 
             compactor.Clear()
 
-            //resultBuffer.Value
+            //validate statBuffer resultImage
+
+
             statBuffer
 
         )

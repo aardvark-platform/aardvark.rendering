@@ -2991,6 +2991,23 @@ module Image =
         finally
             device.Delete temp
 
+    let downloadLevel3d (src : ImageSubresource) (dst : PixVolume) (device : Device) =
+        let format = src.Image.Format
+        let sourcePixFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
+
+        let temp = device.CreateTensorImage(V3i(dst.Size.X, dst.Size.Y, dst.Size.Z), sourcePixFormat, false)
+        try
+            device.GraphicsFamily.run {
+                let layout = src.Image.Layout
+                do! Command.TransformLayout(src.Image, VkImageLayout.TransferSrcOptimal)
+                do! Command.Copy(src, temp)
+                do! Command.TransformLayout(src.Image, layout)
+            }
+            temp.Read(dst)
+        finally
+            device.Delete temp
+
+
     let uploadLevel (src : PixImage) (dst : ImageSubresource) (device : Device) =
         let format = dst.Image.Format
         let dstPixFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
@@ -3038,6 +3055,10 @@ type ContextImageExtensions private() =
     [<Extension>]
     static member inline DownloadLevel(this : Device, src : ImageSubresource, dst : PixImage) =
         this |> Image.downloadLevel src dst
+        
+    [<Extension>]
+    static member inline DownloadLevel(this : Device, src : ImageSubresource, dst : PixVolume) =
+        this |> Image.downloadLevel3d src dst
 
 [<AutoOpen>]
 module private ImageRanges =

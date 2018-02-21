@@ -300,7 +300,8 @@ and MultiRuntime(runtimes : IRuntime[]) =
                 | _ ->
                     ()
 
-        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = failwith ""
+        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) : unit = failwith ""
+        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume) : unit = failwith ""
         member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) = failwith ""
         member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = failwith ""
         member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = failwith ""
