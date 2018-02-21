@@ -201,6 +201,10 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) =
         let image = unbox<Image> t 
         device.DownloadLevel(image.[ImageAspect.Color, level, slice], target)
+        
+    member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume) =
+        let image = unbox<Image> t 
+        device.DownloadLevel(image.[ImageAspect.Color, level, slice], target)
 
     member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) =
         let image = unbox<Image> t 
@@ -630,6 +634,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.DeleteFramebufferSignature(s) = x.DeleteFramebufferSignature(s)
 
         member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = x.Download(t, level, slice, target)
+        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume) = x.Download(t, level, slice, target)
         member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) = x.Upload(t, level, slice, source)
         member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = x.DownloadDepth(t, level, slice, target)
         member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = x.DownloadStencil(t, level, slice, target)
