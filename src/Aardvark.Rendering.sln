@@ -94,6 +94,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "02 - TexturedCube", "Exampl
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "00 - HelloWorld", "Examples\00 - HelloWorld\00 - HelloWorld.fsproj", "{CDDB9BC3-C264-4C51-BD40-4B98E50F0297}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "14 - GeometryShaders", "Examples\14 - GeometryShaders\14 - GeometryShaders.fsproj", "{57D366A4-399B-4FEB-B061-AC92A1089DE5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -252,6 +254,10 @@ Global
 		{CDDB9BC3-C264-4C51-BD40-4B98E50F0297}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CDDB9BC3-C264-4C51-BD40-4B98E50F0297}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CDDB9BC3-C264-4C51-BD40-4B98E50F0297}.Release|Any CPU.Build.0 = Release|Any CPU
+		{57D366A4-399B-4FEB-B061-AC92A1089DE5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{57D366A4-399B-4FEB-B061-AC92A1089DE5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{57D366A4-399B-4FEB-B061-AC92A1089DE5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{57D366A4-399B-4FEB-B061-AC92A1089DE5}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -287,6 +293,7 @@ Global
 		{3322678A-22DA-4C84-B2BF-33B0D2F8C80C} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{BDFCAB13-3D52-4373-94ED-9E2F493EB89E} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{CDDB9BC3-C264-4C51-BD40-4B98E50F0297} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
+		{57D366A4-399B-4FEB-B061-AC92A1089DE5} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C41172B9-09C3-4327-8CE2-CB47CBAA29AC}
