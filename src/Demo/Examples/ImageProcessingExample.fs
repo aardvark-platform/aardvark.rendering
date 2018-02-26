@@ -236,11 +236,19 @@ module ImageProcessingShader =
 
 
 module Helper =
+
     let ceilDiv (v : int) (d : int) =
         if v % d = 0 then v / d
         else 1 + v / d
 
-
+    let TrafoDiffuse = 
+        let effects = 
+            Seq.ofList [
+                DefaultSurfaces.trafo                  |> toEffect
+                ImageProcessingShader.myDiffuseTexture |> toEffect
+            ]
+        let e = FShade.Effect.compose effects
+        FShadeSurface.Get(e) :> ISurface
 
 
 module ImageComposing =
@@ -252,36 +260,35 @@ module ImageComposing =
         let irt = rt :> IComputeRuntime
         let composeShader = irt.CreateComputeShader(TextureCombinationShader.textureComposer)
 
-        member x.Compose (f1: unit -> bool, input1 : IBackendTexture) (f2: unit -> bool, input2 : IBackendTexture) (weight : float) (blend : int) =
+        member x.Compose (delInput1 : bool, input1 : IBackendTexture) (delInput2: bool, input2 : IBackendTexture) (weight : float) (blend : int) =
+            Report.BeginTimed("CreateTexture")
             let output = rt.CreateTexture(size, TextureFormat.R32f, 1, 1)
-          
-            let f = (fun () ->
-                    let deleteInput1 = f1()
-                    let deleteInput2 = f2()
+            Report.EndTimed() |> ignore
 
-                    let input = irt.NewInputBinding(composeShader)
-                    input.["inputL"] <- input1
-                    input.["inputR"] <- input2
-                    input.["output"] <- output
-                    input.["blend"]  <- blend
-                    input.["weight"] <- weight
-                    input.Flush()
+            Report.BeginTimed("Compose")
+            let input = irt.NewInputBinding(composeShader)
+            input.["inputL"] <- input1
+            input.["inputR"] <- input2
+            input.["output"] <- output
+            input.["blend"]  <- blend
+            input.["weight"] <- weight
+            input.Flush()
             
-                    irt.Run [
-                                ComputeCommand.TransformLayout(output,TextureLayout.ShaderWrite)
-                                ComputeCommand.TransformLayout(input1,TextureLayout.ShaderRead)
-                                ComputeCommand.TransformLayout(input2,TextureLayout.ShaderRead)
-                                ComputeCommand.Bind composeShader
-                                ComputeCommand.SetInput input
-                                ComputeCommand.Dispatch(V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
-                                //ComputeCommand.Sync output
-                                ComputeCommand.TransformLayout(output,TextureLayout.ShaderRead)
-                            ]
-                    if deleteInput1 then rt.DeleteTexture input1
-                    if deleteInput2 then rt.DeleteTexture input2
-                    input.Dispose()
-                    true)
-            f, output
+            irt.Run [
+                        ComputeCommand.TransformLayout(output,TextureLayout.ShaderWrite)
+                        ComputeCommand.TransformLayout(input1,TextureLayout.ShaderRead)
+                        ComputeCommand.TransformLayout(input2,TextureLayout.ShaderRead)
+                        ComputeCommand.Bind composeShader
+                        ComputeCommand.SetInput input
+                        ComputeCommand.Dispatch(V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
+                        ComputeCommand.Sync output
+                        ComputeCommand.TransformLayout(output,TextureLayout.ShaderRead)
+                    ]
+            if delInput1 then rt.DeleteTexture input1
+            if delInput2 then rt.DeleteTexture input2
+            input.Dispose()
+            Report.EndTimed() |> ignore
+            true, output
 
         member x.Dispose() =
             irt.DeleteComputeShader composeShader
@@ -306,9 +313,6 @@ module ImageProcessing =
 
 
         (*
-         * Refactored calculation of weights
-         * incl. calculating Sigma depending on the kernel size
-         * 
          * Source for formulas: OpenCV documentation at
          * https://docs.opencv.org/2.4/modules/imgproc/doc/filtering.html?highlight=gaussianblur#gaussianblur
          * 16.02.2018
@@ -330,86 +334,83 @@ module ImageProcessing =
             w
 
         // commands for gauss or highpass
-        let GaussHighPassFunc (weights : IBuffer<float32>) (delBuffer : bool) (shader : IComputeShader) (intex : IBackendTexture) (outtex : IBackendTexture) (radius : int) (f : unit -> bool) : (unit -> bool) = 
-            (fun () ->
-                let deleteInput = f()
-
-                let input = irt.NewInputBinding(shader)
-                input.["input"]   <- intex
-                input.["output"]  <- outtex
-                input.["radius"]  <- radius
-                input.["weights"] <- weights
-                input.Flush()
+        let GaussHighPassFunc (weights : IBuffer<float32>) (delBuffer : bool) (shader : IComputeShader) (intex : IBackendTexture) (outtex : IBackendTexture) (radius : int) (deleteInput : bool) =
+            Report.BeginTimed("Gauss or HighPass")
+            let input = irt.NewInputBinding(shader)
+            input.["input"]   <- intex
+            input.["output"]  <- outtex
+            input.["radius"]  <- radius
+            input.["weights"] <- weights
+            input.Flush()
                 
-                irt.Run [
-                            ComputeCommand.TransformLayout(intex,TextureLayout.ShaderRead)
-                            ComputeCommand.TransformLayout(outtex,TextureLayout.ShaderWrite)
+            irt.Run [
+                        ComputeCommand.TransformLayout(intex,TextureLayout.ShaderRead)
+                        ComputeCommand.TransformLayout(outtex,TextureLayout.ShaderWrite)
 
-                            ComputeCommand.Bind shader
-                            ComputeCommand.SetInput input
-                            ComputeCommand.Dispatch(V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
-                            //ComputeCommand.Sync outtex
-                            ComputeCommand.TransformLayout(outtex,TextureLayout.ShaderRead)
+                        ComputeCommand.Bind shader
+                        ComputeCommand.SetInput input
+                        ComputeCommand.Dispatch(V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
+                        ComputeCommand.Sync outtex
+                        ComputeCommand.TransformLayout(outtex,TextureLayout.ShaderRead)
+                    ]
+            if deleteInput then rt.DeleteTexture intex
+            if delBuffer then rt.DeleteBuffer (weights.Buffer)
+            input.Dispose()
+            Report.EndTimed() |> ignore
+            true
 
-//                            ComputeCommand.TransformLayout(outtex,TextureLayout.TransferRead)
-//                            ComputeCommand.TransformLayout(outtex,TextureLayout.ShaderRead)
-                        ]
-                if deleteInput then rt.DeleteTexture intex
-                if delBuffer then rt.DeleteBuffer (weights.Buffer)
-                input.Dispose()
-                true
-            )
-
-        let BoxFunc (intex : IBackendTexture) (outtex : IBackendTexture) (radius : int) (f : unit -> bool) : (unit -> bool) =
-            (fun () ->
-                let deleteInput = f()
-                let input = irt.NewInputBinding(boxShader)
-                input.["input"]   <- intex
-                input.["output"]  <- outtex
-                input.["radius"]  <- radius
-                input.Flush()
+        let BoxFunc (intex : IBackendTexture) (outtex : IBackendTexture) (radius : int) (deleteInput : bool) : (bool) =
+            Report.BeginTimed("Box")
+            let input = irt.NewInputBinding(boxShader)
+            input.["input"]   <- intex
+            input.["output"]  <- outtex
+            input.["radius"]  <- radius
+            input.Flush()
                 
-                irt.Run [
-                            ComputeCommand.TransformLayout(intex,TextureLayout.ShaderRead)
-                            ComputeCommand.TransformLayout(outtex,TextureLayout.ShaderWrite)
+            irt.Run [
+                        ComputeCommand.TransformLayout(intex,TextureLayout.ShaderRead)
+                        ComputeCommand.TransformLayout(outtex,TextureLayout.ShaderWrite)
 
-                            ComputeCommand.Bind boxShader
-                            ComputeCommand.SetInput input
-                            ComputeCommand.Dispatch(V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
-                            //ComputeCommand.Sync outtex
+                        ComputeCommand.Bind boxShader
+                        ComputeCommand.SetInput input
+                        ComputeCommand.Dispatch(V2i(ceilDiv size.X 8, ceilDiv size.Y 8))
+                        ComputeCommand.Sync outtex
 
-                            ComputeCommand.TransformLayout(outtex,TextureLayout.ShaderRead)
+                        ComputeCommand.TransformLayout(outtex,TextureLayout.ShaderRead)
 
-                        ]
-                if deleteInput then rt.DeleteTexture intex
-                input.Dispose()
-                true
-            )
+                    ]
+            if deleteInput then rt.DeleteTexture intex
+            input.Dispose()
+            Report.EndTimed() |> ignore
 
-        member x.GaussFilterProgram (radius : int) (f0 : unit -> bool, inputTex : IBackendTexture) = 
+            true
+            
+
+        member x.GaussFilterProgram (radius : int) (delInput : bool, inputTex : IBackendTexture) = 
             let outputX = rt.CreateTexture(size, TextureFormat.R32f, 1, 1)
             let outputY = rt.CreateTexture(size, TextureFormat.R32f, 1, 1)
             let w = calculateGaussWeights radius
             let weights : IBuffer<float32> = rt.CreateBuffer<float32>(w)
-            let fx = f0 |> GaussHighPassFunc weights false gaussShaderX inputTex outputX radius // inputTex gets deleted or not depeding on f0
-            let fy = fx |> GaussHighPassFunc weights true  gaussShaderY outputX  outputY radius // outputX gets deleted here! --> outputY gets deleted when fy is called
-            (fy, outputY)
+            let delInput1 = delInput  |> GaussHighPassFunc weights false gaussShaderX inputTex outputX radius
+            let delInput2 = delInput1 |> GaussHighPassFunc weights true  gaussShaderY outputX  outputY radius
+            (delInput2, outputY)
 
 
-        member x.HighPassFilterProgram (radius : int) (f0 : unit -> bool, inputTex : IBackendTexture) =
+        member x.HighPassFilterProgram (radius : int) (delInput : bool, inputTex : IBackendTexture) =
             let outputX = rt.CreateTexture(size, TextureFormat.R32f, 1, 1)
             let outputY = rt.CreateTexture(size, TextureFormat.R32f, 1, 1)
             let w = calculateGaussWeights radius
             let weights : IBuffer<float32> = rt.CreateBuffer<float32>(w)
-            let fx = f0 |> GaussHighPassFunc weights false highPassX inputTex outputX radius // inputTex gets deleted or not depeding on f0
-            let fy = fx |> GaussHighPassFunc weights true  highPassY outputX  outputY radius // outputX gets deleted here! --> outputY gets deleted when fy is called
-            (fy, outputY)
+            let delInput1 = delInput  |> GaussHighPassFunc weights false highPassX inputTex outputX radius
+            let delInput2 = delInput1 |> GaussHighPassFunc weights true  highPassY outputX  outputY radius
+            (delInput2, outputY)
 
-
-        member x.BoxFilterProgram (radius : int) (f0 : unit -> bool, inputTex : IBackendTexture) =
+        member x.BoxFilterProgram (radius : int) (delinput : bool, inputTex : IBackendTexture) =
             let output = rt.CreateTexture(size, TextureFormat.R32f, 1, 1)
-            let f1 = f0 |> BoxFunc inputTex output radius
-            (f1, output)
+            let delinput1 = delinput |> BoxFunc inputTex output radius
+            (delinput1, output)
+
+
 
         member x.Dispose() =
             irt.DeleteComputeShader gaussShaderX
@@ -433,6 +434,7 @@ module Image =
         let rt = app.Runtime
         ///////////////////////////////////////////////////////////////////////////////
         let mutable testsize = V2i(0,0)
+
         let loadTexture (file : string) : IBackendTexture =
             let img = PixImage.Create(file).ToPixImage<byte>(Col.Format.BGR)
             testsize <- img.Size
@@ -442,8 +444,13 @@ module Image =
                 let v = b.[c].ToC3f()
                 a.Volume.[V3l(c,0L)] <- (v.R + v.G + v.B) / 3.0f
             )
+            Report.BeginTimed("CreateTexture")
             let tex = rt.CreateTexture(testsize, TextureFormat.R32f, 1, 1)
+            Report.EndTimed() |> ignore
+
+            Report.BeginTimed("Upload")
             rt.Upload(tex, 0, 0, a) 
+            Report.EndTimed() |> ignore
             tex
 
         let testFile3 = @"..\..\data\testTexture3.jpg"
@@ -470,45 +477,51 @@ module Image =
         
 
         let sign = rt.CreateFramebufferSignature [DefaultSemantic.Colors, {format = RenderbufferFormat.R32f; samples = 1}; ]
-        let tex1 = rt.CreateTexture(s, TextureFormat.R32f, 1, 1)
-        let tex2 = rt.CreateTexture(s, TextureFormat.R32f, 1, 1)
-        let tex3 = rt.CreateTexture(s, TextureFormat.R32f, 1, 1)
-        let tex4 = rt.CreateTexture(s, TextureFormat.R32f, 1, 1)
-        let fbo1 = rt.CreateFramebuffer(sign, Map.ofList[DefaultSemantic.Colors, ({texture = tex1; slice = 0; level = 0} :> IFramebufferOutput)])
-        let fbo2 = rt.CreateFramebuffer(sign, Map.ofList[DefaultSemantic.Colors, ({texture = tex2; slice = 0; level = 0} :> IFramebufferOutput)])
-        let fbo3 = rt.CreateFramebuffer(sign, Map.ofList[DefaultSemantic.Colors, ({texture = tex3; slice = 0; level = 0} :> IFramebufferOutput)])
-        let fbo4 = rt.CreateFramebuffer(sign, Map.ofList[DefaultSemantic.Colors, ({texture = tex4; slice = 0; level = 0} :> IFramebufferOutput)])
+        let signDepth = rt.CreateFramebufferSignature [
+                                    DefaultSemantic.Colors, { format = RenderbufferFormat.R32f; samples = 1};
+                                    DefaultSemantic.Depth,  { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+                                ]
 
         let clear = rt.CompileClear(sign, C4f.Black |> Mod.constant, 1.0 |> Mod.constant)
+        let clearDepth = rt.CompileClear(signDepth, C4f.Black |> Mod.constant, 1.0 |> Mod.constant)
+
 
         let sg (view : IMod<Trafo3d>) (proj : IMod<Trafo3d>) (tex : string) (set : V2f[]) (uv : V2f[]) =
-            Sg.draw (IndexedGeometryMode.TriangleList)
-            |> Sg.vertexAttribute DefaultSemantic.Positions (set |> Mod.constant)
-            |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (uv |> Mod.constant)
-            |> Sg.index (indi |> Mod.constant)
-            |> Sg.viewTrafo (view)
-            |> Sg.projTrafo (proj)
-            |> Sg.diffuseFileTexture' tex false
-            |> Sg.effect [
-                DefaultSurfaces.trafo                  |> toEffect
-                ImageProcessingShader.myDiffuseTexture |> toEffect
-            ]
+            let s = Sg.draw (IndexedGeometryMode.TriangleList)
+                    |> Sg.vertexAttribute DefaultSemantic.Positions (set |> Mod.constant)
+                    |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (uv |> Mod.constant)
+                    |> Sg.index (indi |> Mod.constant)
+                    |> Sg.viewTrafo (view)
+                    |> Sg.projTrafo (proj)
+                    |> Sg.diffuseFileTexture' tex false
+            Sg.SurfaceApplicator(Helper.TrafoDiffuse, s) :> ISg
 
-        let runBaseTask (view : IMod<Trafo3d>) (proj : IMod<Trafo3d>) (texture : int) =
-            if texture = 1 then
-                let f = (fun () -> 
-                    let task = rt.CompileRender(sign, sg view proj testFile1 set1 uv1)
-                    clear.Run(null, fbo1 |> OutputDescription.ofFramebuffer)
-                    task.Run(null, fbo1 |> OutputDescription.ofFramebuffer)
-                    false)
-                f, tex1
-            else
-                let f = (fun () -> 
-                    let task = rt.CompileRender(sign, sg view proj testFile2 set2 uv2)
-                    clear.Run(null, fbo2 |> OutputDescription.ofFramebuffer)
-                    task.Run(null, fbo2 |> OutputDescription.ofFramebuffer)
-                    false)
-                f, tex2
+
+        let sg' (view : IMod<Trafo3d>) (proj : IMod<Trafo3d>) (tex : ITexture) (set : V2f[]) (uv : V2f[]) =
+            let s = Sg.draw (IndexedGeometryMode.TriangleList)
+                    |> Sg.vertexAttribute DefaultSemantic.Positions (set |> Mod.constant)
+                    |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (uv |> Mod.constant)
+                    |> Sg.index (indi |> Mod.constant)
+                    |> Sg.viewTrafo (view)
+                    |> Sg.projTrafo (proj)
+                    |> Sg.diffuseTexture' tex
+            Sg.SurfaceApplicator(Helper.TrafoDiffuse, s) :> ISg
+
+//        let runBaseTask (view : IMod<Trafo3d>) (proj : IMod<Trafo3d>) (texture : int) =
+//            if texture = 1 then
+//                let f = (fun () -> 
+//                    let task = rt.CompileRender(sign, sg view proj testFile1 set1 uv1)
+//                    clear.Run(null, fbo1 |> OutputDescription.ofFramebuffer)
+//                    task.Run(null, fbo1 |> OutputDescription.ofFramebuffer)
+//                    false)
+//                f, tex1
+//            else
+//                let f = (fun () -> 
+//                    let task = rt.CompileRender(sign, sg view proj testFile2 set2 uv2)
+//                    clear.Run(null, fbo2 |> OutputDescription.ofFramebuffer)
+//                    task.Run(null, fbo2 |> OutputDescription.ofFramebuffer)
+//                    false)
+//                f, tex2
         
 
 
@@ -519,58 +532,98 @@ module Image =
             f() |> ignore
             t
 
-        member x.Test (view) (proj) : IBackendTexture =
-//            let f0 = (fun () -> false)
-//            let l00 = (f0, inputImage1)
-//            let r11 = (f0, inputImage2)
-//            let r22 = (f0, inputImage1)
-//            let r33 = (f0, inputImage2)
 
+        member x.Test2 (view) (proj) =
+            let tex = rt.CreateTexture((s), TextureFormat.R32f, 1, 1)
+            let dep = rt.CreateRenderbuffer((s), RenderbufferFormat.Depth24Stencil8, 1)
+            let fbo = rt.CreateFramebuffer(
+                                    signDepth,
+                                    Map.ofList[
+                                        DefaultSemantic.Colors, ({texture = tex; slice = 0; level = 0} :> IFramebufferOutput)
+                                        DefaultSemantic.Depth, (dep :> IFramebufferOutput)
+                                    ])
+            let uvs = Mod.init ([|V2f(0.0, 0.0); V2f(1.0, 0.0); V2f(1.0, 1.0); V2f(0.0, 1.0)|])
+            let x = s.X |> float
+            let y = s.Y |> float
+            let z = 0.0
+            let pos = Mod.init ([|V3f(0.0, 0.0, z); V3f(x, 0.0, z); V3f(x, y, z); V3f(0.0, y, z)|])
+
+            let fileTexture = FileTexture(testFile4, false)
+
+            let tmp =
+                Sg.draw (IndexedGeometryMode.TriangleList)
+                |> Sg.viewTrafo (view)
+                |> Sg.projTrafo (proj)
+                |> Sg.vertexAttribute DefaultSemantic.Positions ([|V3f(0.0, 0.0, z); V3f(x, 0.0, z); V3f(x, y, z); V3f(0.0, y, z)|] |> Mod.constant)
+                |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates uvs
+                |> Sg.index ([|0; 1; 2; 0; 2; 3|] |> Mod.constant)
+                |> Sg.diffuseTexture' fileTexture
+                |> Sg.effect [
+                    DefaultSurfaces.trafo |> toEffect
+                    DefaultSurfaces.diffuseTexture |> toEffect
+                ]
+
+            let taskDepth = rt.CompileRender(signDepth, tmp)
+            clearDepth.Run(null, fbo |> OutputDescription.ofFramebuffer) |> ignore
+            taskDepth.Run(null, fbo |> OutputDescription.ofFramebuffer) |> ignore
+
+            let finalTex = rt.CreateTexture(s, TextureFormat.R32f, 1, 1)
+            let nFbo = rt.CreateFramebuffer(sign, Map.ofList[ DefaultSemantic.Colors, ({texture = finalTex; slice = 0; level = 0} :> IFramebufferOutput)])
+            let tmp2 = sg' view proj tex set4 uv4
+            let nTask = rt.CompileRender(sign, tmp2)
+            clear.Run(null, nFbo |> OutputDescription.ofFramebuffer)
+            nTask.Run(null, nFbo |> OutputDescription.ofFramebuffer)
+
+            finalTex
+
+
+        member x.Test (view) (proj) : IBackendTexture =
             let t = testFile4
 
-            let f01 = (fun () ->
-                        let task = rt.CompileRender(sign, sg view proj t set1 uv1)
-                        clear.Run(null, fbo1 |> OutputDescription.ofFramebuffer)
-                        task.Run(null, fbo1 |> OutputDescription.ofFramebuffer)
-                        false
-                     )
-            let f02 = (fun () ->
-                        let task = rt.CompileRender(sign, sg view proj t set2 uv2)
-                        clear.Run(null, fbo2 |> OutputDescription.ofFramebuffer)
-                        task.Run(null, fbo2 |> OutputDescription.ofFramebuffer)
-                        false
-                     )
+            Report.BeginTimed("CreateTexture + FBO")
+            let tex1 = rt.CreateTexture(s, TextureFormat.R32f, 1, 1)
+            let fbo1 = rt.CreateFramebuffer(sign, Map.ofList[DefaultSemantic.Colors, ({texture = tex1; slice = 0; level = 0} :> IFramebufferOutput)])
+            Report.EndTimed() |> ignore
+            Report.BeginTimed("Render Texture 1")
+            let task = rt.CompileRender(sign, sg view proj t set1 uv1)
+            clear.Run(null, fbo1 |> OutputDescription.ofFramebuffer)
+            task.Run(null, fbo1 |> OutputDescription.ofFramebuffer)
+            Report.EndTimed() |> ignore
 
-            let f03 = (fun () ->
-                        let task = rt.CompileRender(sign, sg view proj t set3 uv3)
-                        clear.Run(null, fbo3 |> OutputDescription.ofFramebuffer)
-                        task.Run(null, fbo3 |> OutputDescription.ofFramebuffer)
-                        false
-                     )
-            let f04 = (fun () ->
-                        let task = rt.CompileRender(sign, sg view proj t set4 uv4)
-                        clear.Run(null, fbo4 |> OutputDescription.ofFramebuffer)
-                        task.Run(null, fbo4 |> OutputDescription.ofFramebuffer)
-                        false
-                     )
+            Report.BeginTimed("CreateTexture + FBO")
+            let tex2 = rt.CreateTexture(s, TextureFormat.R32f, 1, 1)
+            let fbo2 = rt.CreateFramebuffer(sign, Map.ofList[DefaultSemantic.Colors, ({texture = tex2; slice = 0; level = 0} :> IFramebufferOutput)])
+            Report.EndTimed() |> ignore
+            Report.BeginTimed("Render Texture 2")
+            let task = rt.CompileRender(sign, sg view proj t set2 uv2)
+            clear.Run(null, fbo2 |> OutputDescription.ofFramebuffer)
+            task.Run(null, fbo2 |> OutputDescription.ofFramebuffer)
+            Report.EndTimed() |> ignore
 
-            let r01 = (f01, tex1) // r11 //
-            let r02 = (f02, tex2) // l00 //
-            let r03 = (f03, tex3) // r22 // 
-            let r04 = (f04, tex4) // r33 //
+            Report.BeginTimed("CreateTexture + FBO")
+            let tex3 = rt.CreateTexture(s, TextureFormat.R32f, 1, 1)
+            let fbo3 = rt.CreateFramebuffer(sign, Map.ofList[DefaultSemantic.Colors, ({texture = tex3; slice = 0; level = 0} :> IFramebufferOutput)])
+            Report.EndTimed() |> ignore
+            Report.BeginTimed("Render Texture 3")
+            let task = rt.CompileRender(sign, sg view proj t set3 uv3)
+            clear.Run(null, fbo3 |> OutputDescription.ofFramebuffer)
+            task.Run(null, fbo3 |> OutputDescription.ofFramebuffer)
+            Report.EndTimed() |> ignore
 
-            (* Group 1 - Composition only *)
-//            let l1 = r01
-//
-//            let l0 = r02
-//            let r0 = r03
-//            let r1 = composer.Compose l0 r0 0.5 2 // Sub
-//
-//            let l2 = composer.Compose l1 r1 1.0 1 // Add
-//            let r2 = r04
+            Report.BeginTimed("CreateTexture + FBO")
+            let tex4 = rt.CreateTexture(s, TextureFormat.R32f, 1, 1)
+            let fbo4 = rt.CreateFramebuffer(sign, Map.ofList[DefaultSemantic.Colors, ({texture = tex4; slice = 0; level = 0} :> IFramebufferOutput)])
+            Report.EndTimed() |> ignore
+            Report.BeginTimed("Render Texture 4")
+            let task = rt.CompileRender(sign, sg view proj t set4 uv4)
+            clear.Run(null, fbo4 |> OutputDescription.ofFramebuffer)
+            task.Run(null, fbo4 |> OutputDescription.ofFramebuffer)
+            Report.EndTimed() |> ignore
 
-
-            (* Group 2 - Composition and Filtering *)
+            let r01 = (false, tex1) // r11 //
+            let r02 = (false, tex2) // l00 //
+            let r03 = (false, tex3) // r22 // 
+            let r04 = (false, tex4) // r33 //
 
             let l01 = r01
             let l11 = processor.GaussFilterProgram 5 l01
@@ -583,13 +636,9 @@ module Image =
             let l2 = composer.Compose l11 r11 1.0 1 // Add
             let r2 = r04
 
-            let res = composer.Compose l2 r2 1.0 3 // Min
+            let delInput, output = composer.Compose l2 r2 1.0 3 // Min
 
-            bla res
-
-
-
-        member x.Dispose() =
+            Report.BeginTimed("Delete Textures + FBOs")
             rt.DeleteTexture tex1
             rt.DeleteTexture tex2
             rt.DeleteTexture tex3
@@ -598,6 +647,13 @@ module Image =
             rt.DeleteFramebuffer fbo2
             rt.DeleteFramebuffer fbo3
             rt.DeleteFramebuffer fbo4
+            Report.EndTimed() |> ignore
+
+            output
+
+
+        member x.Dispose() =
+
             rt.DeleteFramebufferSignature sign
 
         interface IDisposable with
@@ -658,7 +714,7 @@ module ImageProcessingExample =
         let orthoview = Mod.constant(CameraView.lookAt (V3d(xh, yh, 20)) (V3d(xh, yh, 0)) V3d.OIO |> CameraView.viewTrafo)
         let orthoproj = Mod.constant (Frustum.ortho (Box3d (-xh |> float, -yh |> float, -10.0, xh |> float, yh |> float, 30.0)) |> Frustum.orthoTrafo)
 
-        let tex = imageTest.Test orthoview orthoproj :> ITexture
+        let tex = imageTest.Test2 orthoview orthoproj :> ITexture
 
 
         let quadSg =
@@ -678,15 +734,11 @@ module ImageProcessingExample =
             quad |> Sg.ofIndexedGeometry
 
         let sg =
-            quadSg
-                |> Sg.effect [
-                        DefaultSurfaces.trafo                  |> toEffect
-                        ImageProcessingShader.myDiffuseTexture |> toEffect
-                    ]
-                |> Sg.diffuseTexture' (tex)
-                |> Sg.viewTrafo (orthoview)
-                |> Sg.projTrafo (orthoproj)
-
+            let s = quadSg
+                    |> Sg.diffuseTexture' (tex)
+                    |> Sg.viewTrafo (orthoview)
+                    |> Sg.projTrafo (orthoproj)
+            Sg.SurfaceApplicator(Helper.TrafoDiffuse, s) :> ISg
 
         let renderTask = app.Runtime.CompileRender(win.FramebufferSignature, sg)
 
