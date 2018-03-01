@@ -35,7 +35,7 @@ open Aardvark.Base.Ag
 open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
 open System.Collections.Generic
-
+open System.Threading
 
 module Indirect =
         
@@ -59,13 +59,15 @@ module Indirect =
                  
                 | _ -> 
                     failwith "not there"
-
+    
+        member x.Clear() =
+            store.Clear()
 
     type GeometryCache(runtime : IRuntime, vertexTypes : Map<Symbol, Type>) =
         let geometryCache = RefDict<IndexedGeometry, Management.Block<unit>>()
-        let pool = runtime.CreateGeometryPool(vertexTypes)
+        let mutable pool = runtime.CreateGeometryPool(vertexTypes)
 
-        member x.Pool = pool
+        member x.TryGetBufferView(sem) = pool.TryGetBufferView(sem)
 
         member x.Add(g : IndexedGeometry) =
             geometryCache.Create(g, fun _ -> pool.Alloc g)
@@ -75,6 +77,11 @@ module Indirect =
             if wasLast then pool.Free ptr
             ptr
         
+        member x.Clear() =
+            pool.Dispose()
+            pool <- runtime.CreateGeometryPool(vertexTypes)
+            geometryCache.Clear()
+
     type Writer(m : IMod, offset : nativeint, ptr : ref<nativeint>) = 
         inherit AdaptiveObject()
 
@@ -89,11 +96,8 @@ module Indirect =
         inherit AdaptiveObject()
 
         let dirty = HashSet<Writer>()
-
-        let manager = MemoryManager.createNop()
-
-
-        let cache = RefDict<Map<string, IMod>, managedptr * list<Writer>>()
+        let mutable manager = Aardvark.Base.Management.MemoryManager.createNop()
+        let cache = RefDict<Map<string, IMod>, Management.Block<unit> * list<Writer>>()
 
         let mutable capacity = 0n
         let stores =
@@ -103,19 +107,20 @@ module Indirect =
             )
 
         let fixCapacity() =
-            if manager.Capacity <> capacity then
+            if manager.Capactiy <> capacity then
                 for (_,(es,ptr)) in Map.toSeq stores do
-                    if manager.Capacity = 0n then
+                    if manager.Capactiy = 0n then
                         if !ptr <> 0n then Marshal.FreeHGlobal(!ptr)
                         ptr := 0n
 
                     elif !ptr = 0n then
-                        ptr := Marshal.AllocHGlobal(es * manager.Capacity)
+                        ptr := Marshal.AllocHGlobal(es * manager.Capactiy)
 
                     else
-                        ptr := Marshal.ReAllocHGlobal(!ptr, es * manager.Capacity)
+                        ptr := Marshal.ReAllocHGlobal(!ptr, es * manager.Capactiy)
 
-                capacity <- manager.Capacity
+                Log.warn "[Indirect] resize from: %A to %A" capacity manager.Capactiy
+                capacity <- manager.Capactiy
 
         override x.InputChanged(t, o) =
             match o with    
@@ -148,6 +153,8 @@ module Indirect =
             let wasLast, (ptr, writers) = cache.TryRemove values
             if wasLast then
                 manager.Free ptr
+                
+                fixCapacity()
 
                 lock dirty (fun () ->
                     for w in writers do
@@ -174,20 +181,47 @@ module Indirect =
                 )
 
             )
-
-
-
+            
+        member x.Clear() =
+            stores |> Map.iter (fun _ (_,ptr) ->
+                if !ptr <> 0n then Marshal.FreeHGlobal !ptr
+                ptr := 0n
+            )
+            capacity <- 0n
+            cache.Clear()
+            manager.Dispose()
+            manager <- Aardvark.Base.Management.MemoryManager.createNop()
+            let mutable foo = 0
+            for d in dirty do d.Outputs.Consume(&foo) |> ignore
+            dirty.Clear()
+            transact x.MarkOutdated
 
     [<Semantic>]
     type IndirectSem() =
         member x.RenderObjects(node : Sg.IndirectNode) : aset<IRenderObject> =
             let runtime : IRuntime = x?Runtime
-
-            let reader = node.Objects.GetReader()
+            let mutable reader = node.Objects.GetReader()
             let geometryCache = GeometryCache(runtime, node.Signature.vertexTypes)
             let uniformCache = UniformCache(runtime, node.Signature.uniformTypes)
             let callCache = Dict<IndexedGeometry * Map<string, IMod>, DrawCallInfo>()
 
+            let mutable refCount = 0
+            let kill () =
+                if Interlocked.Increment(&refCount) = 1 then
+                    Log.warn "boot stuff"
+
+                { new IDisposable with 
+                    member x.Dispose () = 
+                        if Interlocked.Decrement(&refCount) = 0 then
+                            Log.warn "destroy stuff"
+                            reader.Dispose()
+                            reader <- node.Objects.GetReader()
+                            geometryCache.Clear()
+                            uniformCache.Clear()
+                            callCache.Clear()
+                    }
+
+            let obj = RenderObject.create()
             let indirectAndInstanceBuffers =
                 Mod.custom (fun token ->
                     
@@ -225,11 +259,6 @@ module Indirect =
                     indirect, instanceBuffers
                 )
 
-
-
-
-
-
             let instanceProvider =
                 node.Signature.uniformTypes |> Map.map (fun name t ->
                     BufferView(Mod.map (snd >> Map.find name) indirectAndInstanceBuffers, t)
@@ -240,13 +269,13 @@ module Indirect =
                 { new IAttributeProvider with
                     member x.All = Seq.empty
                     member x.Dispose() = ()
-                    member x.TryGetAttribute(sem) =
-                        geometryCache.Pool.TryGetBufferView sem
+                    member x.TryGetAttribute(sem) = geometryCache.TryGetBufferView sem
                 }
 
-            let obj = RenderObject.create()
             obj.IndirectBuffer <- Mod.map fst indirectAndInstanceBuffers
             obj.InstanceAttributes <- instanceProvider
             obj.VertexAttributes <- vertexProvider
             obj.Mode <- Mod.constant node.Signature.mode
-            ASet.single (obj :> IRenderObject)
+            obj.Activate <- kill
+            ASet.single(obj :> IRenderObject)
+

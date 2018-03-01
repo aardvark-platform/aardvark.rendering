@@ -33,6 +33,7 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
+    Aardvark.Rendering.GL.RuntimeConfig.SupressSparseBuffers <- true
     
     let geometries = 
         [
@@ -51,6 +52,7 @@ let main argv =
             uniformTypes = Map.ofList ["Offset", typeof<V4f>]
         }
 
+    let showScene = Mod.init true
     let scale = Mod.init 1.0f
 
     let rnd = RandomSystem()
@@ -67,6 +69,9 @@ let main argv =
              do! DefaultSurfaces.simpleLighting
            }
     
+    let sg =
+        Sg.dynamic (showScene |> Mod.map (function true -> sg | _ -> Sg.empty))
+
 
     let win = window {
         backend Backend.GL
@@ -109,6 +114,9 @@ let main argv =
                 transact (fun _ -> 
                     set.Clear()
                 )
+            | Keys.PageUp ->
+                transact (fun () -> showScene.Value <- not showScene.Value)
+
             | _ -> ()
     ) 
 
