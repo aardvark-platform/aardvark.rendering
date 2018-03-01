@@ -104,7 +104,7 @@ module HarwareFeatures =
 
 
         let sg =    
-            Sg.indirect IndexedGeometryMode.TriangleList (Mod.constant indirect)
+            Sg.indirectDraw IndexedGeometryMode.TriangleList (Mod.constant indirect)
                 |> Sg.vertexArray DefaultSemantic.Positions cube.IndexedAttributes.[DefaultSemantic.Positions]
                 |> Sg.vertexArray DefaultSemantic.Normals cube.IndexedAttributes.[DefaultSemantic.Normals]
                 |> Sg.instanceArray DefaultSemantic.InstanceTrafo trafos
