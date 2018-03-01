@@ -69,6 +69,7 @@
     <Compile Include="HighLevelSceneGraph\Culling.fs" />
     <Compile Include="HighLevelSceneGraph\Picking.fs" />
     <Compile Include="HighLevelSceneGraph\Instancing.fs" />
+    <Compile Include="HighLevelSceneGraph\Indirect.fs" />
     <Compile Include="SgFSharp.fs" />
     <Compile Include="Primitives.fs" />
     <Compile Include="IndexedGeometryPrimitives.fs" />
