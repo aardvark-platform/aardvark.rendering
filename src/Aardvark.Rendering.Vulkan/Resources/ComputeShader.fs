@@ -180,7 +180,7 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
                                 buffer, 0L, buffer.Size, Some { new IDisposable with member x.Dispose() = device.Delete buffer }
 
                             | :? IBufferRange as b ->
-                                let buffer = b.Buffer.Handle |> unbox<Buffer>
+                                let buffer = b.Buffer |> unbox<Buffer>
                                 buffer, int64 b.Offset, int64 b.Size, None
 
                             | _ -> 

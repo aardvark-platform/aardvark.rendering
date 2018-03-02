@@ -1082,7 +1082,8 @@ module private ShaderInfo =
                 | OpAccessChain(_,_,id,_) 
                 | OpInBoundsAccessChain(_,_,id,_) 
                 | OpPtrAccessChain(_,_,id,_,_)
-                | OpStore(id,_,_) ->
+                | OpStore(id,_,_)
+                | OpImageTexelPointer(_,_,id,_,_) ->
                     match currentFunction with
                         | Some f when variables.Contains id ->
                             let props = getProps f
