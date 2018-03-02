@@ -104,6 +104,7 @@ and ITextureRuntime =
     abstract member ResolveMultisamples : src : IFramebufferOutput * target : IBackendTexture * imgTrafo : ImageTrafo -> unit
     abstract member Upload : texture : IBackendTexture * level : int * slice : int * source : PixImage -> unit
     abstract member Download : texture : IBackendTexture * level : int * slice : int * target : PixImage -> unit
+    abstract member Download : texture : IBackendTexture * level : int * slice : int * target : PixVolume -> unit
     abstract member DownloadStencil : texture : IBackendTexture * level : int * slice : int * target : Matrix<int> -> unit
     abstract member DownloadDepth : texture : IBackendTexture * level : int * slice : int * target : Matrix<float32> -> unit
     abstract member Copy : src : IBackendTexture * srcBaseSlice : int * srcBaseLevel : int * dst : IBackendTexture * dstBaseSlice : int * dstBaseLevel : int * slices : int * levels : int -> unit
