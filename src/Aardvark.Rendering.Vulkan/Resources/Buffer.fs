@@ -414,7 +414,9 @@ module Buffer =
                 emptyBuffers.TryRemove(key) |> ignore
             )   
 
-            new Buffer(device, handle, ptr, 256L, usage)
+            let buffer = new Buffer(device, handle, ptr, 256L, usage)
+            buffer.AddReference()
+            buffer
         )
 
     let createConcurrent (conc : bool) (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
