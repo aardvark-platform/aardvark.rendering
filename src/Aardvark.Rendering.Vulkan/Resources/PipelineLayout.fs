@@ -168,8 +168,8 @@ module PipelineLayout =
             PipelineLayout(device, handle, setLayouts, uniformBlocks, textures, layout, layers, perLayer)
         )
 
-    let ofEffectLayout (layout : FShade.EffectInputLayout) (samplerDescriptions : Map<string, list<SamplerDescription>>) (layers : int) (perLayer : Set<string>) (device : Device) =
-        let info = PipelineInfo.ofEffectLayout layout samplerDescriptions Map.empty
+    let ofEffectLayout (layout : FShade.EffectInputLayout) (layers : int) (perLayer : Set<string>) (device : Device) =
+        let info = PipelineInfo.ofEffectLayout layout Map.empty
         ofPipelineInfo info layers perLayer device
  
 
@@ -316,8 +316,8 @@ type ContextPipelineLayoutExtensions private() =
         this |> PipelineLayout.ofPipelineInfo info layers perLayer
 
     [<Extension>]
-    static member inline CreatePipelineLayout(this : Device, info : FShade.EffectInputLayout, samplerDescriptions : Map<string, list<SamplerDescription>>, layers : int, perLayer : Set<string>) =
-        this |> PipelineLayout.ofEffectLayout info samplerDescriptions layers perLayer
+    static member inline CreatePipelineLayout(this : Device, info : FShade.EffectInputLayout, layers : int, perLayer : Set<string>) =
+        this |> PipelineLayout.ofEffectLayout info layers perLayer
 
 
     [<Extension>]
