@@ -3038,14 +3038,22 @@ module TextureExtensions =
             using x.ResourceLock (fun _ ->
                 match t.Dimension with
                     | TextureDimension.Texture2D -> 
-                        
-                        //let downloadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (level : int) (image : PixImage)
-                        
+
+                        // wrap matrix into piximage
                         let img : PixImage<int> = PixImage<int>()
                         img.Volume <- target.AsVolume()
                         img.Format <- Col.Format.Stencil
-                        downloadTexture2DInternal TextureTarget.Texture2D true t level img
 
+                        downloadTexture2D t level img
+
+                     | TextureDimension.TextureCube ->
+
+                        // wrap matrix into piximage
+                        let img : PixImage<int> = PixImage<int>()
+                        img.Volume <- target.AsVolume()
+                        img.Format <- Col.Format.Depth
+
+                        downloadTextureCube t level (unbox slice) img
                     | _ ->  
                         failwithf "cannot download stecil-texture of kind: %A" t.Dimension
             )
@@ -3054,13 +3062,22 @@ module TextureExtensions =
             using x.ResourceLock (fun _ ->
                 match t.Dimension with
                     | TextureDimension.Texture2D -> 
-                        
-                        //let downloadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (level : int) (image : PixImage)
-                        
+
+                        // wrap matrix into piximage
                         let img : PixImage<float32> = PixImage<float32>()
                         img.Volume <- target.AsVolume()
                         img.Format <- Col.Format.Depth
-                        downloadTexture2DInternal TextureTarget.Texture2D true t level img
+
+                        downloadTexture2D t level img
+
+                    | TextureDimension.TextureCube ->
+
+                        // wrap matrix into piximage
+                        let img : PixImage<float32> = PixImage<float32>()
+                        img.Volume <- target.AsVolume()
+                        img.Format <- Col.Format.Depth
+
+                        downloadTextureCube t level (unbox slice) img
 
                     | _ ->  
                         failwithf "cannot download stecil-texture of kind: %A" t.Dimension
