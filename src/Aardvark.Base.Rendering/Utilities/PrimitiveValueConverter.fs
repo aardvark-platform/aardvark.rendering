@@ -1002,6 +1002,10 @@ module PrimitiveValueConverter =
             static member Create(converter : 'a -> 'b) =
                 fun (arr : Array) -> arr |> unbox |> Array.map converter
                      
+        type UnboxTyped<'e, 'b>() =
+            static let conv = fun (e : 'e) -> e |> unbox<'b>
+            static member Instance = conv
+
 
         let compose (f : obj) (g : obj) =
             let ft = f.GetType()
@@ -1065,7 +1069,18 @@ module PrimitiveValueConverter =
 
                             | None ->
                                 None
+                    elif inType.IsEnum then
+                        let valueType = Enum.GetUnderlyingType(inType)
+                        let toValue =
+                            let value = typedefof<UnboxTyped<_,_>>.MakeGenericType [| inType; valueType |]
+                            let prop = value.GetProperty("Instance", BindingFlags.NonPublic ||| BindingFlags.Public ||| BindingFlags.Static)
+                            prop.GetValue(null)
 
+                        match tryGetConverter valueType outType with
+                            | Some inner -> 
+                                Some <| compose toValue inner
+                            | None ->
+                                None
                     else
                         None
             )
