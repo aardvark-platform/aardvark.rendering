@@ -8,9 +8,9 @@ nuget Aardvark.Base.FSharp               ~> 3.0.54
 nuget Aardvark.Base.Incremental          ~> 3.0.54
 nuget Aardvark.Base.Runtime              ~> 3.0.54
                                          
-nuget FShade.Core                        ~> 3.3.23
-nuget FShade                             ~> 3.3.23
-nuget FShade.Debug                       ~> 3.3.23
+nuget FShade.Core                        ~> 3.3.24
+nuget FShade                             ~> 3.3.24
+nuget FShade.Debug                       ~> 3.3.24
 
 nuget GLSLangSharp                       ~> 0.3.9
 nuget Unofficial.OpenVR					 ~> 1.0.10
