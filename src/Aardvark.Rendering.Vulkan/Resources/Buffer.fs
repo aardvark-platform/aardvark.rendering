@@ -206,12 +206,22 @@ module BufferCommands =
                     let access, stage =
                         if buffer.Usage.HasFlag VkBufferUsageFlags.IndexBufferBit then 
                             VkAccessFlags.IndexReadBit, VkPipelineStageFlags.VertexInputBit
+
                         elif buffer.Usage.HasFlag VkBufferUsageFlags.VertexBufferBit then
                             VkAccessFlags.VertexAttributeReadBit, VkPipelineStageFlags.VertexInputBit
+
                         elif buffer.Usage.HasFlag VkBufferUsageFlags.IndirectBufferBit then
                             VkAccessFlags.IndirectCommandReadBit, VkPipelineStageFlags.DrawIndirectBit
+
+                        elif buffer.Usage.HasFlag VkBufferUsageFlags.StorageBufferBit then
+                            if cmd.QueueFamily.Flags &&& QueueFlags.Graphics <> QueueFlags.None then
+                                VkAccessFlags.ShaderReadBit, VkPipelineStageFlags.VertexShaderBit
+                            else
+                                VkAccessFlags.ShaderReadBit, VkPipelineStageFlags.ComputeShaderBit
+                                
                         else
-                            failwith ""
+                            failwithf "[Vulkan] bad buffer usage in Acquire: %A" buffer.Usage
+
                             
                             
 
