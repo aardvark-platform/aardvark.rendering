@@ -33,6 +33,35 @@ module StereoShader =
             return { v with pos = V4d(1.0, -1.0, 1.0 + zero, 1.0) * v.pos }
         }
 
+
+    type HiddenVertex =
+        {
+            [<Position>]
+            pos : V4d
+
+            [<Semantic("EyeIndex")>]
+            eyeIndex : int
+
+            [<Layer>]
+            layer : int
+        }
+        
+//    let hiddenAreaGeometry (t : Triangle<HiddenVertex>) =
+//        triangle {
+//            if t.P0.invocation = t.P0.eyeIndex then
+//                yield t.P0
+//                yield t.P1
+//                yield t.P2
+//        }
+
+    let hiddenAreaFragment (t : HiddenVertex) =
+        fragment {
+            if t.layer <> t.eyeIndex then
+                discard()
+
+            return V4d.IIII
+        }
+
 type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
     inherit VrRenderer()
 
@@ -48,6 +77,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
     let mutable fbo = Unchecked.defaultof<Framebuffer>
     let mutable info = Unchecked.defaultof<VrRenderInfo>
     let mutable fImg = Unchecked.defaultof<Image>
+    let mutable hiddenTask = RenderTask.empty
 
     let start = System.DateTime.Now
     let sw = System.Diagnostics.Stopwatch.StartNew()
@@ -81,6 +111,31 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
 
     let beforeRender = Event<unit>()
     let afterRender = Event<unit>()
+
+    let compileHidden (m : IndexedGeometry) =
+        let writeStencil =
+            StencilMode(
+                StencilOperation(
+                    StencilOperationFunction.Replace,
+                    StencilOperationFunction.Replace,
+                    StencilOperationFunction.Replace
+                ),
+                StencilFunction(
+                    StencilCompareFunction.Always,
+                    1,
+                    0xFFFFFFFFu
+                )
+            )
+
+        hiddenTask <-
+            Sg.ofIndexedGeometry m
+                |> Sg.shader {
+                    do! StereoShader.hiddenAreaFragment
+                }
+                |> Sg.stencilMode (Mod.constant writeStencil)
+                |> Sg.writeBuffers' (Set.ofList [DefaultSemantic.Stencil])
+                |> Sg.compile app.Runtime renderPass
+
 
     new(samples) = VulkanVRApplicationLayered(samples, false)
     new(debug) = VulkanVRApplicationLayered(1, debug)
@@ -223,6 +278,9 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
             do! Command.TransformLayout(dImg, VkImageLayout.DepthStencilAttachmentOptimal)
         }
 
+        
+        compileHidden x.HiddenAreaMesh
+
         VrTexture.Vulkan(fTex, Box2d(V2d(0.0, 1.0), V2d(0.5, 0.0))), VrTexture.Vulkan(fTex, Box2d(V2d(0.5, 1.0), V2d(1.0, 0.0)))
 
     override x.Render() = 
@@ -241,7 +299,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
             do! Command.TransformLayout(dImg, VkImageLayout.TransferDstOptimal)
             do! Command.TransformLayout(cImg, VkImageLayout.TransferDstOptimal)
 
-            do! Command.ClearColor(cImg.[ImageAspect.Color, 0, *], C4f.Black)
+            do! Command.ClearColor(cImg.[ImageAspect.Color, 0, *], x.BackgroundColor)
             do! Command.ClearDepthStencil(dImg.[ImageAspect.DepthStencil, 0, *], 1.0, 0u)
             
             do! Command.TransformLayout(dImg, VkImageLayout.DepthStencilAttachmentOptimal)
@@ -250,6 +308,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
         }
 
         caller.EvaluateAlways AdaptiveToken.Top (fun t ->
+            hiddenTask.Run(t, RenderToken.Empty, output)
             task.Run(t, RenderToken.Empty, output)
         )
         let a = cImg.[ImageAspect.Color, *, 0]
@@ -260,9 +319,6 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
 
         device.perform {
             do! Command.TransformLayout(cImg, VkImageLayout.TransferSrcOptimal)
-
-            //do! Command.Blit(cImg.[ImageAspect.Color, 0, 0], srcBox, fImg.[ImageAspect.Color, 0, 0], lBox, VkFilter.Nearest)
-            //do! Command.Blit(cImg.[ImageAspect.Color, 0, 1], srcBox, fImg.[ImageAspect.Color, 0, 0], rBox, VkFilter.Nearest)
 
             if samples > 1 then
                 do! Command.ResolveMultisamples(cImg.[ImageAspect.Color, 0, 0], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(info.framebufferSize, 1))

@@ -453,6 +453,39 @@ type VrRenderer() =
                     yield None
         |]
 
+    let hiddenAreaMesh =
+        let lMesh = system.GetHiddenAreaMesh(EVREye.Eye_Left, EHiddenAreaMeshType.k_eHiddenAreaMesh_Standard)
+        let rMesh = system.GetHiddenAreaMesh(EVREye.Eye_Right, EHiddenAreaMeshType.k_eHiddenAreaMesh_Standard)
+
+        let lFvc = int lMesh.unTriangleCount * 3
+        let rFvc = int rMesh.unTriangleCount * 3
+        let fvc = lFvc + rFvc
+        let arr : V3f[] = Array.zeroCreate fvc
+        let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
+
+        try
+            let lSrc = NativeMatrix<float32>(NativePtr.ofNativeInt lMesh.pVertexData, MatrixInfo(0L, V2l(int64 lFvc, 2L), V2l(2L, 1L)))
+            let lDst = NativeMatrix<float32>(NativePtr.ofNativeInt (gc.AddrOfPinnedObject()), MatrixInfo(0L, V2l(int64 lFvc, 2L), V2l(3L, 1L)))
+            NativeMatrix.copy lSrc lDst
+
+            let rSrc = NativeMatrix<float32>(NativePtr.ofNativeInt rMesh.pVertexData, MatrixInfo(int64 lFvc * 2L, V2l(int64 rFvc, 2L), V2l(2L, 1L)))
+            let rDst = NativeMatrix<float32>(NativePtr.ofNativeInt (gc.AddrOfPinnedObject()), MatrixInfo(int64 lFvc * 3L, V2l(int64 rFvc, 2L), V2l(3L, 1L)))
+            NativeMatrix.copy rSrc rDst
+        finally 
+            gc.Free()
+
+            
+        let eyeIndex : int[] = Array.init fvc (fun vi -> if vi < lFvc then 0 else 1)
+
+        IndexedGeometry(
+            Mode = IndexedGeometryMode.TriangleList,
+            IndexedAttributes =
+                SymDict.ofList [
+                    DefaultSemantic.Positions, arr :> System.Array
+                    Symbol.Create "EyeIndex", eyeIndex :> System.Array
+                ]
+        )
+
     let devices = devicesPerIndex |> Array.choose id
         
 
@@ -527,6 +560,11 @@ type VrRenderer() =
 
                     | None ->
                         ()
+    let mutable backgroundColor = C4f.Black
+
+    member x.BackgroundColor
+        with get() = backgroundColor
+        and set c = backgroundColor <- c
 
             
     member x.GetVulkanInstanceExtensions() = 
@@ -548,6 +586,8 @@ type VrRenderer() =
         isAlive <- false
 
     member x.Info = infos.[0]
+
+    member x.HiddenAreaMesh = hiddenAreaMesh
 
     abstract member OnLoad : info : VrRenderInfo -> VrTexture * VrTexture
     abstract member Render : unit -> unit
