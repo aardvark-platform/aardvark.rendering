@@ -1132,8 +1132,8 @@ type ResourceManager(user : IResourceUser, device : Device) =
     let imageViewCache          = ResourceLocationCache<ImageView>(user)
     let samplerCache            = ResourceLocationCache<Sampler>(user)
     let programCache            = ResourceLocationCache<ShaderProgram>(user)
-    static let simpleSurfaceCache  = System.Collections.Concurrent.ConcurrentDictionary<obj, ShaderProgram>()
-    static let fshadeThingCache = System.Collections.Concurrent.ConcurrentDictionary<obj, PipelineLayout * IMod<FShade.Imperative.Module>>()
+    let simpleSurfaceCache      = System.Collections.Concurrent.ConcurrentDictionary<obj, ShaderProgram>()
+    let fshadeThingCache        = System.Collections.Concurrent.ConcurrentDictionary<obj, PipelineLayout * IMod<FShade.Imperative.Module>>()
     
     let vertexInputCache        = NativeResourceLocationCache<VkPipelineVertexInputStateCreateInfo>(user)
     let inputAssemblyCache      = NativeResourceLocationCache<VkPipelineInputAssemblyStateCreateInfo>(user)
@@ -1236,37 +1236,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateShaderProgram(signature : IFramebufferSignature, data : Aardvark.Base.Surface) =
         match data with
             | Surface.FShadeSimple effect ->
-
-                let layout, module_ = 
-                    fshadeThingCache.GetOrAdd((effect.Id,signature) :> obj,fun _ -> 
-                        let outputs = 
-                            signature.ColorAttachments
-                                |> Map.toList
-                                |> List.map (fun (idx, (name, att)) -> string name, (att.GetType name, idx))
-                                |> Map.ofList
-            
-                        let module_ = 
-                            effect |> FShade.Effect.toModule { PipelineInfo.fshadeConfig with outputs = outputs }
-
-                        let textureInfos = 
-                            effect.Uniforms |> Map.map (fun name v ->
-                                match v.uniformValue with
-                                    | FShade.UniformValue.Sampler(sem,samplerState) ->
-                                        [{ textureName = Symbol.Create sem; samplerState = samplerState.SamplerStateDescription }]
-                                    | FShade.UniformValue.SamplerArray arr ->
-                                        arr |> Array.toList |> List.map (fun (sem, samplerState) ->
-                                            { textureName = Symbol.Create sem; samplerState = samplerState.SamplerStateDescription }
-                                        )
-                                    | _ -> 
-                                        []
-                            )
-
-                        let layout = FShade.EffectInputLayout.ofModule module_
-                        let layout = device.CreatePipelineLayout(layout, textureInfos, signature.LayerCount, signature.PerLayerUniforms)
-
-                        layout, Mod.constant module_
-                    )
-                layout, x.CreateShaderProgram(layout, module_)
+                x.CreateShaderProgram(signature, FShadeSurface.Get(effect))
                 
             | Surface.FShade(compile) -> 
                 let layout, module_ = 
@@ -1282,23 +1252,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
                                 PipelineInfo.fshadeConfig with 
                                     outputs = outputs
                             }
-
-                        let textureInfos = 
-                            let effect = module_.GetValue().userData |> unbox<FShade.Effect>
-                            effect.Uniforms |> Map.map (fun name v ->
-                                match v.uniformValue with
-                                    | FShade.UniformValue.Sampler(sem,samplerState) ->
-                                        [{ textureName = Symbol.Create sem; samplerState = samplerState.SamplerStateDescription }]
-                                    | FShade.UniformValue.SamplerArray arr ->
-                                        arr |> Array.toList |> List.map (fun (sem, samplerState) ->
-                                            { textureName = Symbol.Create sem; samplerState = samplerState.SamplerStateDescription }
-                                        )
-                                    | _ -> 
-                                        []
-                            )
-
-
-                        let layout = device.CreatePipelineLayout(layout, textureInfos, signature.LayerCount, signature.PerLayerUniforms)
+                        let layout = device.CreatePipelineLayout(layout, signature.LayerCount, signature.PerLayerUniforms)
 
                         layout, module_
                     )
