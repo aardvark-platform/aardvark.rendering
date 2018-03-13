@@ -39,20 +39,12 @@ module StereoShader =
             [<Position>]
             pos : V4d
 
-            [<Semantic("EyeIndex")>]
+            [<Semantic("EyeIndex"); Interpolation(InterpolationMode.Flat)>]
             eyeIndex : int
 
             [<Layer>]
             layer : int
         }
-        
-//    let hiddenAreaGeometry (t : Triangle<HiddenVertex>) =
-//        triangle {
-//            if t.P0.invocation = t.P0.eyeIndex then
-//                yield t.P0
-//                yield t.P1
-//                yield t.P2
-//        }
 
     let hiddenAreaFragment (t : HiddenVertex) =
         fragment {
@@ -78,6 +70,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
     let mutable info = Unchecked.defaultof<VrRenderInfo>
     let mutable fImg = Unchecked.defaultof<Image>
     let mutable hiddenTask = RenderTask.empty
+    let mutable overlayTask = RenderTask.empty
 
     let start = System.DateTime.Now
     let sw = System.Diagnostics.Stopwatch.StartNew()
@@ -135,7 +128,9 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
                 |> Sg.stencilMode (Mod.constant writeStencil)
                 |> Sg.writeBuffers' (Set.ofList [DefaultSemantic.Stencil])
                 |> Sg.compile app.Runtime renderPass
-
+    
+    let compileOverlay (sg : ISg) =
+        overlayTask <- Sg.compile app.Runtime renderPass sg
 
     new(samples) = VulkanVRApplicationLayered(samples, false)
     new(debug) = VulkanVRApplicationLayered(1, debug)
@@ -280,6 +275,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
 
         
         compileHidden x.HiddenAreaMesh
+        compileOverlay x.ControllerBoxes
 
         VrTexture.Vulkan(fTex, Box2d(V2d(0.0, 1.0), V2d(0.5, 0.0))), VrTexture.Vulkan(fTex, Box2d(V2d(0.5, 1.0), V2d(1.0, 0.0)))
 
@@ -309,6 +305,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
 
         caller.EvaluateAlways AdaptiveToken.Top (fun t ->
             hiddenTask.Run(t, RenderToken.Empty, output)
+            overlayTask.Run(t, RenderToken.Empty, output)
             task.Run(t, RenderToken.Empty, output)
         )
         let a = cImg.[ImageAspect.Color, *, 0]
@@ -333,6 +330,13 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
         transact (fun () -> time.MarkOutdated(); version.Value <- version.Value + 1)
 
     override x.Release() = 
+        hiddenTask.Dispose()
+        hiddenTask <- RenderTask.empty
+        
+        overlayTask.Dispose()
+        overlayTask <- RenderTask.empty
+
+
         // delete views
         device.Delete fbo.Attachments.[DefaultSemantic.Colors]
         device.Delete fbo.Attachments.[DefaultSemantic.Depth]

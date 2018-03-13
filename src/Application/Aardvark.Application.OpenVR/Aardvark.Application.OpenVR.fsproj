@@ -49,6 +49,11 @@
       <Project>{f8233648-55ce-4795-9151-e512390d86e7}</Project>
       <Private>True</Private>
     </ProjectReference>
+    <ProjectReference Include="..\..\Aardvark.Rendering.Text\Aardvark.Rendering.Text.fsproj">
+      <Name>Aardvark.Rendering.Text</Name>
+      <Project>{fb0c63a7-519a-4fcc-9a4b-841aee5b8c97}</Project>
+      <Private>True</Private>
+    </ProjectReference>
     <ProjectReference Include="..\..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj">
       <Name>Aardvark.SceneGraph</Name>
       <Project>{b9ef48e4-7e73-4ddf-805a-d7324d907cb8}</Project>
