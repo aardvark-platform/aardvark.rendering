@@ -564,7 +564,6 @@ type VrRenderer() =
         controllers 
             |> Array.map (fun c ->
                 let pressed = c.Axis.[0].Pressed
-                Sg.tex
                 Sg.box' C4b.Red (Box3d(-V3d.III * 0.05, V3d.III * 0.05))
                     |> Sg.trafo c.MotionState.Pose
                     |> Sg.onOff pressed
