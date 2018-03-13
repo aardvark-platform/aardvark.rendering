@@ -3,9 +3,11 @@
 open System
 open Valve.VR
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
 open System.Runtime.InteropServices
 open Microsoft.FSharp.NativeInterop
+open Aardvark.SceneGraph
 
 #nowarn "9"
 
@@ -460,28 +462,22 @@ type VrRenderer() =
         let lFvc = int lMesh.unTriangleCount * 3
         let rFvc = int rMesh.unTriangleCount * 3
         let fvc = lFvc + rFvc
-        let arr : V3f[] = Array.zeroCreate fvc
+        let arr : V2f[] = Array.zeroCreate fvc
         let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
-
         try
-            let lSrc = NativeMatrix<float32>(NativePtr.ofNativeInt lMesh.pVertexData, MatrixInfo(0L, V2l(int64 lFvc, 2L), V2l(2L, 1L)))
-            let lDst = NativeMatrix<float32>(NativePtr.ofNativeInt (gc.AddrOfPinnedObject()), MatrixInfo(0L, V2l(int64 lFvc, 2L), V2l(3L, 1L)))
-            NativeMatrix.copy lSrc lDst
-
-            let rSrc = NativeMatrix<float32>(NativePtr.ofNativeInt rMesh.pVertexData, MatrixInfo(int64 lFvc * 2L, V2l(int64 rFvc, 2L), V2l(2L, 1L)))
-            let rDst = NativeMatrix<float32>(NativePtr.ofNativeInt (gc.AddrOfPinnedObject()), MatrixInfo(int64 lFvc * 3L, V2l(int64 rFvc, 2L), V2l(3L, 1L)))
-            NativeMatrix.copy rSrc rDst
+            let ptr = gc.AddrOfPinnedObject()
+            Marshal.Copy(lMesh.pVertexData, ptr, nativeint lFvc * 8n)
+            Marshal.Copy(rMesh.pVertexData, ptr + nativeint 8 * nativeint lFvc, nativeint rFvc * 8n)
         finally 
             gc.Free()
 
-            
         let eyeIndex : int[] = Array.init fvc (fun vi -> if vi < lFvc then 0 else 1)
 
         IndexedGeometry(
             Mode = IndexedGeometryMode.TriangleList,
             IndexedAttributes =
                 SymDict.ofList [
-                    DefaultSemantic.Positions, arr :> System.Array
+                    DefaultSemantic.Positions, arr |> Array.map (fun v -> V3f(2.0f, 2.0f, 1.0f) * V3f(v, 0.0f) - V3f(1,1,0)) :> System.Array
                     Symbol.Create "EyeIndex", eyeIndex :> System.Array
                 ]
         )
@@ -561,6 +557,32 @@ type VrRenderer() =
                     | None ->
                         ()
     let mutable backgroundColor = C4f.Black
+
+
+    let controllerBoxes =
+        let cam = hmds.[0].MotionState.Pose |> Mod.map (fun t -> t.Forward.C3.XYZ)
+        controllers 
+            |> Array.map (fun c ->
+                let pressed = c.Axis.[0].Pressed
+                Sg.tex
+                Sg.box' C4b.Red (Box3d(-V3d.III * 0.05, V3d.III * 0.05))
+                    |> Sg.trafo c.MotionState.Pose
+                    |> Sg.onOff pressed
+            )
+            |> Sg.ofArray
+            |> Sg.shader {
+                do! DefaultSurfaces.trafo
+                do! DefaultSurfaces.constantColor C4f.Red
+                do! DefaultSurfaces.simpleLighting
+            }
+            |> Sg.uniform "CameraLocation" cam
+            |> Sg.uniform "LightLocation" cam
+            |> Sg.uniform "ViewTrafo" infos.[0].viewTrafos
+            |> Sg.uniform "ProjTrafo" infos.[0].projTrafos
+            |> Sg.uniform "ViewportSize" (Mod.constant infos.[0].framebufferSize)
+
+    member x.ControllerBoxes =
+        controllerBoxes
 
     member x.BackgroundColor
         with get() = backgroundColor
