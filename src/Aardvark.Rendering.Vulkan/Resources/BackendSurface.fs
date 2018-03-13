@@ -215,7 +215,7 @@ module PipelineInfo =
                         | Success t -> t
                         | Error e -> failwithf "[Vulkan] bad anarchy motherf***er 666: %A" e
 
-    let ofEffectLayout (layout : EffectInputLayout) (samplerDescriptions : Map<string, list<SamplerDescription>>) (outputs : Map<int, Symbol * AttachmentSignature>) =
+    let ofEffectLayout (layout : EffectInputLayout) (outputs : Map<int, Symbol * AttachmentSignature>) =
             
         let inputs = 
             layout.eInputs
@@ -328,11 +328,6 @@ module PipelineInfo =
                     let binding = newBinding()
                     let typ = ShaderType.ofType typ
 
-                    let samDescriptions =
-                        match Map.tryFind name samplerDescriptions with
-                            | Some l -> l
-                            | None -> []
-
                     match typ with
                         | ShaderType.SampledImage(ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt))
                         | ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt) ->
@@ -341,7 +336,7 @@ module PipelineInfo =
                                 binding         = binding
                                 name            = name
                                 count           = 1
-                                description     = samDescriptions
+                                description     = []
                                 resultType      = PrimitiveType.ofShaderType resultType
                                 isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
                                 isSampled       = isSampled
@@ -360,7 +355,7 @@ module PipelineInfo =
                                 binding         = binding
                                 name            = name
                                 count           = len
-                                description     = samDescriptions
+                                description     = []
                                 resultType      = PrimitiveType.ofShaderType resultType
                                 isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
                                 isSampled       = isSampled
