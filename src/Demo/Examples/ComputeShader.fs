@@ -330,7 +330,7 @@ module ComputeShader =
         
         let par = ParallelPrimitives(runtime)
 
-        let path, size = @"C:\volumes\OGI_006_667-465-512.raw", V3i(667,465,512)
+        let path, size = @"C:\Users\Schorsch\Development\WorkDirectory\OGI_006_667x465x512.raw", V3i(667,465,512)
 
         let data = File.readAllBytes path
         let nativeData =
