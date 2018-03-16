@@ -800,7 +800,9 @@ module ``Compute Commands`` =
                                             Marshal.Copy(src, dst, size)
                                         finally
                                             gc.Free()
-                            )      
+                            ) 
+                            
+                            do! Command.Copy(temp, 0L, unbox<Buffer> dst.Buffer, int64 dst.Offset, int64 temp.Size)     
                         finally
                             device.Delete temp
                     }

@@ -2,6 +2,7 @@
 
 
 open System
+open System.IO
 open Aardvark.Base
 open Aardvark.Base.Incremental
 
@@ -302,9 +303,112 @@ module ComputeShader =
                 let final = (1.0 - fade) * inValue + (fade) * color
                 return V4d(final, 1.0)
             }
+            
+    let rand = RandomSystem()
 
-   
+    let inline measureTime (iter : int) (miter : int) (f : unit -> unit) =   
+        let sw = System.Diagnostics.Stopwatch()
+        for mi in 1 .. miter do
+            sw.Start()
+            for i in 1 .. iter do f()
+            sw.Stop()
+            System.GC.Collect()
+            let mutable status = System.GC.WaitForFullGCComplete()
+            while status = GCNotificationStatus.Timeout do
+                status <- System.GC.WaitForFullGCComplete()
+
+        sw.MicroTime / (miter * iter)
+
+    let testSort (sorter : BitonicSorter<float32>) (len : int) =
+        let data = Array.init len (fun _ -> rand.UniformFloat())
+        let gpu = sorter.CreatePermutation data
+
+        let miter = 5
+        let iter = 20
+
+        let hostTime = 
+            measureTime iter miter (fun () ->
+                sorter.CreatePermutation(data, gpu)
+            )
+        Log.line "cpu->cpu: %A" hostTime
+
+
+        let devTime = MicroTime.Zero
+        use buffer = sorter.Runtime.CreateBuffer data
+        use permBuffer = sorter.Runtime.CreateBuffer<int>(data.Length)
+        let devTime =
+            measureTime iter miter (fun () ->
+                sorter.CreatePermutation(buffer, permBuffer)
+            )
+        Log.line "gpu->gpu: %A" devTime
+        
+        use instance = sorter.NewInstance buffer.Count
+        let repTime =
+            measureTime iter miter (fun () ->
+                instance.Run(buffer, permBuffer)
+            )
+        Log.line "prepared: %A" repTime
+        
+        let cpu = data.CreatePermutationQuickSortAscending()
+        let leak = System.Collections.Generic.List(miter * iter)
+        let cpuTime =
+            measureTime iter miter (fun () ->
+                let p = data.CreatePermutationQuickSortAscending()
+                leak.Add p
+            )
+        Log.line "cpu:      %A" cpuTime
+
+        leak.Clear()
+        System.GC.Collect()
+        System.GC.WaitForFullGCComplete() |> ignore
+
+        let test = gpu |> Array.map (Array.get data)
+        let ref = cpu |> Array.map (Array.get data)
+        if test <> ref then
+            Log.warn "ERROR"
+            None
+        else
+            Some (hostTime, devTime, repTime, cpuTime)
+
+    let runSortPerfTest (runtime : IRuntime) = 
+        use sorter = new BitonicSorter<float32>(runtime, <@ (<=) @>)
+        use dummy = sorter.NewInstance 1024
+
+        let file = @"C:\Users\Schorsch\Desktop\sorting.csv"
+        File.WriteAllLines(file, ["size;host -> host;dev -> dev;dev -> dev (prepared);QuickSort"])
+        for size in 8192 .. 8192 .. 1 <<< 18 do
+            Log.start "test %d" size
+            match testSort sorter size with
+                | Some (hostTime, devTime, repTime, cpuTime) ->
+                    File.AppendAllLines(file, [sprintf "%d;%f;%f;%f;%f" size hostTime.TotalMicroseconds devTime.TotalMicroseconds repTime.TotalMicroseconds cpuTime.TotalMicroseconds])
+                | _ ->
+                    ()
+            Log.stop()
+
+            System.GC.Collect()
+            System.GC.WaitForFullGCComplete() |> ignore
+
+
     let run() =
+        use app = new VulkanApplication(false)
+        //use app = new OpenGlApplication(true)
+        let runtime = app.Runtime :> IRuntime
+        
+        let buffer = runtime.CreateBuffer (Array.init 1024 (fun _ -> 1))
+        let par = new ParallelPrimitives(runtime)
+        par.Scan(<@ (+) @>, buffer, buffer)
+
+        let buffer = buffer.Download()
+        Log.line "%A" buffer
+        Environment.Exit 0
+
+
+        use sorter = new BitonicSorter<float32>(runtime, <@ (<=) @>)
+        use dummy = sorter.NewInstance 1024
+        testSort sorter (1 <<< 20) |> ignore
+        //runSortPerfTest runtime
+        Environment.Exit 0
+
         let env = Environment.GetCommandLineArgs()
 
         let mutable path = "116.png"
@@ -320,11 +424,9 @@ module ComputeShader =
                 path <- env.[i+1]
 
 
-        
 
-        use app = new VulkanApplication(true)
-        //use app = new OpenGlApplication(true)
-        let runtime = app.Runtime :> IRuntime
+
+
         let win = app.CreateSimpleRenderWindow(1) 
 
         
