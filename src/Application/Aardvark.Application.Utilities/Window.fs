@@ -15,6 +15,7 @@ open Aardvark.Base.ShaderReflection
 open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Text
 open Aardvark.Application.OpenVR
+open Aardvark.SceneGraph.Semantics
 
 [<RequireQualifiedAccess>]
 type Backend =
@@ -154,6 +155,9 @@ module Utilities =
         abstract member Sizes : IMod<V2i>
         abstract member Samples : int
         abstract member Time : IMod<DateTime>
+        
+        abstract member IsVR : bool
+        abstract member Controllers : list<VrDevice> 
         abstract member Keyboard : IKeyboard
         abstract member Mouse : IMouse
 
@@ -163,9 +167,19 @@ module Utilities =
         abstract member Scene : ISg with get, set
         abstract member Run : ?preventDisposal:bool -> unit
 
+
     [<AbstractClass>]
     type private SimpleRenderWindow(win : IRenderWindow, view : IMod<Trafo3d[]>, proj : IMod<Trafo3d[]>) =
         let mutable scene = Sg.empty
+
+        let controllers, isVr = 
+            match win with
+                | :? Aardvark.Application.OpenVR.VulkanVRApplicationLayered as w -> 
+                    w.Controllers |> Array.toList, true
+                | _ -> [], false
+        
+        abstract member WrapSg : IRenderWindow * ISg -> ISg
+        default x.WrapSg(_,s) = s
 
 
         abstract member Compile : IRenderWindow * ISg -> IRenderTask
@@ -196,8 +210,13 @@ module Utilities =
             with get() = scene
             and set sg = 
                 scene <- sg
-                let task = x.Compile(win, sg)
-                win.RenderTask <- task
+                match win with
+                    | :? OpenVR.VulkanVRApplicationLayered as win ->
+                        let sg =  x.WrapSg(win, sg)
+                        win.RenderTask <- RuntimeCommand.Render(sg.RenderObjects())
+                    | _ ->
+                        let task = x.Compile(win, sg)
+                        win.RenderTask <- task
         
         interface ISimpleRenderWindow with
             member x.Runtime = x.Runtime
@@ -205,6 +224,8 @@ module Utilities =
             member x.Samples = x.Samples
             member x.Time = x.Time
             member x.Keyboard = x.Keyboard
+            member x.IsVR = isVr
+            member x.Controllers = controllers
             member x.Mouse = x.Mouse
             member x.Run(?preventDisposal) = x.Run(preventDisposal)
             
@@ -587,6 +608,15 @@ module Utilities =
                     )
 
                 { new SimpleRenderWindow(app, app.Info.viewTrafos, app.Info.projTrafos) with
+
+                    override x.WrapSg(win, sg) =
+                        sg
+                        |> Sg.stencilMode (Mod.constant stencilTest)
+                        |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
+                        |> Sg.uniform "ProjTrafo" app.Info.projTrafos
+                        |> Sg.uniform "CameraLocation" hmdLocation
+                        |> Sg.uniform "LightLocation" hmdLocation
+
                     override x.Compile(win, sg) =
                         sg
                         |> Sg.stencilMode (Mod.constant stencilTest)

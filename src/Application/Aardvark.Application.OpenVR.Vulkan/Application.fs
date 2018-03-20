@@ -9,6 +9,8 @@ open Aardvark.Application
 open Aardvark.Application.WinForms
 open System.Windows.Forms
 open Aardvark.SceneGraph
+open Aardvark.SceneGraph.Semantics
+open Valve.VR
 
 module StereoShader =
     open FShade
@@ -69,8 +71,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
     let mutable fbo = Unchecked.defaultof<Framebuffer>
     let mutable info = Unchecked.defaultof<VrRenderInfo>
     let mutable fImg = Unchecked.defaultof<Image>
-    let mutable hiddenTask = RenderTask.empty
-    let mutable overlayTask = RenderTask.empty
+    let mutable hiddenTask = RuntimeCommand.Empty
 
     let start = System.DateTime.Now
     let sw = System.Diagnostics.Stopwatch.StartNew()
@@ -104,6 +105,8 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
 
     let beforeRender = Event<unit>()
     let afterRender = Event<unit>()
+    let mutable userCmd = RuntimeCommand.Empty
+    let mutable loaded = false
 
     let compileHidden (m : IndexedGeometry) =
         let writeStencil =
@@ -120,17 +123,15 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
                 )
             )
 
-        hiddenTask <-
+        let sg =
             Sg.ofIndexedGeometry m
                 |> Sg.shader {
                     do! StereoShader.hiddenAreaFragment
                 }
                 |> Sg.stencilMode (Mod.constant writeStencil)
                 |> Sg.writeBuffers' (Set.ofList [DefaultSemantic.Stencil])
-                |> Sg.compile app.Runtime renderPass
-    
-    let compileOverlay (sg : ISg) =
-        overlayTask <- Sg.compile app.Runtime renderPass sg
+
+        hiddenTask <- RuntimeCommand.Render(sg.RenderObjects())
 
     new(samples) = VulkanVRApplicationLayered(samples, false)
     new(debug) = VulkanVRApplicationLayered(1, debug)
@@ -199,9 +200,12 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
 
 
     member x.RenderTask
-        with get() = task
-        and set t = task <- t
-
+        with set (t : RuntimeCommand) = 
+            userCmd <- t
+            if loaded then
+                let list = AList.ofList [ hiddenTask; t ]
+                task <- new Aardvark.Rendering.Vulkan.Temp.CommandTask(app.Device, renderPass, RuntimeCommand.Ordered list)
+                
     override x.OnLoad(i : VrRenderInfo) : VrTexture * VrTexture =
         info <- i
 
@@ -275,7 +279,10 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
 
         
         compileHidden x.HiddenAreaMesh
-        compileOverlay x.ControllerBoxes
+        
+        let list = AList.ofList [ hiddenTask; userCmd ]
+        task <- new Aardvark.Rendering.Vulkan.Temp.CommandTask(app.Device, renderPass, RuntimeCommand.Ordered list)
+        loaded <- true
 
         VrTexture.Vulkan(fTex, Box2d(V2d(0.0, 1.0), V2d(0.5, 0.0))), VrTexture.Vulkan(fTex, Box2d(V2d(0.5, 1.0), V2d(1.0, 0.0)))
 
@@ -304,8 +311,6 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
         }
 
         caller.EvaluateAlways AdaptiveToken.Top (fun t ->
-            hiddenTask.Run(t, RenderToken.Empty, output)
-            overlayTask.Run(t, RenderToken.Empty, output)
             task.Run(t, RenderToken.Empty, output)
         )
         let a = cImg.[ImageAspect.Color, *, 0]
@@ -330,11 +335,11 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
         transact (fun () -> time.MarkOutdated(); version.Value <- version.Value + 1)
 
     override x.Release() = 
-        hiddenTask.Dispose()
-        hiddenTask <- RenderTask.empty
-        
-        overlayTask.Dispose()
-        overlayTask <- RenderTask.empty
+//        hiddenTask.Dispose()
+//        hiddenTask <- RenderTask.empty
+//        
+//        overlayTask.Dispose()
+//        overlayTask <- RenderTask.empty
 
 
         // delete views
@@ -361,8 +366,8 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
         member x.Samples = samples
         member x.FramebufferSignature = x.FramebufferSignature
         member x.RenderTask
-            with get() = x.RenderTask
-            and set t = x.RenderTask <- t
+            with get() = RenderTask.empty
+            and set t = () //x.RenderTask <- t
         member x.Time = time
         member x.BeforeRender = beforeRender.Publish
         member x.AfterRender = afterRender.Publish
