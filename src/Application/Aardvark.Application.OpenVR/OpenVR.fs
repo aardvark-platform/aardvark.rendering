@@ -545,17 +545,6 @@ type VrRenderer() =
             }
         )
 
-    let processEvents() =
-        let mutable evt : VREvent_t = Unchecked.defaultof<VREvent_t>
-        while system.PollNextEvent(&evt, uint32 sizeof<VREvent_t>) do
-            let id = evt.trackedDeviceIndex |> int
-            if id >= 0 && id < devicesPerIndex.Length then
-                match devicesPerIndex.[id] with
-                    | Some device ->
-                        device.Trigger(&evt)
-
-                    | None ->
-                        ()
     let mutable backgroundColor = C4f.Black
 
 
@@ -579,6 +568,18 @@ type VrRenderer() =
             |> Sg.uniform "ViewTrafo" infos.[0].viewTrafos
             |> Sg.uniform "ProjTrafo" infos.[0].projTrafos
             |> Sg.uniform "ViewportSize" (Mod.constant infos.[0].framebufferSize)
+
+    member private x.ProcessEvents() =
+        let mutable evt : VREvent_t = Unchecked.defaultof<VREvent_t>
+        while system.PollNextEvent(&evt, uint32 sizeof<VREvent_t>) do
+            x.ProcessEvent(evt)
+            let id = evt.trackedDeviceIndex |> int
+            if id >= 0 && id < devicesPerIndex.Length then
+                match devicesPerIndex.[id] with
+                    | Some device ->
+                        device.Trigger(&evt)
+                    | None ->
+                        ()
 
     member x.ControllerBoxes =
         controllerBoxes
@@ -614,12 +615,15 @@ type VrRenderer() =
     abstract member Render : unit -> unit
     abstract member Release : unit -> unit
 
+    abstract member ProcessEvent : VREvent_t -> unit
+    default x.ProcessEvent _ = ()
+
     member x.Run () =
         if not isAlive then raise <| ObjectDisposedException("VrSystem")
         let (lTex, rTex) = x.OnLoad infos.[0] 
 
         while isAlive do
-            processEvents()
+            x.ProcessEvents()
 
             let err = compositor.WaitGetPoses(renderPoses, gamePoses)
             if err = EVRCompositorError.None then
