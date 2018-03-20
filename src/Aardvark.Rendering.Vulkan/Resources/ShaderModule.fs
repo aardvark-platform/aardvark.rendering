@@ -132,6 +132,10 @@ type ContextShaderModuleExtensions private() =
         this |> ShaderModule.ofBinary stage spirv
         
     [<Extension>]
+    static member inline CreateShaderModule(this : Device, stage : ShaderStage, spirv : byte[], info : ShaderInfo) =
+        this |> ShaderModule.ofBinaryWithInfo stage info spirv
+        
+    [<Extension>]
     static member inline Delete(this : Device, shader : ShaderModule) =
         this |> ShaderModule.delete shader
         

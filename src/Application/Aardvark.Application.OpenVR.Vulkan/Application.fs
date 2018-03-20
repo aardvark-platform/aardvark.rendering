@@ -9,6 +9,8 @@ open Aardvark.Application
 open Aardvark.Application.WinForms
 open System.Windows.Forms
 open Aardvark.SceneGraph
+open Aardvark.SceneGraph.Semantics
+open Valve.VR
 
 module StereoShader =
     open FShade
@@ -33,6 +35,27 @@ module StereoShader =
             return { v with pos = V4d(1.0, -1.0, 1.0 + zero, 1.0) * v.pos }
         }
 
+
+    type HiddenVertex =
+        {
+            [<Position>]
+            pos : V4d
+
+            [<Semantic("EyeIndex"); Interpolation(InterpolationMode.Flat)>]
+            eyeIndex : int
+
+            [<Layer>]
+            layer : int
+        }
+
+    let hiddenAreaFragment (t : HiddenVertex) =
+        fragment {
+            if t.layer <> t.eyeIndex then
+                discard()
+
+            return V4d.IIII
+        }
+
 type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
     inherit VrRenderer()
 
@@ -48,6 +71,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
     let mutable fbo = Unchecked.defaultof<Framebuffer>
     let mutable info = Unchecked.defaultof<VrRenderInfo>
     let mutable fImg = Unchecked.defaultof<Image>
+    let mutable hiddenTask = RuntimeCommand.Empty
 
     let start = System.DateTime.Now
     let sw = System.Diagnostics.Stopwatch.StartNew()
@@ -81,6 +105,33 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
 
     let beforeRender = Event<unit>()
     let afterRender = Event<unit>()
+    let mutable userCmd = RuntimeCommand.Empty
+    let mutable loaded = false
+
+    let compileHidden (m : IndexedGeometry) =
+        let writeStencil =
+            StencilMode(
+                StencilOperation(
+                    StencilOperationFunction.Replace,
+                    StencilOperationFunction.Replace,
+                    StencilOperationFunction.Replace
+                ),
+                StencilFunction(
+                    StencilCompareFunction.Always,
+                    1,
+                    0xFFFFFFFFu
+                )
+            )
+
+        let sg =
+            Sg.ofIndexedGeometry m
+                |> Sg.shader {
+                    do! StereoShader.hiddenAreaFragment
+                }
+                |> Sg.stencilMode (Mod.constant writeStencil)
+                |> Sg.writeBuffers' (Set.ofList [DefaultSemantic.Stencil])
+
+        hiddenTask <- RuntimeCommand.Render(sg.RenderObjects())
 
     new(samples) = VulkanVRApplicationLayered(samples, false)
     new(debug) = VulkanVRApplicationLayered(1, debug)
@@ -149,9 +200,12 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
 
 
     member x.RenderTask
-        with get() = task
-        and set t = task <- t
-
+        with set (t : RuntimeCommand) = 
+            userCmd <- t
+            if loaded then
+                let list = AList.ofList [ hiddenTask; t ]
+                task <- new Aardvark.Rendering.Vulkan.Temp.CommandTask(app.Device, renderPass, RuntimeCommand.Ordered list)
+                
     override x.OnLoad(i : VrRenderInfo) : VrTexture * VrTexture =
         info <- i
 
@@ -223,6 +277,13 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
             do! Command.TransformLayout(dImg, VkImageLayout.DepthStencilAttachmentOptimal)
         }
 
+        
+        compileHidden x.HiddenAreaMesh
+        
+        let list = AList.ofList [ hiddenTask; userCmd ]
+        task <- new Aardvark.Rendering.Vulkan.Temp.CommandTask(app.Device, renderPass, RuntimeCommand.Ordered list)
+        loaded <- true
+
         VrTexture.Vulkan(fTex, Box2d(V2d(0.0, 1.0), V2d(0.5, 0.0))), VrTexture.Vulkan(fTex, Box2d(V2d(0.5, 1.0), V2d(1.0, 0.0)))
 
     override x.Render() = 
@@ -241,7 +302,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
             do! Command.TransformLayout(dImg, VkImageLayout.TransferDstOptimal)
             do! Command.TransformLayout(cImg, VkImageLayout.TransferDstOptimal)
 
-            do! Command.ClearColor(cImg.[ImageAspect.Color, 0, *], C4f.Black)
+            do! Command.ClearColor(cImg.[ImageAspect.Color, 0, *], x.BackgroundColor)
             do! Command.ClearDepthStencil(dImg.[ImageAspect.DepthStencil, 0, *], 1.0, 0u)
             
             do! Command.TransformLayout(dImg, VkImageLayout.DepthStencilAttachmentOptimal)
@@ -261,9 +322,6 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
         device.perform {
             do! Command.TransformLayout(cImg, VkImageLayout.TransferSrcOptimal)
 
-            //do! Command.Blit(cImg.[ImageAspect.Color, 0, 0], srcBox, fImg.[ImageAspect.Color, 0, 0], lBox, VkFilter.Nearest)
-            //do! Command.Blit(cImg.[ImageAspect.Color, 0, 1], srcBox, fImg.[ImageAspect.Color, 0, 0], rBox, VkFilter.Nearest)
-
             if samples > 1 then
                 do! Command.ResolveMultisamples(cImg.[ImageAspect.Color, 0, 0], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(info.framebufferSize, 1))
                 do! Command.ResolveMultisamples(cImg.[ImageAspect.Color, 0, 1], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i(info.framebufferSize.X, 0, 0), V3i(info.framebufferSize, 1))
@@ -277,6 +335,13 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
         transact (fun () -> time.MarkOutdated(); version.Value <- version.Value + 1)
 
     override x.Release() = 
+//        hiddenTask.Dispose()
+//        hiddenTask <- RenderTask.empty
+//        
+//        overlayTask.Dispose()
+//        overlayTask <- RenderTask.empty
+
+
         // delete views
         device.Delete fbo.Attachments.[DefaultSemantic.Colors]
         device.Delete fbo.Attachments.[DefaultSemantic.Depth]
@@ -301,8 +366,8 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
         member x.Samples = samples
         member x.FramebufferSignature = x.FramebufferSignature
         member x.RenderTask
-            with get() = x.RenderTask
-            and set t = x.RenderTask <- t
+            with get() = RenderTask.empty
+            and set t = () //x.RenderTask <- t
         member x.Time = time
         member x.BeforeRender = beforeRender.Publish
         member x.AfterRender = afterRender.Publish
