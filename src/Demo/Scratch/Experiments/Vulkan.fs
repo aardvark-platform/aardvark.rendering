@@ -304,33 +304,37 @@ module Lod =
         interface ILodData with
             member x.BoundingBox = root
 
-            member x.Traverse f =
+            member x.RootNode =
                 let rec traverse (level : int) (b : Box3d) =
                     let box = b
-                    let node = { id = b; level = level; bounds = box; inner = true; pointCountNode = 100L; pointCountTree = 100L; render = true }
+                    let n = 600
 
-                    if f node then
-                        let center = b.Center
+                    let center = b.Center
 
-                        let children =
-                            let l = b.Min
-                            let u = b.Max
-                            let c = center
-                            [
-                                Box3d(V3d(l.X, l.Y, l.Z), V3d(c.X, c.Y, c.Z))
-                                Box3d(V3d(c.X, l.Y, l.Z), V3d(u.X, c.Y, c.Z))
-                                Box3d(V3d(l.X, c.Y, l.Z), V3d(c.X, u.Y, c.Z))
-                                Box3d(V3d(c.X, c.Y, l.Z), V3d(u.X, u.Y, c.Z))
-                                Box3d(V3d(l.X, l.Y, c.Z), V3d(c.X, c.Y, u.Z))
-                                Box3d(V3d(c.X, l.Y, c.Z), V3d(u.X, c.Y, u.Z))
-                                Box3d(V3d(l.X, c.Y, c.Z), V3d(c.X, u.Y, u.Z))
-                                Box3d(V3d(c.X, c.Y, c.Z), V3d(u.X, u.Y, u.Z))
-                            ]
+                    let children =
+                        let l = b.Min
+                        let u = b.Max
+                        let c = center
+                        [|
+                            Box3d(V3d(l.X, l.Y, l.Z), V3d(c.X, c.Y, c.Z))
+                            Box3d(V3d(c.X, l.Y, l.Z), V3d(u.X, c.Y, c.Z))
+                            Box3d(V3d(l.X, c.Y, l.Z), V3d(c.X, u.Y, c.Z))
+                            Box3d(V3d(c.X, c.Y, l.Z), V3d(u.X, u.Y, c.Z))
+                            Box3d(V3d(l.X, l.Y, c.Z), V3d(c.X, c.Y, u.Z))
+                            Box3d(V3d(c.X, l.Y, c.Z), V3d(u.X, c.Y, u.Z))
+                            Box3d(V3d(l.X, c.Y, c.Z), V3d(c.X, u.Y, u.Z))
+                            Box3d(V3d(c.X, c.Y, c.Z), V3d(u.X, u.Y, u.Z))
+                        |]
 
-                        children |> List.iter (traverse (level + 1))
-                    else
-                        ()
-                traverse 0 root
+                    let kids = 
+                        if level < 15 then
+                            children |> Array.map (traverse (level + 1)) |> Some
+                        else
+                            None
+
+                    { id = b; level = level; bounds = box;  pointCountNode = 100L; pointCountTree = 100L; children = kids }
+
+                traverse 0 root :> ILodDataNode
 
             member x.Dependencies = []
 
@@ -452,8 +456,7 @@ module Lod =
 
     let cloud =
         Sg.pointCloud data {
-            lodDecider              = Mod.constant (LodData.defaultLodDecider 40.0)
-            lodRasterizer           = Mod.constant (LodData.defaultRasterizeSet)
+            lodRasterizer           = Mod.constant (LodData.defaultRasterizeSet 40.0)
             freeze                  = Mod.constant false
             maxReuseRatio           = 0.5
             minReuseCount           = 1L <<< 20
