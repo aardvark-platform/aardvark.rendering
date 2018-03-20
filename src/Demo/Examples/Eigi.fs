@@ -358,14 +358,14 @@ module Eigi =
 
         let win = 
             window {
-                display Display.Stereo
+                display Display.OpenVR
                 samples 8
                 backend Backend.Vulkan
-                debug true
+                debug false
             }
 
         // load the model
-        let scene = Loader.Assimp.loadFrom @"C:\Users\Schorsch\Desktop\raptor\test2.dae" (Loader.Assimp.defaultFlags ||| Assimp.PostProcessSteps.FlipUVs)
+        let scene = Loader.Assimp.loadFrom @"C:\Aardwork\raptor\test2.dae" (Loader.Assimp.defaultFlags)// ||| Assimp.PostProcessSteps.FlipUVs)
 
         let sw = System.Diagnostics.Stopwatch()
         sw.Start()
