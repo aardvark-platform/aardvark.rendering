@@ -55,6 +55,7 @@
     <Compile Include="Primitives.fs" />
     <Compile Include="Jpeg.fs" />
     <Compile Include="Segmentation.fs" />
+    <Compile Include="Sorting.fs" />
   </ItemGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
