@@ -187,7 +187,7 @@ module Stereo =
                     |> Sg.andAlso overlay
                     |> Sg.compile app.Runtime impl.FramebufferSignature
 
-            impl.RenderTask <-task
+            //impl.RenderTask <-task
             impl.Dock <- System.Windows.Forms.DockStyle.Fill
             d.Controls.Add impl
 
@@ -218,7 +218,7 @@ module Stereo =
                 |> Sg.uniform "ProjTrafo" info.projTrafos
                 |> Sg.compile app.Runtime app.FramebufferSignature
 
-        app.RenderTask <- task
+        //app.RenderTask <- task
 
 
         app.Run()

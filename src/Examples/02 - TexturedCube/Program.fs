@@ -37,10 +37,10 @@ let main argv =
 
     // show the scene in a simple window
     show {
-        backend Backend.GL
-        display Display.Mono
+        backend Backend.Vulkan
+        display Display.OpenVR
         debug false
-        samples 8
+        samples 1
         scene sg
     }
 

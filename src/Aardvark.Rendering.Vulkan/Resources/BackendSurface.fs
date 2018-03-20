@@ -291,20 +291,33 @@ module PipelineInfo =
             eUniformBuffers
                 |> MapExt.toList
                 |> List.map (fun (bufferName, fields) ->
-                    let fields =
-                        fields
-                            |> MapExt.toList
-                            |> List.map (fun (name, typ) ->
+                    if bufferName = "StorageBuffer" then
+                        let bindings = 
+                            fields |> MapExt.toList |> List.map (fun (name, typ) ->
                                 let t = ShaderType.ofType typ
-                                (t, name, [])
+                                {
+                                    set = 0
+                                    binding = newBinding()
+                                    name = name + "SSB"
+                                    layout = UniformBufferLayoutStd140.structLayout [t, name, []]
+                                }
                             )
+                        Choice1Of2 bindings
+                    else
+                        let fields =
+                            fields
+                                |> MapExt.toList
+                                |> List.map (fun (name, typ) ->
+                                    let t = ShaderType.ofType typ
+                                    (t, name, [])
+                                )
 
-                    {
-                        set = 0
-                        binding = newBinding()
-                        name = bufferName
-                        layout = UniformBufferLayoutStd140.structLayout fields
-                    }
+                        Choice2Of2 {
+                            set = 0
+                            binding = newBinding()
+                            name = bufferName
+                            layout = UniformBufferLayoutStd140.structLayout fields
+                        }
                 )
 
         let textures =
@@ -361,8 +374,8 @@ module PipelineInfo =
  
         { 
             pInputs          = inputs
-            pUniformBlocks   = uniformBuffers
-            pStorageBlocks   = []
+            pUniformBlocks   = uniformBuffers |> List.choose (function Choice2Of2 b -> Some b | _ -> None)
+            pStorageBlocks   = uniformBuffers |> List.collect (function Choice1Of2 b -> b | _ -> [])
             pTextures        = textures
             pOutputs         = outputs
             pEffectLayout    = Some layout
