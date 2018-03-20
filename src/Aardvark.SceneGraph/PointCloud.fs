@@ -304,9 +304,6 @@ type PointCloudInfo =
         /// the element-types for all available attributes
         attributeTypes : Map<Symbol, Type>
         
-        /// decider function
-        lodDecider : IMod<LodData.Decider>
-
         /// rasterizer function
         lodRasterizer : IMod<LodData.SetRasterizer>
 
@@ -473,9 +470,6 @@ module PointCloudRenderObjectSemantics =
                 scope?Runtime
 
             let ro = RenderObject.ofScope scope
-            
-            let decider = 
-                config.lodDecider
 
             let rasterizer = 
                 config.lodRasterizer
@@ -516,16 +510,15 @@ module PointCloudRenderObjectSemantics =
                 Mod.custom (fun token ->
                     let view,proj = vp.GetValue(token)
                     let size = size.GetValue(token)
-                    let decider = decider.GetValue(token)
                     let rasterizer = rasterizer.GetValue(token)
 
                     for d in data.Dependencies do d.GetValue token |> ignore
 
-                    view, proj, size, decider, rasterizer
+                    view, proj, size, rasterizer
                 )
 
-            let rasterize (view : Trafo3d, proj : Trafo3d, size : V2i, decider : LodData.Decider, rasterizer : LodData.SetRasterizer) =
-                data.Rasterize(view, proj, decider view proj size,rasterizer)
+            let rasterize (view : Trafo3d, proj : Trafo3d, size : V2i, rasterizer : LodData.SetRasterizer) =
+                data.Rasterize(view, proj, size, rasterizer)
 
             let pool = runtime.CreateGeometryPool(config.attributeTypes)
             let mutable refCount = 0

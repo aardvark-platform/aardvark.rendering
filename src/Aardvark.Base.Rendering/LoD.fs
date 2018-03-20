@@ -8,9 +8,8 @@ type ILodDataNode =
     abstract member Id : obj
     abstract member Level : int
     abstract member Bounds : Box3d
-    abstract member Inner : bool
-    abstract member ShouldRender : bool
     abstract member LocalPointCount : int64
+    abstract member Children : Option<array<ILodDataNode>>
 
 [<CustomEquality; NoComparison>]
 type LodDataNode =
@@ -18,10 +17,9 @@ type LodDataNode =
         id : obj
         level : int
         bounds : Box3d
-        inner : bool
         pointCountTree : int64
         pointCountNode : int64
-        render : bool
+        children : Option<array<LodDataNode>>
     }
 
     override x.GetHashCode() = x.id.GetHashCode()
@@ -33,19 +31,20 @@ type LodDataNode =
     interface ILodDataNode with
         member x.Id = x.id
         member x.Bounds = x.bounds
-        member x.Inner = x.inner
         member x.Level = x.level
-        member x.ShouldRender = x.render
         member x.LocalPointCount = x.pointCountNode
+        member x.Children = x.children |> (Option.map (Array.map (fun l -> l :> ILodDataNode)))
 
 type ILodData =
     abstract member BoundingBox : Box3d
-    abstract member Traverse : (ILodDataNode -> bool) -> unit
+    abstract member RootNode : ILodDataNode
     abstract member Dependencies : list<IMod>
     abstract member GetData : node : ILodDataNode -> Async<Option<IndexedGeometry>>
 
 module LodData =
     
+
+
     type Decider = Trafo3d -> Trafo3d -> V2i -> ILodDataNode -> bool
     
     let defaultLodDecider (targetPixelDistance : float) (viewTrafo : Trafo3d) (projTrafo : Trafo3d) (viewPortSize : V2i) (node : ILodDataNode )  =
@@ -68,35 +67,37 @@ module LodData =
 
         averagePointDistanceInPixels > targetPixelDistance
 
-    type SetRasterizer = FastHull3d -> (ILodDataNode -> bool) -> ((ILodDataNode -> bool)->unit) -> ISet<ILodDataNode>
+    type SetRasterizer = Trafo3d -> Trafo3d -> V2i -> FastHull3d -> ILodDataNode -> ISet<ILodDataNode>
 
-    let defaultRasterizeSet (cameraHull : FastHull3d) (lodDecider : ILodDataNode -> bool) (traverse : (ILodDataNode -> bool) -> unit) =
+    let defaultRasterizeSet (targetPixelDistance : float) (viewTrafo : Trafo3d) (projTrafo : Trafo3d) (viewPortSize : V2i) (cameraHull : FastHull3d) (root : ILodDataNode) =
         
         let result = HashSet<ILodDataNode>()
 
-        let continueTraversal (node : ILodDataNode) =
+        let rec traverse (node : ILodDataNode) =
             if cameraHull.Intersects(node.Bounds) then
-                if node.Inner then
-                    if lodDecider node then
-                        if node.ShouldRender then result.Add node |> ignore
-                        true
-                    else
-                        false
-                else
+                if defaultLodDecider targetPixelDistance viewTrafo projTrafo viewPortSize node then
                     result.Add node |> ignore
-                    false
+                    match node.Children with
+                    | None -> 
+                        ()
+                    | Some cs ->
+                        cs |> Array.iter traverse
+                else
+                    ()
             else
-                false
+                ()
         
-        traverse continueTraversal
+        do traverse root
 
         result :> ISet<_>
         
-    let rasterize viewTrafo projTrafo decider (x : ILodData) (rasterizeSet : SetRasterizer) =
+    let rasterize viewTrafo projTrafo (viewPortSize : V2i) (x : ILodData) (rasterizeSet : SetRasterizer) =
         // create a FastHull3d for the (extended) camera
         let hull = viewTrafo * projTrafo |> ViewProjection.toFastHull3d
 
-        let result = rasterizeSet hull decider x.Traverse
+        let set = x.RootNode
+
+        let result = rasterizeSet viewTrafo projTrafo viewPortSize hull set
 
         // traverse the ILodData building a set of nodes in view respecting
         // the given nearPlaneDistance in [(-1,-1) x (1,1)] space
@@ -129,8 +130,8 @@ module ``Lod Data Extensions`` =
         frustum
 
     type ILodData with
-        member x.Rasterize(viewTrafo : Trafo3d, projTrafo : Trafo3d, decider : ILodDataNode -> bool, rasterizeSet : LodData.SetRasterizer) =
-            LodData.rasterize viewTrafo projTrafo decider x rasterizeSet
+        member x.Rasterize(viewTrafo : Trafo3d, projTrafo : Trafo3d, viewPortSize : V2i, rasterizeSet : LodData.SetRasterizer) =
+            LodData.rasterize viewTrafo projTrafo viewPortSize x rasterizeSet
             
 open System
 open System.Threading

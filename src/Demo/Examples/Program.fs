@@ -1276,6 +1276,7 @@ module AdaptiveResourcesEager =
             maxTime
 
 
+
 open Aardvark.Application.WinForms
 
 [<EntryPoint>]
@@ -1294,8 +1295,8 @@ let main args =
 
     //Examples.Tessellation.run()
     //Examples.Stereo.runNew()
-    Examples.ComputeShader.run()
-    //Examples.LoD.run()
+    //Examples.ComputeShader.run()
+    Examples.LoD.run()
     //Examples.LevelOfDetail.run()
     //Examples.Wobble.run()
     //Examples.GeometryComposition.run()

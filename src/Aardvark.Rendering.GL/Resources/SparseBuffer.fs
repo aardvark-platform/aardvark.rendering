@@ -371,7 +371,6 @@ type SparseBufferGeometryPool(ctx : Context, types : Map<Symbol, Type>) =
 
         use __ = ctx.ResourceLock
         Interlocked.Increment(&count) |> ignore
-
         for (sem, (buffer, t, es)) in Map.toSeq buffers do
             let o = es * ptr.Offset
             let s = es * ptr.Size

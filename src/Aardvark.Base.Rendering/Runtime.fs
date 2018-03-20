@@ -217,6 +217,7 @@ module Management =
                         else
                             let newFree = Block<'a>(this, store, oldCapacity, additional, true, last, null)
                             last.Next <- newFree
+                            last <- newFree
                             free.Insert(newFree)
                     else (* additional < 0 *)
                         let freed = -additional
@@ -294,50 +295,51 @@ module Management =
         member x.Free(b : Block<'a>) =
             if not b.IsFree then
                 lock free (fun () ->
-                    let old = b
+                    if not b.IsFree then
+                        let old = b
                     
-                    let b = Block(x, store, b.Offset, b.Size, b.IsFree, b.Prev, b.Next)
-                    if isNull b.Prev then first <- b
-                    else b.Prev.Next <- b
+                        let b = Block(x, store, b.Offset, b.Size, b.IsFree, b.Prev, b.Next)
+                        if isNull b.Prev then first <- b
+                        else b.Prev.Next <- b
 
-                    if isNull b.Next then last <- b
-                    else b.Next.Prev <- b
+                        if isNull b.Next then last <- b
+                        else b.Next.Prev <- b
 
-                    old.Next <- null
-                    old.Prev <- null
-                    old.IsFree <- true
-                    old.Offset <- -1n
-                    old.Size <- 0n
+                        old.Next <- null
+                        old.Prev <- null
+                        old.IsFree <- true
+                        old.Offset <- -1n
+                        old.Size <- 0n
 
 
-                    let prev = b.Prev
-                    let next = b.Next
-                    if not (isNull prev) && prev.IsFree then
-                        free.Remove(prev) |> ignore
+                        let prev = b.Prev
+                        let next = b.Next
+                        if not (isNull prev) && prev.IsFree then
+                            free.Remove(prev) |> ignore
                         
-                        b.Prev <- prev.Prev
-                        if isNull prev.Prev then first <- b
-                        else prev.Prev.Next <- b
+                            b.Prev <- prev.Prev
+                            if isNull prev.Prev then first <- b
+                            else prev.Prev.Next <- b
 
-                        b.Offset <- prev.Offset
-                        b.Size <- b.Size + prev.Size
+                            b.Offset <- prev.Offset
+                            b.Size <- b.Size + prev.Size
 
-                    if not (isNull next) && next.IsFree then
-                        free.Remove(next) |> ignore
-                        b.Next <- next.Next
-                        if isNull next.Next then last <- b
-                        else next.Next.Prev <- b
-                        b.Next <- next.Next
+                        if not (isNull next) && next.IsFree then
+                            free.Remove(next) |> ignore
+                            b.Next <- next.Next
+                            if isNull next.Next then last <- b
+                            else next.Next.Prev <- b
+                            b.Next <- next.Next
 
-                        b.Size <- b.Size + next.Size
+                            b.Size <- b.Size + next.Size
 
 
-                    b.IsFree <- true
-                    free.Insert(b)
+                        b.IsFree <- true
+                        free.Insert(b)
 
-                    if last.IsFree then
-                        let c = Fun.NextPowerOfTwo (int64 last.Offset) |> nativeint
-                        changeCapacity c
+                        if last.IsFree then
+                            let c = Fun.NextPowerOfTwo (int64 last.Offset) |> nativeint
+                            changeCapacity c
 
                 )
 
