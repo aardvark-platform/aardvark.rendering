@@ -158,7 +158,7 @@ type MotionState() =
     member x.Velocity = velocity :> IMod<_>
     member x.AngularVelocity = angularVelocity :> IMod<_>
 
-    member internal x.Update(newPose : byref<TrackedDevicePose_t>) =
+    member x.Update(newPose : byref<TrackedDevicePose_t>) =
         if newPose.bDeviceIsConnected && newPose.bPoseIsValid && newPose.eTrackingResult = ETrackingResult.Running_OK then
             let t = Trafo.ofHmdMatrix34 newPose.mDeviceToAbsoluteTracking
             isValid.Value <- true
@@ -195,12 +195,11 @@ module RenderModels =
     [<StructLayout(LayoutKind.Sequential)>]
     type RenderModel =
         struct
-            val mutable public InternalHandle : uint64
             val mutable public VertexData : nativeptr<Vertex>
             val mutable public VertexCount : uint32
             val mutable public IndexData : nativeptr<uint16>
             val mutable public TriangleCount : uint32
-            val mutable public TextureMap : TextureMap
+            val mutable public DiffuseTextureId : int32
         end
 
     let private modelCache = System.Collections.Concurrent.ConcurrentDictionary<string, Option<ISg>>()
@@ -209,13 +208,32 @@ module RenderModels =
         let call = DrawCallInfo(FaceVertexCount = int m.TriangleCount * 3, InstanceCount = 1)
         let mode = IndexedGeometryMode.TriangleList
 
-        let indexBuffer = NativeMemoryBuffer(NativePtr.toNativeInt m.IndexData, int m.TriangleCount * 3 * sizeof<uint16>)
-        let indexBufferView = BufferView(Mod.constant (indexBuffer :> IBuffer), typeof<uint16>)
+        let index = 
+            let data : uint16[] = Array.zeroCreate (int m.TriangleCount * 3)
+            let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
+            Marshal.Copy(NativePtr.toNativeInt m.IndexData, gc.AddrOfPinnedObject(), nativeint m.TriangleCount * 3n * 2n)
+            gc.Free()
+            data |> Array.map int
 
-        let vertexBuffer = NativeMemoryBuffer(NativePtr.toNativeInt m.VertexData, int m.VertexCount * sizeof<Vertex>) :> IBuffer
-        let positions = BufferView(Mod.constant vertexBuffer, typeof<V3f>, 0, sizeof<Vertex>)
-        let normals = BufferView(Mod.constant vertexBuffer, typeof<V3f>, 12, sizeof<Vertex>)
-        let coords = BufferView(Mod.constant vertexBuffer, typeof<V2f>, 24, sizeof<Vertex>)
+        let vertices : Vertex[] = Array.zeroCreate (int m.VertexCount)
+        do 
+            let gc = GCHandle.Alloc(vertices, GCHandleType.Pinned)
+            Marshal.Copy(NativePtr.toNativeInt m.VertexData, gc.AddrOfPinnedObject(), nativeint m.VertexCount * nativeint sizeof<Vertex>)
+            gc.Free()
+
+
+        let positions = vertices |> Array.map (fun v -> V3f(v.Postion.X, -v.Postion.Z, v.Postion.Y))
+        let normals = vertices |> Array.map (fun v -> V3f(v.Normal.X, -v.Normal.Z, v.Normal.Y).Normalized)
+        let tc = vertices |> Array.map (fun v -> V2f(v.TexCoord.X, 1.0f - v.TexCoord.Y))
+
+
+        let indexBuffer = ArrayBuffer(index) //NativeMemoryBuffer(NativePtr.toNativeInt m.IndexData, int m.TriangleCount * 3 * sizeof<uint16>)
+        let indexBufferView = BufferView(Mod.constant (indexBuffer :> IBuffer), typeof<int>)
+
+        //let vertexBuffer = NativeMemoryBuffer(NativePtr.toNativeInt m.VertexData, int m.VertexCount * sizeof<Vertex>) :> IBuffer
+        let positions = BufferView(Mod.constant (ArrayBuffer(positions) :> IBuffer), typeof<V3f>)
+        let normals = BufferView(Mod.constant (ArrayBuffer(normals) :> IBuffer), typeof<V3f>)
+        let coords = BufferView(Mod.constant (ArrayBuffer(tc) :> IBuffer), typeof<V2f>)
 
         let sg = 
             Sg.VertexIndexApplicator(indexBufferView, Sg.render mode call) :> ISg 
@@ -223,36 +241,54 @@ module RenderModels =
                 |> Sg.vertexBuffer DefaultSemantic.Normals normals
                 |> Sg.vertexBuffer DefaultSemantic.DiffuseColorCoordinates coords
 
-        let tex = m.TextureMap
-        if tex.Width > 0us && tex.Height > 0us then
-            let info =
-                VolumeInfo(
-                    0L,
-                    V3l(int tex.Width, int tex.Height, 4),
-                    V3l(4, int tex.Width * 4, 1)
+        let mutable ptr = 0n
+        let mutable err = EVRRenderModelError.InvalidTexture
+        if m.DiffuseTextureId >= 0 then
+            err <- OpenVR.RenderModels.LoadTexture_Async(m.DiffuseTextureId, &ptr)
+            while err = EVRRenderModelError.Loading do
+                System.Threading.Thread.Sleep 10
+                err <- OpenVR.RenderModels.LoadTexture_Async(m.DiffuseTextureId, &ptr)
+
+        if err = EVRRenderModelError.None then
+            let tex : TextureMap = NativeInt.read ptr
+            if tex.Width > 0us && tex.Height > 0us then
+                let info =
+                    VolumeInfo(
+                        0L,
+                        V3l(int tex.Width, int tex.Height, 4),
+                        V3l(4, int tex.Width * 4, 1)
+                    )
+
+                let volume = NativeVolume<byte>(tex.Data, info)
+                let image = PixImage<byte>(Col.Format.RGBA, V2i(int tex.Width, int tex.Height))
+
+                NativeVolume.using image.Volume (fun dst ->
+                    NativeVolume.copy volume dst
                 )
-
-            let volume = NativeVolume<byte>(tex.Data, info)
-            let image = PixImage<byte>(Col.Format.RGBA, V2i(int tex.Width, int tex.Height))
-
-            NativeVolume.using image.Volume (fun dst ->
-                NativeVolume.copy volume dst
-            )
             
-            let texture = PixTexture2d(PixImageMipMap [| image :> PixImage |], true) :> ITexture
+                let texture = PixTexture2d(PixImageMipMap [| image :> PixImage |], true) :> ITexture
 
-            Sg.diffuseTexture' texture sg
+                Sg.diffuseTexture' texture sg
+            else
+                sg
         else
             sg
 
     let load (name : string) =
         modelCache.GetOrAdd(name, fun name ->
             let mutable ptr = 0n
-            if OpenVR.RenderModels.LoadRenderModel_Async(name, &ptr) = EVRRenderModelError.None then
+            let mutable err = OpenVR.RenderModels.LoadRenderModel_Async(name, &ptr)
+            while err = EVRRenderModelError.Loading do   
+                System.Threading.Thread.Sleep 10
+                err <- OpenVR.RenderModels.LoadRenderModel_Async(name, &ptr)
+
+
+            if err = EVRRenderModelError.None then
                 let model : RenderModel = NativeInt.read ptr
                 let sg = toSg model
                 Some sg
             else
+                Log.warn "[OpenVR] could not load model %s: %A" name err
                 None
         )
 
@@ -294,6 +330,8 @@ type VrDevice(system : CVRSystem, deviceType : VrDeviceType, index : int) =
 
     let state = MotionState()
 
+    member x.Model = renderModel.Value
+
     member x.RenderModel =
         model.Value
 
@@ -304,6 +342,10 @@ type VrDevice(system : CVRSystem, deviceType : VrDeviceType, index : int) =
     member x.MotionState = state
 
     member x.Events = events.Publish
+
+    member x.Index = index
+
+    member x.RenderModelName = renderModelName.Value 
 
     member internal x.Update(poses : TrackedDevicePose_t[]) =
         state.Update(&poses.[index])
@@ -548,6 +590,8 @@ type VrRenderer() =
     let mutable backgroundColor = C4f.Black
 
 
+
+
     let controllerBoxes =
         let cam = hmds.[0].MotionState.Pose |> Mod.map (fun t -> t.Forward.C3.XYZ)
         controllers 
@@ -569,10 +613,15 @@ type VrRenderer() =
             |> Sg.uniform "ProjTrafo" infos.[0].projTrafos
             |> Sg.uniform "ViewportSize" (Mod.constant infos.[0].framebufferSize)
 
-    member private x.ProcessEvents() =
+
+    let eventQueue = System.Collections.Generic.Queue<VREvent_t>()
+
+    member private x.ProcessEvents(events : System.Collections.Generic.Queue<VREvent_t>) =
+        
         let mutable evt : VREvent_t = Unchecked.defaultof<VREvent_t>
         while system.PollNextEvent(&evt, uint32 sizeof<VREvent_t>) do
-            x.ProcessEvent(evt)
+            
+            events.Enqueue evt
             let id = evt.trackedDeviceIndex |> int
             if id >= 0 && id < devicesPerIndex.Length then
                 match devicesPerIndex.[id] with
@@ -601,6 +650,7 @@ type VrRenderer() =
         let str = b.ToString()
         str.Split(' ') |> Array.toList
 
+    member x.System = system
     member x.Compositor = compositor
     member x.DesiredSize = desiredSize
 
@@ -618,13 +668,17 @@ type VrRenderer() =
     abstract member ProcessEvent : VREvent_t -> unit
     default x.ProcessEvent _ = ()
 
+    abstract member UpdatePoses : TrackedDevicePose_t[] -> unit
+    default x.UpdatePoses _ = ()
+
     member x.Run () =
         if not isAlive then raise <| ObjectDisposedException("VrSystem")
         let (lTex, rTex) = x.OnLoad infos.[0] 
 
-        while isAlive do
-            x.ProcessEvents()
+        
 
+        while isAlive do
+            x.ProcessEvents(eventQueue)
             let err = compositor.WaitGetPoses(renderPoses, gamePoses)
             if err = EVRCompositorError.None then
 
@@ -632,6 +686,13 @@ type VrRenderer() =
                 transact (fun () ->
                     for d in devices do d.Update(renderPoses)
                 )
+
+
+                x.UpdatePoses(renderPoses)
+                while eventQueue.Count > 0 do
+                    let evt = eventQueue.Dequeue()
+                    x.ProcessEvent evt
+
             
                 // render for all HMDs
                 for i in 0 .. hmds.Length - 1 do
