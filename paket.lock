@@ -72,7 +72,7 @@ NUGET
       Aardvark.Base.FSharp (>= 3.0.35)
       FSharp.Core (>= 4.0.0.1)
     Unofficial.AssimpNet (3.3.3)
-    Unofficial.OpenVR (1.0.10)
+    Unofficial.OpenVR (1.0.11)
   remote: https://api.nuget.org/v3/index.json
     Another.Unofficial.Xilium.CefGlue.UnpackNativeDependencies (0.0.13)
       SharpZipLib (>= 0.86 < 0.87)
