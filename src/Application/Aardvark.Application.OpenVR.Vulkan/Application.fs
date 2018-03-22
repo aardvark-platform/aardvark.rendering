@@ -315,22 +315,48 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
         )
         let a = cImg.[ImageAspect.Color, *, 0]
 
-        let srcBox = Box3i(V3i(0,info.framebufferSize.Y - 1,0), V3i(info.framebufferSize.X - 1, 0, 0))
-        let lBox = Box3i(V3i.Zero, V3i(info.framebufferSize - V2i.II, 0))
-        let rBox = Box3i(V3i(info.framebufferSize.X, 0, 0), V3i(2*info.framebufferSize.X - 1, info.framebufferSize.Y-1, 0))
+        if device.AllCount > 1u then
 
-        device.perform {
-            do! Command.TransformLayout(cImg, VkImageLayout.TransferSrcOptimal)
+            device.perform {
+                for di in 0 .. int device.AllCount - 1 do
+                    do! Command.SetDeviceMask (1u <<< di)
 
-            if samples > 1 then
-                do! Command.ResolveMultisamples(cImg.[ImageAspect.Color, 0, 0], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(info.framebufferSize, 1))
-                do! Command.ResolveMultisamples(cImg.[ImageAspect.Color, 0, 1], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i(info.framebufferSize.X, 0, 0), V3i(info.framebufferSize, 1))
-            else
-                do! Command.Copy(cImg.[ImageAspect.Color, 0, 0], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(info.framebufferSize, 1))
-                do! Command.Copy(cImg.[ImageAspect.Color, 0, 1], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i(info.framebufferSize.X, 0, 0), V3i(info.framebufferSize, 1))
+                    do! Command.TransformLayout(cImg, VkImageLayout.TransferSrcOptimal)
+
+                    if samples > 1 then
+                        if di = 0 then
+                            do! Command.ResolveMultisamples(cImg.[ImageAspect.Color, 0, 0], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(info.framebufferSize, 1))
+                        else
+                            do! Command.ResolveMultisamples(cImg.[ImageAspect.Color, 0, 1], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i(info.framebufferSize.X, 0, 0), V3i(info.framebufferSize, 1))
+                    else
+                        if di = 0 then
+                            do! Command.Copy(cImg.[ImageAspect.Color, 0, 0], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(info.framebufferSize, 1))
+                        else
+                            do! Command.Copy(cImg.[ImageAspect.Color, 0, 1], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i(info.framebufferSize.X, 0, 0), V3i(info.framebufferSize, 1))
              
-            do! Command.TransformLayout(fImg, VkImageLayout.TransferSrcOptimal)
-        }
+                    do! Command.TransformLayout(fImg, VkImageLayout.TransferSrcOptimal)
+
+                do! Command.SetDeviceMask 3u
+            }
+
+            //Command.SyncPeersDefault(cImg)
+
+//        let srcBox = Box3i(V3i(0,info.framebufferSize.Y - 1,0), V3i(info.framebufferSize.X - 1, 0, 0))
+//        let lBox = Box3i(V3i.Zero, V3i(info.framebufferSize - V2i.II, 0))
+//        let rBox = Box3i(V3i(info.framebufferSize.X, 0, 0), V3i(2*info.framebufferSize.X - 1, info.framebufferSize.Y-1, 0))
+
+//        device.perform {
+//            do! Command.TransformLayout(cImg, VkImageLayout.TransferSrcOptimal)
+//
+//            if samples > 1 then
+//                do! Command.ResolveMultisamples(cImg.[ImageAspect.Color, 0, 0], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(info.framebufferSize, 1))
+//                do! Command.ResolveMultisamples(cImg.[ImageAspect.Color, 0, 1], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i(info.framebufferSize.X, 0, 0), V3i(info.framebufferSize, 1))
+//            else
+//                do! Command.Copy(cImg.[ImageAspect.Color, 0, 0], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(info.framebufferSize, 1))
+//                do! Command.Copy(cImg.[ImageAspect.Color, 0, 1], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i(info.framebufferSize.X, 0, 0), V3i(info.framebufferSize, 1))
+//             
+//            do! Command.TransformLayout(fImg, VkImageLayout.TransferSrcOptimal)
+//        }
 
         transact (fun () -> time.MarkOutdated(); version.Value <- version.Value + 1)
 
