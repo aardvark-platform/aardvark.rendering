@@ -8,7 +8,7 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
-
+open KHXDeviceGroup
 #nowarn "9"
 #nowarn "51"
 
@@ -17,6 +17,16 @@ open Microsoft.FSharp.NativeInterop
 module ImageViewCommandExtensions =
     
     type Command with
+
+        static member SetDeviceMask(mask : uint32) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue(cmd) =
+                    cmd.AppendCommand()
+                    VkRaw.vkCmdSetDeviceMaskKHX(cmd.Handle, mask)
+                    Disposable.Empty        
+            }
+
         static member SyncPeersDefault(img : Image) =
             if img.PeerHandles.Length > 0 then
                 let device = img.Device
