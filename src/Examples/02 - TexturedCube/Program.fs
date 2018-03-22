@@ -40,7 +40,7 @@ let main argv =
         backend Backend.Vulkan
         display Display.OpenVR
         debug false
-        samples 1
+        samples 8
         scene sg
     }
 
