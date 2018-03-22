@@ -1937,26 +1937,33 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
                 let deviceCount = int device.AllCount
                     
                 for (sem,a) in Map.toSeq fbo.Attachments do
-                    if sem <> DefaultSemantic.Depth then 
-                        do! Command.TransformLayout(a.Image, VkImageLayout.TransferSrcOptimal)
-                        let img = a.Image
-                        let layers = a.ArrayRange
-                        let layerCount = 1 + layers.Max - layers.Min
-                        
-                        let aspect =
-                            match VkFormat.toImageKind img.Format with
-                                | ImageKind.Depth -> ImageAspect.Depth
-                                | ImageKind.DepthStencil  -> ImageAspect.DepthStencil
-                                | _ -> ImageAspect.Color 
+                    transact (fun () ->
+                        let v = a.Image.Version
+                        lock v (fun () -> v.Value <- v.Value + 1)
+                    )
 
-                        let subResource = img.[aspect, a.MipLevelRange.Min]
-                        let ranges =
-                            ranges |> Array.map (fun { frMin = min; frMax = max; frLayers = layers} ->
-                                layers, Box3i(V3i(min,0), V3i(max, 0))
-                            )
-
-                        ()
-                        do! Command.SyncPeers(subResource, ranges)
+//
+//                    // remove!!!!
+//                    if sem <> DefaultSemantic.Depth then 
+//                        do! Command.TransformLayout(a.Image, VkImageLayout.TransferSrcOptimal)
+//                        let img = a.Image
+//                        let layers = a.ArrayRange
+//                        let layerCount = 1 + layers.Max - layers.Min
+//                        
+//                        let aspect =
+//                            match VkFormat.toImageKind img.Format with
+//                                | ImageKind.Depth -> ImageAspect.Depth
+//                                | ImageKind.DepthStencil  -> ImageAspect.DepthStencil
+//                                | _ -> ImageAspect.Color 
+//
+//                        let subResource = img.[aspect, a.MipLevelRange.Min]
+//                        let ranges =
+//                            ranges |> Array.map (fun { frMin = min; frMax = max; frLayers = layers} ->
+//                                layers, Box3i(V3i(min,0), V3i(max, 0))
+//                            )
+//
+//                        ()
+//                        do! Command.SyncPeers(subResource, ranges)
 
 
             for i in 0 .. fbo.ImageViews.Length - 1 do

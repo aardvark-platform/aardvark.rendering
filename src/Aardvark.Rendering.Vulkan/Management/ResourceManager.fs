@@ -1076,6 +1076,7 @@ module Resources =
         inherit AbstractResourceLocation<ImageView>(owner, key)
 
         let mutable handle : Option<ImageView> = None
+        let mutable viewVersion = -1
 
         override x.Create() =
             image.Acquire()
@@ -1091,10 +1092,11 @@ module Resources =
         override x.GetHandle(token : AdaptiveToken) =
             if x.OutOfDate then
                 let image = image.Update token
+                let contentVersion = image.handle.Version.GetValue token
 
                 let isIdentical =
                     match handle with
-                        | Some h -> h.Image = image.handle
+                        | Some h -> h.Image = image.handle && viewVersion = contentVersion
                         | None -> false
 
                 if isIdentical then
@@ -1106,6 +1108,7 @@ module Resources =
 
                     let h = device.CreateInputImageView(image.handle, samplerType, VkComponentMapping.Identity)
                     handle <- Some h
+                    viewVersion <- contentVersion
 
                     { handle = h; version = 0 }
             else
