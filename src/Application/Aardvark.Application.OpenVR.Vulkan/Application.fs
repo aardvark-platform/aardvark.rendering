@@ -224,7 +224,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
                 1, 1, 1, 
                 TextureDimension.Texture2D,
                 TextureFormat.Rgba8,
-                VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.SampledBit
+                VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.SampledBit
             )
 
             
