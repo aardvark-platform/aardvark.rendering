@@ -337,7 +337,21 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
                     do! Command.TransformLayout(fImg, VkImageLayout.TransferSrcOptimal)
 
                 do! Command.SetDeviceMask 3u
+                do! Command.SyncPeersDefault(fImg)
             }
+        else
+            device.perform {
+                do! Command.TransformLayout(cImg, VkImageLayout.TransferSrcOptimal)
+                if samples > 1 then
+                    do! Command.ResolveMultisamples(cImg.[ImageAspect.Color, 0, 0], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(info.framebufferSize, 1))
+                    do! Command.ResolveMultisamples(cImg.[ImageAspect.Color, 0, 1], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i(info.framebufferSize.X, 0, 0), V3i(info.framebufferSize, 1))
+                else
+                    do! Command.Copy(cImg.[ImageAspect.Color, 0, 0], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(info.framebufferSize, 1))
+                    do! Command.Copy(cImg.[ImageAspect.Color, 0, 1], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i(info.framebufferSize.X, 0, 0), V3i(info.framebufferSize, 1))
+             
+                do! Command.TransformLayout(fImg, VkImageLayout.TransferSrcOptimal)
+            }
+            
 
             //Command.SyncPeersDefault(cImg)
 
