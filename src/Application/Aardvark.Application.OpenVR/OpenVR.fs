@@ -545,7 +545,7 @@ type VrRenderer() =
             Log.error "[OpenVR] %A: %s" err str
             //failwithf "[OpenVR] %A: %s" err str
 
-    let depthRange = Range1d(0.1, 100.0) |> Mod.init
+    let depthRange = Range1d(0.15, 1000.0) |> Mod.init
 
 
     let projections =
@@ -637,6 +637,9 @@ type VrRenderer() =
         with get() = backgroundColor
         and set c = backgroundColor <- c
 
+    member x.DepthRange
+        with get() = depthRange.Value
+        and set r = transact (fun () -> depthRange.Value <- r)
             
     member x.GetVulkanInstanceExtensions() = 
         let b = System.Text.StringBuilder(4096, 4096)

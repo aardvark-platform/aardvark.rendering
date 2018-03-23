@@ -7,10 +7,14 @@ open System.Runtime.InteropServices
 open System.Collections.Generic
 open System.Collections.Concurrent
 open Aardvark.Base
+open Aardvark.Base.Incremental
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base.ReflectionHelpers
 open KHXDeviceGroup
+
+
+
 #nowarn "9"
 #nowarn "51"
 
@@ -387,6 +391,7 @@ type Image =
         val mutable public Layout : VkImageLayout
         val mutable public RefCount : int
         val mutable public PeerHandles : VkImage[]
+        val mutable public Version : ModRef<int>
 
         member x.AddReference() = Interlocked.Increment(&x.RefCount) |> ignore
 
@@ -443,6 +448,7 @@ type Image =
                 Layout = layout
                 RefCount = 1
                 PeerHandles = [||]
+                Version = Mod.init 0
             }
     end
 

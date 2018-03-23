@@ -410,9 +410,9 @@ type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExt
     member internal x.AllSharingMode = concurrentSharingMode
 
     member internal x.AllMask = allMask
-    member internal x.AllCount = uint32 deviceGroup.Length
+    member x.AllCount = uint32 deviceGroup.Length
     member internal x.AllIndices = allIndices
-    member internal x.AllIndicesArr = allIndicesArr
+    member x.AllIndicesArr = allIndicesArr
 
     member x.GraphicsFamily : DeviceQueueFamily  = 
         match graphicsFamily with
