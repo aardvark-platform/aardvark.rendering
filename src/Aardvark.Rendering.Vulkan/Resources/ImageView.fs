@@ -5,11 +5,64 @@ open System.Threading
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
-
+open KHXDeviceGroup
 #nowarn "9"
 #nowarn "51"
+
+
+[<AutoOpen>]
+module ImageViewCommandExtensions =
+    
+    type Command with
+
+        static member SetDeviceMask(mask : uint32) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue(cmd) =
+                    cmd.AppendCommand()
+                    VkRaw.vkCmdSetDeviceMaskKHX(cmd.Handle, mask)
+                    Disposable.Empty        
+            }
+
+        static member SyncPeersDefault(img : Image) =
+            if img.PeerHandles.Length > 0 then
+                let device = img.Device
+                let arrayRange = Range1i(0, img.Count - 1)
+                let ranges =
+                    let range = 
+                        { 
+                            frMin = V2i.Zero; 
+                            frMax = img.Size.XY - V2i.II
+                            frLayers = arrayRange
+                        }
+                    range.Split(int device.AllCount)
+
+                command {
+                    do! Command.TransformLayout(img, VkImageLayout.TransferSrcOptimal)
+                    let layers = arrayRange
+                    let layerCount = 1 + layers.Max - layers.Min
+                        
+                    let aspect =
+                        match VkFormat.toImageKind img.Format with
+                            | ImageKind.Depth -> ImageAspect.Depth
+                            | ImageKind.DepthStencil  -> ImageAspect.DepthStencil
+                            | _ -> ImageAspect.Color 
+
+                    let subResource = img.[aspect, 0]
+                    let ranges =
+                        ranges |> Array.map (fun { frMin = min; frMax = max; frLayers = layers} ->
+                            layers, Box3i(V3i(min,0), V3i(max, 0))
+                        )
+
+                    do! Command.SyncPeers(subResource, ranges)
+                    do! Command.TransformLayout(img, VkImageLayout.ShaderReadOnlyOptimal)
+                }
+            else
+                Command.nop
+
 
 type ImageView =
     class
@@ -107,6 +160,11 @@ module ImageView =
                 else
                     false, img
 
+        if img.PeerHandles.Length > 0 then
+            device.eventually {
+                do! Command.SyncPeersDefault img
+            }
+
         let viewType = viewType slices samplerType.isArray samplerType.dimension
         let mutable info = 
             VkImageViewCreateInfo(
@@ -168,6 +226,9 @@ module ImageView =
 
             if view.IsResolved then
                 device.Delete view.Image
+
+
+
 
 [<AbstractClass; Sealed; Extension>]
 type ContextImageViewExtensions private() =
