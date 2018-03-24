@@ -773,6 +773,11 @@ module private RuntimeCommands =
                         Mod.constant Box3d.Unit
             )
 
+        static let rec hook (task : AbstractRenderTask) (o : IRenderObject) =
+            match o with
+                | :? RenderObject as o -> task.HookRenderObject(o) :> IRenderObject
+                | :? MultiRenderObject as o -> o.Children |> List.map (hook task) |> MultiRenderObject :> IRenderObject
+                | o -> o
 
         member x.Uniforms =
             let rec get (o : IRenderObject) =
@@ -806,7 +811,8 @@ module private RuntimeCommands =
 
         override x.Compile(_, stream) =
             // never gets re-executed so the stream does not need to be cleared
-            let o = compiler.manager.PrepareRenderObject(compiler.renderPass, o)
+            
+            let o = compiler.manager.PrepareRenderObject(compiler.renderPass, hook compiler.task o)
             for o in o.Children do
                 for r in o.resources do compiler.resources.Add r        
 
@@ -1978,6 +1984,7 @@ module private RuntimeCommands =
 
     and Compiler =
         {
+            task            : AbstractRenderTask
             resources       : ResourceLocationSet
             manager         : ResourceManager
             renderPass      : RenderPass
@@ -2023,7 +2030,7 @@ module private RuntimeCommands =
                 | RuntimeCommand.DispatchCmd _  ->
                     failwith "[Vulkan] compute commands not implemented"
 
-type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeCommand) =
+type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeCommand) as this =
     inherit AbstractRenderTask()
 
     let pool = device.GraphicsFamily.CreateCommandPool()
@@ -2047,6 +2054,7 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
 
     let compiler =
         {
+            RuntimeCommands.Compiler.task            = this
             RuntimeCommands.Compiler.resources       = resources
             RuntimeCommands.Compiler.manager         = manager
             RuntimeCommands.Compiler.renderPass      = renderPass
