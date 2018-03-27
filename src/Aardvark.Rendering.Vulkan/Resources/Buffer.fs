@@ -415,16 +415,17 @@ module Buffer =
             let mutable reqs = VkMemoryRequirements()
             VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, &&reqs)
 
-            let ptr = device.GetMemory(reqs.memoryTypeBits).Null
-//            VkRaw.vkBindBufferMemory(device.Handle, handle, ptr.Memory.Handle, 0UL)
-//                |> check "could not bind empty buffer's memory"
+            let mem = device.Alloc(reqs, true)
+            VkRaw.vkBindBufferMemory(device.Handle, handle, mem.Memory.Handle, uint64 mem.Offset)
+                |> check "could not bind empty buffer memory"
+
 
             device.OnDispose.Add (fun () ->
                 VkRaw.vkDestroyBuffer(device.Handle, handle, NativePtr.zero)
                 emptyBuffers.TryRemove(key) |> ignore
             )   
 
-            let buffer = new Buffer(device, handle, ptr, 256L, usage)
+            let buffer = new Buffer(device, handle, mem, 256L, usage)
             buffer.AddReference()
             buffer
         )
