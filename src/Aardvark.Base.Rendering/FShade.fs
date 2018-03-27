@@ -335,6 +335,23 @@ module FShadeInterop =
         member x.SamplerStateDescription = toSamplerStateDescription x
 
     type IFramebufferSignature with
+
+        member x.EffectConfig(depthRange : Range1d, flip : bool) =
+            let outputs = 
+                x.ColorAttachments 
+                    |> Map.toList 
+                    |> List.map (fun (slot, (name, att)) ->
+                        match builtInTypes.TryGetValue name with
+                            | (true, t) -> (string name, t, slot)
+                            | _ -> (string name, formatToType att.format, slot)
+                        
+                       )
+            { EffectConfig.ofList outputs with
+                depthRange = depthRange
+                flipHandedness = flip
+            }
+
+
         member x.Link(effect : Effect, depthRange : Range1d, flip : bool) =
             let outputs = 
                 x.ColorAttachments 

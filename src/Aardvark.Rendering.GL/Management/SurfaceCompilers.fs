@@ -20,7 +20,8 @@ module SurfaceCompilers =
         compilers.Add ( typeof<'a>, fun ctx signature s -> compiler ctx signature (unbox<'a> s) )
 
     let compileBackendSurface (ctx : Context) (signature : IFramebufferSignature) (b : BackendSurface) =
-        match ctx.TryCompileProgram(signature, b.ExpectsRowMajorMatrices, b.Code) with
+        let outputs = signature.ColorAttachments |> Map.toList |> List.map (fun (i, (name, si)) -> string name, i) |> Map.ofList
+        match ctx.TryCompileProgram(outputs, b.ExpectsRowMajorMatrices, b.Code) with
             | Success s ->
                 let tryGetSamplerDescription (samplerName : string) (index : int) =
                     match b.Samplers.TryGetValue ((samplerName, index)) with
