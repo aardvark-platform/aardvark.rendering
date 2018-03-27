@@ -20,7 +20,7 @@ type RenderPass =
         val mutable public Semantics : Set<Symbol>
         val mutable public ColorAttachmentCount : int
         val mutable public ColorAttachments : Map<int, Symbol * AttachmentSignature>
-        val mutable public DepthStencilAttachment : Option<AttachmentSignature>
+        val mutable public DepthStencilAttachment : Option<int * AttachmentSignature>
         val mutable public LayerCount : int
         val mutable public PerLayerUniforms : Set<string>
 
@@ -32,8 +32,8 @@ type RenderPass =
         interface IFramebufferSignature with
             member x.Runtime = x.Device.Runtime
             member x.ColorAttachments = x.ColorAttachments
-            member x.DepthAttachment = x.DepthStencilAttachment
-            member x.StencilAttachment = x.DepthStencilAttachment
+            member x.DepthAttachment = x.DepthStencilAttachment |> Option.map snd
+            member x.StencilAttachment = x.DepthStencilAttachment |> Option.map snd
             member x.Images = 
                 let res = x.ColorAttachments |> Map.map (fun k (v,_) -> v)
                 match x.DepthStencilAttachment with
@@ -50,7 +50,7 @@ type RenderPass =
             member x.LayerCount = x.LayerCount
             member x.PerLayerUniforms = x.PerLayerUniforms
 
-        new(device : Device, handle : VkRenderPass, colorCount : int, colors : Map<int, Symbol * AttachmentSignature>, depth : Option<AttachmentSignature>, layers : int, perLayer : Set<string>) = 
+        new(device : Device, handle : VkRenderPass, colorCount : int, colors : Map<int, Symbol * AttachmentSignature>, depth : Option<int * AttachmentSignature>, layers : int, perLayer : Set<string>) = 
             let semantics = colors |> Map.toSeq |> Seq.map (fun (_,(sem,_)) -> sem) |> Set.ofSeq
             let semantics = 
                 match depth with
@@ -181,7 +181,7 @@ module RenderPass =
 
                 let colorMap = colorAtt |> Array.map (fun (i,s,v) -> i,(s,v)) |> Map.ofArray
 
-                RenderPass(device, handle, colorAtt.Length, colorMap, depthAtt |> Option.map snd, layers, perLayer)
+                RenderPass(device, handle, colorAtt.Length, colorMap, depthAtt, layers, perLayer)
             )
         )
 
