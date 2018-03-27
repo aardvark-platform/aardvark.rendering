@@ -1363,7 +1363,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
         let anyAttachment = 
             match pass.ColorAttachments |> Map.toSeq |> Seq.tryHead with
                 | Some (_,(_,a)) -> a
-                | None -> pass.DepthStencilAttachment |> Option.get
+                | None -> pass.DepthStencilAttachment |> Option.map snd |> Option.get
 
         //let inputs = VertexInputState.create inputs
         // TODO: sampleShading

@@ -590,6 +590,8 @@ module private RuntimeCommands =
                 use t = device.Token
                 for d in lock dead (fun () -> consumeList dead) do Buffer.delete d device
 
+                let buffer = getBuffer()
+
                 // write all uniforms into manager.UnsafePointer
                 let dirty = lock dirty (fun () -> consume dirty)
                 manager.Use (fun ptr ->
@@ -967,6 +969,34 @@ module private RuntimeCommands =
                             let pp = box.Center |> v.Forward.TransformPos |> p.Forward.TransformPosProj
                             pp.Z
                         )
+
+                    | Some (:? IMod<Trafo3d[]> as v), Some (:? IMod<Trafo3d> as p) ->
+                        Mod.custom (fun t ->
+                            let v = v.GetValue t
+                            let p = p.GetValue t
+                            let box = box.GetValue t
+                            let pp = Array.map (fun (v : Trafo3d) -> box.Center |> v.Forward.TransformPos |> p.Forward.TransformPosProj) v
+                            pp |> Seq.map (fun pp -> pp.Z) |> Seq.min
+                        )
+                        
+                    | Some (:? IMod<Trafo3d> as v), Some (:? IMod<Trafo3d[]> as p) ->
+                        Mod.custom (fun t ->
+                            let v = v.GetValue t
+                            let p = p.GetValue t
+                            let box = box.GetValue t
+                            let pp = Array.map (fun (p : Trafo3d) -> box.Center |> v.Forward.TransformPos |> p.Forward.TransformPosProj) p
+                            pp |> Seq.map (fun pp -> pp.Z) |> Seq.min
+                        )
+
+                    | Some (:? IMod<Trafo3d[]> as v), Some (:? IMod<Trafo3d[]> as p) ->
+                        Mod.custom (fun t ->
+                            let v = v.GetValue t
+                            let p = p.GetValue t
+                            let box = box.GetValue t
+                            let pp = Array.map2 (fun (v : Trafo3d) (p : Trafo3d) -> box.Center |> v.Forward.TransformPos |> p.Forward.TransformPosProj) v p
+                            pp |> Seq.map (fun pp -> pp.Z) |> Seq.min
+                        )
+
                     | _ ->
                         failwithf "[Vulkan] no ViewProjTrafo for object"
 
@@ -1023,7 +1053,7 @@ module private RuntimeCommands =
                                     new UnorderedCommandBucket() :> CommandBucket
                                 | o -> 
                                     Log.warn "[Vulkan] renderpass order %A not implemented" o
-                                    new SortedCommandBucket(o) :> CommandBucket
+                                    new UnorderedCommandBucket() :> CommandBucket
 
                         let prev = l |> Option.map snd
                         let next = r |> Option.map snd
@@ -1129,47 +1159,48 @@ module private RuntimeCommands =
 
             // create an array containing the depth-clear (if any)
             let depthClears =
-                if hasDepth then
-                    match depth, stencil with
-                        | Some d, Some s ->
-                            let d = d.GetValue token
-                            let s = s.GetValue token
+                match compiler.renderPass.DepthStencilAttachment with
+                    | Some (id,_) ->
+                        match depth, stencil with
+                            | Some d, Some s ->
+                                let d = d.GetValue token
+                                let s = s.GetValue token
 
-                            [|
-                                VkClearAttachment(
-                                    VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit, 
-                                    0u,
-                                    VkClearValue(depthStencil = VkClearDepthStencilValue(float32 d, s))
-                                )
-                            |]
+                                [|
+                                    VkClearAttachment(
+                                        VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit, 
+                                        uint32 id,
+                                        VkClearValue(depthStencil = VkClearDepthStencilValue(float32 d, s))
+                                    )
+                                |]
 
-                        | Some d, None ->   
-                            let d = d.GetValue token
+                            | Some d, None ->   
+                                let d = d.GetValue token
                         
-                            [|
-                                VkClearAttachment(
-                                    VkImageAspectFlags.DepthBit, 
-                                    0u,
-                                    VkClearValue(depthStencil = VkClearDepthStencilValue(float32 d, 0u))
-                                )
-                            |]
+                                [|
+                                    VkClearAttachment(
+                                        VkImageAspectFlags.DepthBit, 
+                                        uint32 id,
+                                        VkClearValue(depthStencil = VkClearDepthStencilValue(float32 d, 0u))
+                                    )
+                                |]
                              
-                        | None, Some s ->
-                            let s = s.GetValue token
+                            | None, Some s ->
+                                let s = s.GetValue token
 
-                            [|
-                                VkClearAttachment(
-                                    VkImageAspectFlags.StencilBit, 
-                                    0u,
-                                    VkClearValue(depthStencil = VkClearDepthStencilValue(1.0f, s))
-                                )
-                            |]
+                                [|
+                                    VkClearAttachment(
+                                        VkImageAspectFlags.StencilBit, 
+                                        uint32 id,
+                                        VkClearValue(depthStencil = VkClearDepthStencilValue(1.0f, s))
+                                    )
+                                |]
 
-                        | None, None ->
-                            [||]
-                else
-                    // if the RenderPass does not contain a depth-stencil attachment we can't clear it
-                    [||]
+                            | None, None ->
+                                [||]
+                    | _ -> 
+                        // if the RenderPass does not contain a depth-stencil attachment we can't clear it
+                        [||]
 
             // create an array containing all color-clears
             let colorClears = 
@@ -1179,7 +1210,7 @@ module private RuntimeCommands =
                             let res = 
                                 VkClearAttachment(
                                     VkImageAspectFlags.ColorBit, 
-                                    uint32 (if hasDepth then 1 + i else i),
+                                    uint32 i,
                                     VkClearValue(color = VkClearColorValue(float32 = value.GetValue(token).ToV4f()))
                                 )
                             Some res
@@ -1189,6 +1220,9 @@ module private RuntimeCommands =
 
             // submit the clear to the stream (after resetting it)
             stream.Clear()
+
+            
+
             stream.ClearAttachments(
                 Array.append depthClears colorClears,
                 [|
@@ -1238,8 +1272,12 @@ module private RuntimeCommands =
                 cmd.Update(token)
 
                 match l with
-                    | Some(_,l) -> l.Next <- Some cmd
-                    | None -> first.Next <- Some cmd.Stream
+                    | Some(_,l) -> 
+                        l.Next <- Some cmd
+                        cmd.Prev <- Some l
+                    | None -> 
+                        first.Next <- Some cmd.Stream
+                        cmd.Prev <- None
 
                 match r with
                     | Some(_,r) -> 

@@ -1047,7 +1047,7 @@ module RenderTask =
 
         let renderPassDepthAspect =
             match renderPass.DepthStencilAttachment with
-                | Some signature ->
+                | Some (_,signature) ->
                     if depthStencilFormats.Contains signature.format then
                         ImageAspect.DepthStencil
                     else
