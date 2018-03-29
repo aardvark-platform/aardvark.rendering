@@ -841,12 +841,17 @@ let test () =
 [<EntryPoint>]
 let main argv = 
  
-    Scratch.DDSTest.run()
-    Environment.Exit 0
+    //Scratch.DDSTest.run()
+    //Environment.Exit 0
 
     Ag.initialize()
     Aardvark.Init()
-       
+    
+    App.run(Aardvark.SceneGraph.Pool.``Shader Switch``.sg())
+    
+
+    Environment.Exit 0
+
     use app = new VulkanApplication(false)
 
     let win = app.CreateSimpleRenderWindow()

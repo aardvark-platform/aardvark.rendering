@@ -486,6 +486,34 @@ module ProgramExtensions =
     let private codeCache = ConcurrentDictionary<Context * string * IFramebufferSignature, Error<FShade.GLSL.GLSLProgramInterface * Program>>()
     
     let private shaderCache = ConcurrentDictionary<Context * Surface * IFramebufferSignature, Error<FShade.GLSL.GLSLProgramInterface * IMod<Program>>>()
+    let private shaderPickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
+
+    let private useDiskCache = false
+    let private cachePath =
+        if useDiskCache then
+            let temp = Path.combine [System.IO.Path.GetTempPath(); "aardvark-gl-shadercache"]
+            if not (System.IO.Directory.Exists temp) then System.IO.Directory.CreateDirectory temp |> ignore
+            temp
+        else
+            ""
+
+    type private OutputSignature =
+        {
+            device      : string
+            id          : string
+            outputs     : Map<string, int * RenderbufferFormat>
+            layered     : Set<string>
+            layerCount  : int
+        }
+
+    type private ShaderCacheEntry =
+        {
+            iface       : FShade.GLSL.GLSLProgramInterface
+            format      : BinaryFormat
+            binary      : byte[]
+            code        : string
+            modes       : Option<Set<IndexedGeometryMode>>
+        }
 
 
     type Aardvark.Rendering.GL.Context with
@@ -517,6 +545,26 @@ module ProgramExtensions =
                 | Error err ->
                     Error err
                     
+        member x.TryGetProgramBinary(prog : Program) =
+            use __ = x.ResourceLock
+
+            let mutable length = 0
+            GL.GetProgram(prog.Handle, unbox 0x8741, &length)
+            let err = GL.GetError()
+            if err <> ErrorCode.NoError then 
+                None
+            else
+                let data : byte[] = Array.zeroCreate length
+                let mutable format = Unchecked.defaultof<BinaryFormat>
+                GL.GetProgramBinary(prog.Handle, length, &length, &format, data)
+                let err = GL.GetError()
+                if err <> ErrorCode.NoError then 
+                    None
+                else
+                    Some (format, data)
+
+
+
         member x.TryCompileProgramCode(fboSignature : Map<string, int>, expectsRowMajorMatrices : bool, code : string) =
             using x.ResourceLock (fun _ ->
                 match x |> ShaderCompiler.tryCompileShaders true code with
@@ -558,13 +606,77 @@ module ProgramExtensions =
 
         member x.TryCompileProgram(id : string, signature : IFramebufferSignature, code : Lazy<GLSL.GLSLShader>) : Error<_> =
             codeCache.GetOrAdd((x, id, signature), fun (x, id, signature) ->
-                let code = code.Value
-                let outputs = code.iface.outputs |> List.map (fun p -> p.paramName, p.paramLocation) |> Map.ofList
-                match x.TryCompileProgramCode(outputs, true, code.code) with
-                    | Success prog ->
-                        Success (code.iface, { prog with InterfaceNew = code.iface })
-                    | Error e ->
-                        Error e
+                
+                let (file : string, content : Option<ShaderCacheEntry>) =
+                    if useDiskCache then
+                        let key = 
+                            {
+                                device      = x.Driver.vendor + "_" + x.Driver.renderer + "_" + string x.Driver.version
+                                id          = id
+                                outputs     = signature.ColorAttachments |> Map.toList |> List.map (fun (id,(name, s)) -> string name, (id, s.format)) |> Map.ofList
+                                layered     = signature.PerLayerUniforms
+                                layerCount  = signature.LayerCount
+                            }
+
+                        let hash = shaderPickler.ComputeHash(key).Hash |> System.Guid
+                        let file = System.IO.Path.Combine(cachePath, string hash + ".bin")
+
+                        if System.IO.File.Exists file then
+                            try file, shaderPickler.UnPickle (File.readAllBytes file) |> Some
+                            with _ -> file, None
+                        else
+                            file, None
+                    else
+                        "", None
+
+                match content with
+                    | Some c ->
+                        
+                        let prog = GL.CreateProgram()
+                        GL.ProgramBinary(prog, c.format, c.binary, c.binary.Length)
+                        GL.Check "could not create program from binary"
+
+                        let program =
+                            {
+                                Context = x
+                                Code = c.code
+                                Handle = prog
+                                Shaders = []
+                                SupportedModes = c.modes
+                                InterfaceNew = Unchecked.defaultof<FShade.GLSL.GLSLProgramInterface>
+
+                                // deprecated stuff
+                                UniformGetters = SymDict.empty
+                                Interface = ShaderReflection.ShaderInterface.empty
+                                TextureInfo = Map.empty
+                            }
+
+                        Success(c.iface, program)
+
+                    | _ -> 
+                        let code = code.Value
+                        let outputs = code.iface.outputs |> List.map (fun p -> p.paramName, p.paramLocation) |> Map.ofList
+                        match x.TryCompileProgramCode(outputs, true, code.code) with
+                            | Success prog ->
+                                if useDiskCache then
+                                    match x.TryGetProgramBinary prog with
+                                        | Some (format, binary) ->
+                                            let entry =
+                                                shaderPickler.Pickle {
+                                                    iface = code.iface
+                                                    format = format
+                                                    binary = binary
+                                                    code = code.code
+                                                    modes = prog.SupportedModes
+                                                }
+                                            File.writeAllBytes file entry
+
+                                        | None ->
+                                            ()
+
+                                Success (code.iface, prog)
+                            | Error e ->
+                                Error e
             )
 
 
