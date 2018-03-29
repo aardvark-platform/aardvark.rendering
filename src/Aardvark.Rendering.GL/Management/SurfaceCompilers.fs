@@ -21,7 +21,7 @@ module SurfaceCompilers =
 
     let compileBackendSurface (ctx : Context) (signature : IFramebufferSignature) (b : BackendSurface) =
         let outputs = signature.ColorAttachments |> Map.toList |> List.map (fun (i, (name, si)) -> string name, i) |> Map.ofList
-        match ctx.TryCompileProgram(outputs, b.ExpectsRowMajorMatrices, b.Code) with
+        match ctx.TryCompileProgramCode(outputs, b.ExpectsRowMajorMatrices, b.Code) with
             | Success s ->
                 let tryGetSamplerDescription (samplerName : string) (index : int) =
                     match b.Samplers.TryGetValue ((samplerName, index)) with
@@ -37,7 +37,7 @@ module SurfaceCompilers =
                                 | None -> None
                         )
                         |> Map.ofSeq
-
+                        
                 Success { 
                     s with 
                         TextureInfo = b.Samplers |> Dictionary.toMap  

@@ -63,7 +63,7 @@ module ShaderTests =
                 Symbol.Create "color", RenderbufferFormat.Rgba8
             ]
 
-        let prep = runtime.PrepareSurface(signature, testSurface) :> IBackendSurface
+        let prep = runtime.PrepareSurface(signature, testSurface)
 
         let uniforms = prep.Uniforms
         let inputs = prep.Inputs

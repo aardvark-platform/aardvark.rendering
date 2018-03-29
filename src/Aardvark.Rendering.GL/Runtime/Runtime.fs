@@ -371,7 +371,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             shaderCache.GetOrAdd(key,fun _ -> 
                 let glsl = 
                     signature.Link(effect, Range1d(-1.0, 1.0), false)
-                        |> ModuleCompiler.compileGLSL410
+                        |> ModuleCompiler.compileGLSL420
 
                 let entries =
                     effect.Shaders 
@@ -438,7 +438,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             failwith ""
 
         member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = x.Copy(src, srcBaseSlice, srcBaseLevel, dst, dstBaseSlice, dstBaseLevel, slices, levels)
-        member x.PrepareSurface (signature, s : ISurface) = x.PrepareSurface(signature, s) :> IBackendSurface
+        member x.PrepareSurface (signature, s : ISurface) : IBackendSurface = x.PrepareSurface(signature, s)
         member x.DeleteSurface (s : IBackendSurface) = 
             match s with
                 | :? Program as p -> x.DeleteSurface p
@@ -589,11 +589,33 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)
-    member x.PrepareSurface (signature : IFramebufferSignature, s : ISurface) = 
+    member x.PrepareSurface (signature : IFramebufferSignature, s : ISurface) : IBackendSurface = 
+        
+
+//        using ctx.ResourceLock (fun d -> 
+//            match SurfaceCompilers.compile ctx signature s with
+//                | Success prog -> prog  
+//                | Error e -> failwith e
+//        )
         using ctx.ResourceLock (fun d -> 
-            match SurfaceCompilers.compile ctx signature s with
-                | Success prog -> prog  
-                | Error e -> failwith e
+            match s with 
+                | :? IBackendSurface as bs -> bs
+                | :? FShadeSurface as fs ->
+                    //ctx.TryCreateProgram(signature, s)
+
+                    // TODO : use resource manager with effect.id -> probably there is a method that already does all this and the following
+
+                    let module_ = signature.Link(fs.Effect, Range1d(-1.0, 1.0), false)
+                    
+                    let glsl = lazy (ModuleCompiler.compileGLSL420 module_)
+            
+                    //shaderCache.GetCreate((fs :?> Surface, signature), (fun _ ->
+
+                    match ctx.TryCompileProgram(fs.Effect.Id, signature, glsl) with
+                        | Success (iface, prog) -> { prog with InterfaceNew = iface } :> IBackendSurface
+                        | Error e -> failwith e
+
+                | _ -> failwith "[GL] invalid surface"
         )
 
 

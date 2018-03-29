@@ -63,6 +63,7 @@ type Program =
        SupportedModes : Option<Set<IndexedGeometryMode>>
        Interface : ShaderReflection.ShaderInterface
        TextureInfo : Map<string * int, SamplerDescription>
+       InterfaceNew : FShade.GLSL.GLSLProgramInterface
 
        [<DefaultValue>]
        mutable _inputs : Option<list<string * Type>>
@@ -431,6 +432,7 @@ module ProgramExtensions =
 
                     try
                         try
+
 //                            let iface = ShaderInterface.ofProgram firstTexture x handle
 //                            let iface = 
 //                                if expectsRowMajorMatrices then ShaderInterface.flipMatrixMajority iface
@@ -445,6 +447,7 @@ module ProgramExtensions =
                                 SupportedModes = supported
                                 Interface = ShaderInterface.empty
                                 TextureInfo = Map.empty
+                                InterfaceNew = Unchecked.defaultof<FShade.GLSL.GLSLProgramInterface>
                             }
 
                         finally 
@@ -477,9 +480,11 @@ module ProgramExtensions =
 
 
     let toFShadeInterface (program : Program) : FShade.GLSL.GLSLProgramInterface =
-        failwith "[GL] implement toFShadeInterface!!!!!"
+        program.InterfaceNew
+        //failwith "[GL] implement toFShadeInterface!!!!!"
  
     let private codeCache = ConcurrentDictionary<Context * string * IFramebufferSignature, Error<FShade.GLSL.GLSLProgramInterface * Program>>()
+    
     let private shaderCache = ConcurrentDictionary<Context * Surface * IFramebufferSignature, Error<FShade.GLSL.GLSLProgramInterface * IMod<Program>>>()
 
 
@@ -512,7 +517,7 @@ module ProgramExtensions =
                 | Error err ->
                     Error err
                     
-        member x.TryCompileProgram(fboSignature : Map<string, int>, expectsRowMajorMatrices : bool, code : string) =
+        member x.TryCompileProgramCode(fboSignature : Map<string, int>, expectsRowMajorMatrices : bool, code : string) =
             using x.ResourceLock (fun _ ->
                 match x |> ShaderCompiler.tryCompileShaders true code with
                     | Success shaders ->
@@ -536,8 +541,8 @@ module ProgramExtensions =
                         Error err
             )
 
-        member x.CompileProgram(fboSignature : Map<string, int>, expectsRowMajorMatrices : bool, code : string) =
-            match x.TryCompileProgram(fboSignature, expectsRowMajorMatrices, code) with
+        member x.CompileProgramCode(fboSignature : Map<string, int>, expectsRowMajorMatrices : bool, code : string) =
+            match x.TryCompileProgramCode(fboSignature, expectsRowMajorMatrices, code) with
                 | Success p -> p
                 | Error e ->
                     failwithf "[GL] shader compiler returned errors: %s" e
@@ -555,9 +560,9 @@ module ProgramExtensions =
             codeCache.GetOrAdd((x, id, signature), fun (x, id, signature) ->
                 let code = code.Value
                 let outputs = code.iface.outputs |> List.map (fun p -> p.paramName, p.paramLocation) |> Map.ofList
-                match x.TryCompileProgram(outputs, true, code.code) with
+                match x.TryCompileProgramCode(outputs, true, code.code) with
                     | Success prog ->
-                        Success (code.iface, prog)
+                        Success (code.iface, { prog with InterfaceNew = code.iface })
                     | Error e ->
                         Error e
             )
