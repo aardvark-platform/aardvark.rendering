@@ -461,13 +461,13 @@ type ResourceManagerExtensions private() =
                             match tex with
                                 | :? IMod<ITexture> as value ->
                                     let t = x.CreateTexture(value)
-                                    lastTextureSlot := sampler.samplerBinding
-                                    Some (sampler.samplerBinding, (t, s))
+                                    lastTextureSlot := sampler.samplerBinding + index
+                                    Some (!lastTextureSlot, (t, s))
 
                                 | :? IMod<ITexture[]> as values ->
                                     let t = x.CreateTexture(values |> Mod.map (fun arr -> arr.[index]))
-                                    lastTextureSlot := sampler.samplerBinding
-                                    Some (sampler.samplerBinding, (t, s))
+                                    lastTextureSlot := sampler.samplerBinding + index
+                                    Some (!lastTextureSlot, (t, s))
 
                                 | _ ->
                                     Log.warn "unexpected texture type %A: %A" sem tex
