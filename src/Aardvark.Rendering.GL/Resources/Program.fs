@@ -447,7 +447,15 @@ module ProgramExtensions =
                                 SupportedModes = supported
                                 Interface = ShaderInterface.empty
                                 TextureInfo = Map.empty
-                                InterfaceNew = Unchecked.defaultof<FShade.GLSL.GLSLProgramInterface>
+                                InterfaceNew =
+                                    {
+                                        inputs          = []
+                                        outputs         = []
+                                        samplers        = []
+                                        images          = []
+                                        storageBuffers  = []
+                                        uniformBuffers  = []
+                                    }
                             }
 
                         finally 
@@ -478,12 +486,7 @@ module ProgramExtensions =
     open FShade.Imperative
     open FShade
 
-
-    let toFShadeInterface (program : Program) : FShade.GLSL.GLSLProgramInterface =
-        program.InterfaceNew
-        //failwith "[GL] implement toFShadeInterface!!!!!"
- 
-    let private codeCache = ConcurrentDictionary<Context * string * IFramebufferSignature, Error<FShade.GLSL.GLSLProgramInterface * Program>>()
+    let private codeCache = ConcurrentDictionary<Context * string * IFramebufferSignature, Error<Program>>()
     
     let private shaderCache = ConcurrentDictionary<Context * Surface * IFramebufferSignature, Error<FShade.GLSL.GLSLProgramInterface * IMod<Program>>>()
     let private shaderPickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
@@ -643,21 +646,22 @@ module ProgramExtensions =
                                 Handle = prog
                                 Shaders = []
                                 SupportedModes = c.modes
-                                InterfaceNew = Unchecked.defaultof<FShade.GLSL.GLSLProgramInterface>
-
+                                InterfaceNew = c.iface
                                 // deprecated stuff
                                 UniformGetters = SymDict.empty
                                 Interface = ShaderReflection.ShaderInterface.empty
                                 TextureInfo = Map.empty
                             }
 
-                        Success(c.iface, program)
+                        Success program
 
                     | _ -> 
                         let code = code.Value
                         let outputs = code.iface.outputs |> List.map (fun p -> p.paramName, p.paramLocation) |> Map.ofList
                         match x.TryCompileProgramCode(outputs, true, code.code) with
                             | Success prog ->
+                                let prog = { prog with InterfaceNew = code.iface }
+
                                 if useDiskCache then
                                     match x.TryGetProgramBinary prog with
                                         | Some (format, binary) ->
@@ -674,7 +678,7 @@ module ProgramExtensions =
                                         | None ->
                                             ()
 
-                                Success (code.iface, prog)
+                                Success prog
                             | Error e ->
                                 Error e
             )
@@ -685,35 +689,47 @@ module ProgramExtensions =
             shaderCache.GetOrAdd((x, surface, signature), fun (x, surface, signature) ->
                 match surface with
                     | Surface.FShadeSimple effect ->
-                        let module_ = signature.Link(effect, Range1d(-1.0, 1.0), false)
                     
-                        let glsl = lazy (ModuleCompiler.compileGLSL420 module_)
+                        let glsl = 
+                            lazy (
+                                let module_ = signature.Link(effect, Range1d(-1.0, 1.0), false)
+                                ModuleCompiler.compileGLSL430 module_
+                            )
 
                         match x.TryCompileProgram(effect.Id, signature, glsl) with
-                            | Success (iface, prog) ->
-                                Success (iface, Mod.constant prog)
+                            | Success (prog) ->
+                                Success (prog.InterfaceNew, Mod.constant prog)
                             | Error e ->
                                 Error e
 
                     | Surface.FShade create ->
-                        let (_,b) = create (signature.EffectConfig(Range1d(-1.0, 1.0), false))
+                        let (inputLayout,b) = create (signature.EffectConfig(Range1d(-1.0, 1.0), false))
 
                         let initial = Mod.force b
                         let effect = initial.userData |> unbox<Effect>
                         let iface =
-                            match x.TryCompileProgram(effect.Id, signature, lazy (ModuleCompiler.compileGLSL420 initial)) with  
-                                | Success (iface,_) -> 
-                                    iface
+                            match x.TryCompileProgram(effect.Id, signature, lazy (ModuleCompiler.compileGLSL430 initial)) with  
+                                | Success prog -> 
+                                    let iface = prog.InterfaceNew
+                                    { iface with
+                                        samplers = iface.samplers |> List.map (fun sam ->
+                                            match MapExt.tryFind sam.samplerName inputLayout.eTextures with
+                                                | Some infos -> { sam with samplerTextures = infos }
+                                                | None -> sam
+                                        )
+                                    }
                                 | Error e ->
                                     failwithf "[GL] shader compiler returned errors: %s" e
+
+
 
 
                         let changeableProgram = 
                             b |> Mod.map (fun m ->
                                 let effect = m.userData |> unbox<Effect>
 
-                                match x.TryCompileProgram(effect.Id, signature, lazy (ModuleCompiler.compileGLSL420 m)) with
-                                    | Success (_, p) -> p
+                                match x.TryCompileProgram(effect.Id, signature, lazy (ModuleCompiler.compileGLSL430 m)) with
+                                    | Success p -> p
                                     | Error e ->
                                         Log.error "[GL] shader compiler returned errors: %A" e
                                         failwithf "[GL] shader compiler returned errors: %A" e
@@ -727,7 +743,7 @@ module ProgramExtensions =
                     | Surface.Backend surface ->
                         match surface with
                             | :? Program as p -> 
-                                Success (toFShadeInterface p, Mod.constant p)
+                                Success (p.InterfaceNew, Mod.constant p)
                             | _ ->
                                 Error (sprintf "[GL] bad surface: %A (hi lui)" surface)
             )

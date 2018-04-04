@@ -371,7 +371,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             shaderCache.GetOrAdd(key,fun _ -> 
                 let glsl = 
                     signature.Link(effect, Range1d(-1.0, 1.0), false)
-                        |> ModuleCompiler.compileGLSL420
+                        |> ModuleCompiler.compileGLSL430
 
                 let entries =
                     effect.Shaders 
@@ -590,34 +590,17 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)
     member x.PrepareSurface (signature : IFramebufferSignature, s : ISurface) : IBackendSurface = 
-        
-
-//        using ctx.ResourceLock (fun d -> 
-//            match SurfaceCompilers.compile ctx signature s with
-//                | Success prog -> prog  
-//                | Error e -> failwith e
-//        )
         using ctx.ResourceLock (fun d -> 
-            match s with 
-                | :? IBackendSurface as bs -> bs
-                | :? FShadeSurface as fs ->
-                    //ctx.TryCreateProgram(signature, s)
+            let surface =
+                match s with
+                    | :? FShadeSurface as f -> Aardvark.Base.Surface.FShadeSimple f.Effect
+                    | _ -> Aardvark.Base.Surface.Backend s
 
-                    // TODO : use resource manager with effect.id -> probably there is a method that already does all this and the following
+            let iface, program = ctx.CreateProgram(signature, surface)
 
-                    let module_ = signature.Link(fs.Effect, Range1d(-1.0, 1.0), false)
-                    
-                    let glsl = lazy (ModuleCompiler.compileGLSL420 module_)
-            
-                    //shaderCache.GetCreate((fs :?> Surface, signature), (fun _ ->
+            Mod.force program :> IBackendSurface
 
-                    match ctx.TryCompileProgram(fs.Effect.Id, signature, glsl) with
-                        | Success (iface, prog) -> { prog with InterfaceNew = iface } :> IBackendSurface
-                        | Error e -> failwith e
-
-                | _ -> failwith "[GL] invalid surface"
         )
-
 
 
     member x.DeleteTexture (t : Texture) = 
@@ -708,7 +691,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.ReadFramebuffer,readFbo)
             GL.Check "could not bind read framebuffer"
             match ms with
-                | :? BackendTextureOutputView as ms ->
+                | :? IBackendTextureOutputView as ms ->
                     let tex = ms.texture |> unbox<Texture>
                     GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2DMultisample, tex.Handle, ms.level)
                     GL.Check "could not set read framebuffer texture"
@@ -716,6 +699,13 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 | :? Renderbuffer as ms ->
                     GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, ms.Handle)
                     GL.Check "could not set read framebuffer texture"
+
+//                | :? IBackendTextureOutputView as ms ->
+//                    let tex = ms.texture |> unbox<Texture>
+//                    GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2DMultisample, tex.Handle, ms.level)
+//                    GL.Check "could not set read framebuffer texture"
+//                    
+//                    
 
                 | _ ->
                     failwithf "[GL] cannot resolve %A" ms
