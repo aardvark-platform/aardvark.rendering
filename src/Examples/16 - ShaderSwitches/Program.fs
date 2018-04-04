@@ -14,9 +14,9 @@ module Sg =
 
     let effectPool (active : IMod<int>) (effects : Effect[]) (sg : ISg) =
         let compile (cfg : EffectConfig) =
-            let modules = effects |> Array.map (Effect.toModule cfg)
-            let layout = EffectInputLayout.ofModules modules
-            let modules = modules |> Array.map (EffectInputLayout.apply layout)
+            let modules1 = effects |> Array.map (Effect.toModule cfg)
+            let layout = EffectInputLayout.ofModules modules1
+            let modules = modules1 |> Array.map (EffectInputLayout.apply layout)
             let current = active |> Mod.map (fun i -> modules.[i % modules.Length])
             layout, current
 

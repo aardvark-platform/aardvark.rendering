@@ -38,7 +38,7 @@ type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * Attachm
     member x.Runtime = runtime
     member x.ColorAttachments = colors
     member x.DepthAttachment = depth
-    member x.StencilAttachment = depth
+    member x.StencilAttachment = stencil
     member x.Images = images
 
     member x.LayerCount = layers
