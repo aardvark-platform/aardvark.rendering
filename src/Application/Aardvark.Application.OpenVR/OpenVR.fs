@@ -533,8 +533,6 @@ type VrRenderer() =
         
 
     let hmds = devices |> Array.filter (fun d -> d.Type = VrDeviceType.Hmd)
-    let controllers = devices |> Array.filter (fun d -> d.Type = VrDeviceType.Controller)
-    
 
 
     let compositor = OpenVR.Compositor
@@ -722,5 +720,5 @@ type VrRenderer() =
 
     member x.Hmd = hmds.[0]
 
-    member x.Controllers = controllers
+    member x.Controllers = devices |> Array.filter (fun d -> d.Type = VrDeviceType.Controller)
 
