@@ -628,7 +628,44 @@ module Utilities =
                 } :> ISimpleRenderWindow
 
             | [Backend.GL] -> 
-                failwith "no OpenGL OpenVR backend atm."
+                let app = OpenGlVRApplicationLayered(cfg.samples, cfg.debug)
+
+                let hmdLocation = app.Hmd.MotionState.Pose |> Mod.map (fun t -> t.Forward.C3.XYZ)
+
+
+                let stencilTest =
+                    StencilMode(
+                        StencilOperation(
+                            StencilOperationFunction.Keep,
+                            StencilOperationFunction.Keep,
+                            StencilOperationFunction.Keep
+                        ),
+                        StencilFunction(
+                            StencilCompareFunction.Equal,
+                            0,
+                            0xFFFFFFFFu
+                        )
+                    )
+
+                { new SimpleRenderWindow(app, app.Info.viewTrafos, app.Info.projTrafos) with
+
+                    override x.WrapSg(win, sg) =
+                        sg
+                        |> Sg.stencilMode (Mod.constant stencilTest)
+                        |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
+                        |> Sg.uniform "ProjTrafo" app.Info.projTrafos
+                        |> Sg.uniform "CameraLocation" hmdLocation
+                        |> Sg.uniform "LightLocation" hmdLocation
+
+                    override x.Compile(win, sg) =
+                        sg
+                        |> Sg.stencilMode (Mod.constant stencilTest)
+                        |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
+                        |> Sg.uniform "ProjTrafo" app.Info.projTrafos
+                        |> Sg.uniform "CameraLocation" hmdLocation
+                        |> Sg.uniform "LightLocation" hmdLocation
+                        |> Sg.compile app.Runtime app.FramebufferSignature
+                } :> ISimpleRenderWindow
 
             | xs -> 
                 failwith "no multi backend support for OpenVR atm."
