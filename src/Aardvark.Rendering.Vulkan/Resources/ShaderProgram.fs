@@ -360,7 +360,7 @@ module ShaderProgram =
 
     let delete (program : ShaderProgram) (device : Device) =
         device.RemoveCached(program.CacheName, program)
-        Log.warn "ref: %s %A" (string program.CacheName) program.RefCount
+        //Log.warn "ref: %s %A" (string program.CacheName) program.RefCount
 
 
 
