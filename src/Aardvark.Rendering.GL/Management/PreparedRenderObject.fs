@@ -603,7 +603,7 @@ type ResourceManagerExtensions private() =
 
         let isActive = x.CreateIsActive rj.IsActive
         let beginMode = 
-            let hasTess = program.Handle.GetValue().Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl || s.Stage = ShaderStage.TessEval)
+            let hasTess = program.Handle.GetValue().HasTessellation
             x.CreateBeginMode(hasTess, rj.Mode)
         let drawCalls = if isNull rj.DrawCallInfos then Unchecked.defaultof<_> else x.CreateDrawCallInfoList rj.DrawCallInfos
         let depthTest = x.CreateDepthTest rj.DepthTest

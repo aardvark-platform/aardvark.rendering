@@ -14,12 +14,22 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
        OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
        try 
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException)
-       with e -> Report.Warn("Could not set SetUnhandledExceptionMode.")
+       with e -> Report.Warn("Could not set UnhandledExceptionMode.")
 
     let runtime = new Runtime()
     let ctx = new Context(runtime, enableDebug)
     do runtime.Context <- ctx
-       
+ 
+    let defaultCachePath =
+        let dir =
+            Path.combine [
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
+                "Aardvark"
+                "OpenGlShaderCache"
+            ]
+        ctx.ShaderCachePath <- Some dir
+        dir
+              
     let init =
         let initialized = ref false
         fun (ctx : Context)  ->
@@ -65,6 +75,10 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
 
     member x.Context = ctx
     member x.Runtime = runtime
+
+    member x.ShaderCachePath
+        with get() = ctx.ShaderCachePath
+        and set p = ctx.ShaderCachePath <- p
 
     member x.Dispose() =
         // first dispose runtime in order to properly dispose resources..

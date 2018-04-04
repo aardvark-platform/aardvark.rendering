@@ -58,7 +58,8 @@ type Program =
        Context : Context
        Code : string
        Handle : int
-       Shaders : list<Shader>
+       HasTessellation : bool
+       //ShadersNew : list<Shader>
        UniformGetters : SymbolDict<IMod>
        SupportedModes : Option<Set<IndexedGeometryMode>>
        Interface : ShaderReflection.ShaderInterface
@@ -442,7 +443,8 @@ module ProgramExtensions =
                                 Context = x
                                 Code = code
                                 Handle = handle
-                                Shaders = shaders
+                                //ShadersNew = shaders
+                                HasTessellation = shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl || s.Stage = ShaderStage.TessEval)
                                 UniformGetters = SymDict.empty
                                 SupportedModes = supported
                                 Interface = ShaderInterface.empty
@@ -491,14 +493,14 @@ module ProgramExtensions =
     let private shaderCache = ConcurrentDictionary<Context * Surface * IFramebufferSignature, Error<FShade.GLSL.GLSLProgramInterface * IMod<Program>>>()
     let private shaderPickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
 
-    let private useDiskCache = false
-    let private cachePath =
-        if useDiskCache then
-            let temp = Path.combine [System.IO.Path.GetTempPath(); "aardvark-gl-shadercache"]
-            if not (System.IO.Directory.Exists temp) then System.IO.Directory.CreateDirectory temp |> ignore
-            temp
-        else
-            ""
+//    let private useDiskCache = true
+//    let private cachePath =
+//        if useDiskCache then
+//            let temp = Path.combine [System.IO.Path.GetTempPath(); "aardvark-gl-shadercache"]
+//            if not (System.IO.Directory.Exists temp) then System.IO.Directory.CreateDirectory temp |> ignore
+//            temp
+//        else
+//            ""
 
     type private OutputSignature =
         {
@@ -515,6 +517,7 @@ module ProgramExtensions =
             format      : BinaryFormat
             binary      : byte[]
             code        : string
+            hasTess     : bool
             modes       : Option<Set<IndexedGeometryMode>>
         }
 
@@ -605,32 +608,31 @@ module ProgramExtensions =
                 GL.Check "could not delete program"
             )
 
-
-
         member x.TryCompileProgram(id : string, signature : IFramebufferSignature, code : Lazy<GLSL.GLSLShader>) : Error<_> =
             codeCache.GetOrAdd((x, id, signature), fun (x, id, signature) ->
                 
                 let (file : string, content : Option<ShaderCacheEntry>) =
-                    if useDiskCache then
-                        let key = 
-                            {
-                                device      = x.Driver.vendor + "_" + x.Driver.renderer + "_" + string x.Driver.version
-                                id          = id
-                                outputs     = signature.ColorAttachments |> Map.toList |> List.map (fun (id,(name, s)) -> string name, (id, s.format)) |> Map.ofList
-                                layered     = signature.PerLayerUniforms
-                                layerCount  = signature.LayerCount
-                            }
+                    match x.ShaderCachePath with    
+                        | Some cachePath ->
+                            let key = 
+                                {
+                                    device      = x.Driver.vendor + "_" + x.Driver.renderer + "_" + string x.Driver.version
+                                    id          = id
+                                    outputs     = signature.ColorAttachments |> Map.toList |> List.map (fun (id,(name, s)) -> string name, (id, s.format)) |> Map.ofList
+                                    layered     = signature.PerLayerUniforms
+                                    layerCount  = signature.LayerCount
+                                }
 
-                        let hash = shaderPickler.ComputeHash(key).Hash |> System.Guid
-                        let file = System.IO.Path.Combine(cachePath, string hash + ".bin")
+                            let hash = shaderPickler.ComputeHash(key).Hash |> System.Guid
+                            let file = System.IO.Path.Combine(cachePath, string hash + ".bin")
 
-                        if System.IO.File.Exists file then
-                            try file, shaderPickler.UnPickle (File.readAllBytes file) |> Some
-                            with _ -> file, None
-                        else
-                            file, None
-                    else
-                        "", None
+                            if System.IO.File.Exists file then
+                                try file, shaderPickler.UnPickle (File.readAllBytes file) |> Some
+                                with _ -> file, None
+                            else
+                                file, None
+                        | _ ->
+                            "", None
 
                 match content with
                     | Some c ->
@@ -644,7 +646,8 @@ module ProgramExtensions =
                                 Context = x
                                 Code = c.code
                                 Handle = prog
-                                Shaders = []
+                                HasTessellation = c.hasTess
+                                //ShadersNew = []
                                 SupportedModes = c.modes
                                 InterfaceNew = c.iface
                                 // deprecated stuff
@@ -661,29 +664,31 @@ module ProgramExtensions =
                         match x.TryCompileProgramCode(outputs, true, code.code) with
                             | Success prog ->
                                 let prog = { prog with InterfaceNew = code.iface }
+                                
+                                match x.ShaderCachePath with    
+                                    | Some cachePath ->
+                                        match x.TryGetProgramBinary prog with
+                                            | Some (format, binary) ->
+                                                let entry =
+                                                    shaderPickler.Pickle {
+                                                        hasTess = prog.HasTessellation
+                                                        iface = code.iface
+                                                        format = format
+                                                        binary = binary
+                                                        code = code.code
+                                                        modes = prog.SupportedModes
+                                                    }
+                                                File.writeAllBytes file entry
 
-                                if useDiskCache then
-                                    match x.TryGetProgramBinary prog with
-                                        | Some (format, binary) ->
-                                            let entry =
-                                                shaderPickler.Pickle {
-                                                    iface = code.iface
-                                                    format = format
-                                                    binary = binary
-                                                    code = code.code
-                                                    modes = prog.SupportedModes
-                                                }
-                                            File.writeAllBytes file entry
-
-                                        | None ->
-                                            ()
+                                            | None ->
+                                                ()
+                                    | _ ->
+                                        ()
 
                                 Success prog
                             | Error e ->
                                 Error e
             )
-
-
 
         member x.TryCreateProgram(signature : IFramebufferSignature, surface : Surface) : Error<GLSL.GLSLProgramInterface * IMod<Program>> =
             shaderCache.GetOrAdd((x, surface, signature), fun (x, surface, signature) ->
