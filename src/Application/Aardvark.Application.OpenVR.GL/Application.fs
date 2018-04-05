@@ -162,7 +162,7 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool)  =
 
         let nTex = ctx.CreateTexture(V3i(info.framebufferSize, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 2, 1, samples)
         let nDepth = ctx.CreateTexture(V3i(info.framebufferSize, 1), TextureDimension.Texture2D, TextureFormat.Depth24Stencil8, 2, 1, samples)
-        let nfTex = ctx.CreateTexture(V3i(info.framebufferSize, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 2, 1, 1)
+        let nfTex = ctx.CreateTexture(V3i(info.framebufferSize * V2i(2,1), 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 1, 1, 1)
 
         let nFbo =
             runtime.CreateFramebuffer(
@@ -202,9 +202,11 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool)  =
             GL.Sync()
 
             if samples > 1 then
-                runtime.ResolveMultisamples(cTex.[TextureAspect.Color, 0, *], fTex, ImageTrafo.Rot0)
+                runtime.ResolveMultisamples(cTex.[TextureAspect.Color, 0, 0], V2i.Zero, fTex, V2i.Zero, cTex.Size.XY, ImageTrafo.Rot0)
+                runtime.ResolveMultisamples(cTex.[TextureAspect.Color, 0, 1], V2i.Zero, fTex, V2i(cTex.Size.X, 0), cTex.Size.XY, ImageTrafo.Rot0)
             else
-                runtime.Copy(cTex.[TextureAspect.Color, 0, *], fTex.[TextureAspect.Color, 0, *])
+                failwith "not implemented"
+                //runtime.Copy(cTex.[TextureAspect.Color, 0, *], fTex.[TextureAspect.Color, 0, *])
                 
         transact (fun () -> time.MarkOutdated(); version.Value <- version.Value + 1)
 
