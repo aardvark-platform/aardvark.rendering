@@ -574,7 +574,7 @@ module OpenGLObjectInterpreter =
                 let vibh = o.VertexInputBinding.Handle.GetValue()
                 let indexed = Option.isSome o.IndexBuffer
 
-                let hasTess = program.Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl)
+                let hasTess = program.HasTessellation
 
                 let patchSize = o.Original.Mode.GetValue() |> Translations.toPatchCount
 

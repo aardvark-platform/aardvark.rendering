@@ -1,7 +1,8 @@
 Aardvark.Base.Incremental
 Aardvark.Base.Runtime
+Unofficial.AssimpNet
 FShade.Core
-FSharp.Core
-BruTile
-OpenHardwareMonitor
 FShade.GLSL
+FSharp.Core
+Unofficial.OpenVR
+FShade.Debug

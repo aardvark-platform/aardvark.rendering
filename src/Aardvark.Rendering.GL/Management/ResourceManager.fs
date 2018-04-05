@@ -217,8 +217,8 @@ module Sharing =
 
 
         
-type UniformBufferManager(ctx : Context, block : ShaderBlock) =
-    let size = block.DataSize
+type UniformBufferManager(ctx : Context, block : FShade.GLSL.GLSLUniformBuffer) =
+    let size = block.ubSize
     let alignedSize = (size + 255) &&& ~~~255
 
     let buffer = 
@@ -235,9 +235,9 @@ type UniformBufferManager(ctx : Context, block : ShaderBlock) =
 
     member x.CreateUniformBuffer(scope : Ag.Scope, u : IUniformProvider, additional : SymbolDict<IMod>) : IResource<UniformBufferView, int> =
         let values =
-            block.Fields 
+            block.ubFields 
             |> List.map (fun f ->
-                let name = ShaderPath.name f.Path
+                let name = f.ufName
                 let sem = Symbol.Create name
 
                 match Uniforms.tryGetDerivedUniform name u with
@@ -256,7 +256,7 @@ type UniformBufferManager(ctx : Context, block : ShaderBlock) =
         viewCache.GetOrCreate(
             key,
             fun () ->
-                let writers = List.map2 (fun f (_,v) -> nativeint f.Offset, ShaderParameterWriter.adaptive v f.Type) block.Fields values
+                let writers = List.map2 (fun (f : FShade.GLSL.GLSLUniformBufferField) (_,v) -> nativeint f.ufOffset, ShaderParameterWriter.adaptive v (ShaderParameterType.ofGLSLType f.ufType)) block.ubFields values
 
                 let mutable block = Unchecked.defaultof<_>
                 let mutable store = 0n
@@ -402,7 +402,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let bufferCache             = derivedCache (fun m -> m.BufferCache)
     let textureCache            = derivedCache (fun m -> m.TextureCache)
     let indirectBufferCache     = derivedCache (fun m -> m.IndirectBufferCache)
-    let programCache            = derivedCache (fun m -> m.ProgramCache)
+    let programCache            = match parent with | Some p -> p.ProgramCache | None -> ConcurrentDictionary<Aardvark.Base.Surface * IFramebufferSignature, FShade.GLSL.GLSLProgramInterface * IMod<Program>>()
+    let programHandleCache      = ResourceCache<Program, int>(None, Option.map snd renderTaskInfo)
     let samplerCache            = derivedCache (fun m -> m.SamplerCache)
     let vertexInputCache        = derivedCache (fun m -> m.VertexInputCache)
     let uniformLocationCache    = derivedCache (fun m -> m.UniformLocationCache)
@@ -417,13 +418,13 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let stencilModeCache        = derivedCache (fun m -> m.StencilModeCache)
     let flagCache               = derivedCache (fun m -> m.FlagCache)
 
-    let uniformBufferManagers = ConcurrentDictionary<ShaderBlock, UniformBufferManager>() // ISSUE: leak? the buffer of the UniformBufferManager is never disposed
+    let uniformBufferManagers = ConcurrentDictionary<FShade.GLSL.GLSLUniformBuffer, UniformBufferManager>() // ISSUE: leak? the buffer of the UniformBufferManager is never disposed
 
     member private x.ArrayBufferCache       : ResourceCache<Buffer, int>                    = arrayBufferCache
     member private x.BufferCache            : ResourceCache<Buffer, int>                    = bufferCache
     member private x.TextureCache           : ResourceCache<Texture, V2i>                   = textureCache
     member private x.IndirectBufferCache    : ResourceCache<IndirectBuffer, V2i>            = indirectBufferCache
-    member private x.ProgramCache           : ResourceCache<Program, int>                   = programCache
+    member private x.ProgramCache           : ConcurrentDictionary<_, _>                    = programCache
     member private x.SamplerCache           : ResourceCache<Sampler, int>                   = samplerCache
     member private x.VertexInputCache       : ResourceCache<VertexInputBindingHandle, int>  = vertexInputCache
     member private x.UniformLocationCache   : ResourceCache<UniformLocation, nativeint>     = uniformLocationCache
@@ -446,8 +447,9 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     interface IResourceManager with
         member x.CreateSurface(signature, surf) =
-            let res = x.CreateSurface(signature, surf)
-            new CastResource<_, _>(res) :> IResource<_>
+            failwith "[GL] IResourceManager impl"
+//            let res = x.CreateSurface(signature, surf)
+//            new CastResource<_, _>(res) :> IResource<_>
 
         member x.CreateBuffer (data : IMod<IBuffer>) =
             let res = x.CreateBuffer(data)
@@ -546,22 +548,26 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.IndirectBuffer
         })
 
-    member x.CreateSurface(signature : IFramebufferSignature, surface : IMod<ISurface>) =
-        let create (s : ISurface) =
-            match SurfaceCompilers.compile ctx signature s with
-                | Success program -> program
-                | Error e -> 
-                    Log.error "[GL] surface compilation failed: %s" e
-                    failwithf "[GL] surface compilation failed: %s" e
 
-        programCache.GetOrCreate<ISurface>(surface, [signature :> obj], {
-            create = fun b      -> create b
-            update = fun h b    -> ctx.Delete(h); create b
-            delete = fun h      -> ctx.Delete h
-            info =   fun h      -> ResourceInfo.Zero
-            view =   fun h      -> h.Handle
-            kind = ResourceKind.ShaderProgram
-        })
+    member x.CreateSurface(signature : IFramebufferSignature, surface : Aardvark.Base.Surface) =
+
+        let (signature, result) = 
+            programCache.GetOrAdd((surface, signature), fun (surface, signature) ->
+                ctx.CreateProgram(signature, surface)
+            )
+
+        let programHandle = 
+            programHandleCache.GetOrCreate<Program>(result, {
+                create = fun b      -> b
+                update = fun h b    -> b
+                delete = fun h      -> ()
+                info =   fun h      -> ResourceInfo.Zero
+                view =   fun h      -> h.Handle
+                kind = ResourceKind.ShaderProgram
+            })
+
+        signature, programHandle
+
 
     member x.CreateSampler (sam : IMod<SamplerStateDescription>) =
         samplerCache.GetOrCreate<SamplerStateDescription>(sam, {
@@ -656,7 +662,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             | None ->
                 failwithf "[GL] could not get uniform: %A" uniform
      
-    member x.CreateUniformBuffer(scope : Ag.Scope, layout : ShaderBlock, program : Program, u : IUniformProvider) =
+    member x.CreateUniformBuffer(scope : Ag.Scope, layout : FShade.GLSL.GLSLUniformBuffer, u : IUniformProvider) =
         let manager = 
             uniformBufferManagers.GetOrAdd(
                 (layout), 
@@ -665,7 +671,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                     //new PersistentlyMappedUniformManager(ctx, s, uniformFields)
             )
 
-        manager.CreateUniformBuffer(scope, u, program.UniformGetters)
+        manager.CreateUniformBuffer(scope, u, SymDict.empty)
  
 
  

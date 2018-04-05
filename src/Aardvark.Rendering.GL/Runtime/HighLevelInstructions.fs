@@ -99,7 +99,7 @@ module Instructions =
         )
 
     let drawIndirect (program : Program) (indexBuffer : Option<BufferView>) (buffer : IResource<IndirectBuffer>) (mode : IMod<IndexedGeometryMode>) (isActive : IMod<bool>) =
-        let hasTess = program.Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl)
+        let hasTess = program.HasTessellation
 
         let indexed, indexType = 
             match indexBuffer with
@@ -158,7 +158,7 @@ module Instructions =
         )
 
     let draw (program : Program) (indexBuffer : Option<BufferView>) (call : IMod<list<DrawCallInfo>>) (mode : IMod<IndexedGeometryMode>) (isActive : IMod<bool>) =
-        let hasTess = program.Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl)
+        let hasTess = program.HasTessellation
 
         let indexed, indexType = 
             match indexBuffer with

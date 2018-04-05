@@ -334,9 +334,43 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
+
+open FShade.GLSL
 [<Extension; AbstractClass; Sealed>]
 type ResourceManagerExtensions private() =
-  
+    
+    static let (|Floaty|_|) (t : GLSLType) =
+        match t with
+            | GLSLType.Float 32 -> Some ()
+            | GLSLType.Float 64 -> Some ()
+            | _ -> None
+        
+
+    static let getExpectedType (t : GLSLType) =
+        match t with
+            | GLSLType.Void -> typeof<unit>
+            | GLSLType.Bool -> typeof<int>
+            | Floaty -> typeof<float32>
+            | GLSLType.Int(true, 32) -> typeof<int>
+            | GLSLType.Int(false, 32) -> typeof<uint32>
+             
+            | GLSLType.Vec(2, Floaty) -> typeof<V2f>
+            | GLSLType.Vec(3, Floaty) -> typeof<V3f>
+            | GLSLType.Vec(4, Floaty) -> typeof<V4f>
+            | GLSLType.Vec(2, Int(true, 32)) -> typeof<V2i>
+            | GLSLType.Vec(3, Int(true, 32)) -> typeof<V3i>
+            | GLSLType.Vec(4, Int(true, 32)) -> typeof<V4i>
+            | GLSLType.Vec(3, Int(false, 32)) -> typeof<C3ui>
+            | GLSLType.Vec(4, Int(false, 32)) -> typeof<C4ui>
+
+
+            | GLSLType.Mat(2,2,Floaty) -> typeof<M22f>
+            | GLSLType.Mat(3,3,Floaty) -> typeof<M33f>
+            | GLSLType.Mat(4,4,Floaty) -> typeof<M44f>
+            | GLSLType.Mat(3,4,Floaty) -> typeof<M34f>
+            | GLSLType.Mat(2,3,Floaty) -> typeof<M23f>
+
+            | _ -> failwithf "[GL] unexpected vertex type: %A" t
 
     [<Extension>]
     static member Prepare (x : ResourceManager, fboSignature : IFramebufferSignature, rj : RenderObject) : PreparedRenderObject =
@@ -358,15 +392,7 @@ type ResourceManagerExtensions private() =
 //                    | _ -> rj.Surface
 //            else rj.Surface
 
-        let surface =
-            match rj.Surface with
-                | Surface.Backend s -> Mod.constant s
-                | Surface.FShadeSimple e -> Mod.constant (FShadeSurface.Get e :> ISurface)
-                | Surface.FShade _ -> failwith "[GL] dynamic shaders not implemented" //e |> Mod.map (fun e -> FShadeSurface.Get e :> ISurface)
-                | Surface.None -> null
-
-        let program = x.CreateSurface(fboSignature, surface)
-        let prog = program.Handle.GetValue()
+        let iface, program = x.CreateSurface(fboSignature, rj.Surface)
 
         GL.Check "[Prepare] Create Surface"
 
@@ -374,21 +400,22 @@ type ResourceManagerExtensions private() =
 
         // create all UniformBuffers requested by the program
         let uniformBuffers =
-            prog.Interface.UniformBlocks 
+            iface.uniformBuffers
                 |> List.map (fun block ->
-                    block.Index, x.CreateUniformBuffer(rj.AttributeScope, block, prog, rj.Uniforms)
+                    block.ubBinding, x.CreateUniformBuffer(rj.AttributeScope, block, rj.Uniforms)
                    )
                 |> Map.ofList
 
         GL.Check "[Prepare] Uniform Buffers"
 
-        // partition all requested (top-level) uniforms into Textures and other
-        let textureUniforms, otherUniforms = 
-            prog.Interface.Uniforms |> List.partition (fun uniform -> 
-                match uniform.Type with 
-                    | Sampler _ | FixedArray(Sampler _, _, _) | DynamicArray(Sampler _, _) -> true 
-                    | _ -> false
-            )
+//        // partition all requested (top-level) uniforms into Textures and other
+//        let textureUniforms, otherUniforms = 
+//         
+//            prog.Interface.Uniforms |> List.partition (fun uniform -> 
+//                match uniform.Type with 
+//                    | Sampler _ | FixedArray(Sampler _, _, _) | DynamicArray(Sampler _, _) -> true 
+//                    | _ -> false
+//            )
 
         // create all requested Textures
         let lastTextureSlot = ref -1
@@ -401,27 +428,20 @@ type ResourceManagerExtensions private() =
                     None
 
         let textures =
-            textureUniforms
+            iface.samplers
                 |> List.collect (fun u ->
-                    match u.Type with
-                        | FixedArray(t, _, cnt) ->
-                            List.init cnt (fun i -> { u with Type = t; Path = ShaderPath.Item(u.Path, i); Binding = u.Binding + i })
-                        | _ -> 
-                            [u]
+                    u.samplerTextures |> List.mapi (fun i  info ->
+                        u, i, info
+                    )
+//                    match u.Type with
+//                        | FixedArray(t, _, cnt) ->
+//                            List.init cnt (fun i -> { u with Type = t; Path = ShaderPath.Item(u.Path, i); Binding = u.Binding + i })
+//                        | _ -> 
+//                            [u]
                    )
-                |> List.choose (fun uniform ->
-                    let name, index =
-                        match uniform.Path with 
-                            | ShaderPath.Value name -> name, 0
-                            | ShaderPath.Item (ShaderPath.Value name, index) -> name, index
-                            | p -> failwithf "[GL] unexpected texture uniform path %A" p
-
-                    let samplerInfo =
-                        match Map.tryFind (name, index) prog.TextureInfo with
-                            | Some info -> info
-                            | _ ->
-                                Log.warn "could not get samplerstate for uniform %A" uniform 
-                                { textureName = Symbol.Create name; samplerState = SamplerStateDescription() }
+                |> List.choose (fun (sampler, index, (texName, samplerState)) ->
+                    let name = sampler.samplerName
+                    let samplerInfo = { textureName = Symbol.Create texName; samplerState = samplerState.SamplerStateDescription }
 
                     let sem = samplerInfo.textureName
                     let samplerState = samplerInfo.samplerState
@@ -429,25 +449,25 @@ type ResourceManagerExtensions private() =
                     match rj.Uniforms.TryGetUniform(rj.AttributeScope, sem) with
                         | Some tex ->
         
-                            let sampler =
+                            let sammy =
                                 match samplerModifier with
                                     | Some modifier -> 
                                         modifier |> Mod.map (fun f -> f sem samplerState)
                                     | None -> 
                                         Mod.constant samplerState
 
-                            let s = x.CreateSampler(sampler)
+                            let s = x.CreateSampler(sammy)
 
                             match tex with
                                 | :? IMod<ITexture> as value ->
                                     let t = x.CreateTexture(value)
-                                    lastTextureSlot := uniform.Binding
-                                    Some (uniform.Binding, (t, s))
+                                    lastTextureSlot := sampler.samplerBinding + index
+                                    Some (!lastTextureSlot, (t, s))
 
                                 | :? IMod<ITexture[]> as values ->
                                     let t = x.CreateTexture(values |> Mod.map (fun arr -> arr.[index]))
-                                    lastTextureSlot := uniform.Binding
-                                    Some (uniform.Binding, (t, s))
+                                    lastTextureSlot := sampler.samplerBinding + index
+                                    Some (!lastTextureSlot, (t, s))
 
                                 | _ ->
                                     Log.warn "unexpected texture type %A: %A" sem tex
@@ -460,31 +480,31 @@ type ResourceManagerExtensions private() =
 
         GL.Check "[Prepare] Textures"
 
-        // create all requested UniformLocations
-        let uniforms =
-            otherUniforms
-                |> List.choose (fun uniform ->
-                    try
-                        let r = x.CreateUniformLocation(rj.AttributeScope, rj.Uniforms, uniform)
-                        Some (uniform.Location, r)
-                    with _ ->
-                        None
-                   )
-                |> Map.ofList
+//        // create all requested UniformLocations
+//        let uniforms =
+//            otherUniforms
+//                |> List.choose (fun uniform ->
+//                    try
+//                        let r = x.CreateUniformLocation(rj.AttributeScope, rj.Uniforms, uniform)
+//                        Some (uniform.Location, r)
+//                    with _ ->
+//                        None
+//                   )
+//                |> Map.ofList
 
         GL.Check "[Prepare] Create Uniform Location"
 
         // create all requested vertex-/instance-inputs
         let buffers =
-            prog.Interface.Inputs 
+            iface.inputs
                 |> List.choose (fun v ->
-                     if v.Location >= 0 then
-                        let expected = ShaderParameterType.getExpectedType v.Type
-                        let sem = v.Path |> ShaderPath.name |> Symbol.Create
+                     if v.paramLocation >= 0 then
+                        let expected = getExpectedType v.paramType
+                        let sem = v.paramName |> Symbol.Create
                         match rj.VertexAttributes.TryGetAttribute sem with
                             | Some value ->
                                 let dep = x.CreateBuffer(value.Buffer)
-                                Some (v.Location, value, AttributeFrequency.PerVertex, dep)
+                                Some (v.paramLocation, value, AttributeFrequency.PerVertex, dep)
                             | _  -> 
                                 match rj.InstanceAttributes with
                                     | null -> failwithf "could not get attribute %A (not found in vertex attributes, and instance attributes is null) for rj: %A" sem rj
@@ -492,7 +512,7 @@ type ResourceManagerExtensions private() =
                                         match rj.InstanceAttributes.TryGetAttribute sem with
                                             | Some value ->
                                                 let dep = x.CreateBuffer(value.Buffer)
-                                                Some(v.Location, value, (AttributeFrequency.PerInstances 1), dep)
+                                                Some(v.paramLocation, value, (AttributeFrequency.PerInstances 1), dep)
                                             | _ -> 
                                                 failwithf "could not get attribute %A" sem
                         else
@@ -583,7 +603,7 @@ type ResourceManagerExtensions private() =
 
         let isActive = x.CreateIsActive rj.IsActive
         let beginMode = 
-            let hasTess = program.Handle.GetValue().Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl || s.Stage = ShaderStage.TessEval)
+            let hasTess = program.Handle.GetValue().HasTessellation
             x.CreateBeginMode(hasTess, rj.Mode)
         let drawCalls = if isNull rj.DrawCallInfos then Unchecked.defaultof<_> else x.CreateDrawCallInfoList rj.DrawCallInfos
         let depthTest = x.CreateDepthTest rj.DepthTest
@@ -606,7 +626,7 @@ type ResourceManagerExtensions private() =
                 LastTextureSlot = !lastTextureSlot
                 Program = program
                 UniformBuffers = uniformBuffers
-                Uniforms = uniforms
+                Uniforms = Map.empty
                 Textures = textures
                 Buffers = buffers
                 IndexBuffer = index

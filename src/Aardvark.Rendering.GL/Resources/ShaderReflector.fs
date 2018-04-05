@@ -189,6 +189,26 @@ module ShaderParameterType =
 
 
         ]
+    
+
+    open FShade.GLSL
+
+    let rec ofGLSLType (t : GLSLType) =
+        match t with
+            | GLSLType.Void -> failwithf "[GL] void cannot be a parameter type"
+            | GLSLType.Bool -> ShaderParameterType.Bool
+            | GLSLType.Int(true,(8|16|32)) -> ShaderParameterType.Int
+            | GLSLType.Int(false,(8|16|32)) -> ShaderParameterType.UnsignedInt
+            | GLSLType.Float((16|32|64)) -> ShaderParameterType.Float
+
+            | GLSLType.Vec(d,b) -> ShaderParameterType.Vector(ofGLSLType b, d)
+            | GLSLType.Mat(r,c,b) -> ShaderParameterType.Matrix(ofGLSLType b, r, c, true)
+            | GLSLType.Array(l, b, s) -> ShaderParameterType.FixedArray(ofGLSLType b, s, l)
+            | GLSLType.Struct(name, fields, size) ->
+                ShaderParameterType.Struct(size, fields |> List.map (fun (name, typ, offset) -> { Name = name; Type = ofGLSLType typ; Offset = offset }))
+
+        
+            | _ -> failwithf "[GL] bad parameter type: %A" t
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -422,6 +442,7 @@ module ShaderInterface =
         let parameters (textureSlots : ref<int>) (iface : ProgramInterface) (p : int) =
             let mutable cnt = 0
             GL.GetProgramInterface(p, iface, ProgramInterfaceParameter.ActiveResources, &cnt)
+
             List.init cnt id |> List.collect (fun pi ->
                 if (iface <> ProgramInterface.Uniform && iface <> ProgramInterface.BufferVariable) || GL.GetProgramResource(p, iface, pi, ProgramProperty.BlockIndex) = -1 then
                     let name = GL.GetProgramResourceName(p, iface, pi)

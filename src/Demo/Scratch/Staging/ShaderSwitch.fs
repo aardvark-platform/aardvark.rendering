@@ -68,11 +68,15 @@ module ``Shader Switch`` =
             Effect.compose [
                 DefaultSurfaces.trafo |> toEffect
                 DefaultSurfaces.constantColor C4f.Blue |> toEffect
+                DefaultSurfaces.diffuseTexture |> toEffect
                 DefaultSurfaces.simpleLighting |> toEffect
+                
             ]
 
         let effects = [| effectRed; effectGreen; effectBlue |]
         let effectId = Mod.init 0
+
+        let prepare = r.PrepareEffect(fboSig, effectBlue)
 
         let compile (config : EffectConfig) =
             let modules = effects |> Array.map (Effect.toModule config)
@@ -146,9 +150,20 @@ module ``Shader Switch`` =
         let surface (sg : ISg) =
             Sg.SurfaceApplicator(Surface.FShade compile, sg) :> ISg
 
+        let randomColors =
+            let rand = RandomSystem()
+            let img = PixImage<byte>(Col.Format.RGBA, 32L, 32L)
+            img.GetMatrix<C4b>().SetByIndex (fun (i : int64) ->
+                rand.UniformC3f().ToC4b()
+            ) |> ignore
+
+            PixTexture2d(PixImageMipMap(img), TextureParams.empty) :> ITexture
+
         let sg = 
             Sg.set(geometries |> ASet.map (fun (vg,t) -> Sg.ofIndexedGeometry vg |> Sg.trafo (Mod.constant t)))
                 |> Sg.fillMode mode
                 |> Sg.uniform "LightLocation" (Mod.constant (10.0 * V3d.III))
+                //|> Sg.surface (prepare :> ISurface)
+                |> Sg.texture DefaultSemantic.DiffuseColorTexture (Mod.constant randomColors)
                 |> surface
         sg

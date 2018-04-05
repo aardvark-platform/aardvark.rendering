@@ -1,22 +1,19 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\..\..\packages\FSharp.Compiler.Tools\build\FSharp.Compiler.Tools.props" Condition="Exists('..\..\..\packages\FSharp.Compiler.Tools\build\FSharp.Compiler.Tools.props')" Label="Paket" />
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>993cf671-5810-44d9-85d8-a35f5ee16f8f</ProjectGuid>
+    <ProjectGuid>77f11e0a-4bb2-4402-b339-b4772d2a4ef6</ProjectGuid>
     <OutputType>Library</OutputType>
-    <RootNamespace>Aardvark.Application.WPF.GL</RootNamespace>
-    <AssemblyName>Aardvark.Application.WPF.GL</AssemblyName>
+    <RootNamespace>Aardvark.Application.OpenVR.GL</RootNamespace>
+    <AssemblyName>Aardvark.Application.OpenVR.GL</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <TargetFSharpCoreVersion>4.4.0.0</TargetFSharpCoreVersion>
-    <Name>Aardvark.Application.WPF.GL</Name>
-    <NuGetPackageImportStamp>716d4491</NuGetPackageImportStamp>
-    <OperatingSystem Condition="Exists('C:\Windows\')">WINDOWS</OperatingSystem>
-    <OperatingSystem Condition="Exists('/usr')">UNIX</OperatingSystem>
-    <TargetFrameworkProfile />
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <Name>Aardvark.Application.OpenVR.GL</Name>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -24,7 +21,7 @@
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
     <OutputPath>..\..\..\bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE;$(OperatingSystem)</DefineConstants>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
     <WarningLevel>3</WarningLevel>
     <DocumentationFile>
     </DocumentationFile>
@@ -34,11 +31,67 @@
     <Optimize>true</Optimize>
     <Tailcalls>true</Tailcalls>
     <OutputPath>..\..\..\bin\Release\</OutputPath>
-    <DefineConstants>TRACE;$(OperatingSystem)</DefineConstants>
+    <DefineConstants>TRACE</DefineConstants>
     <WarningLevel>3</WarningLevel>
     <DocumentationFile>
     </DocumentationFile>
   </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="mscorlib" />
+    <Reference Include="OpenTK">
+      <HintPath>..\..\..\lib\Release\OpenTK.dll</HintPath>
+    </Reference>
+    <Reference Include="OpenTK.Compatibility">
+      <HintPath>..\..\..\lib\Release\OpenTK.Compatibility.dll</HintPath>
+    </Reference>
+    <Reference Include="OpenTK.GLControl">
+      <HintPath>..\..\..\lib\Release\OpenTK.GLControl.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Numerics" />
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj">
+      <Name>Aardvark.Base.Rendering</Name>
+      <Project>{f8233648-55ce-4795-9151-e512390d86e7}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj">
+      <Name>Aardvark.Rendering.GL</Name>
+      <Project>{88b586f5-a5e2-4321-bd5d-27d296da0fdd}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj">
+      <Name>Aardvark.SceneGraph</Name>
+      <Project>{b9ef48e4-7e73-4ddf-805a-d7324d907cb8}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\Aardvark.Application.OpenVR\Aardvark.Application.OpenVR.fsproj">
+      <Name>Aardvark.Application.OpenVR</Name>
+      <Project>{7aaac578-443f-4120-ba74-3732cce920e8}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj">
+      <Name>Aardvark.Application.WinForms.GL</Name>
+      <Project>{4f645de6-6d22-4bad-8489-c1f8456e3d55}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\Aardvark.Application.WinForms\Aardvark.Application.WinForms.fsproj">
+      <Name>Aardvark.Application.WinForms</Name>
+      <Project>{b1d5938d-ab5d-4d0e-8dde-482ef5308f16}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\Aardvark.Application\Aardvark.Application.fsproj">
+      <Name>Aardvark.Application</Name>
+      <Project>{e3508b1c-592c-4e8e-98f3-71dbec6083da}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Application.fs" />
+  </ItemGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
   </PropertyGroup>
@@ -54,65 +107,7 @@
       </PropertyGroup>
     </Otherwise>
   </Choose>
-  <Import Project="$(FSharpTargetsPath)" Condition="exists('$(FSharpTargetsPath)')" />
-  <ItemGroup>
-    <Compile Include="RenderControl.fs" />
-    <Compile Include="SharingRenderControl.fs" />
-    <Compile Include="Application.fs" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj">
-      <Name>Aardvark.Application.WinForms.GL</Name>
-      <Project>{4f645de6-6d22-4bad-8489-c1f8456e3d55}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\Aardvark.Application.WinForms\Aardvark.Application.WinForms.fsproj">
-      <Name>Aardvark.Application.WinForms</Name>
-      <Project>{b1d5938d-ab5d-4d0e-8dde-482ef5308f16}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <Reference Include="mscorlib" />
-    <Reference Include="OpenTK">
-      <HintPath>..\..\..\lib\Release\OpenTK.dll</HintPath>
-    </Reference>
-    <Reference Include="OpenTK.Compatibility">
-      <HintPath>..\..\..\lib\Release\OpenTK.Compatibility.dll</HintPath>
-    </Reference>
-    <Reference Include="OpenTK.GLControl">
-      <HintPath>..\..\..\lib\Release\OpenTK.GLControl.dll</HintPath>
-    </Reference>
-    <Reference Include="PresentationCore" />
-    <Reference Include="PresentationFramework" />
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Drawing" />
-    <Reference Include="System.Numerics" />
-    <Reference Include="System.Windows.Forms" />
-    <Reference Include="System.Xaml" />
-    <Reference Include="UIAutomationTypes" />
-    <Reference Include="WindowsBase" />
-    <ProjectReference Include="..\Aardvark.Application.WPF\Aardvark.Application.WPF.fsproj">
-      <Name>Aardvark.Application.WPF</Name>
-      <Project>{d8ada249-0cb6-4bde-9ae7-dbbdb6c3812a}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\Aardvark.Application\Aardvark.Application.fsproj">
-      <Name>Aardvark.Application</Name>
-      <Project>{e3508b1c-592c-4e8e-98f3-71dbec6083da}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj">
-      <Name>Aardvark.Base.Rendering</Name>
-      <Project>{f8233648-55ce-4795-9151-e512390d86e7}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj">
-      <Name>Aardvark.Rendering.GL</Name>
-      <Project>{88b586f5-a5e2-4321-bd5d-27d296da0fdd}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <Reference Include="WindowsFormsIntegration" />
-  </ItemGroup>
+  <Import Project="$(FSharpTargetsPath)" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">
@@ -123,6 +118,9 @@
   <Choose>
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
       <ItemGroup>
+        <Reference Include="System.Drawing">
+          <Paket>True</Paket>
+        </Reference>
         <Reference Include="System.Runtime.Serialization">
           <Paket>True</Paket>
         </Reference>
@@ -255,28 +253,6 @@
   <Choose>
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
       <ItemGroup>
-        <Reference Include="SharpDX">
-          <HintPath>..\..\..\packages\SharpDX\lib\net45\SharpDX.dll</HintPath>
-          <Private>True</Private>
-          <Paket>True</Paket>
-        </Reference>
-      </ItemGroup>
-    </When>
-  </Choose>
-  <Choose>
-    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
-      <ItemGroup>
-        <Reference Include="SharpDX.Direct3D9">
-          <HintPath>..\..\..\packages\SharpDX.Direct3D9\lib\net45\SharpDX.Direct3D9.dll</HintPath>
-          <Private>True</Private>
-          <Paket>True</Paket>
-        </Reference>
-      </ItemGroup>
-    </When>
-  </Choose>
-  <Choose>
-    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
-      <ItemGroup>
         <Reference Include="System.Collections.Immutable">
           <HintPath>..\..\..\packages\System.Collections.Immutable\lib\netstandard1.0\System.Collections.Immutable.dll</HintPath>
           <Private>True</Private>
@@ -323,6 +299,17 @@
       <ItemGroup>
         <Reference Include="System.Runtime.InteropServices.RuntimeInformation">
           <HintPath>..\..\..\packages\System.Runtime.InteropServices.RuntimeInformation\lib\net45\System.Runtime.InteropServices.RuntimeInformation.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+      </ItemGroup>
+    </When>
+  </Choose>
+  <Choose>
+    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
+      <ItemGroup>
+        <Reference Include="OpenVR">
+          <HintPath>..\..\..\packages\Unofficial.OpenVR\lib\net45\OpenVR.dll</HintPath>
           <Private>True</Private>
           <Paket>True</Paket>
         </Reference>

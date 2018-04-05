@@ -343,8 +343,20 @@ type ShaderInterface =
         UsedBuiltInOutputs  : Map<ShaderStage, Set<string>>
     }
 
+    
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderInterface =
+    let empty =
+        {
+            Inputs              = []
+            Outputs             = []
+            Uniforms            = []
+            UniformBlocks       = []
+            StorageBlocks       = []
+            UsedBuiltInInputs   = Map.empty
+            UsedBuiltInOutputs  = Map.empty
+        }
     let flipMatrixMajority (iface : ShaderInterface) : ShaderInterface =
         {
             Inputs              = iface.Inputs |> List.map ShaderParameter.flipMatrixMajority
@@ -851,6 +863,8 @@ module ShaderParameterWriter =
         let contentType = input.GetType().GetInterface(typedefof<IMod<_>>.Name).GetGenericArguments().[0]
         let writer = get contentType target
         writer.Bind input
+
+
 
 module ShaderBlockWriter =
     open Aardvark.Base.Incremental
