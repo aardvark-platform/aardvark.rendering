@@ -440,6 +440,11 @@ type VrTexture =
             let i = Texture_t(eColorSpace = EColorSpace.Auto, eType = ETextureType.OpenGL, handle = nativeint handle)
             let b = VRTextureBounds_t(uMin = 0.0f, uMax = 1.0f, vMin = 0.0f, vMax = 1.0f)
             new VrTexture(0n, i, EVRSubmitFlags.Submit_Default, b)
+            
+        static member OpenGL(handle : int, bounds : Box2d) =
+            let i = Texture_t(eColorSpace = EColorSpace.Auto, eType = ETextureType.OpenGL, handle = nativeint handle)
+            let b = VRTextureBounds_t(uMin = float32 bounds.Min.X, uMax = float32 bounds.Max.X, vMin = float32 bounds.Min.Y, vMax = float32 bounds.Max.Y)
+            new VrTexture(0n, i, EVRSubmitFlags.Submit_Default, b)
 
         static member Vulkan(data : VRVulkanTextureData_t) =
             let ptr = Marshal.AllocHGlobal sizeof<VRVulkanTextureData_t>
@@ -528,8 +533,6 @@ type VrRenderer() =
         
 
     let hmds = devices |> Array.filter (fun d -> d.Type = VrDeviceType.Hmd)
-    let controllers = devices |> Array.filter (fun d -> d.Type = VrDeviceType.Controller)
-    
 
 
     let compositor = OpenVR.Compositor
@@ -717,5 +720,5 @@ type VrRenderer() =
 
     member x.Hmd = hmds.[0]
 
-    member x.Controllers = controllers
+    member x.Controllers = devices |> Array.filter (fun d -> d.Type = VrDeviceType.Controller)
 

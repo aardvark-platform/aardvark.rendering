@@ -33,7 +33,7 @@ module PipelineInfo =
             version                 = Version(4,5)
             enabledExtensions       = Set.ofList [ "GL_ARB_tessellation_shader"; "GL_ARB_separate_shader_objects"; "GL_ARB_shading_language_420pack" ]
             createUniformBuffers    = true
-            createBindings          = true
+            bindingMode             = GLSL.BindingMode.Global
             createDescriptorSets    = true
             stepDescriptorSets      = false
             createInputLocations    = true
@@ -331,12 +331,18 @@ module PipelineInfo =
                     match typ with
                         | ShaderType.SampledImage(ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt))
                         | ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt) ->
+
+                            let description = 
+                                match MapExt.tryFind name layout.eTextures with
+                                    | Some l -> l |> List.map (fun (n,s) -> { textureName = Symbol.Create n; samplerState = s.SamplerStateDescription })
+                                    | None -> []
+
                             {
                                 set             = set
                                 binding         = binding
                                 name            = name
                                 count           = 1
-                                description     = []
+                                description     = description
                                 resultType      = PrimitiveType.ofShaderType resultType
                                 isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
                                 isSampled       = isSampled
@@ -350,12 +356,18 @@ module PipelineInfo =
                             }
 
                         | ShaderType.Array((ShaderType.SampledImage(ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt)) | ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt)), len) ->
+                            let description = 
+                                match MapExt.tryFind name layout.eTextures with
+                                    | Some l -> l |> List.map (fun (n,s) -> { textureName = Symbol.Create n; samplerState = s.SamplerStateDescription })
+                                    | None -> []
+
+                            
                             {
                                 set             = set
                                 binding         = binding
                                 name            = name
                                 count           = len
-                                description     = []
+                                description     = description
                                 resultType      = PrimitiveType.ofShaderType resultType
                                 isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
                                 isSampled       = isSampled

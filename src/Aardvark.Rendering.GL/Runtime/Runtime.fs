@@ -38,7 +38,7 @@ type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * Attachm
     member x.Runtime = runtime
     member x.ColorAttachments = colors
     member x.DepthAttachment = depth
-    member x.StencilAttachment = depth
+    member x.StencilAttachment = stencil
     member x.Images = images
 
     member x.LayerCount = layers
@@ -371,7 +371,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             shaderCache.GetOrAdd(key,fun _ -> 
                 let glsl = 
                     signature.Link(effect, Range1d(-1.0, 1.0), false)
-                        |> ModuleCompiler.compileGLSL410
+                        |> ModuleCompiler.compileGLSL430
 
                 let entries =
                     effect.Shaders 
@@ -438,7 +438,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             failwith ""
 
         member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = x.Copy(src, srcBaseSlice, srcBaseLevel, dst, dstBaseSlice, dstBaseLevel, slices, levels)
-        member x.PrepareSurface (signature, s : ISurface) = x.PrepareSurface(signature, s) :> IBackendSurface
+        member x.PrepareSurface (signature, s : ISurface) : IBackendSurface = x.PrepareSurface(signature, s)
         member x.DeleteSurface (s : IBackendSurface) = 
             match s with
                 | :? Program as p -> x.DeleteSurface p
@@ -589,13 +589,18 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)
-    member x.PrepareSurface (signature : IFramebufferSignature, s : ISurface) = 
+    member x.PrepareSurface (signature : IFramebufferSignature, s : ISurface) : IBackendSurface = 
         using ctx.ResourceLock (fun d -> 
-            match SurfaceCompilers.compile ctx signature s with
-                | Success prog -> prog  
-                | Error e -> failwith e
-        )
+            let surface =
+                match s with
+                    | :? FShadeSurface as f -> Aardvark.Base.Surface.FShadeSimple f.Effect
+                    | _ -> Aardvark.Base.Surface.Backend s
 
+            let iface, program = ctx.CreateProgram(signature, surface)
+
+            Mod.force program :> IBackendSurface
+
+        )
 
 
     member x.DeleteTexture (t : Texture) = 
@@ -686,7 +691,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.ReadFramebuffer,readFbo)
             GL.Check "could not bind read framebuffer"
             match ms with
-                | :? BackendTextureOutputView as ms ->
+                | :? IBackendTextureOutputView as ms ->
                     let tex = ms.texture |> unbox<Texture>
                     GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2DMultisample, tex.Handle, ms.level)
                     GL.Check "could not set read framebuffer texture"
@@ -694,6 +699,13 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 | :? Renderbuffer as ms ->
                     GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, ms.Handle)
                     GL.Check "could not set read framebuffer texture"
+
+//                | :? IBackendTextureOutputView as ms ->
+//                    let tex = ms.texture |> unbox<Texture>
+//                    GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2DMultisample, tex.Handle, ms.level)
+//                    GL.Check "could not set read framebuffer texture"
+//                    
+//                    
 
                 | _ ->
                     failwithf "[GL] cannot resolve %A" ms

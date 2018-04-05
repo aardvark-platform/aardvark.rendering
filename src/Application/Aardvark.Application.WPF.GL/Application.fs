@@ -3,6 +3,7 @@
 #if WINDOWS
 
 open System
+open System.IO
 open System.Windows.Forms
 
 open Aardvark.Base
@@ -20,6 +21,17 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
     let runtime = new Runtime()
     let ctx = new Context(runtime, enableDebug)
     do runtime.Context <- ctx
+
+    let defaultCachePath =
+        let dir =
+            Path.combine [
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
+                "Aardvark"
+                "OpenGlShaderCache"
+            ]
+        ctx.ShaderCachePath <- Some dir
+        dir
+
 
     let init =
         let initialized = ref false
@@ -51,7 +63,10 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
 
     member x.Context = ctx
     member x.Runtime = runtime
-
+    
+    member x.ShaderCachePath
+        with get() = ctx.ShaderCachePath
+        and set p = ctx.ShaderCachePath <- p
 
     member x.Dispose() =
         ctx.Dispose()

@@ -164,6 +164,23 @@ type Context(runtime : IRuntime, enableDebug : bool, resourceContextCount : int)
 
     let mutable packAlignment = None
 
+    let mutable shaderCachePath : Option<string> = None
+
+    member x.ShaderCachePath
+        with get() = shaderCachePath
+        and set p = 
+            match p with
+                | Some p ->
+                    try
+                        let info = System.IO.DirectoryInfo p
+                        if not info.Exists then info.Create()
+                        shaderCachePath <- Some p
+                    with err ->
+                        Log.error "[GL] could not create cache folder: %A" p
+                        shaderCachePath <- None
+                | None ->
+                    shaderCachePath <- None
+
     member x.MemoryUsage = memoryUsage
 
     member x.CurrentContextHandle

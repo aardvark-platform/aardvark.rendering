@@ -58,11 +58,13 @@ type Program =
        Context : Context
        Code : string
        Handle : int
-       Shaders : list<Shader>
+       HasTessellation : bool
+       //ShadersNew : list<Shader>
        UniformGetters : SymbolDict<IMod>
        SupportedModes : Option<Set<IndexedGeometryMode>>
        Interface : ShaderReflection.ShaderInterface
        TextureInfo : Map<string * int, SamplerDescription>
+       InterfaceNew : FShade.GLSL.GLSLProgramInterface
 
        [<DefaultValue>]
        mutable _inputs : Option<list<string * Type>>
@@ -308,13 +310,11 @@ module ProgramExtensions =
             
             )
 
-        let setFragDataLocations (fboSignature : IFramebufferSignature) (handle : int) (x : Context) =
+        let setFragDataLocations (fboSignature : Map<string, int>) (handle : int) (x : Context) =
             using x.ResourceLock (fun _ ->
-                fboSignature.ColorAttachments 
+                fboSignature 
                     |> Map.toList
-                    |> List.map (fun (location, (semantic, signature)) ->
-                        let name = semantic.ToString()
-
+                    |> List.map (fun (name, location) ->
                         let outputNameAndIndex = 
                             outputSuffixes |> List.tryPick (fun s ->
                                 let outputName = String.Format(s, name)
@@ -328,12 +328,12 @@ module ProgramExtensions =
 
                         match outputNameAndIndex with
                             | Some (outputName, index) ->
-                                GL.BindFragDataLocation(handle, location, semantic.ToString())
+                                GL.BindFragDataLocation(handle, location, name)
                                 GL.Check "could not bind FragData location"
 
-                                { attributeIndex = location; size = 1; name = outputName; semantic = semantic.ToString(); attributeType = ActiveAttribType.FloatVec4 }
+                                { attributeIndex = location; size = 1; name = outputName; semantic = name; attributeType = ActiveAttribType.FloatVec4 }
                             | None ->
-                                failwithf "could not get desired program-output: %A" semantic
+                                failwithf "could not get desired program-output: %A" name
                     )
             )
 
@@ -402,7 +402,7 @@ module ProgramExtensions =
 
             )
 
-        let tryLinkProgram (expectsRowMajorMatrices : bool) (handle : int) (code : string) (shaders : list<Shader>) (firstTexture : int) (imageSlots : Map<Symbol, int>) (findOutputs : int -> Context -> list<ActiveAttribute>) (x : Context) =
+        let tryLinkProgram (expectsRowMajorMatrices : bool) (handle : int) (code : string) (shaders : list<Shader>) (firstTexture : int) (findOutputs : int -> Context -> list<ActiveAttribute>) (x : Context) =
             GL.LinkProgram(handle)
             GL.Check "could not link program"
 
@@ -433,20 +433,31 @@ module ProgramExtensions =
 
                     try
                         try
-                            let iface = ShaderInterface.ofProgram firstTexture x handle
-                            let iface = 
-                                if expectsRowMajorMatrices then ShaderInterface.flipMatrixMajority iface
-                                else iface
+
+//                            let iface = ShaderInterface.ofProgram firstTexture x handle
+//                            let iface = 
+//                                if expectsRowMajorMatrices then ShaderInterface.flipMatrixMajority iface
+//                                else iface
 
                             Success {
                                 Context = x
                                 Code = code
                                 Handle = handle
-                                Shaders = shaders
+                                //ShadersNew = shaders
+                                HasTessellation = shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl || s.Stage = ShaderStage.TessEval)
                                 UniformGetters = SymDict.empty
                                 SupportedModes = supported
-                                Interface = iface
+                                Interface = ShaderInterface.empty
                                 TextureInfo = Map.empty
+                                InterfaceNew =
+                                    {
+                                        inputs          = []
+                                        outputs         = []
+                                        samplers        = []
+                                        images          = []
+                                        storageBuffers  = []
+                                        uniformBuffers  = []
+                                    }
                             }
 
                         finally 
@@ -474,10 +485,47 @@ module ProgramExtensions =
 
                 Error log
 
+    open FShade.Imperative
+    open FShade
+
+    let private codeCache = ConcurrentDictionary<Context * string * IFramebufferSignature, Error<Program>>()
+    
+    let private shaderCache = ConcurrentDictionary<Context * Surface * IFramebufferSignature, Error<FShade.GLSL.GLSLProgramInterface * IMod<Program>>>()
+    let private shaderPickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
+
+//    let private useDiskCache = true
+//    let private cachePath =
+//        if useDiskCache then
+//            let temp = Path.combine [System.IO.Path.GetTempPath(); "aardvark-gl-shadercache"]
+//            if not (System.IO.Directory.Exists temp) then System.IO.Directory.CreateDirectory temp |> ignore
+//            temp
+//        else
+//            ""
+
+    type private OutputSignature =
+        {
+            device      : string
+            id          : string
+            outputs     : Map<string, int * RenderbufferFormat>
+            layered     : Set<string>
+            layerCount  : int
+        }
+
+    type private ShaderCacheEntry =
+        {
+            iface       : FShade.GLSL.GLSLProgramInterface
+            format      : BinaryFormat
+            binary      : byte[]
+            code        : string
+            hasTess     : bool
+            modes       : Option<Set<IndexedGeometryMode>>
+        }
+
+
     type Aardvark.Rendering.GL.Context with
 
 
-        member x.TryCompileShader(stage : ShaderStage, code : string, entryPoint : string) =
+        member x.TryCompileShader(stage : Aardvark.Base.ShaderStage, code : string, entryPoint : string) =
             x |> ShaderCompiler.tryCompileShader stage code entryPoint
 
 
@@ -494,7 +542,7 @@ module ProgramExtensions =
                         GL.AttachShader(handle, s.Handle)
                         GL.Check "could not attach shader to program"
 
-                    match x |> ShaderCompiler.tryLinkProgram expectsRowMajorMatrices handle code shaders 0 Map.empty (fun _ _ -> []) with
+                    match x |> ShaderCompiler.tryLinkProgram expectsRowMajorMatrices handle code shaders 0 (fun _ _ -> []) with
                         | Success program ->
                             Success program
                         | Error err ->
@@ -503,19 +551,31 @@ module ProgramExtensions =
                 | Error err ->
                     Error err
                     
-        member x.TryCompileProgram(fboSignature : IFramebufferSignature, expectsRowMajorMatrices : bool, code : string) =
+        member x.TryGetProgramBinary(prog : Program) =
+            use __ = x.ResourceLock
+
+            let mutable length = 0
+            GL.GetProgram(prog.Handle, unbox 0x8741, &length)
+            let err = GL.GetError()
+            if err <> ErrorCode.NoError then 
+                None
+            else
+                let data : byte[] = Array.zeroCreate length
+                let mutable format = Unchecked.defaultof<BinaryFormat>
+                GL.GetProgramBinary(prog.Handle, length, &length, &format, data)
+                let err = GL.GetError()
+                if err <> ErrorCode.NoError then 
+                    None
+                else
+                    Some (format, data)
+
+
+
+        member x.TryCompileProgramCode(fboSignature : Map<string, int>, expectsRowMajorMatrices : bool, code : string) =
             using x.ResourceLock (fun _ ->
                 match x |> ShaderCompiler.tryCompileShaders true code with
                     | Success shaders ->
-
-                        let imageSlots = fboSignature.Images |> Map.toSeq |> Seq.map (fun (a,b) -> b,a) |> Map.ofSeq
-
-                        let firstTexture = 
-                            if Map.isEmpty fboSignature.Images then
-                                0
-                            else
-                                1 + (fboSignature.Images |> Map.toSeq |> Seq.map fst |> Seq.max)
-
+                        let firstTexture = 0
                         addProgram x
                         let handle = GL.CreateProgram()
                         GL.Check "could not create program"
@@ -524,7 +584,7 @@ module ProgramExtensions =
                             GL.AttachShader(handle, s.Handle)
                             GL.Check "could not attach shader to program"
 
-                        match x |> ShaderCompiler.tryLinkProgram expectsRowMajorMatrices handle code shaders firstTexture imageSlots (ShaderCompiler.setFragDataLocations fboSignature) with
+                        match x |> ShaderCompiler.tryLinkProgram expectsRowMajorMatrices handle code shaders firstTexture (ShaderCompiler.setFragDataLocations fboSignature) with
                             | Success program ->
                                 Success program
                             | Error err ->
@@ -535,40 +595,8 @@ module ProgramExtensions =
                         Error err
             )
 
-        member x.TryCompileTransformFeedbackProgram(wantedSemantics : list<Symbol>, expectsRowMajorMatrices : bool, code : string) =
-            using x.ResourceLock (fun _ ->
-                match x |> ShaderCompiler.tryCompileShaders false code with
-                    | Success shaders ->
-                        let shaders = shaders |> List.filter (fun s -> s.Stage <> ShaderStage.Fragment)
-
-                        addProgram x
-                        let handle = GL.CreateProgram()
-                        GL.Check "could not create program"
-
-                        for s in shaders do
-                            GL.AttachShader(handle, s.Handle)
-                            GL.Check "could not attach shader to program"
-
-             
-                        match x |> ShaderCompiler.tryLinkProgram expectsRowMajorMatrices handle code shaders 0 Map.empty (ShaderCompiler.setTransformFeedbackVaryings wantedSemantics) with
-                            | Success program ->
-                                Success program
-                            | Error err ->
-                                Error err
-
-                    
-                    | Error err ->
-                        Error err
-            )
-
-        member x.CompileProgram(fboSignature : IFramebufferSignature, expectsRowMajorMatrices : bool, code : string) =
-            match x.TryCompileProgram(fboSignature, expectsRowMajorMatrices, code) with
-                | Success p -> p
-                | Error e ->
-                    failwithf "[GL] shader compiler returned errors: %s" e
-
-        member x.CompileTransformFeedbackProgram(wantedSemantics : list<Symbol>, expectsRowMajorMatrices : bool, code : string) =
-            match x.TryCompileTransformFeedbackProgram(wantedSemantics, expectsRowMajorMatrices, code) with
+        member x.CompileProgramCode(fboSignature : Map<string, int>, expectsRowMajorMatrices : bool, code : string) =
+            match x.TryCompileProgramCode(fboSignature, expectsRowMajorMatrices, code) with
                 | Success p -> p
                 | Error e ->
                     failwithf "[GL] shader compiler returned errors: %s" e
@@ -580,5 +608,155 @@ module ProgramExtensions =
                 GL.Check "could not delete program"
             )
 
+        member x.TryCompileProgram(id : string, signature : IFramebufferSignature, code : Lazy<GLSL.GLSLShader>) : Error<_> =
+            codeCache.GetOrAdd((x, id, signature), fun (x, id, signature) ->
+                
+                let (file : string, content : Option<ShaderCacheEntry>) =
+                    match x.ShaderCachePath with    
+                        | Some cachePath ->
+                            let key = 
+                                {
+                                    device      = x.Driver.vendor + "_" + x.Driver.renderer + "_" + string x.Driver.version
+                                    id          = id
+                                    outputs     = signature.ColorAttachments |> Map.toList |> List.map (fun (id,(name, s)) -> string name, (id, s.format)) |> Map.ofList
+                                    layered     = signature.PerLayerUniforms
+                                    layerCount  = signature.LayerCount
+                                }
+
+                            let hash = shaderPickler.ComputeHash(key).Hash |> System.Guid
+                            let file = System.IO.Path.Combine(cachePath, string hash + ".bin")
+
+                            if System.IO.File.Exists file then
+                                try file, shaderPickler.UnPickle (File.readAllBytes file) |> Some
+                                with _ -> file, None
+                            else
+                                file, None
+                        | _ ->
+                            "", None
+
+                match content with
+                    | Some c ->
+                        
+                        let prog = GL.CreateProgram()
+                        GL.ProgramBinary(prog, c.format, c.binary, c.binary.Length)
+                        GL.Check "could not create program from binary"
+
+                        let program =
+                            {
+                                Context = x
+                                Code = c.code
+                                Handle = prog
+                                HasTessellation = c.hasTess
+                                //ShadersNew = []
+                                SupportedModes = c.modes
+                                InterfaceNew = c.iface
+                                // deprecated stuff
+                                UniformGetters = SymDict.empty
+                                Interface = ShaderReflection.ShaderInterface.empty
+                                TextureInfo = Map.empty
+                            }
+
+                        Success program
+
+                    | _ -> 
+                        let code = code.Value
+                        let outputs = code.iface.outputs |> List.map (fun p -> p.paramName, p.paramLocation) |> Map.ofList
+                        match x.TryCompileProgramCode(outputs, true, code.code) with
+                            | Success prog ->
+                                let prog = { prog with InterfaceNew = code.iface }
+                                
+                                match x.ShaderCachePath with    
+                                    | Some cachePath ->
+                                        match x.TryGetProgramBinary prog with
+                                            | Some (format, binary) ->
+                                                let entry =
+                                                    shaderPickler.Pickle {
+                                                        hasTess = prog.HasTessellation
+                                                        iface = code.iface
+                                                        format = format
+                                                        binary = binary
+                                                        code = code.code
+                                                        modes = prog.SupportedModes
+                                                    }
+                                                File.writeAllBytes file entry
+
+                                            | None ->
+                                                ()
+                                    | _ ->
+                                        ()
+
+                                Success prog
+                            | Error e ->
+                                Error e
+            )
+
+        member x.TryCreateProgram(signature : IFramebufferSignature, surface : Surface) : Error<GLSL.GLSLProgramInterface * IMod<Program>> =
+            shaderCache.GetOrAdd((x, surface, signature), fun (x, surface, signature) ->
+                match surface with
+                    | Surface.FShadeSimple effect ->
+                    
+                        let glsl = 
+                            lazy (
+                                let module_ = signature.Link(effect, Range1d(-1.0, 1.0), false)
+                                ModuleCompiler.compileGLSL430 module_
+                            )
+
+                        match x.TryCompileProgram(effect.Id, signature, glsl) with
+                            | Success (prog) ->
+                                Success (prog.InterfaceNew, Mod.constant prog)
+                            | Error e ->
+                                Error e
+
+                    | Surface.FShade create ->
+                        let (inputLayout,b) = create (signature.EffectConfig(Range1d(-1.0, 1.0), false))
+
+                        let initial = Mod.force b
+                        let effect = initial.userData |> unbox<Effect>
+                        let iface =
+                            match x.TryCompileProgram(effect.Id, signature, lazy (ModuleCompiler.compileGLSL430 initial)) with  
+                                | Success prog -> 
+                                    let iface = prog.InterfaceNew
+                                    { iface with
+                                        samplers = iface.samplers |> List.map (fun sam ->
+                                            match MapExt.tryFind sam.samplerName inputLayout.eTextures with
+                                                | Some infos -> { sam with samplerTextures = infos }
+                                                | None -> sam
+                                        )
+                                    }
+                                | Error e ->
+                                    failwithf "[GL] shader compiler returned errors: %s" e
 
 
+
+
+                        let changeableProgram = 
+                            b |> Mod.map (fun m ->
+                                let effect = m.userData |> unbox<Effect>
+
+                                match x.TryCompileProgram(effect.Id, signature, lazy (ModuleCompiler.compileGLSL430 m)) with
+                                    | Success p -> p
+                                    | Error e ->
+                                        Log.error "[GL] shader compiler returned errors: %A" e
+                                        failwithf "[GL] shader compiler returned errors: %A" e
+                            )
+
+                        Success (iface, changeableProgram)
+
+                    | Surface.None ->
+                        Error "[GL] empty shader"
+
+                    | Surface.Backend surface ->
+                        match surface with
+                            | :? Program as p -> 
+                                Success (p.InterfaceNew, Mod.constant p)
+                            | _ ->
+                                Error (sprintf "[GL] bad surface: %A (hi lui)" surface)
+            )
+
+        member x.CreateProgram(signature : IFramebufferSignature, surface : Surface) : GLSL.GLSLProgramInterface * IMod<Program> =
+            match x.TryCreateProgram(signature, surface) with
+                | Success t -> t
+                | Error e ->
+                    Log.error "[GL] shader compiler returned errors: %A" e
+                    failwithf "[GL] shader compiler returned errors: %A" e
+                

@@ -265,7 +265,7 @@ let main argv =
     
 
     show {
-        backend Backend.Vulkan
+        backend Backend.GL
         display Display.Mono
         debug true
         samples 8

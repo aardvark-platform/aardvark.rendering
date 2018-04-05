@@ -78,6 +78,11 @@
       <Project>{b9ef48e4-7e73-4ddf-805a-d7324d907cb8}</Project>
       <Private>True</Private>
     </ProjectReference>
+    <ProjectReference Include="..\Aardvark.Application.OpenVR.GL\Aardvark.Application.OpenVR.GL.fsproj">
+      <Name>Aardvark.Application.OpenVR.GL</Name>
+      <Project>{77f11e0a-4bb2-4402-b339-b4772d2a4ef6}</Project>
+      <Private>True</Private>
+    </ProjectReference>
     <ProjectReference Include="..\Aardvark.Application.OpenVR.Vulkan\Aardvark.Application.OpenVR.Vulkan.fsproj">
       <Name>Aardvark.Application.OpenVR.Vulkan</Name>
       <Project>{fb047d5e-d49a-462e-baa0-b058ce06cfc9}</Project>
