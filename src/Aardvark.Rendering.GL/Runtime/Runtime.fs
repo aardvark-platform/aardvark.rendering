@@ -678,13 +678,13 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         
         new RenderTasks.ClearTask(x, fboSignature, clearValues, depth, ctx) :> IRenderTask
 
-    member x.ResolveMultisamples(ms : IFramebufferOutput, ss : IBackendTexture, trafo : ImageTrafo) =
+    member x.ResolveMultisamples(ms : IFramebufferOutput, srcOffset : V2i, ss : IBackendTexture, dstOffset : V2i, size : V2i, trafo : ImageTrafo) =
         using ctx.ResourceLock (fun _ ->
             let mutable oldFbo = 0
             OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo);
 
             let tex = ss |> unbox<Texture>
-            let size = ms.Size
+            //let size = ms.Size
             let readFbo = OpenGL.GL.GenFramebuffer()
             let drawFbo = OpenGL.GL.GenFramebuffer()
 
@@ -699,6 +699,12 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 | :? Renderbuffer as ms ->
                     GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, ms.Handle)
                     GL.Check "could not set read framebuffer texture"
+
+                | :? ITextureLevel as ms ->
+                    let tex = ms.Texture |> unbox<Texture>
+                    GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2DMultisample, tex.Handle, ms.Level)
+                    GL.Check "could not set read framebuffer texture"
+                    
 
 //                | :? IBackendTextureOutputView as ms ->
 //                    let tex = ms.texture |> unbox<Texture>
@@ -715,8 +721,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, tex.Handle, 0)
             GL.Check "could not set write framebuffer texture"
 
-            let mutable src = Box2i(0, 0, size.X, size.Y)
-            let mutable dst = Box2i(0, 0, size.X, size.Y)
+
+            let mutable src = Box2i(srcOffset.X, srcOffset.Y, size.X, size.Y)
+            let mutable dst = Box2i(dstOffset.X, dstOffset.Y, size.X, size.Y)
 
             match trafo with
                 | ImageTrafo.Rot0 -> ()
@@ -743,6 +750,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             GL.BindFramebuffer(FramebufferTarget.Framebuffer,oldFbo)
             GL.Check "error cleanup"
         )
+
+    member x.ResolveMultisamples(ms : IFramebufferOutput, ss : IBackendTexture, trafo : ImageTrafo) =
+        x.ResolveMultisamples(ms, V2i.Zero, ss, V2i.Zero, ms.Size.XY, trafo)
 
     member x.GenerateMipMaps(t : IBackendTexture) =
         match t with
