@@ -592,31 +592,6 @@ type VrRenderer() =
 
     let mutable backgroundColor = C4f.Black
 
-
-
-
-    let controllerBoxes =
-        let cam = hmds.[0].MotionState.Pose |> Mod.map (fun t -> t.Forward.C3.XYZ)
-        controllers 
-            |> Array.map (fun c ->
-                let pressed = c.Axis.[0].Pressed
-                Sg.box' C4b.Red (Box3d(-V3d.III * 0.05, V3d.III * 0.05))
-                    |> Sg.trafo c.MotionState.Pose
-                    |> Sg.onOff pressed
-            )
-            |> Sg.ofArray
-            |> Sg.shader {
-                do! DefaultSurfaces.trafo
-                do! DefaultSurfaces.constantColor C4f.Red
-                do! DefaultSurfaces.simpleLighting
-            }
-            |> Sg.uniform "CameraLocation" cam
-            |> Sg.uniform "LightLocation" cam
-            |> Sg.uniform "ViewTrafo" infos.[0].viewTrafos
-            |> Sg.uniform "ProjTrafo" infos.[0].projTrafos
-            |> Sg.uniform "ViewportSize" (Mod.constant infos.[0].framebufferSize)
-
-
     let eventQueue = System.Collections.Generic.Queue<VREvent_t>()
 
     member private x.ProcessEvents(events : System.Collections.Generic.Queue<VREvent_t>) =
@@ -633,8 +608,6 @@ type VrRenderer() =
                     | None ->
                         ()
 
-    member x.ControllerBoxes =
-        controllerBoxes
 
     member x.BackgroundColor
         with get() = backgroundColor
