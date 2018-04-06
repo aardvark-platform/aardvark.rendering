@@ -2302,103 +2302,111 @@ module Image =
         
         result
 
-    let alloc (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
+    let private nextFormat =
+        Map.ofList [
+            VkFormat.D24UnormS8Uint, VkFormat.D32SfloatS8Uint
+            VkFormat.X8D24UnormPack32, VkFormat.D32Sfloat
+        ]
+
+    let rec alloc (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
         if device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt) = VkFormatFeatureFlags.None then
-            failf "bad image format %A" fmt
-
-        let mayHavePeers =
-            device.IsDeviceGroup &&
-            (
-                (usage &&& VkImageUsageFlags.ColorAttachmentBit <> VkImageUsageFlags.None) ||
-                (usage &&& VkImageUsageFlags.DepthStencilAttachmentBit <> VkImageUsageFlags.None) ||
-                (usage &&& VkImageUsageFlags.StorageBit <> VkImageUsageFlags.None)
-            )
-
-        let flags =
-            if dim = TextureDimension.TextureCube then VkImageCreateFlags.CubeCompatibleBit
-            else VkImageCreateFlags.None
-
-        let flags =
-            if mayHavePeers then VkImageCreateFlags.AliasBitKhr ||| flags
-            else flags
-
-        let mutable info =
-            VkImageCreateInfo(
-                VkStructureType.ImageCreateInfo, 0n,
-                flags,
-                VkImageType.ofTextureDimension dim,
-                fmt,
-                VkExtent3D(uint32 size.X, uint32 size.Y, uint32 size.Z),
-                uint32 mipMapLevels,
-                uint32 count,
-                unbox<VkSampleCountFlags> samples,
-                VkImageTiling.Optimal,
-                usage,
-                VkSharingMode.Exclusive,
-                0u, NativePtr.zero,
-                VkImageLayout.Undefined
-            ) 
-
-        let mutable handle = VkImage.Null
-        VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, &&handle)
-            |> check "could not create image"
-
-        let mutable reqs = VkMemoryRequirements()
-        VkRaw.vkGetImageMemoryRequirements(device.Handle, handle, &&reqs)
-        let memalign = int64 reqs.alignment |> Alignment.next device.BufferImageGranularity
-        let memsize = int64 reqs.size |> Alignment.next device.BufferImageGranularity
-        let ptr = device.Alloc(VkMemoryRequirements(uint64 memsize, uint64 memalign, reqs.memoryTypeBits), true)
-
-
-
-        if mayHavePeers then
-            let indices = device.AllIndicesArr
-            let handles = Array.zeroCreate indices.Length
-            handles.[0] <- handle
-            for i in 1 .. indices.Length - 1 do
-                let mutable handle = VkImage.Null
-                VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, &&handle)
-                    |> check "could not create image"
-                handles.[1] <- handle
-
-            for off in 0 .. indices.Length - 1 do 
-                let deviceIndices =
-                    Array.init indices.Length (fun i ->
-                        indices.[(i+off) % indices.Length] |> uint32
-                    )
-
-                deviceIndices |> NativePtr.withA (fun pDeviceIndices ->
-                    let mutable info =
-                        VkBindImageMemoryInfoKHX(
-                            VkStructureType.BindImageMemoryInfoKhx, 0n,
-                            handles.[off],
-                            ptr.Memory.Handle,
-                            uint64 ptr.Offset,
-                            uint32 deviceIndices.Length, pDeviceIndices,
-                            0u, NativePtr.zero
-                        )
-
-                    VkRaw.vkBindImageMemory2KHX(device.Handle, 1u, &&info)
-                        |> check "could not bind image memory"
+            match Map.tryFind fmt nextFormat with
+                | Some fmt -> alloc size mipMapLevels count samples dim fmt usage device
+                | None -> failf "bad image format %A" fmt
+        else
+            let mayHavePeers =
+                device.IsDeviceGroup &&
+                (
+                    (usage &&& VkImageUsageFlags.ColorAttachmentBit <> VkImageUsageFlags.None) ||
+                    (usage &&& VkImageUsageFlags.DepthStencilAttachmentBit <> VkImageUsageFlags.None) ||
+                    (usage &&& VkImageUsageFlags.StorageBit <> VkImageUsageFlags.None)
                 )
 
-            let result = Image(device, handles.[0], size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
-            result.PeerHandles <- Array.skip 1 handles
+            let flags =
+                if dim = TextureDimension.TextureCube then VkImageCreateFlags.CubeCompatibleBit
+                else VkImageCreateFlags.None
 
-            device.perform {
-                for i in 1 .. handles.Length - 1 do
-                    let img = Image(device, handles.[i], size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
-                    do! Command.TransformLayout(img, VkImageLayout.TransferDstOptimal)
-            }
+            let flags =
+                if mayHavePeers then VkImageCreateFlags.AliasBitKhr ||| flags
+                else flags
 
-            result
-        else
-            VkRaw.vkBindImageMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
-                |> check "could not bind image memory"
+            let mutable info =
+                VkImageCreateInfo(
+                    VkStructureType.ImageCreateInfo, 0n,
+                    flags,
+                    VkImageType.ofTextureDimension dim,
+                    fmt,
+                    VkExtent3D(uint32 size.X, uint32 size.Y, uint32 size.Z),
+                    uint32 mipMapLevels,
+                    uint32 count,
+                    unbox<VkSampleCountFlags> samples,
+                    VkImageTiling.Optimal,
+                    usage,
+                    VkSharingMode.Exclusive,
+                    0u, NativePtr.zero,
+                    VkImageLayout.Undefined
+                ) 
 
-            let result = Image(device, handle, size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
+            let mutable handle = VkImage.Null
+            VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, &&handle)
+                |> check "could not create image"
+
+            let mutable reqs = VkMemoryRequirements()
+            VkRaw.vkGetImageMemoryRequirements(device.Handle, handle, &&reqs)
+            let memalign = int64 reqs.alignment |> Alignment.next device.BufferImageGranularity
+            let memsize = int64 reqs.size |> Alignment.next device.BufferImageGranularity
+            let ptr = device.Alloc(VkMemoryRequirements(uint64 memsize, uint64 memalign, reqs.memoryTypeBits), true)
+
+
+
+            if mayHavePeers then
+                let indices = device.AllIndicesArr
+                let handles = Array.zeroCreate indices.Length
+                handles.[0] <- handle
+                for i in 1 .. indices.Length - 1 do
+                    let mutable handle = VkImage.Null
+                    VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, &&handle)
+                        |> check "could not create image"
+                    handles.[1] <- handle
+
+                for off in 0 .. indices.Length - 1 do 
+                    let deviceIndices =
+                        Array.init indices.Length (fun i ->
+                            indices.[(i+off) % indices.Length] |> uint32
+                        )
+
+                    deviceIndices |> NativePtr.withA (fun pDeviceIndices ->
+                        let mutable info =
+                            VkBindImageMemoryInfoKHX(
+                                VkStructureType.BindImageMemoryInfoKhx, 0n,
+                                handles.[off],
+                                ptr.Memory.Handle,
+                                uint64 ptr.Offset,
+                                uint32 deviceIndices.Length, pDeviceIndices,
+                                0u, NativePtr.zero
+                            )
+
+                        VkRaw.vkBindImageMemory2KHX(device.Handle, 1u, &&info)
+                            |> check "could not bind image memory"
+                    )
+
+                let result = Image(device, handles.[0], size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
+                result.PeerHandles <- Array.skip 1 handles
+
+                device.perform {
+                    for i in 1 .. handles.Length - 1 do
+                        let img = Image(device, handles.[i], size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
+                        do! Command.TransformLayout(img, VkImageLayout.TransferDstOptimal)
+                }
+
+                result
+            else
+                VkRaw.vkBindImageMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
+                    |> check "could not bind image memory"
+
+                let result = Image(device, handle, size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
         
-            result
+                result
 
     let delete (img : Image) (device : Device) =
         if Interlocked.Decrement(&img.RefCount) = 0 then
