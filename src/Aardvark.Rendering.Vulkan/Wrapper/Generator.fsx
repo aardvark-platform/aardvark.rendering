@@ -185,31 +185,37 @@ module Enum =
             | None -> None
 
 
-type Struct = { name : string; fields : list<Type * string>; isUnion : bool }
+type Struct = { name : string; fields : list<Type * string>; isUnion : bool; alias : Option<string> }
+
+
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Struct =
     let tryRead (defines : Map<string, string>) (e : XElement) =
         let isUnion = attrib e "category" = Some "union"
         match attrib e "name" with
             | Some name ->
-                
-                let fields = 
-                    e.Descendants (xname "member")
-                        |> Seq.map (fun m ->
-                            m.Elements(xname "comment").Remove()
+                match attrib e "alias" with
+                    | Some alias -> 
+                        Some { name = name; fields = []; isUnion = isUnion; alias = Some alias }
+                    | None -> 
+                        let fields = 
+                            e.Descendants (xname "member")
+                                |> Seq.map (fun m ->
+                                    m.Elements(xname "comment").Remove()
 
-                            let name = m.Element(xname "name").Value
-                            let t = 
-                                let v = m.Value.Trim()
-                                let id = v.LastIndexOf(name)
-                                if id < 0 then v
-                                else v.Substring(0, id).Trim() + v.Substring(id + name.Length)
+                                    let name = m.Element(xname "name").Value
+                                    let t = 
+                                        let v = m.Value.Trim()
+                                        let id = v.LastIndexOf(name)
+                                        if id < 0 then v
+                                        else v.Substring(0, id).Trim() + v.Substring(id + name.Length)
 
-                            Type.parseTypeAndName defines t name
-                           )
-                        |> Seq.toList
+                                    Type.parseTypeAndName defines t name
+                                   )
+                                |> Seq.toList
 
-                Some { name = name; fields = fields; isUnion = isUnion }
+                        Some { name = name; fields = fields; isUnion = isUnion; alias = None }
 
             | None -> None
 
@@ -262,17 +268,19 @@ type Command = { returnType : Type; name : string; parameters : list<Type * stri
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Command =
     let tryRead (defines : Map<string, string>) (e : XElement) : Option<Command> =
-        let proto = e.Element(xname "proto")
-        let (returnType,name) = Type.readXmlTypeAndName defines proto
+        try
+            let proto = e.Element(xname "proto")
+            let (returnType,name) = Type.readXmlTypeAndName defines proto
 
-        let parameters =
-            e.Elements(xname "param")
-                |> Seq.map (Type.readXmlTypeAndName defines)
-                |> Seq.toList
+            let parameters =
+                e.Elements(xname "param")
+                    |> Seq.map (Type.readXmlTypeAndName defines)
+                    |> Seq.toList
 
 
-        Some { returnType = returnType; name = name; parameters = parameters }
-
+            Some { returnType = returnType; name = name; parameters = parameters }
+        with _ ->
+            None
 type Extension =
     {
         name            : string
@@ -522,7 +530,7 @@ module XmlReader =
     let aliases (defines : Map<string, string>) (vk : XElement) =
         vk.Descendants(xname "types")
             |> Seq.collect (fun tc -> tc.Descendants (xname "type"))
-            |> Seq.filter (fun t -> attrib t "category" = Some "basetype")
+            |> Seq.filter (fun t -> attrib t "category" = Some "basetype" )
             |> Seq.choose (Alias.tryRead defines)
             |> Seq.toList
 
@@ -877,50 +885,56 @@ module FSharpWriter =
             ) fmt
 
         for s in structs do
-            if s.isUnion then printfn "[<StructLayout(LayoutKind.Explicit)>]"
-            else printfn "[<StructLayout(LayoutKind.Sequential)>]"
-
-            printfn "type %s = " s.name
-            printfn "    struct"
-            for (t, n) in s.fields do
-                let n = fsharpName n
-
-                if s.isUnion then
-                    printfn "        [<FieldOffset(0)>]"
-
-                printfn "        val mutable public %s : %s" n (typeName t)
-                ()
-
-            let fieldDefs = s.fields |> List.map (fun (t,n) -> sprintf "%s : %s" (fsharpName n) (typeName t)) |> String.concat ", "
-            let fieldAss = s.fields |> List.map (fun (_,n) -> sprintf "%s = %s" (fsharpName n) (fsharpName n)) |> String.concat "; "
-
-            if not s.isUnion then
-                printfn ""
-                printfn "        new(%s) = { %s }" fieldDefs fieldAss
-
-                if s.name = "VkExtent3D" then
-                    printfn "        new(w : int, h : int, d : int) = VkExtent3D(uint32 w,uint32 h,uint32 d)" 
-                elif s.name = "VkExtent2D" then
-                    printfn "        new(w : int, h : int) = VkExtent2D(uint32 w,uint32 h)" 
+            match s.alias with
+                | Some alias ->
+                    printfn "type %s = %s" s.name alias
+                | None -> 
+            
+                    if s.isUnion then printfn "[<StructLayout(LayoutKind.Explicit)>]"
+                    else printfn "[<StructLayout(LayoutKind.Sequential)>]"
 
 
-            let fieldSplice = s.fields |> List.map (fun (t,n) -> sprintf "%s = %%A" (fsharpName n)) |> String.concat "; "
-            let fieldAccess = s.fields |> List.map (fun (_,n) -> sprintf "x.%s" (fsharpName n)) |> String.concat " "
+                    printfn "type %s = " s.name
+                    printfn "    struct"
+                    for (t, n) in s.fields do
+                        let n = fsharpName n
+
+                        if s.isUnion then
+                            printfn "        [<FieldOffset(0)>]"
+
+                        printfn "        val mutable public %s : %s" n (typeName t)
+                        ()
+
+                    let fieldDefs = s.fields |> List.map (fun (t,n) -> sprintf "%s : %s" (fsharpName n) (typeName t)) |> String.concat ", "
+                    let fieldAss = s.fields |> List.map (fun (_,n) -> sprintf "%s = %s" (fsharpName n) (fsharpName n)) |> String.concat "; "
+
+                    if not s.isUnion then
+                        printfn ""
+                        printfn "        new(%s) = { %s }" fieldDefs fieldAss
+
+                        if s.name = "VkExtent3D" then
+                            printfn "        new(w : int, h : int, d : int) = VkExtent3D(uint32 w,uint32 h,uint32 d)" 
+                        elif s.name = "VkExtent2D" then
+                            printfn "        new(w : int, h : int) = VkExtent2D(uint32 w,uint32 h)" 
 
 
-            printfn "        override x.ToString() ="
-            printfn "            sprintf \"%s { %s }\" %s" s.name fieldSplice fieldAccess
+                    let fieldSplice = s.fields |> List.map (fun (t,n) -> sprintf "%s = %%A" (fsharpName n)) |> String.concat "; "
+                    let fieldAccess = s.fields |> List.map (fun (_,n) -> sprintf "x.%s" (fsharpName n)) |> String.concat " "
 
 
-            printfn "    end"
-            printfn ""
+                    printfn "        override x.ToString() ="
+                    printfn "            sprintf \"%s { %s }\" %s" s.name fieldSplice fieldAccess
 
-            if s.name = "VkMemoryHeap" then
-                inlineArray "VkMemoryHeap" 16 16
-            elif s.name = "VkMemoryType" then
-                inlineArray "VkMemoryType" 8 32
-            elif s.name = "VkOffset3D" then
-                inlineArray "VkOffset3D" 12 2
+
+                    printfn "    end"
+                    printfn ""
+
+                    if s.name = "VkMemoryHeap" then
+                        inlineArray "VkMemoryHeap" 16 16
+                    elif s.name = "VkMemoryType" then
+                        inlineArray "VkMemoryType" 8 32
+                    elif s.name = "VkOffset3D" then
+                        inlineArray "VkOffset3D" 12 2
 
     let globalStructs (s : list<Struct>) =
         inlineArray "uint32" 4 32
