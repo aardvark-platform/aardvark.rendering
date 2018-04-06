@@ -2302,15 +2302,9 @@ module Image =
         
         result
 
-    let private nextFormat =
-        Map.ofList [
-            VkFormat.D24UnormS8Uint, VkFormat.D32SfloatS8Uint
-            VkFormat.X8D24UnormPack32, VkFormat.D32Sfloat
-        ]
-
     let rec alloc (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
         if device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt) = VkFormatFeatureFlags.None then
-            match Map.tryFind fmt nextFormat with
+            match fmt.NextBetter with
                 | Some fmt -> alloc size mipMapLevels count samples dim fmt usage device
                 | None -> failf "bad image format %A" fmt
         else
