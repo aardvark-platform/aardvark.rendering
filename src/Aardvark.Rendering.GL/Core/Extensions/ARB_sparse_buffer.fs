@@ -25,7 +25,10 @@ module ARB_sparse_buffer =
     type private NamedBufferPageCommitmentDel = delegate of int * nativeint * nativeint * bool -> unit
 
     type GL private() =
-        static let supported = ExtensionHelpers.isSupported (Version(666,666,666)) "GL_ARB_sparse_buffer"
+        static let supported = 
+            let vendor = GL.GetString(StringName.Vendor).ToLower()
+            let reallySupportsSparse = vendor.Contains("nvidia")  
+            reallySupportsSparse && ExtensionHelpers.isSupported (Version(666,666,666)) "GL_ARB_sparse_buffer" 
 
         static let dBufferPageCommitment = 
             if supported then 
