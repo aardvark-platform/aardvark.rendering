@@ -43,6 +43,16 @@ module private Utilities =
                         res <- Map.add k (Set.singleton v) res
             res
 
+    let private nextBetterFormat =
+        Map.ofList [
+            VkFormat.D24UnormS8Uint, VkFormat.D32SfloatS8Uint
+            VkFormat.X8D24UnormPack32, VkFormat.D32Sfloat
+        ]
+
+    type VkFormat with
+        member x.NextBetter = Map.tryFind x nextBetterFormat
+            
+
 type ILogger =
     abstract member section<'a, 'x>     : Printf.StringFormat<'a, (unit -> 'x) -> 'x> -> 'a
     abstract member line<'a, 'x>        : Printf.StringFormat<'a, unit> -> 'a

@@ -119,10 +119,26 @@ module RenderPass =
                     )
                 ) 
 
+            let rec tryFindFormat (fmt : VkFormat) =
+                match device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt) with
+                    | VkFormatFeatureFlags.None ->
+                        match fmt.NextBetter with
+                            | Some better -> tryFindFormat better
+                            | None -> None
+                    | _ ->
+                        Some fmt
+
             let depthAttachmentDescription =
                 match depthAtt with
                     | Some (i,a) ->
                         let format = VkFormat.ofTextureFormat (unbox (int a.format))
+
+                        let format =
+                            match tryFindFormat format with
+                                | Some fmt -> fmt
+                                | None -> failf "could not get supported format for %A" format
+
+
                         let hasStencil =
                             match format with
                                 | VkFormat.D16UnormS8Uint -> true
