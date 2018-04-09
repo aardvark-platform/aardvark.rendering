@@ -113,15 +113,8 @@
     <Reference Include="System.Core" />
     <Reference Include="System.Numerics" />
     <Reference Include="System.Drawing" />
-    <Reference Include="OpenTK.Compatibility">
-      <HintPath>..\..\lib\Release\OpenTK.Compatibility.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
     <Reference Include="OpenTK">
       <HintPath>..\..\lib\Release\OpenTK.dll</HintPath>
-    </Reference>
-    <Reference Include="OpenTK.GLControl">
-      <HintPath>..\..\lib\Release\OpenTK.GLControl.dll</HintPath>
     </Reference>
     <ProjectReference Include="..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj">
       <Project>{F8233648-55CE-4795-9151-E512390D86E7}</Project>
