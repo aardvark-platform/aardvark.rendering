@@ -1,48 +1,51 @@
-framework: net45
+framework: netstandard2.0, net471, netcoreapp2.0
 source https://api.nuget.org/v3/index.json
 source https://vrvis.myget.org/F/aardvark_public/api/v3/index.json
 
-nuget FSharp.Core ~> 4.0.0
+nuget FSharp.Core                        ~> 4.3.0
 
-nuget Aardvark.Base.FSharp               ~> 3.0.54
-nuget Aardvark.Base.Incremental          ~> 3.0.54
-nuget Aardvark.Base.Runtime              ~> 3.0.54
-                                         
-nuget FShade.Core                        ~> 3.4.2
-nuget FShade                             ~> 3.4.2
-nuget FShade.Debug                       ~> 3.4.2
+nuget Aardvark.Base.FSharp               ~> 4.0.0
+nuget Aardvark.Base.Incremental          ~> 4.0.0
+nuget Aardvark.Base.Runtime              ~> 4.0.0
+nuget Aardvark.Base.Essentials           ~> 4.0.0
+                                  
+nuget FShade.Core                        ~> 4.0.0
+nuget FShade                             ~> 4.0.0
+nuget FShade.Debug                       ~> 4.0.0
+
+nuget Unofficial.OpenVR					 ~> 1.1.0 
+
 
 nuget GLSLangSharp                       ~> 0.3.9
-nuget Unofficial.OpenVR					 ~> 1.0.11
 
-nuget FSharp.Quotations.Evaluator        ~> 1.0.6
-nuget FSharp.Charting                    ~> 0.90.14
+
+nuget FSharp.Quotations.Evaluator        ~> 1.1.2
+nuget BruTile                            ~> 2.0.0-alpha1
+nuget Unofficial.LibTessDotNet           ~> 2.0.0
+nuget SharpDX.Direct3D9                  ~> 4.0.1
      
-nuget BruTile                            ~> 0.12.0
+	
+	 
 nuget Unofficial.AssimpNet               ~> 3.3.3
+
+
+nuget FSharp.Charting                    ~> 0.91.1
 nuget OpenHardwareMonitor                ~> 0.7.1
 nuget NanoVgSharp                        ~> 2.1.0
-nuget Unofficial.LibTessDotNet           ~> 1.0.0
-
 nuget DockPanelSuite                     = 2.10.0-beta2
 nuget DockPanelSuite.ThemeVS2012Light    = 2.10.0-beta2
 nuget DockPanelSuite.ThemeVS2013Blue     = 2.10.0-beta2
-
 nuget CommonMark.NET                     ~> 0.12.0
-
 nuget Clipper                            ~> 6.4.0
-nuget NUnit.Console                      ~> 3.6.0
-nuget NUnit                              ~> 3.6.0
-nuget FsUnit                             ~> 2.4.0-alpha-2
 
-nuget SharpDX.Direct3D9
 
-nuget Another.Unofficial.Xilium.CefGlue.UnpackNativeDependencies ~> 0.0.9
-
+nuget NUnit.Console                      ~> 3.8.0
+nuget NUnit                              ~> 3.9.0
+nuget FsUnit                             ~> 3.1.0
 
 group Build
 framework: net45
 content: none
 source https://api.nuget.org/v3/index.json
 source https://vrvis.myget.org/F/aardvark_public/api/v3/index.json
-github aardvark-platform/aardvark.fake:standalone
+github aardvark-platform/aardvark.fake:v4

@@ -8,7 +8,6 @@ open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
 open Aardvark.Application
 open Aardvark.Application.WinForms
-open Aardvark.Rendering.NanoVg
 open Aardvark.Application.WinForms.Vulkan
 
 type RendererConfiguration =

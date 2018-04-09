@@ -9,7 +9,6 @@ open Aardvark.SceneGraph
 open Aardvark.SceneGraph.IO
 open Aardvark.Application
 open Aardvark.Application.WinForms
-open Aardvark.Rendering.NanoVg
 
 type private ChangeableRenderTask() =
     inherit AbstractRenderTask()
@@ -115,7 +114,7 @@ type App private () =
         
         let demos =
             allDemos
-                |> Seq.map (fun t -> t.E0, t.E1.[0])
+                |> Seq.map (fun struct (a,b) -> a, b.[0])
                 |> Seq.filter (fun (mi,_) -> mi.IsStatic)
                 |> Seq.map (fun (mi, n) ->
                     let att = mi.GetCustomAttribute<DescriptionAttribute>()

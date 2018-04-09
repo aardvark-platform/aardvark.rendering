@@ -507,27 +507,6 @@ module private TextureRanges =
         ()
 
 
-
-type BitmapTexture(bmp : System.Drawing.Bitmap, textureParams : TextureParams) =
-    [<Obsolete("use texture params instead")>]
-    member x.WantMipMaps = textureParams.wantMipMaps
-    member x.TextureParams = textureParams
-    member x.Bitmap = bmp
-    interface ITexture with
-        member x.WantMipMaps = textureParams.wantMipMaps
-
-    override x.GetHashCode() =
-        HashCode.Combine(bmp.GetHashCode(), textureParams.GetHashCode())
-
-    override x.Equals o =
-        match o with
-            | :? BitmapTexture as o ->
-                bmp = o.Bitmap && textureParams = o.TextureParams
-            | _ ->
-                false
-    new(bmp : System.Drawing.Bitmap, wantMipMaps : bool) = 
-        BitmapTexture(bmp, { TextureParams.empty with wantMipMaps = wantMipMaps}  )
-
 type FileTexture(fileName : string, textureParams : TextureParams) =
     do if System.IO.File.Exists fileName |> not then failwithf "File does not exist: %s" fileName
 

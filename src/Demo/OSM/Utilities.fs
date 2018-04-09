@@ -105,16 +105,8 @@ module Extensions =
 
 
     let noTileImage = 
-        let bmp = new Bitmap(256,256)
+        DefaultTextures.checkerboardPix :> PixImage
 
-        use g = Graphics.FromImage(bmp)
-        g.Clear(Color.Black)
-
-        use p = new Pen(Brushes.Red, 10.0f)
-        g.DrawLine(p, 0, 0, 256, 256)
-        g.DrawLine(p, 256, 0, 256, 0)
-
-        PixImage.Create(bmp)
 
     type HttpTileSource with
         member x.GetTileAsync(tileInfo : TileInfo) =
@@ -155,7 +147,11 @@ module Extensions =
                 let httpWebRequest = WebRequest.Create(uri) |> unbox<HttpWebRequest>
                 httpWebRequest.UserAgent <- @"Mozilla/5.0 (Windows; U; Windows NT 6.0; en-US; rv:1.9.1.7) Gecko/20091221 Firefox/3.5.7";
                 httpWebRequest.Referer <- "http://maps.google.com/";
-                RequestHelper.FetchImage(httpWebRequest)
+                let response = BruTile.Extensions.HttpWebRequestExtensions.GetSyncResponse(httpWebRequest, Nullable<int>())
+                use stream = response.GetResponseStream()
+                let arr = Array.zeroCreate (int response.ContentLength)
+                stream.Read(arr, 0, arr.Length) |> ignore
+                arr
 
             BruTile.Web.HttpTileSource(GlobalSphericalMercator(), "http://mt{s}.google.com/vt/lyrs=m@130&hl=en&x={x}&y={y}&z={z}", ["0"; "1"; "2"; "3"], tileFetcher = fetchGoogle) :> ITileSource
 
@@ -164,7 +160,11 @@ module Extensions =
                 let httpWebRequest = WebRequest.Create(uri) |> unbox<HttpWebRequest>
                 httpWebRequest.UserAgent <- @"Mozilla/5.0 (Windows; U; Windows NT 6.0; en-US; rv:1.9.1.7) Gecko/20091221 Firefox/3.5.7";
                 httpWebRequest.Referer <- "http://maps.google.com/";
-                RequestHelper.FetchImage(httpWebRequest)
+                let response = BruTile.Extensions.HttpWebRequestExtensions.GetSyncResponse(httpWebRequest, Nullable<int>())
+                use stream = response.GetResponseStream()
+                let arr = Array.zeroCreate (int response.ContentLength)
+                stream.Read(arr, 0, arr.Length) |> ignore
+                arr
 
             BruTile.Web.HttpTileSource(GlobalSphericalMercator(), "http://mt{s}.google.com/vt/lyrs=m@130&hl=en&x={x}&y={y}&z={z}", ["0"; "1"; "2"; "3"], tileFetcher = fetchGoogle) :> ITileSource
 
