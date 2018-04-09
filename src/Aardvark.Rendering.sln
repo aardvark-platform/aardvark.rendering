@@ -1,6 +1,6 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 14
-VisualStudioVersion = 14.0.25420.1
+# Visual Studio 15
+VisualStudioVersion = 15.0.27428.2027
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "16 - ShaderSwitches", "Examples\16 - ShaderSwitches\16 - ShaderSwitches.fsproj", "{61C4E66D-887B-4AD5-831D-AEDCE7F67CB7}"
 EndProject
@@ -26,13 +26,11 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "04 - ModelLoading", "Exampl
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "03 - Animation", "Examples\03 - Animation\03 - Animation.fsproj", "{21A147AA-3100-439F-8E7A-5591F4995D17}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Base.Rendering", "Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj", "{F8233648-55CE-4795-9151-E512390D86E7}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Base.Rendering", "Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj", "{F8233648-55CE-4795-9151-E512390D86E7}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.GL", "Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj", "{88B586F5-A5E2-4321-BD5D-27D296DA0FDD}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Demo", "Demo\Demo\Demo.fsproj", "{3A6C4D14-AF36-4740-9D9C-CC3D8AD523D6}"
-EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.SceneGraph", "Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj", "{B9EF48E4-7E73-4DDF-805A-D7324D907CB8}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.SceneGraph", "Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj", "{B9EF48E4-7E73-4DDF-805A-D7324D907CB8}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Application", "Application", "{2993E291-DFD2-4AB6-9E3B-B7F66015C914}"
 EndProject
@@ -49,8 +47,6 @@ EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "OSM", "Demo\OSM\OSM.fsproj", "{BA817F29-8F5B-4E2F-BFB0-E52206B6244B}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FontRendering", "Demo\FontRendering\FontRendering.fsproj", "{63DCF027-1892-44B9-AF14-1FFF8005617C}"
-EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.NanoVg", "Aardvark.Rendering.NanoVg\Aardvark.Rendering.NanoVg.fsproj", "{054DF582-D549-4DA0-B74B-762AB2585D3F}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "AsyncLoading", "Demo\AsyncLoading\AsyncLoading.fsproj", "{275853BC-F5A5-485D-8F15-CBAB95735399}"
 EndProject
@@ -83,7 +79,7 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.OpenVR
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.OpenVR.Vulkan", "Application\Aardvark.Application.OpenVR.Vulkan\Aardvark.Application.OpenVR.Vulkan.fsproj", "{FB047D5E-D49A-462E-BAA0-B058CE06CFC9}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.GPGPU", "Aardvark.GPGPU\Aardvark.GPGPU.fsproj", "{68E3B876-EB23-4D61-A71F-EF35A146F276}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.GPGPU", "Aardvark.GPGPU\Aardvark.GPGPU.fsproj", "{68E3B876-EB23-4D61-A71F-EF35A146F276}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Examples", "Examples", "{5E3312C4-1B3C-4D41-964C-C3A3E01DA966}"
 	ProjectSection(SolutionItems) = preProject
@@ -164,10 +160,6 @@ Global
 		{88B586F5-A5E2-4321-BD5D-27D296DA0FDD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{88B586F5-A5E2-4321-BD5D-27D296DA0FDD}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{88B586F5-A5E2-4321-BD5D-27D296DA0FDD}.Release|Any CPU.Build.0 = Release|Any CPU
-		{3A6C4D14-AF36-4740-9D9C-CC3D8AD523D6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{3A6C4D14-AF36-4740-9D9C-CC3D8AD523D6}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{3A6C4D14-AF36-4740-9D9C-CC3D8AD523D6}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{3A6C4D14-AF36-4740-9D9C-CC3D8AD523D6}.Release|Any CPU.Build.0 = Release|Any CPU
 		{B9EF48E4-7E73-4DDF-805A-D7324D907CB8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{B9EF48E4-7E73-4DDF-805A-D7324D907CB8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B9EF48E4-7E73-4DDF-805A-D7324D907CB8}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -200,10 +192,6 @@ Global
 		{63DCF027-1892-44B9-AF14-1FFF8005617C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{63DCF027-1892-44B9-AF14-1FFF8005617C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{63DCF027-1892-44B9-AF14-1FFF8005617C}.Release|Any CPU.Build.0 = Release|Any CPU
-		{054DF582-D549-4DA0-B74B-762AB2585D3F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{054DF582-D549-4DA0-B74B-762AB2585D3F}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{054DF582-D549-4DA0-B74B-762AB2585D3F}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{054DF582-D549-4DA0-B74B-762AB2585D3F}.Release|Any CPU.Build.0 = Release|Any CPU
 		{275853BC-F5A5-485D-8F15-CBAB95735399}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{275853BC-F5A5-485D-8F15-CBAB95735399}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{275853BC-F5A5-485D-8F15-CBAB95735399}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -293,7 +281,6 @@ Global
 		{CFFF9E2D-5C66-494F-AB20-DD5047DAD8B9} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{AE1BA94B-B2F3-4A74-9748-4576440E0337} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{21A147AA-3100-439F-8E7A-5591F4995D17} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
-		{3A6C4D14-AF36-4740-9D9C-CC3D8AD523D6} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 		{E3508B1C-592C-4E8E-98F3-71DBEC6083DA} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{4F645DE6-6D22-4BAD-8489-C1F8456E3D55} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{B1D5938D-AB5D-4D0E-8DDE-482EF5308F16} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}

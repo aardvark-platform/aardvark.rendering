@@ -4,6 +4,7 @@
 open System
 open System.IO
 open Aardvark.Base
+open Aardvark.Base.Sorting
 open Aardvark.Base.Incremental
 
 open Aardvark.SceneGraph

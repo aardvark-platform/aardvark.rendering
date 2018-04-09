@@ -3,7 +3,6 @@ open FShade
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Rendering
-open Aardvark.Rendering.NanoVg
 open Aardvark.Application
 open Aardvark.Application.WinForms
 open Aardvark.SceneGraph
@@ -118,6 +117,6 @@ let main argv =
 
     ) |> ignore
 
-    win.RenderTask <- task |> DefaultOverlays.withStatistics
+    win.RenderTask <- task
     win.Run()
     0 

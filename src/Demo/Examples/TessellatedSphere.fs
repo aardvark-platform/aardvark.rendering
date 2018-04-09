@@ -14,7 +14,6 @@ open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection
 open Aardvark.Rendering.Text
 
-open Aardvark.Rendering.NanoVg
 open Aardvark.Base.Rendering.Effects
 
 module TessellatedSphere =

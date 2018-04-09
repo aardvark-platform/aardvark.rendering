@@ -28,7 +28,6 @@ open System.Web
 open System.Globalization
 open Aardvark.SceneGraph.Semantics
 open Aardvark.Base.Rendering
-open Aardvark.Rendering.NanoVg
 
 let app = new OpenGlApplication()
 let source = KnownTileSources.Create(KnownTileSource.BingHybrid)

@@ -1363,7 +1363,7 @@ module ``Devil Loader`` =
 
     open DevILSharp
     
-    let private devilLock = typeof<PixImage>.GetField("s_devilLock", System.Reflection.BindingFlags.NonPublic ||| System.Reflection.BindingFlags.Static).GetValue(null)
+    let private devilLock = typeof<PixImageDevil>.GetField("s_devilLock", System.Reflection.BindingFlags.NonPublic ||| System.Reflection.BindingFlags.Static).GetValue(null)
     
     let private checkf (fmt : Printf.StringFormat<'a, bool -> unit>) =
         Printf.kprintf (fun str ->
@@ -1404,7 +1404,7 @@ module ``Devil Loader`` =
             // let img = PixImage.Create file
             // TensorImage.ofPixImage img srgb device
             lock devilLock (fun () ->
-                PixImage.InitDevil()
+                PixImageDevil.InitDevil()
 
                 let img = IL.GenImage()
                 try
@@ -2972,9 +2972,6 @@ module Image =
 
             | :? INativeTexture as nt ->
                 device |> ofNativeImage nt
-
-            | :? BitmapTexture as bt ->
-                failf "BitmapTexture considered obsolete"
 
             | :? Image as t ->
                 t.AddReference()
