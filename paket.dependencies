@@ -15,6 +15,7 @@ nuget FShade.Debug                       ~> 4.0.0
 
 nuget Unofficial.OpenVR					 ~> 1.1.0 
 nuget Unofficial.Typography              ~> 0.0.2
+nuget CommonMark.NET                     ~> 0.15.1
 
 nuget GLSLangSharp                       ~> 0.3.9
 
@@ -35,7 +36,7 @@ nuget NanoVgSharp                        ~> 2.1.0
 nuget DockPanelSuite                     = 2.10.0-beta2
 nuget DockPanelSuite.ThemeVS2012Light    = 2.10.0-beta2
 nuget DockPanelSuite.ThemeVS2013Blue     = 2.10.0-beta2
-nuget CommonMark.NET                     ~> 0.12.0
+
 nuget Clipper                            ~> 6.4.0
 
 
