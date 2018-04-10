@@ -3,6 +3,7 @@ source https://api.nuget.org/v3/index.json
 source https://vrvis.myget.org/F/aardvark_public/api/v3/index.json
 
 nuget FSharp.Core                        ~> 4.3.0
+nuget FSharp.Compiler.Tools              ~> 10.0.1
 
 nuget Aardvark.Base.FSharp               ~> 4.0.0
 nuget Aardvark.Base.Incremental          ~> 4.0.0
@@ -25,6 +26,10 @@ nuget BruTile                            ~> 2.0.0-alpha1
 nuget Unofficial.LibTessDotNet           ~> 2.0.0
 nuget SharpDX.Direct3D9                  ~> 4.0.1
      
+	
+nuget Unofficial.OpenTK                  ~> 3.0.0
+nuget Unofficial.OpenTK.GLControl        ~> 3.0.0
+	
 	
 	 
 nuget Unofficial.AssimpNet               ~> 3.3.3
