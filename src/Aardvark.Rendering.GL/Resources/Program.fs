@@ -346,10 +346,9 @@ module ProgramExtensions =
                     let outputs = 
                         [ for i in 0..outputCount-1 do
                             let mutable l = 0
-                            let builder = System.Text.StringBuilder(1024)
-                            GL.GetProgramResourceName(p, ProgramInterface.ProgramOutput, i, 1024, &l, builder)
+                            let mutable name = ""
+                            GL.GetProgramResourceName(p, ProgramInterface.ProgramOutput, i, 1024, &l, &name)
                             GL.Check "could not get program resource name"
-                            let name = builder.ToString()
 
                             let mutable prop = ProgramProperty.Type
                             let _,p = GL.GetProgramResource(p, ProgramInterface.ProgramOutput, i, 1, &prop, 1)
