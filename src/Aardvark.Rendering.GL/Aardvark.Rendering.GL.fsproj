@@ -75,6 +75,9 @@
     <Compile Include="Instructions\Instruction.fs" />
     <Compile Include="Instructions\CompileContext.fs" />
     <Compile Include="Instructions\Translations.fs" />
+    <Content Include="OpenTK.dll.config">
+      <Paket>True</Paket>
+    </Content>
     <Content Include="Resources\Resources.txt" />
     <Compile Include="Resources\Fence.fs" />
     <Compile Include="Resources\Buffer.fs" />
@@ -113,9 +116,6 @@
     <Reference Include="System.Core" />
     <Reference Include="System.Numerics" />
     <Reference Include="System.Drawing" />
-    <Reference Include="OpenTK">
-      <HintPath>..\..\lib\Release\OpenTK.dll</HintPath>
-    </Reference>
     <ProjectReference Include="..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj">
       <Project>{F8233648-55CE-4795-9151-E512390D86E7}</Project>
       <Name>Aardvark.Base.Rendering</Name>
@@ -788,6 +788,17 @@
         <Reference Include="System.Threading.ThreadPool">
           <HintPath>..\..\packages\System.Threading.ThreadPool\ref\netstandard1.3\System.Threading.ThreadPool.dll</HintPath>
           <Private>False</Private>
+          <Paket>True</Paket>
+        </Reference>
+      </ItemGroup>
+    </When>
+  </Choose>
+  <Choose>
+    <When Condition="($(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.7.1') Or ($(TargetFrameworkIdentifier) == '.NETCoreApp' And $(TargetFrameworkVersion) == 'v2.0') Or ($(TargetFrameworkIdentifier) == '.NETStandard' And $(TargetFrameworkVersion) == 'v2.0')">
+      <ItemGroup>
+        <Reference Include="OpenTK">
+          <HintPath>..\..\packages\Unofficial.OpenTK\lib\netstandard2.0\OpenTK.dll</HintPath>
+          <Private>True</Private>
           <Paket>True</Paket>
         </Reference>
       </ItemGroup>

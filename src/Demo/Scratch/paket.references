@@ -7,3 +7,5 @@ FSharp.Quotations.Evaluator
 FShade.GLSL
 FSharp.Core
 FSharp.Compiler.Service
+Unofficial.OpenTK
+Unofficial.OpenTK.GLControl

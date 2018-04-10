@@ -5,3 +5,5 @@ Aardvark.Base.Runtime
 SharpDX.Direct3D9
 FSharp.Core
 FShade.GLSL
+Unofficial.OpenTK
+Unofficial.OpenTK.GLControl
