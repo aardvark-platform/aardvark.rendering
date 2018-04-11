@@ -14,6 +14,7 @@ open Aardvark.Rendering.GL
 open Aardvark.Base.NativeTensors
 open Microsoft.FSharp.NativeInterop
 open System.Runtime.CompilerServices
+open Aardvark.Rendering.GL
 
 #nowarn "9"
 
@@ -1141,7 +1142,7 @@ module TextureUploadExtensions =
 
         module IL =
             let lockObj = 
-                let fi = typeof<PixImage>.GetField("s_devilLock", Reflection.BindingFlags.Static ||| Reflection.BindingFlags.NonPublic)
+                let fi = typeof<PixImageDevil>.GetField("s_devilLock", Reflection.BindingFlags.Static ||| Reflection.BindingFlags.NonPublic)
                 fi.GetValue(null)
 
             let GetPixelType() = IL.GetDataType() |> PixelType.ofDevil

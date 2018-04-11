@@ -26,6 +26,7 @@ open Microsoft.FSharp.Quotations
 open Microsoft.FSharp.Linq
 open Aardvark.Base.Incremental
 open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering.GL
 
 
 type UniformLocation(ctx : Context, size : int, uniformType : ShaderParameterType) =

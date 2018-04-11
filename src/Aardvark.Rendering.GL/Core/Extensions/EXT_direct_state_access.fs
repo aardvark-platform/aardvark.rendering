@@ -11,6 +11,7 @@ open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 
 open ExtensionHelpers
+open Aardvark.Rendering.GL
 
 [<AutoOpen>]
 module EXT_direct_state_access =
@@ -22,7 +23,7 @@ module EXT_direct_state_access =
 
         static member NamedBufferData(buffer : int, size : nativeint, data : nativeint, usage : BufferUsageHint) =
             if supported then
-                GL.Ext.NamedBufferData(buffer, size, data, unbox<BufferUsageHint> (int usage))
+                GL.Ext.NamedBufferData(buffer, size, data, usage)
             else
                 bindBuffer buffer (fun t ->
                     GL.BufferData(t, size, data, usage)

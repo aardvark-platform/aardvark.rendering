@@ -10,6 +10,7 @@ open OpenTK.Graphics.OpenGL4
 open Aardvark.Base.Incremental
 open FShade
 open Microsoft.FSharp.NativeInterop
+open Aardvark.Rendering.GL
 
 #nowarn "9"
 
@@ -553,7 +554,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
         use __ = ctx.ResourceLock
-        GL.CopyNamedBufferSubData(uint32 (unbox<int> src.Handle), uint32 (unbox<int> dst.Handle), srcOffset, dstOffset, size)
+        GL.CopyNamedBufferSubData(unbox<int> src.Handle, srcOffset, unbox<int> dst.Handle, dstOffset, size)
         GL.Check "could not copy buffer data"
         GL.Sync()
 
@@ -631,14 +632,14 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         let shareBuffers = eng.sharing &&& ResourceSharing.Buffers <> ResourceSharing.None
             
         match eng.sorting with
-            | Arbitrary | Grouping _  -> 
+            | RenderObjectSorting.Arbitrary | RenderObjectSorting.Grouping _  -> 
                 new RenderTasks.RenderTask(manager, fboSignature, set, engine, shareTextures, shareBuffers) :> IRenderTask
 
-            | Dynamic _ -> 
+            | RenderObjectSorting.Dynamic _ -> 
                 failwith "[SortedRenderTask] not available atm."
                 //new SortedRenderTask.RenderTask(set, man, fboSignature, eng) :> IRenderTask
 
-            | Static _ -> 
+            | RenderObjectSorting.Static _ -> 
                 failwith "[GL] static sorting not implemented"
 
     member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) : IPreparedRenderObject =

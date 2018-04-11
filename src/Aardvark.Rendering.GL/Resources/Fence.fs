@@ -6,6 +6,7 @@ open System.Threading
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
+open Aardvark.Rendering.GL
 
 [<AllowNullLiteral>]
 type Fence private(ctx : ContextHandle, handle : nativeint) =

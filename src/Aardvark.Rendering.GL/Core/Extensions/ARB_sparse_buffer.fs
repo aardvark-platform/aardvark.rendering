@@ -12,6 +12,7 @@ open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 
 open ExtensionHelpers
+open Aardvark.Rendering.GL
 
 
 [<AutoOpen>]

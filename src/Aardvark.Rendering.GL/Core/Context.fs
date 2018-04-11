@@ -9,6 +9,7 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
 open Aardvark.Base
+open Aardvark.Rendering.GL
 
 type private ContextToken(obtain : ContextToken -> ContextHandle, release : ContextToken -> unit) as this =
     let mutable handle = None

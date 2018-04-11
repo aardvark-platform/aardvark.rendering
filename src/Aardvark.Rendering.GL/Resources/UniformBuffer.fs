@@ -27,6 +27,7 @@ open Microsoft.FSharp.Quotations
 open Aardvark.Base.Incremental
 open System.Reflection
 open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering.GL
 
 #nowarn "9"
 
