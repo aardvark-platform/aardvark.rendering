@@ -10,9 +10,9 @@ open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Base.Rendering
-open Aardvark.Rendering.GL
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering.GL
 
 module Sharing =
     

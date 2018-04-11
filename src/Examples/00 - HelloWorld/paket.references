@@ -5,5 +5,7 @@ Unofficial.AssimpNet
 FShade.Core
 FShade.GLSL
 FSharp.Core
+Unofficial.OpenTK
+Unofficial.OpenTK.GLControl
 Unofficial.OpenVR
 FShade.Debug

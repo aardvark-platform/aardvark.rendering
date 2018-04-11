@@ -7,3 +7,5 @@ FsUnit
 FSharp.Core
 NUnit
 FShade.GLSL
+Unofficial.OpenTK
+Unofficial.OpenTK.GLControl

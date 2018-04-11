@@ -7,3 +7,5 @@ FShade.GLSL
 FSharp.Core
 Unofficial.OpenVR
 FShade.Debug
+Unofficial.OpenTK
+Unofficial.OpenTK.GLControl
