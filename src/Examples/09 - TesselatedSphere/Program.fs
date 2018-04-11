@@ -99,7 +99,7 @@ let main argv =
 
     let win = 
         window {
-            backend Backend.GL
+            backends [Backend.GL; Backend.Vulkan]
             display Display.Mono
             debug false
             samples 8

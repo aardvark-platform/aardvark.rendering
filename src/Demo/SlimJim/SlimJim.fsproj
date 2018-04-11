@@ -1,0 +1,26 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp2.0</TargetFramework>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <OutputPath>..\..\..\bin\Debug\</OutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <OutputPath>..\..\..\bin\Release</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj" />
+    <ProjectReference Include="..\..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj" />
+    <ProjectReference Include="..\..\Aardvark.Rendering.Text\Aardvark.Rendering.Text.fsproj" />
+    <ProjectReference Include="..\..\Aardvark.SceneGraph.IO\Aardvark.SceneGraph.IO.fsproj" />
+    <ProjectReference Include="..\..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj" />
+    <ProjectReference Include="..\..\Application\Aardvark.Application.Slim.GL\Aardvark.Application.Slim.GL.fsproj" />
+    <ProjectReference Include="..\..\Application\Aardvark.Application\Aardvark.Application.fsproj" />
+  </ItemGroup>
+  <Import Project="..\..\..\.paket\Paket.Restore.targets" />
+</Project>
