@@ -73,9 +73,6 @@
   </Target>
   -->
   <ItemGroup>
-    <Content Include="OpenTK.dll.config">
-      <Paket>True</Paket>
-    </Content>
     <Compile Include="Tools\Rendering.fs" />
     <Compile Include="Staging\Time.fs" />
     <Compile Include="Staging\Dispatcher.fs" />

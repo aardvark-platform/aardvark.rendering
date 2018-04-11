@@ -70,9 +70,6 @@
   </Target>
   -->
   <ItemGroup>
-    <Content Include="OpenTK.dll.config">
-      <Paket>True</Paket>
-    </Content>
     <Compile Include="ShaderTests.fs" />
     <Compile Include="MultiStageAgTest.fs" />
     <Compile Include="RenderingTests.fs" />

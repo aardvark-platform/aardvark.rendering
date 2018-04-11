@@ -71,9 +71,6 @@
   </Choose>
   <Import Project="..\..\..\packages\Microsoft.NETCore.App\build\$(__paket__Microsoft_NETCore_App_props).props" Condition="Exists('..\..\..\packages\Microsoft.NETCore.App\build\$(__paket__Microsoft_NETCore_App_props).props')" Label="Paket" />
   <ItemGroup>
-    <Content Include="OpenTK.dll.config">
-      <Paket>True</Paket>
-    </Content>
     <Compile Include="RenderControl.fs" />
     <Compile Include="SharingRenderControl.fs" />
     <Compile Include="Application.fs" />

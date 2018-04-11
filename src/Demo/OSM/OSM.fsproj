@@ -77,9 +77,6 @@
     <Compile Include="Utilities.fs" />
     <Compile Include="Hardware.fs" />
     <Compile Include="Program.fs" />
-    <Content Include="OpenTK.dll.config">
-      <Paket>True</Paket>
-    </Content>
     <Content Include="App.config">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
