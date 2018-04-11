@@ -5,6 +5,8 @@ Unofficial.AssimpNet
 FShade.Core
 FShade.GLSL
 FSharp.Core
+Unofficial.Typography
+Unofficial.LibTessDotNet
 Unofficial.OpenTK
 Unofficial.OpenTK.GLControl
 Unofficial.OpenVR
