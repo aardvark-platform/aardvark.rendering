@@ -51,7 +51,7 @@ module private Utils =
     open Microsoft.FSharp.NativeInterop
 
     let devilLock =
-        let fi = typeof<PixImage>.GetField("s_devilLock", BindingFlags.NonPublic ||| BindingFlags.Static)
+        let fi = typeof<PixImageDevil>.GetField("s_devilLock", BindingFlags.NonPublic ||| BindingFlags.Static)
         fi.GetValue(null)
 
     let magic = Guid("252fd451-fde4-4d2b-ab03-f247434a612f")

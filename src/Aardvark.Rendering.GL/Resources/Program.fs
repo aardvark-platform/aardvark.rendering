@@ -16,6 +16,7 @@ open OpenTK.Platform
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.Quotations
+open Aardvark.Rendering.GL
 
 
 [<AutoOpen>]
@@ -337,69 +338,6 @@ module ProgramExtensions =
                     )
             )
 
-        let setTransformFeedbackVaryings (wantedSemantics : list<Symbol>) (p : int) (x : Context) =
-            using x.ResourceLock (fun _ ->
-                try
-                    let outputCount = GL.GetProgramInterface(p, ProgramInterface.ProgramOutput, ProgramInterfaceParameter.ActiveResources)
-                    GL.Check "could not get active-output count"
-
-                    let outputs = 
-                        [ for i in 0..outputCount-1 do
-                            let mutable l = 0
-                            let mutable name = ""
-                            GL.GetProgramResourceName(p, ProgramInterface.ProgramOutput, i, 1024, &l, &name)
-                            GL.Check "could not get program resource name"
-
-                            let mutable prop = ProgramProperty.Type
-                            let _,p = GL.GetProgramResource(p, ProgramInterface.ProgramOutput, i, 1, &prop, 1)
-                            GL.Check "could not get program resource"
-                            let outputType = p |> unbox<ActiveAttribType>
-
-                            let mutable prop = ProgramProperty.ArraySize
-                            let _,size = GL.GetProgramResource(p, ProgramInterface.ProgramOutput, i, 1, &prop, 1)
-                            GL.Check "could not get program resource"
-
-
-                            let attrib = { attributeIndex = i; size = 1; name = name; semantic = name; attributeType = outputType }
-                            Log.line "found: %A" attrib
-                            yield attrib
-
-                        ]   
-                    
-                    let outputs =
-                        let outputMap =
-                            outputs 
-                                |> List.map (fun o -> o.name, o)
-                                |> Map.ofList
-
-                        wantedSemantics |> List.map (fun sem ->
-                            let output = 
-                                geometryOutputSuffixes |> List.tryPick (fun fmt ->
-                                    let name = String.Format(fmt, string sem)
-                                    Map.tryFind name outputMap
-                                )
-
-                            match output with
-                                | Some o -> o
-                                | _ -> failwithf "[GL] could not get geometry-output %A" sem
-
-                        )
-
-
-                    let varyings = 
-                        outputs 
-                            |> List.map (fun o -> o.name)
-                            |> List.toArray
-
-                    GL.TransformFeedbackVaryings(p, varyings.Length, varyings, TransformFeedbackMode.InterleavedAttribs)
-                    GL.Check "could not set feedback varyings"
-
-                    outputs
-
-                with e ->
-                    []
-
-            )
 
         let tryLinkProgram (expectsRowMajorMatrices : bool) (handle : int) (code : string) (shaders : list<Shader>) (firstTexture : int) (findOutputs : int -> Context -> list<ActiveAttribute>) (x : Context) =
             GL.LinkProgram(handle)
@@ -552,6 +490,7 @@ module ProgramExtensions =
                     
         member x.TryGetProgramBinary(prog : Program) =
             use __ = x.ResourceLock
+            GL.GetError() |> ignore
 
             let mutable length = 0
             GL.GetProgram(prog.Handle, unbox 0x8741, &length)

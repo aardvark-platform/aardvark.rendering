@@ -7,6 +7,7 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
 open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering.GL
 
 #nowarn "9"
 
@@ -125,38 +126,38 @@ module ShaderParameterType =
             ActiveUniformType.IntImageCube,                 Image(Int, TextureDimension.TextureCube, false, false)
             ActiveUniformType.IntImageCubeMapArray,         Image(Int, TextureDimension.TextureCube, false, true)
 
-            ActiveUniformType.IntSampler1D,                 Sampler(Int, TextureDimension.Texture1D, false, false, false) 
-            ActiveUniformType.IntSampler1DArray,            Sampler(Int, TextureDimension.Texture1D, false, true, false)
-            ActiveUniformType.IntSampler2D,                 Sampler(Int, TextureDimension.Texture2D, false, false, false)
-            ActiveUniformType.IntSampler2DArray,            Sampler(Int, TextureDimension.Texture2D, false, true, false)
-            ActiveUniformType.IntSampler2DMultisample,      Sampler(Int, TextureDimension.Texture2D, true, false, false)
-            ActiveUniformType.IntSampler2DMultisampleArray, Sampler(Int, TextureDimension.Texture2D, true, true, false)
-            ActiveUniformType.IntSampler2DRect,             Sampler(Int, TextureDimension.Texture2D, false, false, false)
-            ActiveUniformType.IntSampler3D,                 Sampler(Int, TextureDimension.Texture3D, false, false, false)
-            ActiveUniformType.IntSamplerBuffer,             Sampler(Int, TextureDimension.Texture1D, false, false, false)
-            ActiveUniformType.IntSamplerCube,               Sampler(Int, TextureDimension.TextureCube, false, false, false)
-            ActiveUniformType.IntSamplerCubeMapArray,       Sampler(Int, TextureDimension.TextureCube, false, true, false)
+            ActiveUniformType.IntSampler1D,                 ShaderParameterType.Sampler(Int, TextureDimension.Texture1D, false, false, false) 
+            ActiveUniformType.IntSampler1DArray,            ShaderParameterType.Sampler(Int, TextureDimension.Texture1D, false, true, false)
+            ActiveUniformType.IntSampler2D,                 ShaderParameterType.Sampler(Int, TextureDimension.Texture2D, false, false, false)
+            ActiveUniformType.IntSampler2DArray,            ShaderParameterType.Sampler(Int, TextureDimension.Texture2D, false, true, false)
+            ActiveUniformType.IntSampler2DMultisample,      ShaderParameterType.Sampler(Int, TextureDimension.Texture2D, true, false, false)
+            ActiveUniformType.IntSampler2DMultisampleArray, ShaderParameterType.Sampler(Int, TextureDimension.Texture2D, true, true, false)
+            ActiveUniformType.IntSampler2DRect,             ShaderParameterType.Sampler(Int, TextureDimension.Texture2D, false, false, false)
+            ActiveUniformType.IntSampler3D,                 ShaderParameterType.Sampler(Int, TextureDimension.Texture3D, false, false, false)
+            ActiveUniformType.IntSamplerBuffer,             ShaderParameterType.Sampler(Int, TextureDimension.Texture1D, false, false, false)
+            ActiveUniformType.IntSamplerCube,               ShaderParameterType.Sampler(Int, TextureDimension.TextureCube, false, false, false)
+            ActiveUniformType.IntSamplerCubeMapArray,       ShaderParameterType.Sampler(Int, TextureDimension.TextureCube, false, true, false)
 
-            ActiveUniformType.Sampler1D,                    Sampler(Float, TextureDimension.Texture1D, false, false, false) 
-            ActiveUniformType.Sampler1DArray,               Sampler(Float, TextureDimension.Texture1D, false, true, false)
-            ActiveUniformType.Sampler2D,                    Sampler(Float, TextureDimension.Texture2D, false, false, false)
-            ActiveUniformType.Sampler2DArray,               Sampler(Float, TextureDimension.Texture2D, false, true, false)
-            ActiveUniformType.Sampler2DMultisample,         Sampler(Float, TextureDimension.Texture2D, true, false, false)
-            ActiveUniformType.Sampler2DMultisampleArray,    Sampler(Float, TextureDimension.Texture2D, true, true, false)
-            ActiveUniformType.Sampler2DRect,                Sampler(Float, TextureDimension.Texture2D, false, false, false)
-            ActiveUniformType.Sampler3D,                    Sampler(Float, TextureDimension.Texture3D, false, false, false)
-            ActiveUniformType.SamplerBuffer,                Sampler(Float, TextureDimension.Texture1D, false, false, false)
-            ActiveUniformType.SamplerCube,                  Sampler(Float, TextureDimension.TextureCube, false, false, false)
-            ActiveUniformType.SamplerCubeMapArray,          Sampler(Float, TextureDimension.TextureCube, false, true, false)
+            ActiveUniformType.Sampler1D,                    ShaderParameterType.Sampler(Float, TextureDimension.Texture1D, false, false, false) 
+            ActiveUniformType.Sampler1DArray,               ShaderParameterType.Sampler(Float, TextureDimension.Texture1D, false, true, false)
+            ActiveUniformType.Sampler2D,                    ShaderParameterType.Sampler(Float, TextureDimension.Texture2D, false, false, false)
+            ActiveUniformType.Sampler2DArray,               ShaderParameterType.Sampler(Float, TextureDimension.Texture2D, false, true, false)
+            ActiveUniformType.Sampler2DMultisample,         ShaderParameterType.Sampler(Float, TextureDimension.Texture2D, true, false, false)
+            ActiveUniformType.Sampler2DMultisampleArray,    ShaderParameterType.Sampler(Float, TextureDimension.Texture2D, true, true, false)
+            ActiveUniformType.Sampler2DRect,                ShaderParameterType.Sampler(Float, TextureDimension.Texture2D, false, false, false)
+            ActiveUniformType.Sampler3D,                    ShaderParameterType.Sampler(Float, TextureDimension.Texture3D, false, false, false)
+            ActiveUniformType.SamplerBuffer,                ShaderParameterType.Sampler(Float, TextureDimension.Texture1D, false, false, false)
+            ActiveUniformType.SamplerCube,                  ShaderParameterType.Sampler(Float, TextureDimension.TextureCube, false, false, false)
+            ActiveUniformType.SamplerCubeMapArray,          ShaderParameterType.Sampler(Float, TextureDimension.TextureCube, false, true, false)
                     
 
-            ActiveUniformType.Sampler1DShadow,                    Sampler(Float, TextureDimension.Texture1D, false, false, true) 
-            ActiveUniformType.Sampler1DArrayShadow,               Sampler(Float, TextureDimension.Texture1D, false, true, true)
-            ActiveUniformType.Sampler2DShadow,                    Sampler(Float, TextureDimension.Texture2D, false, false, true)
-            ActiveUniformType.Sampler2DArrayShadow,               Sampler(Float, TextureDimension.Texture2D, false, true, true)
-            ActiveUniformType.Sampler2DRectShadow,                Sampler(Float, TextureDimension.Texture2D, false, false, true)
-            ActiveUniformType.SamplerCubeShadow,                  Sampler(Float, TextureDimension.TextureCube, false, false, true)
-            ActiveUniformType.SamplerCubeMapArrayShadow,          Sampler(Float, TextureDimension.TextureCube, false, true, true)
+            ActiveUniformType.Sampler1DShadow,                    ShaderParameterType.Sampler(Float, TextureDimension.Texture1D, false, false, true) 
+            ActiveUniformType.Sampler1DArrayShadow,               ShaderParameterType.Sampler(Float, TextureDimension.Texture1D, false, true, true)
+            ActiveUniformType.Sampler2DShadow,                    ShaderParameterType.Sampler(Float, TextureDimension.Texture2D, false, false, true)
+            ActiveUniformType.Sampler2DArrayShadow,               ShaderParameterType.Sampler(Float, TextureDimension.Texture2D, false, true, true)
+            ActiveUniformType.Sampler2DRectShadow,                ShaderParameterType.Sampler(Float, TextureDimension.Texture2D, false, false, true)
+            ActiveUniformType.SamplerCubeShadow,                  ShaderParameterType.Sampler(Float, TextureDimension.TextureCube, false, false, true)
+            ActiveUniformType.SamplerCubeMapArrayShadow,          ShaderParameterType.Sampler(Float, TextureDimension.TextureCube, false, true, true)
                     
 
             ActiveUniformType.UnsignedIntAtomicCounter,           AtomicCounter UnsignedInt
@@ -175,17 +176,17 @@ module ShaderParameterType =
 
                     
 
-            ActiveUniformType.UnsignedIntSampler1D,                 Sampler(UnsignedInt, TextureDimension.Texture1D, false, false, false) 
-            ActiveUniformType.UnsignedIntSampler1DArray,            Sampler(UnsignedInt, TextureDimension.Texture1D, false, true, false)
-            ActiveUniformType.UnsignedIntSampler2D,                 Sampler(UnsignedInt, TextureDimension.Texture2D, false, false, false)
-            ActiveUniformType.UnsignedIntSampler2DArray,            Sampler(UnsignedInt, TextureDimension.Texture2D, false, true, false)
-            ActiveUniformType.UnsignedIntSampler2DMultisample,      Sampler(UnsignedInt, TextureDimension.Texture2D, true, false, false)
-            ActiveUniformType.UnsignedIntSampler2DMultisampleArray, Sampler(UnsignedInt, TextureDimension.Texture2D, true, true, false)
-            ActiveUniformType.UnsignedIntSampler2DRect,             Sampler(UnsignedInt, TextureDimension.Texture2D, false, false, false)
-            ActiveUniformType.UnsignedIntSampler3D,                 Sampler(UnsignedInt, TextureDimension.Texture3D, false, false, false)
-            ActiveUniformType.UnsignedIntSamplerBuffer,             Sampler(UnsignedInt, TextureDimension.Texture1D, false, false, false)
-            ActiveUniformType.UnsignedIntSamplerCube,               Sampler(UnsignedInt, TextureDimension.TextureCube, false, false, false)
-            ActiveUniformType.UnsignedIntSamplerCubeMapArray,       Sampler(UnsignedInt, TextureDimension.TextureCube, false, true, false)
+            ActiveUniformType.UnsignedIntSampler1D,                 ShaderParameterType.Sampler(UnsignedInt, TextureDimension.Texture1D, false, false, false) 
+            ActiveUniformType.UnsignedIntSampler1DArray,            ShaderParameterType.Sampler(UnsignedInt, TextureDimension.Texture1D, false, true, false)
+            ActiveUniformType.UnsignedIntSampler2D,                 ShaderParameterType.Sampler(UnsignedInt, TextureDimension.Texture2D, false, false, false)
+            ActiveUniformType.UnsignedIntSampler2DArray,            ShaderParameterType.Sampler(UnsignedInt, TextureDimension.Texture2D, false, true, false)
+            ActiveUniformType.UnsignedIntSampler2DMultisample,      ShaderParameterType.Sampler(UnsignedInt, TextureDimension.Texture2D, true, false, false)
+            ActiveUniformType.UnsignedIntSampler2DMultisampleArray, ShaderParameterType.Sampler(UnsignedInt, TextureDimension.Texture2D, true, true, false)
+            ActiveUniformType.UnsignedIntSampler2DRect,             ShaderParameterType.Sampler(UnsignedInt, TextureDimension.Texture2D, false, false, false)
+            ActiveUniformType.UnsignedIntSampler3D,                 ShaderParameterType.Sampler(UnsignedInt, TextureDimension.Texture3D, false, false, false)
+            ActiveUniformType.UnsignedIntSamplerBuffer,             ShaderParameterType.Sampler(UnsignedInt, TextureDimension.Texture1D, false, false, false)
+            ActiveUniformType.UnsignedIntSamplerCube,               ShaderParameterType.Sampler(UnsignedInt, TextureDimension.TextureCube, false, false, false)
+            ActiveUniformType.UnsignedIntSamplerCubeMapArray,       ShaderParameterType.Sampler(UnsignedInt, TextureDimension.TextureCube, false, true, false)
 
 
         ]

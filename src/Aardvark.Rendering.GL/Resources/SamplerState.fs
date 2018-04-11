@@ -12,6 +12,7 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.Quotations
 open Microsoft.FSharp.Linq
+open Aardvark.Rendering.GL
 
 [<AutoOpen>]
 module private SamplerCounters =

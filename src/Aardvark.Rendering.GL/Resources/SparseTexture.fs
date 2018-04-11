@@ -6,6 +6,7 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
 open Microsoft.FSharp.NativeInterop
+open Aardvark.Rendering.GL
 
 #nowarn "9"
 
