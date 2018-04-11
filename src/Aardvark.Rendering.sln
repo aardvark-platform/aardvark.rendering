@@ -100,9 +100,12 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.OpenVR
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.Slim.GL", "Application\Aardvark.Application.Slim.GL\Aardvark.Application.Slim.GL.fsproj", "{F8E2E201-39EC-4000-B3E7-E317016FA807}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "SlimJim", "Demo\SlimJim\SlimJim.fsproj", "{20E2DE44-A06D-4BEA-9AA8-0D60733E18EF}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "SlimJim", "Demo\SlimJim\SlimJim.fsproj", "{20E2DE44-A06D-4BEA-9AA8-0D60733E18EF}"
 EndProject
 Global
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
+	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
