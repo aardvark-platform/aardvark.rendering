@@ -59,6 +59,7 @@
     </When>
   </Choose>
   <ItemGroup>
+    <Compile Include="ChooseForm.fs" />
     <Compile Include="Keyboard.fs" />
     <Compile Include="Mouse.fs" />
     <Compile Include="RenderControl.fs" />
