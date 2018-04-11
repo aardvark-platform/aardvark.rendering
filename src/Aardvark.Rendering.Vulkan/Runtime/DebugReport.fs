@@ -86,7 +86,6 @@ module private DebugReportHelpers =
 //            if ptr = 0n then failf "could not get %s" name
 //            else Marshal.GetDelegateForFunctionPointer(ptr, typeof<'a>) |> unbox<'a>
 
-        static let md5 = new System.Security.Cryptography.MD5Cng()
         static let ignoreRx = System.Text.RegularExpressions.Regex @"vkBeginCommandBuffer\(\)[ \t]*:[ \t]*Secondary[ \t]+Command[ \t]+Buffers[ \t]+\(0x[0-9A-Fa-f]+\)[ \t]+may[ \t]+perform[ \t]+better[ \t]+if[ \t]+a[ \t]+valid[ \t]+framebuffer[ \t]+parameter[ \t]+is[ \t]+specified\."
 
         let mutable refCount = 0
