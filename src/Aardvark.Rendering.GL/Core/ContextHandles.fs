@@ -34,6 +34,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
     let l = obj()
     let mutable debugCallbackInstalled = false
     let mutable onMakeCurrent : ConcurrentHashSet<unit -> unit> = null
+    let mutable debugOutputEnabled = false
 
     static member Current
         with get() = 
@@ -139,6 +140,17 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
 
     member x.AttachDebugOutputIfNeeded() =
         x.AttachDebugOutputIfNeeded false
+
+    member x.DebugOutputEnabled
+        with get() = debugOutputEnabled
+        and set (value : bool) =
+            if value <> debugOutputEnabled then
+                if value then
+                    x.AttachDebugOutputIfNeeded()
+                    GL.Enable(EnableCap.DebugOutput)
+                else
+                    GL.Disable(EnableCap.DebugOutput)
+                debugOutputEnabled <- value
 
 
 /// <summary>
