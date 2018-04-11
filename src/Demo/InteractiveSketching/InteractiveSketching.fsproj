@@ -66,11 +66,6 @@
       <Project>{88b586f5-a5e2-4321-bd5d-27d296da0fdd}</Project>
       <Private>True</Private>
     </ProjectReference>
-    <ProjectReference Include="..\..\Aardvark.Rendering.NanoVg\Aardvark.Rendering.NanoVg.fsproj">
-      <Name>Aardvark.Rendering.NanoVg</Name>
-      <Project>{054df582-d549-4da0-b74b-762ab2585d3f}</Project>
-      <Private>True</Private>
-    </ProjectReference>
     <ProjectReference Include="..\..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj">
       <Name>Aardvark.SceneGraph</Name>
       <Project>{b9ef48e4-7e73-4ddf-805a-d7324d907cb8}</Project>
