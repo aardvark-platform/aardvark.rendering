@@ -43,9 +43,6 @@
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="OpenTK.dll.config">
-      <Paket>True</Paket>
-    </Content>
     <ProjectReference Include="..\..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj">
       <Name>Aardvark.Base.Rendering</Name>
       <Project>{f8233648-55ce-4795-9151-e512390d86e7}</Project>

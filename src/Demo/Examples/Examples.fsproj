@@ -52,9 +52,6 @@
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="OpenTK.dll.config">
-      <Paket>True</Paket>
-    </Content>
     <Compile Include="HelloWorld.fs" />
     <Compile Include="Tutorial.fs" />
     <Compile Include="IndexedGeometryPrimitives.fs" />

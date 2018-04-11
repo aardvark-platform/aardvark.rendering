@@ -59,9 +59,6 @@
     </When>
   </Choose>
   <ItemGroup>
-    <Content Include="OpenTK.dll.config">
-      <Paket>True</Paket>
-    </Content>
     <Compile Include="RenderControl.fs" />
     <Compile Include="GameWindow.fs" />
     <Compile Include="Application.fs" />

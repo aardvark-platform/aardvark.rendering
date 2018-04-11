@@ -31,9 +31,6 @@
     <Compile Include="Instructions\Instruction.fs" />
     <Compile Include="Instructions\CompileContext.fs" />
     <Compile Include="Instructions\Translations.fs" />
-    <Content Include="OpenTK.dll.config">
-      <Paket>True</Paket>
-    </Content>
     <Content Include="Resources\Resources.txt" />
     <Compile Include="Resources\Fence.fs" />
     <Compile Include="Resources\Buffer.fs" />
