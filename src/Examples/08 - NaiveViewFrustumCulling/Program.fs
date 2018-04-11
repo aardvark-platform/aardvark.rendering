@@ -44,7 +44,7 @@ let main argv =
                 for y in min .. max do
                     for z in min .. max do
                         let pos = V3d(float x,float y, float z)
-                        let box = Box3d.FromCenterAndSize(pos, V3d.III * radius)
+                        let box = Box3d.FromCenterAndSize(pos, V3d.III * radius * 2.0)
                         let isVisible = Mod.init true
                         yield {
                             bb = box
