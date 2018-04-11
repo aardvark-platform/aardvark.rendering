@@ -1926,7 +1926,7 @@ module TextureExtensions =
                             GL.BindTexture(TextureTarget.Texture2D, t.Handle)
                             GL.Check "[uploadTexture2DLevelFile] BindTexture"
 
-                            GL.CompressedTexImage2D(TextureTarget.Texture2D, level, ifmt, w, h, 0, size, 0n)
+                            GL.CompressedTexImage2D(TextureTarget.Texture2D, level, unbox<InternalFormat> (int ifmt), w, h, 0, size, 0n)
                             GL.Check "[uploadTexture2DLevelFile] CompressedTexImage2D"
                             GL.BindTexture(TextureTarget.Texture2D, 0)
                             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)

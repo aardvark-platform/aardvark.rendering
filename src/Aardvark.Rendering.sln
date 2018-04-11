@@ -1,6 +1,7 @@
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.27428.2027
+VisualStudioVersion = 15.0.26730.10
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "16 - ShaderSwitches", "Examples\16 - ShaderSwitches\16 - ShaderSwitches.fsproj", "{61C4E66D-887B-4AD5-831D-AEDCE7F67CB7}"
 EndProject

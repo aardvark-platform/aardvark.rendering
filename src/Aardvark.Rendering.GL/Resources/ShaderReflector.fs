@@ -538,9 +538,8 @@ module ShaderInterface =
                 let mutable length = 0
                 let mutable t = ActiveAttribType.None
                 let mutable size = 1
-                let builder = System.Text.StringBuilder(1024)
-                GL.GetActiveAttrib(p, i, 1024, &length, &size, &t, builder)
-                let name = builder.ToString()
+                let mutable name = ""
+                GL.GetActiveAttrib(p, i, 1024, &length, &size, &t, &name)
                 let location = GL.GetAttribLocation(p, name)
 
                 let _type = ShaderParameterType.ofActiveUniformType (unbox<_> (int t))
@@ -563,9 +562,9 @@ module ShaderInterface =
             let mutable length = 0
             let mutable size = 0
             let mutable uniformType = ActiveUniformType.Float
-            let builder = System.Text.StringBuilder(1024)
-            GL.GetActiveUniform(p, ui, 1024, &length, &size, &uniformType, builder)
-            let path = builder.ToString() |> parsePath
+            let mutable name = ""
+            GL.GetActiveUniform(p, ui, 1024, &length, &size, &uniformType, &name)
+            let path = name |> parsePath
             let uniformType = ShaderParameterType.ofActiveUniformType uniformType
 
             let mutable isRowMajor = 0
@@ -596,10 +595,10 @@ module ShaderInterface =
             }
 
         let getNameUB (ui : int) (p : int) =
-            let builder = System.Text.StringBuilder(1024)
+            let mutable name = ""
             let mutable l = 0
-            GL.GetActiveUniformBlockName(p, ui, 1024, &l, builder)
-            builder.ToString()
+            GL.GetActiveUniformBlockName(p, ui, 1024, &l, &name)
+            name
 
         let getUniforms (textureSlot : ref<int>) (p : int) =
             let mutable cnt = 0
