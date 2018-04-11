@@ -3,6 +3,7 @@
 open System
 open NUnit.Framework
 open FsUnit
+open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
 open Aardvark.Base
 open Aardvark.Base.Incremental
@@ -635,14 +636,14 @@ module RenderingTests =
 
 
         clear.Run(RenderToken.Empty, fbo) |> ignore
-        OpenTK.Graphics.OpenGL4.GL.Sync()
+        GL.Sync()
         let token = RenderToken()
         task.Run(token, fbo)
-        OpenTK.Graphics.OpenGL4.GL.Sync()
+        GL.Sync()
         Log.line "%d objects" token.DrawCallCount
         let pi = runtime.Download(color, PixFormat.ByteRGBA)
         pi.SaveAsImage(@"C:\Aardwork\gugu.png")
-        OpenTK.Graphics.OpenGL4.GL.Sync()
+        GL.Sync()
         //task2.Run fbo |> ignore
         //OpenTK.Graphics.OpenGL4.GL.Sync()
 
@@ -787,14 +788,14 @@ module RenderingTests =
         
 
             clear.Run(RenderToken.Empty, fbo)
-            OpenTK.Graphics.OpenGL4.GL.Sync()
+            GL.Sync()
             let token = RenderToken()
             task.Run(token, fbo)
-            OpenTK.Graphics.OpenGL4.GL.Sync()
+            GL.Sync()
             Log.line "%d objects" token.DrawCallCount
             let pi = runtime.Download(color, PixFormat.ByteRGBA)
             pi.SaveAsImage(@"C:\Aardwork\urdar.png")
-            OpenTK.Graphics.OpenGL4.GL.Sync()
+            GL.Sync()
             Log.line "starting update test"
             let mutable iterations = 0
             let sw = Stopwatch()
