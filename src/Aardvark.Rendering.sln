@@ -102,10 +102,11 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.Slim.G
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "SlimJim", "Demo\SlimJim\SlimJim.fsproj", "{20E2DE44-A06D-4BEA-9AA8-0D60733E18EF}"
 EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.Slim", "Application\Aardvark.Application.Slim\Aardvark.Application.Slim.fsproj", "{72A7471E-7BF7-41BD-A654-0DC904B49D1F}"
+EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.Slim.Vulkan", "Application\Aardvark.Application.Slim.Vulkan\Aardvark.Application.Slim.Vulkan.fsproj", "{77AF53B0-FE23-4DE2-B218-5726B295F6BD}"
+EndProject
 Global
-	GlobalSection(Performance) = preSolution
-		HasPerformanceSessions = true
-	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
@@ -279,6 +280,14 @@ Global
 		{20E2DE44-A06D-4BEA-9AA8-0D60733E18EF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{20E2DE44-A06D-4BEA-9AA8-0D60733E18EF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{20E2DE44-A06D-4BEA-9AA8-0D60733E18EF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{72A7471E-7BF7-41BD-A654-0DC904B49D1F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{72A7471E-7BF7-41BD-A654-0DC904B49D1F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{72A7471E-7BF7-41BD-A654-0DC904B49D1F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{72A7471E-7BF7-41BD-A654-0DC904B49D1F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{77AF53B0-FE23-4DE2-B218-5726B295F6BD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{77AF53B0-FE23-4DE2-B218-5726B295F6BD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{77AF53B0-FE23-4DE2-B218-5726B295F6BD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{77AF53B0-FE23-4DE2-B218-5726B295F6BD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -319,8 +328,13 @@ Global
 		{77F11E0A-4BB2-4402-B339-B4772D2A4EF6} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{F8E2E201-39EC-4000-B3E7-E317016FA807} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{20E2DE44-A06D-4BEA-9AA8-0D60733E18EF} = {C664AC25-597F-470A-854B-045CD7E59CE2}
+		{72A7471E-7BF7-41BD-A654-0DC904B49D1F} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
+		{77AF53B0-FE23-4DE2-B218-5726B295F6BD} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C41172B9-09C3-4327-8CE2-CB47CBAA29AC}
+	EndGlobalSection
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
 	EndGlobalSection
 EndGlobal

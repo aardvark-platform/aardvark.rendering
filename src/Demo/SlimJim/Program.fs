@@ -14,8 +14,8 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
-    use app = new OpenGlApplication()
-    let win = app.CreateGameWindow(8)
+    use app = new VulkanApplication(true)
+    use win = app.CreateGameWindow(8)
 
     // Given eye, target and sky vector we compute our initial camera pose
     let initialView = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
