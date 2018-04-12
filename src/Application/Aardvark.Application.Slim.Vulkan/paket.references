@@ -3,4 +3,5 @@ Aardvark.Base.Runtime
 Aardvark.Base.Essentials
 FShade
 FSharp.Core
-Unofficial.OpenTK
+Unofficial.CreateWindow
+GLSLangSharp
