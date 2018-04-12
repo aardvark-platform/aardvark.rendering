@@ -587,13 +587,14 @@ type AbstractRenderTask() =
         transact (fun () -> 
             currentOutput.Value <- output
 
-            for (name, value) in Map.toSeq output.overrides do
+            output.overrides |> Map.iter (fun name value ->
                 match hooks.TryGetValue(name) with
                     | (true, table) ->
                         table.Set(value)
                         toReset.Add table
                     | _ ->
                         ()
+                )
         )
 
         if toReset.Count = 0 then

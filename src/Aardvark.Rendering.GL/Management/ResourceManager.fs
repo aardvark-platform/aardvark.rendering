@@ -10,9 +10,9 @@ open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Base.Rendering
-open Aardvark.Rendering.GL
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering.GL
 
 module Sharing =
     
@@ -221,14 +221,40 @@ type UniformBufferManager(ctx : Context, block : FShade.GLSL.GLSLUniformBuffer) 
     let size = block.ubSize
     let alignedSize = (size + 255) &&& ~~~255
 
-    let buffer = 
-        // TODO: better implementation for uniform buffers (see https://github.com/aardvark-platform/aardvark.rendering/issues/32)
-        use __ = ctx.ResourceLock
-        let handle = GL.GenBuffer()
-        GL.Check "could not create buffer"
-        new FakeSparseBuffer(ctx, handle, id, id) :> SparseBuffer
 
-    let manager = MemoryManager.createNop()
+    let bufferMemory : Management.Memory<Buffer> =
+
+        let alloc (size : nativeint) =
+            use __ = ctx.ResourceLock
+            let handle = GL.GenBuffer()
+
+            GL.NamedBufferStorage(handle, size, 0n, BufferStorageFlags.DynamicStorageBit)
+            GL.Check "could not allocate uniform buffer"
+
+            new Buffer(ctx, size, handle)
+
+        let free (buffer : Buffer) (size : nativeint) =
+            GL.DeleteBuffer(buffer.Handle)
+            GL.Check "could not free uniform buffer"
+
+        {
+            malloc = alloc
+            mfree = free
+            mcopy = fun _ _ _ _ -> failwith "not implemented"
+            mrealloc = fun _ _ _ -> failwith "not implemented"
+        }
+
+
+    let manager = new Management.ChunkedMemoryManager<_>(bufferMemory, 8n <<< 20)
+
+    //let buffer = 
+    //    // TODO: better implementation for uniform buffers (see https://github.com/aardvark-platform/aardvark.rendering/issues/32)
+    //    use __ = ctx.ResourceLock
+    //    let handle = GL.GenBuffer()
+    //    GL.Check "could not create buffer"
+    //    new FakeSparseBuffer(ctx, handle, id, id) :> SparseBuffer
+
+    //let manager = MemoryManager.createNop()
 
     let viewCache = ResourceCache<UniformBufferView, int>(None, None)
     let rw = new ReaderWriterLockSlim()
@@ -273,27 +299,28 @@ type UniformBufferManager(ctx : Context, block : FShade.GLSL.GLSLUniformBuffer) 
                             match old with
                                 | Some old -> old
                                 | None ->
-                                    block <- manager.Alloc (nativeint alignedSize)
+                                    block <- manager.Alloc(nativeint alignedSize)
                                     store <- System.Runtime.InteropServices.Marshal.AllocHGlobal alignedSize
-                                    buffer.Commitment(block.Offset, block.Size, true)
-                                    UniformBufferView(buffer, block.Offset, nativeint block.Size)
+                                    //buffer.Commitment(block.Offset, block.Size, true)
+                                    UniformBufferView(block.Memory.Value, block.Offset, nativeint block.Size)
 
                         for (offset,w) in writers do w.Write(token, store + offset)
-                        buffer.WriteUnsafe(handle.Offset, handle.Size, store)
+
+                        GL.NamedBufferSubData(handle.Buffer.Handle, handle.Offset, handle.Size, store)
+                        GL.Check "could not upload uniform buffer"
+                        //buffer.WriteUnsafe(handle.Offset, handle.Size, store)
                         handle
 
                     member x.Destroy h =
-                        if not block.Free then
+                        if not block.IsFree then
                             System.Runtime.InteropServices.Marshal.FreeHGlobal store
                             use __ = ctx.ResourceLock
-                            buffer.Commitment(block.Offset, block.Size, false)
                             manager.Free block
 
                 }
         )
 
     member x.Dispose() =
-        ctx.Delete buffer
         manager.Dispose()
 
 type DrawBufferConfig =

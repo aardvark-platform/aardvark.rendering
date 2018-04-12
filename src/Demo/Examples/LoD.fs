@@ -125,7 +125,7 @@ module LoD =
         interface ILodData with
             member x.BoundingBox = root
 
-            member x.RootNode = wert.Value
+            member x.RootNode() = wert.Value
 
             member x.Dependencies = []
 
