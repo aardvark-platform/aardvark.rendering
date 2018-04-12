@@ -636,3 +636,11 @@ module DefaultTextures =
 
     let checkerboard = 
         PixTexture2d(PixImageMipMap [| checkerboardPix :> PixImage |], true) :> ITexture |> Mod.constant
+
+    let blackPix = 
+        let pi = PixImage<byte>(Col.Format.RGBA, V2i.II)
+        pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) -> C4b.Black) |> ignore
+        pi
+
+    let blackTex = 
+        PixTexture2d(PixImageMipMap [| blackPix :> PixImage |], false) :> ITexture |> Mod.constant
