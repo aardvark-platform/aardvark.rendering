@@ -713,7 +713,7 @@ module ProgramExtensions =
                         let initial = Mod.force b
                         let effect = initial.userData |> unbox<Effect>
                         let iface =
-                            match x.TryCompileProgram(effect.Id, signature, lazy (ModuleCompiler.compileGLSL430 initial)) with  
+                            match x.TryCompileProgram(effect.Id + "TODO: InputLayoutHash", signature, lazy (ModuleCompiler.compileGLSL430 initial)) with  
                                 | Success prog -> 
                                     let iface = prog.InterfaceNew
                                     { iface with
@@ -733,7 +733,7 @@ module ProgramExtensions =
                             b |> Mod.map (fun m ->
                                 let effect = m.userData |> unbox<Effect>
 
-                                match x.TryCompileProgram(effect.Id, signature, lazy (ModuleCompiler.compileGLSL430 m)) with
+                                match x.TryCompileProgram(effect.Id + "TODO: InputLayoutHash", signature, lazy (ModuleCompiler.compileGLSL430 m)) with
                                     | Success p -> p
                                     | Error e ->
                                         Log.error "[GL] shader compiler returned errors: %A" e
