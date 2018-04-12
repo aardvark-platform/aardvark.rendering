@@ -8,6 +8,4 @@ description
     Aardvark is an open-source platform for visual computing, real-time graphics and visualization.
 frameworkAssemblies
     System.Windows.Forms
-files
-    ..\..\..\bin\Release\Aardvark.Application.WinForms.dll ==> lib\net45
-    ..\..\..\bin\Release\Aardvark.Application.WinForms.pdb ==> lib\net45
+include-pdbs true
