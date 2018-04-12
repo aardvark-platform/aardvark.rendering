@@ -71,28 +71,20 @@ module RenderTasks =
 
         member private x.pushDebugOutput(token : AdaptiveToken) =
             let c = config.GetValue token
-            let wasEnabled = GL.IsEnabled EnableCap.DebugOutput
-            if not wasEnabled then
-                if c.useDebugOutput then
-                    match ContextHandle.Current with
-                        | Some v -> v.AttachDebugOutputIfNeeded()
-                        | None -> Report.Warn("No active context handle in RenderTask.Run")
-                    GL.Enable EnableCap.DebugOutput
-
-            wasEnabled
-
+            match ContextHandle.Current with
+                | Some ctx -> let oldState = ctx.DebugOutputEnabled // get manually tracked state of GL.IsEnabled EnableCap.DebugOutput
+                              ctx.DebugOutputEnabled <- c.useDebugOutput
+                              oldState
+                | None -> Report.Warn("No active context handle in RenderTask.Run")
+                          false
+            
         member private x.popDebugOutput(token : AdaptiveToken, wasEnabled : bool) =
-            let c = config.GetValue token
-            if not wasEnabled then
-                if c.useDebugOutput then
-                    GL.Disable EnableCap.DebugOutput
+            match ContextHandle.Current with
+                | Some ctx -> ctx.DebugOutputEnabled <- wasEnabled
+                | None -> Report.Warn("Still no active context handle in RenderTask.Run")
 
         member private x.pushFbo (desc : OutputDescription) =
             let fbo = desc.framebuffer |> unbox<Framebuffer>
-            let old = Array.create 4 0
-            let mutable oldFbo = 0
-            OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
-            OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
 
             let handle = fbo.Handle |> unbox<int> 
 
@@ -100,13 +92,9 @@ module RenderTasks =
                 GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
                 GL.Check "could not bind framebuffer"
         
-                GL.DepthMask(true)
-                GL.StencilMask(0xFFFFFFFFu)
+                // DepthMask, ColorMask, StencilMask are by default writing everything when creating an FBO
                 
-                for (index,(sem,_)) in fbo.Signature.ColorAttachments |> Map.toSeq do
-                    GL.ColorMask(index, true, true, true, true)
-
-                for (index, sem) in fbo.Signature.Images |> Map.toSeq do
+                fbo.Signature.Images |> Map.iter (fun index sem ->
                     match Map.tryFind sem desc.images with
                         | Some img ->
                             let tex = img.texture |> unbox<Texture>
@@ -114,29 +102,29 @@ module RenderTasks =
                         | None -> 
                             GL.ActiveTexture(int TextureUnit.Texture0 + index |> unbox)
                             GL.BindTexture(TextureTarget.Texture2D, 0)
+                    )
 
             elif handle <> 0 then
                 failwithf "cannot render to texture on this OpenGL driver"
 
             GL.Viewport(desc.viewport.Min.X, desc.viewport.Min.Y, desc.viewport.SizeX + 1, desc.viewport.SizeY + 1)
             GL.Check "could not set viewport"
+            
 
-       
-
-            oldFbo, old
-
-        member private x.popFbo (desc : OutputDescription, (oldFbo : int, old : int[])) =
+        member private x.popFbo (desc : OutputDescription) =
             if ExecutionContext.framebuffersSupported then
-                GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
-                GL.Check "could not bind framebuffer"
+                // execution of RenderObjects might change Color/Depth/StencilMask or DrawBuffers
+                // Color/Depth/StencilMask are reset by epilog RenderObject
+                // Reset of DrawBuffers is not possible as this is dependent on the FBO?
+                // -> Reset DrawBuffers in popFbo
+              
+                let fbo = desc.framebuffer |> unbox<Framebuffer>
+                if fbo.Handle = 0 then
+                    GL.DrawBuffer(DrawBufferMode.BackLeft);
+                else
+                    let drawBuffers = Array.init desc.framebuffer.Signature.ColorAttachments.Count (fun index -> DrawBuffersEnum.ColorAttachment0 + unbox index)
+                    GL.DrawBuffers(drawBuffers.Length, drawBuffers);
 
-                for (index, sem) in desc.framebuffer.Signature.Images |> Map.toSeq do
-                    GL.ActiveTexture(int TextureUnit.Texture0 + index |> unbox)
-                    GL.BindTexture(TextureTarget.Texture2D, 0)
-
-
-            GL.Viewport(old.[0], old.[1], old.[2], old.[3])
-            GL.Check "could not set viewport"
 
         abstract member ProcessDeltas : AdaptiveToken * RenderToken -> unit
         abstract member UpdateResources : AdaptiveToken * RenderToken -> unit
@@ -183,12 +171,11 @@ module RenderTasks =
                     | :? Framebuffer as fbo -> fbo
                     | _ -> failwithf "unsupported framebuffer: %A" fbo
 
-
-            let debugState = x.pushDebugOutput(token)
-            let fboState = x.pushFbo desc
-
             x.ProcessDeltas(token, t)
             x.UpdateResources(token, t)
+
+            let debugState = x.pushDebugOutput(token)
+            x.pushFbo desc
 
             renderTaskLock.Run (fun () ->
                 beforeRender.OnNext()
@@ -200,10 +187,9 @@ module RenderTasks =
                 t.AddDrawCalls(rt.X, rt.Y)
             )
 
-            x.popFbo (desc, fboState)
+            x.popFbo desc
             x.popDebugOutput(token, debugState)
-
-                
+                            
             GL.BindVertexArray 0
             GL.BindBuffer(BufferTarget.DrawIndirectBuffer,0)
             
