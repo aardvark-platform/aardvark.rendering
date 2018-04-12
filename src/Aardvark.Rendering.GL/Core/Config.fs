@@ -37,7 +37,7 @@ module Config =
     /// The number of resource context to be created for a default
     /// rendering context instance.
     /// </summary>
-    let mutable NumberOfResourceContexts = 6
+    let mutable NumberOfResourceContexts = 1
 
     /// <summary>
     /// The number of bits used for color values in default contexts
