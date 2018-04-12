@@ -214,10 +214,8 @@ type Resource<'h, 'v when 'v : unmanaged>(kind : ResourceKind) =
         if refCount <= 0 then
             failwithf "[Resource] cannot update unreferenced resource"
 
-        let oldInfo = info
         let h = x.Create(token, t,current)
         info <- x.GetInfo h
-        let memDelta = info.AllocatedSize - oldInfo.AllocatedSize
         setHandle x h
 
         match current with
