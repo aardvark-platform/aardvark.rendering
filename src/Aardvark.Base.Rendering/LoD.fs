@@ -37,7 +37,7 @@ type LodDataNode =
 
 type ILodData =
     abstract member BoundingBox : Box3d
-    abstract member RootNode : ILodDataNode
+    abstract member RootNode : unit -> ILodDataNode
     abstract member Dependencies : list<IMod>
     abstract member GetData : node : ILodDataNode -> Async<Option<IndexedGeometry>>
 
@@ -95,7 +95,7 @@ module LodData =
         // create a FastHull3d for the (extended) camera
         let hull = viewTrafo * projTrafo |> ViewProjection.toFastHull3d
 
-        let set = x.RootNode
+        let set = x.RootNode()
 
         let result = rasterizeSet viewTrafo projTrafo viewPortSize hull set
 

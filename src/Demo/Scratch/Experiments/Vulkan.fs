@@ -304,7 +304,7 @@ module Lod =
         interface ILodData with
             member x.BoundingBox = root
 
-            member x.RootNode =
+            member x.RootNode() =
                 let rec traverse (level : int) (b : Box3d) =
                     let box = b
                     let n = 600
