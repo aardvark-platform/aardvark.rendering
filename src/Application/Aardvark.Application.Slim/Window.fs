@@ -386,6 +386,7 @@ type SimpleWindow(position : V2i, initialSize : V2i)  =
 
     member x.Invalidate() =
         Interlocked.CompareExchange(&isInvalid, 1, 0) = 0 |> ignore
+        handle.Invalidate()
 
     member x.Title 
         with get() = handle.Title

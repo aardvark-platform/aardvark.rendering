@@ -5,10 +5,10 @@ source https://vrvis.myget.org/F/aardvark_public/api/v3/index.json
 nuget FSharp.Core                        ~> 4.3.0
 nuget FSharp.Compiler.Tools              ~> 10.0.1
 
-nuget Aardvark.Base.FSharp               ~> 4.0.3
-nuget Aardvark.Base.Incremental          ~> 4.0.3
-nuget Aardvark.Base.Runtime              ~> 4.0.3
-nuget Aardvark.Base.Essentials           ~> 4.0.3
+nuget Aardvark.Base.FSharp               ~> 4.0.4
+nuget Aardvark.Base.Incremental          ~> 4.0.4
+nuget Aardvark.Base.Runtime              ~> 4.0.4
+nuget Aardvark.Base.Essentials           ~> 4.0.4
                                   
 nuget FShade.Core                        ~> 4.0.0
 nuget FShade                             ~> 4.0.0
@@ -24,9 +24,9 @@ nuget Unofficial.LibTessDotNet           ~> 2.0.0
 nuget SharpDX.Direct3D9                  ~> 4.0.1
 nuget Unofficial.AssimpNet               ~> 4.0.1
 
-nuget Unofficial.OpenTK                  ~> 3.0.7
-nuget Unofficial.OpenTK.GLControl        ~> 3.0.7
-nuget Unofficial.CreateWindow            ~> 3.0.7
+nuget Unofficial.OpenTK                  ~> 3.0.11
+nuget Unofficial.OpenTK.GLControl        ~> 3.0.11
+nuget Unofficial.CreateWindow            ~> 3.0.11
 	
 	
 nuget FSharp.Charting                    ~> 0.91.1
