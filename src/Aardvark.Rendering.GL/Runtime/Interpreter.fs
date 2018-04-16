@@ -660,27 +660,31 @@ module OpenGLObjectInterpreter =
                         let calls = o.Original.DrawCallInfos.GetValue()
                         if indexed then
                             for c in calls do
-                                if c.InstanceCount = 1 then
-                                    gl.drawElements mode c.FaceVertexCount indexType (nativeint (c.FirstIndex * indexSize))
-                                elif c.InstanceCount > 0 then
-                                    gl.drawElementsInstanced mode c.FaceVertexCount indexType (nativeint (c.FirstIndex * indexSize)) c.InstanceCount
+                                if c.FaceVertexCount > 0 then
+                                    if c.InstanceCount = 1 then
+                                        gl.drawElements mode c.FaceVertexCount indexType (nativeint (c.FirstIndex * indexSize))
+                                    elif c.InstanceCount > 0 then
+                                        gl.drawElementsInstanced mode c.FaceVertexCount indexType (nativeint (c.FirstIndex * indexSize)) c.InstanceCount
                                     
                         else
                             for c in calls do
-                                if c.InstanceCount = 1 then
-                                    gl.drawArrays mode c.FirstIndex c.FaceVertexCount
-                                elif c.InstanceCount > 0 then
-                                    gl.drawArraysInstanced mode c.FirstIndex c.FaceVertexCount c.InstanceCount
+                                if c.FaceVertexCount > 0 then
+                                    if c.InstanceCount = 1 then
+                                        gl.drawArrays mode c.FirstIndex c.FaceVertexCount
+                                    elif c.InstanceCount > 0 then
+                                        gl.drawArraysInstanced mode c.FirstIndex c.FaceVertexCount c.InstanceCount
 
                 #if DEBUG
                 OpenTK.Graphics.OpenGL4.GL.Flush()
                 OpenTK.Graphics.OpenGL4.GL.Finish()
+                OpenTK.Graphics.OpenGL4.GL.Check "Interpreter Render"
                 #endif
 
 
         member gl.render (o : PreparedMultiRenderObject) =
             for o in o.Children do
                 gl.render o
+            
 
 [<AutoOpen>]
 module ``Interpreter Extensions`` =
@@ -693,6 +697,13 @@ module ``Interpreter Extensions`` =
             Interpreter.run scope.contextHandle (fun gl -> 
                 for o in content do gl.render o
                 t.AddInstructions(gl.TotalInstructions, gl.EffectiveInstructions)
+
+                // epilog
+                gl.setDepthMask true
+                gl.setStencilMask true
+                gl.bindProgram 0
+                gl.bindBuffer GL_DRAW_INDIRECT_BUFFER 0
+                //gl.drawBuffers TODO
             )
  
     module RenderProgram =
