@@ -447,6 +447,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     let uniformBufferManagers = ConcurrentDictionary<FShade.GLSL.GLSLUniformBuffer, UniformBufferManager>() // ISSUE: leak? the buffer of the UniformBufferManager is never disposed
 
+    let hasTessDrawModeCache = BinaryCache<IMod<bool>, IMod<IndexedGeometryMode>, IMod<GLBeginMode>>(Mod.map2 (fun t d -> ctx.ToBeginMode(d, t)))
+
     member private x.ArrayBufferCache       : ResourceCache<Buffer, int>                    = arrayBufferCache
     member private x.BufferCache            : ResourceCache<Buffer, int>                    = bufferCache
     member private x.TextureCache           : ResourceCache<Texture, V2i>                   = textureCache
@@ -713,10 +715,11 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
       
-    member x.CreateBeginMode(hasTess : bool, value : IMod<IndexedGeometryMode>) =
-        beginModeCache.GetOrCreate(value, {
-            create = fun b      -> ctx.ToBeginMode(b, hasTess)
-            update = fun h b    -> ctx.ToBeginMode(b, hasTess)
+    member x.CreateBeginMode(hasTess : IMod<bool>, drawMode : IMod<IndexedGeometryMode>) =
+        let mode = hasTessDrawModeCache.Invoke(hasTess, drawMode)
+        beginModeCache.GetOrCreate(mode, {
+            create = fun b      -> b
+            update = fun h b    -> b
             delete = fun h      -> ()
             info =   fun h      -> ResourceInfo.Zero
             view = id
