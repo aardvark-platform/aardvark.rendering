@@ -41,7 +41,7 @@ module TypeSizeExtensions =
 //    [<System.Diagnostics.DebuggerBrowsable(System.Diagnostics.DebuggerBrowsableState.RootHidden)>]
 //    member x.Entries = children
 
-type Driver = { device : GPUVendor; vendor : string; renderer : string; glsl : Version; version : Version; extensions : Set<string> }
+type Driver = { device : GPUVendor; vendor : string; renderer : string; glsl : Version; version : Version; versionString : string; extensions : Set<string> }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Driver =
@@ -69,7 +69,8 @@ module Driver =
     let readInfo() =
         let vendor = GL.GetString(StringName.Vendor)  
         let renderer = GL.GetString(StringName.Renderer)  
-        let version = GL.GetString(StringName.Version) |> parseVersion
+        let versionStr = GL.GetString(StringName.Version)
+        let version = versionStr |> parseVersion
         let glslVersion = GL.GetString(StringName.ShadingLanguageVersion) |> parseVersion
 
         let mutable extensions = Set.empty
@@ -88,7 +89,15 @@ module Driver =
 
 
 
-        { device = gpu; vendor = vendor; renderer = renderer; glsl = glslVersion; version = version; extensions = extensions }
+        { 
+            device = gpu
+            vendor = vendor
+            renderer = renderer
+            glsl = glslVersion
+            version = version
+            versionString = versionStr
+            extensions = extensions 
+        }
 
 
 module MemoryManagementUtilities = 

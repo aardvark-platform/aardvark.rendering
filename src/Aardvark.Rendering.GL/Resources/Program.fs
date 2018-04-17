@@ -616,7 +616,7 @@ module ProgramExtensions =
                         | Some cachePath ->
                             let key = 
                                 {
-                                    device      = x.Driver.vendor + "_" + x.Driver.renderer + "_" + string x.Driver.version
+                                    device      = x.Driver.vendor + "_" + x.Driver.renderer + "_" + x.Driver.versionString
                                     id          = id
                                     outputs     = signature.ColorAttachments |> Map.toList |> List.map (fun (id,(name, s)) -> string name, (id, s.format)) |> Map.ofList
                                     layered     = signature.PerLayerUniforms

@@ -6,7 +6,7 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 
 module ExtensionHelpers =
-    let private suffixes = [""; "ARB"; "EXT"; "NV"; "AMD"]
+    let private suffixes = [""; "EXT"; "ARB"; "NV"; "AMD"]
 
     let vendor() =
         let str = GL.GetString(StringName.Vendor).ToLower()
@@ -50,10 +50,10 @@ module ExtensionHelpers =
     let inline bindBuffer (b : int) (action : BufferTarget -> 'a) =
         let old = GL.GetInteger(unbox 0x90EF)
         try
-            GL.BindBuffer(BufferTarget.DispatchIndirectBuffer, b)
-            action BufferTarget.DispatchIndirectBuffer
+            GL.BindBuffer(BufferTarget.CopyWriteBuffer, b)
+            action BufferTarget.CopyWriteBuffer
         finally
-            GL.BindBuffer(BufferTarget.DispatchIndirectBuffer, old)
+            GL.BindBuffer(BufferTarget.CopyWriteBuffer, old)
         
     let inline bindBuffers (b0 : int) (b1 : int) (action : BufferTarget -> BufferTarget -> 'a) =
         let oRead = GL.GetInteger(unbox 0x8F36)
