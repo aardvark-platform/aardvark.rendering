@@ -82,6 +82,7 @@
     <Compile Include="Types\Formats.fs" />
     <Compile Include="Resources\Buffers.fs" />
     <Compile Include="Resources\Textures.fs" />
+    <Compile Include="Caches.fs" />
     <Compile Include="Compute.fs" />
     <Compile Include="Timer.fs" />
     <Compile Include="LodTree.fs" />
