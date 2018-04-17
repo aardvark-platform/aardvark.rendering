@@ -7,8 +7,7 @@ open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 open Valve.VR
 open Aardvark.Application
-open Aardvark.Application.WinForms
-open System.Windows.Forms
+open Aardvark.Application.Slim
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
 open Valve.VR
@@ -60,7 +59,7 @@ module StereoShader =
 type OpenGlVRApplicationLayered(samples : int, debug : bool)  =
     inherit VrRenderer()
 
-    let app = new Aardvark.Application.WinForms.OpenGlApplication(true, debug)
+    let app = new Aardvark.Application.Slim.OpenGlApplication(true,debug)
     let runtime = app.Runtime
     let ctx = runtime.Context
 
