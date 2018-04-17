@@ -8,7 +8,7 @@ open Aardvark.Base.Incremental
 
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.Application.WinForms
+open Aardvark.Application.Slim
 open Aardvark.Base.Incremental.Operators
 open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection
@@ -30,8 +30,7 @@ type Display =
 
 type RenderConfig =
     {
-        backends    : list<Backend>
-        game        : bool
+        backend    : Backend
         debug       : bool
         samples     : int
         display     : Display
@@ -60,7 +59,6 @@ module ``FShade Extensions`` =
 
 
 module Utilities =
-    open System.Windows.Forms
 
 
 
@@ -309,7 +307,7 @@ module Utilities =
 
         let overlay =
             match Environment.OSVersion with
-                | Windows when List.length config.backends = 1 ->  
+                | Windows ->  
                     let help = status |> Mod.map (fun s -> helpText + "\r\n" + s)
 
                     let showHelp = Mod.init false
@@ -358,19 +356,20 @@ module Utilities =
             | Backend.Vulkan -> new VulkanApplication(debug) :> IApplication
 
     let createApplication (cfg : RenderConfig) =
-        match cfg.backends with
-            | [Backend.GL] -> new OpenGlApplication(cfg.debug) :> IApplication
-            | [Backend.Vulkan] -> new VulkanApplication(cfg.debug) :> IApplication
-            | xs -> new MultiApplication(xs |> List.map (createApp cfg.debug) |> List.toArray ) :> IApplication
+        match cfg.backend with
+            | Backend.GL -> new OpenGlApplication(cfg.debug) :> IApplication
+            | Backend.Vulkan -> new VulkanApplication(cfg.debug) :> IApplication
+
+    let createGameWindow app (cfg : RenderConfig) =
+        match cfg.backend with
+        | Backend.GL -> (unbox<OpenGlApplication> app).CreateGameWindow(cfg.samples) :> IRenderWindow
+        | Backend.Vulkan -> (unbox<VulkanApplication> app).CreateGameWindow(cfg.samples) :> IRenderWindow
 
     let private createMonoScreen (cfg : RenderConfig) =
         let app = createApplication cfg
 
-        let win = 
-            if cfg.game && cfg.backends = [Backend.GL] then (unbox<OpenGlApplication> app).CreateGameWindow(cfg.samples) :> IRenderWindow
-            else app.CreateSimpleRenderWindow(cfg.samples) :> IRenderWindow
-
-
+        let win = createGameWindow app cfg
+        
         let initialView = 
             match cfg.initialCamera with
                 | None -> CameraView.lookAt (V3d(6.0, 6.0, 6.0)) V3d.Zero V3d.OOI
@@ -403,8 +402,7 @@ module Utilities =
 
     let private createStereoScreen (cfg : RenderConfig) =
         let app = createApplication cfg
-
-        let win = app.CreateSimpleRenderWindow(cfg.samples)
+        let win = createGameWindow app cfg
         let runtime = app.Runtime
 
         let samples = cfg.samples
@@ -575,7 +573,7 @@ module Utilities =
                     compile cfg sg
 
                 override x.Release() =
-                    win.Dispose()
+                    //win.Dispose() <- todo make this disposable
                     runtime.DeleteFramebufferSignature signature
         
                     app.Dispose()
@@ -586,8 +584,8 @@ module Utilities =
         res
 
     let private createOpenVR (cfg : RenderConfig) =
-        match cfg.backends with
-            | [Backend.Vulkan] ->
+        match cfg.backend with
+            | Backend.Vulkan ->
                 let app = VulkanVRApplicationLayered(cfg.samples, cfg.debug)
 
                 let hmdLocation = app.Hmd.MotionState.Pose |> Mod.map (fun t -> t.Forward.C3.XYZ)
@@ -627,7 +625,7 @@ module Utilities =
                         |> Sg.compile app.Runtime app.FramebufferSignature
                 } :> ISimpleRenderWindow
 
-            | [Backend.GL] -> 
+            | Backend.GL -> 
                 let app = OpenGlVRApplicationLayered(cfg.samples, cfg.debug)
 
                 let hmdLocation = app.Hmd.MotionState.Pose |> Mod.map (fun t -> t.Forward.C3.XYZ)
@@ -666,9 +664,7 @@ module Utilities =
                         |> Sg.uniform "LightLocation" hmdLocation
                         |> Sg.compile app.Runtime app.FramebufferSignature
                 } :> ISimpleRenderWindow
-
-            | xs -> 
-                failwith "no multi backend support for OpenVR atm."
+                
 
 
     let createWindow (cfg : RenderConfig) =
@@ -682,12 +678,11 @@ module Utilities =
         win.Scene <- cfg.scene
         win.Run()
 
-    let run (display : Display) (backends : list<Backend>) (scene : ISg) =
+    let run (display : Display) (backend : Backend) (scene : ISg) =
         runConfig {
             scene = scene
-            game = false
             display = display
-            backends = backends
+            backend = backend
             debug = true
             samples = 8
             initialCamera = None
@@ -711,10 +706,10 @@ module ``Render Utilities`` =
             match m.Groups.["name"].Value.ToLower() with
                 | "vulkan" | "vk" -> 
                     Log.line "[Application] using Vulkan"
-                    cfg <- { cfg with backends = [Backend.Vulkan] }
+                    cfg <- { cfg with backend = Backend.Vulkan }
                 | "gl" | "opengl" -> 
                     Log.line "[Application] using GL"
-                    cfg <- { cfg with backends = [Backend.GL] }
+                    cfg <- { cfg with backend = Backend.GL }
                 | v -> 
                     Log.warn "[Application] bad backend: %s" v
 
@@ -758,9 +753,8 @@ module ``Render Utilities`` =
     type ShowBuilder() =
         member x.Yield(()) =
             {
-                backends = [Backend.Vulkan]
+                backend = Backend.Vulkan
                 debug = true
-                game = false
                 samples = 8
                 display = Display.Mono
                 scene = Sg.empty
@@ -769,11 +763,7 @@ module ``Render Utilities`` =
 
         [<CustomOperation("backend")>]
         member x.Backend(s : RenderConfig, b : Backend) =
-            { s with backends = [b] }
-
-        [<CustomOperation("backends")>]
-        member x.Backends(s : RenderConfig, bs : list<Backend>) =
-            { s with backends = bs }
+            { s with backend = b }
 
         [<CustomOperation("debug")>]
         member x.Debug(s : RenderConfig, d : bool) =
@@ -795,10 +785,6 @@ module ``Render Utilities`` =
         member x.InitialCamera(state : RenderConfig, c : CameraView) =
             { state with initialCamera = Some c }
 
-        [<CustomOperation("game")>]
-        member x.Game(state : RenderConfig, game : bool) =
-            { state with game = game }
-
         member x.Run(cfg : RenderConfig) =
             Utilities.runConfig (cliOverrides cfg)
 
@@ -807,9 +793,8 @@ module ``Render Utilities`` =
         member x.Yield(()) =
     
             {
-                backends = [Backend.Vulkan]
+                backend = Backend.Vulkan
                 debug = true
-                game = false
                 samples = 8
                 display = Display.Mono
                 scene = Sg.empty
@@ -818,12 +803,8 @@ module ``Render Utilities`` =
 
         [<CustomOperation("backend")>]
         member x.Backend(s : RenderConfig, b : Backend) =
-            { s with backends = [b] }
-
-        [<CustomOperation("backends")>]
-        member x.Backends(s : RenderConfig, bs : list<Backend>) =
-            { s with backends = bs }
-
+            { s with backend = b }
+            
         [<CustomOperation("debug")>]
         member x.Debug(s : RenderConfig, d : bool) =
             { s with debug = d }
@@ -835,10 +816,6 @@ module ``Render Utilities`` =
         [<CustomOperation("display")>]
         member x.Display(s : RenderConfig, d : Display) =
             { s with display = d }
-
-        [<CustomOperation("game")>]
-        member x.Game(state : RenderConfig, game : bool) =
-            { state with game = game }
 
         [<CustomOperation("initialCamera")>]
         member x.InitialCamera(state : RenderConfig, c : CameraView) =
