@@ -72,7 +72,6 @@ module HarwareFeatures =
         show {
             display Display.Mono
             backend bb
-            game true
             samples 8
             debug false
             scene sg
@@ -119,7 +118,6 @@ module HarwareFeatures =
         show {
             display Display.Mono
             backend bb
-            game true
             samples 1
             debug false
             scene sg
