@@ -8,6 +8,5 @@ FSharp.Core
 Unofficial.Typography
 Unofficial.LibTessDotNet
 Unofficial.OpenTK
-Unofficial.OpenTK.GLControl
 Unofficial.OpenVR
 FShade.Debug
