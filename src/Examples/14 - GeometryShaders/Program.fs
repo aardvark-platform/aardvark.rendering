@@ -3,7 +3,7 @@ open Aardvark.Base.Incremental
 
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.Application.WinForms
+open Aardvark.Application.Slim
 open Aardvark.Base.Incremental.Operators
 open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection

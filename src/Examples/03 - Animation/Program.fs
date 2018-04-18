@@ -15,7 +15,7 @@ let main argv =
     // and may show it later.
     let win =
         window {
-            backends [Backend.GL; Backend.Vulkan]
+            backend Backend.Vulkan
             display Display.Mono
             debug true
             samples 8
