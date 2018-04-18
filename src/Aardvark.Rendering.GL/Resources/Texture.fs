@@ -2098,8 +2098,8 @@ module TextureExtensions =
             let sizeChanged = size <> t.Size2D
 
             if sizeChanged then
-                let sizeInBytes = int64 <| ((InternalFormat.getSizeInBits internalFormat) * size.X * size.Y) / 8
-                let sizeInBytes =  if textureParams.wantMipMaps then (sizeInBytes * 4L) / 3L else sizeInBytes
+                let sizeInBytes = (int64 (InternalFormat.getSizeInBits internalFormat) * int64 (size.X) * int64 (size.Y)) >>> 3
+                let sizeInBytes =  if textureParams.wantMipMaps then (sizeInBytes <<< 2) / 3L else sizeInBytes
                 updateTexture t.Context t.SizeInBytes sizeInBytes
                 t.SizeInBytes <- sizeInBytes
 
