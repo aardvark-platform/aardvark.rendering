@@ -275,22 +275,6 @@ module private ConversionHelpers =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module TextureFormat =
-    open System.Collections.Generic
-
-    let internal lookupTable (l : list<'a * 'b>) =
-        let d = Dictionary()
-        for (k,v) in l do
-
-            match d.TryGetValue k with
-                | (true, vo) -> failwithf "duplicated lookup-entry: %A (%A vs %A)" k vo v
-                | _ -> ()
-
-            d.[k] <- v
-
-        fun (key : 'a) ->
-            match d.TryGetValue key with
-                | (true, v) -> v
-                | _ -> failwithf "unsupported %A: %A" typeof<'a> key
 
     let toRenderbufferFormat (fmt : TextureFormat) =
         convertEnum<_, RenderbufferFormat> fmt
@@ -335,7 +319,7 @@ module TextureFormat =
     let ofPixFormat = 
         
         let buildLookup = fun (norm, snorm) ->
-            lookupTable [
+            LookupTable.lookupTable [
                     TextureParams.empty, norm
                     { TextureParams.empty with wantSrgb = true}, snorm
                     { TextureParams.empty with wantMipMaps = true }, norm
@@ -346,7 +330,7 @@ module TextureFormat =
         let rgba8 = buildLookup(TextureFormat.Rgba8, TextureFormat.Srgb8Alpha8)
         let r8 = buildLookup(TextureFormat.R8, TextureFormat.R8Snorm)
         
-        lookupTable [
+        LookupTable.lookupTable [
             PixFormat.ByteBGR  , rgb8
             PixFormat.ByteBGRA , rgba8
             PixFormat.ByteBGRP , rgba8
@@ -381,7 +365,7 @@ module TextureFormat =
         ]
         
     let toDownloadFormat =
-        lookupTable [
+        LookupTable.lookupTable [
             TextureFormat.Rgba8, PixFormat.ByteRGBA
             TextureFormat.Rgb8, PixFormat.ByteRGB
             TextureFormat.CompressedRgb, PixFormat.ByteRGB
@@ -407,7 +391,7 @@ module TextureFormat =
         ]
 
     let pixelSizeInBits =
-        lookupTable [
+        LookupTable.lookupTable [
             TextureFormat.Bgr8, 24
             TextureFormat.Bgra8, 32
             TextureFormat.DepthComponent, 24
@@ -655,7 +639,7 @@ module PixFormat =
 module RenderbufferFormat =
     
     let toColFormat =
-        TextureFormat.lookupTable [
+        LookupTable.lookupTable [
             RenderbufferFormat.DepthComponent, Col.Format.Gray
             RenderbufferFormat.R3G3B2, Col.Format.RGB
             RenderbufferFormat.Rgb4, Col.Format.RGB

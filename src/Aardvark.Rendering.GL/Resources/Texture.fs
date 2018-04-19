@@ -70,8 +70,7 @@ type Texture =
     end
 
 [<AutoOpen>]
-module private ResourceCounts =
-
+module TextureCubeExtensions =
     // PositiveX = 0,
     // NegativeX = 1,
     // PositiveY = 2,
@@ -91,6 +90,9 @@ module private ResourceCounts =
             CubeSide.NegativeZ, TextureTarget.TextureCubeMapNegativeZ
         |]
 
+
+[<AutoOpen>]
+module ResourceCounts =
 
     let addTexture (ctx:Context) size =
         Interlocked.Increment(&ctx.MemoryUsage.TextureCount) |> ignore
@@ -1126,6 +1128,21 @@ module TextureUploadExtensions =
                     typeof<float32>, PixelType.Float
                 ]
 
+            let compressedFormat =
+                LookupTable.lookupTable' [
+                    (PixelFormat.Rgb, PixelType.UnsignedByte, false), (TextureFormat.CompressedRgbS3tcDxt1Ext, PixelInternalFormat.CompressedRgbS3tcDxt1Ext)
+                    (PixelFormat.Rgba, PixelType.UnsignedByte, false), (TextureFormat.CompressedRgbaS3tcDxt5Ext, PixelInternalFormat.CompressedRgbaS3tcDxt5Ext)
+                    (PixelFormat.Rgb, PixelType.UnsignedByte, true), (TextureFormat.CompressedSrgbS3tcDxt1Ext, PixelInternalFormat.CompressedSrgbS3tcDxt1Ext)
+                    (PixelFormat.Rgba, PixelType.UnsignedByte, true), (TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext, PixelInternalFormat.CompressedSrgbAlphaS3tcDxt5Ext)
+                
+                    (PixelFormat.Bgr, PixelType.UnsignedByte, false), (TextureFormat.CompressedRgbS3tcDxt1Ext, PixelInternalFormat.CompressedRgbS3tcDxt1Ext)
+                    (PixelFormat.Bgra, PixelType.UnsignedByte, false), (TextureFormat.CompressedRgbaS3tcDxt5Ext, PixelInternalFormat.CompressedRgbaS3tcDxt5Ext)
+                    (PixelFormat.Bgr, PixelType.UnsignedByte, true), (TextureFormat.CompressedSrgbS3tcDxt1Ext, PixelInternalFormat.CompressedSrgbS3tcDxt1Ext)
+                    (PixelFormat.Bgra, PixelType.UnsignedByte, true), (TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext, PixelInternalFormat.CompressedSrgbAlphaS3tcDxt5Ext)
+            
+                    (PixelFormat.Luminance, PixelType.UnsignedByte, false), (TextureFormat.CompressedRedRgtc1, PixelInternalFormat.CompressedRedRgtc1)
+                ]
+
             let ofDevil =
                 LookupTable.lookupTable [
                     ChannelType.Byte, PixelType.Byte
@@ -1522,37 +1539,6 @@ module TextureUploadExtensions =
 [<AutoOpen>]
 module TextureExtensions =
 
-    let addTexture (ctx:Context) size =
-        Interlocked.Increment(&ctx.MemoryUsage.TextureCount) |> ignore
-        Interlocked.Add(&ctx.MemoryUsage.TextureMemory,size) |> ignore
-
-    let removeTexture (ctx:Context) size =
-        Interlocked.Decrement(&ctx.MemoryUsage.TextureCount)  |> ignore
-        Interlocked.Add(&ctx.MemoryUsage.TextureMemory,-size) |> ignore
-
-    let updateTexture (ctx:Context) oldSize newSize =
-        Interlocked.Add(&ctx.MemoryUsage.TextureMemory,newSize-oldSize) |> ignore
-
-
-    // PositiveX = 0,
-    // NegativeX = 1,
-    // PositiveY = 2,
-    // NegativeY = 3,
-    // PositiveZ = 4,
-    // NegativeZ = 5,
-    // cubeSides are sorted like in their implementation (making some things easier)
-    let cubeSides =
-        [|
-            CubeSide.PositiveX, TextureTarget.TextureCubeMapPositiveX
-            CubeSide.NegativeX, TextureTarget.TextureCubeMapNegativeX
-
-            CubeSide.PositiveY, TextureTarget.TextureCubeMapPositiveY
-            CubeSide.NegativeY, TextureTarget.TextureCubeMapNegativeY
-                
-            CubeSide.PositiveZ, TextureTarget.TextureCubeMapPositiveZ
-            CubeSide.NegativeZ, TextureTarget.TextureCubeMapNegativeZ
-        |]
-
     [<AutoOpen>]
     module private Patterns =
 
@@ -1606,29 +1592,14 @@ module TextureExtensions =
             match t with
                 | :? PixTexture3d as t -> Some(PixTexture3D(t.TextureParams, t.PixVolume))
                 | _ -> None
-
-    let private lookupTable (l : list<'a * 'b>) =
-        let d = Dictionary()
-        for (k,v) in l do
-
-            match d.TryGetValue k with
-                | (true, vo) -> failwithf "duplicated lookup-entry: %A (%A vs %A)" k vo v
-                | _ -> ()
-
-            d.[k] <- v
-
-        fun (key : 'a) ->
-            match d.TryGetValue key with
-                | (true, v) -> Some v
-                | _ -> None
-
+                
     type Col.Format with
         static member Stencil = unbox<Col.Format> (Int32.MaxValue)
         static member Depth = unbox<Col.Format> (Int32.MaxValue - 1)
         static member DepthStencil = unbox<Col.Format> (Int32.MaxValue - 2)
 
     let internal toPixelType =
-        lookupTable [
+        LookupTable.lookupTable' [
             typeof<uint8>, PixelType.UnsignedByte
             typeof<int8>, PixelType.Byte
             typeof<uint16>, PixelType.UnsignedShort
@@ -1642,7 +1613,7 @@ module TextureExtensions =
         ]
 
     let internal toPixelFormat =
-        lookupTable [
+        LookupTable.lookupTable' [
         
             Col.Format.Alpha, PixelFormat.Alpha
             Col.Format.BW, PixelFormat.Red
@@ -1660,7 +1631,7 @@ module TextureExtensions =
         ]
 
     let toUntypedPixelFormat =
-        lookupTable [
+        LookupTable.lookupTable' [
             TextureFormat.DepthComponent16, PixelFormat.DepthComponent
             TextureFormat.Depth24Stencil8, PixelFormat.DepthComponent
             TextureFormat.DepthComponent32, PixelFormat.DepthComponent
@@ -1693,7 +1664,7 @@ module TextureExtensions =
         ]
 
     let internal toChannelCount =
-        lookupTable [
+        LookupTable.lookupTable' [
             Col.Format.Alpha, 1
             Col.Format.BW, 1
             Col.Format.Gray, 1
@@ -1804,11 +1775,30 @@ module TextureExtensions =
 
         ]
 
+    let compressionRatio = 
+         LookupTable.lookupTable [
+                TextureFormat.CompressedRgbS3tcDxt1Ext, 6
+                TextureFormat.CompressedRgbaS3tcDxt1Ext, 6
+                TextureFormat.CompressedRgbaS3tcDxt3Ext, 4 
+                TextureFormat.CompressedRgbaS3tcDxt5Ext, 4
+                TextureFormat.CompressedSrgbS3tcDxt1Ext, 6
+                TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext, 6
+                TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext, 4
+                TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext, 4
+                TextureFormat.CompressedRedRgtc1, 4
+                TextureFormat.CompressedSignedRedRgtc1, 4
+                TextureFormat.CompressedRgRgtc2, 4
+                TextureFormat.CompressedSignedRgRgtc2, 4
+                TextureFormat.CompressedRgbaBptcUnorm, 4
+                TextureFormat.CompressedRgbBptcSignedFloat, 4
+                TextureFormat.CompressedRgbBptcUnsignedFloat, 4
+         ]
+
     module private Devil =
         open DevILSharp
 
         let private pixelType =
-            lookupTable [
+            LookupTable.lookupTable' [
                 ChannelType.Byte, PixelType.Byte
                 //ChannelType.Double, PixelType.Double
                 ChannelType.Float, PixelType.Float
@@ -1821,7 +1811,7 @@ module TextureExtensions =
             ]
 
         let private pixelFormat =
-            lookupTable [
+            LookupTable.lookupTable' [
                 ChannelFormat.RGB, PixelFormat.Rgb
                 ChannelFormat.BGR, PixelFormat.Bgr
                 ChannelFormat.RGBA, PixelFormat.Rgba
@@ -1833,7 +1823,7 @@ module TextureExtensions =
             ]
 
         let private compressedFormat =
-            lookupTable [
+            LookupTable.lookupTable' [
                 (ChannelFormat.RGB, ChannelType.UnsignedByte, false), (CompressedDataFormat.Dxt1, PixelInternalFormat.CompressedRgbS3tcDxt1Ext)
                 (ChannelFormat.RGBA, ChannelType.UnsignedByte, false), (CompressedDataFormat.Dxt5, PixelInternalFormat.CompressedRgbaS3tcDxt5Ext)
                 (ChannelFormat.RGB, ChannelType.UnsignedByte, true), (CompressedDataFormat.Dxt1, PixelInternalFormat.CompressedSrgbS3tcDxt1Ext)
@@ -1849,7 +1839,7 @@ module TextureExtensions =
 
         module private PixFormat =
             let private types =
-                lookupTable [
+                LookupTable.lookupTable' [
                     ChannelType.Byte, typeof<int8>
                     //ChannelType.Double, PixelType.Double
                     ChannelType.Float, typeof<float32>
@@ -1862,7 +1852,7 @@ module TextureExtensions =
                 ]
 
             let private colFormat =
-                lookupTable [
+                LookupTable.lookupTable' [
                     ChannelFormat.RGB, Col.Format.RGB
                     ChannelFormat.BGR, Col.Format.BGR
                     ChannelFormat.RGBA, Col.Format.RGBA
@@ -2077,7 +2067,7 @@ module TextureExtensions =
                 | TextureDimension.TextureCube,   _,        true     -> failwith "TextureCube cannot be multisampled"
 
                 | _ -> failwithf "unknown texture dimension: %A" dim
-
+                
         let getTextureTarget (texture : Texture) =
             getTextureTarget' ( texture.Dimension, texture.IsArray, texture.IsMultisampled)
 
@@ -2089,17 +2079,42 @@ module TextureExtensions =
             let expectedLevels = Fun.Min(size.X, size.Y) |> Fun.Log2 |> Fun.Ceiling |> int //int(Fun.Ceiling(Fun.Log2(Fun.Min(size.X, size.Y))))
             let uploadLevels = if textureParams.wantMipMaps then data.LevelCount else 1
             let generateMipMap = textureParams.wantMipMaps && data.LevelCount < expectedLevels
-            // TODO: think about texture format here
-            let newFormat = TextureFormat.ofPixFormat data.[0].PixFormat textureParams
+            
+            let pixelType = PixelType.ofType data.PixFormat.Type 
+            let pixelFormat = PixelFormat.ofColFormat data.PixFormat.Format 
+
+            let compressedFormat =
+                        if textureParams.wantCompressed then
+                            match PixelType.compressedFormat (pixelFormat, pixelType, textureParams.wantSrgb) with
+                                | Some t -> Some t
+                                | _ -> Log.warn "[GL] Texture format (%A, %A) does not support compression" pixelFormat pixelType; None
+                        else
+                            None
+
+            let newFormat = match compressedFormat with
+                            | Some fmt -> fmt
+                            | _ -> let textureFormat = TextureFormat.ofPixFormat data.[0].PixFormat textureParams
+                                   let internalFormat = TextureFormat.ofPixFormat data.[0].PixFormat textureParams |> int |> unbox<PixelInternalFormat>
+                                   (textureFormat, internalFormat)
+
+            let internalFormat = snd newFormat
+            let newFormat = fst newFormat
+
             let formatChanged = t.Format <> newFormat
+            let isCompressed = compressedFormats.Contains newFormat
+            let oldIsCompressed = compressedFormats.Contains  t.Format
             t.Format <- newFormat
 
-            let internalFormat = TextureFormat.ofPixFormat data.[0].PixFormat textureParams |> int |> unbox<PixelInternalFormat>
             let sizeChanged = size <> t.Size2D
-
-            if sizeChanged then
+            let compressionChanged = oldIsCompressed <> isCompressed
+            if sizeChanged || compressionChanged then
                 let sizeInBytes = (int64 (InternalFormat.getSizeInBits internalFormat) * int64 (size.X) * int64 (size.Y)) >>> 3
-                let sizeInBytes =  if textureParams.wantMipMaps then (sizeInBytes <<< 2) / 3L else sizeInBytes
+                let sizeInBytes = if textureParams.wantMipMaps then (sizeInBytes <<< 2) / 3L else sizeInBytes
+                let sizeInBytes = if isCompressed then 
+                                    let ratio = compressionRatio newFormat
+                                    sizeInBytes / int64 ratio
+                                  else
+                                    sizeInBytes
                 updateTexture t.Context t.SizeInBytes sizeInBytes
                 t.SizeInBytes <- sizeInBytes
 
@@ -2120,8 +2135,7 @@ module TextureExtensions =
                         GL.TexSubImage2D(target, startLevel + l, 0, 0, dim.X, dim.Y, pixelFormat, pixelType, 0n)
                     GL.Check (sprintf "could not upload texture data for level %d" l)
                 )
-
-
+                
             // if the image did not contain a sufficient
             // number of MipMaps and the user demanded 
             // MipMaps we generate them using OpenGL

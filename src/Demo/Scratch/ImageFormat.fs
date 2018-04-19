@@ -653,25 +653,6 @@ module ImageFormat =
     let Abgr32f     = ImageFormat(ChannelFormat.A32, ChannelFormat.B32, ChannelFormat.G32, ChannelFormat.R32, ChannelType.Float)
 
 
-    module LookupTable =
-        open System.Collections.Generic
-
-        let optionLookupTable (l : list<'a * 'b>) =
-            let d = Dictionary()
-            for (k,v) in l do
-
-                match d.TryGetValue k with
-                    | (true, vo) -> failwithf "duplicated lookup-entry: %A (%A vs %A)" k vo v
-                    | _ -> ()
-
-                d.[k] <- v
-
-            fun (key : 'a) ->
-                match d.TryGetValue key with
-                    | (true, v) -> Some v
-                    | _ -> None
-
-
     module private ChannelSemantic =
         let ofColFormat =
             LookupTable.lookupTable [
@@ -708,7 +689,7 @@ module ImageFormat =
             ]
 
         let toType =
-            LookupTable.optionLookupTable [
+            LookupTable.lookupTable' [
                 (ChannelType.Unknown, 8), typeof<uint8>
                 (ChannelType.UInt, 8), typeof<uint8>
                 (ChannelType.SInt, 8), typeof<int8>
