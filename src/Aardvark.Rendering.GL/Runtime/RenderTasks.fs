@@ -16,6 +16,7 @@ open Aardvark.Rendering.GL.Compiler
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering.GL
 
 
 

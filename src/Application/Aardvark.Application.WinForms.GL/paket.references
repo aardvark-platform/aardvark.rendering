@@ -1,5 +1,8 @@
+Aardvark.Base.Essentials
 Aardvark.Base.Incremental
 FShade.Core
 Aardvark.Base.Runtime
 FSharp.Core
 FShade.GLSL
+Unofficial.OpenTK
+Unofficial.OpenTK.GLControl

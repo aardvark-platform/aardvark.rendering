@@ -12,7 +12,6 @@ open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
-open Aardvark.Rendering.NanoVg
 open Aardvark.Base.Monads.State
 open Microsoft.FSharp.NativeInterop
 

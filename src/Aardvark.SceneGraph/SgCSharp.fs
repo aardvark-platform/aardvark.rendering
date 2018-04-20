@@ -32,9 +32,6 @@ type SceneGraphExtensions =
     static member ToSg(sg : seq<ISg>) = Sg.ofSeq sg
 
     [<Extension>]
-    static member CameraView(sg : ISg, view : ICameraView) = Sg.ViewTrafoApplicator(view.ViewTrafos, sg) :> ISg
-
-    [<Extension>]
     static member ViewTrafo(sg : ISg, view : IMod<Trafo3d>) = Sg.viewTrafo view sg
 
     [<Extension>]
@@ -64,17 +61,10 @@ type SceneGraphExtensions =
         Sg.SurfaceApplicator(Surface.FShade (fun cfg -> creator.Invoke(cfg)), sg) :> ISg
 
     [<Extension>]
-    static member FillMode(sg : ISg, mode : IEvent<FillMode>) = Sg.FillModeApplicator(mode, sg) :> ISg
-
-    [<Extension>]
     static member FillMode(sg : ISg, mode : FillMode) = Sg.FillModeApplicator(Mod.constant mode, sg) :> ISg
 
     [<Extension>]
     static member FillMode(sg : ISg, mode : IMod<FillMode>) = Sg.FillModeApplicator(mode, sg) :> ISg
-
-
-    [<Extension>]
-    static member CullMode(sg : ISg, mode : IEvent<CullMode>) = Sg.CullModeApplicator(mode, sg) :> ISg
 
     [<Extension>]
     static member CullMode(sg : ISg, mode : CullMode) = Sg.CullModeApplicator(Mod.constant mode, sg) :> ISg
@@ -82,30 +72,21 @@ type SceneGraphExtensions =
     [<Extension>]
     static member CullMode(sg : ISg, mode : IMod<CullMode>) = Sg.CullModeApplicator(mode, sg) :> ISg
 
-
-    [<Extension>]
-    static member BlendMode(sg : ISg, mode : IEvent<BlendMode>) = Sg.BlendModeApplicator(mode, sg) :> ISg
-
+   
     [<Extension>]
     static member BlendMode(sg : ISg, mode : BlendMode) = Sg.BlendModeApplicator(Mod.constant mode, sg) :> ISg
 
     [<Extension>]
     static member BlendMode(sg : ISg, mode : IMod<BlendMode>) = Sg.BlendModeApplicator(mode, sg) :> ISg
 
-
-    [<Extension>]
-    static member StencilMode(sg : ISg, mode : IEvent<StencilMode>) = Sg.StencilModeApplicator(mode, sg) :> ISg
-
+   
     [<Extension>]
     static member StencilMode(sg : ISg, mode : StencilMode) = Sg.StencilModeApplicator(Mod.constant mode, sg) :> ISg
 
     [<Extension>]
     static member StencilMode(sg : ISg, mode : IMod<StencilMode>) = Sg.StencilModeApplicator(mode, sg) :> ISg
 
-
-    [<Extension>]
-    static member DepthTestMode(sg : ISg, mode : IEvent<DepthTestMode>) = Sg.DepthTestModeApplicator(mode, sg) :> ISg
-
+    
     [<Extension>]
     static member DepthTestMode(sg : ISg, mode : DepthTestMode) = Sg.DepthTestModeApplicator(Mod.constant mode, sg) :> ISg
 

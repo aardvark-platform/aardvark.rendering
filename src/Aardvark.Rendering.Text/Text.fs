@@ -56,7 +56,7 @@ type Text private() =
                     | c ->
                         let g = font |> Font.glyph c
                         chars.Add(cx + g.Before + kerning, g)
-                        cx <- cx + g.Advance
+                        cx <- cx + g.Advance + kerning
 
                 last <- c
 

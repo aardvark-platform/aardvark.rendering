@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.SceneGraph.IO
 
 open Aardvark.Base
+open Aardvark.Base.Sorting
 open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
 

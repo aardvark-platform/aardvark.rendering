@@ -11,6 +11,7 @@ open OpenTK
 open OpenTK.Platform
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
+open Aardvark.Rendering.GL
 
 #nowarn "9"
 

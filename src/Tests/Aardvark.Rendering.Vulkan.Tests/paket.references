@@ -1,6 +1,7 @@
 Aardvark.Base.Incremental
 Aardvark.Base.Runtime
-FSharp.Quotations.Evaluator 
 FShade.Core
 FsUnit
 FSharp.Core
+Unofficial.Typography
+Unofficial.LibTessDotNet

@@ -77,7 +77,7 @@ let main argv =
         }
 
     let texture = 
-        let path = Path.combine [".."; ".."; "data"; "transfer.png"]
+        let path = Path.combine [".."; ".."; ".."; "data"; "transfer.png"]
         FileTexture(path, TextureParams.empty) :> ITexture
 
     let scale =

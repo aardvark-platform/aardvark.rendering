@@ -1,8 +1,12 @@
+Aardvark.Base.Essentials
 Aardvark.Base.Incremental
 Aardvark.Base.Runtime
-FSharp.Quotations.Evaluator 
 FShade.Core
 FsUnit
 FSharp.Core
+Unofficial.Typography
+Unofficial.LibTessDotNet
 NUnit
 FShade.GLSL
+Unofficial.OpenTK
+Unofficial.OpenTK.GLControl

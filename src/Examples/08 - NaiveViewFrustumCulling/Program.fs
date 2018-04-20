@@ -3,7 +3,7 @@ open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.Application.WinForms
+open Aardvark.Application.Slim
 
 // This more complex example shows how to implement (naive) culling by using an additional renderTask
 // which checks visibiliy for each object on the CPU.

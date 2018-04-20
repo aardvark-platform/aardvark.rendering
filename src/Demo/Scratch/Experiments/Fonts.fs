@@ -88,16 +88,16 @@ module ``Move To Base`` =
                     else []
 
                 | [c;b;a] -> 
-                    let tup = Polynomial.RealRootsOf(a,b,c)
-                    [tup.E0; tup.E1] |> List.filter valid |> List.sort
+                    let struct (a,b) = Polynomial.RealRootsOf(a,b,c)
+                    [a;b] |> List.filter valid |> List.sort
 
                 | [d;c;b;a] ->
-                    let tup = Polynomial.RealRootsOf(a,b,c,d)
-                    [tup.E0; tup.E1; tup.E2] |> List.filter valid |> List.sort
+                    let struct (a,b,c) = Polynomial.RealRootsOf(a,b,c,d)
+                    [a; b; c] |> List.filter valid |> List.sort
 
                 | [e;d;c;b;a] ->
-                    let tup = Polynomial.RealRootsOf(a,b,c,d,e)
-                    [tup.E0; tup.E1; tup.E2; tup.E3] |> List.filter valid |> List.sort
+                    let struct (a,b,c,d) = Polynomial.RealRootsOf(a,b,c,d,e)
+                    [a;b;c;d] |> List.filter valid |> List.sort
 
                 | long ->
           

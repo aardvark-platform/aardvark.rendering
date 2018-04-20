@@ -7,10 +7,10 @@ open Aardvark.Base.Incremental
 open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection
-open Aardvark.Rendering.GL
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 open OpenTK.Graphics.OpenGL4
+open Aardvark.Rendering.GL
 
 
 [<CustomEquality;CustomComparison>]

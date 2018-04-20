@@ -10,6 +10,7 @@ open OpenTK.Platform
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.Quotations
+open Aardvark.Rendering.GL
 
 [<AutoOpen>]
 module private FramebufferMemoryUsage =

@@ -8,7 +8,6 @@ open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
-open Aardvark.Rendering.NanoVg
 open Aardvark.SceneGraph.Semantics
 open System.Diagnostics
 open Aardvark.Rendering.GL
@@ -137,7 +136,7 @@ module RandomCubesPerformanceTest =
                 ]
 
         let config = BackendConfiguration.NativeOptimized
-        win.RenderTask <- app.Runtime.CompileRender(win.FramebufferSignature, config, sg.RenderObjects()) |> DefaultOverlays.withStatistics
+        win.RenderTask <- app.Runtime.CompileRender(win.FramebufferSignature, config, sg.RenderObjects())
 
         win.Run()
 
@@ -231,7 +230,7 @@ module RenderTaskPerformance =
                         r.Run(t, output.framebuffer)
             )
 
-        win.RenderTask <- DefaultOverlays.withStatistics customTask
+        win.RenderTask <- customTask
 
         win.Run()
     

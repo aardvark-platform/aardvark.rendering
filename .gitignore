@@ -46,3 +46,5 @@ src/GLVM/*.dylib
 .ionide.debug
 /src/Demo/Scratch/InteractionModels.g.fs
 /.paket/Paket.Restore.targets
+/src/Aardvark.Base.Rendering/.vs/Aardvark.Base.Rendering/v15/*.suo
+/.vs

@@ -4,7 +4,7 @@ open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.Application.WinForms
+open Aardvark.Application.Slim
 
 // This example illustrates how to create a simple render window. 
 // In contrast to the rest of the examples (beginning from 01-Triangle), we use
@@ -23,12 +23,12 @@ let main argv =
 
     // create an OpenGL/Vulkan application. Use the use keyword (using in C#) in order to
     // properly dipose resources on shutdown...
-    use app = new OpenGlApplication()
+    use app = new VulkanApplication()
     // SimpleRenderWindow is a System.Windows.Forms.Form which contains a render control
     // of course you can a custum form and add a control to it.
     // Note that there is also a WPF binding for OpenGL. For more complex GUIs however,
     // we recommend using aardvark-media anyways..
-    let win = app.CreateSimpleRenderWindow(samples = 8)
+    let win = app.CreateGameWindow(samples = 8)
     //win.Title <- "Hello Aardvark"
 
     // Given eye, target and sky vector we compute our initial camera pose

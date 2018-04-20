@@ -13,6 +13,4 @@ frameworkAssemblies
     UIAutomationTypes
     WindowsBase
     WindowsFormsIntegration
-files
-    ..\..\..\bin\Release\Aardvark.Application.WPF.dll ==> lib\net45
-    ..\..\..\bin\Release\Aardvark.Application.WPF.pdb ==> lib\net45
+include-pdbs true

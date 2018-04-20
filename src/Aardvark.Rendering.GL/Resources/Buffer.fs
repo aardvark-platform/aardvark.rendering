@@ -10,6 +10,7 @@ open OpenTK.Platform
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.NativeInterop
+open Aardvark.Rendering.GL
 
 #nowarn "9"
 
@@ -133,7 +134,7 @@ module BufferExtensions =
                 using x.ResourceLock (fun _ ->
                     let handle = GL.GenBuffer()
 
-                    GL.NamedBufferData(handle, (nativeint sizeInBytes), data, usageHint usage)
+                    EXT_direct_state_access.GL.NamedBufferData(handle, (nativeint sizeInBytes), data, usageHint usage)
                     GL.Check "failed to upload buffer"
 
                     handle

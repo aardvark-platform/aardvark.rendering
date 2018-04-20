@@ -1,6 +1,6 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 14
-VisualStudioVersion = 14.0.25420.1
+# Visual Studio 15
+VisualStudioVersion = 15.0.26730.10
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "16 - ShaderSwitches", "Examples\16 - ShaderSwitches\16 - ShaderSwitches.fsproj", "{61C4E66D-887B-4AD5-831D-AEDCE7F67CB7}"
 EndProject
@@ -26,17 +26,15 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "04 - ModelLoading", "Exampl
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "03 - Animation", "Examples\03 - Animation\03 - Animation.fsproj", "{21A147AA-3100-439F-8E7A-5591F4995D17}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Base.Rendering", "Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj", "{F8233648-55CE-4795-9151-E512390D86E7}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Base.Rendering", "Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj", "{F8233648-55CE-4795-9151-E512390D86E7}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.GL", "Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj", "{88B586F5-A5E2-4321-BD5D-27D296DA0FDD}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Rendering.GL", "Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj", "{88B586F5-A5E2-4321-BD5D-27D296DA0FDD}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Demo", "Demo\Demo\Demo.fsproj", "{3A6C4D14-AF36-4740-9D9C-CC3D8AD523D6}"
-EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.SceneGraph", "Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj", "{B9EF48E4-7E73-4DDF-805A-D7324D907CB8}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.SceneGraph", "Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj", "{B9EF48E4-7E73-4DDF-805A-D7324D907CB8}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Application", "Application", "{2993E291-DFD2-4AB6-9E3B-B7F66015C914}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application", "Application\Aardvark.Application\Aardvark.Application.fsproj", "{E3508B1C-592C-4E8E-98F3-71DBEC6083DA}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application", "Application\Aardvark.Application\Aardvark.Application.fsproj", "{E3508B1C-592C-4E8E-98F3-71DBEC6083DA}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WinForms.GL", "Application\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj", "{4F645DE6-6D22-4BAD-8489-C1F8456E3D55}"
 EndProject
@@ -50,8 +48,6 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "OSM", "Demo\OSM\OSM.fsproj"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FontRendering", "Demo\FontRendering\FontRendering.fsproj", "{63DCF027-1892-44B9-AF14-1FFF8005617C}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.NanoVg", "Aardvark.Rendering.NanoVg\Aardvark.Rendering.NanoVg.fsproj", "{054DF582-D549-4DA0-B74B-762AB2585D3F}"
-EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "AsyncLoading", "Demo\AsyncLoading\AsyncLoading.fsproj", "{275853BC-F5A5-485D-8F15-CBAB95735399}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Demo", "Demo", "{C664AC25-597F-470A-854B-045CD7E59CE2}"
@@ -64,18 +60,18 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Examples", "Demo\Examples\E
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Interactive", "Aardvark.Rendering.Interactive\Aardvark.Rendering.Interactive.fsproj", "{79D48400-F885-461A-B747-E3675A7EF2EF}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Text", "Aardvark.Rendering.Text\Aardvark.Rendering.Text.fsproj", "{FB0C63A7-519A-4FCC-9A4B-841AEE5B8C97}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Rendering.Text", "Aardvark.Rendering.Text\Aardvark.Rendering.Text.fsproj", "{FB0C63A7-519A-4FCC-9A4B-841AEE5B8C97}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Dependencies", "Dependencies", "{B5AD6854-A8DC-475D-8B09-242DDB5D79BC}"
 	ProjectSection(SolutionItems) = preProject
 		..\paket.dependencies = ..\paket.dependencies
 	EndProjectSection
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.SceneGraph.IO", "Aardvark.SceneGraph.IO\Aardvark.SceneGraph.IO.fsproj", "{D7B02E89-DC77-462D-A3D4-A28DAA403AAF}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.SceneGraph.IO", "Aardvark.SceneGraph.IO\Aardvark.SceneGraph.IO.fsproj", "{D7B02E89-DC77-462D-A3D4-A28DAA403AAF}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Scratch", "Demo\Scratch\Scratch.fsproj", "{346185F9-AB7F-4973-8B80-24CEB113E4B5}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Vulkan", "Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj", "{8BBC1EF6-9C85-4BAF-A732-FC46DCA64EC3}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Rendering.Vulkan", "Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj", "{8BBC1EF6-9C85-4BAF-A732-FC46DCA64EC3}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WinForms.Vulkan", "Application\Aardvark.Application.WinForms.Vulkan\Aardvark.Application.WinForms.Vulkan.fsproj", "{99DD80B4-B1B8-4042-BEEA-B3A7FD617242}"
 EndProject
@@ -83,7 +79,7 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.OpenVR
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.OpenVR.Vulkan", "Application\Aardvark.Application.OpenVR.Vulkan\Aardvark.Application.OpenVR.Vulkan.fsproj", "{FB047D5E-D49A-462E-BAA0-B058CE06CFC9}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.GPGPU", "Aardvark.GPGPU\Aardvark.GPGPU.fsproj", "{68E3B876-EB23-4D61-A71F-EF35A146F276}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.GPGPU", "Aardvark.GPGPU\Aardvark.GPGPU.fsproj", "{68E3B876-EB23-4D61-A71F-EF35A146F276}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Examples", "Examples", "{5E3312C4-1B3C-4D41-964C-C3A3E01DA966}"
 	ProjectSection(SolutionItems) = preProject
@@ -101,6 +97,14 @@ EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "14 - GeometryShaders", "Examples\14 - GeometryShaders\14 - GeometryShaders.fsproj", "{57D366A4-399B-4FEB-B061-AC92A1089DE5}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.OpenVR.GL", "Application\Aardvark.Application.OpenVR.GL\Aardvark.Application.OpenVR.GL.fsproj", "{77F11E0A-4BB2-4402-B339-B4772D2A4EF6}"
+EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.Slim.GL", "Application\Aardvark.Application.Slim.GL\Aardvark.Application.Slim.GL.fsproj", "{F8E2E201-39EC-4000-B3E7-E317016FA807}"
+EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "SlimJim", "Demo\SlimJim\SlimJim.fsproj", "{20E2DE44-A06D-4BEA-9AA8-0D60733E18EF}"
+EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.Slim", "Application\Aardvark.Application.Slim\Aardvark.Application.Slim.fsproj", "{72A7471E-7BF7-41BD-A654-0DC904B49D1F}"
+EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.Slim.Vulkan", "Application\Aardvark.Application.Slim.Vulkan\Aardvark.Application.Slim.Vulkan.fsproj", "{77AF53B0-FE23-4DE2-B218-5726B295F6BD}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -164,10 +168,6 @@ Global
 		{88B586F5-A5E2-4321-BD5D-27D296DA0FDD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{88B586F5-A5E2-4321-BD5D-27D296DA0FDD}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{88B586F5-A5E2-4321-BD5D-27D296DA0FDD}.Release|Any CPU.Build.0 = Release|Any CPU
-		{3A6C4D14-AF36-4740-9D9C-CC3D8AD523D6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{3A6C4D14-AF36-4740-9D9C-CC3D8AD523D6}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{3A6C4D14-AF36-4740-9D9C-CC3D8AD523D6}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{3A6C4D14-AF36-4740-9D9C-CC3D8AD523D6}.Release|Any CPU.Build.0 = Release|Any CPU
 		{B9EF48E4-7E73-4DDF-805A-D7324D907CB8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{B9EF48E4-7E73-4DDF-805A-D7324D907CB8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B9EF48E4-7E73-4DDF-805A-D7324D907CB8}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -200,10 +200,6 @@ Global
 		{63DCF027-1892-44B9-AF14-1FFF8005617C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{63DCF027-1892-44B9-AF14-1FFF8005617C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{63DCF027-1892-44B9-AF14-1FFF8005617C}.Release|Any CPU.Build.0 = Release|Any CPU
-		{054DF582-D549-4DA0-B74B-762AB2585D3F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{054DF582-D549-4DA0-B74B-762AB2585D3F}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{054DF582-D549-4DA0-B74B-762AB2585D3F}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{054DF582-D549-4DA0-B74B-762AB2585D3F}.Release|Any CPU.Build.0 = Release|Any CPU
 		{275853BC-F5A5-485D-8F15-CBAB95735399}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{275853BC-F5A5-485D-8F15-CBAB95735399}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{275853BC-F5A5-485D-8F15-CBAB95735399}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -276,6 +272,22 @@ Global
 		{77F11E0A-4BB2-4402-B339-B4772D2A4EF6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{77F11E0A-4BB2-4402-B339-B4772D2A4EF6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{77F11E0A-4BB2-4402-B339-B4772D2A4EF6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F8E2E201-39EC-4000-B3E7-E317016FA807}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F8E2E201-39EC-4000-B3E7-E317016FA807}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F8E2E201-39EC-4000-B3E7-E317016FA807}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F8E2E201-39EC-4000-B3E7-E317016FA807}.Release|Any CPU.Build.0 = Release|Any CPU
+		{20E2DE44-A06D-4BEA-9AA8-0D60733E18EF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{20E2DE44-A06D-4BEA-9AA8-0D60733E18EF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{20E2DE44-A06D-4BEA-9AA8-0D60733E18EF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{20E2DE44-A06D-4BEA-9AA8-0D60733E18EF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{72A7471E-7BF7-41BD-A654-0DC904B49D1F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{72A7471E-7BF7-41BD-A654-0DC904B49D1F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{72A7471E-7BF7-41BD-A654-0DC904B49D1F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{72A7471E-7BF7-41BD-A654-0DC904B49D1F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{77AF53B0-FE23-4DE2-B218-5726B295F6BD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{77AF53B0-FE23-4DE2-B218-5726B295F6BD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{77AF53B0-FE23-4DE2-B218-5726B295F6BD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{77AF53B0-FE23-4DE2-B218-5726B295F6BD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -293,7 +305,6 @@ Global
 		{CFFF9E2D-5C66-494F-AB20-DD5047DAD8B9} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{AE1BA94B-B2F3-4A74-9748-4576440E0337} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{21A147AA-3100-439F-8E7A-5591F4995D17} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
-		{3A6C4D14-AF36-4740-9D9C-CC3D8AD523D6} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 		{E3508B1C-592C-4E8E-98F3-71DBEC6083DA} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{4F645DE6-6D22-4BAD-8489-C1F8456E3D55} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{B1D5938D-AB5D-4D0E-8DDE-482EF5308F16} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
@@ -315,8 +326,15 @@ Global
 		{CDDB9BC3-C264-4C51-BD40-4B98E50F0297} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{57D366A4-399B-4FEB-B061-AC92A1089DE5} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{77F11E0A-4BB2-4402-B339-B4772D2A4EF6} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
+		{F8E2E201-39EC-4000-B3E7-E317016FA807} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
+		{20E2DE44-A06D-4BEA-9AA8-0D60733E18EF} = {C664AC25-597F-470A-854B-045CD7E59CE2}
+		{72A7471E-7BF7-41BD-A654-0DC904B49D1F} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
+		{77AF53B0-FE23-4DE2-B218-5726B295F6BD} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C41172B9-09C3-4327-8CE2-CB47CBAA29AC}
+	EndGlobalSection
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
 	EndGlobalSection
 EndGlobal

@@ -8,6 +8,7 @@ open OpenTK.Platform
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
+open Aardvark.Rendering.GL
 
 type ContextErrorEventArgs(msg : string) =
     inherit EventArgs()

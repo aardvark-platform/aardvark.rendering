@@ -3,6 +3,7 @@
 module InternalFormat =
     open System.Collections.Generic
     open OpenTK.Graphics.OpenGL4
+    open Aardvark.Rendering.GL
 
     let internal lookupTable (def : 'b) (l : list<'a * 'b>) =
         let d = Dictionary()
@@ -177,6 +178,7 @@ module InternalFormat =
 module RenderbufferStorage =
     open System.Collections.Generic
     open OpenTK.Graphics.OpenGL4
+    open Aardvark.Rendering.GL
 
     let getSizeInBits = 
         InternalFormat.lookupTable 8 [

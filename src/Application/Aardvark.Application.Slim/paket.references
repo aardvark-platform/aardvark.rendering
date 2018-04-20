@@ -1,6 +1,6 @@
 Aardvark.Base.Incremental
 Aardvark.Base.Runtime
-Unofficial.AssimpNet
-FShade.Core
+Aardvark.Base.Essentials
+FShade
 FSharp.Core
-FShade.GLSL
+Unofficial.CreateWindow

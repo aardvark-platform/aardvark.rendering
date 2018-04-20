@@ -8,7 +8,6 @@ open Aardvark.SceneGraph
 open Aardvark.SceneGraph.IO
 open Aardvark.Application
 open Aardvark.Application.WinForms
-open Aardvark.Rendering.NanoVg
 open FShade
 
 module Shader =
