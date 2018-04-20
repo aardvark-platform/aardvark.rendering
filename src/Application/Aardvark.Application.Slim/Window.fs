@@ -344,6 +344,9 @@ type SimpleWindow(position : V2i, initialSize : V2i)  =
     let mutable loaded = false
     let mutable resizeSub : IDisposable = null 
 
+    let mutable visible = false
+    let mutable visibleSub : IDisposable = null
+
     member x.Load() =
         lock handle (fun () ->
             if not loaded then
@@ -354,11 +357,16 @@ type SimpleWindow(position : V2i, initialSize : V2i)  =
                         if mSize.Value <> newSize then
                             transact (fun () -> mSize.Value <- newSize)
                     )
+                visibleSub <- 
+                    handle.Closing.Subscribe(fun _ ->
+                        visible <- false
+                    )
 
                 keyboard.SetControl handle
                 mouse.SetControl handle
                 x.OnLoad()
                 loaded <- true
+                visible <- false
         )
 
     member private x.Unload() =
@@ -368,6 +376,10 @@ type SimpleWindow(position : V2i, initialSize : V2i)  =
             if not (isNull resizeSub) then
                 resizeSub.Dispose()
                 resizeSub <- null
+
+            if not (isNull visibleSub) then
+                visibleSub.Dispose()
+                visibleSub <- null
 
             keyboard.SetControl null
             mouse.SetControl null
@@ -422,7 +434,8 @@ type SimpleWindow(position : V2i, initialSize : V2i)  =
 
             x.Load()
             handle.Visible <- true
-            while handle.Visible do
+            visible <- true
+            while visible do
                 handle.ProcessEvents()
                 let o = Interlocked.Exchange(&isInvalid, 0)
                 if o = 1 then x.OnRender()
