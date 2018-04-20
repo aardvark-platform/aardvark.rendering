@@ -1,0 +1,3 @@
+<configuration>
+  <dllmap os="linux" dll="libvulkan-1.so" target="libvulkan.so.1"/>
+</configuration>

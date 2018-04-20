@@ -1006,7 +1006,7 @@ module FSharpWriter =
 
 
         printfn "    [<Literal>]"
-        printfn "    let lib = \"vulkan-1.dll\""
+        printfn "    let lib = \"vulkan-1\""
         printfn ""
         for c in l do
             if c.name = "vkCreateInstance" then

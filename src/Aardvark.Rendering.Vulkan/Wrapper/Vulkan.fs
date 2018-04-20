@@ -3234,7 +3234,7 @@ module VkRaw =
     [<CompilerMessage("activeInstance is for internal use only", 1337, IsError=false, IsHidden=true)>]
     let mutable internal activeInstance : VkInstance = 0n
     [<Literal>]
-    let lib = "vulkan-1.dll"
+    let lib = "vulkan-1"
 
     [<DllImport(lib, EntryPoint="vkCreateInstance");SuppressUnmanagedCodeSecurity>]
     extern VkResult private _vkCreateInstance(VkInstanceCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkInstance* pInstance)
