@@ -367,6 +367,7 @@ module ExecutionContext =
 module GLExtensionsPossiblyNotWorkingEverywhere =
     open OpenTK.Graphics.OpenGL4
     open System.Runtime.InteropServices
+    open Aardvark.Rendering.GL
 
     type GL with
         static member inline Sync() =

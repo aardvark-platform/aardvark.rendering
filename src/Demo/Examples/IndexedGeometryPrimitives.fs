@@ -17,7 +17,6 @@ open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Base.Incremental.Operators
 open Aardvark.Base.Rendering
-open Aardvark.Rendering.NanoVg
 
 module IndexedGeometry = 
 

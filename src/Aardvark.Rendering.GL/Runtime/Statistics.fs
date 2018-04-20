@@ -5,6 +5,7 @@ open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
+open Aardvark.Rendering.GL
 
 type OpenGlStopwatch() =
     static let current = new ThreadLocal<Option<OpenGlStopwatch>>(fun () -> None)

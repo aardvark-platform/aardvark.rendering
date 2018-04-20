@@ -10,7 +10,6 @@ open Aardvark.SceneGraph.Semantics
 
 open Aardvark.Application
 open Aardvark.Application.WinForms
-open Aardvark.Rendering.NanoVg
 open Aardvark.Rendering.GL
 
 module Shaders =
@@ -526,8 +525,7 @@ module Playground =
 
         let task = app.Runtime.CompileRender(win.FramebufferSignature, sg)
 
-        win.RenderTask <- task |> DefaultOverlays.withStatistics
-        win.Run()
+        win.RenderTask <- task
         0
 
     let testGeometrySet() =
@@ -640,7 +638,7 @@ module Playground =
 
         let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.NativeOptimized, final)
 
-        win.RenderTask <- task |> DefaultOverlays.withStatistics
+        win.RenderTask <- task
         win.Run()
         0
 
@@ -733,7 +731,7 @@ module Playground =
 
         let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.NativeOptimized, final)
 
-        win.RenderTask <- task |> DefaultOverlays.withStatistics
+        win.RenderTask <- task
         win.Run()
         0
 

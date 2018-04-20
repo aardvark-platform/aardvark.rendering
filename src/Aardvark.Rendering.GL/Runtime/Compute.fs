@@ -14,6 +14,7 @@ open Aardvark.Base.Incremental
 open FShade
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering.GL
 
 #nowarn "9"
 

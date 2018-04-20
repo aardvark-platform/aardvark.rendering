@@ -12,6 +12,7 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.Quotations
 open Microsoft.FSharp.Linq
+open Aardvark.Rendering.GL
 
 [<AutoOpen>]
 module private SamplerCounters =
@@ -131,8 +132,10 @@ module SamplerExtensions =
         GL.SamplerParameter(handle, SamplerParameterName.TextureMagFilter, magFilter d.Filter.Mag)
         GL.Check "could not set MagFilter for sampler"
 
+        
+
         if d.ComparisonFunction <> SamplerComparisonFunction.None then
-            GL.SamplerParameter(handle, SamplerParameterName.TextureCompareMode, OpenTK.Graphics.TextureCompareMode.CompareRefToTexture |> int)
+            GL.SamplerParameter(handle, SamplerParameterName.TextureCompareMode, OpenTK.Graphics.OpenGL4.TextureCompareMode.CompareRefToTexture |> int)
             GL.Check "could not set comparison mode for sampler"
 
             GL.SamplerParameter(handle, SamplerParameterName.TextureCompareFunc, compareFunc d.ComparisonFunction)

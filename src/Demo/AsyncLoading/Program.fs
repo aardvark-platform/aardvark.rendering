@@ -3,9 +3,8 @@ open FShade
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Rendering
-open Aardvark.Rendering.NanoVg
 open Aardvark.Application
-open Aardvark.Application.WinForms
+open Aardvark.Application.Slim
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
 open System.Threading.Tasks
@@ -38,7 +37,7 @@ let running = new ManualResetEventSlim()
 [<EntryPoint>]
 let main argv = 
     use app = new OpenGlApplication()
-    use win = app.CreateSimpleRenderWindow()
+    use win = app.CreateGameWindow()
 
     Aardvark.Init()
 
@@ -118,6 +117,6 @@ let main argv =
 
     ) |> ignore
 
-    win.RenderTask <- task |> DefaultOverlays.withStatistics
+    win.RenderTask <- task
     win.Run()
     0 

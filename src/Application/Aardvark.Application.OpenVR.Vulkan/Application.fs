@@ -6,8 +6,6 @@ open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Valve.VR
 open Aardvark.Application
-open Aardvark.Application.WinForms
-open System.Windows.Forms
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
 open Valve.VR
@@ -58,10 +56,9 @@ module StereoShader =
 
 type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
     inherit VrRenderer()
-
     
-
     let app = new HeadlessVulkanApplication(debug, this.GetVulkanInstanceExtensions(), fun d -> this.GetVulkanDeviceExtensions d.Handle)
+    
     let device = app.Device
 
     let mutable task = RenderTask.empty
@@ -146,58 +143,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
     member x.Sizes = Mod.constant x.DesiredSize
     member x.Samples = samples
     member x.Time = time
-
-    member x.ShowWindow() =
-        async {
-            let d = new Form()
-            
-            
-            //d.ClientSize <- Drawing.Size(2 * app.DesiredSize.X, app.DesiredSize.Y)
-            d.WindowState <- FormWindowState.Maximized
-            d.FormBorderStyle <- FormBorderStyle.None
-
-            let mode = GraphicsMode(Col.Format.RGBA, 8, 24, 8, 2, 8, ImageTrafo.MirrorY)
-            let impl = new VulkanRenderControl(app.Runtime, mode)
-
-
-            let consoleTrafo = 
-                impl.Sizes |> Mod.map (fun s -> 
-                    Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
-                    Trafo3d.Translation(-0.95, 0.9, 0.0)
-                )
-
-            let helpTrafo = 
-                impl.Sizes |> Mod.map (fun s -> 
-                    Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
-                    Trafo3d.Translation(-0.95, -0.95, 0.0)
-                    
-                )
-
-            let task =
-                Sg.fullScreenQuad
-                    |> Sg.diffuseTexture x.Texture
-                    |> Sg.uniform "Version" x.Version
-                    |> Sg.shader {
-                        do! StereoShader.flip
-                        do! DefaultSurfaces.diffuseTexture
-                    }
-
-                    |> Sg.compile app.Runtime impl.FramebufferSignature
-
-            impl.RenderTask <-task
-            impl.Dock <- System.Windows.Forms.DockStyle.Fill
-            d.Controls.Add impl
-
-            impl.KeyDown.Add (fun k ->
-                if k.KeyCode = Keys.Escape then
-                    d.Close()
-            )
-
-            System.Windows.Forms.Application.Run(d)
-            x.Shutdown()
-
-        } |> Async.Start
-
+    
 
     member x.RenderTask
         with set (t : RuntimeCommand) = 

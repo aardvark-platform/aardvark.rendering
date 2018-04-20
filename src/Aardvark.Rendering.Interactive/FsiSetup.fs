@@ -9,7 +9,6 @@ module FsiSetup =
     open Aardvark.Base
     open Aardvark.Base.Incremental
     open Aardvark.Base.Rendering
-    open Aardvark.Rendering.NanoVg
     open Aardvark.SceneGraph
     open Aardvark.SceneGraph.Semantics
 

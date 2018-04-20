@@ -8,7 +8,6 @@ open System.Reactive
 open System.Reactive.Linq
 open System.Runtime.CompilerServices
 open System.Collections.Concurrent
-open System.Windows.Forms
 
 type MouseButtons =
     | None   = 0x0000
@@ -58,13 +57,18 @@ type EventMouse(autoGenerateClickEvents : bool) =
 
     let downPosAndTime = System.Collections.Generic.Dictionary<MouseButtons, int * DateTime * PixelPosition>()
 
+    let DoubleClickTime = 500
+    let DoubleClickSizeWidth = 4
+    let DoubleClickSizeHeight = 4
+
+
     let handleDown (pos : PixelPosition) (b : MouseButtons) =
         match downPosAndTime.TryGetValue b with
             | (true, (oc, ot,op)) ->
                 let dt = DateTime.Now - ot
                 let dp = pos.Position - op.Position
                     
-                if dt.TotalMilliseconds < float SystemInformation.DoubleClickTime && abs dp.X <= SystemInformation.DoubleClickSize.Width && abs dp.Y < SystemInformation.DoubleClickSize.Height then
+                if dt.TotalMilliseconds < float DoubleClickTime && abs dp.X <= DoubleClickSizeWidth && abs dp.Y < DoubleClickSizeHeight then
                     downPosAndTime.[b] <- (oc + 1, DateTime.Now, pos)
                 else
                     downPosAndTime.[b] <- (1, DateTime.Now, pos)
@@ -81,7 +85,7 @@ type EventMouse(autoGenerateClickEvents : bool) =
                 let dp = pos.Position - p.Position
                     
                 if autoGenerateClickEvents then
-                    if dt.TotalMilliseconds < float SystemInformation.DoubleClickTime && abs dp.X <= SystemInformation.DoubleClickSize.Width && abs dp.Y < SystemInformation.DoubleClickSize.Height then
+                    if dt.TotalMilliseconds < float DoubleClickTime && abs dp.X <= DoubleClickSizeWidth && abs dp.Y < DoubleClickSizeHeight then
                         if c < 2 then clickEvent.Emit(b)
                         else doubleClickEvent.Emit(b)
                     else

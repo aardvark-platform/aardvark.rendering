@@ -5,6 +5,7 @@ open OpenTK.Graphics.OpenGL4
 open System.Text.RegularExpressions
 open System.Runtime.InteropServices
 open Aardvark.Base
+open Aardvark.Rendering.GL
 
 [<AutoOpen>]
 module TypeSizeExtensions =

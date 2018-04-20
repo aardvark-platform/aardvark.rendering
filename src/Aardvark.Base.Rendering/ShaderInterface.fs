@@ -571,7 +571,7 @@ module ShaderParameterWriter =
         open System.Threading
         open System.Reflection.Emit
 
-        let dAss = AppDomain.CurrentDomain.DefineDynamicAssembly(AssemblyName "Aardvark.Rendering.GL.Writers", AssemblyBuilderAccess.RunAndSave)
+        let dAss = AssemblyBuilder.DefineDynamicAssembly(AssemblyName "Aardvark.Rendering.GL.Writers", AssemblyBuilderAccess.Run)
         let dMod = dAss.DefineDynamicModule("MainModule")
 
         let mutable currentId = 0
@@ -712,7 +712,7 @@ module ShaderParameterWriter =
             il.Emit(OpCodes.Ret)
 
 
-            let writerType = dType.CreateType()
+            let writerType = dType.CreateTypeInfo()
 
             let ctor = writerType.GetConstructor argTypes
 

@@ -33,7 +33,6 @@ module Sg =
         member x.Mode = mode
         member x.DrawCallInfo = call
 
-        new(call : IEvent<DrawCallInfo>, mode : IEvent<IndexedGeometryMode>) = RenderNode(Mod.fromEvent call, Mod.fromEvent mode)
         new(call : DrawCallInfo, mode : IndexedGeometryMode) = RenderNode(Mod.constant call, Mod.constant mode)
         new(count : int, mode : IndexedGeometryMode) = RenderNode(Mod.constant (DrawCallInfo(
                                                                                     FaceVertexCount = count,
@@ -94,8 +93,6 @@ module Sg =
         member x.IsActive = on
 
         new(on : IMod<bool>, child : ISg) = OnOffNode(on, Mod.constant child)
-        new(on : IEvent<bool>, child : IMod<ISg>) = OnOffNode(Mod.fromEvent on, child)
-        new(on : IEvent<bool>, child : ISg) = OnOffNode(Mod.fromEvent on, Mod.constant child)
 
     type PassApplicator(pass : RenderPass, child : IMod<ISg>) =
         inherit AbstractApplicator(child)
@@ -135,11 +132,7 @@ module Sg =
         member x.Texture = texture
 
         new(semantic : Symbol, texture : IMod<ITexture>, child : ISg) = TextureApplicator(semantic, texture, Mod.constant child)
-        new(semantic : Symbol, texture : IEvent<ITexture>, child : IMod<ISg>) = TextureApplicator(semantic, Mod.fromEvent texture, child)
-        new(semantic : Symbol, texture : IEvent<ITexture>, child : ISg) = TextureApplicator(semantic, Mod.fromEvent texture, Mod.constant child)
         new(texture : IMod<ITexture>, child : ISg) = TextureApplicator(DefaultSemantic.DiffuseColorTexture, texture, child)
-        new(texture : IEvent<ITexture>, child : IMod<ISg>) = TextureApplicator(DefaultSemantic.DiffuseColorTexture,  texture, child)
-        new(texture : IEvent<ITexture>, child : ISg) = TextureApplicator(DefaultSemantic.DiffuseColorTexture, texture, child)
         new(texture : IMod<ITexture>, child : IMod<ISg>) = TextureApplicator(DefaultSemantic.DiffuseColorTexture,texture,child)
 
 
@@ -149,8 +142,6 @@ module Sg =
         member x.Trafo = trafo
 
         new(value : IMod<Trafo3d>, child : ISg) = TrafoApplicator(value, Mod.constant child)
-        new(value : IEvent<Trafo3d>, child : IMod<ISg>) = TrafoApplicator(Mod.fromEvent value, child)
-        new(value : IEvent<Trafo3d>, child : ISg) = TrafoApplicator(Mod.fromEvent value, Mod.constant child)
         new(value : Trafo3d, child : ISg) = TrafoApplicator(Mod.constant value, Mod.constant child)
     
     type ViewTrafoApplicator(trafo : IMod<Trafo3d>, child : IMod<ISg>) =
@@ -159,8 +150,6 @@ module Sg =
         member x.ViewTrafo = trafo
 
         new(value : IMod<Trafo3d>, child : ISg) = ViewTrafoApplicator(value, Mod.constant child)
-        new(value : IEvent<Trafo3d>, child : IMod<ISg>) = ViewTrafoApplicator(Mod.fromEvent value, child)
-        new(value : IEvent<Trafo3d>, child : ISg) = ViewTrafoApplicator(Mod.fromEvent value, Mod.constant child)
 
     type ProjectionTrafoApplicator(trafo : IMod<Trafo3d>, child : IMod<ISg>) =
         inherit AbstractApplicator(child)
@@ -168,8 +157,6 @@ module Sg =
         member x.ProjectionTrafo = trafo
 
         new(value : IMod<Trafo3d>, child : ISg) = ProjectionTrafoApplicator(value, Mod.constant child)
-        new(value : IEvent<Trafo3d>, child : IMod<ISg>) = ProjectionTrafoApplicator(Mod.fromEvent value, child)
-        new(value : IEvent<Trafo3d>, child : ISg) = ProjectionTrafoApplicator(Mod.fromEvent value, Mod.constant child)
 
 
     type DepthTestModeApplicator(mode : IMod<DepthTestMode>, child : IMod<ISg>) =
@@ -178,8 +165,6 @@ module Sg =
         member x.Mode = mode
 
         new(value : IMod<DepthTestMode>, child : ISg) = DepthTestModeApplicator(value, Mod.constant child)
-        new(value : IEvent<DepthTestMode>, child : IMod<ISg>) = DepthTestModeApplicator(Mod.fromEvent value, child)
-        new(value : IEvent<DepthTestMode>, child : ISg) = DepthTestModeApplicator(Mod.fromEvent value, Mod.constant child)
 
     type CullModeApplicator(mode : IMod<CullMode>, child : IMod<ISg>) =
         inherit AbstractApplicator(child)
@@ -187,8 +172,6 @@ module Sg =
         member x.Mode = mode
 
         new(value : IMod<CullMode>, child : ISg) = CullModeApplicator(value, Mod.constant child)
-        new(value : IEvent<CullMode>, child : IMod<ISg>) = CullModeApplicator(Mod.fromEvent value, child)
-        new(value : IEvent<CullMode>, child : ISg) = CullModeApplicator(Mod.fromEvent value, Mod.constant child)
 
     type FillModeApplicator(mode : IMod<FillMode>, child : IMod<ISg>) =
         inherit AbstractApplicator(child)
@@ -196,8 +179,6 @@ module Sg =
         member x.Mode = mode
 
         new(value : IMod<FillMode>, child : ISg) = FillModeApplicator(value, Mod.constant child)
-        new(value : IEvent<FillMode>, child : IMod<ISg>) = FillModeApplicator(Mod.fromEvent value, child)
-        new(value : IEvent<FillMode>, child : ISg) = FillModeApplicator(Mod.fromEvent value, Mod.constant child)
         new(value : FillMode, child : ISg) = FillModeApplicator(Mod.constant value, Mod.constant child)
 
     type StencilModeApplicator(mode : IMod<StencilMode>, child : IMod<ISg>) =
@@ -206,8 +187,6 @@ module Sg =
         member x.Mode = mode
 
         new(value : IMod<StencilMode>, child : ISg) = StencilModeApplicator(value, Mod.constant child)
-        new(value : IEvent<StencilMode>, child : IMod<ISg>) = StencilModeApplicator(Mod.fromEvent value, child)
-        new(value : IEvent<StencilMode>, child : ISg) = StencilModeApplicator(Mod.fromEvent value, Mod.constant child)
 
     type BlendModeApplicator(mode : IMod<BlendMode>, child : IMod<ISg>) =
         inherit AbstractApplicator(child)
@@ -215,8 +194,6 @@ module Sg =
         member x.Mode = mode
 
         new(value : IMod<BlendMode>, child : ISg) = BlendModeApplicator(value, Mod.constant child)
-        new(value : IEvent<BlendMode>, child : IMod<ISg>) = BlendModeApplicator(Mod.fromEvent value, child)
-        new(value : IEvent<BlendMode>, child : ISg) = BlendModeApplicator(Mod.fromEvent value, Mod.constant child)
 
     type RasterizerStateApplicator(state : IMod<RasterizerState>, child : IMod<ISg>) =
         inherit AbstractApplicator(child)
@@ -235,8 +212,6 @@ module Sg =
         member x.BlendMode = blend
 
         new(value : IMod<RasterizerState>, child : ISg) = RasterizerStateApplicator(value, Mod.constant child)
-        new(value : IEvent<RasterizerState>, child : IMod<ISg>) = RasterizerStateApplicator(Mod.fromEvent value, child)
-        new(value : IEvent<RasterizerState>, child : ISg) = RasterizerStateApplicator(Mod.fromEvent value, Mod.constant child)
 
     type WriteBuffersApplicator(buffers : Option<Set<Symbol>>, child : IMod<ISg>) =
         inherit AbstractApplicator(child)

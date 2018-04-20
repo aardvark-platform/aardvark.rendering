@@ -10,6 +10,7 @@ open Microsoft.FSharp.NativeInterop
 
 module Instructions =
     open OpenTK.Graphics.OpenGL4
+    open Aardvark.Rendering.GL
 
     let setDepthMask (active : bool) =
         Instruction.DepthMask(if active then 1 else 0)

@@ -1,3 +1,4 @@
+Aardvark.Base.Essentials
 Aardvark.Base.Incremental
 Aardvark.Base.Runtime
 FShade.Core
@@ -5,3 +6,5 @@ FSharp.Core
 BruTile
 OpenHardwareMonitor
 FShade.GLSL
+Unofficial.OpenTK
+Unofficial.OpenTK.GLControl

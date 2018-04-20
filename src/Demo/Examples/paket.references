@@ -1,3 +1,4 @@
+Aardvark.Base.Essentials
 Aardvark.Base.Incremental
 Aardvark.Base.Runtime
 Unofficial.AssimpNet
@@ -6,3 +7,5 @@ FShade.GLSL
 FSharp.Core
 Unofficial.OpenVR
 FShade.Debug
+Unofficial.OpenTK
+Unofficial.OpenTK.GLControl
