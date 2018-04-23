@@ -325,13 +325,6 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
         swTotal.Stop()
 
     override x.Release() = 
-//        hiddenTask.Dispose()
-//        hiddenTask <- RenderTask.empty
-//        
-//        overlayTask.Dispose()
-//        overlayTask <- RenderTask.empty
-
-
         // delete views
         device.Delete fbo.Attachments.[DefaultSemantic.Colors]
         device.Delete fbo.Attachments.[DefaultSemantic.Depth]
