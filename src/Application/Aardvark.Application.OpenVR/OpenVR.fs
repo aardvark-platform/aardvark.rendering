@@ -514,6 +514,91 @@ type VrSystemStats =
     
     static member Zero = { ProcessEvents = MicroTime.Zero; WaitGetPoses = MicroTime.Zero; UpdatePoses = MicroTime.Zero; Render = VrRenderStats.Zero; Submit = MicroTime.Zero; Total = MicroTime.Zero; FrameCount = 0 }
 
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module VrSystemStats =
+    open Aardvark.SceneGraph
+    open FShade
+
+    let toStackedGraph (stats : IMod<VrSystemStats>) =
+        
+        let col (v : int) =
+            C4b(byte (v >>> 16), byte (v >>> 8), byte v)
+
+        let trafosAndColors =
+            stats |> Mod.map (fun s ->
+                
+
+                let timesAndColors =
+                    [|
+                        s.ProcessEvents.TotalSeconds, col 0x161148
+                        s.WaitGetPoses.TotalSeconds, col 0xB8B4DE
+                        s.UpdatePoses.TotalSeconds, col 0x6B66A5
+
+                        s.Render.Clear.TotalSeconds, col 0xFFE9C7
+                        s.Render.Render.TotalSeconds, col 0x67430B
+                        s.Render.Resolve.TotalSeconds, col 0xEDC384
+
+                        s.Submit.TotalSeconds, col 0x25705A
+                    |]
+
+                let scale = 1.0 / s.Total.TotalSeconds
+                
+                let scales =
+                    timesAndColors 
+                        |> Array.map (fun (t,_) -> t * scale)
+
+                let offsets =
+                    scales
+                        |> Array.scan (+) 0.0
+                        |> Array.take timesAndColors.Length
+                
+
+                let trafos = 
+                    Array.map2 (fun (o : float) (s : float) -> Trafo3d.Scale(1.0, s, 1.0) * Trafo3d.Translation(0.0, o, 0.0)) offsets scales
+
+                let colors =
+                    Array.map snd timesAndColors
+                    
+                trafos, colors
+            )
+
+        let trafos = Mod.map fst trafosAndColors
+        let colors = Mod.map snd trafosAndColors
+
+        let baseBox = 
+            Sg.box' C4b.White (Box3d(V3d.Zero, V3d.III))
+                |> Sg.shader {
+                    do! DefaultSurfaces.trafo
+
+                    do! fun (v : Effects.Vertex) ->
+                        fragment {
+                            let c : V4d = uniform?Color
+                            return c
+                        }
+                    
+                    do! DefaultSurfaces.simpleLighting
+                }
+
+        let m44Trafos = Mod.map (Array.map (Trafo.forward >> M44f.op_Explicit)) trafos
+        Sg.InstancingNode(
+            m44Trafos,
+            Map.ofList [
+                "Color", BufferView(colors |> Mod.map (fun v -> ArrayBuffer(v) :> IBuffer), typeof<C4b>)
+            ],
+            Mod.constant baseBox
+        ) :> ISg
+
+
+
+
+
+
+
+
+
+    
+
 [<AbstractClass>]
 type VrRenderer() =
     let system =
