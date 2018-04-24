@@ -593,6 +593,13 @@ module Utilities =
                 let hmdLocation = app.Hmd.MotionState.Pose |> Mod.map (fun t -> t.Forward.C3.XYZ)
 
 
+//                let lastStats = Mod.init VrSystemStats.Zero
+//                app.Statistics.Values.Add (fun s ->
+//                    printfn "%A" s
+//                    transact (fun () -> lastStats.Value <- s)
+//                )
+
+
                 let stencilTest =
                     StencilMode(
                         StencilOperation(
@@ -606,11 +613,18 @@ module Utilities =
                             0xFFFFFFFFu
                         )
                     )
+//
+//                let ildefonso =
+//                    let trafo = app.Controllers.[0].MotionState.Pose
+//                    VrSystemStats.toStackedGraph lastStats
+//                        |> Sg.transform (Trafo3d.Scale(0.05, 0.2, 0.05))
+//                        |> Sg.trafo trafo
 
                 { new SimpleRenderWindow(app, app.Info.viewTrafos, app.Info.projTrafos) with
 
                     override x.WrapSg(win, sg) =
                         sg
+                        //|> Sg.andAlso ildefonso
                         |> Sg.stencilMode (Mod.constant stencilTest)
                         |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
                         |> Sg.uniform "ProjTrafo" app.Info.projTrafos
@@ -619,6 +633,7 @@ module Utilities =
 
                     override x.Compile(win, sg) =
                         sg
+                        //|> Sg.andAlso ildefonso
                         |> Sg.stencilMode (Mod.constant stencilTest)
                         |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
                         |> Sg.uniform "ProjTrafo" app.Info.projTrafos
@@ -627,7 +642,7 @@ module Utilities =
                         |> Sg.compile app.Runtime app.FramebufferSignature
                 } :> ISimpleRenderWindow
 
-            | [Backend.GL] -> 
+            | _ -> 
                 let app = OpenGlVRApplicationLayered(cfg.samples, cfg.debug)
 
                 let hmdLocation = app.Hmd.MotionState.Pose |> Mod.map (fun t -> t.Forward.C3.XYZ)
@@ -666,9 +681,7 @@ module Utilities =
                         |> Sg.uniform "LightLocation" hmdLocation
                         |> Sg.compile app.Runtime app.FramebufferSignature
                 } :> ISimpleRenderWindow
-
-            | xs -> 
-                failwith "no multi backend support for OpenVR atm."
+                
 
 
     let createWindow (cfg : RenderConfig) =

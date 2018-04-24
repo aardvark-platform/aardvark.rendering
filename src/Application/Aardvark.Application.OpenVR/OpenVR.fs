@@ -11,6 +11,9 @@ open Aardvark.SceneGraph
 
 #nowarn "9"
 
+open System.Diagnostics
+open System.Threading
+
 type VrDeviceType =
     | Other = 0
     | Hmd = 1
@@ -449,6 +452,7 @@ type VrTexture =
         static member Vulkan(data : VRVulkanTextureData_t) =
             let ptr = Marshal.AllocHGlobal sizeof<VRVulkanTextureData_t>
             NativeInt.write ptr data
+
             let i = Texture_t(eColorSpace = EColorSpace.Auto, eType = ETextureType.Vulkan, handle = ptr)
             let b = VRTextureBounds_t(uMin = 0.0f, uMax = 1.0f, vMin = 0.0f, vMax = 1.0f)
             new VrTexture(ptr, i, EVRSubmitFlags.Submit_Default, b)
@@ -482,6 +486,121 @@ type VrRenderInfo =
         projTrafos          : IMod<Trafo3d[]>
     }
 
+    //let swProcessEvents = Stopwatch()
+    //let swWaitPoses = Stopwatch()
+    //let swUpdatePoses = Stopwatch()
+    //let swRender = Stopwatch()
+    //let swSubmit = Stopwatch()
+    //let swTotal = Stopwatch()
+
+type VrRenderStats =
+    {
+        Total   : MicroTime
+        Clear   : MicroTime
+        Render  : MicroTime
+        Resolve : MicroTime
+    }
+
+    static member Zero = { Total = MicroTime.Zero; Clear = MicroTime.Zero; Render = MicroTime.Zero; Resolve = MicroTime.Zero }
+
+type VrSystemStats =
+    {
+        ProcessEvents   : MicroTime
+        WaitGetPoses    : MicroTime
+        UpdatePoses     : MicroTime
+        Render          : VrRenderStats
+        Submit          : MicroTime
+        Total           : MicroTime
+        FrameCount      : int
+    }
+    
+    static member Zero = { ProcessEvents = MicroTime.Zero; WaitGetPoses = MicroTime.Zero; UpdatePoses = MicroTime.Zero; Render = VrRenderStats.Zero; Submit = MicroTime.Zero; Total = MicroTime.Zero; FrameCount = 0 }
+
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module VrSystemStats =
+    open Aardvark.SceneGraph
+    open FShade
+
+    let toStackedGraph (stats : IMod<VrSystemStats>) =
+        
+        let col (v : int) =
+            C4b(byte (v >>> 16), byte (v >>> 8), byte v)
+
+        let trafosAndColors =
+            stats |> Mod.map (fun s ->
+                
+
+                let timesAndColors =
+                    [|
+                        s.ProcessEvents.TotalSeconds, C4b.Blue
+                        s.WaitGetPoses.TotalSeconds, C4b.Red
+                        s.UpdatePoses.TotalSeconds, C4b.Gray
+
+                        s.Render.Clear.TotalSeconds, C4b.Yellow
+                        s.Render.Render.TotalSeconds, C4b.Green
+                        s.Render.Resolve.TotalSeconds, C4b.White
+
+                        s.Submit.TotalSeconds, C4b.VRVisGreen
+                    |]
+
+                let scale = 1.0 / s.Total.TotalSeconds
+                
+                let scales =
+                    timesAndColors 
+                        |> Array.map (fun (t,_) -> t * scale)
+
+                let offsets =
+                    scales
+                        |> Array.scan (+) 0.0
+                        |> Array.take timesAndColors.Length
+                
+
+                let trafos = 
+                    Array.map2 (fun (o : float) (s : float) -> Trafo3d.Scale(1.0, s, 1.0) * Trafo3d.Translation(0.0, o, 0.0)) offsets scales
+
+                let colors =
+                    Array.map snd timesAndColors
+                    
+                trafos, colors
+            )
+
+        let trafos = Mod.map fst trafosAndColors
+        let colors = Mod.map snd trafosAndColors
+
+        let baseBox = 
+            Sg.box' C4b.White (Box3d(V3d.Zero, V3d.III))
+                |> Sg.shader {
+                    do! DefaultSurfaces.trafo
+
+                    do! fun (v : Effects.Vertex) ->
+                        fragment {
+                            let c : V4d = uniform?Color
+                            return c
+                        }
+                    
+                    do! DefaultSurfaces.simpleLighting
+                }
+
+        let m44Trafos = Mod.map (Array.map (Trafo.forward >> M44f.op_Explicit)) trafos
+        Sg.InstancingNode(
+            m44Trafos,
+            Map.ofList [
+                "Color", BufferView(colors |> Mod.map (fun v -> ArrayBuffer(v) :> IBuffer), typeof<C4b>)
+            ],
+            Mod.constant baseBox
+        ) :> ISg
+
+
+
+
+
+
+
+
+
+    
+
 [<AbstractClass>]
 type VrRenderer() =
     let system =
@@ -501,6 +620,12 @@ type VrRenderer() =
                 else
                     yield None
         |]
+
+    static let sEyeIndex = Symbol.Create "EyeIndex"
+    static let sRCoord = Symbol.Create "RCoord"
+    static let sGCoord = Symbol.Create "GCoord"
+    static let sBCoord = Symbol.Create "BCoord"
+
 
     let hiddenAreaMesh =
         let lMesh = system.GetHiddenAreaMesh(EVREye.Eye_Left, EHiddenAreaMeshType.k_eHiddenAreaMesh_Standard)
@@ -525,19 +650,99 @@ type VrRenderer() =
             IndexedAttributes =
                 SymDict.ofList [
                     DefaultSemantic.Positions, arr |> Array.map (fun v -> V3f(2.0f, 2.0f, 1.0f) * V3f(v, 0.0f) - V3f(1,1,0)) :> System.Array
-                    Symbol.Create "EyeIndex", eyeIndex :> System.Array
+                    sEyeIndex, eyeIndex :> System.Array
                 ]
         )
 
     let devices = devicesPerIndex |> Array.choose id
         
-
     let hmds = devices |> Array.filter (fun d -> d.Type = VrDeviceType.Hmd)
+
+    let getDistortionGeometry (gridSize : V2i) =
+        
+        let cnt = gridSize.X * gridSize.Y
+
+        let scale = V2d.II / V2d(gridSize)
+
+
+        let eyeIndex    : int[] = Array.zeroCreate (2 * cnt)
+        let position    : V3f[] = Array.zeroCreate (2 * cnt)
+        let rCoord      : V2f[] = Array.zeroCreate (2 * cnt)
+        let gCoord      : V2f[] = Array.zeroCreate (2 * cnt)
+        let bCoord      : V2f[] = Array.zeroCreate (2 * cnt)
+
+
+
+        
+        let mutable i = 0
+        let mutable coords = DistortionCoordinates_t()
+
+        for eye in [EVREye.Eye_Left; EVREye.Eye_Right] do
+            let ei = int eye
+            for y in 0 .. gridSize.Y - 1 do
+                for x in 0 .. gridSize.X - 1 do
+                    let ci = V2i(x,y)
+                    let c = V2d ci * scale
+                    let ndc = c * 2.0 - V2d.II
+
+                    position.[i] <- V3f(ndc.X, ndc.Y, -1.0)
+                    eyeIndex.[i] <- ei
+
+                    if system.ComputeDistortion(eye, float32 c.X, float32 c.Y, &coords) then
+                        rCoord.[i] <- V2f(coords.rfRed0, coords.rfRed1)
+                        gCoord.[i] <- V2f(coords.rfGreen0, coords.rfGreen1)
+                        bCoord.[i] <- V2f(coords.rfBlue0, coords.rfBlue1)
+                    else
+                        rCoord.[i] <- V2f.Zero
+                        gCoord.[i] <- V2f.Zero
+                        bCoord.[i] <- V2f.Zero
+
+                    i <- i + 1
+
+        let indices = Array.zeroCreate (6 * 2 * cnt)
+        
+        let jx = 1
+        let jy = gridSize.X
+        let mutable ti = 0
+        let mutable offset = 0
+        for eye in [EVREye.Eye_Left; EVREye.Eye_Right] do
+            for y in 1 .. gridSize.Y - 1 do
+                for x in 1 .. gridSize.X - 1 do
+                    let i11 = offset + x + y * gridSize.X
+                    let i01 = i11 - jx
+                    let i10 = i11 - jy
+                    let i00 = i10 - jx
+
+                    indices.[ti + 0] <- i00
+                    indices.[ti + 1] <- i10
+                    indices.[ti + 2] <- i11
+
+                    indices.[ti + 3] <- i00
+                    indices.[ti + 4] <- i11
+                    indices.[ti + 5] <- i01
+                    ti <- ti + 6
+
+            offset <- offset + cnt
+
+
+        IndexedGeometry(
+            Mode = IndexedGeometryMode.TriangleList,
+            IndexArray = indices,
+            IndexedAttributes =
+                SymDict.ofList [
+                    DefaultSemantic.Positions, position :> Array
+                    sEyeIndex, eyeIndex :> Array
+                    sRCoord, rCoord :> Array
+                    sGCoord, gCoord :> Array
+                    sBCoord, bCoord :> Array
+                ]
+        )
+            
 
 
     let compositor = OpenVR.Compositor
     let renderPoses = Array.zeroCreate (int OpenVR.k_unMaxTrackedDeviceCount)
-    let gamePoses = Array.zeroCreate (int OpenVR.k_unMaxTrackedDeviceCount)
+    let gamePoses = Array.zeroCreate 0 //(int OpenVR.k_unMaxTrackedDeviceCount)
 
 
     [<VolatileField>]
@@ -594,6 +799,22 @@ type VrRenderer() =
 
     let eventQueue = System.Collections.Generic.Queue<VREvent_t>()
 
+    let swProcessEvents = Stopwatch()
+    let swWaitPoses = Stopwatch()
+    let swUpdatePoses = Stopwatch()
+    let swRender = Stopwatch()
+    let swSubmit = Stopwatch()
+    let swTotal = Stopwatch()
+
+    let mutable frameCount = 0
+    let mutable statFrameCount = 20
+    let evtStatistics = EventSource<VrSystemStats>()
+
+    static member EyeIndexSym = sEyeIndex
+    static member RCoordSym = sRCoord
+    static member GCoordSym = sGCoord
+    static member BCoordSym = sBCoord
+
     member private x.ProcessEvents(events : System.Collections.Generic.Queue<VREvent_t>) =
         
         let mutable evt : VREvent_t = Unchecked.defaultof<VREvent_t>
@@ -607,7 +828,6 @@ type VrRenderer() =
                         device.Trigger(&evt)
                     | None ->
                         ()
-
 
     member x.BackgroundColor
         with get() = backgroundColor
@@ -640,6 +860,24 @@ type VrRenderer() =
 
     member x.HiddenAreaMesh = hiddenAreaMesh
 
+    member x.GetDistortionMesh (gridSize : V2i) = getDistortionGeometry gridSize
+
+
+    abstract member GetRenderStats : unit -> VrRenderStats
+    default x.GetRenderStats() =
+        let t = swRender.MicroTime
+        {
+            Total   = t
+            Clear   = MicroTime.Zero
+            Render  = t
+            Resolve = MicroTime.Zero
+        }
+
+    abstract member ResetRenderStats : unit -> unit
+    default x.ResetRenderStats() =
+        swRender.Reset()
+
+
     abstract member OnLoad : info : VrRenderInfo -> VrTexture * VrTexture
     abstract member Render : unit -> unit
     abstract member Release : unit -> unit
@@ -650,42 +888,119 @@ type VrRenderer() =
     abstract member UpdatePoses : TrackedDevicePose_t[] -> unit
     default x.UpdatePoses _ = ()
 
+    member x.StatisticsFrameCount
+        with get() = statFrameCount
+        and set v = statFrameCount <- v
+
+    member x.Statistics = evtStatistics :> IEvent<_>
+
+    member x.GetPoses() =
+        let renderPoses = Array.zeroCreate renderPoses.Length
+        let mutable fSecondsSinceLastVsync = 0.0f
+        let mutable pullFrameCounter = 0UL
+        system.GetTimeSinceLastVsync(&fSecondsSinceLastVsync, &pullFrameCounter) |> ignore
+            
+        let mutable err = ETrackedPropertyError.TrackedProp_Success
+        let fDisplayFrequency = system.GetFloatTrackedDeviceProperty(uint32 hmds.[0].Index, ETrackedDeviceProperty.Prop_DisplayFrequency_Float, &err) // vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_DisplayFrequency_Float );
+        let fFrameDuration = 1.f / fDisplayFrequency;
+        let fVsyncToPhotons = system.GetFloatTrackedDeviceProperty(uint32 hmds.[0].Index, ETrackedDeviceProperty.Prop_DisplayFrequency_Float, &err) // vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_DisplayFrequency_Float );
+
+        let fPredictedSecondsFromNow = fFrameDuration - fSecondsSinceLastVsync + fVsyncToPhotons
+
+        system.GetDeviceToAbsoluteTrackingPose(ETrackingUniverseOrigin.TrackingUniverseStanding, fPredictedSecondsFromNow, renderPoses)
+        renderPoses
+
+    member x.UpdatePoses() =
+        swWaitPoses.Start()
+        compositor.WaitGetPoses(renderPoses, gamePoses) |> ignore
+        swWaitPoses.Stop()
+
+        swUpdatePoses.Start()
+        // update all poses
+        transact (fun () ->
+            for d in devices do d.Update(renderPoses)
+        )
+
+        x.UpdatePoses(renderPoses)
+        swUpdatePoses.Stop()
+
     member x.Run () =
         if not isAlive then raise <| ObjectDisposedException("VrSystem")
         let (lTex, rTex) = x.OnLoad infos.[0] 
 
         
+        system.CaptureInputFocus() |> ignore
+        compositor.CompositorBringToFront()
+        compositor.WaitGetPoses(renderPoses, gamePoses) |> ignore
 
         while isAlive do
+            swTotal.Start()
+            swProcessEvents.Start()
             x.ProcessEvents(eventQueue)
-            let err = compositor.WaitGetPoses(renderPoses, gamePoses)
-            if err = EVRCompositorError.None then
 
-                // update all poses
-                transact (fun () ->
-                    for d in devices do d.Update(renderPoses)
-                )
+            while eventQueue.Count > 0 do
+                let evt = eventQueue.Dequeue()
+                x.ProcessEvent evt
+            swProcessEvents.Stop()
+            
+            x.UpdatePoses()
 
+            // render for all HMDs
+            for i in 0 .. hmds.Length - 1 do
+                let hmd = hmds.[i]
+                     
+                if hmd.MotionState.IsValid.GetValue() then
+                    swRender.Start()
+                    x.Render()
+                    swRender.Stop()
+                    
+                    swSubmit.Start()
+                    let errL = compositor.Submit(EVREye.Eye_Left, &lTex.Info, &lTex.Bounds, lTex.Flags)
+                    let errR = compositor.Submit(EVREye.Eye_Right, &rTex.Info, &rTex.Bounds, rTex.Flags)
+                    compositor.PostPresentHandoff()
+                    swSubmit.Stop() 
 
-                x.UpdatePoses(renderPoses)
-                while eventQueue.Count > 0 do
-                    let evt = eventQueue.Dequeue()
-                    x.ProcessEvent evt
+                    if errL <> EVRCompositorError.None || errR <> EVRCompositorError.None then
+                        errL ||| errR |> check "failed to sumbit"
 
             
-                // render for all HMDs
-                for i in 0 .. hmds.Length - 1 do
-                    let hmd = hmds.[i]
-                     
-                    if hmd.MotionState.IsValid.GetValue() then
-                        x.Render()
+            swTotal.Stop()
 
-                        compositor.Submit(EVREye.Eye_Left, &lTex.Info, &lTex.Bounds, lTex.Flags) |> check "submit left"
-                        compositor.Submit(EVREye.Eye_Right, &rTex.Info, &rTex.Bounds, rTex.Flags) |> check "submit right"
+            frameCount <- frameCount + 1
 
-            else
-                Log.error "[OpenVR] %A" err
-        
+            if frameCount >= statFrameCount then
+                let r = x.GetRenderStats()
+                x.ResetRenderStats()
+
+                let stats = 
+                    {
+                        ProcessEvents   = swProcessEvents.MicroTime / frameCount
+                        WaitGetPoses    = swWaitPoses.MicroTime / frameCount
+                        UpdatePoses     = swUpdatePoses.MicroTime / frameCount
+                        Render          = 
+                            { 
+                                Total   = r.Total / frameCount
+                                Clear   = r.Clear / frameCount
+                                Render  = r.Render / frameCount
+                                Resolve = r.Resolve / frameCount
+                            }
+                        Submit          = swSubmit.MicroTime / frameCount
+                        Total           = swTotal.MicroTime / frameCount
+                        FrameCount      = frameCount
+                    }
+                    
+                evtStatistics.Emit(stats)
+
+                swProcessEvents.Reset()
+                swWaitPoses.Reset()
+                swUpdatePoses.Reset()
+                swSubmit.Reset()
+                swTotal.Reset()
+                swRender.Reset()
+                frameCount <- 0
+
+
+        system.ReleaseInputFocus() |> ignore
         OpenVR.Shutdown()
         lTex.Dispose()
         rTex.Dispose()

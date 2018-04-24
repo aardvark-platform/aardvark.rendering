@@ -1,16 +1,16 @@
 ﻿namespace Aardvark.Application.OpenVR
 
+open System.Diagnostics
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Valve.VR
 open Aardvark.Application
-open Aardvark.Application.WinForms
-open System.Windows.Forms
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
 open Valve.VR
+
 
 module StereoShader =
     open FShade
@@ -58,10 +58,9 @@ module StereoShader =
 
 type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
     inherit VrRenderer()
-
     
-
     let app = new HeadlessVulkanApplication(debug, this.GetVulkanInstanceExtensions(), fun d -> this.GetVulkanDeviceExtensions d.Handle)
+    
     let device = app.Device
 
     let mutable task = RenderTask.empty
@@ -133,6 +132,12 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
 
         hiddenTask <- RuntimeCommand.Render(sg.RenderObjects())
 
+    let swClear     = Stopwatch()
+    let swRender    = Stopwatch()
+    let swResolve   = Stopwatch()
+    let swTotal     = Stopwatch()
+    
+    
     new(samples) = VulkanVRApplicationLayered(samples, false)
     new(debug) = VulkanVRApplicationLayered(1, debug)
     new() = VulkanVRApplicationLayered(1, false)
@@ -146,58 +151,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
     member x.Sizes = Mod.constant x.DesiredSize
     member x.Samples = samples
     member x.Time = time
-
-    member x.ShowWindow() =
-        async {
-            let d = new Form()
-            
-            
-            //d.ClientSize <- Drawing.Size(2 * app.DesiredSize.X, app.DesiredSize.Y)
-            d.WindowState <- FormWindowState.Maximized
-            d.FormBorderStyle <- FormBorderStyle.None
-
-            let mode = GraphicsMode(Col.Format.RGBA, 8, 24, 8, 2, 8, ImageTrafo.MirrorY)
-            let impl = new VulkanRenderControl(app.Runtime, mode)
-
-
-            let consoleTrafo = 
-                impl.Sizes |> Mod.map (fun s -> 
-                    Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
-                    Trafo3d.Translation(-0.95, 0.9, 0.0)
-                )
-
-            let helpTrafo = 
-                impl.Sizes |> Mod.map (fun s -> 
-                    Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
-                    Trafo3d.Translation(-0.95, -0.95, 0.0)
-                    
-                )
-
-            let task =
-                Sg.fullScreenQuad
-                    |> Sg.diffuseTexture x.Texture
-                    |> Sg.uniform "Version" x.Version
-                    |> Sg.shader {
-                        do! StereoShader.flip
-                        do! DefaultSurfaces.diffuseTexture
-                    }
-
-                    |> Sg.compile app.Runtime impl.FramebufferSignature
-
-            impl.RenderTask <-task
-            impl.Dock <- System.Windows.Forms.DockStyle.Fill
-            d.Controls.Add impl
-
-            impl.KeyDown.Add (fun k ->
-                if k.KeyCode = Keys.Escape then
-                    d.Close()
-            )
-
-            System.Windows.Forms.Application.Run(d)
-            x.Shutdown()
-
-        } |> Async.Start
-
+    
 
     member x.RenderTask
         with set (t : RuntimeCommand) = 
@@ -286,18 +240,25 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
 
         VrTexture.Vulkan(fTex, Box2d(V2d(0.0, 1.0), V2d(0.5, 0.0))), VrTexture.Vulkan(fTex, Box2d(V2d(0.5, 1.0), V2d(1.0, 0.0)))
 
-    override x.Render() = 
-//        let view, lProj, rProj =
-//            caller.EvaluateAlways AdaptiveToken.Top (fun t ->
-//                let view = info.viewTrafo.GetValue t
-//                let lProj = info.lProjTrafo.GetValue t
-//                let rProj = info.rProjTrafo.GetValue t
-//
-//                view, lProj, rProj
-//            )
+    override x.ResetRenderStats() =
+        swClear.Reset()
+        swRender.Reset()
+        swResolve.Reset()
+        swTotal.Reset()
+        
+    override x.GetRenderStats() =
+        {
+            Clear = swClear.MicroTime
+            Render = swRender.MicroTime
+            Resolve = swResolve.MicroTime
+            Total = swTotal.MicroTime
+        }
 
+    override x.Render() = 
+        swTotal.Start()
         let output = OutputDescription.ofFramebuffer fbo
 
+        swClear.Start()
         device.perform {
             do! Command.TransformLayout(dImg, VkImageLayout.TransferDstOptimal)
             do! Command.TransformLayout(cImg, VkImageLayout.TransferDstOptimal)
@@ -309,10 +270,16 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
             do! Command.TransformLayout(cImg, VkImageLayout.ColorAttachmentOptimal)
 
         }
+        swClear.Stop()
 
+        swRender.Start()
         caller.EvaluateAlways AdaptiveToken.Top (fun t ->
             task.Run(t, RenderToken.Empty, output)
         )
+        swRender.Stop()
+
+
+        swResolve.Start()
         let a = cImg.[ImageAspect.Color, *, 0]
 
         if device.AllCount > 1u then
@@ -351,37 +318,13 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
              
                 do! Command.TransformLayout(fImg, VkImageLayout.TransferSrcOptimal)
             }
-            
+        swResolve.Stop()
 
-            //Command.SyncPeersDefault(cImg)
-
-//        let srcBox = Box3i(V3i(0,info.framebufferSize.Y - 1,0), V3i(info.framebufferSize.X - 1, 0, 0))
-//        let lBox = Box3i(V3i.Zero, V3i(info.framebufferSize - V2i.II, 0))
-//        let rBox = Box3i(V3i(info.framebufferSize.X, 0, 0), V3i(2*info.framebufferSize.X - 1, info.framebufferSize.Y-1, 0))
-
-//        device.perform {
-//            do! Command.TransformLayout(cImg, VkImageLayout.TransferSrcOptimal)
-//
-//            if samples > 1 then
-//                do! Command.ResolveMultisamples(cImg.[ImageAspect.Color, 0, 0], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(info.framebufferSize, 1))
-//                do! Command.ResolveMultisamples(cImg.[ImageAspect.Color, 0, 1], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i(info.framebufferSize.X, 0, 0), V3i(info.framebufferSize, 1))
-//            else
-//                do! Command.Copy(cImg.[ImageAspect.Color, 0, 0], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(info.framebufferSize, 1))
-//                do! Command.Copy(cImg.[ImageAspect.Color, 0, 1], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i(info.framebufferSize.X, 0, 0), V3i(info.framebufferSize, 1))
-//             
-//            do! Command.TransformLayout(fImg, VkImageLayout.TransferSrcOptimal)
-//        }
 
         transact (fun () -> time.MarkOutdated(); version.Value <- version.Value + 1)
+        swTotal.Stop()
 
     override x.Release() = 
-//        hiddenTask.Dispose()
-//        hiddenTask <- RenderTask.empty
-//        
-//        overlayTask.Dispose()
-//        overlayTask <- RenderTask.empty
-
-
         // delete views
         device.Delete fbo.Attachments.[DefaultSemantic.Colors]
         device.Delete fbo.Attachments.[DefaultSemantic.Depth]
