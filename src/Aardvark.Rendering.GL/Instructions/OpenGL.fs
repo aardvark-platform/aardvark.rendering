@@ -702,6 +702,8 @@ module OpenGl =
         let HSetConservativeRaster = getGLVMProcAddress "hglSetConservativeRaster"
         let HSetMultisample = getGLVMProcAddress "hglSetMultisample"
 
+        let HBindTextures = getGLVMProcAddress "hglBindTextures"
+        let HBindSamplers = getGLVMProcAddress "hglBindSamplers"
 
 
 
@@ -780,6 +782,8 @@ module OpenGl =
               HBindVertexAttributes, "hglBindVertexAttributes"
               HSetConservativeRaster, "hglSetConservativeRaster"
               HSetMultisample, "hglSetMultisample"
+              HBindTextures, "hglBindTextures"
+              HBindSamplers, "hglBindSamplers"
 
             ] |> Map.ofList
 
@@ -871,3 +875,5 @@ module OpenGl =
         let HBindVertexAttributes : nativeint -> nativeint -> unit = wrap Pointers.HBindVertexAttributes
         let HSetConservativeRaster : nativeint -> unit = wrap Pointers.HSetConservativeRaster
         let HSetMultisample : nativeint -> unit = wrap Pointers.HSetMultisample
+        let HBindTextures : int -> int -> nativeint -> nativeint -> unit = wrap Pointers.HBindTextures
+        let HBindSamplers : int -> int -> nativeint -> unit = wrap Pointers.HBindSamplers

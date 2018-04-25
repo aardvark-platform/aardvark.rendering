@@ -406,10 +406,6 @@ module RenderTasks =
             x.Call(OpenGl.Pointers.ActiveTexture)
             
         member x.BindTexture (texture : IResource<Texture, V2i>) =
-//            let target = 
-//                let r = texture.Handle.GetValue()
-//                Translations.toGLTarget r.Dimension r.IsArray r.Multisamples
-
             x.BeginCall(2)
             x.PushIntArg(texture.Pointer |> NativePtr.toNativeInt)
             x.PushIntArg(4n + NativePtr.toNativeInt texture.Pointer)
@@ -446,7 +442,22 @@ module RenderTasks =
                 x.TexParameteri(target, TextureParameterName.TextureMagFilter, SamplerStateHelpers.magFilter s.Filter.Mag)
                 x.TexParameterf(target, TextureParameterName.TextureMinLod, s.MinLod)
                 x.TexParameterf(target, TextureParameterName.TextureMaxLod, s.MaxLod)
-                
+
+        member x.BindTexturesAndSamplers (textureBinding : IResource<TextureBinding, TextureBinding>) =
+            let handle = textureBinding.Update(AdaptiveToken.Top, RenderToken.Empty); textureBinding.Handle.GetValue()
+            if handle.count > 0 then
+                x.BeginCall(4)
+                x.PushArg(handle.textures |> NativePtr.toNativeInt)
+                x.PushArg(handle.targets |> NativePtr.toNativeInt)
+                x.PushArg(handle.count)
+                x.PushArg(handle.offset)
+                x.Call(OpenGl.Pointers.HBindTextures)
+
+                x.BeginCall(3)
+                x.PushArg(handle.samplers |> NativePtr.toNativeInt)
+                x.PushArg(handle.count)
+                x.PushArg(handle.offset)
+                x.Call(OpenGl.Pointers.HBindSamplers)            
 
         member x.Uniform1fv(location : int, cnt : int, ptr : nativeint) =
             x.BeginCall(3)
@@ -714,25 +725,30 @@ module RenderTasks =
                         x.BindUniformBufferView(id, ub)
 
             // bind all textures/samplers (if needed)
-            let latestSlot = ref prev.LastTextureSlot
-            for (id,(tex,sam)) in Map.toSeq me.Textures do
-                //do! useTextureSlot id
 
-                let texEqual, samEqual =
-                    match Map.tryFind id prev.Textures with
-                        | Some (ot, os) -> (ot = tex), (os = sam)
-                        | _ -> false, false
+            let binding = me.Textures.Handle.GetValue()
+            
+            if prev.Textures <> me.Textures then
+                x.BindTexturesAndSamplers(me.Textures)
+            //let latestSlot = ref prev.LastTextureSlot
+            //for (id,(tex,sam)) in Map.toSeq me.Textures do
+            //    //do! useTextureSlot id
+
+            //    let texEqual, samEqual =
+            //        match Map.tryFind id prev.Textures with
+            //            | Some (ot, os) -> (ot = tex), (os = sam)
+            //            | _ -> false, false
 
 
-                if id <> !latestSlot then
-                    x.SetActiveTexture(id)
-                    latestSlot := id 
+            //    if id <> !latestSlot then
+            //        x.SetActiveTexture(id)
+            //        latestSlot := id 
 
-                if not texEqual then 
-                    x.BindTexture(tex)
+            //    if not texEqual then 
+            //        x.BindTexture(tex)
 
-                if not samEqual || (not ExecutionContext.samplersSupported && not texEqual) then
-                    x.BindSampler(id, sam)
+            //    if not samEqual || (not ExecutionContext.samplersSupported && not texEqual) then
+            //        x.BindSampler(id, sam)
 
             // bind all top-level uniforms (if needed)
             for (id,u) in Map.toSeq me.Uniforms do

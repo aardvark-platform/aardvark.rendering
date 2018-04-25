@@ -78,6 +78,11 @@ static PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC		glDrawElementsInsta
 static PFNGLMULTIDRAWARRAYSINDIRECTPROC					glMultiDrawArraysIndirect;
 static PFNGLMULTIDRAWELEMENTSINDIRECTPROC				glMultiDrawElementsIndirect;
 
+typedef void (APIENTRYP PFNGLBINDTEXTURESPROC) (GLuint first, GLsizei count, const GLuint *textures);
+typedef void (APIENTRYP PFNGLBINDSAMPLERSPROC) (GLuint first, GLsizei count, const GLuint *samplers);
+
+static PFNGLBINDTEXTURESPROC glBindTextures;
+static PFNGLBINDSAMPLERSPROC glBindSamplers;
 
 // enum holding the available instruction codes
 typedef enum {
@@ -150,7 +155,9 @@ typedef enum {
 	HSetStencilMode = 108,
 	HBindVertexAttributes = 109,
 	HSetConservativeRaster = 110,
-	HSetMultisample = 111
+	HSetMultisample = 111,
+	HBindTextures = 112,
+	HBindSamplers = 113
 
 } InstructionCode;
 
@@ -214,8 +221,9 @@ DllExport(void) hglCleanup(void* ctx);
 
 DllExport(void) hglDrawArrays(RuntimeStats* stats, int* isActive, BeginMode* mode, DrawCallInfoList* infos);
 DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, DrawCallInfoList* infos);
-DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, HandleAndCountStruct* handleAndCount);
-DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, HandleAndCountStruct* handleAndCount);
+
+DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, HandleAndCount* handleAndCount);
+DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, HandleAndCount* handleAndCount);
 DllExport(void) hglSetDepthTest(DepthTestMode* mode);
 DllExport(void) hglSetCullFace(GLenum* face);
 DllExport(void) hglSetPolygonMode(GLenum* mode);
@@ -225,3 +233,6 @@ DllExport(void) hglBindVertexArray(int* vao);
 DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding* binding);
 DllExport(void) hglSetConservativeRaster(int* enable);
 DllExport(void) hglSetMultisample(int* enable);
+
+DllExport(void) hglBindTextures(GLuint first, GLsizei count, const GLenum* targets, const GLuint *textures);
+DllExport(void) hglBindSamplers(GLuint first, GLsizei count, const GLuint *samplers);

@@ -100,25 +100,30 @@ module DeltaCompiler =
                         yield Instructions.bindUniformBufferView id ub
 
             // bind all textures/samplers (if needed)
-            let latestSlot = ref prev.LastTextureSlot
-            for (id,(tex,sam)) in Map.toSeq me.Textures do
-                do! useTextureSlot id
+            
+            
+            if prev.Textures <> me.Textures then
+                yield Instructions.bindSamplers me.Textures
+                yield Instructions.bindTextures me.Textures
+            //let latestSlot = ref prev.LastTextureSlot
+            //for (id,(tex,sam)) in Map.toSeq me.Textures do
+            //    do! useTextureSlot id
 
-                let texEqual, samEqual =
-                    match Map.tryFind id prev.Textures with
-                        | Some (ot, os) -> (ot = tex), (os = sam)
-                        | _ -> false, false
+            //    let texEqual, samEqual =
+            //        match Map.tryFind id prev.Textures with
+            //            | Some (ot, os) -> (ot = tex), (os = sam)
+            //            | _ -> false, false
 
 
-                if id <> !latestSlot then
-                    yield Instructions.setActiveTexture id
-                    latestSlot := id 
+            //    if id <> !latestSlot then
+            //        yield Instructions.setActiveTexture id
+            //        latestSlot := id 
 
-                if not texEqual then 
-                    yield Instructions.bindTexture tex
+            //    if not texEqual then 
+            //        yield Instructions.bindTexture tex
 
-                if not samEqual || (not ExecutionContext.samplersSupported && not texEqual) then
-                    yield Instructions.bindSampler id sam
+            //    if not samEqual || (not ExecutionContext.samplersSupported && not texEqual) then
+            //        yield Instructions.bindSampler id sam
 
             // bind all top-level uniforms (if needed)
             for (id,u) in Map.toSeq me.Uniforms do
