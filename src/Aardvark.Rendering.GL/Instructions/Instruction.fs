@@ -82,6 +82,8 @@ type InstructionCode =
     | HBindVertexAttributes         = 109
     | HSetConservativeRaster        = 110
     | HSetMultisample               = 111
+    | HBindTextures                 = 112
+    | HBindSamplers                 = 113
 
 
 /// <summary>
@@ -242,3 +244,10 @@ type Instruction internal(code : InstructionCode, args : obj[]) =
 
     static member HSetMultisample (enabled : nativeptr<int>) =
         Instruction(InstructionCode.HSetMultisample, [| enabled |])
+
+
+    static member HBindTextures (first : int) (count : int) (targets : nativeptr<int>) (textures : nativeptr<int>) = 
+        Instruction(InstructionCode.HBindTextures, [|first :> obj; count :> obj; targets :> obj; textures :> obj|])
+
+    static member HBindSamplers (first : int) (count : int) (samplers : nativeptr<int>) = 
+        Instruction(InstructionCode.HBindSamplers, [|first :> obj; count :> obj; samplers :> obj|])

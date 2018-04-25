@@ -154,6 +154,9 @@ module ExecutionContext =
             | InstructionCode.HSetConservativeRaster        -> OpenGl.Pointers.HSetConservativeRaster
             | InstructionCode.HSetMultisample               -> OpenGl.Pointers.HSetMultisample
 
+            | InstructionCode.HBindTextures                 -> OpenGl.Pointers.HBindTextures
+            | InstructionCode.HBindSamplers                 -> OpenGl.Pointers.HBindSamplers
+
 
             | _ -> raise <| OpenGLException (OpenTK.Graphics.OpenGL4.ErrorCode.InvalidEnum, sprintf "cannot get function pointer for: %A" i)
 
@@ -232,6 +235,11 @@ module ExecutionContext =
             OpenGl.Pointers.HBindVertexAttributes, fun args -> Instruction(InstructionCode.HBindVertexAttributes, args)
             OpenGl.Pointers.HSetConservativeRaster, fun args -> Instruction(InstructionCode.HSetConservativeRaster, args)
             OpenGl.Pointers.HSetMultisample, fun args -> Instruction(InstructionCode.HSetMultisample, args)
+
+            
+            OpenGl.Pointers.HBindTextures, fun args -> Instruction(InstructionCode.HBindTextures, args)
+            OpenGl.Pointers.HBindSamplers, fun args -> Instruction(InstructionCode.HBindSamplers, args)
+
         ]
 
     let callToInstruction (ptr : nativeint, args : obj[]) =
@@ -342,6 +350,9 @@ module ExecutionContext =
             | InstructionCode.HBindVertexAttributes -> OpenGl.Unsafe.HBindVertexAttributes (ptr 0) (ptr 1)
             | InstructionCode.HSetConservativeRaster -> OpenGl.Unsafe.HSetConservativeRaster (ptr 0)
             | InstructionCode.HSetMultisample -> OpenGl.Unsafe.HSetMultisample (ptr 0)
+
+            | InstructionCode.HBindTextures -> OpenGl.Unsafe.HBindTextures (int 0) (int 1) (ptr 2) (ptr 3)
+            | InstructionCode.HBindSamplers -> OpenGl.Unsafe.HBindSamplers (int 0) (int 1) (ptr 2)
 
             | InstructionCode.GetError                 -> ()
             | _ -> failwithf "unknown instruction: %A" i

@@ -409,6 +409,16 @@ type CastResource<'a, 'b when 'a : equality and 'b : equality>(inner : IResource
     interface IResource<'b> with
         member x.Handle = handle
 
+[<Struct>]
+type TextureBinding =
+    {
+        offset : int
+        count : int
+        targets : nativeptr<int>
+        textures : nativeptr<int>
+        samplers : nativeptr<int>
+    }
+
 [<AllowNullLiteral>]
 type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, renderTaskInfo : Option<IFramebufferSignature * RenderTaskLock>, shareTextures : bool, shareBuffers : bool) =
     
@@ -445,9 +455,15 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let stencilModeCache        = derivedCache (fun m -> m.StencilModeCache)
     let flagCache               = derivedCache (fun m -> m.FlagCache)
 
+    
+    let textureBindingCache     = derivedCache (fun m -> m.TextureBindingCache)
+
+
     let uniformBufferManagers = ConcurrentDictionary<FShade.GLSL.GLSLUniformBuffer, UniformBufferManager>() // ISSUE: leak? the buffer of the UniformBufferManager is never disposed
 
     let hasTessDrawModeCache = BinaryCache<IMod<bool>, IMod<IndexedGeometryMode>, IMod<GLBeginMode>>(Mod.map2 (fun t d -> ctx.ToBeginMode(d, t)))
+
+    let samplerDescriptionCache = UnaryCache(fun (samplerState : FShade.SamplerState) -> samplerState.SamplerStateDescription)
 
     member private x.ArrayBufferCache       : ResourceCache<Buffer, int>                    = arrayBufferCache
     member private x.BufferCache            : ResourceCache<Buffer, int>                    = bufferCache
@@ -468,6 +484,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     member private x.BlendModeCache         : ResourceCache<GLBlendMode, GLBlendMode>        = blendModeCache
     member private x.StencilModeCache       : ResourceCache<GLStencilMode, GLStencilMode>      = stencilModeCache
     member private x.FlagCache              : ResourceCache<bool, int>      = flagCache
+    member private x.TextureBindingCache    : ResourceCache<TextureBinding, TextureBinding> = textureBindingCache
 
     member x.RenderTaskLock = renderTaskInfo
 
@@ -577,6 +594,9 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.IndirectBuffer
         })
 
+    member x.GetSamplerStateDescription(samplerState : FShade.SamplerState) =
+        samplerDescriptionCache.Invoke(samplerState)
+
 
     member x.CreateSurface(signature : IFramebufferSignature, surface : Aardvark.Base.Surface) =
 
@@ -607,6 +627,84 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             view =   fun h      -> h.Handle
             kind = ResourceKind.SamplerState
         })
+
+    member x.CreateTextureBinding(bindings : Map<int, IResource<Texture, V2i> * IResource<Sampler, int>>) =
+        textureBindingCache.GetOrCreate(
+            [bindings :> obj],
+            fun () ->
+                { new Resource<TextureBinding, TextureBinding>(ResourceKind.Unknown) with
+
+                    member x.View a = a
+
+                    member x.GetInfo _ = ResourceInfo.Zero
+
+                    member x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<TextureBinding>) =
+                        if Map.isEmpty bindings then
+                            {
+                                offset = 0
+                                count = 0
+                                textures = NativePtr.zero
+                                targets = NativePtr.zero
+                                samplers = NativePtr.zero
+                            }
+                        else
+                            let (lastId,_) = bindings |> Map.toSeq |> Seq.last
+                            let slotCount = lastId + 1
+
+                            let bindingHandle = 
+                                match old with
+                                    | Some o -> 
+                                        o
+                                    | _ ->
+
+                                        bindings |> Map.iter (fun _ (t, s) ->
+                                            t.AddRef()
+                                            s.AddRef()
+                                        )
+
+                                        let offset = 0
+                                        let count = slotCount
+                                        let targets = NativePtr.alloc slotCount 
+                                        let samplers = NativePtr.alloc slotCount 
+                                        let textures = NativePtr.alloc slotCount 
+                                        {
+                                            offset = offset
+                                            count = count
+                                            targets = targets
+                                            samplers = samplers
+                                            textures = textures
+                                        }
+
+                            let bindings = bindings |> Map.map (fun _ (t, s) -> t.Update(token, rt); s.Update(token, rt); (NativePtr.read t.Pointer, NativePtr.read s.Pointer))
+
+                            for i in 0 .. slotCount - 1 do
+                                match Map.tryFind i bindings with
+                                    | Some (t,s) ->
+                                        NativePtr.set bindingHandle.textures i t.X
+                                        NativePtr.set bindingHandle.targets i t.Y
+                                        NativePtr.set bindingHandle.samplers i s
+                                    | _ ->
+                                        NativePtr.set bindingHandle.textures i 0
+                                        NativePtr.set bindingHandle.targets i (int TextureTarget.Texture2D)
+                                        NativePtr.set bindingHandle.samplers i 0
+                                    
+
+                            bindingHandle
+
+                    member x.Destroy (b : TextureBinding) =
+                        if not (Map.isEmpty bindings) then
+                            NativePtr.free b.targets
+                            NativePtr.free b.textures
+                            NativePtr.free b.samplers
+
+                            bindings |> Map.iter (fun _ (t, s) ->
+                                t.RemoveRef()
+                                s.RemoveRef()
+                            )
+
+
+                }
+        )
 
     member x.CreateVertexInputBinding( bindings : list<int * BufferView * AttributeFrequency * IResource<Buffer, int>>, index : Option<OpenGl.Enums.IndexType * IResource<Buffer, int>>) =
         let createView (self : AdaptiveToken) (index : int, view : BufferView, frequency : AttributeFrequency, buffer : IResource<Buffer>) =

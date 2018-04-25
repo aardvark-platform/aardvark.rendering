@@ -237,7 +237,7 @@ module Utilities =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
-    let private hookSg (config : RenderConfig )(win : IRenderControl) (sg : ISg) =
+    let private hookSg (win : IRenderControl) (sg : ISg) =
         let fillMode = Mod.init FillMode.Fill
         let cullMode = Mod.init CullMode.None
 
@@ -278,10 +278,12 @@ module Utilities =
         let helpText = 
             String.concat "\r\n" [
                 "Key Bindings:"
-                "  H             toggle this Help"
-                "  Alt + X       toggle FillMode"
-                "  Alt + Y       toggle CullMode"
-                "  WSAD          move camera"
+                "  H                   toggle this Help"
+                "  Alt + X             toggle FillMode"
+                "  Alt + Y             toggle CullMode"
+                "  WSAD                move camera"
+                "  Alt-Shift + Return  toggle Fullscreen"
+                "  Ctrl + End          toggle render continuously"
                 ""
                 "Navigation:"
                 "  Left Mouse    look around"
@@ -350,6 +352,26 @@ module Utilities =
         let sg = sg |> Sg.fillMode fillMode |> Sg.cullMode cullMode
         sg, overlay
 
+    module Sg =
+        let simpleOverlay (win : IRenderControl) (sg : ISg) =
+
+            let initialView =CameraView.lookAt (V3d(6.0, 6.0, 6.0)) V3d.Zero V3d.OOI
+            let view =
+                initialView
+                    |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
+                    |> Mod.map CameraView.viewTrafo
+
+            let proj =
+                win.Sizes 
+                    |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
+                    |> Mod.map Frustum.projTrafo
+
+            let (sg, overlay) = hookSg win sg
+            let sg = sg |> Sg.viewTrafo view |> Sg.projTrafo proj
+            Sg.ofList [sg; overlay]
+
+
+
     let createApp (debug : bool) (backend : Backend)  =
         match backend with
             | Backend.GL -> new OpenGlApplication(debug) :> IApplication
@@ -387,7 +409,7 @@ module Utilities =
 
         { new SimpleRenderWindow(win, view |> Mod.map Array.singleton, proj |> Mod.map Array.singleton) with
             override x.Compile(win, sg) =
-                let sg, overlay = sg |> hookSg cfg win
+                let sg, overlay = sg |> hookSg win
                 sg
                 |> Sg.viewTrafo view
                 |> Sg.projTrafo proj
@@ -517,7 +539,7 @@ module Utilities =
             framebuffer.Acquire()
             resolved.Acquire()
 
-            let sg, overlay = sg |> hookSg config win
+            let sg, overlay = sg |> hookSg win
 
             let stereoTask =
                 sg

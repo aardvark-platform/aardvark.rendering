@@ -25,7 +25,7 @@ type PreparedRenderObject =
         Program : IResource<Program, int>
         UniformBuffers : Map<int, IResource<UniformBufferView, int>>
         Uniforms : Map<int, IResource<UniformLocation, nativeint>>
-        Textures : Map<int, IResource<Texture, V2i> * IResource<Sampler, int>>
+        Textures : IResource<TextureBinding, TextureBinding>
         Buffers : list<int * BufferView * AttributeFrequency * IResource<Buffer, int>>
         IndexBuffer : Option<OpenGl.Enums.IndexType * IResource<Buffer, int>>
         
@@ -78,9 +78,7 @@ type PreparedRenderObject =
             for (_,u) in Map.toSeq x.Uniforms do
                 yield u :> _
 
-            for (_,(t,s)) in Map.toSeq x.Textures do
-                yield t :> _
-                yield s :> _
+            yield x.Textures :> _
 
             for (_,_,_,b) in x.Buffers do
                 yield b :> _
@@ -117,9 +115,7 @@ type PreparedRenderObject =
         for (_,ul) in x.Uniforms |> Map.toSeq do
             ul.Update(caller, token)
 
-        for (_,(t,s)) in x.Textures |> Map.toSeq do
-            t.Update(caller, token)
-            s.Update(caller, token)
+        x.Textures.Update(caller, token)
 
         for (_,_,_,b) in x.Buffers  do
             b.Update(caller, token)
@@ -171,8 +167,9 @@ type PreparedRenderObject =
                         match x.IndirectBuffer with
                             | Some b -> b.Dispose()
                             | None -> x.DrawCallInfos.Dispose()
+                            
 
-                        x.Textures |> Map.iter (fun _ (t,s) -> t.Dispose(); s.Dispose())
+                        x.Textures.Dispose()
                         x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
                         x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
                         //x.Program.Dispose() // dont want anymore
@@ -222,7 +219,7 @@ module PreparedRenderObject =
             Program = Unchecked.defaultof<_>
             UniformBuffers = Map.empty
             Uniforms = Map.empty
-            Textures = Map.empty
+            Textures = Unchecked.defaultof<_>
             Buffers = []
             IndexBuffer = None
             IndirectBuffer = None
@@ -441,7 +438,8 @@ type ResourceManagerExtensions private() =
                    )
                 |> List.choose (fun (sampler, index, (texName, samplerState)) ->
                     let name = sampler.samplerName
-                    let samplerInfo = { textureName = Symbol.Create texName; samplerState = samplerState.SamplerStateDescription }
+                    let samplerInfo = { textureName = Symbol.Create texName; samplerState = x.GetSamplerStateDescription(samplerState) } // SamplerStateDescription ARE BUILT OVER AND OVER AGAIN?
+                    //let samplerInfo = { textureName = Symbol.Create texName; samplerState = samplerState.SamplerStateDescription } // SamplerStateDescription ARE BUILT OVER AND OVER AGAIN?
 
                     let sem = samplerInfo.textureName
                     let samplerState = samplerInfo.samplerState
@@ -452,10 +450,11 @@ type ResourceManagerExtensions private() =
                             let sammy =
                                 match samplerModifier with
                                     | Some modifier -> 
-                                        modifier |> Mod.map (fun f -> f sem samplerState)
+                                        modifier |> Mod.map (fun f -> f sem samplerState) // NEW MOD SHOULD BE CREAED CACHED BASED ON (tex, modifier)
                                     | None -> 
                                         Mod.constant samplerState
 
+                            let xx = sammy
                             let s = x.CreateSampler(sammy)
 
                             match tex with
@@ -465,7 +464,7 @@ type ResourceManagerExtensions private() =
                                     Some (!lastTextureSlot, (t, s))
 
                                 | :? IMod<ITexture[]> as values ->
-                                    let t = x.CreateTexture(values |> Mod.map (fun arr -> arr.[index]))
+                                    let t = x.CreateTexture(values |> Mod.map (fun arr -> arr.[index])) // SHOULD BE CACHED BASED ON INPUT MOD
                                     lastTextureSlot := sampler.samplerBinding + index
                                     Some (!lastTextureSlot, (t, s))
 
@@ -477,6 +476,16 @@ type ResourceManagerExtensions private() =
                             None
                     )
                 |> Map.ofList
+
+
+        let textureBinding = 
+            x.CreateTextureBinding(textures)
+
+        
+        textures |> Map.iter (fun _ (t,s) ->
+            t.RemoveRef()
+            s.RemoveRef()
+        )
 
         GL.Check "[Prepare] Textures"
 
@@ -627,7 +636,7 @@ type ResourceManagerExtensions private() =
                 Program = program
                 UniformBuffers = uniformBuffers
                 Uniforms = Map.empty
-                Textures = textures
+                Textures = textureBinding
                 Buffers = buffers
                 IndexBuffer = index
                 IndirectBuffer = indirect

@@ -69,6 +69,21 @@ module Instructions =
 
     let setActiveTexture (index : int) =
         Instruction.ActiveTexture ((int OpenGl.Enums.TextureUnit.Texture0) + index)
+        
+    let bindSamplers (binding : IResource<TextureBinding>) =
+        let handle = binding.Update(AdaptiveToken.Top, RenderToken.Empty); binding.Handle.GetValue()
+        if handle.count > 0 then
+            [ Instruction.HBindSamplers handle.offset handle.count handle.samplers ]
+        else
+            []
+
+        
+    let bindTextures (binding : IResource<TextureBinding>) =
+        let handle = binding.Update(AdaptiveToken.Top, RenderToken.Empty); binding.Handle.GetValue()
+        if handle.count > 0 then
+            [ Instruction.HBindTextures handle.offset handle.count handle.targets handle.textures ]
+        else
+            []
 
     let bindSampler (index : int) (sampler : IResource<Sampler>) =
         if ExecutionContext.samplersSupported then

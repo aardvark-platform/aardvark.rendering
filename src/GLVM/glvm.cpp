@@ -49,8 +49,8 @@ static PROC getProc(LPCSTR name)
 }
 
 #endif
-#define trace(a) {} //printf(a)
-#define endtrace(a)  {} //{ printf("%s: %d\n", (a), glGetError()); glFlush(); glFinish(); }
+#define trace(a) {} //{ printf(a); }
+#define endtrace(a) {} //{ printf("%s: %d\n", (a), glGetError()); glFlush(); glFinish(); }
 
 
 
@@ -70,6 +70,10 @@ DllExport(void) vmInit()
 
 	glMultiDrawArraysIndirect = (PFNGLMULTIDRAWARRAYSINDIRECTPROC)getProc("glMultiDrawArraysIndirect");
 	glMultiDrawElementsIndirect = (PFNGLMULTIDRAWELEMENTSINDIRECTPROC)getProc("glMultiDrawElementsIndirect");
+
+	glBindTextures = (PFNGLBINDTEXTURESPROC)getProc("glBindTextures");
+	glBindSamplers = (PFNGLBINDTEXTURESPROC)getProc("glBindSamplers");
+
 
 	#ifndef __APPLE__
 	#ifndef __GNUC__
@@ -415,6 +419,12 @@ void runInstruction(Instruction* i)
 	case HSetMultisample:
 		hglSetMultisample((int*)i->Arg0);
 		break;
+	case HBindTextures:
+		hglBindTextures((GLuint)i->Arg0, (GLsizei)i->Arg1, (const GLenum*)i->Arg2, (const GLuint*)i->Arg3);
+		break;
+	case HBindSamplers:
+		hglBindSamplers((GLuint)i->Arg0, (GLsizei)i->Arg1, (const GLuint*)i->Arg2);
+		break;
 	default:
 		printf("unknown instruction code: %d\n", i->Code);
 		break;
@@ -748,6 +758,16 @@ Statistics runRedundancyChecks(Fragment* frag)
 					{
 						hglSetMultisample((int*)i->Arg0);
 					}
+					break;
+
+				case HBindTextures:
+					// TODO: check redundancies
+					hglBindTextures((GLuint)i->Arg0, (GLsizei)i->Arg1, (const GLenum*)i->Arg2, (const GLuint*)i->Arg3);
+					break;
+
+				case HBindSamplers:
+					// TODO: check redundancies
+					hglBindSamplers((GLuint)i->Arg0, (GLsizei)i->Arg1, (const GLuint*)i->Arg2);
 					break;
 
 				default:
@@ -1182,3 +1202,50 @@ DllExport(void) hglSetMultisample(int * enable)
 	}
 }
 
+
+
+DllExport(void) hglBindTextures(GLuint first, GLsizei count, const GLenum* targets, const GLuint *textures)
+{
+	trace("hglBindTextures");
+	if (glBindTextures != nullptr)
+	{
+		//printf("hglBindTextures(%d, %d, %d)\n", first, count, textures);
+		glBindTextures(first, count, textures);
+	}
+	else
+	{
+		for (int i = 0; i < count; i++) 
+		{
+			GLuint texture;
+			if (textures == NULL)
+				texture = 0;
+			else
+				texture = textures[i];
+			glActiveTexture(GL_TEXTURE0 + first + i);
+			if (texture != 0) 
+				glBindTexture(targets[i], textures[i]);
+			else
+				glBindTexture(targets[i], 0);
+		}
+	}
+}
+
+DllExport(void) hglBindSamplers(GLuint first, GLsizei count, const GLuint *samplers)
+{
+	trace("hglBindSamplers");
+	if (glBindSamplers != nullptr)
+	{
+		glBindSamplers(first, count, samplers);
+	}
+	else
+	{
+		for (int i = 0; i < count; i++) 
+		{
+			if (samplers == NULL)
+				glBindSampler(first + i, 0);
+			else
+				glBindSampler(first + i, samplers[i]);
+		}
+	}
+
+}
