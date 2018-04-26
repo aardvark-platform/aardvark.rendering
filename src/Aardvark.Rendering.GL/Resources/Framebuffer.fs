@@ -124,13 +124,13 @@ module FramebufferExtensions =
                         match o.Dimension with
                             | TextureDimension.TextureCube ->
                                 let (_,target) = TextureCubeExtensions.cubeSides.[baseSlice]
-                                if o.Count > 1 then
+                                if o.IsArray then
                                     failwith "cubemaparray currently not implemented"
                                 else
                                     GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, target, o.Handle, level)
                                 GL.Check "could not attach texture"
                             | _ ->
-                                if o.Count > 1 then
+                                if o.IsArray then
                                     GL.FramebufferTextureLayer(FramebufferTarget.Framebuffer, attachment, o.Handle, level, baseSlice)
                                 else
                                     GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, (if o.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), o.Handle, level)
@@ -155,13 +155,13 @@ module FramebufferExtensions =
                         match o.Dimension with
                             | TextureDimension.TextureCube ->
                                 let (_,target) = TextureCubeExtensions.cubeSides.[baseSlice]
-                                if o.Count > 1 then
+                                if o.IsArray then
                                     failwith "cubemaparray currently not implemented"
                                 else
                                     GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, target, o.Handle, level)
                                 GL.Check "could not attach texture"
                             | _ ->
-                                if o.Count > 1 then
+                                if o.IsArray then
                                     GL.FramebufferTextureLayer(FramebufferTarget.Framebuffer, attachment, o.Handle, level, baseSlice)
                                 else
                                     GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, (if o.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), o.Handle, level)

@@ -24,15 +24,33 @@ module Shader =
         fragment {
             
             let cnt : int = uniform?TextureCount
+            let crdOff : V2d = uniform?BlaBuffer?CoordOff
             let mutable color = V3d.OOO
             for i in 0..cnt-1 do
-                color <- color + samplerArray.[i].Sample(v.tc).XYZ
+                color <- color + samplerArray.[i].Sample(v.tc + crdOff * 3.0).XYZ
 
             if cnt > 0 then
                 color <- color / float cnt
 
             return V4d(color, 1.0)
-        }          
+        }  
+      
+    type VertexIn = {
+        [<WorldPosition>] wp : V4d
+    }
+
+    type VertexOut = {
+        [<WorldPosition>] wp : V4d
+        [<ClipDistance>] cd : float[]
+    }
+
+    let clipVs (v : VertexIn) =
+        vertex {
+            let planeCoefficients : V4d = uniform?ClipPlaneCoefficients
+            let clidDistance = V4d.Dot(v.wp, planeCoefficients)
+            return { wp = v.wp
+                     cd = [| clidDistance |] }
+        }
 
 
 
@@ -66,14 +84,15 @@ let main argv =
         
         transact (fun _ -> 
             for i in 0..number-1 do
-                let box = Primitives.unitBox
+                //let box = Primitives.unitSphere 7
+                let box = IndexedGeometryPrimitives.solidPhiThetaSphere (Sphere3d.Unit) (10) (C4b.Red)
                 let pos = rand.UniformV3d() * 100.0 - 50.0
                 scene.Add((box, Trafo3d.Translation(pos))) |> ignore
             )
         ()
 
 
-    addStuff 1000
+    addStuff 5000
 
     let case = Mod.init 0
 
@@ -103,7 +122,9 @@ let main argv =
 
                             let drawGeos = Sg.set (scene |> ASet.map (fun (ig, trafo) ->
                                         Sg.ofIndexedGeometry ig
-                                            |> Sg.trafo (Mod.constant trafo)))
+                                            |> Sg.trafo (Mod.constant trafo)
+                                            |> Sg.vertexBufferValue DefaultSemantic.DiffuseColorCoordinates (Mod.init V4f.Zero)
+                                            |> Sg.uniform "CoordOff" (Mod.init (rand.UniformV2d()))))
 
                             let mutable sg = drawGeos
                                             |> Sg.uniform "TextureCount" count
@@ -120,6 +141,8 @@ let main argv =
                             let drawGeos = Sg.set (scene |> ASet.map (fun (ig, trafo) ->
                                                 Sg.ofIndexedGeometry ig
                                                             |> Sg.trafo (Mod.constant trafo)
+                                                            |> Sg.vertexBufferValue DefaultSemantic.DiffuseColorCoordinates (Mod.init V4f.Zero)
+                                                            |> Sg.uniform "CoordOff" (Mod.init (rand.UniformV2d()))
                                                             |> Sg.uniform "TextureCount" count
                                         ))
 
@@ -139,6 +162,8 @@ let main argv =
 
                                         let mutable sg = Sg.ofIndexedGeometry ig
                                                             |> Sg.trafo (Mod.constant trafo)
+                                                            |> Sg.vertexBufferValue DefaultSemantic.DiffuseColorCoordinates (Mod.init V4f.Zero)
+                                                            |> Sg.uniform "CoordOff" (Mod.init (rand.UniformV2d()))
                                                             |> Sg.uniform "TextureCount" count
                                             
                                         for i in 0..textures.Length-1 do
@@ -154,6 +179,8 @@ let main argv =
 
                                         let sg = Sg.ofIndexedGeometry ig
                                                             |> Sg.trafo (Mod.constant trafo)
+                                                            |> Sg.vertexBufferValue DefaultSemantic.DiffuseColorCoordinates (Mod.init V4f.Zero)
+                                                            |> Sg.uniform "CoordOff" (Mod.init (rand.UniformV2d()))
                                                             |> Sg.uniform "TextureCount" count
                                                             
                                         let mutable map = Map.empty<Symbol, IMod>
@@ -174,10 +201,12 @@ let main argv =
     let sg = Sg.set (cases)
                 |> Sg.shader {
                     do! DefaultSurfaces.trafo
+                    do! Shader.clipVs
                     do! Shader.sampleTextureArray
                     }
 
                 |> Sg.simpleOverlay win
+                |> Sg.uniform "ClipPlaneCoefficients" (Mod.constant (V4d(0, 1, 0, 0)))
 
 
     let rt = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.NativeOptimized, sg)
@@ -191,10 +220,16 @@ let main argv =
             member x.PerformUpdate (a,b) = rt.Update(a,b)
             member x.Perform (t,a,b) = 
                 sw.Restart()
-                rt.Run(t,a,b)
+                let stats = RenderToken.Zero
+                use __ = app.Runtime.Context.ResourceLock
+                OpenTK.Graphics.OpenGL4.GL.Enable(OpenTK.Graphics.OpenGL4.EnableCap.ClipDistance0)
+                rt.Run(t,stats,b)
                 sw.Stop()
-                if sw.Elapsed.TotalSeconds > 0.1 then Log.warn "long frame: %A" sw.MicroTime
-                
+                if sw.Elapsed.TotalSeconds > 0.1 then 
+                    Log.warn "long frame: %A" sw.MicroTime
+                    Log.line "DrawCount: %d" stats.DrawCallCount
+                    Log.line "Instructions: %d" stats.TotalInstructions
+                                
 
             member x.Release() = rt.Dispose()
             member x.Use f = rt.Use f
