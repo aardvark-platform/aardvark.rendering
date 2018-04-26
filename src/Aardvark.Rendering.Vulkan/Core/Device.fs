@@ -1320,7 +1320,7 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
     let mutable commands = 0
     let mutable recording = false
     let cleanupTasks = List<IDisposable>()
-
+    
     let cleanup() =
         for c in cleanupTasks do c.Dispose()
         cleanupTasks.Clear()
@@ -1328,7 +1328,7 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
     member x.Reset() =
         cleanup()
 
-        VkRaw.vkResetCommandBuffer(handle, VkCommandBufferResetFlags.None)
+        VkRaw.vkResetCommandBuffer(handle, VkCommandBufferResetFlags.ReleaseResourcesBit)
             |> check "could not reset command buffer"
         commands <- 0
         recording <- false
@@ -1443,13 +1443,23 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
     member x.ClearCompensation() =
         cleanupTasks.Clear()
 
+
+
     //abstract member Dispose : unit -> unit
-    member x.Dispose() =
+    member private x.Dispose(disposing : bool) =
         if handle <> 0n && device.Handle <> 0n then
             cleanup()
             
             VkRaw.vkFreeCommandBuffers(device.Handle, pool, 1u, &&handle)
             handle <- 0n
+
+        if disposing then 
+            GC.SuppressFinalize(x)
+        else 
+            Log.warn "GC found leaking commandbuffer"
+
+    member x.Dispose() = x.Dispose(true)
+    override x.Finalize() = x.Dispose(false)
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -1690,7 +1700,7 @@ and DeviceHeap internal(device : Device, memory : MemoryInfo, heap : MemoryHeapI
                 )
 
             let mutable mem = VkDeviceMemory.Null
-
+            
             VkRaw.vkAllocateMemory(device.Handle, &&info, NativePtr.zero, &&mem)
                 |> check "could not allocate memory"
 
@@ -2105,6 +2115,7 @@ and DeviceTask(parent : DeviceQueueThread, priority : int) =
     let mutable status = 0
     let mutable ex : exn = null
     let mutable conts = []
+    let mutable kill = []
     let mutable tcs : System.Threading.Tasks.TaskCompletionSource<unit> = null
 
     static let finished : DeviceTask =
@@ -2137,6 +2148,9 @@ and DeviceTask(parent : DeviceQueueThread, priority : int) =
                 let r = conts
                 conts <- []
 
+                for k in kill do k()
+                kill <- []
+
                 if not (isNull tcs) then tcs.SetResult()
 
                 r
@@ -2152,6 +2166,9 @@ and DeviceTask(parent : DeviceQueueThread, priority : int) =
                 Monitor.PulseAll lockObj
                 let r = conts
                 conts <- []
+
+                for k in kill do k()
+                kill <- []
                 if not (isNull tcs) then tcs.SetException(e)
                 r
             )
@@ -2190,6 +2207,12 @@ and DeviceTask(parent : DeviceQueueThread, priority : int) =
             else
                 tcs.Task
         )
+
+    member x.AddCleanup(f : unit -> unit) =
+        lock lockObj (fun () ->
+            kill <- f :: kill
+        )
+        
 
     member x.ContinueWith (priority : int, cmd : QueueCommand) =
         lock lockObj (fun () ->
@@ -2580,6 +2603,7 @@ and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
                 if not buffer.IsEmpty then
                     family.RunSynchronously(priority, QueueCommand.Submit([], [], [buffer]))
 
+                buffer.Dispose()
                 current <- None
 
             | None ->
@@ -2591,7 +2615,9 @@ and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
                 current <- None
                 buffer.End()
                 if not buffer.IsEmpty then
-                    family.Start(priority, buffer)
+                    let task = family.Start(priority, buffer)
+                    task.AddCleanup buffer.Dispose
+                    task
                 else 
                     DeviceTask.Finished
             | None ->
