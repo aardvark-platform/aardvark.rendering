@@ -5,6 +5,7 @@ open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Application
 open OpenTK
+open OpenTK.Graphics
 open OpenTK.Platform
 open System.Threading
 
@@ -327,7 +328,7 @@ type ResizeEventHandler = delegate of obj * ResizeEventArgs -> unit
 
 type SimpleWindow(position : V2i, initialSize : V2i)  =
     
-    let handle = Factory.Default.CreateNativeWindow(position.X, position.Y, initialSize.X, initialSize.Y, "Aardvark rocks \\o/", GameWindowFlags.Default, DisplayDevice.Default)
+    let handle = Factory.Default.CreateNativeWindow(position.X, position.Y, initialSize.X, initialSize.Y, "Aardvark rocks \\o/", GraphicsMode.Default, GameWindowFlags.Default, DisplayDevice.Default)
     
     let mSize = Mod.init initialSize
     
