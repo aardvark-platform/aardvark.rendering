@@ -1,10 +1,11 @@
 ﻿namespace Aardvark.Application
 
 open Aardvark.Base
+open Aardvark.Base.Incremental
+open Aardvark.Base.Incremental.Operators
 open System.Runtime.CompilerServices
 open Aardvark.Base.Incremental
 open System.Collections.Concurrent
-
 
 type IKeyboard =
     abstract member IsDown : Keys -> IMod<bool>
@@ -18,6 +19,10 @@ type IKeyboard =
 
     abstract member ClaimsKeyEvents : bool with get, set
 
+    abstract member Alt : IMod<bool>
+    abstract member Shift : IMod<bool>
+    abstract member Control : IMod<bool>
+
 
 type EventKeyboard() =
     let downKeys = CSet.empty
@@ -30,7 +35,17 @@ type EventKeyboard() =
     let input = EventSource<char>()
     let mutable claimEvents = true
 
-
+    let lAlt = lazy (isDown.GetOrAdd(Keys.LeftAlt, fun k -> Mod.init (downKeys.Contains k)))
+    let rAlt = lazy (isDown.GetOrAdd(Keys.RightAlt, fun k -> Mod.init (downKeys.Contains k)))
+    let alt = lazy (lAlt.Value %|| rAlt.Value)
+    
+    let lShift = lazy (isDown.GetOrAdd(Keys.LeftShift, fun k -> Mod.init (downKeys.Contains k)))
+    let rShift = lazy (isDown.GetOrAdd(Keys.RightShift, fun k -> Mod.init (downKeys.Contains k)))
+    let shift = lazy (lShift.Value %|| rShift.Value)
+    
+    let lCtrl = lazy (isDown.GetOrAdd(Keys.LeftCtrl, fun k -> Mod.init (downKeys.Contains k)))
+    let rCtrl = lazy (isDown.GetOrAdd(Keys.RightCtrl, fun k -> Mod.init (downKeys.Contains k)))
+    let ctrl = lazy (lCtrl.Value %|| rCtrl.Value)
 
     abstract member KeyDown : Keys -> unit
     abstract member KeyUp : Keys -> unit
@@ -84,7 +99,12 @@ type EventKeyboard() =
         with get() = claimEvents
         and set v = claimEvents <- v
 
+
     interface IKeyboard with
+        member x.Alt = alt.Value
+        member x.Shift = shift.Value
+        member x.Control = ctrl.Value
+
         member x.IsDown (k : Keys) =
             let r = isDown.GetOrAdd(k, fun k -> Mod.init (downKeys.Contains k))
             r :> IMod<_>

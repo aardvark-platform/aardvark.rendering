@@ -52,10 +52,9 @@ type SimpleRenderWindow() as this =
                 baseTitle <- t
 
         x.Text <- baseTitle
-        let alt = ctrl.Keyboard.IsDown(Keys.LeftAlt)
-        let shift = ctrl.Keyboard.IsDown(Keys.LeftShift)
+
         ctrl.Keyboard.KeyDown(Keys.Enter).Values.Add (fun () ->
-            if Mod.force alt && Mod.force shift then
+            if Mod.force ctrl.Keyboard.Alt && Mod.force ctrl.Keyboard.Shift then
                 this.ToggleFullScreen()
         )
 

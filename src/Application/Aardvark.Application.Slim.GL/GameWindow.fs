@@ -332,13 +332,15 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
         Config.MajorVersion, 
         Config.MinorVersion, 
         Config.ContextFlags,
-        VSync = VSyncMode.Off
+        VSync = VSyncMode.Off,
+        RenderAsFastAsPossible = false
     )
     let ctx = runtime.Context
 
 
     let mutable loaded = false
-    let mutable task : Option<IRenderTask> = None
+    let mutable task = RenderTask.empty
+    let mutable taskSub : IDisposable = { new IDisposable with member x.Dispose() = () }
 
     let depthSignature =
         match Config.DepthBits, Config.StencilBits with
@@ -398,6 +400,10 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
     let mutable totalTime = MicroTime.Zero
     let mutable baseTitle = ""
 
+    //member private x.Invalidate() =
+    //    if not x.RenderAsFastAsPossible then
+    //        base.Invalidate()
+
     member x.NewFrame (t : MicroTime) = 
         frameCount <- frameCount + 1
         totalTime <- totalTime + t
@@ -409,9 +415,13 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
         ()
 
     member x.RenderTask
-        with get() = task.Value
-        and set t = task <- Some t
-            
+        with get() = task
+        and set t = 
+            task.Dispose()
+            taskSub.Dispose()
+            task <- t
+            taskSub <- t.AddMarkingCallback (fun () -> x.Invalidate())
+
     member x.Sizes = sizes :> IMod<_>
 
     member x.Time = time :> IMod<_>
@@ -436,6 +446,33 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
         x.BeforeRender.Add sw.Restart
         x.AfterRender.Add (fun () -> sw.Stop(); x.NewFrame sw.MicroTime)
 
+        let k = keyboard :> IKeyboard
+        k.KeyDown(Keys.End).Values.Add (fun () ->
+            if Mod.force k.Control then
+                x.RenderAsFastAsPossible <- not x.RenderAsFastAsPossible
+        )
+    
+        let mutable oldState = x.WindowState
+        let mutable oldBorder = x.WindowBorder
+        let mutable full = false
+        k.KeyDown(Keys.Enter).Values.Add(fun () ->
+            if Mod.force k.Alt && Mod.force k.Shift then
+                if full then
+                    full <- false
+                    x.WindowBorder <- oldBorder
+                    x.WindowState <- oldState
+                else
+                    full <- true
+                    oldState <- x.WindowState
+                    oldBorder <- x.WindowBorder
+                    x.WindowBorder <- WindowBorder.Hidden
+                    x.WindowState <- WindowState.Fullscreen
+        )
+
+
+
+
+
         base.OnLoad(e)
         loaded <- true
         base.MakeCurrent()
@@ -452,40 +489,32 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
 
             let size = V2i(base.ClientSize.Width, base.ClientSize.Height)
             
+            using (ctx.RenderingLock contextHandle) (fun _ ->
+                        
+                if size <> sizes.Value then
+                    transact (fun () -> Mod.change sizes size)
 
-            match task with
-                | Some t ->
-                    using (ctx.RenderingLock contextHandle) (fun _ ->
+                defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
+                defaultOutput <- { defaultOutput with viewport = Box2i(V2i.OO, defaultFramebuffer.Size - V2i.II) }
+
+                GL.ColorMask(true, true, true, true)
+                GL.DepthMask(true)
+                GL.Viewport(0,0,x.ClientSize.Width, x.ClientSize.Height)
+                GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+                GL.ClearDepth(1.0)
+                GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+
+                let desc = OutputDescription.ofFramebuffer defaultFramebuffer
+                task.Run(AdaptiveToken.Top, RenderToken.Empty, defaultOutput)
                         
 
-                        if size <> sizes.Value then
-                            transact (fun () -> Mod.change sizes size)
+                x.SwapBuffers()
 
-                        defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
-                        defaultOutput <- { defaultOutput with viewport = Box2i(V2i.OO, defaultFramebuffer.Size - V2i.II) }
-
-                        GL.ColorMask(true, true, true, true)
-                        GL.DepthMask(true)
-                        GL.Viewport(0,0,x.ClientSize.Width, x.ClientSize.Height)
-                        GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
-                        GL.ClearDepth(1.0)
-                        GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
-
-                        let desc = OutputDescription.ofFramebuffer defaultFramebuffer
-                        t.Run(AdaptiveToken.Top, RenderToken.Empty, defaultOutput)
+                if not time.OutOfDate then
+                    transact (fun () -> time.MarkOutdated())
                         
-
-                        x.SwapBuffers()
-
-                        if not time.OutOfDate then
-                            transact (fun () -> time.MarkOutdated())
-                        
-                    )
-
-                | None ->
-                    if size <> sizes.Value then
-                        transact (fun () -> Mod.change sizes size)
-   
+            )
+                    
             if not first then
                 avgFrameTime.Add(frameWatch.Elapsed.TotalSeconds)
             first <- false

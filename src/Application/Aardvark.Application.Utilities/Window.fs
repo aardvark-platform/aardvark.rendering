@@ -242,10 +242,9 @@ module Utilities =
         let cullMode = Mod.init CullMode.None
 
         let status = Mod.init ""
-
-        let alt = win.Keyboard.IsDown(Aardvark.Application.Keys.LeftAlt)
+        
         win.Keyboard.KeyDown(Aardvark.Application.Keys.X).Values.Add (fun () ->
-            if Mod.force alt then
+            if Mod.force win.Keyboard.Alt then
                 transact (fun () ->
                     let newFillMode = 
                         match fillMode.Value with
@@ -259,7 +258,7 @@ module Utilities =
         )
 
         win.Keyboard.KeyDown(Aardvark.Application.Keys.Y).Values.Add (fun () ->
-            if Mod.force alt then
+            if Mod.force win.Keyboard.Alt then
                 transact (fun () ->
                     let newCull = 
                         match cullMode.Value with
