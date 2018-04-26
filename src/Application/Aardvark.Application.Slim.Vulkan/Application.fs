@@ -52,6 +52,10 @@ module private VulkanHandles =
                     None
             
 
+module private DefaultText =
+    [<Literal>]
+    let baseText = "Aardvark rocks \\o/ - Vulkan GameWindow"
+
 
 
 type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, size : V2i, mode : AbstractGraphicsMode) =
@@ -67,13 +71,20 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
     let mutable swapchainDesc : SwapchainDescription = Unchecked.defaultof<_>
     let mutable surface : Surface = Unchecked.defaultof<_>
     let mutable swapchain : Option<Swapchain> = None
+    let mutable rafap = false
 
     let startTime = DateTime.Now
     let sw = System.Diagnostics.Stopwatch.StartNew()
     let time = Mod.custom (fun _ -> startTime + sw.Elapsed) 
+    
+    let frameWatch = System.Diagnostics.Stopwatch()
+    let mutable frameCount = 0
+    let mutable totalTime = MicroTime.Zero
+    let mutable baseTitle = ""
 
-    let eBeforeRender = Event<unit>()
-    let eAfterRender = Event<unit>()
+
+    let eBeforeRender = FSharp.Control.Event<unit>()
+    let eAfterRender =  FSharp.Control.Event<unit>()
 
     let createSurface (info : OpenTK.Platform.IWindowInfo) =
         match SurfaceInfo.tryOfWindowInfo info with
@@ -83,6 +94,15 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
                 Log.error "[Vulkan] cannot create device for window: %A" info
                 failwithf "[Vulkan] cannot create device for window: %A" info
     
+    member x.NewFrame (t : MicroTime) = 
+        frameCount <- frameCount + 1
+        totalTime <- totalTime + t
+        if frameCount > 50 then
+            let fps = float frameCount / totalTime.TotalSeconds
+            base.Title <- DefaultText.baseText + sprintf " (%.3f fps)" fps
+            frameCount <- 0
+            totalTime <- MicroTime.Zero
+        ()
     member x.RenderTask
         with get() = 
             task
@@ -93,11 +113,40 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
             task <- t
             x.Invalidate()
 
+    member x.RenderAsFastAsPossible
+        with get() = rafap
+        and set v =
+            if v then
+                if not rafap then
+                    rafap <- true
+                    x.Invalidate()
+            else
+                rafap <- false
+                
+    member x.BeforeRender : FSharp.Control.IEvent<unit> = eBeforeRender.Publish
+    member x.AfterRender : FSharp.Control.IEvent<unit> = eAfterRender.Publish
+
     override x.OnLoad() =
         let info = unbox<OpenTK.Platform.IWindowInfo> x.WindowInfo
         surface <- createSurface info
         swapchainDesc <- device.CreateSwapchainDescription(surface, mode)
+
+        let k = x.Keyboard
+        k.KeyDown(Keys.End).Values.Add (fun () ->
+            if Mod.force k.Control then
+                x.RenderAsFastAsPossible <- not x.RenderAsFastAsPossible
+        )
+    
+        k.KeyDown(Keys.Enter).Values.Add(fun () ->
+            if Mod.force k.Alt && Mod.force k.Shift then
+                x.Fullscreen <- not x.Fullscreen
+        )
         
+        let sw = System.Diagnostics.Stopwatch()
+        eBeforeRender.Publish.Add sw.Restart
+        eAfterRender.Publish.Add (fun () -> sw.Stop(); x.NewFrame sw.MicroTime)
+        
+
     override x.OnUnload() =
         match swapchain with
             | Some c -> 
@@ -139,12 +188,9 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
         )
         eAfterRender.Trigger()
         transact time.MarkOutdated
-        
+        if rafap then x.Invalidate()
 
    
-    member this.AfterRender = eAfterRender.Publish
-    member this.BeforeRender = eBeforeRender.Publish
-
     member this.FramebufferSignature =
         this.Load()
         swapchainDesc.renderPass :> IFramebufferSignature
