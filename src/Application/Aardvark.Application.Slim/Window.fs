@@ -8,6 +8,7 @@ open OpenTK
 open OpenTK.Graphics
 open OpenTK.Platform
 open System.Threading
+open System.Reactive.Linq
 
 [<AutoOpen>]
 module private GameWindowIO =
@@ -348,9 +349,14 @@ type SimpleWindow(position : V2i, initialSize : V2i)  =
     let mutable visible = false
     let mutable visibleSub : IDisposable = null
 
+    let mutable fullscreen = false
+    let mutable oldBorder = WindowBorder.Resizable
+    let mutable oldState = WindowState.Normal
+
     member x.Load() =
         lock handle (fun () ->
             if not loaded then
+            
                 resizeSub <- 
                     handle.Resize.Subscribe(fun e -> 
                         let newSize = x.ClientSize
@@ -368,6 +374,8 @@ type SimpleWindow(position : V2i, initialSize : V2i)  =
                 x.OnLoad()
                 loaded <- true
                 visible <- false
+                
+
         )
 
     member private x.Unload() =
@@ -422,6 +430,25 @@ type SimpleWindow(position : V2i, initialSize : V2i)  =
     member x.Mouse = mouse :> IMouse
 
     member x.WindowInfo = handle.WindowInfo :> obj
+
+    member x.Fullscreen
+        with get() = fullscreen
+        and set v =
+            if v then
+                if not fullscreen then
+                    oldBorder <- handle.WindowBorder
+                    oldState <- handle.WindowState
+                    handle.WindowBorder <- WindowBorder.Hidden
+                    handle.WindowState <- WindowState.Fullscreen
+                fullscreen <- true
+            else
+                if fullscreen then
+                    handle.WindowBorder <- oldBorder
+                    handle.WindowState <- oldState
+                fullscreen <- false
+                    
+
+
 
     [<CLIEvent>]
     member x.Resize = eResize.Publish
