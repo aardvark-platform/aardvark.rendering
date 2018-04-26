@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
@@ -23,32 +23,32 @@
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>glvm</RootNamespace>
     <TargetPlatformVersion>8.1</TargetPlatformVersion>
-    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.17134.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -140,7 +140,9 @@
       </Message>
     </PostBuildEvent>
     <CustomBuildStep>
-      <Command>xcopy $(SolutionDir)..\bin\Debug\glvm.* $(SolutionDir)..\bin\Release\ /Y</Command>
+      <Command>xcopy "$(SolutionDir)..\bin\Debug\glvm.*" "$(SolutionDir)..\bin\Release\" /Y
+xcopy "$(SolutionDir)..\bin\Debug\glvm.*" "$(SolutionDir)..\bin\Release\netcoreapp2.0" /Y
+xcopy "$(SolutionDir)..\bin\Debug\glvm.*" "$(SolutionDir)..\bin\Debug\netcoreapp2.0" /Y</Command>
     </CustomBuildStep>
     <CustomBuildStep>
       <Message>copying binaries to bin\Release</Message>
@@ -203,7 +205,9 @@
     </PostBuildEvent>
     <CustomBuildStep>
       <Command>xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(SolutionDir)..\bin\Debug" /y
-xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(SolutionDir)..\bin\Release" /y</Command>
+xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(SolutionDir)..\bin\Release" /y
+xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(SolutionDir)..\bin\Debug\netcoreapp2.0" /y
+xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(SolutionDir)..\bin\Release\netcoreapp2.0" /y</Command>
       <Message>copying binaries to bin\Debug</Message>
       <Outputs>$(SolutionDir)..\bin\Debug\glvm.dll;$(SolutionDir)..\bin\Debug\glvm.exp;$(SolutionDir)..\bin\Debug\glvm.lib;$(SolutionDir)..\bin\Debug\glvm.pdb;$(SolutionDir)..\bin\Release\glvm.dll;$(SolutionDir)..\bin\Release\glvm.exp;$(SolutionDir)..\bin\Release\glvm.lib;$(SolutionDir)..\bin\Release\glvm.pdb</Outputs>
     </CustomBuildStep>
