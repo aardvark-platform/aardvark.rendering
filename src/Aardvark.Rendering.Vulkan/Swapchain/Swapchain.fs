@@ -314,8 +314,10 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 do! Command.TransformLayout(backbuffer, VkImageLayout.TransferDstOptimal)
                 do! Command.Blit(
                         currentImage.[ImageAspect.Color, 0, *],
+                        VkImageLayout.TransferSrcOptimal,
                         srcRange,
                         backbuffer.[ImageAspect.Color, 0, *],
+                        VkImageLayout.TransferDstOptimal, 
                         dstRange,
                         VkFilter.Nearest
                     )

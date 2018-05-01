@@ -1910,12 +1910,10 @@ module ``Image Command Extensions`` =
             Command.ResolveMultisamples(src, V3i.Zero, dst, V3i.Zero, src.Size)
 
 
-        static member Blit(src : ImageSubresourceLayers, srcRange : Box3i, dst : ImageSubresourceLayers, dstRange : Box3i, filter : VkFilter) =
+        static member Blit(src : ImageSubresourceLayers, srcLayout : VkImageLayout, srcRange : Box3i, dst : ImageSubresourceLayers, dstLayout : VkImageLayout, dstRange : Box3i, filter : VkFilter) =
             { new Command() with
                 member x.Compatible = QueueFlags.Graphics
                 member x.Enqueue cmd =
-                    let srcLayout = src.Image.Layout
-                    let dstLayout = dst.Image.Layout
 
                     let mutable srcOffsets = VkOffset3D_2()
 
@@ -1958,14 +1956,14 @@ module ``Image Command Extensions`` =
                     Disposable.Empty
             }
 
-        static member Blit(src : ImageSubresourceLayers, dst : ImageSubresourceLayers, dstRange : Box3i, filter : VkFilter) =
-            Command.Blit(src, Box3i(V3i.Zero, src.Size - V3i.III), dst, dstRange, filter)
+        static member Blit(src : ImageSubresourceLayers, srcLayout : VkImageLayout, dst : ImageSubresourceLayers, dstLayout : VkImageLayout, dstRange : Box3i, filter : VkFilter) =
+            Command.Blit(src, srcLayout, Box3i(V3i.Zero, src.Size - V3i.III), dst, dstLayout, dstRange, filter)
 
-        static member Blit(src : ImageSubresourceLayers, srcRange : Box3i, dst : ImageSubresourceLayers, filter : VkFilter) =
-            Command.Blit(src, srcRange, dst, Box3i(V3i.Zero, dst.Size - V3i.III), filter)
+        static member Blit(src : ImageSubresourceLayers, srcLayout : VkImageLayout, srcRange : Box3i, dst : ImageSubresourceLayers, dstLayout : VkImageLayout, filter : VkFilter) =
+            Command.Blit(src, srcLayout, srcRange, dst, dstLayout, Box3i(V3i.Zero, dst.Size - V3i.III), filter)
 
-        static member Blit(src : ImageSubresourceLayers, dst : ImageSubresourceLayers, filter : VkFilter) =
-            Command.Blit(src, Box3i(V3i.Zero, src.Size - V3i.III), dst, Box3i(V3i.Zero, dst.Size - V3i.III), filter)
+        static member Blit(src : ImageSubresourceLayers, srcLayout : VkImageLayout, dst : ImageSubresourceLayers, dstLayout : VkImageLayout, filter : VkFilter) =
+            Command.Blit(src, srcLayout, Box3i(V3i.Zero, src.Size - V3i.III), dst, dstLayout, Box3i(V3i.Zero, dst.Size - V3i.III), filter)
 
 
         static member ClearColor(img : ImageSubresourceRange, color : C4f) =
@@ -2024,7 +2022,7 @@ module ``Image Command Extensions`` =
 
                     for l in 1 .. img.LevelCount - 1 do
                         do! Command.TransformLayout(img.[l,*], oldLayout, VkImageLayout.TransferDstOptimal)
-                        do! Command.Blit(img.[l - 1, *], img.[l, *], VkFilter.Linear)
+                        do! Command.Blit(img.[l - 1, *], VkImageLayout.TransferSrcOptimal, img.[l, *], VkImageLayout.TransferDstOptimal, VkFilter.Linear)
                         do! Command.TransformLayout(img.[l,*], VkImageLayout.TransferDstOptimal, VkImageLayout.TransferSrcOptimal)
 
                     do! Command.TransformLayout(img, VkImageLayout.TransferSrcOptimal, oldLayout)
