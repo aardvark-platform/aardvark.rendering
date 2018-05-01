@@ -11,7 +11,6 @@ open Aardvark.Base.Incremental
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base.ReflectionHelpers
-open KHXDeviceGroup
 
 
 
@@ -2148,7 +2147,7 @@ module ``Image Command Extensions`` =
                         let deviceIndices = baseImage.Device.AllIndicesArr
                         
                         for di in deviceIndices do
-                            VkRaw.vkCmdSetDeviceMaskKHX(cmd.Handle, 1u <<< int di)
+                            VkRaw.vkCmdSetDeviceMask(cmd.Handle, 1u <<< int di)
 
                             let srcSlices, srcRange = ranges.[int di]
 
@@ -2174,13 +2173,13 @@ module ``Image Command Extensions`` =
                                     1u, &&copy
                                 )
 
-                        VkRaw.vkCmdSetDeviceMaskKHX(cmd.Handle, baseImage.Device.AllMask)
+                        VkRaw.vkCmdSetDeviceMask(cmd.Handle, baseImage.Device.AllMask)
 
                         VkRaw.vkCmdPipelineBarrier(
                             cmd.Handle,
                             VkPipelineStageFlags.TransferBit,
                             VkPipelineStageFlags.TopOfPipeBit,
-                            VkDependencyFlags.DeviceGroupBitKhx,
+                            VkDependencyFlags.DeviceGroupBit,
                             0u, NativePtr.zero,
                             0u, NativePtr.zero, 
                             0u, NativePtr.zero // wrongness
@@ -2233,7 +2232,6 @@ module ``Image Command Extensions`` =
 // ===========================================================================================
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Image =
-    open KHXDeviceGroup
     open KHRBindMemory2
 
     let allocLinear (size : V2i) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
@@ -2321,7 +2319,7 @@ module Image =
                 else VkImageCreateFlags.None
 
             let flags =
-                if mayHavePeers then VkImageCreateFlags.AliasBitKhr ||| flags
+                if mayHavePeers then VkImageCreateFlags.AliasBit ||| flags
                 else flags
 
             let mutable info =
@@ -2370,17 +2368,29 @@ module Image =
                         )
 
                     deviceIndices |> NativePtr.withA (fun pDeviceIndices ->
-                        let mutable info =
-                            VkBindImageMemoryInfoKHX(
-                                VkStructureType.BindImageMemoryInfoKhx, 0n,
-                                handles.[off],
-                                ptr.Memory.Handle,
-                                uint64 ptr.Offset,
+                        let mutable groupInfo =
+                            VkBindImageMemoryDeviceGroupInfo(
+                                VkStructureType.BindImageMemoryDeviceGroupInfo, 0n,
                                 uint32 deviceIndices.Length, pDeviceIndices,
                                 0u, NativePtr.zero
                             )
+                        let mutable info =  
+                            VkBindImageMemoryInfo(
+                                VkStructureType.BindImageMemoryInfo, NativePtr.toNativeInt &&groupInfo,
+                                handles.[off],
+                                ptr.Memory.Handle,
+                                uint64 ptr.Offset
+                            )
+                            //VkBindImageMemoryInfo(
+                            //    VkStructureType.BindImageMemoryInfo, 0n,
+                            //    handles.[off],
+                            //    ptr.Memory.Handle,
+                            //    uint64 ptr.Offset,
+                            //    uint32 deviceIndices.Length, pDeviceIndices,
+                            //    0u, NativePtr.zero
+                            //)
 
-                        VkRaw.vkBindImageMemory2KHX(device.Handle, 1u, &&info)
+                        VkRaw.vkBindImageMemory2(device.Handle, 1u, &&info)
                             |> check "could not bind image memory"
                     )
 

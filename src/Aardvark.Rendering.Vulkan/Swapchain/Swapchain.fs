@@ -75,7 +75,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
     let surface = description.surface
     let renderPass = description.renderPass
 
-    let presentTrafo = VkSurfaceTransformFlagBitsKHR.ofImageTrafo description.presentTrafo
+    let presentTrafo = VkSurfaceTransformFlagsKHR.ofImageTrafo description.presentTrafo
 
     let recreate (old : VkSwapchainKHR) (size : V2i) =
         let extent = VkExtent2D(size.X, size.Y)
@@ -104,7 +104,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 0u, NativePtr.zero,
 
                 presentTrafo,
-                VkCompositeAlphaFlagBitsKHR.VkCompositeAlphaOpaqueBitKhr,
+                VkCompositeAlphaFlagsKHR.VkCompositeAlphaOpaqueBitKhr,
                 description.presentMode,
                 1u,
                 old

@@ -46,35 +46,35 @@ type SurfaceInfo =
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module VkSurfaceTransformFlagBitsKHR =
+module VkSurfaceTransformFlagsKHR =
     let ofImageTrafo =
         LookupTable.lookupTable [
-            ImageTrafo.Rot0,            VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformIdentityBitKhr
-            ImageTrafo.Rot90,           VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformRotate90BitKhr
-            ImageTrafo.Rot180,          VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformRotate180BitKhr
-            ImageTrafo.Rot270,          VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformRotate270BitKhr
-            ImageTrafo.MirrorX,         VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformHorizontalMirrorBitKhr
-            ImageTrafo.MirrorY,         VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformHorizontalMirrorRotate180BitKhr
-            ImageTrafo.Transpose,       VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformHorizontalMirrorRotate90BitKhr
-            ImageTrafo.Transverse,      VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformHorizontalMirrorRotate270BitKhr
+            ImageTrafo.Rot0,            VkSurfaceTransformFlagsKHR.VkSurfaceTransformIdentityBitKhr
+            ImageTrafo.Rot90,           VkSurfaceTransformFlagsKHR.VkSurfaceTransformRotate90BitKhr
+            ImageTrafo.Rot180,          VkSurfaceTransformFlagsKHR.VkSurfaceTransformRotate180BitKhr
+            ImageTrafo.Rot270,          VkSurfaceTransformFlagsKHR.VkSurfaceTransformRotate270BitKhr
+            ImageTrafo.MirrorX,         VkSurfaceTransformFlagsKHR.VkSurfaceTransformHorizontalMirrorBitKhr
+            ImageTrafo.MirrorY,         VkSurfaceTransformFlagsKHR.VkSurfaceTransformHorizontalMirrorRotate180BitKhr
+            ImageTrafo.Transpose,       VkSurfaceTransformFlagsKHR.VkSurfaceTransformHorizontalMirrorRotate90BitKhr
+            ImageTrafo.Transverse,      VkSurfaceTransformFlagsKHR.VkSurfaceTransformHorizontalMirrorRotate270BitKhr
         ]
 
     let toImageTrafo =
         LookupTable.lookupTable [
-           VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformIdentityBitKhr,                      ImageTrafo.Rot0
-           VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformRotate90BitKhr,                      ImageTrafo.Rot90
-           VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformRotate180BitKhr,                     ImageTrafo.Rot180
-           VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformRotate270BitKhr,                     ImageTrafo.Rot270
-           VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformHorizontalMirrorBitKhr,              ImageTrafo.MirrorX
-           VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformHorizontalMirrorRotate180BitKhr,     ImageTrafo.MirrorY
-           VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformHorizontalMirrorRotate90BitKhr,      ImageTrafo.Transpose
-           VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformHorizontalMirrorRotate270BitKhr,     ImageTrafo.Transverse
+           VkSurfaceTransformFlagsKHR.VkSurfaceTransformIdentityBitKhr,                      ImageTrafo.Rot0
+           VkSurfaceTransformFlagsKHR.VkSurfaceTransformRotate90BitKhr,                      ImageTrafo.Rot90
+           VkSurfaceTransformFlagsKHR.VkSurfaceTransformRotate180BitKhr,                     ImageTrafo.Rot180
+           VkSurfaceTransformFlagsKHR.VkSurfaceTransformRotate270BitKhr,                     ImageTrafo.Rot270
+           VkSurfaceTransformFlagsKHR.VkSurfaceTransformHorizontalMirrorBitKhr,              ImageTrafo.MirrorX
+           VkSurfaceTransformFlagsKHR.VkSurfaceTransformHorizontalMirrorRotate180BitKhr,     ImageTrafo.MirrorY
+           VkSurfaceTransformFlagsKHR.VkSurfaceTransformHorizontalMirrorRotate90BitKhr,      ImageTrafo.Transpose
+           VkSurfaceTransformFlagsKHR.VkSurfaceTransformHorizontalMirrorRotate270BitKhr,     ImageTrafo.Transverse
         ]
 
-    let toImageTrafos (flags : VkSurfaceTransformFlagBitsKHR) =
-        let values = Enum.GetValues(typeof<VkSurfaceTransformFlagBitsKHR>) |> unbox<VkSurfaceTransformFlagBitsKHR[]>
+    let toImageTrafos (flags : VkSurfaceTransformFlagsKHR) =
+        let values = Enum.GetValues(typeof<VkSurfaceTransformFlagsKHR>) |> unbox<VkSurfaceTransformFlagsKHR[]>
         values 
-            |> Seq.filter (fun v -> (flags &&& v) <> VkSurfaceTransformFlagBitsKHR.None)
+            |> Seq.filter (fun v -> (flags &&& v) <> VkSurfaceTransformFlagsKHR.None)
             |> Seq.map toImageTrafo
             |> Set.ofSeq
 
@@ -106,8 +106,8 @@ type Surface(device : Device, handle : VkSurfaceKHR) =
             VkRaw.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical.Handle, handle, &&surfaceCaps) 
                 |> check "could not get Surface capabilities"
         
-    let supportedTransforms = unbox<VkSurfaceTransformFlagBitsKHR> (int surfaceCaps.supportedTransforms) |> VkSurfaceTransformFlagBitsKHR.toImageTrafos
-    let supportedCompositeAlpha = unbox<VkCompositeAlphaFlagBitsKHR> (int surfaceCaps.supportedCompositeAlpha)
+    let supportedTransforms = unbox<VkSurfaceTransformFlagsKHR> (int surfaceCaps.supportedTransforms) |> VkSurfaceTransformFlagsKHR.toImageTrafos
+    let supportedCompositeAlpha = unbox<VkCompositeAlphaFlagsKHR> (int surfaceCaps.supportedCompositeAlpha)
     let supportedUsage = surfaceCaps.supportedUsageFlags
     let minSize = V2i(int surfaceCaps.minImageExtent.width, int surfaceCaps.minImageExtent.height)
     let maxSize = V2i(int surfaceCaps.maxImageExtent.width, int surfaceCaps.maxImageExtent.height)
@@ -183,7 +183,7 @@ type Surface(device : Device, handle : VkSurfaceKHR) =
         else
             V2i.Zero
         
-    member x.HasCompositeAlpha (t : VkCompositeAlphaFlagBitsKHR) = (t &&& supportedCompositeAlpha) = t
+    member x.HasCompositeAlpha (t : VkCompositeAlphaFlagsKHR) = (t &&& supportedCompositeAlpha) = t
     member x.HasUsage (t : VkImageUsageFlags) = (t &&& supportedUsage) = t
 
 

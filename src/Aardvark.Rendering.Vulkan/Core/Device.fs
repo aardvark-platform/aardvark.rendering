@@ -8,8 +8,6 @@ open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
-open KHXDeviceGroupCreation
-open KHXDeviceGroup
 open KHRSwapchain
 
 #nowarn "9"
@@ -115,7 +113,7 @@ type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExt
             | _ -> false, [| dev |]
 
     let wantedExtensions =
-        if isGroup then wantedExtensions |> Set.add KHXDeviceGroup.Name
+        if isGroup then wantedExtensions
         else wantedExtensions
 
     let physical = deviceGroup.[0]
@@ -217,8 +215,8 @@ type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExt
 
             deviceHandles |> NativePtr.withA(fun pDevices ->
                 let mutable groupInfo =
-                    VkDeviceGroupDeviceCreateInfoKHX(
-                        VkStructureType.DeviceGroupDeviceCreateInfoKhx,
+                    VkDeviceGroupDeviceCreateInfo(
+                        VkStructureType.DeviceGroupDeviceCreateInfo,
                         0n,
                         uint32 deviceGroup.Length,
                         pDevices
@@ -893,8 +891,8 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
                 let groupInfos =
                     binds |> Array.collect (fun b ->
                         device.AllIndicesArr |> Array.map (fun i ->
-                            VkDeviceGroupBindSparseInfoKHX(
-                                VkStructureType.DeviceGroupBindSparseInfoKhx, 0n,
+                            VkDeviceGroupBindSparseInfo(
+                                VkStructureType.DeviceGroupBindSparseInfo, 0n,
                                 uint32 i,
                                 uint32 i
                             )
@@ -954,8 +952,8 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
                         else 0u, NativePtr.zero
 
                     let mutable ext =
-                        VkDeviceGroupSubmitInfoKHX(
-                            VkStructureType.DeviceGroupSubmitInfoKhx, 0n, 
+                        VkDeviceGroupSubmitInfo(
+                            VkStructureType.DeviceGroupSubmitInfo, 0n, 
                             waitCount, pWaitIndices,
                             uint32 cmds.Length, pCmdMasks,
                             signalCount, pSignalIndices
@@ -2284,8 +2282,8 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                     else 0u, NativePtr.zero
 
                 let mutable ext =
-                    VkDeviceGroupSubmitInfoKHX(
-                        VkStructureType.DeviceGroupSubmitInfoKhx, 0n, 
+                    VkDeviceGroupSubmitInfo(
+                        VkStructureType.DeviceGroupSubmitInfo, 0n, 
                         waitCount, pWaitIndices,
                         uint32 cmds.Length, pCmdMasks,
                         signalCount, pSignalIndices
@@ -2368,8 +2366,8 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
 
                 let! pGroupInfos = 
                     Array.init deviceCount (fun di ->
-                        VkDeviceGroupBindSparseInfoKHX(
-                            VkStructureType.DeviceGroupBindSparseInfoKhx, 0n,
+                        VkDeviceGroupBindSparseInfo(
+                            VkStructureType.DeviceGroupBindSparseInfo, 0n,
                             uint32 di,
                             uint32 di
                         )

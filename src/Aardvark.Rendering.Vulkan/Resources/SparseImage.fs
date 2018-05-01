@@ -9,7 +9,6 @@ open System.Collections.Concurrent
 open Aardvark.Base
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
-open KHXDeviceGroup
 
 #nowarn "9"
 #nowarn "51"
