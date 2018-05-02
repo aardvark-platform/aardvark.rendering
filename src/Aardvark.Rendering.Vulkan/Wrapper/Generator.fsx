@@ -59,8 +59,15 @@ module XmlStuff =
             else
                 failwithf "not a number: %A" v
 
+    let extensionEnumValue (dir : Option<string>) (e : int) (offset : int) =
+        match dir with
+            | Some "-" -> 
+                -(1000000000 + (e - 1) * 1000 + offset)
+            | _ ->
+                1000000000 + (e - 1) * 1000 + offset
 
-    let (|Enum|BitMask|Failure|) (e : XElement) = 
+
+    let (|Enum|BitMask|Ext|Failure|) (e : XElement) = 
         match attrib e "value", attrib e "bitpos" with
               | Some v,_ ->
                     let v =  toInt32 v 10
@@ -77,7 +84,15 @@ module XmlStuff =
                     Enum v
               | _, Some bp -> 
                     BitMask (System.Int32.Parse bp)
-              | _ -> Failure
+              | _ -> 
+                match attrib e "extnumber", attrib e "offset" with
+                    | Some en, Some on ->
+                        let en = toInt32 en 10
+                        let on = toInt32 on 10
+                        Ext (extensionEnumValue (attrib e "dir") en on)
+
+                    | _ ->
+                        Failure
 
 
 type Type =
@@ -174,6 +189,7 @@ module Enum =
                             match kv with
                                 | Enum value -> name, EnumValue value
                                 | BitMask bit -> name, EnumBit bit
+                                | Ext value -> name, EnumValue value
                                 | _ -> failwithf "invalid enum-value: %A" kv         
                            )
                         |> Seq.toList
@@ -520,6 +536,52 @@ module XmlReader =
             |> Seq.filter (fun e -> attrib e "name" <> Some "API Constants") 
             |> Seq.choose Enum.tryRead
             |> Seq.toList
+
+    let enumExtends (vk : XElement) (enums : list<Enum>) =
+
+        let feature11 =
+            vk.Descendants(xname "feature") |> Seq.tryFind (fun e -> attrib e "name" = Some "VK_VERSION_1_1")
+
+        match feature11 with
+            | Some f11 ->
+
+                let mutable map = enums |> List.map (fun e -> e.name, e) |> Map.ofList
+                f11.Descendants(xname "enum")
+                    |> Seq.iter (fun e -> 
+                        match attrib e "extends" with
+                            | Some enumName ->
+
+                                match Map.tryFind enumName map with
+                                    | Some baseEnum ->
+
+                                        let name = (attrib e "name").Value
+                                        let value =
+                                            match e with
+                                                | Enum value -> EnumValue value
+                                                | BitMask bit -> EnumBit bit
+                                                | Ext value -> EnumValue value
+                                                | _ -> failwithf "invalid enum-value: %A" e     
+
+                                        let newEnum = { baseEnum with alternatives = (name, value) :: baseEnum.alternatives }
+
+                                        map <- Map.add enumName newEnum map
+
+                                        ()
+                                    | None ->
+                                        ()
+                            | None ->
+                                ()
+                    )
+                       
+                       
+                enums |> List.map (fun e -> map.[e.name])
+
+            | None ->
+                enums
+
+
+
+
     let structs (defines : Map<string, string>) (vk : XElement) =
         vk.Descendants(xname "types")
             |> Seq.collect (fun tc -> tc.Descendants (xname "type"))
@@ -550,6 +612,7 @@ module XmlReader =
 module FSharpWriter =
 
     open System.Text.RegularExpressions
+    open System.Xml.Linq
 
     let private uppercase = Regex @"[A-Z0-9]+"
     let private startsWithNumber = Regex @"^[0-9]+"
@@ -630,12 +693,12 @@ module FSharpWriter =
         printfn "type VkMemoryMapFlags = | MinValue = 0"
 
         // missing since new version
-        printfn "type VkDisplayPlaneAlphaFlagsKHR = | MinValue = 0"
+        //printfn "type VkDisplayPlaneAlphaFlagsKHR = | MinValue = 0"
         printfn "type VkDisplaySurfaceCreateFlagsKHR = | MinValue = 0"
         printfn "type VkSwapchainCreateFlagsKHR = | MinValue = 0"
         printfn "type VkSwapchainCreateFlagBitsKHR = | MinValue = 0"
-        printfn "type VkSurfaceTransformFlagsKHR = | MinValue = 0"
-        printfn "type VkCompositeAlphaFlagsKHR = | MinValue = 0"
+        //printfn "type VkSurfaceTransformFlagsKHR = | MinValue = 0"
+        //printfn "type VkCompositeAlphaFlagsKHR = | MinValue = 0"
 
         printfn "type VkPipelineLayoutCreateFlags = | MinValue = 0"
         printfn "type VkBufferViewCreateFlags = | MinValue = 0"
@@ -672,16 +735,17 @@ module FSharpWriter =
         printfn "type VkWaylandSurfaceCreateFlagsKHR = | MinValue = 0"
         printfn "type VkMirSurfaceCreateFlagsKHR = | MinValue = 0"
 
-        printfn "type VkDebugReportFlagsEXT = | MinValue = 0"
+        //printfn "type VkDebugReportFlagsEXT = | MinValue = 0"
         printfn "type PFN_vkDebugReportCallbackEXT = nativeint"
+        printfn "type PFN_vkDebugUtilsMessengerCallbackEXT = nativeint"
         printfn ""
         printfn "type VkExternalMemoryHandleTypeFlagsNV = | MinValue = 0"
         printfn "type VkExternalMemoryFeatureFlagsNV = | MinValue = 0"
         printfn "type VkIndirectCommandsLayoutUsageFlagsNVX = | MinValue = 0"
         printfn "type VkObjectEntryUsageFlagsNVX = | MinValue = 0"
         printfn ""
-        printfn "type VkDescriptorUpdateTemplateCreateFlagsKHR = | MinValue = 0"
-        printfn "type VkDeviceGroupPresentModeFlagsKHX = | MinValue = 0"
+        printfn "type VkDescriptorUpdateTemplateCreateFlags = | MinValue = 0"
+        //printfn "type VkDeviceGroupPresentModeFlagsKHR = | MinValue = 0"
         printfn "type VkExternalFenceHandleTypeFlagsKHR = | MinValue = 0"
         printfn "type VkExternalMemoryHandleTypeFlagsKHR = | MinValue = 0"
         printfn "type VkExternalSemaphoreHandleTypeFlagsKHR = | MinValue = 0"
@@ -701,8 +765,15 @@ module FSharpWriter =
         printfn "type VkValidationCacheCreateFlagsEXT = | MinValue = 0"
         printfn "type VkViSurfaceCreateFlagsNN = | MinValue = 0"
         printfn "type VkPeerMemoryFeatureFlagsKHX = | MinValue = 0"
-        printfn "type VkCommandPoolTrimFlagsKHR = | MinValue = 0"
+        printfn "type VkCommandPoolTrimFlags = | MinValue = 0"
+        printfn "type VkPipelineRasterizationConservativeStateCreateFlagsEXT = | MinValue = 0"
+        //printfn "type VkDescriptorBindingFlagsEXT = | MinValue = 0"
 
+
+        printfn "type VkDebugUtilsMessengerCallbackDataFlagsEXT = | MinValue = 0"
+        printfn "type VkDebugUtilsMessengerCreateFlagsEXT = | MinValue = 0"
+        //printfn "type VkDebugUtilsMessageSeverityFlagsEXT = | MinValue = 0"
+        //printfn "type VkDebugUtilsMessageTypeFlagsEXT = | MinValue = 0"
 //    let extendedEnums() =
 //        printfn "[<AutoOpen>]"
 //        printfn "module WSIEnums = "
@@ -728,7 +799,7 @@ module FSharpWriter =
         printfn ""
 
     let cleanEnumName (e : string) =
-        if e.EndsWith "FlagBits" then e.Substring(0, e.Length - 8) + "Flags"
+        if e.Contains "FlagBits" then e.Replace("FlagBits", "Flags") //Substring(0, e.Length - 8) + "Flags"
         else e
 
     let enumExtensions (indent : string) (name : string) (exts : list<string * int>) =
@@ -835,8 +906,8 @@ module FSharpWriter =
             | FixedArray(Literal "char", s) -> sprintf "String%d" s
             | Ptr(Literal "void") -> "nativeint"
             | Literal n -> 
-                if n.EndsWith "FlagBits" then
-                    n.Substring(0, n.Length - 8) + "Flags"
+                if n.Contains "FlagBits" then
+                    n.Replace("FlagBits", "Flags") //.Substring(0, n.Length - 8) + "Flags"
                 else
                     match Map.tryFind n knownTypes with
                         | Some n -> n
@@ -905,12 +976,36 @@ module FSharpWriter =
                         printfn "        val mutable public %s : %s" n (typeName t)
                         ()
 
-                    let fieldDefs = s.fields |> List.map (fun (t,n) -> sprintf "%s : %s" (fsharpName n) (typeName t)) |> String.concat ", "
-                    let fieldAss = s.fields |> List.map (fun (_,n) -> sprintf "%s = %s" (fsharpName n) (fsharpName n)) |> String.concat "; "
+                    let fieldDefs = s.fields |> List.map (fun (t,n) -> sprintf "%s : %s" (fsharpName n) (typeName t)) //|> String.concat ", "
+                    let fieldAss = s.fields |> List.map (fun (_,n) -> sprintf "%s = %s" (fsharpName n) (fsharpName n)) //|> String.concat "; "
 
                     if not s.isUnion then
+
+                        let argumentIndent = "          "
+                        
                         printfn ""
-                        printfn "        new(%s) = { %s }" fieldDefs fieldAss
+
+                        match fieldDefs with
+                            | d :: ds ->
+                                printfn "        new(%s" d
+
+                                for d in ds do
+                                    printfn "%s, %s" argumentIndent d
+                                printfn "          ) ="
+                            | [] ->
+                                printfn "        new() = { }"
+
+                        match fieldAss with
+                            | a :: ass ->
+                                printfn "            {"
+                                printfn "                %s" a
+                                for a in ass do printfn "                %s" a
+                                printfn "            }"
+                            | [] ->
+                                ()
+
+
+                        //printfn "        new(%s) = { %s }" fieldDefs fieldAss
 
                         if s.name = "VkExtent3D" then
                             printfn "        new(w : int, h : int, d : int) = VkExtent3D(uint32 w,uint32 h,uint32 d)" 
@@ -918,13 +1013,19 @@ module FSharpWriter =
                             printfn "        new(w : int, h : int) = VkExtent2D(uint32 w,uint32 h)" 
 
 
-                    let fieldSplice = s.fields |> List.map (fun (t,n) -> sprintf "%s = %%A" (fsharpName n)) |> String.concat "; "
-                    let fieldAccess = s.fields |> List.map (fun (_,n) -> sprintf "x.%s" (fsharpName n)) |> String.concat " "
+                    let fieldSplice = s.fields |> List.map (fun (t,n) -> sprintf "%s = %%A" (fsharpName n)) //|> String.concat "; "
+                    let fieldAccess = s.fields |> List.map (fun (_,n) -> sprintf "x.%s" (fsharpName n))
 
 
                     printfn "        override x.ToString() ="
-                    printfn "            sprintf \"%s { %s }\" %s" s.name fieldSplice fieldAccess
+                    printfn "            String.concat \"; \" ["
+                    for (s,a) in List.zip fieldSplice fieldAccess do
+                        printfn "                sprintf \"%s\" %s" s a
 
+                    printfn "            ] |> sprintf \"%s { %%s }\"" s.name
+                    //printfn "            sprintf \"%s { %s }\"" s.name fieldSplice
+                    //for a in fieldAccess do
+                    //    printfn "                %s" a
 
                     printfn "    end"
                     printfn ""
@@ -1072,79 +1173,82 @@ module FSharpWriter =
                 []
 
     let rec extension (mapping : Map<string, list<string>>) (indent : string) (e : Extension) =
-        let subindent = indent + "    "
-        let printfn fmt =
-            Printf.kprintf (fun str -> 
-                printfn "%s%s" indent str
-            ) fmt
+        
+        if not (List.isEmpty e.commands) || not (List.isEmpty e.structs) || not (List.isEmpty e.enums) || not (Map.isEmpty e.enumExtensions) || not (List.isEmpty e.subExtensions) || e.number >= 0 then
 
-        printfn ""
-        printfn "module %s =" e.name
+            let subindent = indent + "    "
+            let printfn fmt =
+                Printf.kprintf (fun str -> 
+                    printfn "%s%s" indent str
+                ) fmt
 
-        if e.number >= 0 then
-            printfn "    let Name = \"%s\"" e.extName
-            printfn "    let Number = %d" e.number
-            printfn "    "
+            printfn ""
+            printfn "module %s =" e.name
 
-        let required = requires mapping e.name |> Set.ofList
-
-        if not (Set.isEmpty required) then
             if e.number >= 0 then
-                let exts = required |> Seq.map (sprintf "%s.Name") |> String.concat "; " |> sprintf "[ %s ]"
-                printfn "    let Required = %s" exts
+                printfn "    let Name = \"%s\"" e.extName
+                printfn "    let Number = %d" e.number
+                printfn "    "
 
-            for r in required do
-                printfn "    open %s" r
+            let required = requires mapping e.name |> Set.ofList
+
+            if not (Set.isEmpty required) then
+                if e.number >= 0 then
+                    let exts = required |> Seq.map (sprintf "%s.Name") |> String.concat "; " |> sprintf "[ %s ]"
+                    printfn "    let Required = %s" exts
+
+                for r in required do
+                    printfn "    open %s" r
                 
-        if e.name <> "EXTDebugReport" then
-            printfn "    open EXTDebugReport"
+            if e.name <> "EXTDebugReport" then
+                printfn "    open EXTDebugReport"
+                printfn "    "
+
+            enums subindent e.enums
             printfn "    "
 
-        enums subindent e.enums
-        printfn "    "
+            structs subindent (Struct.topologicalSort e.structs)
+            printfn "    "
+            for (name, values) in Map.toSeq e.enumExtensions do
+                enumExtensions subindent name values
+            printfn "    "
 
-        structs subindent (Struct.topologicalSort e.structs)
-        printfn "    "
-        for (name, values) in Map.toSeq e.enumExtensions do
-            enumExtensions subindent name values
-        printfn "    "
+            match e.commands with
+                | [] -> ()
+                | _ -> 
+                    printfn "    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]"
+                    printfn "    module VkRaw ="
+                    for c in e.commands do
+                        let delegateName = c.name.Substring(0,1).ToUpper() + c.name.Substring(1) + "Del"
+                        let targs = c.parameters |> List.map (fun (t,n) -> (typeName t)) |> String.concat " * "
+                        let ret = 
+                            match typeName c.returnType with
+                                | "void" -> "unit"
+                                | n -> n
 
-        match e.commands with
-            | [] -> ()
-            | _ -> 
-                printfn "    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]"
-                printfn "    module VkRaw ="
-                for c in e.commands do
-                    let delegateName = c.name.Substring(0,1).ToUpper() + c.name.Substring(1) + "Del"
-                    let targs = c.parameters |> List.map (fun (t,n) -> (typeName t)) |> String.concat " * "
-                    let ret = 
-                        match typeName c.returnType with
-                            | "void" -> "unit"
-                            | n -> n
-
-                    let tDel = sprintf "%s -> %s" targs ret
-                    printfn "        [<SuppressUnmanagedCodeSecurity>]"
-                    printfn "        type %s = delegate of %s" delegateName tDel
+                        let tDel = sprintf "%s -> %s" targs ret
+                        printfn "        [<SuppressUnmanagedCodeSecurity>]"
+                        printfn "        type %s = delegate of %s" delegateName tDel
                         
-                printfn "        "
-                printfn "        [<AbstractClass; Sealed>]"
-                printfn "        type private Loader<'d> private() ="
-                printfn "            static do Report.Begin(3, \"[Vulkan] loading %s\")" e.extName
-                for c in e.commands do
-                    let delegateName = c.name.Substring(0,1).ToUpper() + c.name.Substring(1) + "Del"
-                    printfn "            static let s_%sDel = VkRaw.vkImportInstanceDelegate<%s> \"%s\"" c.name delegateName c.name
-                printfn "            static do Report.End(3) |> ignore"
-                for c in e.commands do
-                    printfn "            static member %s = s_%sDel" c.name c.name
+                    printfn "        "
+                    printfn "        [<AbstractClass; Sealed>]"
+                    printfn "        type private Loader<'d> private() ="
+                    printfn "            static do Report.Begin(3, \"[Vulkan] loading %s\")" e.extName
+                    for c in e.commands do
+                        let delegateName = c.name.Substring(0,1).ToUpper() + c.name.Substring(1) + "Del"
+                        printfn "            static let s_%sDel = VkRaw.vkImportInstanceDelegate<%s> \"%s\"" c.name delegateName c.name
+                    printfn "            static do Report.End(3) |> ignore"
+                    for c in e.commands do
+                        printfn "            static member %s = s_%sDel" c.name c.name
       
-                for c in e.commands do
-                    let argDef = c.parameters |> List.map (fun (t,n) -> sprintf "%s : %s" (fsharpName n) (typeName t)) |> String.concat ", "
-                    let argUse = c.parameters |> List.map (fun (_,n) -> (fsharpName n)) |> String.concat ", "
+                    for c in e.commands do
+                        let argDef = c.parameters |> List.map (fun (t,n) -> sprintf "%s : %s" (fsharpName n) (typeName t)) |> String.concat ", "
+                        let argUse = c.parameters |> List.map (fun (_,n) -> (fsharpName n)) |> String.concat ", "
 
-                    printfn "        let %s(%s) = Loader<unit>.%s.Invoke(%s)" c.name argDef c.name argUse
+                        printfn "        let %s(%s) = Loader<unit>.%s.Invoke(%s)" c.name argDef c.name argUse
 
-        for s in e.subExtensions do
-            extension mapping (indent + "    ") s
+            for s in e.subExtensions do
+                extension mapping (indent + "    ") s
 
     let topoExtensions (s : list<Extension>) : list<Extension> =
         let typeMap = s |> List.map (fun s -> s.name, s) |> Map.ofList
@@ -1220,6 +1324,7 @@ let run () =
     let aliases = XmlReader.aliases defines vk
     let handles = XmlReader.handles vk
     let enums = XmlReader.enums vk
+    let enums = XmlReader.enumExtends vk enums
     let structs = XmlReader.structs defines vk
     let commands = XmlReader.commands defines vk
     let exts, commands, enums, structs = XmlReader.extensions vk commands enums structs

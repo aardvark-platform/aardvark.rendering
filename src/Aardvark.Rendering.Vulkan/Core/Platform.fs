@@ -8,7 +8,6 @@ open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 open System.Reflection
-open KHXDeviceGroupCreation
 open KHRGetPhysicalDeviceProperties2
 open KHRExternalMemoryCapabilities
 
@@ -20,7 +19,6 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
 
     let extensions = 
         extensions 
-            |> Set.add KHXDeviceGroupCreation.Name
             |> Set.add KHRGetPhysicalDeviceProperties2.Name
 
     static let availableLayers =
@@ -139,30 +137,28 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
         devices |> Array.map (fun d -> PhysicalDevice(this, d, extensions))
 
     let groups =    
-        if Set.contains KHXDeviceGroupCreation.Name extensions then
-            let mutable groupCount = 0u
+        let mutable groupCount = 0u
 
-            VkRaw.vkEnumeratePhysicalDeviceGroupsKHX(instance, &&groupCount, NativePtr.zero)
+        VkRaw.vkEnumeratePhysicalDeviceGroups(instance, &&groupCount, NativePtr.zero)
+            |> check "could not get physical device groups"
+
+
+        let groups = Array.zeroCreate (int groupCount)
+        groups |> NativePtr.withA (fun ptr ->
+            VkRaw.vkEnumeratePhysicalDeviceGroups(instance, &&groupCount, ptr)
                 |> check "could not get physical device groups"
+        )
 
-
-            let groups = Array.zeroCreate (int groupCount)
-            groups |> NativePtr.withA (fun ptr ->
-                VkRaw.vkEnumeratePhysicalDeviceGroupsKHX(instance, &&groupCount, ptr)
-                    |> check "could not get physical device groups"
-            )
-
-            groups |> Array.mapi (fun i d -> 
-                let devices = 
-                    Array.init (int d.physicalDeviceCount) (fun ii ->
-                        let handle = d.physicalDevices.[ii]
-                        devices |> Array.find (fun dd -> dd.Handle = handle)
-                    )
-                PhysicalDeviceGroup(this, devices, extensions)
-            )
-            |> Array.filter (fun g -> g.Devices.Length > 1)
-        else
-            [||]
+        groups |> Array.mapi (fun i d -> 
+            let devices = 
+                Array.init (int d.physicalDeviceCount) (fun ii ->
+                    let handle = d.physicalDevices.[ii]
+                    devices |> Array.find (fun dd -> dd.Handle = handle)
+                )
+            PhysicalDeviceGroup(this, devices, extensions)
+        )
+        |> Array.filter (fun g -> g.Devices.Length > 1)
+      
 
     let devicesAndGroups =
         Array.append devices (groups |> Array.map (fun a -> a :> _))
@@ -324,34 +320,52 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
     let mutable properties = VkPhysicalDeviceProperties()
     do VkRaw.vkGetPhysicalDeviceProperties(handle, &&properties)
 
-    
+
+    let maxAllocationSize, maxPerSetDescriptors =
+        let mutable main3 = 
+            VkPhysicalDeviceMaintenance3Properties(
+                VkStructureType.PhysicalDeviceMaintenance3Properties, 0n, 10u, 10UL
+            )
+
+        let mutable props = 
+            VkPhysicalDeviceProperties2KHR(
+                VkStructureType.PhysicalDeviceProperties2,
+                NativePtr.toNativeInt &&main3,
+                VkPhysicalDeviceProperties()
+            )
+
+        VkRaw.vkGetPhysicalDeviceProperties2(handle, &&props)
+
+
+        let maxMemoryAllocationSize = min (uint64 Int64.MaxValue) main3.maxMemoryAllocationSize |> int64
+        let maxPerSetDescriptors = min (uint32 Int32.MaxValue) main3.maxPerSetDescriptors |> int
+
+        maxMemoryAllocationSize, maxPerSetDescriptors
+  
     let uniqueId, deviceMask =
-        if Set.contains KHRGetPhysicalDeviceProperties2.Name enabledInstanceExtensions then
-            let mutable id =
-                KHRExternalMemoryCapabilities.VkPhysicalDeviceIDPropertiesKHR(
-                    VkStructureType.PhysicalDeviceIdPropertiesKhr,
-                    0n,
-                    Guid.Empty,
-                    Guid.Empty,
-                    byte_8 (),
-                    0u,
-                    0u
-                )
+        let mutable id =
+            KHRExternalMemoryCapabilities.VkPhysicalDeviceIDPropertiesKHR(
+                VkStructureType.PhysicalDeviceIdProperties,
+                0n,
+                Guid.Empty,
+                Guid.Empty,
+                byte_8 (),
+                0u,
+                0u
+            )
+            
+        let mutable khrProps = 
+            VkPhysicalDeviceProperties2KHR(
+                VkStructureType.PhysicalDeviceProperties2,
+                NativePtr.toNativeInt &&id,
+                VkPhysicalDeviceProperties()
+            )
+        VkRaw.vkGetPhysicalDeviceProperties2(handle, &&khrProps)
+        let uid = sprintf "{ GUID = %A; Mask = %d }" id.deviceUUID id.deviceNodeMask
+        uid, id.deviceNodeMask
+     
 
-            let mutable khrProps = 
-                VkPhysicalDeviceProperties2KHR(
-                    VkStructureType.PhysicalDeviceProperties2Khr,
-                    NativePtr.toNativeInt &&id,
-                    VkPhysicalDeviceProperties()
-                )
-            VkRaw.vkGetPhysicalDeviceProperties2KHR(handle, &&khrProps)
-            let uid = sprintf "{ GUID = %A; Mask = %d }" id.deviceUUID id.deviceNodeMask
-            uid, id.deviceNodeMask
-        else
-            let uid = sprintf "{ Vendor = %d; Device = %d }" properties.vendorID properties.deviceID
-            uid, 1u
-
-    let limits = DeviceLimits.ofVkDeviceLimits properties.limits
+    let limits = DeviceLimits.ofVkDeviceLimits (Mem maxAllocationSize) properties.limits
     let vendor = PCI.vendorName (int properties.vendorID)
 
 
@@ -404,6 +418,9 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
 
     let hostMemory = memoryTypes |> Array.maxBy MemoryInfo.hostScore
     let deviceMemory = memoryTypes |> Array.maxBy MemoryInfo.deviceScore
+    
+    member x.MaxAllocationSize = maxAllocationSize
+    member x.MaxPerSetDescriptors = maxPerSetDescriptors
 
     member x.GetFormatFeatures(tiling : VkImageTiling, fmt : VkFormat) =
         match tiling with

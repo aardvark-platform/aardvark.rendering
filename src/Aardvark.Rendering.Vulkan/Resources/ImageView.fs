@@ -8,7 +8,6 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
-open KHXDeviceGroup
 #nowarn "9"
 #nowarn "51"
 
@@ -23,7 +22,7 @@ module ImageViewCommandExtensions =
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue(cmd) =
                     cmd.AppendCommand()
-                    VkRaw.vkCmdSetDeviceMaskKHX(cmd.Handle, mask)
+                    VkRaw.vkCmdSetDeviceMask(cmd.Handle, mask)
                     Disposable.Empty        
             }
 

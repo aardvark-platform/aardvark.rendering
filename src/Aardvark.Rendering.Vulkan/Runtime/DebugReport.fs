@@ -65,22 +65,22 @@ module private DebugReportHelpers =
 
     [<AutoOpen>]
     module EnumExtensions =
-        type VkDebugReportFlagBitsEXT with
+        type VkDebugReportFlagsEXT with
             static member All =
-                VkDebugReportFlagBitsEXT.VkDebugReportDebugBitExt |||
-                VkDebugReportFlagBitsEXT.VkDebugReportErrorBitExt |||
-                VkDebugReportFlagBitsEXT.VkDebugReportInformationBitExt |||
-                VkDebugReportFlagBitsEXT.VkDebugReportPerformanceWarningBitExt |||
-                VkDebugReportFlagBitsEXT.VkDebugReportWarningBitExt
+                VkDebugReportFlagsEXT.VkDebugReportDebugBitExt |||
+                VkDebugReportFlagsEXT.VkDebugReportErrorBitExt |||
+                VkDebugReportFlagsEXT.VkDebugReportInformationBitExt |||
+                VkDebugReportFlagsEXT.VkDebugReportPerformanceWarningBitExt |||
+                VkDebugReportFlagsEXT.VkDebugReportWarningBitExt
 
     type VkDebugReportCallbackEXTDelegate = 
         delegate of 
-            VkDebugReportFlagBitsEXT * VkDebugReportObjectTypeEXT * 
+            VkDebugReportFlagsEXT * VkDebugReportObjectTypeEXT * 
             uint64 * uint64 * int * cstr * cstr * nativeint -> uint32
 
 
     type DebugReportAdapter internal(instance : Instance) =
-        let flags = VkDebugReportFlagBitsEXT.All
+        let flags = VkDebugReportFlagsEXT.All
 //        let load (name : string) : 'a =
 //            let ptr = VkRaw.vkGetInstanceProcAddr(instance.Handle, name)
 //            if ptr = 0n then failf "could not get %s" name
@@ -111,7 +111,7 @@ module private DebugReportHelpers =
 //
 
 
-        let callback (flags : VkDebugReportFlagBitsEXT) (objType : VkDebugReportObjectTypeEXT) (srcObject : uint64) (location : uint64) (msgCode : int) (layerPrefix : cstr) (msg : cstr) (userData : nativeint) =
+        let callback (flags : VkDebugReportFlagsEXT) (objType : VkDebugReportObjectTypeEXT) (srcObject : uint64) (location : uint64) (msgCode : int) (layerPrefix : cstr) (msg : cstr) (userData : nativeint) =
             let layerPrefix = layerPrefix |> CStr.toString
             let msg = msg |> CStr.toString
 
@@ -197,12 +197,12 @@ module private DebugReportHelpers =
         member x.Raise(severity : MessageSeverity, msg : string) =
             let flags =
                 match severity with
-                    | MessageSeverity.Debug -> VkDebugReportFlagBitsEXT.VkDebugReportDebugBitExt 
-                    | MessageSeverity.Information -> VkDebugReportFlagBitsEXT.VkDebugReportInformationBitExt
-                    | MessageSeverity.PerformanceWarning -> VkDebugReportFlagBitsEXT.VkDebugReportPerformanceWarningBitExt
-                    | MessageSeverity.Warning -> VkDebugReportFlagBitsEXT.VkDebugReportWarningBitExt
-                    | MessageSeverity.Error -> VkDebugReportFlagBitsEXT.VkDebugReportErrorBitExt
-                    | _ -> VkDebugReportFlagBitsEXT.None
+                    | MessageSeverity.Debug -> VkDebugReportFlagsEXT.VkDebugReportDebugBitExt 
+                    | MessageSeverity.Information -> VkDebugReportFlagsEXT.VkDebugReportInformationBitExt
+                    | MessageSeverity.PerformanceWarning -> VkDebugReportFlagsEXT.VkDebugReportPerformanceWarningBitExt
+                    | MessageSeverity.Warning -> VkDebugReportFlagsEXT.VkDebugReportWarningBitExt
+                    | MessageSeverity.Error -> VkDebugReportFlagsEXT.VkDebugReportErrorBitExt
+                    | _ -> VkDebugReportFlagsEXT.None
 
             msg |> CStr.suse (fun str -> 
                 VkRaw.vkDebugReportMessageEXT(

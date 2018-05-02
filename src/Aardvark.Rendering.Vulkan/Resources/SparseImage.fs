@@ -9,7 +9,6 @@ open System.Collections.Concurrent
 open Aardvark.Base
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
-open KHXDeviceGroup
 
 #nowarn "9"
 #nowarn "51"
@@ -830,7 +829,7 @@ module SparseTextureImplemetation =
             and set r = witness <- r
 
     let runTest() =
-        let instance = new Instance(Version(1,0,0), Set.empty, Set.empty)
+        let instance = new Instance(Version(1,1,0), Set.empty, Set.empty)
         let device = instance.Devices.[0].CreateDevice(Set.empty, Set.empty)
 
         let size = V3i(1024, 512, 256)
