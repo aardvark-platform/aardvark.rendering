@@ -320,7 +320,28 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
     let mutable properties = VkPhysicalDeviceProperties()
     do VkRaw.vkGetPhysicalDeviceProperties(handle, &&properties)
 
-    
+
+    let maxAllocationSize, maxPerSetDescriptors =
+        let mutable main3 = 
+            VkPhysicalDeviceMaintenance3Properties(
+                VkStructureType.PhysicalDeviceMaintenance3Properties, 0n, 10u, 10UL
+            )
+
+        let mutable props = 
+            VkPhysicalDeviceProperties2KHR(
+                VkStructureType.PhysicalDeviceProperties2,
+                NativePtr.toNativeInt &&main3,
+                VkPhysicalDeviceProperties()
+            )
+
+        VkRaw.vkGetPhysicalDeviceProperties2(handle, &&props)
+
+
+        let maxMemoryAllocationSize = min (uint64 Int64.MaxValue) main3.maxMemoryAllocationSize |> int64
+        let maxPerSetDescriptors = min (uint32 Int32.MaxValue) main3.maxPerSetDescriptors |> int
+
+        maxMemoryAllocationSize, maxPerSetDescriptors
+  
     let uniqueId, deviceMask =
         let mutable id =
             KHRExternalMemoryCapabilities.VkPhysicalDeviceIDPropertiesKHR(
@@ -332,7 +353,7 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
                 0u,
                 0u
             )
-
+            
         let mutable khrProps = 
             VkPhysicalDeviceProperties2KHR(
                 VkStructureType.PhysicalDeviceProperties2,
@@ -344,7 +365,7 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
         uid, id.deviceNodeMask
      
 
-    let limits = DeviceLimits.ofVkDeviceLimits properties.limits
+    let limits = DeviceLimits.ofVkDeviceLimits (Mem maxAllocationSize) properties.limits
     let vendor = PCI.vendorName (int properties.vendorID)
 
 
@@ -397,6 +418,9 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
 
     let hostMemory = memoryTypes |> Array.maxBy MemoryInfo.hostScore
     let deviceMemory = memoryTypes |> Array.maxBy MemoryInfo.deviceScore
+    
+    member x.MaxAllocationSize = maxAllocationSize
+    member x.MaxPerSetDescriptors = maxPerSetDescriptors
 
     member x.GetFormatFeatures(tiling : VkImageTiling, fmt : VkFormat) =
         match tiling with

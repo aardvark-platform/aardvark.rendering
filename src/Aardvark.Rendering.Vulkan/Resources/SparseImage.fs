@@ -829,7 +829,7 @@ module SparseTextureImplemetation =
             and set r = witness <- r
 
     let runTest() =
-        let instance = new Instance(Version(1,0,0), Set.empty, Set.empty)
+        let instance = new Instance(Version(1,1,0), Set.empty, Set.empty)
         let device = instance.Devices.[0].CreateDevice(Set.empty, Set.empty)
 
         let size = V3i(1024, 512, 256)

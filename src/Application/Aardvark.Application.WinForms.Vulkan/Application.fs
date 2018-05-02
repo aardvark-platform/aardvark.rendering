@@ -128,7 +128,7 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
         let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions) |> Set.ofList
         let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers) |> Set.ofList
     
-        new Instance(Version(1,0,0), enabledLayers, enabledExtensions)
+        new Instance(Version(1,1,0), enabledLayers, enabledExtensions)
 
     // choose a physical device
     let physicalDevice = 

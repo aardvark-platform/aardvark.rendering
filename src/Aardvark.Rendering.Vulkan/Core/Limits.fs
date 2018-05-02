@@ -97,6 +97,8 @@ type MemoryLimits =
         /// the maximum number of device memory allocations, as created by vkAllocateMemory, which can simultaneously exist.
         MaxAllocationCount : int
 
+        MaxAllocationSize : Mem
+
         /// the total amount of address space available, in bytes, for sparse memory resources. This is an upper bound on the sum of the size of all sparse resources, regardless of whether any memory is bound to them.
         SparseAddressSpaceSize : Mem
 
@@ -128,6 +130,7 @@ type MemoryLimits =
 
     member x.Print(l : ILogger) =
         l.line "max allocations:            %d" x.MaxAllocationCount
+        l.line "max allocation size:        %A" x.MaxAllocationSize
         l.line "sparse size:                %A" x.SparseAddressSpaceSize
         l.line "buffer/image distance:      %d" x.BufferImageGranularity
         l.line "map alignment:              %d" x.MinMemoryMapAlignment
@@ -585,7 +588,7 @@ module DeviceLimits =
                 if flags.HasFlag VkSampleCountFlags.D64Bit then yield 64
             ]
 
-    let ofVkDeviceLimits (limits : VkPhysicalDeviceLimits) =
+    let ofVkDeviceLimits (maxAllocationSize : Mem) (limits : VkPhysicalDeviceLimits) =
         {
             Image = 
                 {
@@ -623,6 +626,7 @@ module DeviceLimits =
             Memory = 
                 {
                     MaxAllocationCount                  = int limits.maxMemoryAllocationCount
+                    MaxAllocationSize                   = maxAllocationSize
                     SparseAddressSpaceSize              = Mem (limits.sparseAddressSpaceSize &&& 0x7FFFFFFFFFFFFFFFUL)
                     BufferImageGranularity              = int64 limits.bufferImageGranularity
                     MinMemoryMapAlignment               = int64 limits.minMemoryMapAlignment

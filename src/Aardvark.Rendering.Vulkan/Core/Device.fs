@@ -301,7 +301,7 @@ type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExt
 
     let memories = 
         physical.MemoryTypes |> Array.map (fun t ->
-            new DeviceHeap(this, t, t.heap)
+            new DeviceHeap(this, physical, t, t.heap)
         )
 
     let hostMemory = memories.[physical.HostMemory.index]
@@ -1628,10 +1628,12 @@ and Event internal(device : Device) =
         member x.Dispose() = x.Dispose()
 
 
-and DeviceHeap internal(device : Device, memory : MemoryInfo, heap : MemoryHeapInfo) as this =
+and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : MemoryInfo, heap : MemoryHeapInfo) as this =
     let hostVisible = memory.flags |> MemoryFlags.hostVisible
     let manager = DeviceMemoryManager(this, heap.Capacity.Bytes, 128L <<< 20)
     let mask = 1u <<< memory.index
+
+    let maxAllocationSize = physical.MaxAllocationSize
 
     let createNullPtr() =
         let mutable mem = VkDeviceMemory.Null
@@ -1689,39 +1691,45 @@ and DeviceHeap internal(device : Device, memory : MemoryInfo, heap : MemoryHeapI
 
 
     member x.TryAllocRaw(size : int64, [<Out>] ptr : byref<DeviceMemory>) =
-        if heap.TryAdd size then
-            let mutable info =
-                VkMemoryAllocateInfo(
-                    VkStructureType.MemoryAllocateInfo, 0n,
-                    uint64 size,
-                    uint32 memory.index
-                )
-
-            let mutable mem = VkDeviceMemory.Null
-            
-            VkRaw.vkAllocateMemory(device.Handle, &&info, NativePtr.zero, &&mem)
-                |> check "could not allocate memory"
-
-            
-            let hostPtr = 
-                if hostVisible then
-                    let mutable hostPtr = 0n
-                    VkRaw.vkMapMemory(device.Handle, mem, 0UL, uint64 size, VkMemoryMapFlags.MinValue, &&hostPtr)
-                        |> check "could not map memory"
-                    hostPtr
-                else
-                    0n
-
-
-            ptr <- new DeviceMemory(x, mem, size, hostPtr)
-            true
-        else
+        if size > maxAllocationSize then
             false
+        else
+            if heap.TryAdd size then
+                let mutable info =
+                    VkMemoryAllocateInfo(
+                        VkStructureType.MemoryAllocateInfo, 0n,
+                        uint64 size,
+                        uint32 memory.index
+                    )
+
+                let mutable mem = VkDeviceMemory.Null
+            
+                VkRaw.vkAllocateMemory(device.Handle, &&info, NativePtr.zero, &&mem)
+                    |> check "could not allocate memory"
+
+            
+                let hostPtr = 
+                    if hostVisible then
+                        let mutable hostPtr = 0n
+                        VkRaw.vkMapMemory(device.Handle, mem, 0UL, uint64 size, VkMemoryMapFlags.MinValue, &&hostPtr)
+                            |> check "could not map memory"
+                        hostPtr
+                    else
+                        0n
+
+
+                ptr <- new DeviceMemory(x, mem, size, hostPtr)
+                true
+            else
+                false
 
     member x.AllocRaw(size : int64) =
-        match x.TryAllocRaw size with
-            | (true, ptr) -> ptr
-            | _ -> failf "could not allocate %A (only %A available)" (Mem size) heap.Available
+        if size > maxAllocationSize then
+            failf "could not allocate %A (exceeds MaxAllocationSize: %A)" (Mem size) (Mem maxAllocationSize)
+        else
+            match x.TryAllocRaw size with
+                | (true, ptr) -> ptr
+                | _ -> failf "could not allocate %A (only %A available)" (Mem size) heap.Available
             
     member x.TryAllocRaw(mem : Mem, [<Out>] ptr : byref<DeviceMemory>) = x.TryAllocRaw(mem.Bytes, &ptr)
     member x.TryAllocRaw(mem : VkDeviceSize, [<Out>] ptr : byref<DeviceMemory>) = x.TryAllocRaw(int64 mem, &ptr)
@@ -1758,7 +1766,7 @@ and DeviceHeap internal(device : Device, memory : MemoryInfo, heap : MemoryHeapI
 
         manager.Clear()
 
-    member x.Copy() = new DeviceHeap(device, memory, heap)
+    member x.Copy() = new DeviceHeap(device, physical, memory, heap)
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
