@@ -144,7 +144,7 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
         let availableExtensions =
             physicalDevice.GlobalExtensions |> Seq.map (fun e -> e.name) |> Set.ofSeq
   
-        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions) |> Set.ofList
+        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
 
         physicalDevice.CreateDevice(enabledExtensions)
 
@@ -152,7 +152,7 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
     let runtime = new Runtime(device, false, false, debug)
 
     let canCreateRenderControl =
-        Set.contains Instance.Extensions.SwapChain device.EnabledExtensions
+        List.contains Instance.Extensions.SwapChain device.EnabledExtensions
 
     member x.Runtime = runtime
 
