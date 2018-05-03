@@ -92,6 +92,27 @@ module ``Image Format Extensions`` =
         VkAccessFlags.TransferReadBit |||
         VkAccessFlags.UniformReadBit |||
         VkAccessFlags.VertexAttributeReadBit
+        
+    let private allAccess = 
+        VkAccessFlags.ColorAttachmentReadBit ||| 
+        VkAccessFlags.DepthStencilAttachmentReadBit ||| 
+        VkAccessFlags.HostReadBit |||
+        VkAccessFlags.IndexReadBit |||
+        VkAccessFlags.IndirectCommandReadBit ||| 
+        VkAccessFlags.InputAttachmentReadBit |||
+        VkAccessFlags.MemoryReadBit |||
+        VkAccessFlags.ShaderReadBit |||
+        VkAccessFlags.TransferReadBit |||
+        VkAccessFlags.UniformReadBit |||
+        VkAccessFlags.VertexAttributeReadBit ||| 
+        VkAccessFlags.ColorAttachmentWriteBit |||
+        VkAccessFlags.DepthStencilAttachmentWriteBit |||
+        VkAccessFlags.HostWriteBit |||
+        VkAccessFlags.MemoryWriteBit |||
+        VkAccessFlags.ShaderWriteBit |||
+        VkAccessFlags.TransferWriteBit
+
+
 
     let private allAspects =
         VkImageAspectFlags.ColorBit |||
@@ -101,9 +122,12 @@ module ``Image Format Extensions`` =
     type VkAccessFlags with
         static member Write = writeAccess
         static member Read = readAccess
+        static member All = allAccess
+
 
     type VkImageAspectFlags with
         static member All = allAspects
+
 
     module VkImageType =
         let ofTextureDimension =
@@ -375,6 +399,12 @@ type ImageAspect =
     | Stencil = 0x00000004
     | Metadata = 0x00000008
     | DepthStencil = 0x00000006
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module VkImageAspectFlags =
+    let ofImageAspect (a : ImageAspect) =
+        a |> int |> unbox<VkImageAspectFlags>
+
 
 type Image =
     class 
@@ -2131,19 +2161,21 @@ module ``Image Command Extensions`` =
             { new Command() with
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue(cmd) =
-
-                        
+                
                     let device = img.Image.Device
 
                     let mutable totalSize = 0L
 
                     if img.Image.PeerHandles.Length > 0 then
                         cmd.AppendCommand()
+
+
                         let device = img.Image.Device
 
                         let baseImage = img.Image
                         let deviceIndices = baseImage.Device.AllIndicesArr
                         
+
                         for di in deviceIndices do
                             VkRaw.vkCmdSetDeviceMask(cmd.Handle, 1u <<< int di)
 
@@ -2173,56 +2205,27 @@ module ``Image Command Extensions`` =
 
                         VkRaw.vkCmdSetDeviceMask(cmd.Handle, baseImage.Device.AllMask)
 
+                        let mutable mem =
+                            VkMemoryBarrier(
+                                VkStructureType.MemoryBarrier, 0n,
+                                VkAccessFlags.TransferWriteBit,
+                                VkAccessFlags.TransferReadBit ||| VkAccessFlags.ShaderReadBit
+                            )
+
                         VkRaw.vkCmdPipelineBarrier(
                             cmd.Handle,
                             VkPipelineStageFlags.TransferBit,
-                            VkPipelineStageFlags.TopOfPipeBit,
+                            VkPipelineStageFlags.TransferBit ||| VkPipelineStageFlags.VertexShaderBit,
                             VkDependencyFlags.DeviceGroupBit,
-                            0u, NativePtr.zero,
+                            1u, &&mem, 
                             0u, NativePtr.zero, 
-                            0u, NativePtr.zero // wrongness
+                            0u, NativePtr.zero
                         )
 
                     Disposable.Empty
             }
 
 
-//
-//        static member Sync(img : ImageSubresourceRange) =
-//            if img.Image.IsNull then
-//                Command.Nop
-//            else
-//                { new Command() with
-//                    member x.Compatible = QueueFlags.All
-//                    member x.Enqueue (cmd : CommandBuffer) =
-//                        let layout = img.Image.Layout
-//                        let mutable barrier =
-//                            VkImageMemoryBarrier(
-//                                VkStructureType.ImageMemoryBarrier, 0n, 
-//                                VkAccessFlags.Write,
-//                                VkAccessFlags.Read,
-//                                layout,
-//                                layout,
-//                                VK_QUEUE_FAMILY_IGNORED,
-//                                VK_QUEUE_FAMILY_IGNORED,
-//                                img.Image.Handle,
-//                                img.VkImageSubresourceRange
-//                            )
-//                            
-//                        cmd.AppendCommand()
-//                        VkRaw.vkCmdPipelineBarrier(
-//                            cmd.Handle,
-//                            VkPipelineStageFlags.TopOfPipeBit,
-//                            VkPipelineStageFlags.TopOfPipeBit,
-//                            VkDependencyFlags.None,
-//                            0u, NativePtr.zero,
-//                            0u, NativePtr.zero,
-//                            1u, &&barrier
-//                        )
-//                        Disposable.Empty
-//                }
-//
-//
 
 
 // ===========================================================================================

@@ -233,23 +233,26 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
 
             if debug then
                 yield Instance.Extensions.DebugReport
+                yield Instance.Extensions.DebugUtils
+
         ]
 
     let requestedLayers =
         [
             if debug then
-                yield Instance.Layers.Nsight
-                yield Instance.Layers.SwapChain
-                yield Instance.Layers.DrawState
-                yield Instance.Layers.ParamChecker
                 yield Instance.Layers.StandardValidation
-                yield Instance.Layers.DeviceLimits
-                yield Instance.Layers.CoreValidation
-                yield Instance.Layers.ParameterValidation
-                yield Instance.Layers.ObjectTracker
-                yield Instance.Layers.Threading
-                yield Instance.Layers.UniqueObjects
-                yield Instance.Layers.Image
+                yield "VK_LAYER_LUNARG_assistant_layer"
+                //yield Instance.Layers.Nsight
+                //yield Instance.Layers.SwapChain
+                //yield Instance.Layers.DrawState
+                //yield Instance.Layers.ParamChecker
+                //yield Instance.Layers.DeviceLimits
+                //yield Instance.Layers.CoreValidation
+                //yield Instance.Layers.ParameterValidation
+                //yield Instance.Layers.ObjectTracker
+                //yield Instance.Layers.Threading
+                //yield Instance.Layers.UniqueObjects
+                //yield Instance.Layers.Image
         ]
 
     let instance = 
@@ -260,8 +263,8 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
             Instance.AvailableLayers |> Seq.map (fun l -> l.name) |> Set.ofSeq
 
         // create an instance
-        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions) |> Set.ofList
-        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers) |> Set.ofList
+        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
+        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers)
     
         new Instance(Version(1,1,0), enabledLayers, enabledExtensions)
 
@@ -279,19 +282,19 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
         let availableExtensions =
             physicalDevice.GlobalExtensions |> Seq.map (fun e -> e.name) |> Set.ofSeq
 
-        let availableLayers =
-            physicalDevice.AvailableLayers |> Seq.map (fun l -> l.name) |> Set.ofSeq
+        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
 
-        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions) |> Set.ofList
-        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers) |> Set.ofList
-        
-        physicalDevice.CreateDevice(enabledLayers, enabledExtensions)
+        Log.warn "requestedExtensions: %A" requestedExtensions
+
+        physicalDevice.CreateDevice(enabledExtensions)
+
+    
 
     // create a runtime
     let runtime = new Runtime(device, false, false, debug)
 
     let canCreateRenderControl =
-        Set.contains Instance.Extensions.SwapChain device.EnabledExtensions
+        List.contains Instance.Extensions.SwapChain device.EnabledExtensions
 
     member x.Runtime = runtime
 

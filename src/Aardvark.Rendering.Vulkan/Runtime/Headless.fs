@@ -45,8 +45,8 @@ type HeadlessVulkanApplication(debug : bool, instanceExtensions : list<string>, 
             Instance.AvailableLayers |> Seq.map (fun l -> l.name) |> Set.ofSeq
 
         // create an instance
-        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions) |> Set.ofList
-        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers) |> Set.ofList
+        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
+        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers)
     
         new Instance(Version(1,1,0), enabledLayers, enabledExtensions)
 
@@ -65,15 +65,10 @@ type HeadlessVulkanApplication(debug : bool, instanceExtensions : list<string>, 
         let availableExtensions =
             physicalDevice.GlobalExtensions |> Seq.map (fun e -> e.name) |> Set.ofSeq
 
-        let availableLayers =
-            physicalDevice.AvailableLayers |> Seq.map (fun l -> l.name) |> Set.ofSeq
-
         let devExt = deviceExtensions physicalDevice
+        let devExt = devExt |> List.filter (fun r -> Set.contains r availableExtensions)
 
-        let enabledExtensions = Set.union (Set.ofList requestedExtensions) (Set.ofList devExt) |> Set.toList |> List.filter (fun r -> Set.contains r availableExtensions) |> Set.ofList
-        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers) |> Set.ofList
-        
-        physicalDevice.CreateDevice(enabledLayers, enabledExtensions)
+        physicalDevice.CreateDevice(requestedExtensions @ devExt)
 
     // create a runtime
     let runtime = new Runtime(device, false, false, debug)

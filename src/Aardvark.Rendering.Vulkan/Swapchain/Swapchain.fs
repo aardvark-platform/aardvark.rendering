@@ -195,7 +195,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                         V3i(size.X, size.Y, 1), 1, 1, 1, 
                         TextureDimension.Texture2D, 
                         VkFormat.toTextureFormat description.colorFormat, 
-                        VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit
+                        VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit
                     )
                 // hacky-hack
                 image.Format <- description.colorFormat
@@ -258,16 +258,14 @@ type Swapchain(device : Device, description : SwapchainDescription) =
             if disposed <> 0 then 
                 failf "cannot use disposed Swapchain"
 
+            // the color-data is currently stored in colorView
+            let mutable currentImage : Image = Unchecked.defaultof<_>
+            let mutable backbuffer  : Image = Unchecked.defaultof<_>
+            let mutable res :  'a = Unchecked.defaultof<_>
+
+
             device.perform {
-                update()
-
-                // acquire a swapchain image for rendering
-                do! x.AcquireNextImage
-
-                // determine color and output images (may differ when using MSAA)
-                let outputIndex = int !currentBuffer
-                let backbuffer = buffers.[outputIndex].Image
-
+                update() 
                 let framebuffer = framebuffer.Value
                 let colorView = framebuffer.Attachments.[DefaultSemantic.Colors]
                 let depthView = Map.tryFind DefaultSemantic.Depth framebuffer.Attachments
@@ -276,6 +274,12 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 // blit(resolveView, transformView)
 
                 // clear color & depth
+
+                //do! Command.PerDevice(fun di ->
+                //        let color = if di = 0 then C4f.Green else C4f.Blue
+                //        Command.ClearColor(colorView.Image.[ImageAspect.Color], color)
+                //    )
+
                 do! Command.ClearColor(colorView.Image.[ImageAspect.Color], C4f.Black)
                 match depthView with
                     | Some v -> do! Command.ClearDepthStencil(v.Image.[ImageAspect.DepthStencil], 1.0, 0u)
@@ -285,10 +289,11 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 do! Command.TransformLayout(colorView.Image, VkImageLayout.ColorAttachmentOptimal)
 
                 // render the scene
-                let res = render framebuffer
+                res <- render framebuffer
+
 
                 // the color-data is currently stored in colorView
-                let mutable currentImage = colorView.Image
+                currentImage <- colorView.Image
 
                 // if the colorView is multisampled we need to resolve it to a temporary 
                 // single-sampled image (resolvedImage)
@@ -297,20 +302,59 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                         // resolve multisamples
                         do! Command.TransformLayout(colorView.Image, VkImageLayout.TransferSrcOptimal)
                         do! Command.TransformLayout(resolvedImage, VkImageLayout.TransferDstOptimal)
-                        do! Command.ResolveMultisamples(colorView.Image.[ImageAspect.Color, 0, *], resolvedImage.[ImageAspect.Color, 0, *])
+
+
+                        if device.AllCount > 1u then
+                            let size = framebuffer.Size
+                            let range = 
+                                { 
+                                    frMin = V2i.Zero
+                                    frMax = size - V2i.II
+                                    frLayers = Range1i(0,renderPass.LayerCount-1)
+                                }
+                            let ranges = range.Split(int device.AllCount)
+                            do! Command.PerDevice (fun di ->
+                                let myRange = ranges.[di]
+                                
+                                Command.ResolveMultisamples(
+                                    colorView.Image.[ImageAspect.Color, 0, *], 
+                                    V3i(myRange.frMin, 0),
+                                    resolvedImage.[ImageAspect.Color, 0, *],
+                                    V3i(myRange.frMin, 0),
+                                    V3i(V2i.II + myRange.frMax - myRange.frMin, 1)
+                                )
+                            )
+                        else
+                            do! Command.ResolveMultisamples(colorView.Image.[ImageAspect.Color, 0, *], resolvedImage.[ImageAspect.Color, 0, *])
 
                         // the color-data is now stored in the resolved image
                         currentImage <- resolvedImage
                     | None ->
                         ()
 
-                // since the blit might include an ImageTrafo we need to sompute
+
+                if device.AllCount > 1u then
+                    //do! Command.TransformLayout(currentImage, VkImageLayout.TransferSrcOptimal)
+                    do! Command.SyncPeersDefault(currentImage, VkImageLayout.TransferSrcOptimal)
+                    //do! Command.TransformLayout(currentImage, VkImageLayout.TransferDstOptimal)
+                else
+                    do! Command.TransformLayout(currentImage, VkImageLayout.TransferSrcOptimal)
+
+                // since the blit might include an ImageTrafo we need to compute
                 // appropriate ranges
                 let srcRange = Box3i(V3i(0,0,0), V3i(size.X - 1, size.Y - 1, 0))
                 let dstRange = srcRange.Transformed description.blitTrafo
 
+
+                // acquire a swapchain image for rendering
+                do! x.AcquireNextImage
+
+                // determine color and output images (may differ when using MSAA)
+                let outputIndex = int !currentBuffer
+                backbuffer <- buffers.[outputIndex].Image
+
                 // blit the current image to the final backbuffer using the ranges from above
-                do! Command.TransformLayout(currentImage, VkImageLayout.TransferSrcOptimal)
+                //do! Command.TransformLayout(currentImage, VkImageLayout.TransferSrcOptimal)
                 do! Command.TransformLayout(backbuffer, VkImageLayout.TransferDstOptimal)
                 do! Command.Blit(
                         currentImage.[ImageAspect.Color, 0, *],
@@ -337,8 +381,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
         if o = 0 then
             // delete old things
             VkRaw.vkDestroySwapchainKHR(device.Handle, handle, NativePtr.zero)
-
-
+            
             framebuffer |> Option.iter (fun framebuffer ->
                 framebuffer.Attachments |> Map.iter (fun _ v ->
                     device.Delete v.Image

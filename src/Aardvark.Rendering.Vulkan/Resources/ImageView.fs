@@ -26,7 +26,7 @@ module ImageViewCommandExtensions =
                     Disposable.Empty        
             }
 
-        static member SyncPeersDefault(img : Image) =
+        static member SyncPeersDefault(img : Image, dstLayout : VkImageLayout) =
             if img.PeerHandles.Length > 0 then
                 let device = img.Device
                 let arrayRange = Range1i(0, img.Count - 1)
@@ -57,7 +57,7 @@ module ImageViewCommandExtensions =
                         )
 
                     do! Command.SyncPeers(subResource, ranges)
-                    do! Command.TransformLayout(img, VkImageLayout.ShaderReadOnlyOptimal)
+                    do! Command.TransformLayout(img, dstLayout)
                 }
             else
                 Command.nop
@@ -161,7 +161,7 @@ module ImageView =
 
         if img.PeerHandles.Length > 0 then
             device.eventually {
-                do! Command.SyncPeersDefault img
+                do! Command.SyncPeersDefault(img, VkImageLayout.ShaderReadOnlyOptimal)
             }
 
         let viewType = viewType slices samplerType.isArray samplerType.dimension

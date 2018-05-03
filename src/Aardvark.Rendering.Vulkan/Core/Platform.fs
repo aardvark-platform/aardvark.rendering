@@ -14,12 +14,9 @@ open KHRExternalMemoryCapabilities
 #nowarn "9"
 #nowarn "51"
 
-type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<string>) as this =   
+type Instance(apiVersion : Version, layers : list<string>, extensions : list<string>) as this =   
     inherit VulkanObject()
 
-    let extensions = 
-        extensions 
-            |> Set.add KHRGetPhysicalDeviceProperties2.Name
 
     static let availableLayers =
         let mutable count = 0u
@@ -50,11 +47,11 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
     static let globalExtensionNames = globalExtensions |> Seq.map (fun p -> p.name.ToLower(), p.name) |> Map.ofSeq
 
 
-    static let filterLayersAndExtensions (wantedLayers : Set<string>, wantedExtensions : Set<string>) =
+    static let filterLayersAndExtensions (wantedLayers : list<string>, wantedExtensions : list<string>) =
         let availableExtensions = Dictionary globalExtensionNames
 
         let enabledLayers = 
-            wantedLayers |> Set.filter (fun name ->
+            wantedLayers |> List.filter (fun name ->
                 let name = name.ToLower()
                 match Map.tryFind name availableLayerNames with
                     | Some layer -> 
@@ -68,7 +65,7 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
             )
 
         let enabledExtensions =
-            wantedExtensions |> Seq.choose (fun name ->
+            wantedExtensions |> List.choose (fun name ->
                 let name = name.ToLower()
                 match availableExtensions.TryGetValue name with
                     | (true, realName) -> 
@@ -77,51 +74,54 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
                     | _ -> 
                         //VkRaw.warn "could not enable instance-extension '%s' since it is not available" name
                         None
-            ) |> Set.ofSeq
+            )
 
         enabledLayers, enabledExtensions
 
     let layers, extensions = filterLayersAndExtensions (layers, extensions)
+    
+    let appName = CStr.malloc "Aardvark"
 
     let mutable instance =
-        try
-            let layers = Set.toArray layers
-            let extensions = Set.toArray extensions
+        let layers = List.toArray layers
+        let extensions = List.toArray extensions
 
-            let pLayers = CStr.sallocMany layers
-            let pExtensions = CStr.sallocMany extensions
-            let appName = CStr.salloc "Aardvark"
+        layers |> CStr.susemany (fun cLayers pLayers ->
+            extensions |> CStr.susemany (fun cExtensions pExtensions ->
 
-            let apiVersion = apiVersion.ToVulkan()
+        //let pLayers = CStr.sallocMany layers
+        //let pExtensions = CStr.sallocMany extensions
 
-            let mutable applicationInfo =
-                VkApplicationInfo(
-                    VkStructureType.ApplicationInfo, 0n,
-                    appName,
-                    0u,
-                    appName,
-                    0u,
-                    apiVersion
-                )
+                let apiVersion = apiVersion.ToVulkan()
 
-            let mutable info =
-                VkInstanceCreateInfo(
-                    VkStructureType.InstanceCreateInfo, 0n,
-                    VkInstanceCreateFlags.MinValue,
-                    &&applicationInfo,
-                    uint32 layers.Length, pLayers,
-                    uint32 extensions.Length, pExtensions
-                )
+                let mutable applicationInfo =
+                    VkApplicationInfo(
+                        VkStructureType.ApplicationInfo, 0n,
+                        appName,
+                        0u,
+                        appName,
+                        0u,
+                        apiVersion
+                    )
 
-            let mutable instance = VkInstance.Zero
+                let mutable info =
+                    VkInstanceCreateInfo(
+                        VkStructureType.InstanceCreateInfo, 0n,
+                        VkInstanceCreateFlags.MinValue,
+                        &&applicationInfo,
+                        uint32 cLayers, pLayers,
+                        uint32 cExtensions, pExtensions
+                    )
 
-            VkRaw.vkCreateInstance(&&info, NativePtr.zero, &&instance)
-                |> check "could not create instance"
+                let mutable instance = VkInstance.Zero
+
+                VkRaw.vkCreateInstance(&&info, NativePtr.zero, &&instance)
+                    |> check "could not create instance"
 
 
-            instance
-        finally
-            ()
+                instance
+            )
+        )
 
     let devices =
         let mutable deviceCount = 0u
@@ -203,14 +203,14 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
         l.section "instance:" (fun () ->
             l.section "layers:" (fun () ->
                 for layer in availableLayers do
-                    let isEnabled = Set.contains layer.name layers
+                    let isEnabled = List.contains layer.name layers
                     let suffix = if isEnabled then "(X)" else "( )"
                     l.line "%s (v%A) %s" layer.name layer.specification suffix
             )
 
             l.section "extensions:" (fun () ->
                 for ext in globalExtensions do
-                    let isEnabled = Set.contains ext.name extensions
+                    let isEnabled = List.contains ext.name extensions
                     let suffix = if isEnabled then "(X)" else "( )"
                     l.line "%s (v%A) %s" ext.name ext.specification suffix
             )
@@ -289,7 +289,7 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
 
         )
 
-and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enabledInstanceExtensions : Set<string>) =
+and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enabledInstanceExtensions : list<string>) =
     static let allFormats = Enum.GetValues(typeof<VkFormat>) |> unbox<VkFormat[]>
 
     let availableLayers = 
@@ -460,7 +460,7 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
         sprintf "{ name = %s; type = %A; api = %A }" name x.Type x.APIVersion
     
 
-and PhysicalDeviceGroup internal(instance : Instance, devices : PhysicalDevice[], enabledInstanceExtensions : Set<string>) =
+and PhysicalDeviceGroup internal(instance : Instance, devices : PhysicalDevice[], enabledInstanceExtensions : list<string>) =
     inherit PhysicalDevice(instance, devices.[0].Handle, enabledInstanceExtensions)
    
     let mask = devices |> Seq.map (fun d -> d.DeviceMask) |> Seq.fold (|||) 0u
@@ -481,6 +481,7 @@ and PhysicalDeviceGroup internal(instance : Instance, devices : PhysicalDevice[]
 module Instance =
     module Extensions =
         let DebugReport         = "VK_EXT_debug_report"
+        let DebugUtils          = "VK_EXT_debug_utils"
         let Surface             = "VK_KHR_surface"
         let SwapChain           = "VK_KHR_swapchain"
         let Display             = "VK_KHR_display"
@@ -492,7 +493,6 @@ module Instance =
         let Win32Surface        = "VK_KHR_win32_surface"
         let XcbSurface          = "VK_KHR_xcb_surface"
         let XlibSurface         = "VK_KHR_xlib_surface"
-
     module Layers =
         let ApiDump             = "VK_LAYER_LUNARG_api_dump"
         let DeviceLimits        = "VK_LAYER_LUNARG_device_limits"

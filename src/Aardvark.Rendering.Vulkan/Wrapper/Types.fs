@@ -167,6 +167,42 @@ module CStr =
 
         ptrs
 
+    let susemany (f : int -> nativeptr<cstr> -> 'r) (strings : seq<string>) =
+        let mutable length = 0
+        let mutable count = 0
+        for s in strings do
+            length <- length + s.Length + 1
+            count <- count + 1
+
+        let content : byte[] = Array.zeroCreate length
+        
+        let gc = GCHandle.Alloc(content, GCHandleType.Pinned)
+        try
+            let pData = gc.AddrOfPinnedObject()
+            let mutable i = 0
+            let mutable o = 0
+            let offsets = Array.zeroCreate count
+
+            for s in strings do
+                let arr = System.Text.Encoding.ASCII.GetBytes(s)
+                offsets.[i] <- pData + nativeint o
+                arr.CopyTo(content, o)
+                content.[o + arr.Length] <- 0uy
+                o <- o + arr.Length + 1
+                i <- i + 1
+
+                
+            let gc = GCHandle.Alloc(offsets, GCHandleType.Pinned)
+            try
+                let pStrs = gc.AddrOfPinnedObject()
+                f count (NativePtr.ofNativeInt pStrs)
+            finally
+                gc.Free()
+
+        finally 
+            gc.Free()
+
+
     let malloc (str : string) =
         let ptr = NativePtr.malloc (str.Length + 1)
         str |> writeTo ptr |> ignore

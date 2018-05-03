@@ -106,15 +106,12 @@ type UploadMode =
     | Sync
     | Async
 
-type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExtensions : Set<string>) as this =
+type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as this =
     let isGroup, deviceGroup =
         match dev with
             | :? PhysicalDeviceGroup as g -> true, g.Devices
             | _ -> false, [| dev |]
 
-    let wantedExtensions =
-        if isGroup then wantedExtensions
-        else wantedExtensions
 
     let physical = deviceGroup.[0]
     let pool = QueueFamilyPool(physical.QueueFamilies)
@@ -141,25 +138,25 @@ type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExt
 
     let allMask = dev.DeviceMask
 
-    let layers, extensions =
+    let extensions =
         let availableExtensions = physical.GlobalExtensions |> Seq.map (fun e -> e.name.ToLower(), e.name) |> Dictionary.ofSeq
-        let availableLayerNames = physical.AvailableLayers |> Seq.map (fun l -> l.name.ToLower(), l) |> Map.ofSeq
-        let enabledLayers = 
-            wantedLayers |> Set.filter (fun name ->
-                let name = name.ToLower()
-                match Map.tryFind name availableLayerNames with
-                    | Some layer -> 
-                        VkRaw.debug "enabled layer %A" name
-                        for e in layer.extensions do
-                            availableExtensions.[e.name.ToLower()] <- e.name
-                        true
-                    | _ ->
-                        VkRaw.warn "could not enable device-layer '%s' since it is not available" name
-                        false
-            )
+        //let availableLayerNames = physical.AvailableLayers |> Seq.map (fun l -> l.name.ToLower(), l) |> Map.ofSeq
+        //let enabledLayers = 
+        //    wantedLayers |> Set.filter (fun name ->
+        //        let name = name.ToLower()
+        //        match Map.tryFind name availableLayerNames with
+        //            | Some layer -> 
+        //                VkRaw.debug "enabled layer %A" name
+        //                for e in layer.extensions do
+        //                    availableExtensions.[e.name.ToLower()] <- e.name
+        //                true
+        //            | _ ->
+        //                VkRaw.warn "could not enable device-layer '%s' since it is not available" name
+        //                false
+        //    )
 
         let enabledExtensions =
-            wantedExtensions |> Seq.choose (fun name ->
+            wantedExtensions |> List.choose (fun name ->
                 let name = name.ToLower()
                 match availableExtensions.TryGetValue name with
                     | (true, realName) -> 
@@ -168,9 +165,10 @@ type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExt
                     | _ -> 
                         VkRaw.warn "could not enable device-extension '%s' since it is not available" name
                         None
-            ) |> Set.ofSeq
+            )
 
-        enabledLayers, enabledExtensions
+        enabledExtensions
+
     let mutable isDisposed = 0
 
     let instance = physical.Instance
@@ -201,44 +199,46 @@ type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExt
                 )
 
         queueInfos |> NativePtr.withA (fun ptr ->
-            let layers = Set.toArray layers
-            let extensions = Set.toArray extensions
-            let pLayers = CStr.sallocMany layers
-            let pExtensions = CStr.sallocMany extensions
+            //let layers = Set.toArray layers
+            let extensions = List.toArray extensions
+            //let pLayers = CStr.sallocMany layers
+            //let pExtensions = CStr.sallocMany extensions
+            extensions |> CStr.susemany (fun cExtensions pExtensions ->
 
             
-            let mutable features = VkPhysicalDeviceFeatures()
-            VkRaw.vkGetPhysicalDeviceFeatures(physical.Handle, &&features)
+                let mutable features = VkPhysicalDeviceFeatures()
+                VkRaw.vkGetPhysicalDeviceFeatures(physical.Handle, &&features)
 
 
-            let deviceHandles = deviceGroup |> Array.map (fun d -> d.Handle)
+                let deviceHandles = deviceGroup |> Array.map (fun d -> d.Handle)
 
-            deviceHandles |> NativePtr.withA(fun pDevices ->
-                let mutable groupInfo =
-                    VkDeviceGroupDeviceCreateInfo(
-                        VkStructureType.DeviceGroupDeviceCreateInfo,
-                        0n,
-                        uint32 deviceGroup.Length,
-                        pDevices
-                    )
+                deviceHandles |> NativePtr.withA(fun pDevices ->
+                    let mutable groupInfo =
+                        VkDeviceGroupDeviceCreateInfo(
+                            VkStructureType.DeviceGroupDeviceCreateInfo,
+                            0n,
+                            uint32 deviceGroup.Length,
+                            pDevices
+                        )
 
-                let next = if isGroup then NativePtr.toNativeInt &&groupInfo else 0n
+                    let next = if isGroup then NativePtr.toNativeInt &&groupInfo else 0n
 
-                let mutable info =
-                    VkDeviceCreateInfo(
-                        VkStructureType.DeviceCreateInfo, next,
-                        VkDeviceCreateFlags.MinValue,
-                        uint32 queueInfos.Length, ptr,
-                        uint32 layers.Length, pLayers,
-                        uint32 extensions.Length, pExtensions,
-                        &&features
-                    )
+                    let mutable info =
+                        VkDeviceCreateInfo(
+                            VkStructureType.DeviceCreateInfo, next,
+                            VkDeviceCreateFlags.MinValue,
+                            uint32 queueInfos.Length, ptr,
+                            0u, NativePtr.zero,
+                            uint32 cExtensions, pExtensions,
+                            &&features
+                        )
 
-                let mutable device = VkDevice.Zero
-                VkRaw.vkCreateDevice(physical.Handle, &&info, NativePtr.zero, &&device)
-                    |> check "could not create device"
+                    let mutable device = VkDevice.Zero
+                    VkRaw.vkCreateDevice(physical.Handle, &&info, NativePtr.zero, &&device)
+                        |> check "could not create device"
 
-                device
+                    device
+                )
             )
         )
 
@@ -391,8 +391,7 @@ type Device internal(dev : PhysicalDevice, wantedLayers : Set<string>, wantedExt
 
     [<Obsolete>]
     member x.QueueFamilies = queueFamilies
-
-    member x.EnabledLayers = layers
+    
     member x.EnabledExtensions = extensions
 
     member x.MinMemoryMapAlignment = memoryLimits.MinMemoryMapAlignment
@@ -1343,15 +1342,31 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
                 VkQueryPipelineStatisticFlags.None
             )
 
-        let mutable info =
-            VkCommandBufferBeginInfo(
-                VkStructureType.CommandBufferBeginInfo, 0n,
-                unbox (int usage),
-                &&inh
-            )
 
-        VkRaw.vkBeginCommandBuffer(handle, &&info)
-            |> check "could not begin command buffer"
+
+        
+
+        let mutable next =
+            if device.AllCount > 1u then
+                VkDeviceGroupCommandBufferBeginInfo(
+                    VkStructureType.DeviceGroupCommandBufferBeginInfo, 0n,
+                    device.AllMask
+                ) |> Some
+            else 
+                None
+
+
+        next |> NativePtr.withOption (fun pNext ->
+            let mutable info =
+                VkCommandBufferBeginInfo(
+                    VkStructureType.CommandBufferBeginInfo, NativePtr.toNativeInt pNext,
+                    unbox (int usage),
+                    &&inh
+                )
+
+            VkRaw.vkBeginCommandBuffer(handle, &&info)
+                |> check "could not begin command buffer"
+        )
 
         commands <- 0
         recording <- true
@@ -2753,8 +2768,8 @@ type DeviceExtensions private() =
 
 
     [<Extension>]
-    static member CreateDevice(this : PhysicalDevice, wantedLayers : Set<string>, wantedExtensions : Set<string>) =
-        new Device(this, wantedLayers, wantedExtensions)
+    static member CreateDevice(this : PhysicalDevice, wantedExtensions : list<string>) =
+        new Device(this, wantedExtensions)
 
     [<Extension>]
     static member GetMemory(this : Device, bits : uint32, preferDevice : bool) =

@@ -39,6 +39,15 @@ type Command() =
                 Disposable.Empty
         }
 
+    static let resetDeviceMask =
+        { new Command() with
+            member x.Compatible = QueueFlags.All
+            member x.Enqueue cmd =
+                cmd.AppendCommand()
+                VkRaw.vkCmdSetDeviceMask(cmd.Handle, cmd.Device.AllMask)
+                Disposable.Empty
+        }
+
     abstract member Compatible : QueueFlags
     abstract member Enqueue : CommandBuffer -> Disposable
     interface ICommand with
@@ -121,6 +130,46 @@ type Command() =
                 cmd.WaitAll([| e |], dstFlags)
                 Disposable.Empty
         }
+
+
+    static member SetDeviceMask(mask : uint32) =
+        { new Command() with
+            member x.Compatible = QueueFlags.All
+            member x.Enqueue cmd =
+                cmd.AppendCommand()
+                VkRaw.vkCmdSetDeviceMask(cmd.Handle, mask)
+                Disposable.Empty
+        }
+
+    static member ResetDevicemask = resetDeviceMask
+
+    static member PerDevice (command : int -> Command) =
+        { new Command() with
+            member x.Compatible = QueueFlags.All
+            member x.Enqueue cmd =
+                if cmd.Device.AllCount = 1u then
+                    command(0).Enqueue cmd
+                else
+                    let disp = System.Collections.Generic.List<Disposable>()
+                    for di in cmd.Device.AllIndicesArr do
+                        let mask = 1u <<< int di
+                        cmd.AppendCommand()
+                        VkRaw.vkCmdSetDeviceMask(cmd.Handle, mask)
+
+                        let d = command(int di).Enqueue cmd
+                        if not (isNull d) then disp.Add d
+                    
+                    cmd.AppendCommand()
+                    VkRaw.vkCmdSetDeviceMask(cmd.Handle, cmd.Device.AllMask)
+
+                    if disp.Count > 0 then
+                        Disposable.Compose (CSharpList.toList disp)
+                    else
+                        Disposable.Empty
+        }
+
+        
+
 //
 //[<AbstractClass>]
 //type QueueCommand() =

@@ -9,7 +9,8 @@ open System.Runtime.CompilerServices
 open System.Threading
 open System.Collections.Concurrent
 open Aardvark.Base
-open EXTDebugReport
+open Microsoft.FSharp.NativeInterop
+open EXTDebugUtils
 
 type MessageSeverity =
     | Information           = 0x00000001
@@ -52,16 +53,14 @@ type ObjectType =
 type DebugMessage = 
     { 
         id              : Guid
+        performance     : bool
         severity        : MessageSeverity
-        objectType      : ObjectType 
-        sourceObject    : uint64 
         layerPrefix     : string
         message         : string
     }
 
 [<AutoOpen>]
 module private DebugReportHelpers =
-    open EXTDebugReport
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -73,11 +72,27 @@ module private DebugReportHelpers =
                 VkDebugReportFlagsEXT.VkDebugReportPerformanceWarningBitExt |||
                 VkDebugReportFlagsEXT.VkDebugReportWarningBitExt
 
-    type VkDebugReportCallbackEXTDelegate = 
-        delegate of 
-            VkDebugReportFlagsEXT * VkDebugReportObjectTypeEXT * 
-            uint64 * uint64 * int * cstr * cstr * nativeint -> uint32
+    //type VkDebugReportCallbackEXTDelegate = 
+    //    delegate of 
+    //        VkDebugReportFlagsEXT * VkDebugReportObjectTypeEXT * 
+    //        uint64 * uint64 * int * cstr * cstr * nativeint -> uint32
 
+
+    //typedef VkBool32 (VKAPI_PTR *PFN_vkDebugUtilsMessengerCallbackEXT)(
+    //    VkDebugUtilsMessageSeverityFlagBitsEXT           messageSeverity,
+    //    VkDebugUtilsMessageTypeFlagsEXT                  messageType,
+    //    const VkDebugUtilsMessengerCallbackDataEXT*      pCallbackData,
+    //    void*                                            pUserData);
+
+    type VkDebugUtilsMessengerCallbackEXTDelegate =
+        delegate of VkDebugUtilsMessageSeverityFlagsEXT * VkDebugUtilsMessageTypeFlagsEXT * nativeptr<VkDebugUtilsMessengerCallbackDataEXT> * nativeint -> int
+
+    type VkDebugUtilsMessageSeverityFlagsEXT with
+        static member All =
+            VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityErrorBitExt |||
+            VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityWarningBitExt |||
+            VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityInfoBitExt // |||
+           // VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityVerboseBitExt
 
     type DebugReportAdapter internal(instance : Instance) =
         let flags = VkDebugReportFlagsEXT.All
@@ -101,7 +116,13 @@ module private DebugReportHelpers =
                 obs.OnNext message
 
 
-
+        let toSeverity =
+            LookupTable.lookupTable [
+                VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityErrorBitExt, MessageSeverity.Error  
+                VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityWarningBitExt, MessageSeverity.Warning  
+                VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityInfoBitExt, MessageSeverity.Information  
+                VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityVerboseBitExt, MessageSeverity.Debug   
+            ]
 
 //
 //        let computeHash (f : BinaryWriter -> unit) =
@@ -111,9 +132,17 @@ module private DebugReportHelpers =
 //
 
 
-        let callback (flags : VkDebugReportFlagsEXT) (objType : VkDebugReportObjectTypeEXT) (srcObject : uint64) (location : uint64) (msgCode : int) (layerPrefix : cstr) (msg : cstr) (userData : nativeint) =
-            let layerPrefix = layerPrefix |> CStr.toString
-            let msg = msg |> CStr.toString
+        let callback (severity : VkDebugUtilsMessageSeverityFlagsEXT) (messageType : VkDebugUtilsMessageTypeFlagsEXT) (data : nativeptr<VkDebugUtilsMessengerCallbackDataEXT>) (userData : nativeint) =
+            
+            let data = NativePtr.read data
+            
+            let messageIdName =
+                if data.pMessageIdName <> NativePtr.zero then
+                    data.pMessageIdName |> CStr.toString
+                else
+                    ""
+                    
+            let msg = data.pMessage |> CStr.toString
 
             let hash = Guid.Empty
 //                computeHash (fun w ->
@@ -127,26 +156,27 @@ module private DebugReportHelpers =
             if not (ignoreRx.IsMatch msg) then
                 raise {
                     id              = hash
-                    severity        = unbox (int flags)
-                    objectType      = unbox (int objType)
-                    sourceObject    = srcObject
-                    layerPrefix     = layerPrefix
+                    performance     = (messageType &&& VkDebugUtilsMessageTypeFlagsEXT.VkDebugUtilsMessageTypePerformanceBitExt) <> VkDebugUtilsMessageTypeFlagsEXT.None
+                    severity        = toSeverity severity
+                    layerPrefix     = messageIdName
                     message         = msg
                 }
 
-            0u
+            0
 
-        let callbackDelegate = VkDebugReportCallbackEXTDelegate(callback)
+        let callbackDelegate = VkDebugUtilsMessengerCallbackEXTDelegate(callback)
         let mutable gc = Unchecked.defaultof<GCHandle>
-        let mutable callback = VkDebugReportCallbackEXT.Null
+        let mutable callback = VkDebugUtilsMessengerEXT.Null
 
         let destroy() =
             let o = Interlocked.Exchange(&refCount, 0)
             if o <> 0 then
                 shutdown()
                 gc.Free()
-                VkRaw.vkDestroyDebugReportCallbackEXT(instance.Handle, callback, NativePtr.zero)
-                callback <- VkDebugReportCallbackEXT.Null
+
+                VkRaw.vkDestroyDebugUtilsMessengerEXT(instance.Handle, callback, NativePtr.zero)
+
+                callback <- VkDebugUtilsMessengerEXT.Null
                 observers.Clear()
                 currentId <- 0
 
@@ -159,15 +189,33 @@ module private DebugReportHelpers =
             if n = 1 then
                 gc <- GCHandle.Alloc(callbackDelegate)
                 let ptr = Marshal.GetFunctionPointerForDelegate(callbackDelegate)
+                //let mutable info =
+                //    VkDebugReportCallbackCreateInfoEXT(
+                //        VkStructureType.DebugReportCallbackCreateInfoExt, 0n,
+                //        flags,
+                //        ptr,
+                //        0n
+                //    )
+
                 let mutable info =
-                    VkDebugReportCallbackCreateInfoEXT(
-                        unbox 1000011000, 0n,
-                        unbox (int flags),
-                        ptr,
-                        0n
+                    VkDebugUtilsMessengerCreateInfoEXT(
+                        VkStructureType.DebugUtilsMessengerCreateInfoExt, 0n,
+                        VkDebugUtilsMessengerCreateFlagsEXT.MinValue,
+                        VkDebugUtilsMessageSeverityFlagsEXT.All,
+
+                        VkDebugUtilsMessageTypeFlagsEXT.VkDebugUtilsMessageTypeGeneralBitExt ||| 
+                        VkDebugUtilsMessageTypeFlagsEXT.VkDebugUtilsMessageTypeValidationBitExt ||| 
+                        VkDebugUtilsMessageTypeFlagsEXT.VkDebugUtilsMessageTypePerformanceBitExt,
+
+                        ptr, 123n
                     )
-                VkRaw.vkCreateDebugReportCallbackEXT(instance.Handle, &&info, NativePtr.zero, &&callback)
-                    |> check "vkDbgCreateMsgCallback"
+
+
+                VkRaw.vkCreateDebugUtilsMessengerEXT(instance.Handle, &&info, NativePtr.zero, &&callback)
+                    |> check "vkCreateDebugUtilsMessengerEXT"
+
+                //VkRaw.vkCreateDebugReportCallbackEXT(instance.Handle, &&info, NativePtr.zero, &&callback)
+                //    |> check "vkDbgCreateMsgCallback"
 
                 instance.BeforeDispose.AddHandler(instanceDisposedHandler)
 
@@ -179,8 +227,8 @@ module private DebugReportHelpers =
                     let n = Interlocked.Decrement(&refCount)
                     if n = 0 then
                         gc.Free()
-                        VkRaw.vkDestroyDebugReportCallbackEXT(instance.Handle, callback, NativePtr.zero)
-                        callback <- VkDebugReportCallbackEXT.Null
+                        VkRaw.vkDestroyDebugUtilsMessengerEXT(instance.Handle, callback, NativePtr.zero)
+                        callback <- VkDebugUtilsMessengerEXT.Null
                         instance.BeforeDispose.RemoveHandler(instanceDisposedHandler)
                 | _ ->
                     Report.Warn "[Vulkan] DebugReport Observer removed which was never added"
@@ -197,22 +245,47 @@ module private DebugReportHelpers =
         member x.Raise(severity : MessageSeverity, msg : string) =
             let flags =
                 match severity with
-                    | MessageSeverity.Debug -> VkDebugReportFlagsEXT.VkDebugReportDebugBitExt 
-                    | MessageSeverity.Information -> VkDebugReportFlagsEXT.VkDebugReportInformationBitExt
-                    | MessageSeverity.PerformanceWarning -> VkDebugReportFlagsEXT.VkDebugReportPerformanceWarningBitExt
-                    | MessageSeverity.Warning -> VkDebugReportFlagsEXT.VkDebugReportWarningBitExt
-                    | MessageSeverity.Error -> VkDebugReportFlagsEXT.VkDebugReportErrorBitExt
-                    | _ -> VkDebugReportFlagsEXT.None
+                    | MessageSeverity.Debug -> VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityVerboseBitExt 
+                    | MessageSeverity.Information -> VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityInfoBitExt
+                    | MessageSeverity.PerformanceWarning -> VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityWarningBitExt
+                    | MessageSeverity.Warning -> VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityWarningBitExt
+                    | MessageSeverity.Error -> VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityErrorBitExt
+                    | _ -> VkDebugUtilsMessageSeverityFlagsEXT.None
 
             msg |> CStr.suse (fun str -> 
-                VkRaw.vkDebugReportMessageEXT(
+
+                let mutable objectname =
+                    VkDebugUtilsObjectNameInfoEXT(
+                        VkStructureType.DebugUtilsObjectNameInfoExt, 0n,
+                        VkObjectType.Instance, uint64 instance.Handle,
+                        NativePtr.zero
+                    )
+
+                let mutable info = 
+                    VkDebugUtilsMessengerCallbackDataEXT(
+                        VkStructureType.DebugUtilsMessengerCallbackDataExt, 0n,
+                        VkDebugUtilsMessengerCallbackDataFlagsEXT.MinValue,
+                        layer, 0,
+                        str, 
+                        0u, NativePtr.zero,
+                        0u, NativePtr.zero,
+                        1u, &&objectname
+                    )
+
+                VkRaw.vkSubmitDebugUtilsMessageEXT(
                     instance.Handle,
-                    unbox (int flags),
-                    VkDebugReportObjectTypeEXT.VkDebugReportObjectTypeUnknownExt,
-                    0UL, 0UL, 0,
-                    layer,
-                    str
+                    flags,
+                    VkDebugUtilsMessageTypeFlagsEXT.VkDebugUtilsMessageTypeGeneralBitExt,
+                    &&info
                 )
+                //VkRaw.vkDebugReportMessageEXT(
+                //    instance.Handle,
+                //    unbox (int flags),
+                //    VkDebugReportObjectTypeEXT.VkDebugReportObjectTypeUnknownExt,
+                //    0UL, 0UL, 0,
+                //    layer,
+                //    str
+                //)
             )
             
 [<AbstractClass; Sealed; Extension>]
@@ -225,8 +298,7 @@ type InstanceExtensions private() =
                 obs.OnNext {
                     id              = Guid.Empty
                     severity        = MessageSeverity.Warning
-                    objectType      = ObjectType.DebugReport
-                    sourceObject    = 0UL
+                    performance     = false
                     layerPrefix     = "DR"
                     message         = "could not subscribe to DebugMessages since the instance does not provide the needed Extension"
                 }
@@ -239,7 +311,7 @@ type InstanceExtensions private() =
             match table.TryGetValue instance with
                 | (true, adapter) -> adapter
                 | _ ->
-                    if Set.contains Instance.Extensions.DebugReport instance.EnabledExtensions then
+                    if List.contains Instance.Extensions.DebugUtils instance.EnabledExtensions then
                         let adapter = new DebugReportAdapter(instance)
                         table.Add(instance, Some adapter)
                         Some adapter

@@ -454,6 +454,8 @@ type SimpleWindow(position : V2i, initialSize : V2i)  =
     member x.Resize = eResize.Publish
     
     member x.Close() =
+        visible <- false
+        isClosed.Set()
         handle.Close()
 
     member x.Run() =
@@ -466,7 +468,7 @@ type SimpleWindow(position : V2i, initialSize : V2i)  =
             while visible do
                 handle.ProcessEvents()
                 let o = Interlocked.Exchange(&isInvalid, 0)
-                if o = 1 then x.OnRender()
+                if o = 1 && visible then x.OnRender()
 
             x.Unload()
 

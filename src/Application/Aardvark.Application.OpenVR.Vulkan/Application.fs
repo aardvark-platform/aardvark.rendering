@@ -304,7 +304,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
                     do! Command.TransformLayout(fImg, VkImageLayout.TransferSrcOptimal)
 
                 do! Command.SetDeviceMask 3u
-                do! Command.SyncPeersDefault(fImg)
+                do! Command.SyncPeersDefault(fImg, VkImageLayout.TransferSrcOptimal)
             }
         else
             device.perform {

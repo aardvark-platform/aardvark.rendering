@@ -125,8 +125,8 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
             Instance.AvailableLayers |> Seq.map (fun l -> l.name) |> Set.ofSeq
 
         // create an instance
-        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions) |> Set.ofList
-        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers) |> Set.ofList
+        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
+        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers)
     
         new Instance(Version(1,1,0), enabledLayers, enabledExtensions)
 
@@ -143,14 +143,10 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
     let device = 
         let availableExtensions =
             physicalDevice.GlobalExtensions |> Seq.map (fun e -> e.name) |> Set.ofSeq
-
-        let availableLayers =
-            physicalDevice.AvailableLayers |> Seq.map (fun l -> l.name) |> Set.ofSeq
-
+  
         let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions) |> Set.ofList
-        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers) |> Set.ofList
-        
-        physicalDevice.CreateDevice(enabledLayers, enabledExtensions)
+
+        physicalDevice.CreateDevice(enabledExtensions)
 
     // create a runtime
     let runtime = new Runtime(device, false, false, debug)
