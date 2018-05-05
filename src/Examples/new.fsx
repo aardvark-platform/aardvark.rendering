@@ -5,10 +5,12 @@ open System
 open System.IO
 open System.Text.RegularExpressions
 
+type Sdk = Core | Framework
+
 type ProjectKind =
     | Folder
-    | FSharp
-    | CSharp
+    | FSharp of Sdk
+    | CSharp of Sdk
     | Unknown of Guid
 
 type ProjectSection =
@@ -140,13 +142,16 @@ module Solution =
 
         let folderKind = Guid.Parse "2150E333-8FDC-42A3-9474-1A3956D46DE8"
         let fsharpKind = Guid.Parse "F2A71F9B-5D33-465A-A702-920D77279786"
-        let csharpKind = Guid.Parse "FAE04EC0-301F-11D3-BF4B-00C04F79EFBC"
+        let csharpKind =   Guid.Parse "FAE04EC0-301F-11D3-BF4B-00C04F79EFBC"
+        let csharpDotNet = Guid.Parse "9A19103F-16F7-4668-BE54-9A1E7A4F7556"
+        let fsharpDotNet = Guid.Parse "6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705"
         let guidPattern = @"[a-fA-F0-9\-]+"
 
         let toKind (g : Guid) =
             if g = folderKind then Folder
-            elif g = fsharpKind then FSharp
-            elif g = csharpKind then CSharp
+            elif g = fsharpKind then FSharp Sdk.Framework
+            elif g = csharpKind then CSharp Sdk.Framework
+            elif g = fsharpDotNet then FSharp Sdk.Core
             else ProjectKind.Unknown g
 
         let pVersion = 
@@ -341,15 +346,17 @@ module Solution =
         String.concat "\r\n" [
             yield ""
             yield "Microsoft Visual Studio Solution File, Format Version 12.00"
-            yield "# Visual Studio 14"
+            yield "# Visual Studio 15"
             yield sprintf "VisualStudioVersion = %s" (string sln.version)
             yield sprintf "MinimumVisualStudioVersion = %s" (string sln.minVerson)
 
             for p in sln.projects do
                 let kind =
                     match p.kind with
-                        | FSharp -> fsharpKind
-                        | CSharp -> csharpKind
+                        | FSharp Framework -> fsharpKind
+                        | CSharp Framework -> csharpKind
+                        | FSharp Core -> fsharpDotNet
+                        | CSharp Core -> csharpDotNet
                         | Folder -> folderKind
                         | ProjectKind.Unknown g -> g
 
@@ -489,7 +496,7 @@ module ProjectDirectory =
         for e in dd do
             e.Value <- value
 
-    let copy (source : string) (id : int) (target : string) =
+    let copy (source : string) (kind : ProjectKind) (id : int) (target : string) =
         if Directory.Exists target then Directory.Delete(target, true)
         let target = Directory.CreateDirectory target
         let source = DirectoryInfo source
@@ -525,20 +532,14 @@ module ProjectDirectory =
             let guid = Guid.NewGuid()
             let fileName = sprintf "%02d - %s" id projectName
             printfn "%A" fileName
-            let prop = d.Descendants(xname "PropertyGroup") |> Seq.head
-            prop?ProjectGuid <- guid.ToString("B").ToUpper()
-            prop?Name <- sprintf "%02d - %s" id projectName
-            prop?RootNamespace <- projectName
-            prop?AssemblyName <- projectName
+            //let prop = d.Descendants(xname "PropertyGroup") |> Seq.head
+            //prop?ProjectGuid <- guid.ToString("B").ToUpper()
+            //prop?Name <- sprintf "%02d - %s" id projectName
+            //prop?RootNamespace <- projectName
+            //prop?AssemblyName <- projectName
 
             let outFile = Path.Combine(target.FullName, fileName + p.Extension)
             d.Save(outFile)
-
-            let kind = 
-                match p.Extension with
-                    | ".fsproj" -> ProjectKind.FSharp
-                    | ".csproj" -> ProjectKind.CSharp
-                    | e -> failwithf "unknown project file %A" e
 
             let project = 
                 {
@@ -558,7 +559,8 @@ module ProjectDirectory =
 let private numberedRx = System.Text.RegularExpressions.Regex @"(?<number>[0-9]+) \- .*"
 let newExample (name : string) (dir : string) =
     let dirs = Directory.GetDirectories(dir, "*", SearchOption.TopDirectoryOnly)
-    let template = Path.Combine(dir, "01 - Triangle")
+    let sourceProjectName = "02 - TexturedCube"
+    let template = Path.Combine(dir, sourceProjectName)
 
     let maxIndex =
         dirs |> Seq.map (fun d ->
@@ -569,18 +571,21 @@ let newExample (name : string) (dir : string) =
 
     let id = maxIndex + 1
 
-    let dst = Path.Combine(dir, sprintf "%02d - %s" id name)
-    let newProjs = ProjectDirectory.copy template id dst 
-
     let slnPath = Path.Combine(dir, "..\\Aardvark.Rendering.sln")
     let sln = slnPath |> Solution.load
     let examples = Solution.tryFindFolder "Examples" sln
 
-    let mutable sln = sln
-    for newProj in newProjs do
-        sln <- Solution.add examples newProj sln
+    match Solution.tryFind sourceProjectName sln with
+        | Some p -> 
+            let dst = Path.Combine(dir, sprintf "%02d - %s" id name)
+            let newProjs = ProjectDirectory.copy template  p.kind id dst 
 
-    Solution.save slnPath sln
+            let mutable sln = sln
+            for newProj in newProjs do
+                sln <- Solution.add examples newProj sln
+
+            Solution.save slnPath sln
+        | None -> failwithf "could not find source project in solution: %A" sourceProjectName
 
 printfn "enter a name:"
 let name = Console.ReadLine()
