@@ -29,6 +29,7 @@
     <Compile Include="Semantics\Textures.fs" />
     <Compile Include="Semantics\Environment.fs" />
     <Compile Include="Semantics\AsyncLoad.fs" />
+    <Compile Include="HighLevelSceneGraph\Commands.fs" />
     <Compile Include="HighLevelSceneGraph\Lod.fs" />
     <Compile Include="HighLevelSceneGraph\Culling.fs" />
     <Compile Include="HighLevelSceneGraph\Picking.fs" />

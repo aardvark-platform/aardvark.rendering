@@ -13,11 +13,10 @@ open Microsoft.FSharp.NativeInterop
 open EXTDebugUtils
 
 type MessageSeverity =
-    | Information           = 0x00000001
+    | Debug                 = 0x00000008
+    | Information           = 0x00000004
     | Warning               = 0x00000002
-    | PerformanceWarning    = 0x00000004
-    | Error                 = 0x00000008
-    | Debug                 = 0x00000010
+    | Error                 = 0x00000001
 
 type ObjectType = 
     | Unknown = 0
@@ -61,6 +60,26 @@ type DebugMessage =
 
 [<AutoOpen>]
 module private DebugReportHelpers =
+    open System.Security.Cryptography
+    open System.IO
+
+    module VkDebugUtilsMessageSeverityFlagsEXT =
+        let toMessageSeverity =
+            LookupTable.lookupTable [
+                VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityErrorBitExt, MessageSeverity.Error  
+                VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityWarningBitExt, MessageSeverity.Warning  
+                VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityInfoBitExt, MessageSeverity.Information  
+                VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityVerboseBitExt, MessageSeverity.Debug   
+            ]
+
+        let ofMessageSeverity =
+            LookupTable.lookupTable [
+                MessageSeverity.Error, VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityErrorBitExt 
+                MessageSeverity.Warning, VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityWarningBitExt 
+                MessageSeverity.Information, VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityInfoBitExt  
+                MessageSeverity.Debug, VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityVerboseBitExt   
+            ]
+            
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -72,18 +91,6 @@ module private DebugReportHelpers =
                 VkDebugReportFlagsEXT.VkDebugReportPerformanceWarningBitExt |||
                 VkDebugReportFlagsEXT.VkDebugReportWarningBitExt
 
-    //type VkDebugReportCallbackEXTDelegate = 
-    //    delegate of 
-    //        VkDebugReportFlagsEXT * VkDebugReportObjectTypeEXT * 
-    //        uint64 * uint64 * int * cstr * cstr * nativeint -> uint32
-
-
-    //typedef VkBool32 (VKAPI_PTR *PFN_vkDebugUtilsMessengerCallbackEXT)(
-    //    VkDebugUtilsMessageSeverityFlagBitsEXT           messageSeverity,
-    //    VkDebugUtilsMessageTypeFlagsEXT                  messageType,
-    //    const VkDebugUtilsMessengerCallbackDataEXT*      pCallbackData,
-    //    void*                                            pUserData);
-
     type VkDebugUtilsMessengerCallbackEXTDelegate =
         delegate of VkDebugUtilsMessageSeverityFlagsEXT * VkDebugUtilsMessageTypeFlagsEXT * nativeptr<VkDebugUtilsMessengerCallbackDataEXT> * nativeint -> int
 
@@ -91,73 +98,64 @@ module private DebugReportHelpers =
         static member All =
             VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityErrorBitExt |||
             VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityWarningBitExt |||
-            VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityInfoBitExt // |||
-           // VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityVerboseBitExt
+            VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityInfoBitExt |||
+            VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityVerboseBitExt
 
     type DebugReportAdapter internal(instance : Instance) =
         let flags = VkDebugReportFlagsEXT.All
-//        let load (name : string) : 'a =
-//            let ptr = VkRaw.vkGetInstanceProcAddr(instance.Handle, name)
-//            if ptr = 0n then failf "could not get %s" name
-//            else Marshal.GetDelegateForFunctionPointer(ptr, typeof<'a>) |> unbox<'a>
+        
+        static let md5 = MD5.Create()
 
-        static let ignoreRx = System.Text.RegularExpressions.Regex @"vkBeginCommandBuffer\(\)[ \t]*:[ \t]*Secondary[ \t]+Command[ \t]+Buffers[ \t]+\(0x[0-9A-Fa-f]+\)[ \t]+may[ \t]+perform[ \t]+better[ \t]+if[ \t]+a[ \t]+valid[ \t]+framebuffer[ \t]+parameter[ \t]+is[ \t]+specified\."
+        static let computeHash (action : BinaryWriter -> unit) =
+            use mem = new MemoryStream()
+            use w = new BinaryWriter(mem)
+            action w
+            w.Flush()
 
+            mem.ToArray() |> md5.ComputeHash |> Guid
+
+
+        let mutable verbosity = MessageSeverity.Information
         let mutable refCount = 0
         let mutable currentId = 0
         let observers = ConcurrentDictionary<int, IObserver<DebugMessage>>()
 
         let shutdown () = 
             for (KeyValue(_,obs)) in observers do
-                obs.OnCompleted()
+                try obs.OnCompleted()
+                with _ -> ()
 
         let raise (message : DebugMessage) = 
             for (KeyValue(_,obs)) in observers do
-                obs.OnNext message
-
-
-        let toSeverity =
-            LookupTable.lookupTable [
-                VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityErrorBitExt, MessageSeverity.Error  
-                VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityWarningBitExt, MessageSeverity.Warning  
-                VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityInfoBitExt, MessageSeverity.Information  
-                VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityVerboseBitExt, MessageSeverity.Debug   
-            ]
-
-//
-//        let computeHash (f : BinaryWriter -> unit) =
-//            use ms = new MemoryStream()
-//            f (new BinaryWriter(ms, Text.Encoding.UTF8, true))
-//            ms.ToArray() |> md5.ComputeHash |> Guid
-//
-
+                try obs.OnNext message
+                with _ -> ()
 
         let callback (severity : VkDebugUtilsMessageSeverityFlagsEXT) (messageType : VkDebugUtilsMessageTypeFlagsEXT) (data : nativeptr<VkDebugUtilsMessengerCallbackDataEXT>) (userData : nativeint) =
+            let severity = VkDebugUtilsMessageSeverityFlagsEXT.toMessageSeverity severity
+            if severity <= verbosity then
+                let data = NativePtr.read data
             
-            let data = NativePtr.read data
-            
-            let messageIdName =
-                if data.pMessageIdName <> NativePtr.zero then
-                    data.pMessageIdName |> CStr.toString
-                else
-                    ""
+                let messageIdName =
+                    if data.pMessageIdName <> NativePtr.zero then
+                        data.pMessageIdName |> CStr.toString
+                    else
+                        ""
                     
-            let msg = data.pMessage |> CStr.toString
+                let msg = data.pMessage |> CStr.toString
 
-            let hash = Guid.Empty
-//                computeHash (fun w ->
-//                    w.Write (int flags)
-//                    w.Write (int objType)
-//                    w.Write msgCode
-//                    w.Write layerPrefix
-//                    w.Write location
-//                )
+                let hash = 
+                    computeHash (fun w ->
+                        w.Write(messageIdName)
+                        w.Write(data.messageIdNumber)
+                        w.Write(int messageType)
+                        w.Write(int severity)
+                    )
+            
 
-            if not (ignoreRx.IsMatch msg) then
                 raise {
                     id              = hash
-                    performance     = (messageType &&& VkDebugUtilsMessageTypeFlagsEXT.VkDebugUtilsMessageTypePerformanceBitExt) <> VkDebugUtilsMessageTypeFlagsEXT.None
-                    severity        = toSeverity severity
+                    performance     = messageType.HasFlag(VkDebugUtilsMessageTypeFlagsEXT.VkDebugUtilsMessageTypePerformanceBitExt)
+                    severity        = severity
                     layerPrefix     = messageIdName
                     message         = msg
                 }
@@ -189,14 +187,7 @@ module private DebugReportHelpers =
             if n = 1 then
                 gc <- GCHandle.Alloc(callbackDelegate)
                 let ptr = Marshal.GetFunctionPointerForDelegate(callbackDelegate)
-                //let mutable info =
-                //    VkDebugReportCallbackCreateInfoEXT(
-                //        VkStructureType.DebugReportCallbackCreateInfoExt, 0n,
-                //        flags,
-                //        ptr,
-                //        0n
-                //    )
-
+                
                 let mutable info =
                     VkDebugUtilsMessengerCreateInfoEXT(
                         VkStructureType.DebugUtilsMessengerCreateInfoExt, 0n,
@@ -213,10 +204,7 @@ module private DebugReportHelpers =
 
                 VkRaw.vkCreateDebugUtilsMessengerEXT(instance.Handle, &&info, NativePtr.zero, &&callback)
                     |> check "vkCreateDebugUtilsMessengerEXT"
-
-                //VkRaw.vkCreateDebugReportCallbackEXT(instance.Handle, &&info, NativePtr.zero, &&callback)
-                //    |> check "vkDbgCreateMsgCallback"
-
+                    
                 instance.BeforeDispose.AddHandler(instanceDisposedHandler)
 
             id
@@ -235,6 +223,10 @@ module private DebugReportHelpers =
 
         let layer = CStr.malloc "DebugReport"
 
+        member x.Verbosity
+            with get() = verbosity
+            and set v = verbosity <- v
+
         interface IObservable<DebugMessage> with
             member x.Subscribe (observer : IObserver<DebugMessage>) =
                 let id = add observer
@@ -243,18 +235,10 @@ module private DebugReportHelpers =
                 }
                 
         member x.Raise(severity : MessageSeverity, msg : string) =
-            let flags =
-                match severity with
-                    | MessageSeverity.Debug -> VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityVerboseBitExt 
-                    | MessageSeverity.Information -> VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityInfoBitExt
-                    | MessageSeverity.PerformanceWarning -> VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityWarningBitExt
-                    | MessageSeverity.Warning -> VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityWarningBitExt
-                    | MessageSeverity.Error -> VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityErrorBitExt
-                    | _ -> VkDebugUtilsMessageSeverityFlagsEXT.None
+            let flags = VkDebugUtilsMessageSeverityFlagsEXT.ofMessageSeverity severity
 
             msg |> CStr.suse (fun str -> 
-
-                let mutable objectname =
+                let mutable objectName =
                     VkDebugUtilsObjectNameInfoEXT(
                         VkStructureType.DebugUtilsObjectNameInfoExt, 0n,
                         VkObjectType.Instance, uint64 instance.Handle,
@@ -269,7 +253,7 @@ module private DebugReportHelpers =
                         str, 
                         0u, NativePtr.zero,
                         0u, NativePtr.zero,
-                        1u, &&objectname
+                        1u, &&objectName
                     )
 
                 VkRaw.vkSubmitDebugUtilsMessageEXT(
@@ -278,14 +262,6 @@ module private DebugReportHelpers =
                     VkDebugUtilsMessageTypeFlagsEXT.VkDebugUtilsMessageTypeGeneralBitExt,
                     &&info
                 )
-                //VkRaw.vkDebugReportMessageEXT(
-                //    instance.Handle,
-                //    unbox (int flags),
-                //    VkDebugReportObjectTypeEXT.VkDebugReportObjectTypeUnknownExt,
-                //    0UL, 0UL, 0,
-                //    layer,
-                //    str
-                //)
             )
             
 [<AbstractClass; Sealed; Extension>]
@@ -331,7 +307,24 @@ type InstanceExtensions private() =
             | Some a -> a.Raise(severity, msg)
             | _ -> ()
 
+    [<Extension>]
+    static member GetDebugVerbosity(this : Instance) =
+        match getAdapter this with
+            | Some a -> a.Verbosity
+            | _ -> MessageSeverity.Error
+            
+    [<Extension>]
+    static member SetDebugVerbosity(this : Instance, v : MessageSeverity) =
+        match getAdapter this with
+            | Some a -> a.Verbosity <- v
+            | _ -> ()
+
 [<AutoOpen>]
 module ``FSharp Style Debug Extensions`` =
     type Instance with
         member x.DebugMessages = x.GetDebugMessageObservable()
+
+        member x.DebugVerbosity
+            with get() = x.GetDebugVerbosity()
+            and set v = x.SetDebugVerbosity(v)
+

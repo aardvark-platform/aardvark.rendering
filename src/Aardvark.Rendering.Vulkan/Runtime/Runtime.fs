@@ -130,10 +130,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     #endif
 
 
-    let ignored =
-        HashSet.ofList [
-            Guid.Parse("{2f3e2b49-7f12-eb9c-578f-c46f5981d022}")
-        ]
+    let ignored : HashSet<Guid> =
+        HashSet.empty
 
     let debugBreak (msg : DebugMessage) =
         if Debugger.IsAttached then
@@ -151,11 +149,11 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                 | MessageSeverity.Warning ->
                     Report.Warn("[Vulkan] {0}", str)
 
-                | MessageSeverity.PerformanceWarning ->
-                    Report.Line("[Vulkan] performance: {0}", str)
+                | MessageSeverity.Information ->
+                    Report.Line("[Vulkan] {0}", str)
 
                 | _ ->
-                    Report.Line(4, "[Vulkan] {0}", str)
+                    Report.Line("[Vulkan] DEBUG: {0}", str)
 
     // install debug output to file (and errors/warnings to console)
     let debugSubscription = 
@@ -172,6 +170,9 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.Device = device
     member x.ResourceManager = manager
     member x.ContextLock = device.Token :> IDisposable
+    member x.DebugVerbosity
+        with get() = instance.DebugVerbosity
+        and set v = instance.DebugVerbosity <- v
 
     member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = failf "not implemented"
     member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = failf "not implemented"

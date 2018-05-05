@@ -28,16 +28,22 @@ type Display =
     | Stereo
     | OpenVR
 
+type DebugVerbosity =
+    | None = 0
+    | Error = 1
+    | Warning = 2
+    | Information = 3
+    | Debug = 4
+
 type RenderConfig =
     {
-        backend    : Backend
-        debug       : bool
+        backend     : Backend
+        debug       : DebugVerbosity
         samples     : int
         display     : Display
         scene       : ISg
         initialCamera  : Option<CameraView>
     }
-
 
 [<AutoOpen>]
 module ``FShade Extensions`` =
@@ -59,7 +65,6 @@ module ``FShade Extensions`` =
 
 
 module Utilities =
-
 
 
     [<AbstractClass>]
@@ -369,7 +374,13 @@ module Utilities =
             let sg = sg |> Sg.viewTrafo view |> Sg.projTrafo proj
             Sg.ofList [sg; overlay]
 
-
+    let private toMessageSeverity =
+        LookupTable.lookupTable [
+            DebugVerbosity.Debug, MessageSeverity.Debug
+            DebugVerbosity.Information, MessageSeverity.Information
+            DebugVerbosity.Warning, MessageSeverity.Warning
+            DebugVerbosity.Error, MessageSeverity.Error
+        ]
 
     let createApp (debug : bool) (backend : Backend)  =
         match backend with
@@ -377,9 +388,14 @@ module Utilities =
             | Backend.Vulkan -> new VulkanApplication(debug) :> IApplication
 
     let createApplication (cfg : RenderConfig) =
+        let enableDebug = cfg.debug <> DebugVerbosity.None
         match cfg.backend with
-            | Backend.GL -> new OpenGlApplication(cfg.debug) :> IApplication
-            | Backend.Vulkan -> new VulkanApplication(cfg.debug) :> IApplication
+            | Backend.GL -> new OpenGlApplication(enableDebug) :> IApplication
+            | Backend.Vulkan -> 
+                let app = new VulkanApplication(enableDebug) 
+                if enableDebug then
+                    app.Runtime.DebugVerbosity <- toMessageSeverity cfg.debug
+                app :> IApplication
 
     let createGameWindow app (cfg : RenderConfig) =
         match cfg.backend with
@@ -607,7 +623,10 @@ module Utilities =
     let private createOpenVR (cfg : RenderConfig) =
         match cfg.backend with
             | Backend.Vulkan ->
-                let app = VulkanVRApplicationLayered(cfg.samples, cfg.debug)
+                let enableDebug = cfg.debug <> DebugVerbosity.None
+                let app = VulkanVRApplicationLayered(cfg.samples, enableDebug)
+                if enableDebug then
+                    app.Runtime.DebugVerbosity <- toMessageSeverity cfg.debug
 
                 let hmdLocation = app.Hmd.MotionState.Pose |> Mod.map (fun t -> t.Forward.C3.XYZ)
 
@@ -647,7 +666,8 @@ module Utilities =
                 } :> ISimpleRenderWindow
 
             | Backend.GL -> 
-                let app = OpenGlVRApplicationLayered(cfg.samples, cfg.debug)
+                let enableDebug = cfg.debug <> DebugVerbosity.None
+                let app = OpenGlVRApplicationLayered(cfg.samples, enableDebug)
 
                 let hmdLocation = app.Hmd.MotionState.Pose |> Mod.map (fun t -> t.Forward.C3.XYZ)
 
@@ -704,7 +724,7 @@ module Utilities =
             scene = scene
             display = display
             backend = backend
-            debug = true
+            debug = DebugVerbosity.Warning
             samples = 8
             initialCamera = None
         }
@@ -766,7 +786,7 @@ module ``Render Utilities`` =
                 else
                     true
             Log.line "[Application] debug: %A" state
-            cfg <- { cfg with debug = state }
+            cfg <- { cfg with debug = if state then DebugVerbosity.Information else DebugVerbosity.None }
 
 
         cfg
@@ -775,7 +795,7 @@ module ``Render Utilities`` =
         member x.Yield(()) =
             {
                 backend = Backend.Vulkan
-                debug = true
+                debug = DebugVerbosity.Warning
                 samples = 8
                 display = Display.Mono
                 scene = Sg.empty
@@ -788,6 +808,10 @@ module ``Render Utilities`` =
 
         [<CustomOperation("debug")>]
         member x.Debug(s : RenderConfig, d : bool) =
+            { s with debug = if d then DebugVerbosity.Information else DebugVerbosity.None }
+            
+        [<CustomOperation("verbosity")>]
+        member x.Verbosity(s : RenderConfig, d : DebugVerbosity) =
             { s with debug = d }
 
         [<CustomOperation("samples")>]
@@ -815,7 +839,7 @@ module ``Render Utilities`` =
     
             {
                 backend = Backend.Vulkan
-                debug = true
+                debug = DebugVerbosity.Warning
                 samples = 8
                 display = Display.Mono
                 scene = Sg.empty
@@ -828,6 +852,10 @@ module ``Render Utilities`` =
             
         [<CustomOperation("debug")>]
         member x.Debug(s : RenderConfig, d : bool) =
+            { s with debug = if d then DebugVerbosity.Information else DebugVerbosity.None }
+            
+        [<CustomOperation("verbosity")>]
+        member x.Verbosity(s : RenderConfig, d : DebugVerbosity) =
             { s with debug = d }
 
         [<CustomOperation("samples")>]

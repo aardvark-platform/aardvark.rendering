@@ -521,6 +521,27 @@ type RuntimeCommand =
     static member LodTree(surface : Surface, pipeline : PipelineState, geometries : LodTreeLoader<Geometry>) =
         RuntimeCommand.LodTreeCmd(surface, pipeline, geometries)
 
+type CommandRenderObject(pass : RenderPass, scope : Ag.Scope, command : RuntimeCommand) =
+    let id = newId()
+
+    member x.Id = id
+    member x.RenderPass = pass
+    member x.AttributeScope = scope
+    member x.Command = command
+    
+    interface IRenderObject with
+        member x.Id = id
+        member x.RenderPass = pass
+        member x.AttributeScope = scope
+
+
+    override x.GetHashCode() = id.GetHashCode()
+    override x.Equals o =
+        match o with
+            | :? CommandRenderObject as o -> id = o.Id
+            | _ -> false
+
+
 type IAdaptiveBufferReader =
     inherit IAdaptiveObject
     inherit IDisposable

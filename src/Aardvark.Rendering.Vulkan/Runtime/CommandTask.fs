@@ -732,8 +732,11 @@ module private RuntimeCommands =
                 with get() = x.Next
                 and set n = x.Next <- n
 
+        abstract member GroupKey : list<obj>
         abstract member Compile : AdaptiveToken * VKVM.CommandStream -> unit
         abstract member Free : unit -> unit
+
+        default x.GroupKey = [x.Id :> obj]
 
         member x.Stream = check(); stream
 
@@ -797,7 +800,7 @@ module private RuntimeCommands =
 
         member x.BoundingBox = boundingBox.Value
 
-        member x.GroupKey =
+        override x.GroupKey =
             match prepared with
                 | Some p -> [ p.First.pipeline :> obj; p.Id :> obj ]
                 | None -> failwith "inconsistent state"
@@ -867,8 +870,8 @@ module private RuntimeCommands =
         abstract member First : PreparedCommand
         abstract member Last : PreparedCommand
         
-        abstract member Add : RenderObjectCommand -> unit
-        abstract member Remove : RenderObjectCommand -> bool
+        abstract member Add : PreparedCommand -> unit
+        abstract member Remove : PreparedCommand -> bool
 
         abstract member Release : unit -> unit
 
@@ -899,7 +902,7 @@ module private RuntimeCommands =
         override x.First = trie.First.Value
         override x.Last = trie.Last.Value
 
-        override x.Add(cmd : RenderObjectCommand) =
+        override x.Add(cmd : PreparedCommand) =
             trie.Add(cmd.GroupKey, cmd)
             match trie.Last with
                 | Some last -> 
@@ -912,7 +915,7 @@ module private RuntimeCommands =
                 | None ->
                     failwith "[Vulkan] empty CommandBucket"
 
-        override x.Remove(cmd : RenderObjectCommand) =
+        override x.Remove(cmd : PreparedCommand) =
             let res = trie.Remove(cmd.GroupKey)
             match trie.Last with
                 | Some last -> 
@@ -954,7 +957,8 @@ module private RuntimeCommands =
         override x.First = firstCommand
         override x.Last = lastCommand
 
-        override x.Add(cmd : RenderObjectCommand) =
+        override x.Add(cmd : PreparedCommand) =
+            let cmd = unbox<RenderObjectCommand> cmd
             let depth = 
                 let u = cmd.Uniforms
                     
@@ -1003,7 +1007,8 @@ module private RuntimeCommands =
 
             commands.Add(cmd, depth)
 
-        override x.Remove(cmd : RenderObjectCommand) =
+        override x.Remove(cmd : PreparedCommand) =
+            let cmd = unbox<RenderObjectCommand> cmd
             commands.Remove cmd
 
         override x.Release() =
@@ -1072,12 +1077,17 @@ module private RuntimeCommands =
                         bucket
             )
             
-        let cache = Dict<IRenderObject, RenderObjectCommand>()
-        let dirty = HashSet<RenderObjectCommand>()
+        let cache = Dict<IRenderObject, PreparedCommand>()
+        let dirty = HashSet<PreparedCommand>()
+
+        let compile (o : IRenderObject) =
+            match o with
+                | :? CommandRenderObject as o -> compiler.Compile o.Command
+                | _ -> new RenderObjectCommand(compiler, o) :> PreparedCommand
 
         let insert (token : AdaptiveToken) (o : IRenderObject) =
             // insert cmd into trie (link programs)
-            let cmd = new RenderObjectCommand(compiler, o) 
+            let cmd = compile o
             cmd.Update token
             
             let bucket = getBucket o.RenderPass
