@@ -2,6 +2,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.26730.10
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "18 - RenderCommands", "Examples\18 - RenderCommands\18 - RenderCommands.fsproj", "{227587AA-4E5F-4AB6-887A-471DC887131E}"
+EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "16 - ShaderSwitches", "Examples\16 - ShaderSwitches\16 - ShaderSwitches.fsproj", "{61C4E66D-887B-4AD5-831D-AEDCE7F67CB7}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "15 - GeometryPooling", "Examples\15 - GeometryPooling\15 - GeometryPooling.fsproj", "{023D65B5-26C5-4887-82DC-0F622966DABB}"
@@ -114,6 +116,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{227587AA-4E5F-4AB6-887A-471DC887131E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{227587AA-4E5F-4AB6-887A-471DC887131E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{227587AA-4E5F-4AB6-887A-471DC887131E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{227587AA-4E5F-4AB6-887A-471DC887131E}.Release|Any CPU.Build.0 = Release|Any CPU
 		{61C4E66D-887B-4AD5-831D-AEDCE7F67CB7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{61C4E66D-887B-4AD5-831D-AEDCE7F67CB7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{61C4E66D-887B-4AD5-831D-AEDCE7F67CB7}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -299,6 +305,7 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{227587AA-4E5F-4AB6-887A-471DC887131E} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{61C4E66D-887B-4AD5-831D-AEDCE7F67CB7} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{023D65B5-26C5-4887-82DC-0F622966DABB} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{9A3BD9B8-9942-40B5-BC90-F4D14FE766CB} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}

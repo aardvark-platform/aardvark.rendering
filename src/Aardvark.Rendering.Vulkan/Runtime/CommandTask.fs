@@ -932,7 +932,9 @@ module private RuntimeCommands =
             firstCommand.Dispose()
             trie.Clear()
 
-        override x.PerformUpdate _ = ()
+        override x.PerformUpdate token = 
+            
+            ()
 
     and SortedCommandBucket(order : RenderPassOrder) =
         inherit CommandBucket()
@@ -1112,7 +1114,7 @@ module private RuntimeCommands =
 
         override x.InputChanged(_,i) =
             match i with
-                | :? RenderObjectCommand as c ->
+                | :? PreparedCommand as c ->
                     // should be unreachable
                     lock dirty (fun () -> dirty.Add c |> ignore)
                 | _ ->
@@ -1139,8 +1141,7 @@ module private RuntimeCommands =
             // allowing resources to 'survive' the update
             deltas |> HDeltaSet.iter (insert token) (remove)
 
-            // get and update the dirty RenderObjectCommands (actually should be empty since they're unchangeable)
-            assert (dirty.Count = 0)
+            // get and update the dirty PreparedCommands (can be non-empty due to CommandNode)
             let dirty = lock dirty (fun () -> consume dirty)
             for d in dirty do d.Update(token)
 
@@ -1172,6 +1173,7 @@ module private RuntimeCommands =
             let depthClears =
                 match compiler.renderPass.DepthStencilAttachment with
                     | Some (id,_) ->
+                        let id = 0u
                         match depth, stencil with
                             | Some d, Some s ->
                                 let d = d.GetValue token
@@ -1231,8 +1233,17 @@ module private RuntimeCommands =
 
             // submit the clear to the stream (after resetting it)
             stream.Clear()
-
             
+
+            //let clears = Array.append depthClears colorClears
+            //let rects = 
+            //    Array.init clears.Length (fun _ ->
+            //        VkClearRect(
+            //            VkRect2D(VkOffset2D(viewport.Min.X,viewport.Min.Y), VkExtent2D(uint32 (5 + viewport.SizeX) , uint32 (5+ viewport.SizeY))),
+            //            0u,
+            //            uint32 compiler.renderPass.LayerCount
+            //        )
+            //    )
 
             stream.ClearAttachments(
                 Array.append depthClears colorClears,

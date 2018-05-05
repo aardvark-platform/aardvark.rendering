@@ -1767,3 +1767,26 @@ module VkImageLayout =
             VkImageLayout.Preinitialized,                   VkPipelineStageFlags.HostBit
             VkImageLayout.PresentSrcKhr,                    VkPipelineStageFlags.TransferBit
         ]
+
+  
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module VkAccessFlags =
+    let toVkPipelineStageFlags =
+        
+        LookupTable.lookupTable [
+            VkAccessFlags.IndirectCommandReadBit, VkPipelineStageFlags.DrawIndirectBit
+            VkAccessFlags.IndexReadBit, VkPipelineStageFlags.VertexInputBit
+            VkAccessFlags.VertexAttributeReadBit, VkPipelineStageFlags.VertexInputBit
+            VkAccessFlags.UniformReadBit, VkPipelineStageFlags.VertexShaderBit
+            VkAccessFlags.InputAttachmentReadBit, VkPipelineStageFlags.VertexShaderBit
+            VkAccessFlags.ShaderReadBit, VkPipelineStageFlags.VertexShaderBit
+            VkAccessFlags.ShaderWriteBit, VkPipelineStageFlags.FragmentShaderBit
+            VkAccessFlags.ColorAttachmentReadBit, VkPipelineStageFlags.VertexShaderBit
+            VkAccessFlags.ColorAttachmentWriteBit, VkPipelineStageFlags.FragmentShaderBit
+            VkAccessFlags.DepthStencilAttachmentReadBit, VkPipelineStageFlags.VertexShaderBit
+            VkAccessFlags.DepthStencilAttachmentWriteBit, VkPipelineStageFlags.FragmentShaderBit
+            VkAccessFlags.TransferReadBit, VkPipelineStageFlags.TransferBit
+            VkAccessFlags.TransferWriteBit, VkPipelineStageFlags.TransferBit
+
+
+        ]

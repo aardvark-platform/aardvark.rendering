@@ -1982,7 +1982,7 @@ module ``Image Command Extensions`` =
                         )
                     
                     cmd.AppendCommand()
-                    VkRaw.vkCmdBlitImage(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Image.Handle, dst.Image.Layout, 1u, &&blit, filter)
+                    VkRaw.vkCmdBlitImage(cmd.Handle, src.Image.Handle, srcLayout, dst.Image.Handle, dstLayout, 1u, &&blit, filter)
                     Disposable.Empty
             }
 
@@ -2041,6 +2041,36 @@ module ``Image Command Extensions`` =
                         Disposable.Empty
                 }
 
+
+        static member Sync(img : ImageSubresourceRange, layout : VkImageLayout, src : VkAccessFlags, dst : VkAccessFlags) =
+            { new Command() with
+                member x.Compatible = QueueFlags.Graphics ||| QueueFlags.Compute
+                member x.Enqueue cmd =
+                    cmd.AppendCommand()
+                    let srcStage = VkAccessFlags.toVkPipelineStageFlags src
+                    let dstStage = VkAccessFlags.toVkPipelineStageFlags dst
+
+                    let mutable image =
+                        VkImageMemoryBarrier(
+                            VkStructureType.ImageMemoryBarrier, 0n,
+                            src, dst, 
+                            layout, layout,
+                            VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+                            img.Image.Handle,
+                            img.VkImageSubresourceRange
+                        )
+
+                    VkRaw.vkCmdPipelineBarrier(
+                        cmd.Handle,
+                        srcStage, dstStage,
+                        VkDependencyFlags.None,
+                        0u, NativePtr.zero,
+                        0u, NativePtr.zero,
+                        1u, &&image
+                    )
+
+                    Disposable.Empty
+            }
 
         static member GenerateMipMaps (img : ImageSubresourceRange) =
             if img.Image.IsNull then
