@@ -2111,6 +2111,7 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
     let stats = NativePtr.alloc 1
     let manager = new ResourceManager(user, device)
     let resources = ResourceLocationSet(user)
+    let mutable lastFramebuffer = None
 
     let compiler =
         {
@@ -2194,19 +2195,27 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
         let resourcesChanged = 
             resources.Update(token)
 
-        if viewportChanged || commandChanged || resourcesChanged then
+        let framebufferChanged =
+            if lastFramebuffer <> Some fbo then
+                lastFramebuffer <- Some fbo
+                true
+            else
+                false
+
+        if viewportChanged || commandChanged || resourcesChanged || framebufferChanged then
             let cause =
                 String.concat "; " [
                     if commandChanged then yield "content"
                     if resourcesChanged then yield "resources"
                     if viewportChanged then yield "viewport"
+                    if framebufferChanged then yield "framebuffer"
                 ]
                 |> sprintf "{ %s }"
 
             Log.line "[Vulkan] recompile commands: %s" cause
 
             inner.Reset()
-            inner.Begin(renderPass, CommandBufferUsage.RenderPassContinue)
+            inner.Begin(renderPass, fbo, CommandBufferUsage.RenderPassContinue)
 
             inner.enqueue {
                 do! Command.SetViewports(vp)

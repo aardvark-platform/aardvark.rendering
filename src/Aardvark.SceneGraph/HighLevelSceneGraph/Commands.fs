@@ -25,6 +25,7 @@ type RenderCommand =
         | RGeometries of config : RenderGeometryConfig * geometries : aset<IndexedGeometry>
         | ROrdered of alist<RenderCommand>
         | ROrderedConstant of list<RenderCommand>
+        | RIfThenElse of condition : IMod<bool> * ifTrue : RenderCommand * ifFalse : RenderCommand
 
     static member Empty = REmpty
 
@@ -57,6 +58,15 @@ type RenderCommand =
     static member Unordered(l : seq<ISg>) = RUnorderedScenes(ASet.ofSeq l)
     static member Unordered(l : list<ISg>) = RUnorderedScenes(ASet.ofList l)
     static member Unordered(l : aset<ISg>) = RUnorderedScenes(l)
+    static member Render (s : ISg) = RUnorderedScenes(ASet.single s)
+    
+    static member Ordered(l : seq<ISg>) = ROrderedConstant(l |> Seq.map RenderCommand.Render |> Seq.toList)
+    static member Ordered(l : list<ISg>) = ROrderedConstant(l |> List.map RenderCommand.Render)
+    static member Ordered(l : alist<ISg>) = RenderCommand.Ordered(l |> AList.map RenderCommand.Render)
+
+    static member IfThenElse(condition : IMod<bool>, ifTrue : RenderCommand, ifFalse : RenderCommand) = RIfThenElse(condition, ifTrue, ifFalse)
+    static member When(condition : IMod<bool>, ifTrue : RenderCommand) = RIfThenElse(condition, ifTrue, REmpty)
+    static member WhenNot(condition : IMod<bool>, ifFalse : RenderCommand) = RIfThenElse(condition, REmpty, ifFalse)
 
     static member Geometries(config : RenderGeometryConfig,  geometries : aset<IndexedGeometry>) = RGeometries(config, geometries)
     static member Geometries(config : RenderGeometryConfig,  geometries : seq<IndexedGeometry>) = RGeometries(config, ASet.ofSeq geometries)
@@ -143,7 +153,10 @@ module RuntimeCommandSemantics =
                 | RenderCommand.ROrderedConstant(list) ->
                     let commands = list |> List.map (ofRenderCommand parent)
                     RuntimeCommand.Ordered(AList.ofList commands)
-                    
+
+                | RenderCommand.RIfThenElse(c,t,f) ->
+                    RuntimeCommand.IfThenElse(c, ofRenderCommand parent t, ofRenderCommand parent f)
+
     [<Semantic>]
     type RuntimeCommandSem() =
         member x.RenderObjects(n : Sg.RuntimeCommandNode) : aset<IRenderObject> =

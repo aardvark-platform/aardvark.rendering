@@ -131,7 +131,11 @@
       <AdditionalLibraryDirectories>C:\VulkanSDK\1.0.65.1\Lib</AdditionalLibraryDirectories>
     </Link>
     <CustomBuildStep>
-      <Command>xcopy $(SolutionDir)..\bin\Debug\vkvm.* $(SolutionDir)..\bin\Release\ /Y</Command>
+      <Command>xcopy "$(SolutionDir)..\bin\Debug\vkvm.*" "$(SolutionDir)..\bin\Release\" /Y
+xcopy "$(SolutionDir)..\bin\Debug\vkvm.*" "$(SolutionDir)..\bin\Debug\netcoreapp2.0" /Y
+xcopy "$(SolutionDir)..\bin\Debug\vkvm.*" "$(SolutionDir)..\bin\Release\netcoreapp2.0" /Y
+xcopy "$(SolutionDir)..\bin\Debug\vkvm.*" "$(SolutionDir)..\bin\Debug\netstandard2.0" /Y
+xcopy "$(SolutionDir)..\bin\Debug\vkvm.*" "$(SolutionDir)..\bin\Release\netstandard2.0" /Y</Command>
       <Message>copying binaries to bin\Release</Message>
       <Outputs>$(SolutionDir)..\bin\Release\vkvm.dll;$(SolutionDir)..\bin\Release\vkvm.exp;$(SolutionDir)..\bin\Release\vkvm.lib;$(SolutionDir)..\bin\Release\vkvm.pdb;%(Outputs)</Outputs>
     </CustomBuildStep>

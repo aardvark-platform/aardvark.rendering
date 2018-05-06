@@ -1397,6 +1397,33 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
         commands <- 0
         recording <- true
 
+    member x.Begin(pass : Resource<VkRenderPass>, framebuffer : Resource<VkFramebuffer>, usage : CommandBufferUsage) =
+        cleanup()
+        let mutable inh =
+            VkCommandBufferInheritanceInfo(
+                VkStructureType.CommandBufferInheritanceInfo, 0n,
+                pass.Handle, 0u,
+                framebuffer.Handle, 
+                0u,
+                VkQueryControlFlags.None,
+                VkQueryPipelineStatisticFlags.None
+            )
+
+        let mutable info =
+            VkCommandBufferBeginInfo(
+                VkStructureType.CommandBufferBeginInfo, 0n,
+                unbox (int usage),
+                &&inh
+            )
+
+        VkRaw.vkBeginCommandBuffer(handle, &&info)
+            |> check "could not begin command buffer"
+
+
+        commands <- 0
+        recording <- true
+
+
     member x.End() =
         VkRaw.vkEndCommandBuffer(handle)
             |> check "could not end command buffer"
