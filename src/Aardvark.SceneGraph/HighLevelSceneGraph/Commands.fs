@@ -26,6 +26,7 @@ type RenderCommand =
         | ROrdered of alist<RenderCommand>
         | ROrderedConstant of list<RenderCommand>
         | RIfThenElse of condition : IMod<bool> * ifTrue : RenderCommand * ifFalse : RenderCommand
+        | RLodTree of config : RenderGeometryConfig * geometries : LodTreeLoader<Geometry>
 
     static member Empty = REmpty
 
@@ -67,6 +68,8 @@ type RenderCommand =
     static member IfThenElse(condition : IMod<bool>, ifTrue : RenderCommand, ifFalse : RenderCommand) = RIfThenElse(condition, ifTrue, ifFalse)
     static member When(condition : IMod<bool>, ifTrue : RenderCommand) = RIfThenElse(condition, ifTrue, REmpty)
     static member WhenNot(condition : IMod<bool>, ifFalse : RenderCommand) = RIfThenElse(condition, REmpty, ifFalse)
+
+    static member LodTree(config : RenderGeometryConfig, geometries : LodTreeLoader<Geometry>) = RLodTree(config,geometries)
 
     static member Geometries(config : RenderGeometryConfig,  geometries : aset<IndexedGeometry>) = RGeometries(config, geometries)
     static member Geometries(config : RenderGeometryConfig,  geometries : seq<IndexedGeometry>) = RGeometries(config, ASet.ofSeq geometries)
@@ -156,6 +159,24 @@ module RuntimeCommandSemantics =
 
                 | RenderCommand.RIfThenElse(c,t,f) ->
                     RuntimeCommand.IfThenElse(c, ofRenderCommand parent t, ofRenderCommand parent f)
+
+                | RenderCommand.RLodTree(config,g) ->
+                    let state =
+                        {
+                            depthTest           = parent.DepthTestMode
+                            cullMode            = parent.CullMode
+                            blendMode           = parent.BlendMode
+                            fillMode            = parent.FillMode
+                            stencilMode         = parent.StencilMode
+                            multisample         = parent.Multisample
+                            writeBuffers        = parent.WriteBuffers
+                            globalUniforms      = new Providers.UniformProvider(Ag.getContext(), parent.Uniforms, [])
+                            geometryMode        = config.mode
+                            vertexInputTypes    = config.vertexInputTypes
+                            perGeometryUniforms = config.perGeometryUniforms
+                        }
+
+                    RuntimeCommand.LodTree(parent.Surface, state, g)
 
     [<Semantic>]
     type RuntimeCommandSem() =
