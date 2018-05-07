@@ -57,7 +57,7 @@ let testCompile() =
             
             DrawCallInfos       = Mod.constant [ callInfo ]
             IndirectBuffer      = null
-            Mode                = Mod.constant IndexedGeometryMode.TriangleList
+            Mode                = IndexedGeometryMode.TriangleList
         
 
             Surface             = Surface.Backend (surface :> ISurface)

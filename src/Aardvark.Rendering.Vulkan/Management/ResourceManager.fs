@@ -541,7 +541,7 @@ module Resources =
             }
         )
 
-    type InputAssemblyStateResource(owner : IResourceCache, key : list<obj>, input : IMod<IndexedGeometryMode>, program : IResourceLocation<ShaderProgram>) =
+    type InputAssemblyStateResource(owner : IResourceCache, key : list<obj>, input : IndexedGeometryMode, program : IResourceLocation<ShaderProgram>) =
         inherit AbstractPointerResourceWithEquality<VkPipelineInputAssemblyStateCreateInfo>(owner, key)
 
         override x.Create() =
@@ -553,7 +553,7 @@ module Resources =
             program.Release()
 
         override x.Compute(token) =
-            let m = input.GetValue token
+            let m = input
             let p = program.Update token
             let res = 
                 if p.handle.HasTessellation then { topology = VkPrimitiveTopology.PatchList; restartEnable = false }
@@ -1236,11 +1236,14 @@ type ResourceManager(user : IResourceUser, device : Device) =
             prog
         )
 
-    member x.CreateShaderProgram(signature : IFramebufferSignature, data : Aardvark.Base.Surface) =
+    member x.CreateShaderProgram(signature : IFramebufferSignature, data : Aardvark.Base.Surface, top : IndexedGeometryMode) =
         match data with
             | Surface.FShadeSimple effect ->
-                x.CreateShaderProgram(signature, FShadeSurface.Get(effect))
-                
+                let module_ = signature.Link(effect, Range1d(0.0, 1.0), false, top)
+                let layout = FShade.EffectInputLayout.ofModule module_
+                let layout = device.CreatePipelineLayout(layout, signature.LayerCount, signature.PerLayerUniforms)
+
+                layout, x.CreateShaderProgram(layout, Mod.constant module_)
             | Surface.FShade(compile) -> 
                 let layout, module_ = 
                     fshadeThingCache.GetOrAdd((signature, compile) :> obj, fun _ ->
@@ -1319,7 +1322,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateVertexInputState(program : PipelineInfo, mode : IMod<Map<Symbol, VertexInputDescription>>) =
         vertexInputCache.GetOrCreate([program :> obj; mode :> obj], fun cache key -> new VertexInputStateResource(cache, key, program, mode))
 
-    member x.CreateInputAssemblyState(mode : IMod<IndexedGeometryMode>, program : IResourceLocation<ShaderProgram>) =
+    member x.CreateInputAssemblyState(mode : IndexedGeometryMode, program : IResourceLocation<ShaderProgram>) =
         inputAssemblyCache.GetOrCreate([mode :> obj; program :> obj], fun cache key -> new InputAssemblyStateResource(cache, key, mode, program))
 
     member x.CreateDepthStencilState(depthWrite : bool, depth : IMod<DepthTestMode>, stencil : IMod<StencilMode>) =

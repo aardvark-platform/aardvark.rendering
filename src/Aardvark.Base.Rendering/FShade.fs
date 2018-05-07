@@ -334,6 +334,18 @@ module FShadeInterop =
     type SamplerState with
         member x.SamplerStateDescription = toSamplerStateDescription x
 
+    let toInputTopology =
+        LookupTable.lookupTable [
+            IndexedGeometryMode.PointList, InputTopology.Point
+            IndexedGeometryMode.LineList, InputTopology.Line
+            IndexedGeometryMode.LineStrip, InputTopology.Line
+            IndexedGeometryMode.LineAdjacencyList, InputTopology.LineAdjacency
+            IndexedGeometryMode.TriangleList, InputTopology.Triangle
+            IndexedGeometryMode.TriangleStrip, InputTopology.Triangle
+            IndexedGeometryMode.TriangleAdjacencyList, InputTopology.TriangleAdjacency
+            IndexedGeometryMode.QuadList, InputTopology.Patch 4
+        ]
+
     type IFramebufferSignature with
 
         member x.EffectConfig(depthRange : Range1d, flip : bool) =
@@ -352,7 +364,7 @@ module FShadeInterop =
             }
 
 
-        member x.Link(effect : Effect, depthRange : Range1d, flip : bool) =
+        member x.Link(effect : Effect, depthRange : Range1d, flip : bool, top : IndexedGeometryMode) =
             let outputs = 
                 x.ColorAttachments 
                     |> Map.toList 
@@ -362,6 +374,8 @@ module FShadeInterop =
                             | _ -> (string name, formatToType att.format, slot)
                         
                        )
+
+            let top = toInputTopology top
 
             let config = 
                 { EffectConfig.ofList outputs with
@@ -375,13 +389,13 @@ module FShadeInterop =
                 if x.LayerCount > 1 then
                     effect 
                         // TODO: other topologies????
-                        |> Effect.toLayeredEffect x.LayerCount (x.PerLayerUniforms |> Seq.map (fun n -> n, n) |> Map.ofSeq) InputTopology.Triangle
+                        |> Effect.toLayeredEffect x.LayerCount (x.PerLayerUniforms |> Seq.map (fun n -> n, n) |> Map.ofSeq) top
                         |> withDeviceIndex deviceCount
                         |> Effect.toModule config
                 else 
                     effect 
                         // TODO: other topologies????
-                        |> Effect.toMultiViewportEffect deviceCount Map.empty InputTopology.Triangle
+                        |> Effect.toMultiViewportEffect deviceCount Map.empty top
                         |> withDeviceIndex deviceCount
                         |> Effect.toModule config
             else
@@ -389,7 +403,7 @@ module FShadeInterop =
                 if x.LayerCount > 1 then
                     effect 
                         // TODO: other topologies????
-                        |> Effect.toLayeredEffect x.LayerCount (x.PerLayerUniforms |> Seq.map (fun n -> n, n) |> Map.ofSeq) InputTopology.Triangle
+                        |> Effect.toLayeredEffect x.LayerCount (x.PerLayerUniforms |> Seq.map (fun n -> n, n) |> Map.ofSeq) top
                         |> Effect.toModule config
                 else
                     effect |> Effect.toModule config
@@ -437,8 +451,8 @@ module FShadeInterop =
         member x.Effect = effect
 
         interface IGeneratedSurface with
-            member x.Generate (r : IRuntime, signature : IFramebufferSignature) =
-                r.AssembleEffect(effect, signature) 
+            member x.Generate (r : IRuntime, signature : IFramebufferSignature, topology : InputTopology) =
+                r.AssembleEffect(effect, signature, topology) 
 
     let toFShadeSurface (e : FShadeEffect) = FShadeSurface.Get e :> ISurface
 
@@ -498,6 +512,6 @@ type FShadeRuntimeExtensions private() =
         )
 
     [<Extension>]
-    static member Link (this : IFramebufferSignature, e : Effect, depthRange : Range1d, flip : bool) =
-        this.Link(e, depthRange, flip)
+    static member Link (this : IFramebufferSignature, e : Effect, depthRange : Range1d, flip : bool, top : InputTopology) =
+        this.Link(e, depthRange, flip, top)
 

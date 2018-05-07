@@ -533,7 +533,7 @@ module SgPrimitives =
                     l |> Array.collect (fun l -> [|V3f l.P0; V3f l.P1|])
                 )
             
-            Sg.RenderNode(call, Mod.constant IndexedGeometryMode.LineList)
+            Sg.RenderNode(call, IndexedGeometryMode.LineList)
                 |> Sg.vertexAttribute DefaultSemantic.Positions positions
                 |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> Mod.map (fun c -> c.ToC4f().ToV4f()))
 
@@ -551,7 +551,7 @@ module SgPrimitives =
                     l |> Array.collect (fun l -> [|V3f l.P0; V3f l.P1; V3f l.P2|])
                 )
             
-            Sg.RenderNode(call, Mod.constant IndexedGeometryMode.TriangleList)
+            Sg.RenderNode(call, IndexedGeometryMode.TriangleList)
                 |> Sg.vertexAttribute DefaultSemantic.Positions positions
                 |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> Mod.map (fun c -> c.ToC4f().ToV4f()))
 

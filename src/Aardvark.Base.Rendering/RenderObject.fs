@@ -241,7 +241,7 @@ type RenderObject =
                 
         mutable DrawCallInfos       : IMod<list<DrawCallInfo>>
         mutable IndirectBuffer      : IMod<IIndirectBuffer>
-        mutable Mode                : IMod<IndexedGeometryMode>
+        mutable Mode                : IndexedGeometryMode
         
 
         mutable Surface             : Surface
@@ -283,7 +283,7 @@ type RenderObject =
           DrawCallInfos = null
           IndirectBuffer = null
 
-          Mode = null
+          Mode = IndexedGeometryMode.TriangleList
           Surface = Surface.None
           DepthTest = null
           CullMode = null
@@ -338,7 +338,7 @@ module RenderObjectExtensions =
           RenderPass = RenderPass.main
           DrawCallInfos = null
           IndirectBuffer = null
-          Mode = null
+          Mode = IndexedGeometryMode.TriangleList
           Surface = Surface.None
           DepthTest = null
           CullMode = null

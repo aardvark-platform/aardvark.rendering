@@ -27,33 +27,42 @@ module Sg =
 
     type DynamicNode(child : IMod<ISg>) = inherit AbstractApplicator(child)
 
-    type RenderNode(call : IMod<DrawCallInfo>, mode : IMod<IndexedGeometryMode>) =
+    type RenderNode(call : IMod<DrawCallInfo>, mode : IndexedGeometryMode) =
         interface ISg
 
         member x.Mode = mode
         member x.DrawCallInfo = call
 
-        new(call : DrawCallInfo, mode : IndexedGeometryMode) = RenderNode(Mod.constant call, Mod.constant mode)
-        new(count : int, mode : IndexedGeometryMode) = RenderNode(Mod.constant (DrawCallInfo(
-                                                                                    FaceVertexCount = count,
-                                                                                    InstanceCount = 1,
-                                                                                    FirstIndex = 0,
-                                                                                    FirstInstance = 0,
-                                                                                    BaseVertex = 0
-                                                                                )) , Mod.constant mode)
-        new(count : IMod<int>, mode : IndexedGeometryMode) = RenderNode(Mod.map (fun x -> DrawCallInfo(
-                                                                                            FaceVertexCount = x,
-                                                                                            InstanceCount = 1,
-                                                                                            FirstIndex = 0,
-                                                                                            FirstInstance = 0,
-                                                                                            BaseVertex = 0
-                                                                                )) count , Mod.constant mode)
+        new(call : DrawCallInfo, mode : IndexedGeometryMode) = RenderNode(Mod.constant call, mode)
+        new(count : int, mode : IndexedGeometryMode) = 
+            let call = 
+                DrawCallInfo(
+                    FaceVertexCount = count,
+                    InstanceCount = 1,
+                    FirstIndex = 0,
+                    FirstInstance = 0,
+                    BaseVertex = 0
+                )
+            RenderNode(Mod.constant call, mode)
+
+        new(count : IMod<int>, mode : IndexedGeometryMode) = 
+            let call =
+                count |> Mod.map (fun x ->
+                    DrawCallInfo(
+                        FaceVertexCount = x,
+                        InstanceCount = 1,
+                        FirstIndex = 0,
+                        FirstInstance = 0,
+                        BaseVertex = 0
+                    )
+                )
+            RenderNode(call, mode)
     
     type RenderObjectNode(objects : aset<IRenderObject>) =
         interface ISg
         member x.Objects = objects
 
-    type IndirectRenderNode(buffer : IMod<IIndirectBuffer>, mode : IMod<IndexedGeometryMode>) =
+    type IndirectRenderNode(buffer : IMod<IIndirectBuffer>, mode : IndexedGeometryMode) =
         interface ISg
 
         member x.Mode = mode

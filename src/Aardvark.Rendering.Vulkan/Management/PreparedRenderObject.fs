@@ -101,7 +101,7 @@ type DevicePreparedRenderObjectExtensions private() =
         
         let resources = System.Collections.Generic.List<IResourceLocation>()
 
-        let programLayout, program = this.CreateShaderProgram(renderPass, ro.Surface)
+        let programLayout, program = this.CreateShaderProgram(renderPass, ro.Surface, ro.Mode)
 
         let descriptorSets = 
             programLayout.DescriptorSetLayouts |> Array.map (fun ds ->

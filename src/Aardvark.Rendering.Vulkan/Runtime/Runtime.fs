@@ -623,11 +623,11 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             x.Copy(src, srcOffset, dst, dstOffset, size)
 
         member x.OnDispose = onDispose.Publish
-        member x.AssembleModule (effect : FShade.Effect, signature : IFramebufferSignature) =
-            signature.Link(effect, Range1d(0.0, 1.0), false)
+        member x.AssembleModule (effect : FShade.Effect, signature : IFramebufferSignature, topology : InputTopology) =
+            signature.Link(effect, Range1d(0.0, 1.0), false, topology)
 
-        member x.AssembleEffect (effect : FShade.Effect, signature : IFramebufferSignature) =
-            BackendSurface.ofEffectSimple signature effect
+        member x.AssembleEffect (effect : FShade.Effect, signature : IFramebufferSignature, topology : InputTopology) =
+            BackendSurface.ofEffectSimple signature effect topology
 
         member x.ResourceManager = failf "not implemented"
 

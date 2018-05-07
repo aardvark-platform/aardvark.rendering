@@ -609,7 +609,10 @@ type AbstractRenderTask() =
                     for r in toReset do r.Reset()
                 )
                 x.PerformUpdate(token, RenderToken.Empty)
-
+    
+    member x.HookProvider (uniforms : IUniformProvider) =
+        hookProvider uniforms
+                
     member x.HookRenderObject (ro : RenderObject) =
         { ro with Uniforms = hookProvider ro.Uniforms }
                 

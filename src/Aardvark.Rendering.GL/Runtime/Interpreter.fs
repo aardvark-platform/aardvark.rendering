@@ -576,10 +576,10 @@ module OpenGLObjectInterpreter =
 
                 let hasTess = program.HasTessellation
 
-                let patchSize = o.Original.Mode.GetValue() |> Translations.toPatchCount
+                let patchSize = o.Original.Mode |> Translations.toPatchCount
 
                 let mode =
-                    let igMode = o.Original.Mode.GetValue()
+                    let igMode = o.Original.Mode
 
                     if hasTess then 
                         int OpenGl.Enums.DrawMode.Patches

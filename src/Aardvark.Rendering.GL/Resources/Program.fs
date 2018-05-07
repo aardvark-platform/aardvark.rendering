@@ -628,14 +628,14 @@ module ProgramExtensions =
                                 Error e
             )
 
-        member x.TryCreateProgram(signature : IFramebufferSignature, surface : Surface) : Error<GLSL.GLSLProgramInterface * IMod<Program>> =
+        member x.TryCreateProgram(signature : IFramebufferSignature, surface : Surface, topology : IndexedGeometryMode) : Error<GLSL.GLSLProgramInterface * IMod<Program>> =
             shaderCache.GetOrAdd((x, surface, signature), fun (x, surface, signature) ->
                 match surface with
                     | Surface.FShadeSimple effect ->
                     
                         let glsl = 
                             lazy (
-                                let module_ = signature.Link(effect, Range1d(-1.0, 1.0), false)
+                                let module_ = signature.Link(effect, Range1d(-1.0, 1.0), false, topology)
                                 ModuleCompiler.compileGLSL430 module_
                             )
 
@@ -691,8 +691,8 @@ module ProgramExtensions =
                                 Error (sprintf "[GL] bad surface: %A (hi lui)" surface)
             )
 
-        member x.CreateProgram(signature : IFramebufferSignature, surface : Surface) : GLSL.GLSLProgramInterface * IMod<Program> =
-            match x.TryCreateProgram(signature, surface) with
+        member x.CreateProgram(signature : IFramebufferSignature, surface : Surface, topology : IndexedGeometryMode) : GLSL.GLSLProgramInterface * IMod<Program> =
+            match x.TryCreateProgram(signature, surface, topology) with
                 | Success t -> t
                 | Error e ->
                     Log.error "[GL] shader compiler returned errors: %A" e

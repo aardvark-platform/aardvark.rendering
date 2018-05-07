@@ -389,7 +389,7 @@ type ResourceManagerExtensions private() =
 //                    | _ -> rj.Surface
 //            else rj.Surface
 
-        let iface, program = x.CreateSurface(fboSignature, rj.Surface)
+        let iface, program = x.CreateSurface(fboSignature, rj.Surface, rj.Mode)
 
         GL.Check "[Prepare] Create Surface"
 

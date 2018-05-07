@@ -275,7 +275,7 @@ module Indirect =
             obj.IndirectBuffer <- Mod.map fst indirectAndInstanceBuffers
             obj.InstanceAttributes <- instanceProvider
             obj.VertexAttributes <- vertexProvider
-            obj.Mode <- Mod.constant node.Signature.mode
+            obj.Mode <- node.Signature.mode
             obj.Activate <- kill
             ASet.single(obj :> IRenderObject)
 

@@ -439,7 +439,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let bufferCache             = derivedCache (fun m -> m.BufferCache)
     let textureCache            = derivedCache (fun m -> m.TextureCache)
     let indirectBufferCache     = derivedCache (fun m -> m.IndirectBufferCache)
-    let programCache            = match parent with | Some p -> p.ProgramCache | None -> ConcurrentDictionary<Aardvark.Base.Surface * IFramebufferSignature, FShade.GLSL.GLSLProgramInterface * IMod<Program>>()
+    let programCache            = match parent with | Some p -> p.ProgramCache | None -> ConcurrentDictionary<Aardvark.Base.Surface * IFramebufferSignature * IndexedGeometryMode, FShade.GLSL.GLSLProgramInterface * IMod<Program>>()
     let programHandleCache      = ResourceCache<Program, int>(None, Option.map snd renderTaskInfo)
     let samplerCache            = derivedCache (fun m -> m.SamplerCache)
     let vertexInputCache        = derivedCache (fun m -> m.VertexInputCache)
@@ -461,7 +461,13 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     let uniformBufferManagers = ConcurrentDictionary<FShade.GLSL.GLSLUniformBuffer, UniformBufferManager>() // ISSUE: leak? the buffer of the UniformBufferManager is never disposed
 
-    let hasTessDrawModeCache = BinaryCache<IMod<bool>, IMod<IndexedGeometryMode>, IMod<GLBeginMode>>(Mod.map2 (fun t d -> ctx.ToBeginMode(d, t)))
+    let hasTessDrawModeCache = 
+        ConcurrentDictionary<IndexedGeometryMode, UnaryCache<IMod<bool>, IMod<GLBeginMode>>>()
+        
+    let getTessDrawModeCache (mode : IndexedGeometryMode) =
+        hasTessDrawModeCache.GetOrAdd(mode, fun mode ->
+            UnaryCache(Mod.map (fun t -> ctx.ToBeginMode(mode, t)))
+        )
 
     let samplerDescriptionCache = UnaryCache(fun (samplerState : FShade.SamplerState) -> samplerState.SamplerStateDescription)
 
@@ -598,11 +604,11 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         samplerDescriptionCache.Invoke(samplerState)
 
 
-    member x.CreateSurface(signature : IFramebufferSignature, surface : Aardvark.Base.Surface) =
+    member x.CreateSurface(signature : IFramebufferSignature, surface : Aardvark.Base.Surface, topology : IndexedGeometryMode) =
 
         let (signature, result) = 
-            programCache.GetOrAdd((surface, signature), fun (surface, signature) ->
-                ctx.CreateProgram(signature, surface)
+            programCache.GetOrAdd((surface, signature, topology), fun (surface, signature, topology) ->
+                ctx.CreateProgram(signature, surface, topology)
             )
 
         let programHandle = 
@@ -813,8 +819,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
       
-    member x.CreateBeginMode(hasTess : IMod<bool>, drawMode : IMod<IndexedGeometryMode>) =
-        let mode = hasTessDrawModeCache.Invoke(hasTess, drawMode)
+    member x.CreateBeginMode(hasTess : IMod<bool>, drawMode : IndexedGeometryMode) =
+        let mode = getTessDrawModeCache(drawMode).Invoke(hasTess)
         beginModeCache.GetOrCreate(mode, {
             create = fun b      -> b
             update = fun h b    -> b

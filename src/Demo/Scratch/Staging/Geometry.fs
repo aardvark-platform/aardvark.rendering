@@ -602,7 +602,7 @@ module GeometryTest =
                 
                     )
 
-                ro.Mode <- Mod.constant g.mode
+                ro.Mode <- g.mode
                 ro.DrawCallInfos <- Mod.constant [call]
                 ro.Indices <- g.indices
 

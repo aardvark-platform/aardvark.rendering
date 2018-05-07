@@ -246,7 +246,7 @@ module SgFSharp =
             Sg.RenderNode(call,mode) 
             
         let indirectDraw (mode : IndexedGeometryMode) (buffer : IMod<IIndirectBuffer>) =
-            Sg.IndirectRenderNode(buffer, Mod.constant mode) :> ISg
+            Sg.IndirectRenderNode(buffer, mode) :> ISg
 
         let ofIndexedGeometry (g : IndexedGeometry) =
             let attributes = 
@@ -415,7 +415,7 @@ module SgFSharp =
                     )
                 )
 
-            let sg = Sg.VertexAttributeApplicator(vertexAttributes, Sg.RenderNode(call, Mod.constant g.Mode)) :> ISg
+            let sg = Sg.VertexAttributeApplicator(vertexAttributes, Sg.RenderNode(call, g.Mode)) :> ISg
         
             let sg =
                 if index <> null then

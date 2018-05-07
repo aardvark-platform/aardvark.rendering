@@ -106,7 +106,7 @@ module RenderCommands =
 
     type ResourceManager with
         member x.PreparePipelineState (renderPass : RenderPass, state : PipelineState) =
-            let layout, program = x.CreateShaderProgram(renderPass, state.surface)
+            let layout, program = x.CreateShaderProgram(renderPass, state.surface, state.geometryMode)
 
             let inputs = 
                 layout.PipelineInfo.pInputs |> List.map (fun p ->
@@ -121,7 +121,7 @@ module RenderCommands =
                 x.CreateVertexInputState(layout.PipelineInfo, Mod.constant (VertexInputState.ofTypes inputs))
 
             let inputAssembly =
-                x.CreateInputAssemblyState(Mod.constant state.geometryMode, program)
+                x.CreateInputAssemblyState(state.geometryMode, program)
 
             let rasterizerState =
                 x.CreateRasterizerState(state.depthTest, state.cullMode, state.fillMode)

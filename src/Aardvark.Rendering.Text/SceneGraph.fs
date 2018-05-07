@@ -131,7 +131,7 @@ module Sg =
             shapes.VertexAttributes <- cache.VertexBuffers
             shapes.IndirectBuffer <- indirectAndOffsets |> Mod.map (fun (i,_,_) -> i)
             shapes.InstanceAttributes <- instanceAttributes
-            shapes.Mode <- Mod.constant IndexedGeometryMode.TriangleList
+            shapes.Mode <- IndexedGeometryMode.TriangleList
             shapes.Surface <- Surface.FShadeSimple cache.Effect
 
 
@@ -153,7 +153,7 @@ module Sg =
                 )
 
             boundary.DrawCallInfos <- [drawCall] |> Mod.constant
-            boundary.Mode <- Mod.constant IndexedGeometryMode.TriangleList
+            boundary.Mode <- IndexedGeometryMode.TriangleList
             boundary.Uniforms <-
                 let old = boundary.Uniforms
                 { new IUniformProvider with

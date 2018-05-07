@@ -44,7 +44,7 @@ type PreparedGeometry =
 type ResourceManagerExtensions private() =
     [<Extension>]
     static member PreparePipelineState (this : ResourceManager, renderPass : RenderPass, surface : Aardvark.Base.Surface, state : PipelineState) =
-        let layout, program = this.CreateShaderProgram(renderPass, surface)
+        let layout, program = this.CreateShaderProgram(renderPass, surface, state.geometryMode)
 
         let inputs = 
             layout.PipelineInfo.pInputs |> List.map (fun p ->
@@ -62,7 +62,7 @@ type ResourceManagerExtensions private() =
             this.CreateVertexInputState(layout.PipelineInfo, Mod.constant (VertexInputState.ofTypes inputs))
 
         let inputAssembly =
-            this.CreateInputAssemblyState(Mod.constant state.geometryMode, program)
+            this.CreateInputAssemblyState(state.geometryMode, program)
 
         let rasterizerState =
             this.CreateRasterizerState(state.depthTest, state.cullMode, state.fillMode)
@@ -95,13 +95,13 @@ type ResourceManagerExtensions private() =
         }
             
     [<Extension>]
-    static member PrepareGeometry(this : ResourceManager, state : PreparedPipelineState, g : Geometry) : PreparedGeometry =
+    static member PrepareGeometry(this : ResourceManager, state : PreparedPipelineState, g : Geometry, uniforms : IUniformProvider) : PreparedGeometry =
         let resources = System.Collections.Generic.List<IResourceLocation>()
 
         let layout = state.ppLayout
 
         let descriptorSets, additionalResources = 
-            this.CreateDescriptorSets(layout, UniformProvider.union (UniformProvider.ofMap g.uniforms) state.ppUniforms)
+            this.CreateDescriptorSets(layout, UniformProvider.union uniforms state.ppUniforms)
 
         resources.AddRange additionalResources
 
@@ -1434,7 +1434,10 @@ module private RuntimeCommands =
 
         override x.Compile(_, stream) =
             // never gets re-executed so the stream does not need to be cleared
-            let pg = compiler.manager.PrepareGeometry(pipeline, geometry)
+
+            let uniforms = compiler.task.HookProvider (UniformProvider.ofMap geometry.uniforms)
+
+            let pg = compiler.manager.PrepareGeometry(pipeline, geometry, uniforms)
             prepared <- Some pg
 
             if async then
@@ -1474,7 +1477,7 @@ module private RuntimeCommands =
             match preparedPipeline with
                 | None -> 
                     // create and cache the PreparedPipelineState
-                    let pipeline = compiler.manager.PreparePipelineState(compiler.renderPass, surface, state)
+                    let pipeline = compiler.manager.PreparePipelineState(compiler.renderPass, surface, { state with globalUniforms = compiler.task.HookProvider state.globalUniforms })
                     compiler.resources.Add pipeline.ppPipeline
                     preparedPipeline <- Some pipeline
 
@@ -1565,7 +1568,7 @@ module private RuntimeCommands =
                     ()
 
         override x.Compile(_, stream : VKVM.CommandStream) =
-            let pipeline = compiler.manager.PreparePipelineState(compiler.renderPass, surface, state)
+            let pipeline = compiler.manager.PreparePipelineState(compiler.renderPass, surface, { state with globalUniforms = compiler.task.HookProvider state.globalUniforms })
             compiler.resources.Add pipeline.ppPipeline
             preparedPipeline <- Some pipeline
 
@@ -1743,7 +1746,7 @@ module private RuntimeCommands =
             compiler.manager.PreparePipelineState(compiler.renderPass, surface, state)
 
         let descritorSet, descritorSetResources =
-            let sets, resources = compiler.manager.CreateDescriptorSets(pipeline.ppLayout, state.globalUniforms)
+            let sets, resources = compiler.manager.CreateDescriptorSets(pipeline.ppLayout, compiler.task.HookProvider state.globalUniforms)
             compiler.manager.CreateDescriptorSetBinding(pipeline.ppLayout, Array.toList sets), resources
 
         let pipelineInfo = pipeline.ppLayout.PipelineInfo
@@ -1798,9 +1801,13 @@ module private RuntimeCommands =
             let uSlot = 
                 let uniforms =
                     instanceInputs |> Map.map (fun name _ ->
-                        match g.SingleAttributes.TryGetValue (Symbol.Create name) with
+                        let name = Symbol.Create name
+                        match g.SingleAttributes.TryGetValue name with
                             | (true, (:? IMod as a)) -> a
-                            | _ -> failf "asdasdasd"
+                            | _ -> 
+                                match pipeline.ppUniforms.TryGetUniform(Ag.emptyScope, name) with
+                                    | Some a -> a
+                                    | None -> failwithf "[Vulkan] could not get uniform %A" name
                     )
                 
                 instanceManager.NewSlot(uniforms)

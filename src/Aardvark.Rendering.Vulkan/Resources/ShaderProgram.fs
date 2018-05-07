@@ -373,9 +373,9 @@ type ContextShaderProgramExtensions private() =
                 s.Get signature |> unbox<ShaderProgram>
             | :? ShaderProgram as p -> p
             | :? BackendSurface as bs -> this |> ShaderProgram.ofBackendSurface bs
-            | :? IGeneratedSurface as gs ->
-                let bs = gs.Generate(this.Runtime, signature) 
-                this |> ShaderProgram.ofBackendSurface bs
+            //| :? IGeneratedSurface as gs ->
+            //    let bs = gs.Generate(this.Runtime, signature) 
+            //    this |> ShaderProgram.ofBackendSurface bs
             | _ ->
                 failf "bad surface type: %A" surface
 

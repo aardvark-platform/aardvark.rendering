@@ -70,7 +70,7 @@ module Sems =
             
             let o = RenderObject.create()
 
-            o.Mode <- Mod.constant b.Mode
+            o.Mode <- b.Mode
 
             o.IndirectBuffer <- 
                 b.Calls 

@@ -15,7 +15,7 @@ type AirState =
     {
         isActive            : IMod<bool>
         drawCallInfos       : IMod<list<DrawCallInfo>>
-        mode                : IMod<IndexedGeometryMode>
+        mode                : IndexedGeometryMode
         surface             : Surface
 
         depthTest           : IMod<DepthTestMode>
@@ -573,11 +573,9 @@ type Air private() =
     // ================================================================================================================
     // Toplogy
     // ================================================================================================================
-    static member Toplogy (mode : IMod<IndexedGeometryMode>) =
+    static member Toplogy (mode : IndexedGeometryMode) =
         modify (fun s -> { s with mode = mode })
   
-    static member Toplogy (mode : IndexedGeometryMode) =
-        modify (fun s -> { s with mode = Mod.constant mode })
     
 
     // ================================================================================================================

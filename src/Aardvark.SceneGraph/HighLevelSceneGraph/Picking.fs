@@ -154,7 +154,7 @@ module PickingSemantics =
             index : Option<BufferView>
             positions : Option<BufferView>
             call : IMod<DrawCallInfo>
-            mode : IMod<IndexedGeometryMode>
+            mode : IndexedGeometryMode
         }
 
     [<Semantic>]
@@ -236,7 +236,7 @@ module PickingSemantics =
         static let createLeafPickable (key : PickingKey) =
             lock cache (fun () ->
                 cache.GetOrCreate(key, fun key ->
-                    let mode = Mod.force key.mode
+                    let mode = key.mode
                     if mode = IndexedGeometryMode.TriangleList then
                         let call = key.call
 

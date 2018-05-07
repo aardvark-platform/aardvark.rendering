@@ -364,14 +364,14 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
         member x.OnDispose = onDispose.Publish
 
-        member x.AssembleModule (effect : Effect, signature : IFramebufferSignature) =
-            signature.Link(effect, Range1d(-1.0, 1.0), false)
+        member x.AssembleModule (effect : Effect, signature : IFramebufferSignature, topology : InputTopology) =
+            signature.Link(effect, Range1d(-1.0, 1.0), false, topology)
 
-        member x.AssembleEffect (effect : Effect, signature : IFramebufferSignature) =
+        member x.AssembleEffect (effect : Effect, signature : IFramebufferSignature, topology : InputTopology) =
             let key = effect.Id, signature.ExtractSemantics()
             shaderCache.GetOrAdd(key,fun _ -> 
                 let glsl = 
-                    signature.Link(effect, Range1d(-1.0, 1.0), false)
+                    signature.Link(effect, Range1d(-1.0, 1.0), false, topology)
                         |> ModuleCompiler.compileGLSL430
 
                 let entries =
@@ -597,7 +597,10 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                     | :? FShadeSurface as f -> Aardvark.Base.Surface.FShadeSimple f.Effect
                     | _ -> Aardvark.Base.Surface.Backend s
 
-            let iface, program = ctx.CreateProgram(signature, surface)
+            if signature.LayerCount > 1 then
+                Log.warn("[PrepareSurface] Using Triangle topology.")
+
+            let iface, program = ctx.CreateProgram(signature, surface, IndexedGeometryMode.TriangleList)
 
             Mod.force program :> IBackendSurface
 

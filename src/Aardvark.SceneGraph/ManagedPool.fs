@@ -595,13 +595,13 @@ type IRuntimePoolExtensions private() =
 module ManagedPoolSg =
 
     module Sg =
-        type PoolNode(pool : ManagedPool, calls : aset<ManagedDrawCall>, mode : IMod<IndexedGeometryMode>) =
+        type PoolNode(pool : ManagedPool, calls : aset<ManagedDrawCall>, mode : IndexedGeometryMode) =
             interface ISg
             member x.Pool = pool
             member x.Calls = calls
             member x.Mode = mode
 
-        let pool (pool : ManagedPool) (calls : aset<ManagedDrawCall>) (mode : IMod<IndexedGeometryMode>)=
+        let pool (pool : ManagedPool) (calls : aset<ManagedDrawCall>) (mode : IndexedGeometryMode)=
             PoolNode(pool, calls, mode) :> ISg
 
 

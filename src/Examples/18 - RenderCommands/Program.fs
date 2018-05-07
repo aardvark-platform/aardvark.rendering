@@ -37,7 +37,7 @@ type Octree(bounds : Box3d) =
             async {
                 let! data = data
                 return
-                    IndexedGeometryPrimitives.Box.solidBox data (rand.UniformC3f().ToC4b())
+                    IndexedGeometryPrimitives.Box.wireBox data (rand.UniformC3f().ToC4b())
                         |> Geometry.ofIndexedGeometry Map.empty
             }
             |> Some
@@ -122,7 +122,7 @@ let main argv =
 
         let config =
             {
-                mode = IndexedGeometryMode.TriangleList
+                mode = IndexedGeometryMode.LineList
                 vertexInputTypes = Map.ofList [DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Colors, typeof<C4b>]
                 perGeometryUniforms = Map.empty
             }   
@@ -147,9 +147,10 @@ let main argv =
         )
         |> Sg.shader {
             do! DefaultSurfaces.trafo
-            //do! DefaultSurfaces.thickLine
+            do! DefaultSurfaces.thickLine
         }  
         |> Sg.uniform "LineWidth" (Mod.constant 3.0)
+        //|> Sg.uniform "ViewportSize" win.Sizes
 
 
     // show the scene in a simple window

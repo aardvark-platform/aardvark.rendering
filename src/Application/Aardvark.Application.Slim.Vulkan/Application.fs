@@ -284,8 +284,6 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
 
         let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
 
-        Log.warn "requestedExtensions: %A" requestedExtensions
-
         physicalDevice.CreateDevice(enabledExtensions)
 
     

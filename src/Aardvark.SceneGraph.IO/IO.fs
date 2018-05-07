@@ -265,7 +265,7 @@ module Loader =
 
                         let ro = RenderObject.create()
                         ro.VertexAttributes <- mesh
-                        ro.Mode <- Mod.constant mesh.geometry.Mode
+                        ro.Mode <- mesh.geometry.Mode
                         ro.DrawCallInfos <- Mod.constant [call]
 
                         let uniforms =

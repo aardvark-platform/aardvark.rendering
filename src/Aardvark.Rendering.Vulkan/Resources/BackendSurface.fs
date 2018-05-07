@@ -444,8 +444,8 @@ module BackendSurface =
         // TODO: gl_PointSize (builtIn)
         BackendSurface(glsl.code, entries, Map.empty, SymDict.empty, samplers, true)
 
-    let ofEffectSimple (signature : IFramebufferSignature) (effect : FShade.Effect) =
-        let module_ = signature.Link(effect, Range1d(0.0, 1.0), false)
+    let ofEffectSimple (signature : IFramebufferSignature) (effect : FShade.Effect) (topology : InputTopology) =
+        let module_ = signature.Link(effect, Range1d(0.0, 1.0), false, topology)
         ofModule module_
 
 
