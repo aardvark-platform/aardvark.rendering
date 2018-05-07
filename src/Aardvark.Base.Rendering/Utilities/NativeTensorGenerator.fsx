@@ -276,9 +276,9 @@ module Generator =
                     offset |> List.map string |> String.concat "" |> sprintf "pp%s"
 
                 if boundsCheck.Length > 0 then
-                    line "let mutable %s : nativeptr<'a> = if %s then NativePtr.ofNativeInt (%s) else %s" ptrName boundsCheck (getPtr offset) ptr0Name
+                    line "let %s : nativeptr<'a> = if %s then NativePtr.ofNativeInt (%s) else %s" ptrName boundsCheck (getPtr offset) ptr0Name
                 else 
-                    line "let mutable %s : nativeptr<'a> = NativePtr.ofNativeInt (%s)" ptrName (getPtr offset)
+                    line "let %s : nativeptr<'a> = NativePtr.ofNativeInt (%s)" ptrName (getPtr offset)
 
             let rec buildSample (prefix : string) (d : int) =
                 if d >= dim then
