@@ -284,6 +284,33 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let cXY = compare (abs info.DX) (abs info.DY)
         if cXY >= 0  then x.CopyToXY(y, f)
         else x.CopyToYX(y, f)
+    member x.SampleNearest(coord : float) : 'a[] = 
+        let p0f = coord * float x.Size.X
+        let mutable nearest = int64 (Fun.Round p0f)
+        if nearest < 0L then nearest <- 0L
+        else if nearest >= x.Size.X then nearest <- x.Size.X - 1L
+        let sa = nativeint sizeof<'a>
+        let ptr = NativePtr.toNativeInt x.Pointer + nativeint (nearest * x.Delta.X) * sa
+        let dY = nativeint x.DY * sa
+        Array.init (int x.Size.Y) (fun i -> NativePtr.read (NativePtr.ofNativeInt (ptr + nativeint i * dY)))
+    member x.SampleLinear(coord : float, lerp : float -> 'a -> 'a -> 'a) : 'a[] = 
+        let p0f = coord * float x.Size.X
+        let mutable p0 = int64 p0f
+        let frac = p0f - float p0
+        if p0 < 0L then p0 <- 0L
+        else if p0 >= x.Size.X then p0 <- x.Size.X - 1L
+        let sa = nativeint sizeof<'a>
+        let ptr0 = NativePtr.toNativeInt x.Pointer + nativeint (p0 * x.Delta.X) * sa
+        let dX = nativeint x.DX * sa
+        let dY = nativeint x.DY * sa
+        let pp0 : nativeptr<'a> = NativePtr.ofNativeInt (ptr0)
+        let pp1 : nativeptr<'a> = if p0 < x.Size.X then NativePtr.ofNativeInt (ptr0 + dX) else pp0
+        Array.init (int x.SY) (fun i ->
+            let v0 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0 + sa * dY * nativeint i))
+            let v1 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1 + sa * dY * nativeint i))
+            let vx = lerp frac v0 v1 // TODO: frac
+            vx
+        )
     static member Using<'b> (m : Matrix<'a>, f : NativeMatrix<'a> -> 'b) = 
         let gc = GCHandle.Alloc(m.Data, GCHandleType.Pinned)
         try f (NativeMatrix<'a>(NativePtr.ofNativeInt (gc.AddrOfPinnedObject()), m.Info))
@@ -1027,6 +1054,44 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         elif cXY >= 0  && cXZ >= 0  && cYZ <= 0 then x.CopyToXZY(y, f)
         elif cXY >= 0  && cXZ <= 0 && cYZ <= 0 then x.CopyToZXY(y, f)
         else x.CopyToZYX(y, f)
+    member x.SampleNearest(coord : V2d) : 'a[] = 
+        let p0f = coord * V2d x.Size.XY
+        let mutable nearest = V2l(int64 (Fun.Round p0f.X), int64 (Fun.Round p0f.Y))
+        if nearest.X < 0L then nearest.X <- 0L
+        else if nearest.X >= x.SX then nearest.X <- x.SX - 1L
+        if nearest.Y < 0L then nearest.Y <- 0L
+        else if nearest.Y >= x.SY then nearest.Y <- x.SY - 1L
+        let sa = nativeint sizeof<'a>
+        let ptr = NativePtr.toNativeInt x.Pointer + nativeint (V2l.Dot(nearest, x.Delta.XY)) * sa
+        let dZ = nativeint x.DZ * sa
+        Array.init (int x.Size.Z) (fun i -> NativePtr.read (NativePtr.ofNativeInt (ptr + nativeint i * dZ)))
+    member x.SampleLinear(coord : V2d, lerp : float -> 'a -> 'a -> 'a) : 'a[] = 
+        let p0f = coord * V2d x.Size.XY
+        let mutable p0 = V2l(int64 p0f.X, int64 p0f.Y)
+        let frac = p0f - V2d p0
+        if p0.X < 0L then p0.X <- 0L
+        else if p0.X >= x.SX then p0.X <- x.SX - 1L
+        if p0.Y < 0L then p0.Y <- 0L
+        else if p0.Y >= x.SY then p0.Y <- x.SY - 1L
+        let sa = nativeint sizeof<'a>
+        let ptr0 = NativePtr.toNativeInt x.Pointer + nativeint (V2l.Dot(p0, x.Delta.XY)) * sa
+        let dX = nativeint x.DX * sa
+        let dY = nativeint x.DY * sa
+        let dZ = nativeint x.DZ * sa
+        let pp00 : nativeptr<'a> = NativePtr.ofNativeInt (ptr0)
+        let pp10 : nativeptr<'a> = if p0.X < x.SX then NativePtr.ofNativeInt (ptr0 + dX) else pp00
+        let pp01 : nativeptr<'a> = if p0.Y < x.SY then NativePtr.ofNativeInt (ptr0 + dY) else pp00
+        let pp11 : nativeptr<'a> = if p0.X < x.SX && p0.Y < x.SY then NativePtr.ofNativeInt (ptr0 + dX + dY) else pp00
+        Array.init (int x.SZ) (fun i ->
+            let v00 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp00 + sa * dZ * nativeint i))
+            let v10 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp10 + sa * dZ * nativeint i))
+            let v01 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp01 + sa * dZ * nativeint i))
+            let v11 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp11 + sa * dZ * nativeint i))
+            let vx0 = lerp frac.X v00 v10 // TODO: frac
+            let vx1 = lerp frac.X v01 v11 // TODO: frac
+            let vxx = lerp frac.Y vx0 vx1 // TODO: frac
+            vxx
+        )
     static member Using<'b> (m : Volume<'a>, f : NativeVolume<'a> -> 'b) = 
         let gc = GCHandle.Alloc(m.Data, GCHandleType.Pinned)
         try f (NativeVolume<'a>(NativePtr.ofNativeInt (gc.AddrOfPinnedObject()), m.Info))
@@ -4053,6 +4118,61 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif cXW <= 0 && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.CopyToWXZY(y, f)
         elif cXW <= 0 && cXY >= 0  && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.CopyToWZXY(y, f)
         else x.CopyToWZYX(y, f)
+    member x.SampleNearest(coord : V3d) : 'a[] = 
+        let p0f = coord * V3d x.Size.XYZ
+        let mutable nearest = V3l(int64 (Fun.Round p0f.X), int64 (Fun.Round p0f.Y), int64 (Fun.Round p0f.Z))
+        if nearest.X < 0L then nearest.X <- 0L
+        else if nearest.X >= x.SX then nearest.X <- x.SX - 1L
+        if nearest.Y < 0L then nearest.Y <- 0L
+        else if nearest.Y >= x.SY then nearest.Y <- x.SY - 1L
+        if nearest.Z < 0L then nearest.Z <- 0L
+        else if nearest.Z >= x.SZ then nearest.Z <- x.SZ - 1L
+        let sa = nativeint sizeof<'a>
+        let ptr = NativePtr.toNativeInt x.Pointer + nativeint (V3l.Dot(nearest, x.Delta.XYZ)) * sa
+        let dW = nativeint x.DW * sa
+        Array.init (int x.Size.W) (fun i -> NativePtr.read (NativePtr.ofNativeInt (ptr + nativeint i * dW)))
+    member x.SampleLinear(coord : V3d, lerp : float -> 'a -> 'a -> 'a) : 'a[] = 
+        let p0f = coord * V3d x.Size.XYZ
+        let mutable p0 = V3l(int64 p0f.X, int64 p0f.Y, int64 p0f.Z)
+        let frac = p0f - V3d p0
+        if p0.X < 0L then p0.X <- 0L
+        else if p0.X >= x.SX then p0.X <- x.SX - 1L
+        if p0.Y < 0L then p0.Y <- 0L
+        else if p0.Y >= x.SY then p0.Y <- x.SY - 1L
+        if p0.Z < 0L then p0.Z <- 0L
+        else if p0.Z >= x.SZ then p0.Z <- x.SZ - 1L
+        let sa = nativeint sizeof<'a>
+        let ptr0 = NativePtr.toNativeInt x.Pointer + nativeint (V3l.Dot(p0, x.Delta.XYZ)) * sa
+        let dX = nativeint x.DX * sa
+        let dY = nativeint x.DY * sa
+        let dZ = nativeint x.DZ * sa
+        let dW = nativeint x.DW * sa
+        let pp000 : nativeptr<'a> = NativePtr.ofNativeInt (ptr0)
+        let pp100 : nativeptr<'a> = if p0.X < x.SX then NativePtr.ofNativeInt (ptr0 + dX) else pp000
+        let pp010 : nativeptr<'a> = if p0.Y < x.SY then NativePtr.ofNativeInt (ptr0 + dY) else pp000
+        let pp110 : nativeptr<'a> = if p0.X < x.SX && p0.Y < x.SY then NativePtr.ofNativeInt (ptr0 + dX + dY) else pp000
+        let pp001 : nativeptr<'a> = if p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dZ) else pp000
+        let pp101 : nativeptr<'a> = if p0.X < x.SX && p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dX + dZ) else pp000
+        let pp011 : nativeptr<'a> = if p0.Y < x.SY && p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dY + dZ) else pp000
+        let pp111 : nativeptr<'a> = if p0.X < x.SX && p0.Y < x.SY && p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dX + dY + dZ) else pp000
+        Array.init (int x.SW) (fun i ->
+            let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp000 + sa * dW * nativeint i))
+            let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp100 + sa * dW * nativeint i))
+            let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp010 + sa * dW * nativeint i))
+            let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp110 + sa * dW * nativeint i))
+            let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp001 + sa * dW * nativeint i))
+            let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp101 + sa * dW * nativeint i))
+            let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp011 + sa * dW * nativeint i))
+            let v111 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp111 + sa * dW * nativeint i))
+            let vx00 = lerp frac.X v000 v100 // TODO: frac
+            let vx10 = lerp frac.X v010 v110 // TODO: frac
+            let vx01 = lerp frac.X v001 v101 // TODO: frac
+            let vx11 = lerp frac.X v011 v111 // TODO: frac
+            let vxx0 = lerp frac.Y vx00 vx10 // TODO: frac
+            let vxx1 = lerp frac.Y vx01 vx11 // TODO: frac
+            let vxxx = lerp frac.Z vxx0 vxx1 // TODO: frac
+            vxxx
+        )
     static member Using<'b> (m : Tensor4<'a>, f : NativeTensor4<'a> -> 'b) = 
         let gc = GCHandle.Alloc(m.Data, GCHandleType.Pinned)
         try f (NativeTensor4<'a>(NativePtr.ofNativeInt (gc.AddrOfPinnedObject()), m.Info))

@@ -123,6 +123,202 @@ module Generator =
         buildLoop 0
         stop()
 
+
+    let sampleNearest (dim : int) =
+        if dim > 1 then
+            let coordType = 
+                match dim with
+                    | 2 -> "float"
+                    | 3 -> "V2d"
+                    | 4 -> "V3d"
+                    | _ -> failwith "invalid dim"
+
+           
+
+            start "member x.SampleNearest(coord : %s) : 'a[] = " coordType
+            
+            let dim = dim - 1
+
+            let lv, iv = 
+                match Map.tryFind dim vectorNames with
+                    | Some t -> t
+                    | None -> "int64", "int"
+
+            let swizzle = Array.take dim componentNames  |> String.concat ""
+
+            line "let p0f = coord * %s x.Size.%s" coordType swizzle
+            line "let mutable nearest = %s" (
+                if dim = 1 then
+                    "int64 (Fun.Round p0f)"
+                else
+                    Array.take dim componentNames 
+                        |> Array.map (sprintf "int64 (Fun.Round p0f.%s)") 
+                        |> String.concat ", "
+                        |> sprintf "%s(%s)" lv
+            )
+
+            if dim = 1 then
+                line "if nearest < 0L then nearest <- 0L"
+                line "else if nearest >= x.Size.%s then nearest <- x.Size.%s - 1L" swizzle swizzle
+            else
+                for c in Array.take dim componentNames do
+                    line "if nearest.%s < 0L then nearest.%s <- 0L" c c
+                    line "else if nearest.%s >= x.S%s then nearest.%s <- x.S%s - 1L" c c c c
+
+            let idot =
+                match dim with
+                    | 1 -> "{0} * {1}"
+                    | _ -> sprintf "%s.Dot({0}, {1})" lv
+            
+            line "let sa = nativeint sizeof<'a>"
+            line "let ptr = NativePtr.toNativeInt x.Pointer + nativeint (%s) * sa" (System.String.Format(idot, "nearest", sprintf "x.Delta.%s" swizzle))
+
+            let lastComp = componentNames.[dim]
+            line "let d%s = nativeint x.D%s * sa" lastComp lastComp
+            line "Array.init (int x.Size.%s) (fun i -> NativePtr.read (NativePtr.ofNativeInt (ptr + nativeint i * d%s)))" lastComp lastComp
+            
+            stop()
+
+    let sampleLinear (dim : int) =
+        if dim > 1 then
+            let coordType = 
+                match dim with
+                    | 2 -> "float"
+                    | 3 -> "V2d"
+                    | 4 -> "V3d"
+                    | _ -> failwith "invalid dim"
+            start "member x.SampleLinear(coord : %s, lerp : float -> 'a -> 'a -> 'a) : 'a[] = " coordType
+            
+            let dim = dim - 1
+
+            let lv, iv = 
+                match Map.tryFind dim vectorNames with
+                    | Some t -> t
+                    | None -> "int64", "int"
+
+            //let componentNames = Array.take dim componentNames
+            let swizzle = Array.take dim componentNames  |> String.concat ""
+
+            line "let p0f = coord * %s x.Size.%s" coordType swizzle
+            line "let mutable p0 = %s" (
+                if dim = 1 then
+                    "int64 p0f"
+                else
+                    Array.take dim componentNames
+                        |> Array.map (sprintf "int64 p0f.%s") 
+                        |> String.concat ", "
+                        |> sprintf "%s(%s)" lv
+            )
+
+            line "let frac = p0f - %s p0" coordType
+
+            if dim = 1 then
+                line "if p0 < 0L then p0 <- 0L"
+                line "else if p0 >= x.Size.%s then p0 <- x.Size.%s - 1L" swizzle swizzle
+            else
+                for c in Array.take dim componentNames do
+                    line "if p0.%s < 0L then p0.%s <- 0L" c c
+                    line "else if p0.%s >= x.S%s then p0.%s <- x.S%s - 1L" c c c c
+
+            let idot =
+                match dim with
+                    | 1 -> "{0} * {1}"
+                    | _ -> sprintf "%s.Dot({0}, {1})" lv
+
+            line "let sa = nativeint sizeof<'a>"
+            line "let ptr0 = NativePtr.toNativeInt x.Pointer + nativeint (%s) * sa" (System.String.Format(idot, "p0", sprintf "x.Delta.%s" swizzle))
+
+            for c in Array.take (dim + 1) componentNames do
+                line "let d%s = nativeint x.D%s * sa" c c
+
+            let getPtr (offsets : list<int>) =
+                offsets 
+                    |> List.mapi (fun d -> function 0 -> None | 1 -> Some (sprintf "d%s" componentNames.[d]) | v -> Some (sprintf "d%s * %d" componentNames.[d] v))
+                    |> List.choose id
+                    |> List.append [ "ptr0" ]
+                    |> String.concat " + "
+
+            
+            let rec allAssignments (len : int) =
+                if len = 0 then
+                    [[]]
+                else
+                    allAssignments (len - 1)
+                        |> List.collect (fun l ->
+                            [
+                                0 :: l
+                                1 :: l
+                            ]        
+                        )
+                    
+            let offsets = allAssignments dim
+
+            for offset in offsets do
+                let boundsCheck =
+                    offset |> List.mapi (fun d i ->
+                        if dim = 1 then
+                            if i > 0 then Some "p0 < x.Size.X"
+                            else None
+                        else 
+                            if i > 0 then Some (sprintf "p0.%s < x.S%s" componentNames.[d] componentNames.[d])
+                            else None
+                    )
+                    |> List.choose id
+                    |> String.concat " && "
+
+                let ptr0Name = 
+                    offset |> List.map (fun _ -> "0") |> String.concat "" |> sprintf "pp%s"
+                    
+                let valueName = 
+                    offset |> List.map string |> String.concat "" |> sprintf "v%s"
+                    
+                let ptrName = 
+                    offset |> List.map string |> String.concat "" |> sprintf "pp%s"
+
+                if boundsCheck.Length > 0 then
+                    line "let mutable %s : nativeptr<'a> = if %s then NativePtr.ofNativeInt (%s) else %s" ptrName boundsCheck (getPtr offset) ptr0Name
+                else 
+                    line "let mutable %s : nativeptr<'a> = NativePtr.ofNativeInt (%s)" ptrName (getPtr offset)
+
+            let rec buildSample (prefix : string) (d : int) =
+                if d >= dim then
+                    let res = Array.create dim "x" |> String.concat "" |> sprintf "v%s"
+                    line "%s" res
+                else
+                    let r = dim - d
+                    let offsets = allAssignments (r - 1)
+                    
+                    let frac = 
+                        if dim = 1 then "frac"
+                        else sprintf "frac.%s" (componentNames.[d])
+
+                    for offset in offsets do
+                        let vName = offset |> List.map string |> String.concat "" |> sprintf "v%sx%s" prefix
+                        let i0 = 0 :: offset |> List.map string |> String.concat "" |> sprintf "v%s%s" prefix
+                        let i1 = 1 :: offset |> List.map string |> String.concat "" |> sprintf "v%s%s" prefix
+                        line "let %s = lerp %s %s %s // TODO: frac" vName frac i0 i1
+                    buildSample (prefix + "x") (d + 1)
+            
+            let lastDim = componentNames.[dim]
+            start "Array.init (int x.S%s) (fun i ->" lastDim
+
+            for offset in offsets do
+                let valueName = 
+                    offset |> List.map string |> String.concat "" |> sprintf "v%s"
+                    
+                let ptrName = 
+                    offset |> List.map string |> String.concat "" |> sprintf "pp%s"
+
+                line "let %s : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt %s + sa * d%s * nativeint i))" valueName ptrName lastDim
+
+
+            buildSample "" 0
+            stop()
+
+            line ")"
+                    
+            stop()
+
     let copyToInternal (otherType : string) (otherGenArg : string) (args : list<string * string>) (op : string -> string -> string) (components : string[]) =
         let suffix = components |> String.concat ""
         let argDef = (("y", sprintf "%s<%s>" otherType otherGenArg) :: args) |> Seq.map (fun (n,t) -> sprintf "%s : %s" n t) |> String.concat ", "
@@ -211,6 +407,7 @@ module Generator =
             stop()
         
         dispatcher check componentNames "CopyTo" (("y", sprintf "%s<%s>" otherName otherGenArg) :: args)
+        
 
     let getManagedName (dim : int) =
         match Map.tryFind dim tensorNames with
@@ -295,12 +492,15 @@ module Generator =
         // Set (value)
         for perm in allPermutations componentNames do setter (List.toArray perm)
         dispatcher id componentNames "Set" ["value", "'a"]
-
+        
         // CopyTo(other)
         copyTo componentNames name "'a" [] (fun l r -> sprintf "NativePtr.write (NativePtr.ofNativeInt<'a> %s) (NativePtr.read (NativePtr.ofNativeInt<'a> %s))" r l)
         
         // CopyTo(other, transform)
         copyTo componentNames name "'b" ["f", "'a -> 'b"] (fun l r -> sprintf "NativePtr.write (NativePtr.ofNativeInt<'b> %s) (f (NativePtr.read (NativePtr.ofNativeInt<'a> %s)))" r l)
+
+        sampleNearest dim
+        sampleLinear dim
 
         let offsets = componentNames |> List.map (sprintf "begin%s")
         let sizes = componentNames |> List.map (sprintf "size%s")
