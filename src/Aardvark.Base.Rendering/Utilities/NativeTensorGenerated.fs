@@ -26,6 +26,57 @@ type NativeVector<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VectorInfo
             ptr <- ptr + jX
     member x.Set(value : 'a) = 
         x.SetX(value)
+    member inline private x.SetByCoordX(getValue : int64 -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = 0L
+        let step = 1L
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord <- initialCoord
+            NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+            coord <- coord + step
+            ptr <- ptr + jX
+    member x.SetByCoord(value : int64 -> 'a) = 
+        x.SetByCoordX(value)
+    member inline private x.SetByCoordX(getValue : int -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = 0
+        let step = 1
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord <- initialCoord
+            NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+            coord <- coord + step
+            ptr <- ptr + jX
+    member x.SetByCoord(value : int -> 'a) = 
+        x.SetByCoordX(value)
+    member inline private x.SetByCoordX(getValue : float -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = 0.5 / float x.Size
+        let step = 1.0 / float x.Size
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord <- initialCoord
+            NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+            coord <- coord + step
+            ptr <- ptr + jX
+    member x.SetByCoord(value : float -> 'a) = 
+        x.SetByCoordX(value)
     member inline private x.CopyToX(y : NativeVector<'a>) = 
         let sa = nativeint (sizeof<'a>)
         let mutable xptr = ptr |> NativePtr.toNativeInt
@@ -63,6 +114,21 @@ type NativeVector<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VectorInfo
         if info.Size <> y.Size then
             failwithf "NativeVector size mismatch: { src = %A; dst = %A }" info.Size y.Size
         x.CopyToX(y, f)
+    member x.SampleLinear(coord : float, lerp : float -> 'a -> 'a -> 'a) : 'a = 
+        let p0f = coord * float x.Size.X
+        let mutable p0 = int64 p0f
+        let frac = p0f - float p0
+        if p0 < 0L then p0 <- 0L
+        else if p0 >= x.Size.X then p0 <- x.Size.X - 1L
+        let sa = nativeint sizeof<'a>
+        let ptr0 = NativePtr.toNativeInt x.Pointer + nativeint (p0 * x.Delta.X) * sa
+        let dX = nativeint x.DX * sa
+        let pp0 : nativeptr<'a> = NativePtr.ofNativeInt (ptr0)
+        let pp1 : nativeptr<'a> = if p0 < x.Size.X then NativePtr.ofNativeInt (ptr0 + dX) else pp0
+        let v0 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0))
+        let v1 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1))
+        let vx = lerp frac v0 v1
+        vx
     static member Using<'b> (m : Vector<'a>, f : NativeVector<'a> -> 'b) = 
         let gc = GCHandle.Alloc(m.Data, GCHandleType.Pinned)
         try f (NativeVector<'a>(NativePtr.ofNativeInt (gc.AddrOfPinnedObject()), m.Info))
@@ -186,6 +252,150 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let cXY = compare (abs info.DX) (abs info.DY)
         if cXY >= 0  then x.SetXY(value)
         else x.SetYX(value)
+    member inline private x.SetByCoordXY(getValue : V2l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V2l.Zero
+        let step = V2l.One
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordYX(getValue : V2l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V2l.Zero
+        let step = V2l.One
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member x.SetByCoord(value : V2l -> 'a) = 
+        let cXY = compare (abs info.DX) (abs info.DY)
+        if cXY >= 0  then x.SetByCoordXY(value)
+        else x.SetByCoordYX(value)
+    member inline private x.SetByCoordXY(getValue : V2i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V2i.Zero
+        let step = V2i.One
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordYX(getValue : V2i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V2i.Zero
+        let step = V2i.One
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member x.SetByCoord(value : V2i -> 'a) = 
+        let cXY = compare (abs info.DX) (abs info.DY)
+        if cXY >= 0  then x.SetByCoordXY(value)
+        else x.SetByCoordYX(value)
+    member inline private x.SetByCoordXY(getValue : V2d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V2d(0.5, 0.5) / V2d(x.Size)
+        let step = V2d.One / V2d(x.Size)
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordYX(getValue : V2d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V2d(0.5, 0.5) / V2d(x.Size)
+        let step = V2d.One / V2d(x.Size)
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member x.SetByCoord(value : V2d -> 'a) = 
+        let cXY = compare (abs info.DX) (abs info.DY)
+        if cXY >= 0  then x.SetByCoordXY(value)
+        else x.SetByCoordYX(value)
     member inline private x.CopyToXY(y : NativeMatrix<'a>) = 
         let sa = nativeint (sizeof<'a>)
         let mutable xptr = ptr |> NativePtr.toNativeInt
@@ -308,9 +518,33 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         Array.init (int x.SY) (fun i ->
             let v0 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0 + sa * dY * nativeint i))
             let v1 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1 + sa * dY * nativeint i))
-            let vx = lerp frac v0 v1 // TODO: frac
+            let vx = lerp frac v0 v1
             vx
         )
+    member x.SampleLinear(coord : V2d, lerp : float -> 'a -> 'a -> 'a) : 'a = 
+        let p0f = coord * V2d x.Size.XY
+        let mutable p0 = V2l(int64 p0f.X, int64 p0f.Y)
+        let frac = p0f - V2d p0
+        if p0.X < 0L then p0.X <- 0L
+        else if p0.X >= x.SX then p0.X <- x.SX - 1L
+        if p0.Y < 0L then p0.Y <- 0L
+        else if p0.Y >= x.SY then p0.Y <- x.SY - 1L
+        let sa = nativeint sizeof<'a>
+        let ptr0 = NativePtr.toNativeInt x.Pointer + nativeint (V2l.Dot(p0, x.Delta.XY)) * sa
+        let dX = nativeint x.DX * sa
+        let dY = nativeint x.DY * sa
+        let pp00 : nativeptr<'a> = NativePtr.ofNativeInt (ptr0)
+        let pp10 : nativeptr<'a> = if p0.X < x.SX then NativePtr.ofNativeInt (ptr0 + dX) else pp00
+        let pp01 : nativeptr<'a> = if p0.Y < x.SY then NativePtr.ofNativeInt (ptr0 + dY) else pp00
+        let pp11 : nativeptr<'a> = if p0.X < x.SX && p0.Y < x.SY then NativePtr.ofNativeInt (ptr0 + dX + dY) else pp00
+        let v00 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp00))
+        let v10 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp10))
+        let v01 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp01))
+        let v11 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp11))
+        let vx0 = lerp frac.X v00 v10
+        let vx1 = lerp frac.X v01 v11
+        let vxx = lerp frac.Y vx0 vx1
+        vxx
     static member Using<'b> (m : Matrix<'a>, f : NativeMatrix<'a> -> 'b) = 
         let gc = GCHandle.Alloc(m.Data, GCHandleType.Pinned)
         try f (NativeMatrix<'a>(NativePtr.ofNativeInt (gc.AddrOfPinnedObject()), m.Info))
@@ -688,6 +922,558 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         elif cXY >= 0  && cXZ >= 0  && cYZ <= 0 then x.SetXZY(value)
         elif cXY >= 0  && cXZ <= 0 && cYZ <= 0 then x.SetZXY(value)
         else x.SetZYX(value)
+    member inline private x.SetByCoordXYZ(getValue : V3l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V3l.Zero
+        let step = V3l.One
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordYXZ(getValue : V3l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V3l.Zero
+        let step = V3l.One
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordYZX(getValue : V3l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V3l.Zero
+        let step = V3l.One
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordXZY(getValue : V3l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V3l.Zero
+        let step = V3l.One
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordZXY(getValue : V3l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V3l.Zero
+        let step = V3l.One
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordZYX(getValue : V3l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V3l.Zero
+        let step = V3l.One
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member x.SetByCoord(value : V3l -> 'a) = 
+        let cXY = compare (abs info.DX) (abs info.DY)
+        let cXZ = compare (abs info.DX) (abs info.DZ)
+        let cYZ = compare (abs info.DY) (abs info.DZ)
+        if cXY >= 0  && cXZ >= 0  && cYZ >= 0  then x.SetByCoordXYZ(value)
+        elif cXY <= 0 && cXZ >= 0  && cYZ >= 0  then x.SetByCoordYXZ(value)
+        elif cXY <= 0 && cXZ <= 0 && cYZ >= 0  then x.SetByCoordYZX(value)
+        elif cXY >= 0  && cXZ >= 0  && cYZ <= 0 then x.SetByCoordXZY(value)
+        elif cXY >= 0  && cXZ <= 0 && cYZ <= 0 then x.SetByCoordZXY(value)
+        else x.SetByCoordZYX(value)
+    member inline private x.SetByCoordXYZ(getValue : V3i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V3i.Zero
+        let step = V3i.One
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordYXZ(getValue : V3i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V3i.Zero
+        let step = V3i.One
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordYZX(getValue : V3i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V3i.Zero
+        let step = V3i.One
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordXZY(getValue : V3i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V3i.Zero
+        let step = V3i.One
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordZXY(getValue : V3i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V3i.Zero
+        let step = V3i.One
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordZYX(getValue : V3i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V3i.Zero
+        let step = V3i.One
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member x.SetByCoord(value : V3i -> 'a) = 
+        let cXY = compare (abs info.DX) (abs info.DY)
+        let cXZ = compare (abs info.DX) (abs info.DZ)
+        let cYZ = compare (abs info.DY) (abs info.DZ)
+        if cXY >= 0  && cXZ >= 0  && cYZ >= 0  then x.SetByCoordXYZ(value)
+        elif cXY <= 0 && cXZ >= 0  && cYZ >= 0  then x.SetByCoordYXZ(value)
+        elif cXY <= 0 && cXZ <= 0 && cYZ >= 0  then x.SetByCoordYZX(value)
+        elif cXY >= 0  && cXZ >= 0  && cYZ <= 0 then x.SetByCoordXZY(value)
+        elif cXY >= 0  && cXZ <= 0 && cYZ <= 0 then x.SetByCoordZXY(value)
+        else x.SetByCoordZYX(value)
+    member inline private x.SetByCoordXYZ(getValue : V3d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V3d(0.5, 0.5, 0.5) / V3d(x.Size)
+        let step = V3d.One / V3d(x.Size)
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordYXZ(getValue : V3d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V3d(0.5, 0.5, 0.5) / V3d(x.Size)
+        let step = V3d.One / V3d(x.Size)
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordYZX(getValue : V3d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V3d(0.5, 0.5, 0.5) / V3d(x.Size)
+        let step = V3d.One / V3d(x.Size)
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordXZY(getValue : V3d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V3d(0.5, 0.5, 0.5) / V3d(x.Size)
+        let step = V3d.One / V3d(x.Size)
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordZXY(getValue : V3d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V3d(0.5, 0.5, 0.5) / V3d(x.Size)
+        let step = V3d.One / V3d(x.Size)
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordZYX(getValue : V3d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V3d(0.5, 0.5, 0.5) / V3d(x.Size)
+        let step = V3d.One / V3d(x.Size)
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member x.SetByCoord(value : V3d -> 'a) = 
+        let cXY = compare (abs info.DX) (abs info.DY)
+        let cXZ = compare (abs info.DX) (abs info.DZ)
+        let cYZ = compare (abs info.DY) (abs info.DZ)
+        if cXY >= 0  && cXZ >= 0  && cYZ >= 0  then x.SetByCoordXYZ(value)
+        elif cXY <= 0 && cXZ >= 0  && cYZ >= 0  then x.SetByCoordYXZ(value)
+        elif cXY <= 0 && cXZ <= 0 && cYZ >= 0  then x.SetByCoordYZX(value)
+        elif cXY >= 0  && cXZ >= 0  && cYZ <= 0 then x.SetByCoordXZY(value)
+        elif cXY >= 0  && cXZ <= 0 && cYZ <= 0 then x.SetByCoordZXY(value)
+        else x.SetByCoordZYX(value)
     member inline private x.CopyToXYZ(y : NativeVolume<'a>) = 
         let sa = nativeint (sizeof<'a>)
         let mutable xptr = ptr |> NativePtr.toNativeInt
@@ -1087,11 +1873,50 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             let v10 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp10 + sa * dZ * nativeint i))
             let v01 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp01 + sa * dZ * nativeint i))
             let v11 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp11 + sa * dZ * nativeint i))
-            let vx0 = lerp frac.X v00 v10 // TODO: frac
-            let vx1 = lerp frac.X v01 v11 // TODO: frac
-            let vxx = lerp frac.Y vx0 vx1 // TODO: frac
+            let vx0 = lerp frac.X v00 v10
+            let vx1 = lerp frac.X v01 v11
+            let vxx = lerp frac.Y vx0 vx1
             vxx
         )
+    member x.SampleLinear(coord : V3d, lerp : float -> 'a -> 'a -> 'a) : 'a = 
+        let p0f = coord * V3d x.Size.XYZ
+        let mutable p0 = V3l(int64 p0f.X, int64 p0f.Y, int64 p0f.Z)
+        let frac = p0f - V3d p0
+        if p0.X < 0L then p0.X <- 0L
+        else if p0.X >= x.SX then p0.X <- x.SX - 1L
+        if p0.Y < 0L then p0.Y <- 0L
+        else if p0.Y >= x.SY then p0.Y <- x.SY - 1L
+        if p0.Z < 0L then p0.Z <- 0L
+        else if p0.Z >= x.SZ then p0.Z <- x.SZ - 1L
+        let sa = nativeint sizeof<'a>
+        let ptr0 = NativePtr.toNativeInt x.Pointer + nativeint (V3l.Dot(p0, x.Delta.XYZ)) * sa
+        let dX = nativeint x.DX * sa
+        let dY = nativeint x.DY * sa
+        let dZ = nativeint x.DZ * sa
+        let pp000 : nativeptr<'a> = NativePtr.ofNativeInt (ptr0)
+        let pp100 : nativeptr<'a> = if p0.X < x.SX then NativePtr.ofNativeInt (ptr0 + dX) else pp000
+        let pp010 : nativeptr<'a> = if p0.Y < x.SY then NativePtr.ofNativeInt (ptr0 + dY) else pp000
+        let pp110 : nativeptr<'a> = if p0.X < x.SX && p0.Y < x.SY then NativePtr.ofNativeInt (ptr0 + dX + dY) else pp000
+        let pp001 : nativeptr<'a> = if p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dZ) else pp000
+        let pp101 : nativeptr<'a> = if p0.X < x.SX && p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dX + dZ) else pp000
+        let pp011 : nativeptr<'a> = if p0.Y < x.SY && p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dY + dZ) else pp000
+        let pp111 : nativeptr<'a> = if p0.X < x.SX && p0.Y < x.SY && p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dX + dY + dZ) else pp000
+        let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp000))
+        let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp100))
+        let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp010))
+        let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp110))
+        let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp001))
+        let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp101))
+        let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp011))
+        let v111 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp111))
+        let vx00 = lerp frac.X v000 v100
+        let vx10 = lerp frac.X v010 v110
+        let vx01 = lerp frac.X v001 v101
+        let vx11 = lerp frac.X v011 v111
+        let vxx0 = lerp frac.Y vx00 vx10
+        let vxx1 = lerp frac.Y vx01 vx11
+        let vxxx = lerp frac.Z vxx0 vxx1
+        vxxx
     static member Using<'b> (m : Volume<'a>, f : NativeVolume<'a> -> 'b) = 
         let gc = GCHandle.Alloc(m.Data, GCHandleType.Pinned)
         try f (NativeVolume<'a>(NativePtr.ofNativeInt (gc.AddrOfPinnedObject()), m.Info))
@@ -2348,6 +3173,2691 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif cXW <= 0 && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.SetWXZY(value)
         elif cXW <= 0 && cXY >= 0  && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.SetWZXY(value)
         else x.SetWZYX(value)
+    member inline private x.SetByCoordXYZW(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    let eW = ptr + sW
+                    while ptr <> eW do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jW
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordYXZW(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    let eW = ptr + sW
+                    while ptr <> eW do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jW
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordYZXW(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    let eW = ptr + sW
+                    while ptr <> eW do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jW
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordYZWX(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eW = ptr + sW
+                while ptr <> eW do
+                    coord.Z <- initialCoord.Z
+                    let eX = ptr + sX
+                    while ptr <> eX do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jX
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jW
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordXZYW(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    let eW = ptr + sW
+                    while ptr <> eW do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jW
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordZXYW(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    let eW = ptr + sW
+                    while ptr <> eW do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jW
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordZYXW(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    let eW = ptr + sW
+                    while ptr <> eW do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jW
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordZYWX(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eW = ptr + sW
+                while ptr <> eW do
+                    coord.Z <- initialCoord.Z
+                    let eX = ptr + sX
+                    while ptr <> eX do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jX
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jW
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordXZWY(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eW = ptr + sW
+                while ptr <> eW do
+                    coord.Z <- initialCoord.Z
+                    let eY = ptr + sY
+                    while ptr <> eY do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jY
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jW
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordZXWY(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eW = ptr + sW
+                while ptr <> eW do
+                    coord.Z <- initialCoord.Z
+                    let eY = ptr + sY
+                    while ptr <> eY do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jY
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jW
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordZWXY(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eW = ptr + sW
+            while ptr <> eW do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    let eY = ptr + sY
+                    while ptr <> eY do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jY
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jW
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordZWYX(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eW = ptr + sW
+            while ptr <> eW do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    let eX = ptr + sX
+                    while ptr <> eX do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jX
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jW
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordXYWZ(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eW = ptr + sW
+                while ptr <> eW do
+                    coord.Z <- initialCoord.Z
+                    let eZ = ptr + sZ
+                    while ptr <> eZ do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jZ
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jW
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordYXWZ(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eW = ptr + sW
+                while ptr <> eW do
+                    coord.Z <- initialCoord.Z
+                    let eZ = ptr + sZ
+                    while ptr <> eZ do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jZ
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jW
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordYWXZ(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eW = ptr + sW
+            while ptr <> eW do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    let eZ = ptr + sZ
+                    while ptr <> eZ do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jZ
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jW
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordYWZX(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eW = ptr + sW
+            while ptr <> eW do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    let eX = ptr + sX
+                    while ptr <> eX do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jX
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jW
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordXWYZ(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eW = ptr + sW
+            while ptr <> eW do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    let eZ = ptr + sZ
+                    while ptr <> eZ do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jZ
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jW
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordWXYZ(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eW = ptr + sW
+        while ptr <> eW do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    let eZ = ptr + sZ
+                    while ptr <> eZ do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jZ
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jW
+    member inline private x.SetByCoordWYXZ(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eW = ptr + sW
+        while ptr <> eW do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    let eZ = ptr + sZ
+                    while ptr <> eZ do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jZ
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jW
+    member inline private x.SetByCoordWYZX(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eW = ptr + sW
+        while ptr <> eW do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    let eX = ptr + sX
+                    while ptr <> eX do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jX
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jW
+    member inline private x.SetByCoordXWZY(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eW = ptr + sW
+            while ptr <> eW do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    let eY = ptr + sY
+                    while ptr <> eY do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jY
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jW
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordWXZY(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eW = ptr + sW
+        while ptr <> eW do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    let eY = ptr + sY
+                    while ptr <> eY do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jY
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jW
+    member inline private x.SetByCoordWZXY(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eW = ptr + sW
+        while ptr <> eW do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    let eY = ptr + sY
+                    while ptr <> eY do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jY
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jW
+    member inline private x.SetByCoordWZYX(getValue : V4l -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V4l.Zero
+        let step = V4l.One
+        let mutable coord = initialCoord
+        let eW = ptr + sW
+        while ptr <> eW do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    let eX = ptr + sX
+                    while ptr <> eX do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jX
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jW
+    member x.SetByCoord(value : V4l -> 'a) = 
+        let cXW = compare (abs info.DX) (abs info.DW)
+        let cXY = compare (abs info.DX) (abs info.DY)
+        let cXZ = compare (abs info.DX) (abs info.DZ)
+        let cYW = compare (abs info.DY) (abs info.DW)
+        let cYZ = compare (abs info.DY) (abs info.DZ)
+        let cZW = compare (abs info.DZ) (abs info.DW)
+        if cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW >= 0  then x.SetByCoordXYZW(value)
+        elif cXW >= 0  && cXY <= 0 && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW >= 0  then x.SetByCoordYXZW(value)
+        elif cXW >= 0  && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ >= 0  && cZW >= 0  then x.SetByCoordYZXW(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ >= 0  && cZW >= 0  then x.SetByCoordYZWX(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW >= 0  && cYZ <= 0 && cZW >= 0  then x.SetByCoordXZYW(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ <= 0 && cYW >= 0  && cYZ <= 0 && cZW >= 0  then x.SetByCoordZXYW(value)
+        elif cXW >= 0  && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ <= 0 && cZW >= 0  then x.SetByCoordZYXW(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ <= 0 && cZW >= 0  then x.SetByCoordZYWX(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ <= 0 && cZW >= 0  then x.SetByCoordXZWY(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW >= 0  then x.SetByCoordZXWY(value)
+        elif cXW <= 0 && cXY >= 0  && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW >= 0  then x.SetByCoordZWXY(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW >= 0  then x.SetByCoordZWYX(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW <= 0 then x.SetByCoordXYWZ(value)
+        elif cXW >= 0  && cXY <= 0 && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW <= 0 then x.SetByCoordYXWZ(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW <= 0 then x.SetByCoordYWXZ(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ >= 0  && cZW <= 0 then x.SetByCoordYWZX(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ >= 0  && cZW <= 0 then x.SetByCoordXWYZ(value)
+        elif cXW <= 0 && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ >= 0  && cZW <= 0 then x.SetByCoordWXYZ(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ >= 0  && cYW <= 0 && cYZ >= 0  && cZW <= 0 then x.SetByCoordWYXZ(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW <= 0 && cYZ >= 0  && cZW <= 0 then x.SetByCoordWYZX(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.SetByCoordXWZY(value)
+        elif cXW <= 0 && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.SetByCoordWXZY(value)
+        elif cXW <= 0 && cXY >= 0  && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.SetByCoordWZXY(value)
+        else x.SetByCoordWZYX(value)
+    member inline private x.SetByCoordXYZW(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    let eW = ptr + sW
+                    while ptr <> eW do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jW
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordYXZW(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    let eW = ptr + sW
+                    while ptr <> eW do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jW
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordYZXW(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    let eW = ptr + sW
+                    while ptr <> eW do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jW
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordYZWX(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eW = ptr + sW
+                while ptr <> eW do
+                    coord.Z <- initialCoord.Z
+                    let eX = ptr + sX
+                    while ptr <> eX do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jX
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jW
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordXZYW(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    let eW = ptr + sW
+                    while ptr <> eW do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jW
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordZXYW(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    let eW = ptr + sW
+                    while ptr <> eW do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jW
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordZYXW(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    let eW = ptr + sW
+                    while ptr <> eW do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jW
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordZYWX(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eW = ptr + sW
+                while ptr <> eW do
+                    coord.Z <- initialCoord.Z
+                    let eX = ptr + sX
+                    while ptr <> eX do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jX
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jW
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordXZWY(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eW = ptr + sW
+                while ptr <> eW do
+                    coord.Z <- initialCoord.Z
+                    let eY = ptr + sY
+                    while ptr <> eY do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jY
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jW
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordZXWY(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eW = ptr + sW
+                while ptr <> eW do
+                    coord.Z <- initialCoord.Z
+                    let eY = ptr + sY
+                    while ptr <> eY do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jY
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jW
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordZWXY(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eW = ptr + sW
+            while ptr <> eW do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    let eY = ptr + sY
+                    while ptr <> eY do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jY
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jW
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordZWYX(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eW = ptr + sW
+            while ptr <> eW do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    let eX = ptr + sX
+                    while ptr <> eX do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jX
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jW
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordXYWZ(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eW = ptr + sW
+                while ptr <> eW do
+                    coord.Z <- initialCoord.Z
+                    let eZ = ptr + sZ
+                    while ptr <> eZ do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jZ
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jW
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordYXWZ(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eW = ptr + sW
+                while ptr <> eW do
+                    coord.Z <- initialCoord.Z
+                    let eZ = ptr + sZ
+                    while ptr <> eZ do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jZ
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jW
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordYWXZ(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eW = ptr + sW
+            while ptr <> eW do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    let eZ = ptr + sZ
+                    while ptr <> eZ do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jZ
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jW
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordYWZX(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eW = ptr + sW
+            while ptr <> eW do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    let eX = ptr + sX
+                    while ptr <> eX do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jX
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jW
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordXWYZ(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eW = ptr + sW
+            while ptr <> eW do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    let eZ = ptr + sZ
+                    while ptr <> eZ do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jZ
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jW
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordWXYZ(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eW = ptr + sW
+        while ptr <> eW do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    let eZ = ptr + sZ
+                    while ptr <> eZ do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jZ
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jW
+    member inline private x.SetByCoordWYXZ(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eW = ptr + sW
+        while ptr <> eW do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    let eZ = ptr + sZ
+                    while ptr <> eZ do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jZ
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jW
+    member inline private x.SetByCoordWYZX(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eW = ptr + sW
+        while ptr <> eW do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    let eX = ptr + sX
+                    while ptr <> eX do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jX
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jW
+    member inline private x.SetByCoordXWZY(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eW = ptr + sW
+            while ptr <> eW do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    let eY = ptr + sY
+                    while ptr <> eY do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jY
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jW
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordWXZY(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eW = ptr + sW
+        while ptr <> eW do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    let eY = ptr + sY
+                    while ptr <> eY do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jY
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jW
+    member inline private x.SetByCoordWZXY(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eW = ptr + sW
+        while ptr <> eW do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    let eY = ptr + sY
+                    while ptr <> eY do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jY
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jW
+    member inline private x.SetByCoordWZYX(getValue : V4i -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V4i.Zero
+        let step = V4i.One
+        let mutable coord = initialCoord
+        let eW = ptr + sW
+        while ptr <> eW do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    let eX = ptr + sX
+                    while ptr <> eX do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jX
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jW
+    member x.SetByCoord(value : V4i -> 'a) = 
+        let cXW = compare (abs info.DX) (abs info.DW)
+        let cXY = compare (abs info.DX) (abs info.DY)
+        let cXZ = compare (abs info.DX) (abs info.DZ)
+        let cYW = compare (abs info.DY) (abs info.DW)
+        let cYZ = compare (abs info.DY) (abs info.DZ)
+        let cZW = compare (abs info.DZ) (abs info.DW)
+        if cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW >= 0  then x.SetByCoordXYZW(value)
+        elif cXW >= 0  && cXY <= 0 && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW >= 0  then x.SetByCoordYXZW(value)
+        elif cXW >= 0  && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ >= 0  && cZW >= 0  then x.SetByCoordYZXW(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ >= 0  && cZW >= 0  then x.SetByCoordYZWX(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW >= 0  && cYZ <= 0 && cZW >= 0  then x.SetByCoordXZYW(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ <= 0 && cYW >= 0  && cYZ <= 0 && cZW >= 0  then x.SetByCoordZXYW(value)
+        elif cXW >= 0  && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ <= 0 && cZW >= 0  then x.SetByCoordZYXW(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ <= 0 && cZW >= 0  then x.SetByCoordZYWX(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ <= 0 && cZW >= 0  then x.SetByCoordXZWY(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW >= 0  then x.SetByCoordZXWY(value)
+        elif cXW <= 0 && cXY >= 0  && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW >= 0  then x.SetByCoordZWXY(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW >= 0  then x.SetByCoordZWYX(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW <= 0 then x.SetByCoordXYWZ(value)
+        elif cXW >= 0  && cXY <= 0 && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW <= 0 then x.SetByCoordYXWZ(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW <= 0 then x.SetByCoordYWXZ(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ >= 0  && cZW <= 0 then x.SetByCoordYWZX(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ >= 0  && cZW <= 0 then x.SetByCoordXWYZ(value)
+        elif cXW <= 0 && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ >= 0  && cZW <= 0 then x.SetByCoordWXYZ(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ >= 0  && cYW <= 0 && cYZ >= 0  && cZW <= 0 then x.SetByCoordWYXZ(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW <= 0 && cYZ >= 0  && cZW <= 0 then x.SetByCoordWYZX(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.SetByCoordXWZY(value)
+        elif cXW <= 0 && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.SetByCoordWXZY(value)
+        elif cXW <= 0 && cXY >= 0  && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.SetByCoordWZXY(value)
+        else x.SetByCoordWZYX(value)
+    member inline private x.SetByCoordXYZW(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    let eW = ptr + sW
+                    while ptr <> eW do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jW
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordYXZW(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    let eW = ptr + sW
+                    while ptr <> eW do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jW
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordYZXW(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    let eW = ptr + sW
+                    while ptr <> eW do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jW
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordYZWX(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eW = ptr + sW
+                while ptr <> eW do
+                    coord.Z <- initialCoord.Z
+                    let eX = ptr + sX
+                    while ptr <> eX do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jX
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jW
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordXZYW(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    let eW = ptr + sW
+                    while ptr <> eW do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jW
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordZXYW(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    let eW = ptr + sW
+                    while ptr <> eW do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jW
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordZYXW(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    let eW = ptr + sW
+                    while ptr <> eW do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jW
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordZYWX(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eW = ptr + sW
+                while ptr <> eW do
+                    coord.Z <- initialCoord.Z
+                    let eX = ptr + sX
+                    while ptr <> eX do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jX
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jW
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordXZWY(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eW = ptr + sW
+                while ptr <> eW do
+                    coord.Z <- initialCoord.Z
+                    let eY = ptr + sY
+                    while ptr <> eY do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jY
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jW
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordZXWY(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eW = ptr + sW
+                while ptr <> eW do
+                    coord.Z <- initialCoord.Z
+                    let eY = ptr + sY
+                    while ptr <> eY do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jY
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jW
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordZWXY(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eW = ptr + sW
+            while ptr <> eW do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    let eY = ptr + sY
+                    while ptr <> eY do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jY
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jW
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordZWYX(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eZ = ptr + sZ
+        while ptr <> eZ do
+            coord.X <- initialCoord.X
+            let eW = ptr + sW
+            while ptr <> eW do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    let eX = ptr + sX
+                    while ptr <> eX do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jX
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jW
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jZ
+    member inline private x.SetByCoordXYWZ(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eW = ptr + sW
+                while ptr <> eW do
+                    coord.Z <- initialCoord.Z
+                    let eZ = ptr + sZ
+                    while ptr <> eZ do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jZ
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jW
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordYXWZ(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eW = ptr + sW
+                while ptr <> eW do
+                    coord.Z <- initialCoord.Z
+                    let eZ = ptr + sZ
+                    while ptr <> eZ do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jZ
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jW
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordYWXZ(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eW = ptr + sW
+            while ptr <> eW do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    let eZ = ptr + sZ
+                    while ptr <> eZ do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jZ
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jW
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordYWZX(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eY = ptr + sY
+        while ptr <> eY do
+            coord.X <- initialCoord.X
+            let eW = ptr + sW
+            while ptr <> eW do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    let eX = ptr + sX
+                    while ptr <> eX do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jX
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jW
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jY
+    member inline private x.SetByCoordXWYZ(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eW = ptr + sW
+            while ptr <> eW do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    let eZ = ptr + sZ
+                    while ptr <> eZ do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jZ
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jW
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordWXYZ(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eW = ptr + sW
+        while ptr <> eW do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    let eZ = ptr + sZ
+                    while ptr <> eZ do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jZ
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jW
+    member inline private x.SetByCoordWYXZ(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eW = ptr + sW
+        while ptr <> eW do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    let eZ = ptr + sZ
+                    while ptr <> eZ do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jZ
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jW
+    member inline private x.SetByCoordWYZX(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eW = ptr + sW
+        while ptr <> eW do
+            coord.X <- initialCoord.X
+            let eY = ptr + sY
+            while ptr <> eY do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    let eX = ptr + sX
+                    while ptr <> eX do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jX
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jY
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jW
+    member inline private x.SetByCoordXWZY(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SW * info.DW) * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eX = ptr + sX
+        while ptr <> eX do
+            coord.X <- initialCoord.X
+            let eW = ptr + sW
+            while ptr <> eW do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    let eY = ptr + sY
+                    while ptr <> eY do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jY
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jW
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jX
+    member inline private x.SetByCoordWXZY(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eW = ptr + sW
+        while ptr <> eW do
+            coord.X <- initialCoord.X
+            let eX = ptr + sX
+            while ptr <> eX do
+                coord.Y <- initialCoord.Y
+                let eZ = ptr + sZ
+                while ptr <> eZ do
+                    coord.Z <- initialCoord.Z
+                    let eY = ptr + sY
+                    while ptr <> eY do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jY
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jZ
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jX
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jW
+    member inline private x.SetByCoordWZXY(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eW = ptr + sW
+        while ptr <> eW do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eX = ptr + sX
+                while ptr <> eX do
+                    coord.Z <- initialCoord.Z
+                    let eY = ptr + sY
+                    while ptr <> eY do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jY
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jX
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jW
+    member inline private x.SetByCoordWZYX(getValue : V4d -> 'a) = 
+        let sa = nativeint (sizeof<'a>)
+        let mutable ptr = ptr |> NativePtr.toNativeInt
+        ptr <- ptr + nativeint info.Origin * sa
+        let sW = nativeint (info.SW * info.DW) * sa
+        let jW = nativeint (info.DW - info.SZ * info.DZ) * sa
+        let sZ = nativeint (info.SZ * info.DZ) * sa
+        let jZ = nativeint (info.DZ - info.SY * info.DY) * sa
+        let sY = nativeint (info.SY * info.DY) * sa
+        let jY = nativeint (info.DY - info.SX * info.DX) * sa
+        let sX = nativeint (info.SX * info.DX) * sa
+        let jX = nativeint (info.DX) * sa
+        let initialCoord = V4d(0.5, 0.5, 0.5, 0.5) / V4d(x.Size)
+        let step = V4d.One / V4d(x.Size)
+        let mutable coord = initialCoord
+        let eW = ptr + sW
+        while ptr <> eW do
+            coord.X <- initialCoord.X
+            let eZ = ptr + sZ
+            while ptr <> eZ do
+                coord.Y <- initialCoord.Y
+                let eY = ptr + sY
+                while ptr <> eY do
+                    coord.Z <- initialCoord.Z
+                    let eX = ptr + sX
+                    while ptr <> eX do
+                        coord.W <- initialCoord.W
+                        NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
+                        coord.W <- coord.W + step.W
+                        ptr <- ptr + jX
+                    coord.Z <- coord.Z + step.Z
+                    ptr <- ptr + jY
+                coord.Y <- coord.Y + step.Y
+                ptr <- ptr + jZ
+            coord.X <- coord.X + step.X
+            ptr <- ptr + jW
+    member x.SetByCoord(value : V4d -> 'a) = 
+        let cXW = compare (abs info.DX) (abs info.DW)
+        let cXY = compare (abs info.DX) (abs info.DY)
+        let cXZ = compare (abs info.DX) (abs info.DZ)
+        let cYW = compare (abs info.DY) (abs info.DW)
+        let cYZ = compare (abs info.DY) (abs info.DZ)
+        let cZW = compare (abs info.DZ) (abs info.DW)
+        if cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW >= 0  then x.SetByCoordXYZW(value)
+        elif cXW >= 0  && cXY <= 0 && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW >= 0  then x.SetByCoordYXZW(value)
+        elif cXW >= 0  && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ >= 0  && cZW >= 0  then x.SetByCoordYZXW(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ >= 0  && cZW >= 0  then x.SetByCoordYZWX(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW >= 0  && cYZ <= 0 && cZW >= 0  then x.SetByCoordXZYW(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ <= 0 && cYW >= 0  && cYZ <= 0 && cZW >= 0  then x.SetByCoordZXYW(value)
+        elif cXW >= 0  && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ <= 0 && cZW >= 0  then x.SetByCoordZYXW(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ <= 0 && cZW >= 0  then x.SetByCoordZYWX(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ <= 0 && cZW >= 0  then x.SetByCoordXZWY(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW >= 0  then x.SetByCoordZXWY(value)
+        elif cXW <= 0 && cXY >= 0  && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW >= 0  then x.SetByCoordZWXY(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW >= 0  then x.SetByCoordZWYX(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW <= 0 then x.SetByCoordXYWZ(value)
+        elif cXW >= 0  && cXY <= 0 && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW <= 0 then x.SetByCoordYXWZ(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW <= 0 then x.SetByCoordYWXZ(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ >= 0  && cZW <= 0 then x.SetByCoordYWZX(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ >= 0  && cZW <= 0 then x.SetByCoordXWYZ(value)
+        elif cXW <= 0 && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ >= 0  && cZW <= 0 then x.SetByCoordWXYZ(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ >= 0  && cYW <= 0 && cYZ >= 0  && cZW <= 0 then x.SetByCoordWYXZ(value)
+        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW <= 0 && cYZ >= 0  && cZW <= 0 then x.SetByCoordWYZX(value)
+        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.SetByCoordXWZY(value)
+        elif cXW <= 0 && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.SetByCoordWXZY(value)
+        elif cXW <= 0 && cXY >= 0  && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.SetByCoordWZXY(value)
+        else x.SetByCoordWZYX(value)
     member inline private x.CopyToXYZW(y : NativeTensor4<'a>) = 
         let sa = nativeint (sizeof<'a>)
         let mutable xptr = ptr |> NativePtr.toNativeInt
@@ -4164,15 +7674,81 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp101 + sa * dW * nativeint i))
             let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp011 + sa * dW * nativeint i))
             let v111 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp111 + sa * dW * nativeint i))
-            let vx00 = lerp frac.X v000 v100 // TODO: frac
-            let vx10 = lerp frac.X v010 v110 // TODO: frac
-            let vx01 = lerp frac.X v001 v101 // TODO: frac
-            let vx11 = lerp frac.X v011 v111 // TODO: frac
-            let vxx0 = lerp frac.Y vx00 vx10 // TODO: frac
-            let vxx1 = lerp frac.Y vx01 vx11 // TODO: frac
-            let vxxx = lerp frac.Z vxx0 vxx1 // TODO: frac
+            let vx00 = lerp frac.X v000 v100
+            let vx10 = lerp frac.X v010 v110
+            let vx01 = lerp frac.X v001 v101
+            let vx11 = lerp frac.X v011 v111
+            let vxx0 = lerp frac.Y vx00 vx10
+            let vxx1 = lerp frac.Y vx01 vx11
+            let vxxx = lerp frac.Z vxx0 vxx1
             vxxx
         )
+    member x.SampleLinear(coord : V4d, lerp : float -> 'a -> 'a -> 'a) : 'a = 
+        let p0f = coord * V4d x.Size.XYZW
+        let mutable p0 = V4l(int64 p0f.X, int64 p0f.Y, int64 p0f.Z, int64 p0f.W)
+        let frac = p0f - V4d p0
+        if p0.X < 0L then p0.X <- 0L
+        else if p0.X >= x.SX then p0.X <- x.SX - 1L
+        if p0.Y < 0L then p0.Y <- 0L
+        else if p0.Y >= x.SY then p0.Y <- x.SY - 1L
+        if p0.Z < 0L then p0.Z <- 0L
+        else if p0.Z >= x.SZ then p0.Z <- x.SZ - 1L
+        if p0.W < 0L then p0.W <- 0L
+        else if p0.W >= x.SW then p0.W <- x.SW - 1L
+        let sa = nativeint sizeof<'a>
+        let ptr0 = NativePtr.toNativeInt x.Pointer + nativeint (V4l.Dot(p0, x.Delta.XYZW)) * sa
+        let dX = nativeint x.DX * sa
+        let dY = nativeint x.DY * sa
+        let dZ = nativeint x.DZ * sa
+        let dW = nativeint x.DW * sa
+        let pp0000 : nativeptr<'a> = NativePtr.ofNativeInt (ptr0)
+        let pp1000 : nativeptr<'a> = if p0.X < x.SX then NativePtr.ofNativeInt (ptr0 + dX) else pp0000
+        let pp0100 : nativeptr<'a> = if p0.Y < x.SY then NativePtr.ofNativeInt (ptr0 + dY) else pp0000
+        let pp1100 : nativeptr<'a> = if p0.X < x.SX && p0.Y < x.SY then NativePtr.ofNativeInt (ptr0 + dX + dY) else pp0000
+        let pp0010 : nativeptr<'a> = if p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dZ) else pp0000
+        let pp1010 : nativeptr<'a> = if p0.X < x.SX && p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dX + dZ) else pp0000
+        let pp0110 : nativeptr<'a> = if p0.Y < x.SY && p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dY + dZ) else pp0000
+        let pp1110 : nativeptr<'a> = if p0.X < x.SX && p0.Y < x.SY && p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dX + dY + dZ) else pp0000
+        let pp0001 : nativeptr<'a> = if p0.W < x.SW then NativePtr.ofNativeInt (ptr0 + dW) else pp0000
+        let pp1001 : nativeptr<'a> = if p0.X < x.SX && p0.W < x.SW then NativePtr.ofNativeInt (ptr0 + dX + dW) else pp0000
+        let pp0101 : nativeptr<'a> = if p0.Y < x.SY && p0.W < x.SW then NativePtr.ofNativeInt (ptr0 + dY + dW) else pp0000
+        let pp1101 : nativeptr<'a> = if p0.X < x.SX && p0.Y < x.SY && p0.W < x.SW then NativePtr.ofNativeInt (ptr0 + dX + dY + dW) else pp0000
+        let pp0011 : nativeptr<'a> = if p0.Z < x.SZ && p0.W < x.SW then NativePtr.ofNativeInt (ptr0 + dZ + dW) else pp0000
+        let pp1011 : nativeptr<'a> = if p0.X < x.SX && p0.Z < x.SZ && p0.W < x.SW then NativePtr.ofNativeInt (ptr0 + dX + dZ + dW) else pp0000
+        let pp0111 : nativeptr<'a> = if p0.Y < x.SY && p0.Z < x.SZ && p0.W < x.SW then NativePtr.ofNativeInt (ptr0 + dY + dZ + dW) else pp0000
+        let pp1111 : nativeptr<'a> = if p0.X < x.SX && p0.Y < x.SY && p0.Z < x.SZ && p0.W < x.SW then NativePtr.ofNativeInt (ptr0 + dX + dY + dZ + dW) else pp0000
+        let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0000))
+        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1000))
+        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0100))
+        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1100))
+        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0010))
+        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1010))
+        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0110))
+        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1110))
+        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0001))
+        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1001))
+        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0101))
+        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1101))
+        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0011))
+        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1011))
+        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0111))
+        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1111))
+        let vx000 = lerp frac.X v0000 v1000
+        let vx100 = lerp frac.X v0100 v1100
+        let vx010 = lerp frac.X v0010 v1010
+        let vx110 = lerp frac.X v0110 v1110
+        let vx001 = lerp frac.X v0001 v1001
+        let vx101 = lerp frac.X v0101 v1101
+        let vx011 = lerp frac.X v0011 v1011
+        let vx111 = lerp frac.X v0111 v1111
+        let vxx00 = lerp frac.Y vx000 vx100
+        let vxx10 = lerp frac.Y vx010 vx110
+        let vxx01 = lerp frac.Y vx001 vx101
+        let vxx11 = lerp frac.Y vx011 vx111
+        let vxxx0 = lerp frac.Z vxx00 vxx10
+        let vxxx1 = lerp frac.Z vxx01 vxx11
+        let vxxxx = lerp frac.W vxxx0 vxxx1
+        vxxxx
     static member Using<'b> (m : Tensor4<'a>, f : NativeTensor4<'a> -> 'b) = 
         let gc = GCHandle.Alloc(m.Data, GCHandleType.Pinned)
         try f (NativeTensor4<'a>(NativePtr.ofNativeInt (gc.AddrOfPinnedObject()), m.Info))
