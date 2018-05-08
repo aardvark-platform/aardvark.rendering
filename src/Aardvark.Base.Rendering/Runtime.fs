@@ -736,8 +736,8 @@ and IRuntime =
     abstract member CreateFramebufferSignature : attachments : SymbolDict<AttachmentSignature> * textures : Set<Symbol> * layers : int * perLayerUniforms : Set<string> -> IFramebufferSignature
     abstract member DeleteFramebufferSignature : IFramebufferSignature -> unit
 
-    abstract member AssembleEffect : FShade.Effect * IFramebufferSignature * FShade.InputTopology -> BackendSurface
-    abstract member AssembleModule : FShade.Effect * IFramebufferSignature * FShade.InputTopology -> FShade.Imperative.Module
+    abstract member AssembleEffect : FShade.Effect * IFramebufferSignature * IndexedGeometryMode -> BackendSurface
+    abstract member AssembleModule : FShade.Effect * IFramebufferSignature * IndexedGeometryMode -> FShade.Imperative.Module
 
     abstract member PrepareSurface : IFramebufferSignature * ISurface -> IBackendSurface
     abstract member PrepareRenderObject : IFramebufferSignature * IRenderObject -> IPreparedRenderObject
@@ -904,7 +904,7 @@ type RenderTaskRunExtensions() =
 type IGeneratedSurface =
     inherit ISurface
 
-    abstract member Generate : IRuntime * IFramebufferSignature * FShade.InputTopology -> BackendSurface
+    abstract member Generate : IRuntime * IFramebufferSignature * IndexedGeometryMode -> BackendSurface
 
 type BinaryShader private(content : Lazy<byte[]>) =
     member x.Content = content.Value

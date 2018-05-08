@@ -355,7 +355,7 @@ module Generator =
             stop()
 
     let sampleLinear (dim : int) (lower : bool) =
-        if dim > 1 || not lower then
+        if dim > 1 then
             let dim = 
                 if lower then dim - 1
                 else dim
@@ -382,8 +382,11 @@ module Generator =
 
             //let componentNames = Array.take dim componentNames
             let swizzle = Array.take dim componentNames  |> String.concat ""
+            if dim > 1 then
+                line "let p0f = coord * %s x.Size.%s" coordType swizzle
+            else
+                line "let p0f = coord * %s x.Size" coordType
 
-            line "let p0f = coord * %s x.Size.%s" coordType swizzle
             line "let mutable p0 = %s" (
                 if dim = 1 then
                     "int64 p0f"
@@ -398,7 +401,7 @@ module Generator =
 
             if dim = 1 then
                 line "if p0 < 0L then p0 <- 0L"
-                line "else if p0 >= x.Size.%s then p0 <- x.Size.%s - 1L" swizzle swizzle
+                line "else if p0 >= x.Size then p0 <- x.Size - 1L"
             else
                 for c in Array.take dim componentNames do
                     line "if p0.%s < 0L then p0.%s <- 0L" c c
@@ -697,7 +700,7 @@ module Generator =
         copyTo componentNames name "'b" ["f", "'a -> 'b"] (fun l r -> sprintf "NativePtr.write (NativePtr.ofNativeInt<'b> %s) (f (NativePtr.read (NativePtr.ofNativeInt<'a> %s)))" r l)
 
         sampleNearest dim
-        sampleLinear dim true
+        //sampleLinear dim true
         sampleLinear dim false
 
         let offsets = componentNames |> List.map (sprintf "begin%s")

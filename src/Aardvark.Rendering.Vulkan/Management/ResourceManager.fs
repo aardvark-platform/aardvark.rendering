@@ -530,12 +530,12 @@ module Resources =
         )
 
         
-    type ShaderProgramResource(owner : IResourceCache, key : list<obj>, device : Device, signature : IFramebufferSignature, input : ISurface) =
+    type ShaderProgramResource(owner : IResourceCache, key : list<obj>, device : Device, signature : IFramebufferSignature, input : ISurface, top : IndexedGeometryMode) =
         inherit ImmutableResourceLocation<ISurface, ShaderProgram>(
             owner, key, 
             Mod.constant input,
             {
-                icreate = fun (b : ISurface) -> device.CreateShaderProgram(signature, b)
+                icreate = fun (b : ISurface) -> device.CreateShaderProgram(signature, b, top)
                 idestroy = fun b -> device.Delete b
                 ieagerDestroy = false
             }
@@ -1150,7 +1150,18 @@ type ResourceManager(user : IResourceUser, device : Device) =
     let descriptorBindingCache  = NativeResourceLocationCache<DescriptorSetBinding>(user)
     let indexBindingCache       = NativeResourceLocationCache<IndexBufferBinding>(user)
     let isActiveCache           = NativeResourceLocationCache<int>(user)
-
+    
+    static let toInputTopology =
+        LookupTable.lookupTable [
+            IndexedGeometryMode.PointList, FShade.InputTopology.Point
+            IndexedGeometryMode.LineList, FShade.InputTopology.Line
+            IndexedGeometryMode.LineStrip, FShade.InputTopology.Line
+            IndexedGeometryMode.LineAdjacencyList, FShade.InputTopology.LineAdjacency
+            IndexedGeometryMode.TriangleList, FShade.InputTopology.Triangle
+            IndexedGeometryMode.TriangleStrip, FShade.InputTopology.Triangle
+            IndexedGeometryMode.TriangleAdjacencyList, FShade.InputTopology.TriangleAdjacency
+            IndexedGeometryMode.QuadList, FShade.InputTopology.Patch 4
+        ]
 
     member x.ResourceUser = user
 
@@ -1204,12 +1215,12 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateSampler(data : IMod<SamplerStateDescription>) =
         samplerCache.GetOrCreate([data :> obj], fun cache key -> new SamplerResource(cache, key, device, data))
         
-    member x.CreateShaderProgram(signature : IFramebufferSignature, data : ISurface) =
+    member x.CreateShaderProgram(signature : IFramebufferSignature, data : ISurface, top : IndexedGeometryMode) =
         let programKey = (signature, data) :> obj
 
         let program = 
             simpleSurfaceCache.GetOrAdd(programKey, fun _ ->
-                device.CreateShaderProgram(signature, data)
+                device.CreateShaderProgram(signature, data, top)
             )
 
         if FShade.EffectDebugger.isAttached then
@@ -1239,11 +1250,11 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateShaderProgram(signature : IFramebufferSignature, data : Aardvark.Base.Surface, top : IndexedGeometryMode) =
         match data with
             | Surface.FShadeSimple effect ->
-                let module_ = signature.Link(effect, Range1d(0.0, 1.0), false, top)
-                let layout = FShade.EffectInputLayout.ofModule module_
-                let layout = device.CreatePipelineLayout(layout, signature.LayerCount, signature.PerLayerUniforms)
-
-                layout, x.CreateShaderProgram(layout, Mod.constant module_)
+                x.CreateShaderProgram(signature, FShadeSurface.Get(effect), top)
+                //let module_ = signature.Link(effect, Range1d(0.0, 1.0), false, top)
+                //let layout = FShade.EffectInputLayout.ofModule module_
+                //let layout = device.CreatePipelineLayout(layout, signature.LayerCount, signature.PerLayerUniforms)
+                //layout, x.CreateShaderProgram(layout, Mod.constant module_)
             | Surface.FShade(compile) -> 
                 let layout, module_ = 
                     fshadeThingCache.GetOrAdd((signature, compile) :> obj, fun _ ->
@@ -1267,7 +1278,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
 
             | Surface.Backend s -> 
                 
-                x.CreateShaderProgram(signature, s)
+                x.CreateShaderProgram(signature, s, top)
 
             | Surface.None -> 
                 failwith "[Vulkan] encountered empty surface"

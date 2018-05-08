@@ -364,10 +364,10 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
         member x.OnDispose = onDispose.Publish
 
-        member x.AssembleModule (effect : Effect, signature : IFramebufferSignature, topology : InputTopology) =
+        member x.AssembleModule (effect : Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
             signature.Link(effect, Range1d(-1.0, 1.0), false, topology)
 
-        member x.AssembleEffect (effect : Effect, signature : IFramebufferSignature, topology : InputTopology) =
+        member x.AssembleEffect (effect : Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
             let key = effect.Id, signature.ExtractSemantics()
             shaderCache.GetOrAdd(key,fun _ -> 
                 let glsl = 

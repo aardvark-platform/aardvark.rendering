@@ -451,7 +451,7 @@ module FShadeInterop =
         member x.Effect = effect
 
         interface IGeneratedSurface with
-            member x.Generate (r : IRuntime, signature : IFramebufferSignature, topology : InputTopology) =
+            member x.Generate (r : IRuntime, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
                 r.AssembleEffect(effect, signature, topology) 
 
     let toFShadeSurface (e : FShadeEffect) = FShadeSurface.Get e :> ISurface
@@ -511,7 +511,4 @@ type FShadeRuntimeExtensions private() =
             newPrep :> ISurface
         )
 
-    [<Extension>]
-    static member Link (this : IFramebufferSignature, e : Effect, depthRange : Range1d, flip : bool, top : InputTopology) =
-        this.Link(e, depthRange, flip, top)
 

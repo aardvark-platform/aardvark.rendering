@@ -114,21 +114,6 @@ type NativeVector<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VectorInfo
         if info.Size <> y.Size then
             failwithf "NativeVector size mismatch: { src = %A; dst = %A }" info.Size y.Size
         x.CopyToX(y, f)
-    member x.SampleLinear(coord : float, lerp : float -> 'a -> 'a -> 'a) : 'a = 
-        let p0f = coord * float x.Size.X
-        let mutable p0 = int64 p0f
-        let frac = p0f - float p0
-        if p0 < 0L then p0 <- 0L
-        else if p0 >= x.Size.X then p0 <- x.Size.X - 1L
-        let sa = nativeint sizeof<'a>
-        let ptr0 = NativePtr.toNativeInt x.Pointer + nativeint (p0 * x.Delta.X) * sa
-        let dX = nativeint x.DX * sa
-        let pp0 : nativeptr<'a> = NativePtr.ofNativeInt (ptr0)
-        let pp1 : nativeptr<'a> = if p0 < x.Size.X then NativePtr.ofNativeInt (ptr0 + dX) else pp0
-        let v0 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0))
-        let v1 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1))
-        let vx = lerp frac v0 v1
-        vx
     static member Using<'b> (m : Vector<'a>, f : NativeVector<'a> -> 'b) = 
         let gc = GCHandle.Alloc(m.Data, GCHandleType.Pinned)
         try f (NativeVector<'a>(NativePtr.ofNativeInt (gc.AddrOfPinnedObject()), m.Info))
@@ -503,24 +488,6 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let ptr = NativePtr.toNativeInt x.Pointer + nativeint (nearest * x.Delta.X) * sa
         let dY = nativeint x.DY * sa
         Array.init (int x.Size.Y) (fun i -> NativePtr.read (NativePtr.ofNativeInt (ptr + nativeint i * dY)))
-    member x.SampleLinear(coord : float, lerp : float -> 'a -> 'a -> 'a) : 'a[] = 
-        let p0f = coord * float x.Size.X
-        let mutable p0 = int64 p0f
-        let frac = p0f - float p0
-        if p0 < 0L then p0 <- 0L
-        else if p0 >= x.Size.X then p0 <- x.Size.X - 1L
-        let sa = nativeint sizeof<'a>
-        let ptr0 = NativePtr.toNativeInt x.Pointer + nativeint (p0 * x.Delta.X) * sa
-        let dX = nativeint x.DX * sa
-        let dY = nativeint x.DY * sa
-        let pp0 : nativeptr<'a> = NativePtr.ofNativeInt (ptr0)
-        let pp1 : nativeptr<'a> = if p0 < x.Size.X then NativePtr.ofNativeInt (ptr0 + dX) else pp0
-        Array.init (int x.SY) (fun i ->
-            let v0 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0 + sa * dY * nativeint i))
-            let v1 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1 + sa * dY * nativeint i))
-            let vx = lerp frac v0 v1
-            vx
-        )
     member x.SampleLinear(coord : V2d, lerp : float -> 'a -> 'a -> 'a) : 'a = 
         let p0f = coord * V2d x.Size.XY
         let mutable p0 = V2l(int64 p0f.X, int64 p0f.Y)
@@ -1851,33 +1818,6 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let ptr = NativePtr.toNativeInt x.Pointer + nativeint (V2l.Dot(nearest, x.Delta.XY)) * sa
         let dZ = nativeint x.DZ * sa
         Array.init (int x.Size.Z) (fun i -> NativePtr.read (NativePtr.ofNativeInt (ptr + nativeint i * dZ)))
-    member x.SampleLinear(coord : V2d, lerp : float -> 'a -> 'a -> 'a) : 'a[] = 
-        let p0f = coord * V2d x.Size.XY
-        let mutable p0 = V2l(int64 p0f.X, int64 p0f.Y)
-        let frac = p0f - V2d p0
-        if p0.X < 0L then p0.X <- 0L
-        else if p0.X >= x.SX then p0.X <- x.SX - 1L
-        if p0.Y < 0L then p0.Y <- 0L
-        else if p0.Y >= x.SY then p0.Y <- x.SY - 1L
-        let sa = nativeint sizeof<'a>
-        let ptr0 = NativePtr.toNativeInt x.Pointer + nativeint (V2l.Dot(p0, x.Delta.XY)) * sa
-        let dX = nativeint x.DX * sa
-        let dY = nativeint x.DY * sa
-        let dZ = nativeint x.DZ * sa
-        let pp00 : nativeptr<'a> = NativePtr.ofNativeInt (ptr0)
-        let pp10 : nativeptr<'a> = if p0.X < x.SX then NativePtr.ofNativeInt (ptr0 + dX) else pp00
-        let pp01 : nativeptr<'a> = if p0.Y < x.SY then NativePtr.ofNativeInt (ptr0 + dY) else pp00
-        let pp11 : nativeptr<'a> = if p0.X < x.SX && p0.Y < x.SY then NativePtr.ofNativeInt (ptr0 + dX + dY) else pp00
-        Array.init (int x.SZ) (fun i ->
-            let v00 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp00 + sa * dZ * nativeint i))
-            let v10 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp10 + sa * dZ * nativeint i))
-            let v01 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp01 + sa * dZ * nativeint i))
-            let v11 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp11 + sa * dZ * nativeint i))
-            let vx0 = lerp frac.X v00 v10
-            let vx1 = lerp frac.X v01 v11
-            let vxx = lerp frac.Y vx0 vx1
-            vxx
-        )
     member x.SampleLinear(coord : V3d, lerp : float -> 'a -> 'a -> 'a) : 'a = 
         let p0f = coord * V3d x.Size.XYZ
         let mutable p0 = V3l(int64 p0f.X, int64 p0f.Y, int64 p0f.Z)
@@ -7641,48 +7581,6 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let ptr = NativePtr.toNativeInt x.Pointer + nativeint (V3l.Dot(nearest, x.Delta.XYZ)) * sa
         let dW = nativeint x.DW * sa
         Array.init (int x.Size.W) (fun i -> NativePtr.read (NativePtr.ofNativeInt (ptr + nativeint i * dW)))
-    member x.SampleLinear(coord : V3d, lerp : float -> 'a -> 'a -> 'a) : 'a[] = 
-        let p0f = coord * V3d x.Size.XYZ
-        let mutable p0 = V3l(int64 p0f.X, int64 p0f.Y, int64 p0f.Z)
-        let frac = p0f - V3d p0
-        if p0.X < 0L then p0.X <- 0L
-        else if p0.X >= x.SX then p0.X <- x.SX - 1L
-        if p0.Y < 0L then p0.Y <- 0L
-        else if p0.Y >= x.SY then p0.Y <- x.SY - 1L
-        if p0.Z < 0L then p0.Z <- 0L
-        else if p0.Z >= x.SZ then p0.Z <- x.SZ - 1L
-        let sa = nativeint sizeof<'a>
-        let ptr0 = NativePtr.toNativeInt x.Pointer + nativeint (V3l.Dot(p0, x.Delta.XYZ)) * sa
-        let dX = nativeint x.DX * sa
-        let dY = nativeint x.DY * sa
-        let dZ = nativeint x.DZ * sa
-        let dW = nativeint x.DW * sa
-        let pp000 : nativeptr<'a> = NativePtr.ofNativeInt (ptr0)
-        let pp100 : nativeptr<'a> = if p0.X < x.SX then NativePtr.ofNativeInt (ptr0 + dX) else pp000
-        let pp010 : nativeptr<'a> = if p0.Y < x.SY then NativePtr.ofNativeInt (ptr0 + dY) else pp000
-        let pp110 : nativeptr<'a> = if p0.X < x.SX && p0.Y < x.SY then NativePtr.ofNativeInt (ptr0 + dX + dY) else pp000
-        let pp001 : nativeptr<'a> = if p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dZ) else pp000
-        let pp101 : nativeptr<'a> = if p0.X < x.SX && p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dX + dZ) else pp000
-        let pp011 : nativeptr<'a> = if p0.Y < x.SY && p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dY + dZ) else pp000
-        let pp111 : nativeptr<'a> = if p0.X < x.SX && p0.Y < x.SY && p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dX + dY + dZ) else pp000
-        Array.init (int x.SW) (fun i ->
-            let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp000 + sa * dW * nativeint i))
-            let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp100 + sa * dW * nativeint i))
-            let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp010 + sa * dW * nativeint i))
-            let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp110 + sa * dW * nativeint i))
-            let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp001 + sa * dW * nativeint i))
-            let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp101 + sa * dW * nativeint i))
-            let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp011 + sa * dW * nativeint i))
-            let v111 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp111 + sa * dW * nativeint i))
-            let vx00 = lerp frac.X v000 v100
-            let vx10 = lerp frac.X v010 v110
-            let vx01 = lerp frac.X v001 v101
-            let vx11 = lerp frac.X v011 v111
-            let vxx0 = lerp frac.Y vx00 vx10
-            let vxx1 = lerp frac.Y vx01 vx11
-            let vxxx = lerp frac.Z vxx0 vxx1
-            vxxx
-        )
     member x.SampleLinear(coord : V4d, lerp : float -> 'a -> 'a -> 'a) : 'a = 
         let p0f = coord * V4d x.Size.XYZW
         let mutable p0 = V4l(int64 p0f.X, int64 p0f.Y, int64 p0f.Z, int64 p0f.W)

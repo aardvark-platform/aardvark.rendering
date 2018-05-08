@@ -280,10 +280,10 @@ and MultiRuntime(runtimes : IRuntime[]) =
 
         member x.OnDispose = disp.Publish
 
-        member x.AssembleEffect (effect : FShade.Effect, signature : IFramebufferSignature, topology : FShade.InputTopology) =
+        member x.AssembleEffect (effect : FShade.Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
             failwith ""
 
-        member x.AssembleModule (effect : FShade.Effect, signature : IFramebufferSignature, topology : FShade.InputTopology) =
+        member x.AssembleModule (effect : FShade.Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
             failwith ""
 
         member x.ResourceManager = failwith "not implemented"

@@ -17,6 +17,7 @@ open FShade
 open FShade.Imperative
 
 module CommandTest =
+
     let run() =
         use app = new VulkanApplication(false)
         let win = app.CreateSimpleRenderWindow(8)
