@@ -76,7 +76,7 @@ type Program =
     } with
 
     member x.WritesPointSize =
-        x.Interface.UsedBuiltInOutputs |> Map.exists (fun _ s -> s |> Set.contains "gl_PointSize")
+        x.InterfaceNew.usedBuiltIns |> MapExt.exists (MapExt.tryFind FShade.Imperative.ParameterKind.Output >> Option.defaultValue Set.empty >> Set.contains "gl_PointSize" |> constF)
 
     interface IBackendSurface with
         member x.Handle = x.Handle :> obj
@@ -394,6 +394,7 @@ module ProgramExtensions =
                                         images          = []
                                         storageBuffers  = []
                                         uniformBuffers  = []
+                                        usedBuiltIns    = MapExt.empty
                                     }
                             }
 

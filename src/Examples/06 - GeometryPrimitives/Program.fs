@@ -10,6 +10,17 @@ open Aardvark.Application
      create a window which we can use to subscribe to mouse and keyboard
 *)
 
+open FShade
+type SizeVertex = 
+    {
+        [<PointSize>] s : float
+    }
+
+let sizeShader (v : SizeVertex) =
+    vertex {
+        return { v with s = 8.0 }
+    }
+
 [<EntryPoint>]
 let main argv = 
     
@@ -53,6 +64,17 @@ let main argv =
     let cone =
         IndexedGeometryPrimitives.solidCone (V3d(30,0,0)) V3d.ZAxis 5.0 3.0 128 C4b.White
 
+    let points = 
+        let pos =
+            [|
+                for x in 0.0 .. 0.1 .. 2.0 do
+                    for y in 0.0 .. 0.1 .. 2.0 do
+                        for z in 5.0 .. 0.1 .. 7.0 do
+                            yield V3f(x,y,z)
+            |]
+        let rand = RandomSystem()
+        IndexedGeometryPrimitives.points pos (Array.init pos.Length (fun _ -> rand.UniformC3f().ToC4b()))
+
     let scene =
         Sg.ofSeq [
             boxes
@@ -68,6 +90,14 @@ let main argv =
             do! DefaultSurfaces.vertexColor
             do! DefaultSurfaces.simpleLighting
         }
+        |> Sg.andAlso (
+            Sg.ofIndexedGeometry points 
+                |> Sg.shader {
+                    do! sizeShader
+                    do! DefaultSurfaces.trafo
+                    do! DefaultSurfaces.vertexColor
+                }
+        )
     
 
     // similarly to show, we can use the window computation expression in order create a window conveniently.
@@ -75,7 +105,7 @@ let main argv =
         window {
             display Display.Mono
             samples 8
-            backend Backend.Vulkan
+            backend Backend.GL
             initialCamera (CameraView.lookAt (V3d.III * 20.0) V3d.OOO V3d.OOI)
             debug true
         }
