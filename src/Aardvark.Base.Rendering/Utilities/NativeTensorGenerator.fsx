@@ -154,7 +154,9 @@ module Generator =
 
     type CoordDescription =
         {
+            dim     : int
             typ     : string
+            
             init    : string -> string
             step    : string -> string
             set     : string -> string -> string -> string
@@ -168,18 +170,20 @@ module Generator =
             if dim > 1 then       
                 let lv, iv = vectorNames.[dim]
                 {
+                    dim = dim
                     typ = lv
-                    init = fun s -> sprintf "%s.Zero" lv
-                    step = fun s -> sprintf "%s.One" lv
+                    init = fun _ -> sprintf "%s.Zero" lv
+                    step = fun _ -> sprintf "%s.One" lv
                     get = fun v i -> sprintf "%s.%s" v i
                     set = fun v i r -> sprintf "%s.%s <- %s" v i r
                 }
 
             else
                 {
+                    dim = dim
                     typ = "int64"
-                    init = fun s -> "0L"
-                    step = fun s -> "1L"
+                    init = fun _ -> "0L"
+                    step = fun _ -> "1L"
                     get = fun v _ -> v
                     set = fun v _ r -> sprintf "%s <- %s" v r
                 }
@@ -188,68 +192,47 @@ module Generator =
             if dim > 1 then    
                 let lv, iv = vectorNames.[dim]
                 {
+                    dim = dim
                     typ = iv
-                    init = fun s -> sprintf "%s.Zero" iv
-                    step = fun s -> sprintf "%s.One" iv
+                    init = fun _ -> sprintf "%s.Zero" iv
+                    step = fun _ -> sprintf "%s.One" iv
                     get = fun v i -> sprintf "%s.%s" v i
                     set = fun v i r -> sprintf "%s.%s <- %s" v i r
                 }
 
             else
                 {
+                    dim = dim
                     typ = "int"
-                    init = fun s -> "0"
-                    step = fun s -> "1"
-                    get = fun v _ -> v
-                    set = fun v _ r -> sprintf "%s <- %s" v r
-                }
-
-        let float32 (dim : int) =
-            if dim > 1 then    
-                let _, fv = floatVectorNames.[dim]
-
-                let value v = 
-                    let args = Array.create dim v |> String.concat ", "
-                    sprintf "%s(%s)" fv args
-
-                {
-                    typ = fv
-                    init = fun s -> sprintf "%s / %s(%s)" (value "0.5f") fv s
-                    step = fun s -> sprintf "%s.One / %s(%s)" fv fv s
-                    get = fun v i -> sprintf "%s.%s" v i
-                    set = fun v i r -> sprintf "%s.%s <- %s" v i r
-                }
-
-            else
-                {
-                    typ = "float32"
-                    init = fun s -> sprintf "0.5f / float32 %s" s
-                    step = fun s -> sprintf "1.0f / float32 %s" s
+                    init = fun _ -> "0"
+                    step = fun _ -> "1"
                     get = fun v _ -> v
                     set = fun v _ r -> sprintf "%s <- %s" v r
                 }
 
         let float (dim : int) =
             if dim > 1 then    
-                let dv, fv = floatVectorNames.[dim]
+                let dv, _ = floatVectorNames.[dim]
 
                 let value v = 
                     let args = Array.create dim v |> String.concat ", "
                     sprintf "%s(%s)" dv args
 
                 {
+                    dim = dim
                     typ = dv
-                    init = fun s -> sprintf "%s / %s(%s)" (value "0.5") dv s
-                    step = fun s -> sprintf "%s.One / %s(%s)" dv dv s
+                    init = fun s -> sprintf "%s / %s(%s)" (value "0.5") dv s 
+                    step = fun s -> sprintf "%s.One / %s(%s)" (dv) dv s 
                     get = fun v i -> sprintf "%s.%s" v i
                     set = fun v i r -> sprintf "%s.%s <- %s" v i r
                 }
 
             else
                 {
+                    dim = dim
                     typ = "float"
-                    init = fun s -> sprintf "0.5 / float %s" s
-                    step = fun s -> sprintf "1.0 / float %s" s
+                    init = fun s -> sprintf "0.5 / float(%s)"  s 
+                    step = fun s -> sprintf "1.0 / float(%s)" s 
                     get = fun v _ -> v
                     set = fun v _ r -> sprintf "%s <- %s" v r
                 }
@@ -282,19 +265,20 @@ module Generator =
         
         line "let initialCoord = %s" (coord.init "x.Size")
         line "let step = %s" (coord.step "x.Size")
+
         line "let mutable coord = initialCoord"
 
         let rec buildLoop (index : int) =
             if index >= components.Length then
+                //line "let c = %s" (coord.view "coord" "x.Size")
                 line "NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)"
             else
                 let mine = components.[index]
                 line "let e%s = ptr + s%s" mine mine
+                if index <> 0 then line "%s" (coord.set "coord" mine (coord.get "initialCoord" mine))
                 start "while ptr <> e%s do" mine 
-                let compName = componentNames.[index]
-                line "%s" (coord.set "coord" compName (coord.get "initialCoord" compName))
                 buildLoop (index + 1)
-                line "%s" (coord.set "coord" compName (sprintf "%s + %s" (coord.get "coord" compName) (coord.get "step" compName)))
+                line "%s" (coord.set "coord" mine (sprintf "%s + %s" (coord.get "coord" mine) (coord.get "step" mine)))
                 line "ptr <- ptr + j%s" mine
                 stop()
 
@@ -354,12 +338,8 @@ module Generator =
             
             stop()
 
-    let sampleLinear (dim : int) (lower : bool) =
+    let sampleLinear (dim : int) =
         if dim > 1 then
-            let dim = 
-                if lower then dim - 1
-                else dim
-
             let coordType = 
                 match dim with
                     | 1 -> "float"
@@ -368,12 +348,12 @@ module Generator =
                     | 4 -> "V4d"
                     | _ -> failwith "invalid dim"
 
-            let resType = 
-                if lower then "'a[]"
-                else "'a"
+            let resType = "'a"
 
             start "member x.SampleLinear(coord : %s, lerp : float -> 'a -> 'a -> 'a) : %s = " coordType resType
-            
+            line "let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)"
+            line "let coord = %s.Min(%s.Max(coord, %s.Zero), %s.One)" coordType coordType coordType coordType
+
 
             let lv, iv = 
                 match Map.tryFind dim vectorNames with
@@ -382,41 +362,52 @@ module Generator =
 
             //let componentNames = Array.take dim componentNames
             let swizzle = Array.take dim componentNames  |> String.concat ""
+            let half = sprintf "%s(%s)" coordType (Array.create dim "0.5" |> String.concat ", ")
             if dim > 1 then
-                line "let p0f = coord * %s x.Size.%s" coordType swizzle
+                line "let p0f = coord * %s x.Size.%s - %s" coordType swizzle half
             else
-                line "let p0f = coord * %s x.Size" coordType
+                line "let p0f = coord * %s x.Size - %s" coordType half
 
             line "let mutable p0 = %s" (
                 if dim = 1 then
-                    "int64 p0f"
+                    "int64 (floor p0f)"
                 else
                     Array.take dim componentNames
-                        |> Array.map (sprintf "int64 p0f.%s") 
+                        |> Array.map (sprintf "int64 (floor p0f.%s)") 
                         |> String.concat ", "
                         |> sprintf "%s(%s)" lv
             )
 
             line "let frac = p0f - %s p0" coordType
 
-            if dim = 1 then
-                line "if p0 < 0L then p0 <- 0L"
-                line "else if p0 >= x.Size then p0 <- x.Size - 1L"
-            else
-                for c in Array.take dim componentNames do
-                    line "if p0.%s < 0L then p0.%s <- 0L" c c
-                    line "else if p0.%s >= x.S%s then p0.%s <- x.S%s - 1L" c c c c
+            let fullyInside =
+                Array.take dim componentNames |> Array.map (fun c -> sprintf "p0.%s >= 0L && p0.%s < x.Size.%s - 1L" c c c) |> String.concat " && "
 
             let idot =
                 match dim with
                     | 1 -> "{0} * {1}"
                     | _ -> sprintf "%s.Dot({0}, {1})" lv
 
+
             line "let sa = nativeint sizeof<'a>"
+
+            for c in Array.take dim componentNames do
+                line "let d%s = nativeint x.D%s * sa" c c
+            start "if %s then" fullyInside
+
             line "let ptr0 = NativePtr.toNativeInt x.Pointer + nativeint (%s) * sa" (System.String.Format(idot, "p0", sprintf "x.Delta.%s" swizzle))
 
-            for c in Array.take (if lower then dim + 1 else dim) componentNames do
-                line "let d%s = nativeint x.D%s * sa" c c
+            let rec allAssignments (len : int) =
+                if len < 0 then
+                    []
+                elif len = 0 then
+                    [[]]
+                else
+                    let inner = allAssignments (len - 1)
+                    [
+                        for a in inner do yield 0 :: a
+                        for a in inner do yield 1 :: a
+                    ]
 
             let getPtr (offsets : list<int>) =
                 offsets 
@@ -424,48 +415,6 @@ module Generator =
                     |> List.choose id
                     |> List.append [ "ptr0" ]
                     |> String.concat " + "
-
-            
-            let rec allAssignments (len : int) =
-                if len = 0 then
-                    [[]]
-                else
-                    allAssignments (len - 1)
-                        |> List.collect (fun l ->
-                            [
-                                0 :: l
-                                1 :: l
-                            ]        
-                        )
-                    
-            let offsets = allAssignments dim
-
-            for offset in offsets do
-                let boundsCheck =
-                    offset |> List.mapi (fun d i ->
-                        if dim = 1 then
-                            if i > 0 then Some "p0 < x.Size.X"
-                            else None
-                        else 
-                            if i > 0 then Some (sprintf "p0.%s < x.S%s" componentNames.[d] componentNames.[d])
-                            else None
-                    )
-                    |> List.choose id
-                    |> String.concat " && "
-
-                let ptr0Name = 
-                    offset |> List.map (fun _ -> "0") |> String.concat "" |> sprintf "pp%s"
-                    
-                let valueName = 
-                    offset |> List.map string |> String.concat "" |> sprintf "v%s"
-                    
-                let ptrName = 
-                    offset |> List.map string |> String.concat "" |> sprintf "pp%s"
-
-                if boundsCheck.Length > 0 then
-                    line "let %s : nativeptr<'a> = if %s then NativePtr.ofNativeInt (%s) else %s" ptrName boundsCheck (getPtr offset) ptr0Name
-                else 
-                    line "let %s : nativeptr<'a> = NativePtr.ofNativeInt (%s)" ptrName (getPtr offset)
 
             let rec buildSample (prefix : string) (d : int) =
                 if d >= dim then
@@ -483,36 +432,61 @@ module Generator =
                         let vName = offset |> List.map string |> String.concat "" |> sprintf "v%sx%s" prefix
                         let i0 = 0 :: offset |> List.map string |> String.concat "" |> sprintf "v%s%s" prefix
                         let i1 = 1 :: offset |> List.map string |> String.concat "" |> sprintf "v%s%s" prefix
-                        line "let %s = lerp %s %s %s" vName frac i0 i1
+                        line "let %s = lerp.Invoke(%s, %s, %s)" vName frac i0 i1
                     buildSample (prefix + "x") (d + 1)
             
-            if lower then
-                let lastDim = componentNames.[dim]
-                start "Array.init (int x.S%s) (fun i ->" lastDim
+         
+            let offsets = allAssignments dim
 
-                for offset in offsets do
-                    let valueName = 
-                        offset |> List.map string |> String.concat "" |> sprintf "v%s"
+            for offset in offsets do
+                let ptr0Name = 
+                    offset |> List.map (fun _ -> "0") |> String.concat "" |> sprintf "pp%s"
                     
-                    let ptrName = 
-                        offset |> List.map string |> String.concat "" |> sprintf "pp%s"
+                let valueName = 
+                    offset |> List.map string |> String.concat "" |> sprintf "v%s"
+                    
+                let ptrName = 
+                    offset |> List.map string |> String.concat "" |> sprintf "pp%s"
 
-                    line "let %s : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt %s + sa * d%s * nativeint i))" valueName ptrName lastDim
+                line "let %s : 'a =  NativePtr.read (NativePtr.ofNativeInt (%s))" valueName (getPtr offset)
 
 
-                buildSample "" 0
-                stop()
-                line ")"
-            else
 
-                for offset in offsets do
-                    let valueName = offset |> List.map string |> String.concat "" |> sprintf "v%s"
-                    let ptrName = offset |> List.map string |> String.concat "" |> sprintf "pp%s"
-                    line "let %s : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt %s))" valueName ptrName
+            //for offset in offsets do
+            //    let valueName = offset |> List.map string |> String.concat "" |> sprintf "v%s"
+            //    let ptrName = offset |> List.map string |> String.concat "" |> sprintf "pp%s"
+            //    line "let %s : 'a = NativePtr.read %s" valueName ptrName
 
-                buildSample "" 0
+            buildSample "" 0
+            stop()
+
+            start "else"
+
+            line "let max = x.Size - %s.One" lv
+            for offset in offsets do
+                let ptr0Name = 
+                    offset |> List.map (fun _ -> "0") |> String.concat "" |> sprintf "pp%s"
+                    
+                let valueName = 
+                    offset |> List.map string |> String.concat "" |> sprintf "v%s"
+                    
+                let ptrName = 
+                    offset |> List.map string |> String.concat "" |> sprintf "pp%s"
+
+                let offsetVec = offset |> List.map (sprintf "%dL") |> String.concat ", " |> sprintf "%s(%s)" lv
+
+                let offset = 
+                    if offset |> List.forall ((=) 0) then
+                        System.String.Format(idot, "x.Delta", sprintf "%s.Min(%s.Max(%s.Zero, p0), max)" lv lv lv)
+                    else
+                        System.String.Format(idot, "x.Delta", sprintf "%s.Min(%s.Max(%s.Zero, p0 + %s), max)" lv lv lv offsetVec)
+                        
+                //line "let %s : nativeptr<'a> = NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(%s) * sa)" ptrName offset
+                line "let %s : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(%s) * sa))" valueName offset
+
+            buildSample "" 0
                 
-                    
+            stop()  
             stop()
 
     let copyToInternal (otherType : string) (otherGenArg : string) (args : list<string * string>) (op : string -> string -> string) (components : string[]) =
@@ -701,7 +675,7 @@ module Generator =
 
         sampleNearest dim
         //sampleLinear dim true
-        sampleLinear dim false
+        sampleLinear dim
 
         let offsets = componentNames |> List.map (sprintf "begin%s")
         let sizes = componentNames |> List.map (sprintf "size%s")

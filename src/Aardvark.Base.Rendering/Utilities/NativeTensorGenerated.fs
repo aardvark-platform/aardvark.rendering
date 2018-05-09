@@ -37,7 +37,6 @@ type NativeVector<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VectorInfo
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord <- initialCoord
             NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
             coord <- coord + step
             ptr <- ptr + jX
@@ -54,7 +53,6 @@ type NativeVector<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VectorInfo
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord <- initialCoord
             NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
             coord <- coord + step
             ptr <- ptr + jX
@@ -66,12 +64,11 @@ type NativeVector<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VectorInfo
         ptr <- ptr + nativeint info.Origin * sa
         let sX = nativeint (info.SX * info.DX) * sa
         let jX = nativeint (info.DX) * sa
-        let initialCoord = 0.5 / float x.Size
-        let step = 1.0 / float x.Size
+        let initialCoord = 0.5 / float(x.Size)
+        let step = 1.0 / float(x.Size)
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord <- initialCoord
             NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
             coord <- coord + step
             ptr <- ptr + jX
@@ -250,10 +247,9 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
@@ -272,14 +268,13 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member x.SetByCoord(value : V2l -> 'a) = 
         let cXY = compare (abs info.DX) (abs info.DY)
@@ -298,10 +293,9 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
@@ -320,14 +314,13 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member x.SetByCoord(value : V2i -> 'a) = 
         let cXY = compare (abs info.DX) (abs info.DY)
@@ -346,10 +339,9 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
@@ -368,14 +360,13 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member x.SetByCoord(value : V2d -> 'a) = 
         let cXY = compare (abs info.DX) (abs info.DY)
@@ -489,29 +480,34 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let dY = nativeint x.DY * sa
         Array.init (int x.Size.Y) (fun i -> NativePtr.read (NativePtr.ofNativeInt (ptr + nativeint i * dY)))
     member x.SampleLinear(coord : V2d, lerp : float -> 'a -> 'a -> 'a) : 'a = 
-        let p0f = coord * V2d x.Size.XY
-        let mutable p0 = V2l(int64 p0f.X, int64 p0f.Y)
+        let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
+        let coord = V2d.Min(V2d.Max(coord, V2d.Zero), V2d.One)
+        let p0f = coord * V2d x.Size.XY - V2d(0.5, 0.5)
+        let mutable p0 = V2l(int64 (floor p0f.X), int64 (floor p0f.Y))
         let frac = p0f - V2d p0
-        if p0.X < 0L then p0.X <- 0L
-        else if p0.X >= x.SX then p0.X <- x.SX - 1L
-        if p0.Y < 0L then p0.Y <- 0L
-        else if p0.Y >= x.SY then p0.Y <- x.SY - 1L
         let sa = nativeint sizeof<'a>
-        let ptr0 = NativePtr.toNativeInt x.Pointer + nativeint (V2l.Dot(p0, x.Delta.XY)) * sa
         let dX = nativeint x.DX * sa
         let dY = nativeint x.DY * sa
-        let pp00 : nativeptr<'a> = NativePtr.ofNativeInt (ptr0)
-        let pp10 : nativeptr<'a> = if p0.X < x.SX then NativePtr.ofNativeInt (ptr0 + dX) else pp00
-        let pp01 : nativeptr<'a> = if p0.Y < x.SY then NativePtr.ofNativeInt (ptr0 + dY) else pp00
-        let pp11 : nativeptr<'a> = if p0.X < x.SX && p0.Y < x.SY then NativePtr.ofNativeInt (ptr0 + dX + dY) else pp00
-        let v00 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp00))
-        let v10 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp10))
-        let v01 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp01))
-        let v11 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp11))
-        let vx0 = lerp frac.X v00 v10
-        let vx1 = lerp frac.X v01 v11
-        let vxx = lerp frac.Y vx0 vx1
-        vxx
+        if p0.X >= 0L && p0.X < x.Size.X - 1L && p0.Y >= 0L && p0.Y < x.Size.Y - 1L then
+            let ptr0 = NativePtr.toNativeInt x.Pointer + nativeint (V2l.Dot(p0, x.Delta.XY)) * sa
+            let v00 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0))
+            let v01 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dY))
+            let v10 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dX))
+            let v11 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dX + dY))
+            let vx0 = lerp.Invoke(frac.X, v00, v10)
+            let vx1 = lerp.Invoke(frac.X, v01, v11)
+            let vxx = lerp.Invoke(frac.Y, vx0, vx1)
+            vxx
+        else
+            let max = x.Size - V2l.One
+            let v00 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V2l.Dot(x.Delta, V2l.Min(V2l.Max(V2l.Zero, p0), max))) * sa))
+            let v01 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V2l.Dot(x.Delta, V2l.Min(V2l.Max(V2l.Zero, p0 + V2l(0L, 1L)), max))) * sa))
+            let v10 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V2l.Dot(x.Delta, V2l.Min(V2l.Max(V2l.Zero, p0 + V2l(1L, 0L)), max))) * sa))
+            let v11 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V2l.Dot(x.Delta, V2l.Min(V2l.Max(V2l.Zero, p0 + V2l(1L, 1L)), max))) * sa))
+            let vx0 = lerp.Invoke(frac.X, v00, v10)
+            let vx1 = lerp.Invoke(frac.X, v01, v11)
+            let vxx = lerp.Invoke(frac.Y, vx0, vx1)
+            vxx
     static member Using<'b> (m : Matrix<'a>, f : NativeMatrix<'a> -> 'b) = 
         let gc = GCHandle.Alloc(m.Data, GCHandleType.Pinned)
         try f (NativeMatrix<'a>(NativePtr.ofNativeInt (gc.AddrOfPinnedObject()), m.Info))
@@ -904,13 +900,12 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
@@ -933,19 +928,18 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordYZX(getValue : V3l -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -962,19 +956,18 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordXZY(getValue : V3l -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -991,17 +984,16 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
             coord.X <- coord.X + step.X
             ptr <- ptr + jX
@@ -1020,19 +1012,18 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordZYX(getValue : V3l -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -1049,19 +1040,18 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member x.SetByCoord(value : V3l -> 'a) = 
         let cXY = compare (abs info.DX) (abs info.DY)
@@ -1088,13 +1078,12 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
@@ -1117,19 +1106,18 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordYZX(getValue : V3i -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -1146,19 +1134,18 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordXZY(getValue : V3i -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -1175,17 +1162,16 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
             coord.X <- coord.X + step.X
             ptr <- ptr + jX
@@ -1204,19 +1190,18 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordZYX(getValue : V3i -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -1233,19 +1218,18 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member x.SetByCoord(value : V3i -> 'a) = 
         let cXY = compare (abs info.DX) (abs info.DY)
@@ -1272,13 +1256,12 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
@@ -1301,19 +1284,18 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordYZX(getValue : V3d -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -1330,19 +1312,18 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordXZY(getValue : V3d -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -1359,17 +1340,16 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
             coord.X <- coord.X + step.X
             ptr <- ptr + jX
@@ -1388,19 +1368,18 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordZYX(getValue : V3d -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -1417,19 +1396,18 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member x.SetByCoord(value : V3d -> 'a) = 
         let cXY = compare (abs info.DX) (abs info.DY)
@@ -1819,44 +1797,51 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let dZ = nativeint x.DZ * sa
         Array.init (int x.Size.Z) (fun i -> NativePtr.read (NativePtr.ofNativeInt (ptr + nativeint i * dZ)))
     member x.SampleLinear(coord : V3d, lerp : float -> 'a -> 'a -> 'a) : 'a = 
-        let p0f = coord * V3d x.Size.XYZ
-        let mutable p0 = V3l(int64 p0f.X, int64 p0f.Y, int64 p0f.Z)
+        let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
+        let coord = V3d.Min(V3d.Max(coord, V3d.Zero), V3d.One)
+        let p0f = coord * V3d x.Size.XYZ - V3d(0.5, 0.5, 0.5)
+        let mutable p0 = V3l(int64 (floor p0f.X), int64 (floor p0f.Y), int64 (floor p0f.Z))
         let frac = p0f - V3d p0
-        if p0.X < 0L then p0.X <- 0L
-        else if p0.X >= x.SX then p0.X <- x.SX - 1L
-        if p0.Y < 0L then p0.Y <- 0L
-        else if p0.Y >= x.SY then p0.Y <- x.SY - 1L
-        if p0.Z < 0L then p0.Z <- 0L
-        else if p0.Z >= x.SZ then p0.Z <- x.SZ - 1L
         let sa = nativeint sizeof<'a>
-        let ptr0 = NativePtr.toNativeInt x.Pointer + nativeint (V3l.Dot(p0, x.Delta.XYZ)) * sa
         let dX = nativeint x.DX * sa
         let dY = nativeint x.DY * sa
         let dZ = nativeint x.DZ * sa
-        let pp000 : nativeptr<'a> = NativePtr.ofNativeInt (ptr0)
-        let pp100 : nativeptr<'a> = if p0.X < x.SX then NativePtr.ofNativeInt (ptr0 + dX) else pp000
-        let pp010 : nativeptr<'a> = if p0.Y < x.SY then NativePtr.ofNativeInt (ptr0 + dY) else pp000
-        let pp110 : nativeptr<'a> = if p0.X < x.SX && p0.Y < x.SY then NativePtr.ofNativeInt (ptr0 + dX + dY) else pp000
-        let pp001 : nativeptr<'a> = if p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dZ) else pp000
-        let pp101 : nativeptr<'a> = if p0.X < x.SX && p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dX + dZ) else pp000
-        let pp011 : nativeptr<'a> = if p0.Y < x.SY && p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dY + dZ) else pp000
-        let pp111 : nativeptr<'a> = if p0.X < x.SX && p0.Y < x.SY && p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dX + dY + dZ) else pp000
-        let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp000))
-        let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp100))
-        let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp010))
-        let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp110))
-        let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp001))
-        let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp101))
-        let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp011))
-        let v111 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp111))
-        let vx00 = lerp frac.X v000 v100
-        let vx10 = lerp frac.X v010 v110
-        let vx01 = lerp frac.X v001 v101
-        let vx11 = lerp frac.X v011 v111
-        let vxx0 = lerp frac.Y vx00 vx10
-        let vxx1 = lerp frac.Y vx01 vx11
-        let vxxx = lerp frac.Z vxx0 vxx1
-        vxxx
+        if p0.X >= 0L && p0.X < x.Size.X - 1L && p0.Y >= 0L && p0.Y < x.Size.Y - 1L && p0.Z >= 0L && p0.Z < x.Size.Z - 1L then
+            let ptr0 = NativePtr.toNativeInt x.Pointer + nativeint (V3l.Dot(p0, x.Delta.XYZ)) * sa
+            let v000 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0))
+            let v001 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dZ))
+            let v010 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dY))
+            let v011 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dY + dZ))
+            let v100 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dX))
+            let v101 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dX + dZ))
+            let v110 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dX + dY))
+            let v111 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dX + dY + dZ))
+            let vx00 = lerp.Invoke(frac.X, v000, v100)
+            let vx01 = lerp.Invoke(frac.X, v001, v101)
+            let vx10 = lerp.Invoke(frac.X, v010, v110)
+            let vx11 = lerp.Invoke(frac.X, v011, v111)
+            let vxx0 = lerp.Invoke(frac.Y, vx00, vx10)
+            let vxx1 = lerp.Invoke(frac.Y, vx01, vx11)
+            let vxxx = lerp.Invoke(frac.Z, vxx0, vxx1)
+            vxxx
+        else
+            let max = x.Size - V3l.One
+            let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V3l.Dot(x.Delta, V3l.Min(V3l.Max(V3l.Zero, p0), max))) * sa))
+            let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V3l.Dot(x.Delta, V3l.Min(V3l.Max(V3l.Zero, p0 + V3l(0L, 0L, 1L)), max))) * sa))
+            let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V3l.Dot(x.Delta, V3l.Min(V3l.Max(V3l.Zero, p0 + V3l(0L, 1L, 0L)), max))) * sa))
+            let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V3l.Dot(x.Delta, V3l.Min(V3l.Max(V3l.Zero, p0 + V3l(0L, 1L, 1L)), max))) * sa))
+            let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V3l.Dot(x.Delta, V3l.Min(V3l.Max(V3l.Zero, p0 + V3l(1L, 0L, 0L)), max))) * sa))
+            let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V3l.Dot(x.Delta, V3l.Min(V3l.Max(V3l.Zero, p0 + V3l(1L, 0L, 1L)), max))) * sa))
+            let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V3l.Dot(x.Delta, V3l.Min(V3l.Max(V3l.Zero, p0 + V3l(1L, 1L, 0L)), max))) * sa))
+            let v111 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V3l.Dot(x.Delta, V3l.Min(V3l.Max(V3l.Zero, p0 + V3l(1L, 1L, 1L)), max))) * sa))
+            let vx00 = lerp.Invoke(frac.X, v000, v100)
+            let vx01 = lerp.Invoke(frac.X, v001, v101)
+            let vx10 = lerp.Invoke(frac.X, v010, v110)
+            let vx11 = lerp.Invoke(frac.X, v011, v111)
+            let vxx0 = lerp.Invoke(frac.Y, vx00, vx10)
+            let vxx1 = lerp.Invoke(frac.Y, vx01, vx11)
+            let vxxx = lerp.Invoke(frac.Z, vxx0, vxx1)
+            vxxx
     static member Using<'b> (m : Volume<'a>, f : NativeVolume<'a> -> 'b) = 
         let gc = GCHandle.Alloc(m.Data, GCHandleType.Pinned)
         try f (NativeVolume<'a>(NativePtr.ofNativeInt (gc.AddrOfPinnedObject()), m.Info))
@@ -3130,16 +3115,15 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     let eW = ptr + sW
+                    coord.W <- initialCoord.W
                     while ptr <> eW do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                         coord.W <- coord.W + step.W
                         ptr <- ptr + jW
@@ -3166,24 +3150,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     let eW = ptr + sW
+                    coord.W <- initialCoord.W
                     while ptr <> eW do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                         coord.W <- coord.W + step.W
                         ptr <- ptr + jW
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordYZXW(getValue : V4l -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -3202,24 +3185,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     let eW = ptr + sW
+                    coord.W <- initialCoord.W
                     while ptr <> eW do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                         coord.W <- coord.W + step.W
                         ptr <- ptr + jW
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordYZWX(getValue : V4l -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -3238,24 +3220,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eW = ptr + sW
+                coord.W <- initialCoord.W
                 while ptr <> eW do
-                    coord.Z <- initialCoord.Z
                     let eX = ptr + sX
+                    coord.X <- initialCoord.X
                     while ptr <> eX do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.X <- coord.X + step.X
                         ptr <- ptr + jX
-                    coord.Z <- coord.Z + step.Z
+                    coord.W <- coord.W + step.W
                     ptr <- ptr + jW
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordXZYW(getValue : V4l -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -3274,22 +3255,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     let eW = ptr + sW
+                    coord.W <- initialCoord.W
                     while ptr <> eW do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                         coord.W <- coord.W + step.W
                         ptr <- ptr + jW
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
             coord.X <- coord.X + step.X
             ptr <- ptr + jX
@@ -3310,24 +3290,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     let eW = ptr + sW
+                    coord.W <- initialCoord.W
                     while ptr <> eW do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                         coord.W <- coord.W + step.W
                         ptr <- ptr + jW
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordZYXW(getValue : V4l -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -3346,24 +3325,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     let eW = ptr + sW
+                    coord.W <- initialCoord.W
                     while ptr <> eW do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                         coord.W <- coord.W + step.W
                         ptr <- ptr + jW
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordZYWX(getValue : V4l -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -3382,24 +3360,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eW = ptr + sW
+                coord.W <- initialCoord.W
                 while ptr <> eW do
-                    coord.Z <- initialCoord.Z
                     let eX = ptr + sX
+                    coord.X <- initialCoord.X
                     while ptr <> eX do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.X <- coord.X + step.X
                         ptr <- ptr + jX
-                    coord.Z <- coord.Z + step.Z
+                    coord.W <- coord.W + step.W
                     ptr <- ptr + jW
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordXZWY(getValue : V4l -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -3418,22 +3395,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eW = ptr + sW
+                coord.W <- initialCoord.W
                 while ptr <> eW do
-                    coord.Z <- initialCoord.Z
                     let eY = ptr + sY
+                    coord.Y <- initialCoord.Y
                     while ptr <> eY do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Y <- coord.Y + step.Y
                         ptr <- ptr + jY
-                    coord.Z <- coord.Z + step.Z
+                    coord.W <- coord.W + step.W
                     ptr <- ptr + jW
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
             coord.X <- coord.X + step.X
             ptr <- ptr + jX
@@ -3454,24 +3430,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eW = ptr + sW
+                coord.W <- initialCoord.W
                 while ptr <> eW do
-                    coord.Z <- initialCoord.Z
                     let eY = ptr + sY
+                    coord.Y <- initialCoord.Y
                     while ptr <> eY do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Y <- coord.Y + step.Y
                         ptr <- ptr + jY
-                    coord.Z <- coord.Z + step.Z
+                    coord.W <- coord.W + step.W
                     ptr <- ptr + jW
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordZWXY(getValue : V4l -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -3490,24 +3465,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eW = ptr + sW
+            coord.W <- initialCoord.W
             while ptr <> eW do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     let eY = ptr + sY
+                    coord.Y <- initialCoord.Y
                     while ptr <> eY do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Y <- coord.Y + step.Y
                         ptr <- ptr + jY
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
-                coord.Y <- coord.Y + step.Y
+                coord.W <- coord.W + step.W
                 ptr <- ptr + jW
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordZWYX(getValue : V4l -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -3526,24 +3500,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eW = ptr + sW
+            coord.W <- initialCoord.W
             while ptr <> eW do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     let eX = ptr + sX
+                    coord.X <- initialCoord.X
                     while ptr <> eX do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.X <- coord.X + step.X
                         ptr <- ptr + jX
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.W <- coord.W + step.W
                 ptr <- ptr + jW
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordXYWZ(getValue : V4l -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -3562,20 +3535,19 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eW = ptr + sW
+                coord.W <- initialCoord.W
                 while ptr <> eW do
-                    coord.Z <- initialCoord.Z
                     let eZ = ptr + sZ
+                    coord.Z <- initialCoord.Z
                     while ptr <> eZ do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Z <- coord.Z + step.Z
                         ptr <- ptr + jZ
-                    coord.Z <- coord.Z + step.Z
+                    coord.W <- coord.W + step.W
                     ptr <- ptr + jW
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
@@ -3598,24 +3570,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eW = ptr + sW
+                coord.W <- initialCoord.W
                 while ptr <> eW do
-                    coord.Z <- initialCoord.Z
                     let eZ = ptr + sZ
+                    coord.Z <- initialCoord.Z
                     while ptr <> eZ do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Z <- coord.Z + step.Z
                         ptr <- ptr + jZ
-                    coord.Z <- coord.Z + step.Z
+                    coord.W <- coord.W + step.W
                     ptr <- ptr + jW
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordYWXZ(getValue : V4l -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -3634,24 +3605,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eW = ptr + sW
+            coord.W <- initialCoord.W
             while ptr <> eW do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     let eZ = ptr + sZ
+                    coord.Z <- initialCoord.Z
                     while ptr <> eZ do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Z <- coord.Z + step.Z
                         ptr <- ptr + jZ
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
-                coord.Y <- coord.Y + step.Y
+                coord.W <- coord.W + step.W
                 ptr <- ptr + jW
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordYWZX(getValue : V4l -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -3670,24 +3640,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eW = ptr + sW
+            coord.W <- initialCoord.W
             while ptr <> eW do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     let eX = ptr + sX
+                    coord.X <- initialCoord.X
                     while ptr <> eX do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.X <- coord.X + step.X
                         ptr <- ptr + jX
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
-                coord.Y <- coord.Y + step.Y
+                coord.W <- coord.W + step.W
                 ptr <- ptr + jW
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordXWYZ(getValue : V4l -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -3706,22 +3675,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eW = ptr + sW
+            coord.W <- initialCoord.W
             while ptr <> eW do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     let eZ = ptr + sZ
+                    coord.Z <- initialCoord.Z
                     while ptr <> eZ do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Z <- coord.Z + step.Z
                         ptr <- ptr + jZ
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.W <- coord.W + step.W
                 ptr <- ptr + jW
             coord.X <- coord.X + step.X
             ptr <- ptr + jX
@@ -3742,24 +3710,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eW = ptr + sW
         while ptr <> eW do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     let eZ = ptr + sZ
+                    coord.Z <- initialCoord.Z
                     while ptr <> eZ do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Z <- coord.Z + step.Z
                         ptr <- ptr + jZ
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.W <- coord.W + step.W
             ptr <- ptr + jW
     member inline private x.SetByCoordWYXZ(getValue : V4l -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -3778,24 +3745,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eW = ptr + sW
         while ptr <> eW do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     let eZ = ptr + sZ
+                    coord.Z <- initialCoord.Z
                     while ptr <> eZ do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Z <- coord.Z + step.Z
                         ptr <- ptr + jZ
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
-            coord.X <- coord.X + step.X
+            coord.W <- coord.W + step.W
             ptr <- ptr + jW
     member inline private x.SetByCoordWYZX(getValue : V4l -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -3814,24 +3780,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eW = ptr + sW
         while ptr <> eW do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     let eX = ptr + sX
+                    coord.X <- initialCoord.X
                     while ptr <> eX do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.X <- coord.X + step.X
                         ptr <- ptr + jX
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
-            coord.X <- coord.X + step.X
+            coord.W <- coord.W + step.W
             ptr <- ptr + jW
     member inline private x.SetByCoordXWZY(getValue : V4l -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -3850,22 +3815,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eW = ptr + sW
+            coord.W <- initialCoord.W
             while ptr <> eW do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     let eY = ptr + sY
+                    coord.Y <- initialCoord.Y
                     while ptr <> eY do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Y <- coord.Y + step.Y
                         ptr <- ptr + jY
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
-                coord.Y <- coord.Y + step.Y
+                coord.W <- coord.W + step.W
                 ptr <- ptr + jW
             coord.X <- coord.X + step.X
             ptr <- ptr + jX
@@ -3886,24 +3850,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eW = ptr + sW
         while ptr <> eW do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     let eY = ptr + sY
+                    coord.Y <- initialCoord.Y
                     while ptr <> eY do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Y <- coord.Y + step.Y
                         ptr <- ptr + jY
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.W <- coord.W + step.W
             ptr <- ptr + jW
     member inline private x.SetByCoordWZXY(getValue : V4l -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -3922,24 +3885,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eW = ptr + sW
         while ptr <> eW do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     let eY = ptr + sY
+                    coord.Y <- initialCoord.Y
                     while ptr <> eY do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Y <- coord.Y + step.Y
                         ptr <- ptr + jY
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
-            coord.X <- coord.X + step.X
+            coord.W <- coord.W + step.W
             ptr <- ptr + jW
     member inline private x.SetByCoordWZYX(getValue : V4l -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -3958,24 +3920,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eW = ptr + sW
         while ptr <> eW do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     let eX = ptr + sX
+                    coord.X <- initialCoord.X
                     while ptr <> eX do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.X <- coord.X + step.X
                         ptr <- ptr + jX
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
-            coord.X <- coord.X + step.X
+            coord.W <- coord.W + step.W
             ptr <- ptr + jW
     member x.SetByCoord(value : V4l -> 'a) = 
         let cXW = compare (abs info.DX) (abs info.DW)
@@ -4025,16 +3986,15 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     let eW = ptr + sW
+                    coord.W <- initialCoord.W
                     while ptr <> eW do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                         coord.W <- coord.W + step.W
                         ptr <- ptr + jW
@@ -4061,24 +4021,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     let eW = ptr + sW
+                    coord.W <- initialCoord.W
                     while ptr <> eW do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                         coord.W <- coord.W + step.W
                         ptr <- ptr + jW
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordYZXW(getValue : V4i -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -4097,24 +4056,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     let eW = ptr + sW
+                    coord.W <- initialCoord.W
                     while ptr <> eW do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                         coord.W <- coord.W + step.W
                         ptr <- ptr + jW
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordYZWX(getValue : V4i -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -4133,24 +4091,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eW = ptr + sW
+                coord.W <- initialCoord.W
                 while ptr <> eW do
-                    coord.Z <- initialCoord.Z
                     let eX = ptr + sX
+                    coord.X <- initialCoord.X
                     while ptr <> eX do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.X <- coord.X + step.X
                         ptr <- ptr + jX
-                    coord.Z <- coord.Z + step.Z
+                    coord.W <- coord.W + step.W
                     ptr <- ptr + jW
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordXZYW(getValue : V4i -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -4169,22 +4126,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     let eW = ptr + sW
+                    coord.W <- initialCoord.W
                     while ptr <> eW do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                         coord.W <- coord.W + step.W
                         ptr <- ptr + jW
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
             coord.X <- coord.X + step.X
             ptr <- ptr + jX
@@ -4205,24 +4161,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     let eW = ptr + sW
+                    coord.W <- initialCoord.W
                     while ptr <> eW do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                         coord.W <- coord.W + step.W
                         ptr <- ptr + jW
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordZYXW(getValue : V4i -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -4241,24 +4196,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     let eW = ptr + sW
+                    coord.W <- initialCoord.W
                     while ptr <> eW do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                         coord.W <- coord.W + step.W
                         ptr <- ptr + jW
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordZYWX(getValue : V4i -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -4277,24 +4231,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eW = ptr + sW
+                coord.W <- initialCoord.W
                 while ptr <> eW do
-                    coord.Z <- initialCoord.Z
                     let eX = ptr + sX
+                    coord.X <- initialCoord.X
                     while ptr <> eX do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.X <- coord.X + step.X
                         ptr <- ptr + jX
-                    coord.Z <- coord.Z + step.Z
+                    coord.W <- coord.W + step.W
                     ptr <- ptr + jW
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordXZWY(getValue : V4i -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -4313,22 +4266,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eW = ptr + sW
+                coord.W <- initialCoord.W
                 while ptr <> eW do
-                    coord.Z <- initialCoord.Z
                     let eY = ptr + sY
+                    coord.Y <- initialCoord.Y
                     while ptr <> eY do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Y <- coord.Y + step.Y
                         ptr <- ptr + jY
-                    coord.Z <- coord.Z + step.Z
+                    coord.W <- coord.W + step.W
                     ptr <- ptr + jW
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
             coord.X <- coord.X + step.X
             ptr <- ptr + jX
@@ -4349,24 +4301,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eW = ptr + sW
+                coord.W <- initialCoord.W
                 while ptr <> eW do
-                    coord.Z <- initialCoord.Z
                     let eY = ptr + sY
+                    coord.Y <- initialCoord.Y
                     while ptr <> eY do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Y <- coord.Y + step.Y
                         ptr <- ptr + jY
-                    coord.Z <- coord.Z + step.Z
+                    coord.W <- coord.W + step.W
                     ptr <- ptr + jW
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordZWXY(getValue : V4i -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -4385,24 +4336,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eW = ptr + sW
+            coord.W <- initialCoord.W
             while ptr <> eW do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     let eY = ptr + sY
+                    coord.Y <- initialCoord.Y
                     while ptr <> eY do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Y <- coord.Y + step.Y
                         ptr <- ptr + jY
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
-                coord.Y <- coord.Y + step.Y
+                coord.W <- coord.W + step.W
                 ptr <- ptr + jW
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordZWYX(getValue : V4i -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -4421,24 +4371,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eW = ptr + sW
+            coord.W <- initialCoord.W
             while ptr <> eW do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     let eX = ptr + sX
+                    coord.X <- initialCoord.X
                     while ptr <> eX do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.X <- coord.X + step.X
                         ptr <- ptr + jX
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.W <- coord.W + step.W
                 ptr <- ptr + jW
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordXYWZ(getValue : V4i -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -4457,20 +4406,19 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eW = ptr + sW
+                coord.W <- initialCoord.W
                 while ptr <> eW do
-                    coord.Z <- initialCoord.Z
                     let eZ = ptr + sZ
+                    coord.Z <- initialCoord.Z
                     while ptr <> eZ do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Z <- coord.Z + step.Z
                         ptr <- ptr + jZ
-                    coord.Z <- coord.Z + step.Z
+                    coord.W <- coord.W + step.W
                     ptr <- ptr + jW
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
@@ -4493,24 +4441,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eW = ptr + sW
+                coord.W <- initialCoord.W
                 while ptr <> eW do
-                    coord.Z <- initialCoord.Z
                     let eZ = ptr + sZ
+                    coord.Z <- initialCoord.Z
                     while ptr <> eZ do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Z <- coord.Z + step.Z
                         ptr <- ptr + jZ
-                    coord.Z <- coord.Z + step.Z
+                    coord.W <- coord.W + step.W
                     ptr <- ptr + jW
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordYWXZ(getValue : V4i -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -4529,24 +4476,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eW = ptr + sW
+            coord.W <- initialCoord.W
             while ptr <> eW do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     let eZ = ptr + sZ
+                    coord.Z <- initialCoord.Z
                     while ptr <> eZ do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Z <- coord.Z + step.Z
                         ptr <- ptr + jZ
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
-                coord.Y <- coord.Y + step.Y
+                coord.W <- coord.W + step.W
                 ptr <- ptr + jW
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordYWZX(getValue : V4i -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -4565,24 +4511,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eW = ptr + sW
+            coord.W <- initialCoord.W
             while ptr <> eW do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     let eX = ptr + sX
+                    coord.X <- initialCoord.X
                     while ptr <> eX do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.X <- coord.X + step.X
                         ptr <- ptr + jX
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
-                coord.Y <- coord.Y + step.Y
+                coord.W <- coord.W + step.W
                 ptr <- ptr + jW
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordXWYZ(getValue : V4i -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -4601,22 +4546,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eW = ptr + sW
+            coord.W <- initialCoord.W
             while ptr <> eW do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     let eZ = ptr + sZ
+                    coord.Z <- initialCoord.Z
                     while ptr <> eZ do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Z <- coord.Z + step.Z
                         ptr <- ptr + jZ
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.W <- coord.W + step.W
                 ptr <- ptr + jW
             coord.X <- coord.X + step.X
             ptr <- ptr + jX
@@ -4637,24 +4581,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eW = ptr + sW
         while ptr <> eW do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     let eZ = ptr + sZ
+                    coord.Z <- initialCoord.Z
                     while ptr <> eZ do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Z <- coord.Z + step.Z
                         ptr <- ptr + jZ
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.W <- coord.W + step.W
             ptr <- ptr + jW
     member inline private x.SetByCoordWYXZ(getValue : V4i -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -4673,24 +4616,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eW = ptr + sW
         while ptr <> eW do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     let eZ = ptr + sZ
+                    coord.Z <- initialCoord.Z
                     while ptr <> eZ do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Z <- coord.Z + step.Z
                         ptr <- ptr + jZ
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
-            coord.X <- coord.X + step.X
+            coord.W <- coord.W + step.W
             ptr <- ptr + jW
     member inline private x.SetByCoordWYZX(getValue : V4i -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -4709,24 +4651,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eW = ptr + sW
         while ptr <> eW do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     let eX = ptr + sX
+                    coord.X <- initialCoord.X
                     while ptr <> eX do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.X <- coord.X + step.X
                         ptr <- ptr + jX
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
-            coord.X <- coord.X + step.X
+            coord.W <- coord.W + step.W
             ptr <- ptr + jW
     member inline private x.SetByCoordXWZY(getValue : V4i -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -4745,22 +4686,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eW = ptr + sW
+            coord.W <- initialCoord.W
             while ptr <> eW do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     let eY = ptr + sY
+                    coord.Y <- initialCoord.Y
                     while ptr <> eY do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Y <- coord.Y + step.Y
                         ptr <- ptr + jY
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
-                coord.Y <- coord.Y + step.Y
+                coord.W <- coord.W + step.W
                 ptr <- ptr + jW
             coord.X <- coord.X + step.X
             ptr <- ptr + jX
@@ -4781,24 +4721,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eW = ptr + sW
         while ptr <> eW do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     let eY = ptr + sY
+                    coord.Y <- initialCoord.Y
                     while ptr <> eY do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Y <- coord.Y + step.Y
                         ptr <- ptr + jY
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.W <- coord.W + step.W
             ptr <- ptr + jW
     member inline private x.SetByCoordWZXY(getValue : V4i -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -4817,24 +4756,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eW = ptr + sW
         while ptr <> eW do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     let eY = ptr + sY
+                    coord.Y <- initialCoord.Y
                     while ptr <> eY do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Y <- coord.Y + step.Y
                         ptr <- ptr + jY
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
-            coord.X <- coord.X + step.X
+            coord.W <- coord.W + step.W
             ptr <- ptr + jW
     member inline private x.SetByCoordWZYX(getValue : V4i -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -4853,24 +4791,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eW = ptr + sW
         while ptr <> eW do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     let eX = ptr + sX
+                    coord.X <- initialCoord.X
                     while ptr <> eX do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.X <- coord.X + step.X
                         ptr <- ptr + jX
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
-            coord.X <- coord.X + step.X
+            coord.W <- coord.W + step.W
             ptr <- ptr + jW
     member x.SetByCoord(value : V4i -> 'a) = 
         let cXW = compare (abs info.DX) (abs info.DW)
@@ -4920,16 +4857,15 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     let eW = ptr + sW
+                    coord.W <- initialCoord.W
                     while ptr <> eW do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                         coord.W <- coord.W + step.W
                         ptr <- ptr + jW
@@ -4956,24 +4892,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     let eW = ptr + sW
+                    coord.W <- initialCoord.W
                     while ptr <> eW do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                         coord.W <- coord.W + step.W
                         ptr <- ptr + jW
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordYZXW(getValue : V4d -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -4992,24 +4927,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     let eW = ptr + sW
+                    coord.W <- initialCoord.W
                     while ptr <> eW do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                         coord.W <- coord.W + step.W
                         ptr <- ptr + jW
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordYZWX(getValue : V4d -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -5028,24 +4962,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eW = ptr + sW
+                coord.W <- initialCoord.W
                 while ptr <> eW do
-                    coord.Z <- initialCoord.Z
                     let eX = ptr + sX
+                    coord.X <- initialCoord.X
                     while ptr <> eX do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.X <- coord.X + step.X
                         ptr <- ptr + jX
-                    coord.Z <- coord.Z + step.Z
+                    coord.W <- coord.W + step.W
                     ptr <- ptr + jW
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordXZYW(getValue : V4d -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -5064,22 +4997,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     let eW = ptr + sW
+                    coord.W <- initialCoord.W
                     while ptr <> eW do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                         coord.W <- coord.W + step.W
                         ptr <- ptr + jW
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
             coord.X <- coord.X + step.X
             ptr <- ptr + jX
@@ -5100,24 +5032,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     let eW = ptr + sW
+                    coord.W <- initialCoord.W
                     while ptr <> eW do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                         coord.W <- coord.W + step.W
                         ptr <- ptr + jW
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordZYXW(getValue : V4d -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -5136,24 +5067,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     let eW = ptr + sW
+                    coord.W <- initialCoord.W
                     while ptr <> eW do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
                         coord.W <- coord.W + step.W
                         ptr <- ptr + jW
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordZYWX(getValue : V4d -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -5172,24 +5102,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eW = ptr + sW
+                coord.W <- initialCoord.W
                 while ptr <> eW do
-                    coord.Z <- initialCoord.Z
                     let eX = ptr + sX
+                    coord.X <- initialCoord.X
                     while ptr <> eX do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.X <- coord.X + step.X
                         ptr <- ptr + jX
-                    coord.Z <- coord.Z + step.Z
+                    coord.W <- coord.W + step.W
                     ptr <- ptr + jW
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordXZWY(getValue : V4d -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -5208,22 +5137,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eW = ptr + sW
+                coord.W <- initialCoord.W
                 while ptr <> eW do
-                    coord.Z <- initialCoord.Z
                     let eY = ptr + sY
+                    coord.Y <- initialCoord.Y
                     while ptr <> eY do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Y <- coord.Y + step.Y
                         ptr <- ptr + jY
-                    coord.Z <- coord.Z + step.Z
+                    coord.W <- coord.W + step.W
                     ptr <- ptr + jW
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
             coord.X <- coord.X + step.X
             ptr <- ptr + jX
@@ -5244,24 +5172,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eW = ptr + sW
+                coord.W <- initialCoord.W
                 while ptr <> eW do
-                    coord.Z <- initialCoord.Z
                     let eY = ptr + sY
+                    coord.Y <- initialCoord.Y
                     while ptr <> eY do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Y <- coord.Y + step.Y
                         ptr <- ptr + jY
-                    coord.Z <- coord.Z + step.Z
+                    coord.W <- coord.W + step.W
                     ptr <- ptr + jW
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordZWXY(getValue : V4d -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -5280,24 +5207,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eW = ptr + sW
+            coord.W <- initialCoord.W
             while ptr <> eW do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     let eY = ptr + sY
+                    coord.Y <- initialCoord.Y
                     while ptr <> eY do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Y <- coord.Y + step.Y
                         ptr <- ptr + jY
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
-                coord.Y <- coord.Y + step.Y
+                coord.W <- coord.W + step.W
                 ptr <- ptr + jW
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordZWYX(getValue : V4d -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -5316,24 +5242,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eZ = ptr + sZ
         while ptr <> eZ do
-            coord.X <- initialCoord.X
             let eW = ptr + sW
+            coord.W <- initialCoord.W
             while ptr <> eW do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     let eX = ptr + sX
+                    coord.X <- initialCoord.X
                     while ptr <> eX do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.X <- coord.X + step.X
                         ptr <- ptr + jX
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.W <- coord.W + step.W
                 ptr <- ptr + jW
-            coord.X <- coord.X + step.X
+            coord.Z <- coord.Z + step.Z
             ptr <- ptr + jZ
     member inline private x.SetByCoordXYWZ(getValue : V4d -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -5352,20 +5277,19 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eW = ptr + sW
+                coord.W <- initialCoord.W
                 while ptr <> eW do
-                    coord.Z <- initialCoord.Z
                     let eZ = ptr + sZ
+                    coord.Z <- initialCoord.Z
                     while ptr <> eZ do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Z <- coord.Z + step.Z
                         ptr <- ptr + jZ
-                    coord.Z <- coord.Z + step.Z
+                    coord.W <- coord.W + step.W
                     ptr <- ptr + jW
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
@@ -5388,24 +5312,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eW = ptr + sW
+                coord.W <- initialCoord.W
                 while ptr <> eW do
-                    coord.Z <- initialCoord.Z
                     let eZ = ptr + sZ
+                    coord.Z <- initialCoord.Z
                     while ptr <> eZ do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Z <- coord.Z + step.Z
                         ptr <- ptr + jZ
-                    coord.Z <- coord.Z + step.Z
+                    coord.W <- coord.W + step.W
                     ptr <- ptr + jW
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordYWXZ(getValue : V4d -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -5424,24 +5347,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eW = ptr + sW
+            coord.W <- initialCoord.W
             while ptr <> eW do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     let eZ = ptr + sZ
+                    coord.Z <- initialCoord.Z
                     while ptr <> eZ do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Z <- coord.Z + step.Z
                         ptr <- ptr + jZ
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
-                coord.Y <- coord.Y + step.Y
+                coord.W <- coord.W + step.W
                 ptr <- ptr + jW
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordYWZX(getValue : V4d -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -5460,24 +5382,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eY = ptr + sY
         while ptr <> eY do
-            coord.X <- initialCoord.X
             let eW = ptr + sW
+            coord.W <- initialCoord.W
             while ptr <> eW do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     let eX = ptr + sX
+                    coord.X <- initialCoord.X
                     while ptr <> eX do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.X <- coord.X + step.X
                         ptr <- ptr + jX
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
-                coord.Y <- coord.Y + step.Y
+                coord.W <- coord.W + step.W
                 ptr <- ptr + jW
-            coord.X <- coord.X + step.X
+            coord.Y <- coord.Y + step.Y
             ptr <- ptr + jY
     member inline private x.SetByCoordXWYZ(getValue : V4d -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -5496,22 +5417,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eW = ptr + sW
+            coord.W <- initialCoord.W
             while ptr <> eW do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     let eZ = ptr + sZ
+                    coord.Z <- initialCoord.Z
                     while ptr <> eZ do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Z <- coord.Z + step.Z
                         ptr <- ptr + jZ
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.W <- coord.W + step.W
                 ptr <- ptr + jW
             coord.X <- coord.X + step.X
             ptr <- ptr + jX
@@ -5532,24 +5452,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eW = ptr + sW
         while ptr <> eW do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     let eZ = ptr + sZ
+                    coord.Z <- initialCoord.Z
                     while ptr <> eZ do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Z <- coord.Z + step.Z
                         ptr <- ptr + jZ
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.W <- coord.W + step.W
             ptr <- ptr + jW
     member inline private x.SetByCoordWYXZ(getValue : V4d -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -5568,24 +5487,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eW = ptr + sW
         while ptr <> eW do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     let eZ = ptr + sZ
+                    coord.Z <- initialCoord.Z
                     while ptr <> eZ do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Z <- coord.Z + step.Z
                         ptr <- ptr + jZ
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
-            coord.X <- coord.X + step.X
+            coord.W <- coord.W + step.W
             ptr <- ptr + jW
     member inline private x.SetByCoordWYZX(getValue : V4d -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -5604,24 +5522,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eW = ptr + sW
         while ptr <> eW do
-            coord.X <- initialCoord.X
             let eY = ptr + sY
+            coord.Y <- initialCoord.Y
             while ptr <> eY do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     let eX = ptr + sX
+                    coord.X <- initialCoord.X
                     while ptr <> eX do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.X <- coord.X + step.X
                         ptr <- ptr + jX
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
                 coord.Y <- coord.Y + step.Y
                 ptr <- ptr + jY
-            coord.X <- coord.X + step.X
+            coord.W <- coord.W + step.W
             ptr <- ptr + jW
     member inline private x.SetByCoordXWZY(getValue : V4d -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -5640,22 +5557,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eX = ptr + sX
         while ptr <> eX do
-            coord.X <- initialCoord.X
             let eW = ptr + sW
+            coord.W <- initialCoord.W
             while ptr <> eW do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     let eY = ptr + sY
+                    coord.Y <- initialCoord.Y
                     while ptr <> eY do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Y <- coord.Y + step.Y
                         ptr <- ptr + jY
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
-                coord.Y <- coord.Y + step.Y
+                coord.W <- coord.W + step.W
                 ptr <- ptr + jW
             coord.X <- coord.X + step.X
             ptr <- ptr + jX
@@ -5676,24 +5592,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eW = ptr + sW
         while ptr <> eW do
-            coord.X <- initialCoord.X
             let eX = ptr + sX
+            coord.X <- initialCoord.X
             while ptr <> eX do
-                coord.Y <- initialCoord.Y
                 let eZ = ptr + sZ
+                coord.Z <- initialCoord.Z
                 while ptr <> eZ do
-                    coord.Z <- initialCoord.Z
                     let eY = ptr + sY
+                    coord.Y <- initialCoord.Y
                     while ptr <> eY do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Y <- coord.Y + step.Y
                         ptr <- ptr + jY
                     coord.Z <- coord.Z + step.Z
                     ptr <- ptr + jZ
-                coord.Y <- coord.Y + step.Y
+                coord.X <- coord.X + step.X
                 ptr <- ptr + jX
-            coord.X <- coord.X + step.X
+            coord.W <- coord.W + step.W
             ptr <- ptr + jW
     member inline private x.SetByCoordWZXY(getValue : V4d -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -5712,24 +5627,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eW = ptr + sW
         while ptr <> eW do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eX = ptr + sX
+                coord.X <- initialCoord.X
                 while ptr <> eX do
-                    coord.Z <- initialCoord.Z
                     let eY = ptr + sY
+                    coord.Y <- initialCoord.Y
                     while ptr <> eY do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.Y <- coord.Y + step.Y
                         ptr <- ptr + jY
-                    coord.Z <- coord.Z + step.Z
+                    coord.X <- coord.X + step.X
                     ptr <- ptr + jX
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
-            coord.X <- coord.X + step.X
+            coord.W <- coord.W + step.W
             ptr <- ptr + jW
     member inline private x.SetByCoordWZYX(getValue : V4d -> 'a) = 
         let sa = nativeint (sizeof<'a>)
@@ -5748,24 +5662,23 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let mutable coord = initialCoord
         let eW = ptr + sW
         while ptr <> eW do
-            coord.X <- initialCoord.X
             let eZ = ptr + sZ
+            coord.Z <- initialCoord.Z
             while ptr <> eZ do
-                coord.Y <- initialCoord.Y
                 let eY = ptr + sY
+                coord.Y <- initialCoord.Y
                 while ptr <> eY do
-                    coord.Z <- initialCoord.Z
                     let eX = ptr + sX
+                    coord.X <- initialCoord.X
                     while ptr <> eX do
-                        coord.W <- initialCoord.W
                         NativePtr.write (NativePtr.ofNativeInt<'a> ptr) (getValue coord)
-                        coord.W <- coord.W + step.W
+                        coord.X <- coord.X + step.X
                         ptr <- ptr + jX
-                    coord.Z <- coord.Z + step.Z
+                    coord.Y <- coord.Y + step.Y
                     ptr <- ptr + jY
-                coord.Y <- coord.Y + step.Y
+                coord.Z <- coord.Z + step.Z
                 ptr <- ptr + jZ
-            coord.X <- coord.X + step.X
+            coord.W <- coord.W + step.W
             ptr <- ptr + jW
     member x.SetByCoord(value : V4d -> 'a) = 
         let cXW = compare (abs info.DX) (abs info.DW)
@@ -7582,71 +7495,84 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let dW = nativeint x.DW * sa
         Array.init (int x.Size.W) (fun i -> NativePtr.read (NativePtr.ofNativeInt (ptr + nativeint i * dW)))
     member x.SampleLinear(coord : V4d, lerp : float -> 'a -> 'a -> 'a) : 'a = 
-        let p0f = coord * V4d x.Size.XYZW
-        let mutable p0 = V4l(int64 p0f.X, int64 p0f.Y, int64 p0f.Z, int64 p0f.W)
+        let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
+        let coord = V4d.Min(V4d.Max(coord, V4d.Zero), V4d.One)
+        let p0f = coord * V4d x.Size.XYZW - V4d(0.5, 0.5, 0.5, 0.5)
+        let mutable p0 = V4l(int64 (floor p0f.X), int64 (floor p0f.Y), int64 (floor p0f.Z), int64 (floor p0f.W))
         let frac = p0f - V4d p0
-        if p0.X < 0L then p0.X <- 0L
-        else if p0.X >= x.SX then p0.X <- x.SX - 1L
-        if p0.Y < 0L then p0.Y <- 0L
-        else if p0.Y >= x.SY then p0.Y <- x.SY - 1L
-        if p0.Z < 0L then p0.Z <- 0L
-        else if p0.Z >= x.SZ then p0.Z <- x.SZ - 1L
-        if p0.W < 0L then p0.W <- 0L
-        else if p0.W >= x.SW then p0.W <- x.SW - 1L
         let sa = nativeint sizeof<'a>
-        let ptr0 = NativePtr.toNativeInt x.Pointer + nativeint (V4l.Dot(p0, x.Delta.XYZW)) * sa
         let dX = nativeint x.DX * sa
         let dY = nativeint x.DY * sa
         let dZ = nativeint x.DZ * sa
         let dW = nativeint x.DW * sa
-        let pp0000 : nativeptr<'a> = NativePtr.ofNativeInt (ptr0)
-        let pp1000 : nativeptr<'a> = if p0.X < x.SX then NativePtr.ofNativeInt (ptr0 + dX) else pp0000
-        let pp0100 : nativeptr<'a> = if p0.Y < x.SY then NativePtr.ofNativeInt (ptr0 + dY) else pp0000
-        let pp1100 : nativeptr<'a> = if p0.X < x.SX && p0.Y < x.SY then NativePtr.ofNativeInt (ptr0 + dX + dY) else pp0000
-        let pp0010 : nativeptr<'a> = if p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dZ) else pp0000
-        let pp1010 : nativeptr<'a> = if p0.X < x.SX && p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dX + dZ) else pp0000
-        let pp0110 : nativeptr<'a> = if p0.Y < x.SY && p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dY + dZ) else pp0000
-        let pp1110 : nativeptr<'a> = if p0.X < x.SX && p0.Y < x.SY && p0.Z < x.SZ then NativePtr.ofNativeInt (ptr0 + dX + dY + dZ) else pp0000
-        let pp0001 : nativeptr<'a> = if p0.W < x.SW then NativePtr.ofNativeInt (ptr0 + dW) else pp0000
-        let pp1001 : nativeptr<'a> = if p0.X < x.SX && p0.W < x.SW then NativePtr.ofNativeInt (ptr0 + dX + dW) else pp0000
-        let pp0101 : nativeptr<'a> = if p0.Y < x.SY && p0.W < x.SW then NativePtr.ofNativeInt (ptr0 + dY + dW) else pp0000
-        let pp1101 : nativeptr<'a> = if p0.X < x.SX && p0.Y < x.SY && p0.W < x.SW then NativePtr.ofNativeInt (ptr0 + dX + dY + dW) else pp0000
-        let pp0011 : nativeptr<'a> = if p0.Z < x.SZ && p0.W < x.SW then NativePtr.ofNativeInt (ptr0 + dZ + dW) else pp0000
-        let pp1011 : nativeptr<'a> = if p0.X < x.SX && p0.Z < x.SZ && p0.W < x.SW then NativePtr.ofNativeInt (ptr0 + dX + dZ + dW) else pp0000
-        let pp0111 : nativeptr<'a> = if p0.Y < x.SY && p0.Z < x.SZ && p0.W < x.SW then NativePtr.ofNativeInt (ptr0 + dY + dZ + dW) else pp0000
-        let pp1111 : nativeptr<'a> = if p0.X < x.SX && p0.Y < x.SY && p0.Z < x.SZ && p0.W < x.SW then NativePtr.ofNativeInt (ptr0 + dX + dY + dZ + dW) else pp0000
-        let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0000))
-        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1000))
-        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0100))
-        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1100))
-        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0010))
-        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1010))
-        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0110))
-        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1110))
-        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0001))
-        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1001))
-        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0101))
-        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1101))
-        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0011))
-        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1011))
-        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp0111))
-        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt pp1111))
-        let vx000 = lerp frac.X v0000 v1000
-        let vx100 = lerp frac.X v0100 v1100
-        let vx010 = lerp frac.X v0010 v1010
-        let vx110 = lerp frac.X v0110 v1110
-        let vx001 = lerp frac.X v0001 v1001
-        let vx101 = lerp frac.X v0101 v1101
-        let vx011 = lerp frac.X v0011 v1011
-        let vx111 = lerp frac.X v0111 v1111
-        let vxx00 = lerp frac.Y vx000 vx100
-        let vxx10 = lerp frac.Y vx010 vx110
-        let vxx01 = lerp frac.Y vx001 vx101
-        let vxx11 = lerp frac.Y vx011 vx111
-        let vxxx0 = lerp frac.Z vxx00 vxx10
-        let vxxx1 = lerp frac.Z vxx01 vxx11
-        let vxxxx = lerp frac.W vxxx0 vxxx1
-        vxxxx
+        if p0.X >= 0L && p0.X < x.Size.X - 1L && p0.Y >= 0L && p0.Y < x.Size.Y - 1L && p0.Z >= 0L && p0.Z < x.Size.Z - 1L && p0.W >= 0L && p0.W < x.Size.W - 1L then
+            let ptr0 = NativePtr.toNativeInt x.Pointer + nativeint (V4l.Dot(p0, x.Delta.XYZW)) * sa
+            let v0000 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0))
+            let v0001 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dW))
+            let v0010 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dZ))
+            let v0011 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dZ + dW))
+            let v0100 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dY))
+            let v0101 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dY + dW))
+            let v0110 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dY + dZ))
+            let v0111 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dY + dZ + dW))
+            let v1000 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dX))
+            let v1001 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dX + dW))
+            let v1010 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dX + dZ))
+            let v1011 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dX + dZ + dW))
+            let v1100 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dX + dY))
+            let v1101 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dX + dY + dW))
+            let v1110 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dX + dY + dZ))
+            let v1111 : 'a =  NativePtr.read (NativePtr.ofNativeInt (ptr0 + dX + dY + dZ + dW))
+            let vx000 = lerp.Invoke(frac.X, v0000, v1000)
+            let vx001 = lerp.Invoke(frac.X, v0001, v1001)
+            let vx010 = lerp.Invoke(frac.X, v0010, v1010)
+            let vx011 = lerp.Invoke(frac.X, v0011, v1011)
+            let vx100 = lerp.Invoke(frac.X, v0100, v1100)
+            let vx101 = lerp.Invoke(frac.X, v0101, v1101)
+            let vx110 = lerp.Invoke(frac.X, v0110, v1110)
+            let vx111 = lerp.Invoke(frac.X, v0111, v1111)
+            let vxx00 = lerp.Invoke(frac.Y, vx000, vx100)
+            let vxx01 = lerp.Invoke(frac.Y, vx001, vx101)
+            let vxx10 = lerp.Invoke(frac.Y, vx010, vx110)
+            let vxx11 = lerp.Invoke(frac.Y, vx011, vx111)
+            let vxxx0 = lerp.Invoke(frac.Z, vxx00, vxx10)
+            let vxxx1 = lerp.Invoke(frac.Z, vxx01, vxx11)
+            let vxxxx = lerp.Invoke(frac.W, vxxx0, vxxx1)
+            vxxxx
+        else
+            let max = x.Size - V4l.One
+            let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V4l.Dot(x.Delta, V4l.Min(V4l.Max(V4l.Zero, p0), max))) * sa))
+            let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V4l.Dot(x.Delta, V4l.Min(V4l.Max(V4l.Zero, p0 + V4l(0L, 0L, 0L, 1L)), max))) * sa))
+            let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V4l.Dot(x.Delta, V4l.Min(V4l.Max(V4l.Zero, p0 + V4l(0L, 0L, 1L, 0L)), max))) * sa))
+            let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V4l.Dot(x.Delta, V4l.Min(V4l.Max(V4l.Zero, p0 + V4l(0L, 0L, 1L, 1L)), max))) * sa))
+            let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V4l.Dot(x.Delta, V4l.Min(V4l.Max(V4l.Zero, p0 + V4l(0L, 1L, 0L, 0L)), max))) * sa))
+            let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V4l.Dot(x.Delta, V4l.Min(V4l.Max(V4l.Zero, p0 + V4l(0L, 1L, 0L, 1L)), max))) * sa))
+            let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V4l.Dot(x.Delta, V4l.Min(V4l.Max(V4l.Zero, p0 + V4l(0L, 1L, 1L, 0L)), max))) * sa))
+            let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V4l.Dot(x.Delta, V4l.Min(V4l.Max(V4l.Zero, p0 + V4l(0L, 1L, 1L, 1L)), max))) * sa))
+            let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V4l.Dot(x.Delta, V4l.Min(V4l.Max(V4l.Zero, p0 + V4l(1L, 0L, 0L, 0L)), max))) * sa))
+            let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V4l.Dot(x.Delta, V4l.Min(V4l.Max(V4l.Zero, p0 + V4l(1L, 0L, 0L, 1L)), max))) * sa))
+            let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V4l.Dot(x.Delta, V4l.Min(V4l.Max(V4l.Zero, p0 + V4l(1L, 0L, 1L, 0L)), max))) * sa))
+            let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V4l.Dot(x.Delta, V4l.Min(V4l.Max(V4l.Zero, p0 + V4l(1L, 0L, 1L, 1L)), max))) * sa))
+            let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V4l.Dot(x.Delta, V4l.Min(V4l.Max(V4l.Zero, p0 + V4l(1L, 1L, 0L, 0L)), max))) * sa))
+            let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V4l.Dot(x.Delta, V4l.Min(V4l.Max(V4l.Zero, p0 + V4l(1L, 1L, 0L, 1L)), max))) * sa))
+            let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V4l.Dot(x.Delta, V4l.Min(V4l.Max(V4l.Zero, p0 + V4l(1L, 1L, 1L, 0L)), max))) * sa))
+            let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (NativePtr.toNativeInt x.Pointer + nativeint(V4l.Dot(x.Delta, V4l.Min(V4l.Max(V4l.Zero, p0 + V4l(1L, 1L, 1L, 1L)), max))) * sa))
+            let vx000 = lerp.Invoke(frac.X, v0000, v1000)
+            let vx001 = lerp.Invoke(frac.X, v0001, v1001)
+            let vx010 = lerp.Invoke(frac.X, v0010, v1010)
+            let vx011 = lerp.Invoke(frac.X, v0011, v1011)
+            let vx100 = lerp.Invoke(frac.X, v0100, v1100)
+            let vx101 = lerp.Invoke(frac.X, v0101, v1101)
+            let vx110 = lerp.Invoke(frac.X, v0110, v1110)
+            let vx111 = lerp.Invoke(frac.X, v0111, v1111)
+            let vxx00 = lerp.Invoke(frac.Y, vx000, vx100)
+            let vxx01 = lerp.Invoke(frac.Y, vx001, vx101)
+            let vxx10 = lerp.Invoke(frac.Y, vx010, vx110)
+            let vxx11 = lerp.Invoke(frac.Y, vx011, vx111)
+            let vxxx0 = lerp.Invoke(frac.Z, vxx00, vxx10)
+            let vxxx1 = lerp.Invoke(frac.Z, vxx01, vxx11)
+            let vxxxx = lerp.Invoke(frac.W, vxxx0, vxxx1)
+            vxxxx
     static member Using<'b> (m : Tensor4<'a>, f : NativeTensor4<'a> -> 'b) = 
         let gc = GCHandle.Alloc(m.Data, GCHandleType.Pinned)
         try f (NativeTensor4<'a>(NativePtr.ofNativeInt (gc.AddrOfPinnedObject()), m.Info))

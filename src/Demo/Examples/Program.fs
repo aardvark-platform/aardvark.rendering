@@ -1279,6 +1279,31 @@ module AdaptiveResourcesEager =
 
 open Aardvark.Application.WinForms
 
+module private NativeSupport =
+    open System.IO
+    open System.Runtime.InteropServices
+
+    [<DllImport("kernel32.dll", SetLastError=true)>]
+    extern bool ReadFile(Microsoft.Win32.SafeHandles.SafeFileHandle handle, IntPtr buffer, uint32 numBytesToRead, int* numBytesRead, IntPtr overlapped);
+
+    let ReadFile2 (file : string) = 
+        let info = FileInfo(file)
+        let f = File.OpenRead file
+
+        let mutable ptr = Marshal.AllocHGlobal( info.Length |> nativeint)
+        let result = ptr
+        let mutable remaining = info.Length
+        let buffer = Array.zeroCreate<byte> (1 <<< 22)
+        while remaining > 0L do
+            let s = f.Read(buffer, 0, min remaining buffer.LongLength |> int)
+            Marshal.Copy(buffer, 0, ptr, s)
+            ptr <- ptr + nativeint s
+            remaining <- remaining - int64 s
+        result
+
+let lerp : float -> byte -> byte -> byte =
+    fun t a b -> Fun.Lerp(t,a,b)
+
 [<EntryPoint>]
 [<STAThread>]
 let main args =
@@ -1290,8 +1315,63 @@ let main args =
     Ag.initialize()
     Aardvark.Init()
 
+    let inputVolume = NativeSupport.ReadFile2 @"C:\volumes\GussPK_AlSi_0.5Sn_180kV_925x925x500px.raw"
+
+    let size = V3i(925,925,500)
+    let halfSize = size / 2
+    let volume = NativeVolume<uint16>(NativePtr.ofNativeInt inputVolume, VolumeInfo(0L,V3l size,V3l(1,size.X,size.X*size.Y)))
+
+    let target : byte[] = Array.zeroCreate (halfSize.X*halfSize.Y*halfSize.Z * 2)
+    let gc = GCHandle.Alloc(target,GCHandleType.Pinned)
+
+    let targetVolume = NativeVolume<uint16>(NativePtr.ofNativeInt<| gc.AddrOfPinnedObject(), VolumeInfo(0L,V3l halfSize,V3l(1,halfSize.X,halfSize.X*halfSize.Y)))
+
+    targetVolume.SetByCoord(fun (v : V3d) -> 
+        volume.SampleLinear(v, fun t a b -> Fun.Lerp(t,a,b))
+    )
+
+    gc.Free()
+
+    File.WriteAllBytes(sprintf @"C:\volumes\gussHalf_%d_%d_%d.raw" halfSize.X halfSize.Y halfSize.Z, target)
+    System.Environment.Exit 0
+
+    //let src = PixImage.Create(@"C:\volumes\George-Clooney-014.jpg").ToPixImage<byte>()
+    ////let src = PixImage.Create(@"C:\volumes\dog2.png").ToPixImage<byte>()
+    //let dst = PixImage<byte>(src.Format, src.Size / 2)
+
+    //let bla = V3d(0.5 / V2d src.Size,0.0)
+
+    //NativeMatrix.using (src.GetChannel(0L)) (fun pSrc -> 
+    //    NativeMatrix.using (dst.GetChannel(0L)) (fun pDst -> 
+    //        let lerp = lerp
+
+    //        for i in 1 .. 2 do
+
+    //            pDst.SetByCoord(fun (v : V2d) -> 
+    //                pSrc.SampleLinear(v, lerp)
+    //            )
+        
+    //        let iter = 10
+    //        let sw = System.Diagnostics.Stopwatch.StartNew()
+    //        for i in 1 .. iter do
+    //            pDst.SetByCoord(fun (v : V2d) -> 
+    //                pSrc.SampleLinear(v, lerp)
+    //            )
+    //        sw.Stop()
+
+    //        Log.line "took: %A" (sw.MicroTime / iter)
+
+    //    )
+    //)
+
+    //dst.SaveAsImage(@"C:\volumes\oida.png")
+    //src.SaveAsImage(@"C:\volumes\input.png")
+    //System.Environment.Exit 0
+
 
     //Aardvark.Application.OpenVR.UnhateTest.run()
+    
+    let lerp = OptimizedClosures.FSharpFunc<float, float, float>.Adapt(fun a b -> a)
 
     //Examples.Tessellation.run()
     //Examples.Stereo.runNew()
