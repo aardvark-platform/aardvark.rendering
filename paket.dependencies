@@ -5,6 +5,7 @@ source https://vrvis.myget.org/F/aardvark_public/api/v3/index.json
 nuget FSharp.Core                        ~> 4.3.0
 
 nuget Aardvark.Base.FSharp               ~> 4.0.11
+nuget Aardvark.Base.IO                   ~> 4.0.11
 nuget Aardvark.Base.Incremental          ~> 4.0.11
 nuget Aardvark.Base.Runtime              ~> 4.0.11
 nuget Aardvark.Base.Essentials           ~> 4.0.11
@@ -34,6 +35,7 @@ nuget DockPanelSuite.ThemeVS2012Light    = 2.10.0-beta2
 nuget DockPanelSuite.ThemeVS2013Blue     = 2.10.0-beta2
 nuget Clipper                            ~> 6.4.0
 
+nuget SharpZipLib.NETStandard            ~> 1.0.7
 
 nuget NUnit.Console                      ~> 3.8.0
 nuget NUnit                              ~> 3.9.0
