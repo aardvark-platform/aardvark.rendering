@@ -10,9 +10,9 @@ nuget Aardvark.Base.Incremental          ~> 4.0.11
 nuget Aardvark.Base.Runtime              ~> 4.0.11
 nuget Aardvark.Base.Essentials           ~> 4.0.11
                                   
-nuget FShade.Core                        ~> 4.0.0
-nuget FShade                             ~> 4.0.0
-nuget FShade.Debug                       ~> 4.0.0
+nuget FShade.Core                        ~> 4.0.2
+nuget FShade                             ~> 4.0.2
+nuget FShade.Debug                       ~> 4.0.2
 
 nuget Unofficial.OpenVR					 ~> 1.1.0 
 nuget Unofficial.Typography              ~> 0.0.2
