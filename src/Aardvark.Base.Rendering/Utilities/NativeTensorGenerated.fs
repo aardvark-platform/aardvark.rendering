@@ -74,7 +74,7 @@ type NativeVector<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VectorInfo
             ptr <- ptr + jX
     member x.SetByCoord(value : float -> 'a) = 
         x.SetByCoordX(value)
-    member private x.BlitToInternalX(y : NativeVector<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalX(y : NativeVector<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -106,7 +106,7 @@ type NativeVector<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VectorInfo
             px <- px + xdX * nativeint (ni - icoord)
             icoord <- ni
             frac <- coord - float(icoord)
-    member private x.BlitToInternalXE(y : NativeVector<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXE(y : NativeVector<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -134,12 +134,26 @@ type NativeVector<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VectorInfo
             px <- px + xjX
             coord <- coord + step
             icoord <- icoord + 1L
-    member private x.BlitToX(y : NativeVector<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToX(y : NativeVector<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size > x.Size then failwith "[NativeTensor] upsampling not implemented"
         if x.SX = y.SX then x.BlitToInternalXE(y, lerp)
         else x.BlitToInternalX(y, lerp)
     member x.BlitTo(y : NativeVector<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         x.BlitToX(y, lerp)
+    member x.Item
+        with get(c0 : int64) : 'a = 
+            let i = x.Delta * c0
+            NativePtr.read (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i)))
+        and set (c0 : int64) (value : 'a) =
+            let i = x.Delta * c0
+            NativePtr.write (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i))) value
+    member x.Item
+        with get(c0 : int) : 'a = 
+            let i = x.Delta * int64(c0)
+            NativePtr.read (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i)))
+        and set (c0 : int) (value : 'a) =
+            let i = x.Delta * int64(c0)
+            NativePtr.write (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i))) value
     member inline private x.CopyToX(y : NativeVector<'a>) = 
         let sa = nativeint (sizeof<'a>)
         let mutable xptr = ptr |> NativePtr.toNativeInt
@@ -242,8 +256,16 @@ type NativeVector<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VectorInfo
 
 /// The NativeVector module providers convenient F#-style functions for accessing NativeVectors
 module NativeVector =
+    let inline private lerpy< ^a, ^b when (^a or ^b) : (static member Lerp : float * ^b * ^b -> ^b)> (_ : ^a) (t : float) (a : ^b) (b : ^b) =
+        ((^a or ^b) : (static member Lerp : float * ^b * ^b -> ^b) (t, a,b))
+    let inline private lerper t a b = lerpy (Unchecked.defaultof<Fun>) t a b
     /// sets the entire Vector to the given value
     let inline set (value : 'a) (dst : NativeVector<'a>) = dst.Set(value)
+    
+    /// sets each entry to the value computed by getValue
+    let inline setByCoord (getValue : int64 -> 'a) (m : NativeVector<'a>) = m.SetByCoord(getValue)
+    
+    let inline blit (src : NativeVector<'a>) (dst : NativeVector<'a>) = src.BlitTo(dst, lerper)
     
     /// copies the content of 'src' to 'dst'
     let inline copy (src : NativeVector<'a>) (dst : NativeVector<'a>) = src.CopyTo(dst)
@@ -438,7 +460,7 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let cXY = compare (abs info.DX) (abs info.DY)
         if cXY >= 0  then x.SetByCoordXY(value)
         else x.SetByCoordYX(value)
-    member private x.BlitToInternalXY(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXY(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -490,7 +512,7 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXYE(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYE(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -535,7 +557,7 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXEY(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEY(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -581,7 +603,7 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEYE(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYE(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -622,13 +644,13 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToXY(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToXY(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEYE(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalXEY(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalXYE(y, lerp)
         else x.BlitToInternalXY(y, lerp)
-    member private x.BlitToInternalYX(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYX(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -680,7 +702,7 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYXE(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXE(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -725,7 +747,7 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYEX(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEX(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -771,7 +793,7 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEXE(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXE(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -812,7 +834,7 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToYX(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToYX(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEXE(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalYEX(y, lerp)
@@ -822,6 +844,34 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let cXY = compare (abs info.DX) (abs info.DY)
         if cXY >= 0  then x.BlitToXY(y, lerp)
         else x.BlitToYX(y, lerp)
+    member x.Item
+        with get(c0 : V2l) : 'a = 
+            let i = V2l.Dot(x.Delta, c0)
+            NativePtr.read (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i)))
+        and set (c0 : V2l) (value : 'a) =
+            let i = V2l.Dot(x.Delta, c0)
+            NativePtr.write (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i))) value
+    member x.Item
+        with get(c0 : V2i) : 'a = 
+            let i = V2l.Dot(x.Delta, V2l(c0))
+            NativePtr.read (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i)))
+        and set (c0 : V2i) (value : 'a) =
+            let i = V2l.Dot(x.Delta, V2l(c0))
+            NativePtr.write (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i))) value
+    member x.Item
+        with get(c0 : int, c1 : int) : 'a = 
+            let i = V2l.Dot(x.Delta, V2l(c0, c1))
+            NativePtr.read (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i)))
+        and set (c0 : int, c1 : int) (value : 'a) =
+            let i = V2l.Dot(x.Delta, V2l(c0, c1))
+            NativePtr.write (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i))) value
+    member x.Item
+        with get(c0 : int64, c1 : int64) : 'a = 
+            let i = V2l.Dot(x.Delta, V2l(c0, c1))
+            NativePtr.read (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i)))
+        and set (c0 : int64, c1 : int64) (value : 'a) =
+            let i = V2l.Dot(x.Delta, V2l(c0, c1))
+            NativePtr.write (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i))) value
     member inline private x.CopyToXY(y : NativeMatrix<'a>) = 
         let sa = nativeint (sizeof<'a>)
         let mutable xptr = ptr |> NativePtr.toNativeInt
@@ -1179,8 +1229,18 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
 
 /// The NativeMatrix module providers convenient F#-style functions for accessing NativeMatrixs
 module NativeMatrix =
+    let inline private lerpy< ^a, ^b when (^a or ^b) : (static member Lerp : float * ^b * ^b -> ^b)> (_ : ^a) (t : float) (a : ^b) (b : ^b) =
+        ((^a or ^b) : (static member Lerp : float * ^b * ^b -> ^b) (t, a,b))
+    let inline private lerper t a b = lerpy (Unchecked.defaultof<Fun>) t a b
     /// sets the entire Matrix to the given value
     let inline set (value : 'a) (dst : NativeMatrix<'a>) = dst.Set(value)
+    
+    /// sets each entry to the value computed by getValue
+    let inline setByCoord (getValue : V2l -> 'a) (m : NativeMatrix<'a>) = m.SetByCoord(getValue)
+    
+    let inline sample (location : V2d) (m : NativeMatrix<'a>) = m.SampleLinear(location, lerper)
+    
+    let inline blit (src : NativeMatrix<'a>) (dst : NativeMatrix<'a>) = src.BlitTo(dst, lerper)
     
     /// copies the content of 'src' to 'dst'
     let inline copy (src : NativeMatrix<'a>) (dst : NativeMatrix<'a>) = src.CopyTo(dst)
@@ -1869,7 +1929,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         elif cXY >= 0  && cXZ >= 0  && cYZ <= 0 then x.SetByCoordXZY(value)
         elif cXY >= 0  && cXZ <= 0 && cYZ <= 0 then x.SetByCoordZXY(value)
         else x.SetByCoordZYX(value)
-    member private x.BlitToInternalXYZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -1945,7 +2005,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXYZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2010,7 +2070,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXYEZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYEZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2075,7 +2135,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXYEZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYEZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2133,7 +2193,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXEYZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2199,7 +2259,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEYZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2258,7 +2318,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEYEZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYEZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2317,7 +2377,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEYEZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYEZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2371,7 +2431,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToXYZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToXYZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SX = y.SX && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXEYEZE(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEYEZ(y, lerp)
@@ -2381,7 +2441,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         elif x.SY = y.SY then x.BlitToInternalXYEZ(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalXYZE(y, lerp)
         else x.BlitToInternalXYZ(y, lerp)
-    member private x.BlitToInternalYXZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2457,7 +2517,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYXZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2522,7 +2582,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYXEZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXEZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2587,7 +2647,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYXEZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXEZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2645,7 +2705,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYEXZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2711,7 +2771,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEXZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2770,7 +2830,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEXEZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXEZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2829,7 +2889,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEXEZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXEZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2883,7 +2943,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToYXZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToYXZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SY = y.SY && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYEXEZE(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEXEZ(y, lerp)
@@ -2893,7 +2953,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         elif x.SX = y.SX then x.BlitToInternalYXEZ(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalYXZE(y, lerp)
         else x.BlitToInternalYXZ(y, lerp)
-    member private x.BlitToInternalYZX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2969,7 +3029,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYZXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3034,7 +3094,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYZEX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZEX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3099,7 +3159,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYZEXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZEXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3157,7 +3217,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYEZX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3223,7 +3283,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEZXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3282,7 +3342,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEZEX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZEX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3341,7 +3401,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEZEXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZEXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3395,7 +3455,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToYZX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToYZX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SY = y.SY && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYEZEXE(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalYEZEX(y, lerp)
@@ -3405,7 +3465,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         elif x.SZ = y.SZ then x.BlitToInternalYZEX(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalYZXE(y, lerp)
         else x.BlitToInternalYZX(y, lerp)
-    member private x.BlitToInternalXZY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3481,7 +3541,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXZYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3546,7 +3606,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXZEY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZEY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3611,7 +3671,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXZEYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZEYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3669,7 +3729,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXEZY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3735,7 +3795,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEZYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3794,7 +3854,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEZEY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZEY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3853,7 +3913,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEZEYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZEYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3907,7 +3967,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToXZY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToXZY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SX = y.SX && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXEZEYE(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalXEZEY(y, lerp)
@@ -3917,7 +3977,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         elif x.SZ = y.SZ then x.BlitToInternalXZEY(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalXZYE(y, lerp)
         else x.BlitToInternalXZY(y, lerp)
-    member private x.BlitToInternalZXY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3993,7 +4053,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZXYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4058,7 +4118,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZXEY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXEY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4123,7 +4183,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZXEYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXEYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4181,7 +4241,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZEXY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4247,7 +4307,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEXYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4306,7 +4366,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEXEY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXEY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4365,7 +4425,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEXEYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXEYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4419,7 +4479,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToZXY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToZXY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SZ = y.SZ && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZEXEYE(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalZEXEY(y, lerp)
@@ -4429,7 +4489,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         elif x.SX = y.SX then x.BlitToInternalZXEY(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalZXYE(y, lerp)
         else x.BlitToInternalZXY(y, lerp)
-    member private x.BlitToInternalZYX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4505,7 +4565,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZYXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4570,7 +4630,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZYEX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYEX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4635,7 +4695,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZYEXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYEXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4693,7 +4753,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZEYX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4759,7 +4819,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEYXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4818,7 +4878,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEYEX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYEX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4877,7 +4937,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEYEXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYEXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4931,7 +4991,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToZYX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToZYX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SZ = y.SZ && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZEYEXE(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalZEYEX(y, lerp)
@@ -4951,6 +5011,34 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         elif cXY >= 0  && cXZ >= 0  && cYZ <= 0 then x.BlitToXZY(y, lerp)
         elif cXY >= 0  && cXZ <= 0 && cYZ <= 0 then x.BlitToZXY(y, lerp)
         else x.BlitToZYX(y, lerp)
+    member x.Item
+        with get(c0 : V3l) : 'a = 
+            let i = V3l.Dot(x.Delta, c0)
+            NativePtr.read (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i)))
+        and set (c0 : V3l) (value : 'a) =
+            let i = V3l.Dot(x.Delta, c0)
+            NativePtr.write (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i))) value
+    member x.Item
+        with get(c0 : V3i) : 'a = 
+            let i = V3l.Dot(x.Delta, V3l(c0))
+            NativePtr.read (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i)))
+        and set (c0 : V3i) (value : 'a) =
+            let i = V3l.Dot(x.Delta, V3l(c0))
+            NativePtr.write (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i))) value
+    member x.Item
+        with get(c0 : int, c1 : int, c2 : int) : 'a = 
+            let i = V3l.Dot(x.Delta, V3l(c0, c1, c2))
+            NativePtr.read (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i)))
+        and set (c0 : int, c1 : int, c2 : int) (value : 'a) =
+            let i = V3l.Dot(x.Delta, V3l(c0, c1, c2))
+            NativePtr.write (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i))) value
+    member x.Item
+        with get(c0 : int64, c1 : int64, c2 : int64) : 'a = 
+            let i = V3l.Dot(x.Delta, V3l(c0, c1, c2))
+            NativePtr.read (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i)))
+        and set (c0 : int64, c1 : int64, c2 : int64) (value : 'a) =
+            let i = V3l.Dot(x.Delta, V3l(c0, c1, c2))
+            NativePtr.write (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i))) value
     member inline private x.CopyToXYZ(y : NativeVolume<'a>) = 
         let sa = nativeint (sizeof<'a>)
         let mutable xptr = ptr |> NativePtr.toNativeInt
@@ -5971,8 +6059,18 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
 
 /// The NativeVolume module providers convenient F#-style functions for accessing NativeVolumes
 module NativeVolume =
+    let inline private lerpy< ^a, ^b when (^a or ^b) : (static member Lerp : float * ^b * ^b -> ^b)> (_ : ^a) (t : float) (a : ^b) (b : ^b) =
+        ((^a or ^b) : (static member Lerp : float * ^b * ^b -> ^b) (t, a,b))
+    let inline private lerper t a b = lerpy (Unchecked.defaultof<Fun>) t a b
     /// sets the entire Volume to the given value
     let inline set (value : 'a) (dst : NativeVolume<'a>) = dst.Set(value)
+    
+    /// sets each entry to the value computed by getValue
+    let inline setByCoord (getValue : V3l -> 'a) (m : NativeVolume<'a>) = m.SetByCoord(getValue)
+    
+    let inline sample (location : V3d) (m : NativeVolume<'a>) = m.SampleLinear(location, lerper)
+    
+    let inline blit (src : NativeVolume<'a>) (dst : NativeVolume<'a>) = src.BlitTo(dst, lerper)
     
     /// copies the content of 'src' to 'dst'
     let inline copy (src : NativeVolume<'a>) (dst : NativeVolume<'a>) = src.CopyTo(dst)
@@ -9243,7 +9341,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif cXW <= 0 && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.SetByCoordWXZY(value)
         elif cXW <= 0 && cXY >= 0  && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.SetByCoordWZXY(value)
         else x.SetByCoordWZYX(value)
-    member private x.BlitToInternalXYZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -9351,7 +9449,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXYZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -9440,7 +9538,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXYZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -9529,7 +9627,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXYZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -9607,7 +9705,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXYEZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYEZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -9696,7 +9794,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXYEZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYEZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -9774,7 +9872,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXYEZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYEZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -9852,7 +9950,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXYEZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYEZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -9923,7 +10021,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXEYZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10013,7 +10111,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEYZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10092,7 +10190,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEYZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10171,7 +10269,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEYZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10243,7 +10341,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEYEZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYEZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10322,7 +10420,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEYEZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYEZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10394,7 +10492,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEYEZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYEZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10466,7 +10564,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEYEZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYEZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10533,7 +10631,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToXYZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToXYZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SX = y.SX && x.SY = y.SY && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalXEYEZEWE(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXEYEZEW(y, lerp)
@@ -10551,7 +10649,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SZ = y.SZ then x.BlitToInternalXYZEW(y, lerp)
         elif x.SW = y.SW then x.BlitToInternalXYZWE(y, lerp)
         else x.BlitToInternalXYZW(y, lerp)
-    member private x.BlitToInternalYXZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10659,7 +10757,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYXZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10748,7 +10846,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYXZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10837,7 +10935,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYXZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10915,7 +11013,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYXEZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXEZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11004,7 +11102,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYXEZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXEZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11082,7 +11180,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYXEZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXEZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11160,7 +11258,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYXEZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXEZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11231,7 +11329,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYEXZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11321,7 +11419,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEXZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11400,7 +11498,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEXZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11479,7 +11577,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEXZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11551,7 +11649,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEXEZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXEZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11630,7 +11728,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEXEZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXEZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11702,7 +11800,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEXEZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXEZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11774,7 +11872,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEXEZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXEZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11841,7 +11939,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToYXZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToYXZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SY = y.SY && x.SX = y.SX && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalYEXEZEWE(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYEXEZEW(y, lerp)
@@ -11859,7 +11957,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SZ = y.SZ then x.BlitToInternalYXZEW(y, lerp)
         elif x.SW = y.SW then x.BlitToInternalYXZWE(y, lerp)
         else x.BlitToInternalYXZW(y, lerp)
-    member private x.BlitToInternalYZXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11967,7 +12065,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYZXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12056,7 +12154,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYZXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12145,7 +12243,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYZXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12223,7 +12321,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYZEXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZEXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12312,7 +12410,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYZEXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZEXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12390,7 +12488,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYZEXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZEXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12468,7 +12566,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYZEXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZEXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12539,7 +12637,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYEZXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12629,7 +12727,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEZXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12708,7 +12806,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEZXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12787,7 +12885,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEZXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12859,7 +12957,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEZEXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZEXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12938,7 +13036,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEZEXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZEXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13010,7 +13108,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEZEXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZEXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13082,7 +13180,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEZEXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZEXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13149,7 +13247,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToYZXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToYZXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SY = y.SY && x.SZ = y.SZ && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalYEZEXEWE(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYEZEXEW(y, lerp)
@@ -13167,7 +13265,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SX = y.SX then x.BlitToInternalYZXEW(y, lerp)
         elif x.SW = y.SW then x.BlitToInternalYZXWE(y, lerp)
         else x.BlitToInternalYZXW(y, lerp)
-    member private x.BlitToInternalYZWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13275,7 +13373,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYZWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13364,7 +13462,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYZWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13453,7 +13551,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYZWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13531,7 +13629,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYZEWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZEWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13620,7 +13718,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYZEWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZEWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13698,7 +13796,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYZEWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZEWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13776,7 +13874,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYZEWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZEWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13847,7 +13945,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYEZWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13937,7 +14035,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEZWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14016,7 +14114,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEZWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14095,7 +14193,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEZWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14167,7 +14265,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEZEWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZEWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14246,7 +14344,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEZEWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZEWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14318,7 +14416,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEZEWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZEWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14390,7 +14488,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEZEWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZEWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14457,7 +14555,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToYZWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToYZWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SY = y.SY && x.SZ = y.SZ && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalYEZEWEXE(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalYEZEWEX(y, lerp)
@@ -14475,7 +14573,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SW = y.SW then x.BlitToInternalYZWEX(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalYZWXE(y, lerp)
         else x.BlitToInternalYZWX(y, lerp)
-    member private x.BlitToInternalXZYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14583,7 +14681,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXZYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14672,7 +14770,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXZYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14761,7 +14859,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXZYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14839,7 +14937,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXZEYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZEYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14928,7 +15026,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXZEYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZEYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15006,7 +15104,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXZEYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZEYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15084,7 +15182,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXZEYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZEYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15155,7 +15253,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXEZYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15245,7 +15343,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEZYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15324,7 +15422,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEZYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15403,7 +15501,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEZYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15475,7 +15573,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEZEYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZEYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15554,7 +15652,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEZEYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZEYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15626,7 +15724,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEZEYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZEYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15698,7 +15796,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEZEYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZEYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15765,7 +15863,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToXZYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToXZYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SX = y.SX && x.SZ = y.SZ && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalXEZEYEWE(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXEZEYEW(y, lerp)
@@ -15783,7 +15881,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SY = y.SY then x.BlitToInternalXZYEW(y, lerp)
         elif x.SW = y.SW then x.BlitToInternalXZYWE(y, lerp)
         else x.BlitToInternalXZYW(y, lerp)
-    member private x.BlitToInternalZXYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15891,7 +15989,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZXYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15980,7 +16078,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZXYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16069,7 +16167,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZXYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16147,7 +16245,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZXEYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXEYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16236,7 +16334,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZXEYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXEYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16314,7 +16412,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZXEYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXEYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16392,7 +16490,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZXEYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXEYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16463,7 +16561,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZEXYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16553,7 +16651,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEXYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16632,7 +16730,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEXYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16711,7 +16809,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEXYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16783,7 +16881,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEXEYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXEYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16862,7 +16960,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEXEYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXEYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16934,7 +17032,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEXEYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXEYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17006,7 +17104,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEXEYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXEYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17073,7 +17171,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToZXYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToZXYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SZ = y.SZ && x.SX = y.SX && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalZEXEYEWE(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZEXEYEW(y, lerp)
@@ -17091,7 +17189,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SY = y.SY then x.BlitToInternalZXYEW(y, lerp)
         elif x.SW = y.SW then x.BlitToInternalZXYWE(y, lerp)
         else x.BlitToInternalZXYW(y, lerp)
-    member private x.BlitToInternalZYXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17199,7 +17297,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZYXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17288,7 +17386,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZYXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17377,7 +17475,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZYXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17455,7 +17553,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZYEXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYEXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17544,7 +17642,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZYEXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYEXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17622,7 +17720,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZYEXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYEXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17700,7 +17798,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZYEXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYEXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17771,7 +17869,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZEYXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17861,7 +17959,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEYXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17940,7 +18038,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEYXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18019,7 +18117,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEYXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18091,7 +18189,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEYEXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYEXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18170,7 +18268,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEYEXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYEXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18242,7 +18340,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEYEXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYEXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18314,7 +18412,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEYEXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYEXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18381,7 +18479,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToZYXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToZYXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SZ = y.SZ && x.SY = y.SY && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalZEYEXEWE(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZEYEXEW(y, lerp)
@@ -18399,7 +18497,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SX = y.SX then x.BlitToInternalZYXEW(y, lerp)
         elif x.SW = y.SW then x.BlitToInternalZYXWE(y, lerp)
         else x.BlitToInternalZYXW(y, lerp)
-    member private x.BlitToInternalZYWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18507,7 +18605,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZYWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18596,7 +18694,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZYWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18685,7 +18783,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZYWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18763,7 +18861,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZYEWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYEWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18852,7 +18950,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZYEWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYEWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18930,7 +19028,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZYEWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYEWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19008,7 +19106,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZYEWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYEWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19079,7 +19177,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZEYWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19169,7 +19267,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEYWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19248,7 +19346,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEYWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19327,7 +19425,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEYWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19399,7 +19497,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEYEWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYEWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19478,7 +19576,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEYEWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYEWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19550,7 +19648,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEYEWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYEWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19622,7 +19720,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEYEWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYEWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19689,7 +19787,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToZYWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToZYWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SZ = y.SZ && x.SY = y.SY && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalZEYEWEXE(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalZEYEWEX(y, lerp)
@@ -19707,7 +19805,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SW = y.SW then x.BlitToInternalZYWEX(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalZYWXE(y, lerp)
         else x.BlitToInternalZYWX(y, lerp)
-    member private x.BlitToInternalXZWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19815,7 +19913,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXZWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19904,7 +20002,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXZWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19993,7 +20091,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXZWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20071,7 +20169,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXZEWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZEWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20160,7 +20258,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXZEWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZEWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20238,7 +20336,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXZEWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZEWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20316,7 +20414,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXZEWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZEWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20387,7 +20485,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXEZWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20477,7 +20575,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEZWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20556,7 +20654,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEZWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20635,7 +20733,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEZWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20707,7 +20805,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEZEWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZEWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20786,7 +20884,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEZEWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZEWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20858,7 +20956,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEZEWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZEWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20930,7 +21028,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEZEWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZEWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20997,7 +21095,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToXZWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToXZWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SX = y.SX && x.SZ = y.SZ && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalXEZEWEYE(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalXEZEWEY(y, lerp)
@@ -21015,7 +21113,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SW = y.SW then x.BlitToInternalXZWEY(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalXZWYE(y, lerp)
         else x.BlitToInternalXZWY(y, lerp)
-    member private x.BlitToInternalZXWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21123,7 +21221,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZXWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21212,7 +21310,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZXWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21301,7 +21399,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZXWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21379,7 +21477,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZXEWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXEWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21468,7 +21566,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZXEWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXEWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21546,7 +21644,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZXEWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXEWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21624,7 +21722,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZXEWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXEWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21695,7 +21793,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZEXWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21785,7 +21883,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEXWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21864,7 +21962,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEXWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21943,7 +22041,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEXWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22015,7 +22113,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEXEWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXEWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22094,7 +22192,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEXEWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXEWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22166,7 +22264,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEXEWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXEWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22238,7 +22336,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEXEWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXEWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22305,7 +22403,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToZXWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToZXWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SZ = y.SZ && x.SX = y.SX && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalZEXEWEYE(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalZEXEWEY(y, lerp)
@@ -22323,7 +22421,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SW = y.SW then x.BlitToInternalZXWEY(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalZXWYE(y, lerp)
         else x.BlitToInternalZXWY(y, lerp)
-    member private x.BlitToInternalZWXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22431,7 +22529,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZWXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22520,7 +22618,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZWXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22609,7 +22707,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZWXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22687,7 +22785,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZWEXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWEXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22776,7 +22874,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZWEXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWEXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22854,7 +22952,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZWEXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWEXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22932,7 +23030,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZWEXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWEXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23003,7 +23101,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZEWXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23093,7 +23191,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEWXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23172,7 +23270,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEWXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23251,7 +23349,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEWXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23323,7 +23421,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEWEXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWEXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23402,7 +23500,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEWEXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWEXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23474,7 +23572,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEWEXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWEXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23546,7 +23644,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEWEXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWEXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23613,7 +23711,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToZWXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToZWXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SZ = y.SZ && x.SW = y.SW && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZEWEXEYE(y, lerp)
         elif x.SZ = y.SZ && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalZEWEXEY(y, lerp)
@@ -23631,7 +23729,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SX = y.SX then x.BlitToInternalZWXEY(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalZWXYE(y, lerp)
         else x.BlitToInternalZWXY(y, lerp)
-    member private x.BlitToInternalZWYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23739,7 +23837,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZWYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23828,7 +23926,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZWYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23917,7 +24015,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZWYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23995,7 +24093,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZWEYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWEYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24084,7 +24182,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZWEYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWEYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24162,7 +24260,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZWEYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWEYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24240,7 +24338,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZWEYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWEYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24311,7 +24409,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member private x.BlitToInternalZEWYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24401,7 +24499,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEWYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24480,7 +24578,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEWYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24559,7 +24657,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEWYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24631,7 +24729,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEWEYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWEYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24710,7 +24808,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEWEYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWEYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24782,7 +24880,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEWEYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWEYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24854,7 +24952,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToInternalZEWEYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWEYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24921,7 +25019,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member private x.BlitToZWYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToZWYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SZ = y.SZ && x.SW = y.SW && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZEWEYEXE(y, lerp)
         elif x.SZ = y.SZ && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalZEWEYEX(y, lerp)
@@ -24939,7 +25037,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SY = y.SY then x.BlitToInternalZWYEX(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalZWYXE(y, lerp)
         else x.BlitToInternalZWYX(y, lerp)
-    member private x.BlitToInternalXYWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25047,7 +25145,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXYWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25136,7 +25234,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXYWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25225,7 +25323,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXYWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25303,7 +25401,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXYEWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYEWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25392,7 +25490,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXYEWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYEWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25470,7 +25568,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXYEWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYEWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25548,7 +25646,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXYEWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYEWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25619,7 +25717,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXEYWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25709,7 +25807,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEYWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25788,7 +25886,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEYWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25867,7 +25965,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEYWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25939,7 +26037,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEYEWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYEWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26018,7 +26116,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEYEWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYEWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26090,7 +26188,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEYEWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYEWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26162,7 +26260,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEYEWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYEWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26229,7 +26327,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToXYWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToXYWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SX = y.SX && x.SY = y.SY && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalXEYEWEZE(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalXEYEWEZ(y, lerp)
@@ -26247,7 +26345,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SW = y.SW then x.BlitToInternalXYWEZ(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalXYWZE(y, lerp)
         else x.BlitToInternalXYWZ(y, lerp)
-    member private x.BlitToInternalYXWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26355,7 +26453,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYXWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26444,7 +26542,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYXWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26533,7 +26631,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYXWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26611,7 +26709,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYXEWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXEWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26700,7 +26798,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYXEWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXEWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26778,7 +26876,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYXEWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXEWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26856,7 +26954,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYXEWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXEWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26927,7 +27025,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYEXWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27017,7 +27115,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEXWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27096,7 +27194,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEXWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27175,7 +27273,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEXWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27247,7 +27345,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEXEWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXEWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27326,7 +27424,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEXEWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXEWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27398,7 +27496,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEXEWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXEWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27470,7 +27568,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEXEWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXEWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27537,7 +27635,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToYXWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToYXWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SY = y.SY && x.SX = y.SX && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalYEXEWEZE(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalYEXEWEZ(y, lerp)
@@ -27555,7 +27653,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SW = y.SW then x.BlitToInternalYXWEZ(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalYXWZE(y, lerp)
         else x.BlitToInternalYXWZ(y, lerp)
-    member private x.BlitToInternalYWXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27663,7 +27761,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYWXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27752,7 +27850,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYWXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27841,7 +27939,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYWXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27919,7 +28017,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYWEXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWEXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28008,7 +28106,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYWEXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWEXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28086,7 +28184,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYWEXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWEXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28164,7 +28262,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYWEXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWEXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28235,7 +28333,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYEWXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28325,7 +28423,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEWXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28404,7 +28502,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEWXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28483,7 +28581,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEWXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28555,7 +28653,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEWEXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWEXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28634,7 +28732,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEWEXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWEXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28706,7 +28804,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEWEXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWEXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28778,7 +28876,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEWEXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWEXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28845,7 +28943,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToYWXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToYWXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SY = y.SY && x.SW = y.SW && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYEWEXEZE(y, lerp)
         elif x.SY = y.SY && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalYEWEXEZ(y, lerp)
@@ -28863,7 +28961,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SX = y.SX then x.BlitToInternalYWXEZ(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalYWXZE(y, lerp)
         else x.BlitToInternalYWXZ(y, lerp)
-    member private x.BlitToInternalYWZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28971,7 +29069,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYWZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29060,7 +29158,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYWZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29149,7 +29247,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYWZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29227,7 +29325,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYWEZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWEZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29316,7 +29414,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYWEZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWEZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29394,7 +29492,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYWEZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWEZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29472,7 +29570,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYWEZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWEZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29543,7 +29641,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member private x.BlitToInternalYEWZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29633,7 +29731,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEWZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29712,7 +29810,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEWZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29791,7 +29889,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEWZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29863,7 +29961,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEWEZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWEZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29942,7 +30040,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEWEZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWEZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30014,7 +30112,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEWEZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWEZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30086,7 +30184,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToInternalYEWEZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWEZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30153,7 +30251,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member private x.BlitToYWZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToYWZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SY = y.SY && x.SW = y.SW && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYEWEZEXE(y, lerp)
         elif x.SY = y.SY && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalYEWEZEX(y, lerp)
@@ -30171,7 +30269,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SZ = y.SZ then x.BlitToInternalYWZEX(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalYWZXE(y, lerp)
         else x.BlitToInternalYWZX(y, lerp)
-    member private x.BlitToInternalXWYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30279,7 +30377,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXWYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30368,7 +30466,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXWYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30457,7 +30555,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXWYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30535,7 +30633,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXWEYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWEYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30624,7 +30722,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXWEYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWEYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30702,7 +30800,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXWEYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWEYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30780,7 +30878,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXWEYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWEYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30851,7 +30949,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXEWYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30941,7 +31039,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEWYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31020,7 +31118,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEWYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31099,7 +31197,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEWYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31171,7 +31269,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEWEYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWEYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31250,7 +31348,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEWEYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWEYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31322,7 +31420,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEWEYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWEYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31394,7 +31492,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEWEYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWEYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31461,7 +31559,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToXWYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToXWYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SX = y.SX && x.SW = y.SW && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXEWEYEZE(y, lerp)
         elif x.SX = y.SX && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalXEWEYEZ(y, lerp)
@@ -31479,7 +31577,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SY = y.SY then x.BlitToInternalXWYEZ(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalXWYZE(y, lerp)
         else x.BlitToInternalXWYZ(y, lerp)
-    member private x.BlitToInternalWXYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31587,7 +31685,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWXYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31676,7 +31774,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWXYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31765,7 +31863,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWXYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31843,7 +31941,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWXEYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXEYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31932,7 +32030,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWXEYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXEYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32010,7 +32108,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWXEYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXEYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32088,7 +32186,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWXEYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXEYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32159,7 +32257,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWEXYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32249,7 +32347,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEXYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32328,7 +32426,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEXYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32407,7 +32505,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEXYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32479,7 +32577,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEXEYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXEYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32558,7 +32656,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEXEYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXEYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32630,7 +32728,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEXEYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXEYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32702,7 +32800,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEXEYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXEYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32769,7 +32867,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToWXYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToWXYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SW = y.SW && x.SX = y.SX && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalWEXEYEZE(y, lerp)
         elif x.SW = y.SW && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalWEXEYEZ(y, lerp)
@@ -32787,7 +32885,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SY = y.SY then x.BlitToInternalWXYEZ(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalWXYZE(y, lerp)
         else x.BlitToInternalWXYZ(y, lerp)
-    member private x.BlitToInternalWYXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32895,7 +32993,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWYXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32984,7 +33082,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWYXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33073,7 +33171,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWYXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33151,7 +33249,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWYEXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYEXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33240,7 +33338,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWYEXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYEXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33318,7 +33416,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWYEXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYEXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33396,7 +33494,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWYEXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYEXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33467,7 +33565,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWEYXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33557,7 +33655,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEYXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33636,7 +33734,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEYXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33715,7 +33813,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEYXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33787,7 +33885,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEYEXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYEXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33866,7 +33964,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEYEXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYEXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33938,7 +34036,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEYEXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYEXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34010,7 +34108,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEYEXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYEXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34077,7 +34175,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToWYXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToWYXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SW = y.SW && x.SY = y.SY && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalWEYEXEZE(y, lerp)
         elif x.SW = y.SW && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalWEYEXEZ(y, lerp)
@@ -34095,7 +34193,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SX = y.SX then x.BlitToInternalWYXEZ(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalWYXZE(y, lerp)
         else x.BlitToInternalWYXZ(y, lerp)
-    member private x.BlitToInternalWYZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34203,7 +34301,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWYZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34292,7 +34390,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWYZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34381,7 +34479,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWYZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34459,7 +34557,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWYEZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYEZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34548,7 +34646,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWYEZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYEZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34626,7 +34724,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWYEZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYEZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34704,7 +34802,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWYEZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYEZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34775,7 +34873,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWEYZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34865,7 +34963,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEYZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34944,7 +35042,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEYZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35023,7 +35121,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEYZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35095,7 +35193,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEYEZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYEZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35174,7 +35272,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEYEZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYEZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35246,7 +35344,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEYEZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYEZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35318,7 +35416,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEYEZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYEZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35385,7 +35483,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToWYZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToWYZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SW = y.SW && x.SY = y.SY && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalWEYEZEXE(y, lerp)
         elif x.SW = y.SW && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalWEYEZEX(y, lerp)
@@ -35403,7 +35501,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SZ = y.SZ then x.BlitToInternalWYZEX(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalWYZXE(y, lerp)
         else x.BlitToInternalWYZX(y, lerp)
-    member private x.BlitToInternalXWZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35511,7 +35609,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXWZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35600,7 +35698,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXWZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35689,7 +35787,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXWZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35767,7 +35865,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXWEZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWEZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35856,7 +35954,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXWEZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWEZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35934,7 +36032,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXWEZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWEZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36012,7 +36110,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXWEZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWEZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36083,7 +36181,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member private x.BlitToInternalXEWZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36173,7 +36271,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEWZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36252,7 +36350,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEWZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36331,7 +36429,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEWZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36403,7 +36501,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEWEZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWEZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36482,7 +36580,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEWEZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWEZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36554,7 +36652,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEWEZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWEZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36626,7 +36724,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToInternalXEWEZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWEZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36693,7 +36791,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member private x.BlitToXWZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToXWZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SX = y.SX && x.SW = y.SW && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXEWEZEYE(y, lerp)
         elif x.SX = y.SX && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalXEWEZEY(y, lerp)
@@ -36711,7 +36809,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SZ = y.SZ then x.BlitToInternalXWZEY(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalXWZYE(y, lerp)
         else x.BlitToInternalXWZY(y, lerp)
-    member private x.BlitToInternalWXZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36819,7 +36917,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWXZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36908,7 +37006,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWXZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36997,7 +37095,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWXZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37075,7 +37173,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWXEZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXEZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37164,7 +37262,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWXEZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXEZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37242,7 +37340,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWXEZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXEZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37320,7 +37418,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWXEZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXEZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37391,7 +37489,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWEXZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37481,7 +37579,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEXZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37560,7 +37658,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEXZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37639,7 +37737,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEXZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37711,7 +37809,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEXEZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXEZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37790,7 +37888,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEXEZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXEZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37862,7 +37960,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEXEZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXEZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37934,7 +38032,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEXEZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXEZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38001,7 +38099,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToWXZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToWXZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SW = y.SW && x.SX = y.SX && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalWEXEZEYE(y, lerp)
         elif x.SW = y.SW && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalWEXEZEY(y, lerp)
@@ -38019,7 +38117,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SZ = y.SZ then x.BlitToInternalWXZEY(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalWXZYE(y, lerp)
         else x.BlitToInternalWXZY(y, lerp)
-    member private x.BlitToInternalWZXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38127,7 +38225,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWZXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38216,7 +38314,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWZXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38305,7 +38403,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWZXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38383,7 +38481,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWZEXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZEXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38472,7 +38570,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWZEXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZEXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38550,7 +38648,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWZEXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZEXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38628,7 +38726,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWZEXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZEXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38699,7 +38797,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWEZXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38789,7 +38887,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEZXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38868,7 +38966,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEZXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38947,7 +39045,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEZXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39019,7 +39117,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEZEXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZEXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39098,7 +39196,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEZEXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZEXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39170,7 +39268,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEZEXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZEXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39242,7 +39340,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEZEXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZEXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39309,7 +39407,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToWZXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToWZXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SW = y.SW && x.SZ = y.SZ && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalWEZEXEYE(y, lerp)
         elif x.SW = y.SW && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalWEZEXEY(y, lerp)
@@ -39327,7 +39425,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif x.SX = y.SX then x.BlitToInternalWZXEY(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalWZXYE(y, lerp)
         else x.BlitToInternalWZXY(y, lerp)
-    member private x.BlitToInternalWZYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39435,7 +39533,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWZYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39524,7 +39622,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWZYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39613,7 +39711,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWZYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39691,7 +39789,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWZEYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZEYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39780,7 +39878,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWZEYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZEYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39858,7 +39956,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWZEYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZEYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39936,7 +40034,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWZEYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZEYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -40007,7 +40105,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member private x.BlitToInternalWEZYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -40097,7 +40195,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEZYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -40176,7 +40274,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEZYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -40255,7 +40353,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEZYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -40327,7 +40425,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEZEYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZEYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -40406,7 +40504,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEZEYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZEYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -40478,7 +40576,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEZEYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZEYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -40550,7 +40648,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToInternalWEZEYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZEYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -40617,7 +40715,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member private x.BlitToWZYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToWZYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SW = y.SW && x.SZ = y.SZ && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalWEZEYEXE(y, lerp)
         elif x.SW = y.SW && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalWEZEYEX(y, lerp)
@@ -40666,6 +40764,34 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif cXW <= 0 && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.BlitToWXZY(y, lerp)
         elif cXW <= 0 && cXY >= 0  && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.BlitToWZXY(y, lerp)
         else x.BlitToWZYX(y, lerp)
+    member x.Item
+        with get(c0 : V4l) : 'a = 
+            let i = V4l.Dot(x.Delta, c0)
+            NativePtr.read (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i)))
+        and set (c0 : V4l) (value : 'a) =
+            let i = V4l.Dot(x.Delta, c0)
+            NativePtr.write (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i))) value
+    member x.Item
+        with get(c0 : V4i) : 'a = 
+            let i = V4l.Dot(x.Delta, V4l(c0))
+            NativePtr.read (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i)))
+        and set (c0 : V4i) (value : 'a) =
+            let i = V4l.Dot(x.Delta, V4l(c0))
+            NativePtr.write (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i))) value
+    member x.Item
+        with get(c0 : int, c1 : int, c2 : int, c3 : int) : 'a = 
+            let i = V4l.Dot(x.Delta, V4l(c0, c1, c2, c3))
+            NativePtr.read (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i)))
+        and set (c0 : int, c1 : int, c2 : int, c3 : int) (value : 'a) =
+            let i = V4l.Dot(x.Delta, V4l(c0, c1, c2, c3))
+            NativePtr.write (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i))) value
+    member x.Item
+        with get(c0 : int64, c1 : int64, c2 : int64, c3 : int64) : 'a = 
+            let i = V4l.Dot(x.Delta, V4l(c0, c1, c2, c3))
+            NativePtr.read (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i)))
+        and set (c0 : int64, c1 : int64, c2 : int64, c3 : int64) (value : 'a) =
+            let i = V4l.Dot(x.Delta, V4l(c0, c1, c2, c3))
+            NativePtr.write (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i))) value
     member inline private x.CopyToXYZW(y : NativeTensor4<'a>) = 
         let sa = nativeint (sizeof<'a>)
         let mutable xptr = ptr |> NativePtr.toNativeInt
@@ -44013,8 +44139,18 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
 
 /// The NativeTensor4 module providers convenient F#-style functions for accessing NativeTensor4s
 module NativeTensor4 =
+    let inline private lerpy< ^a, ^b when (^a or ^b) : (static member Lerp : float * ^b * ^b -> ^b)> (_ : ^a) (t : float) (a : ^b) (b : ^b) =
+        ((^a or ^b) : (static member Lerp : float * ^b * ^b -> ^b) (t, a,b))
+    let inline private lerper t a b = lerpy (Unchecked.defaultof<Fun>) t a b
     /// sets the entire Tensor4 to the given value
     let inline set (value : 'a) (dst : NativeTensor4<'a>) = dst.Set(value)
+    
+    /// sets each entry to the value computed by getValue
+    let inline setByCoord (getValue : V4l -> 'a) (m : NativeTensor4<'a>) = m.SetByCoord(getValue)
+    
+    let inline sample (location : V4d) (m : NativeTensor4<'a>) = m.SampleLinear(location, lerper)
+    
+    let inline blit (src : NativeTensor4<'a>) (dst : NativeTensor4<'a>) = src.BlitTo(dst, lerper)
     
     /// copies the content of 'src' to 'dst'
     let inline copy (src : NativeTensor4<'a>) (dst : NativeTensor4<'a>) = src.CopyTo(dst)

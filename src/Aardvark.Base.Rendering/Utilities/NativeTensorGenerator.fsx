@@ -409,7 +409,7 @@ module Generator =
             if dim = 1 then sprintf "floor(%s)" v
             else sprintf "%s.Floor" v
 
-        start "member private x.BlitToInternal%s(y : %s<'a>, lerp : float -> 'a -> 'a -> 'a) = " suffix selfType
+        start "member inline private x.BlitToInternal%s(y : %s<'a>, lerp : float -> 'a -> 'a -> 'a) = " suffix selfType
 
         line "let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)"
         line "let sa = nativeint (sizeof<'a>)"
@@ -547,7 +547,7 @@ module Generator =
             let suffix = Array.zip components d |> Array.map (fun (c,d) -> if d then c + "E" else c) |> String.concat ""
             sprintf "x.BlitToInternal%s(y, lerp)" suffix
 
-        start "member private x.BlitTo%s(y : %s<'a>, lerp : float -> 'a -> 'a -> 'a) = " suffix selfType
+        start "member inline private x.BlitTo%s(y : %s<'a>, lerp : float -> 'a -> 'a -> 'a) = " suffix selfType
 
         if dim <= 1 then
             line "if y.Size > x.Size then failwith \"[NativeTensor] upsampling not implemented\""
@@ -593,6 +593,45 @@ module Generator =
 
 
         stop()
+
+    let item (dim : int) =
+        
+        let lv, iv =
+            match Map.tryFind dim vectorNames with
+                | Some t -> t
+                | None -> "int64", "int"
+
+
+
+        let coordTypes =
+            [
+                yield [lv], "{0}"
+                yield [iv], sprintf "%s({0})" lv
+                if dim > 1 then
+                    yield (List.init dim (fun _ -> "int"), List.init dim (sprintf "{%d}") |> String.concat ", " |> sprintf "%s(%s)" lv)
+                    yield (List.init dim (fun _ -> "int64"), List.init dim (sprintf "{%d}") |> String.concat ", " |> sprintf "%s(%s)" lv)
+            ]
+
+        let idot =
+            if dim = 1 then "{0} * {1}"
+            else sprintf "%s.Dot({0}, {1})" lv
+
+        for (ct, convert) in coordTypes do
+            start "member x.Item"
+            let argDef = ct |> List.mapi (fun i t -> sprintf "c%d : %s" i t) |> String.concat ", "
+            let argRef = System.String.Format(convert, List.init dim (fun i -> sprintf "c%d" i :> obj) |> List.toArray)
+
+            start "with get(%s) : 'a = " argDef
+            line "let i = %s" (System.String.Format(idot, "x.Delta", argRef))
+            line "NativePtr.read (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i)))"
+            stop()
+
+            start "and set (%s) (value : 'a) =" argDef
+            line "let i = %s" (System.String.Format(idot, "x.Delta", argRef))
+            line "NativePtr.write (NativePtr.ofNativeInt<'a> (NativePtr.toNativeInt x.Pointer + nativeint sizeof<'a> * (nativeint x.Origin + nativeint i))) value"
+            stop()
+
+            stop()
 
 
 
@@ -911,6 +950,9 @@ module Generator =
             blitInternal (List.toArray perm)
         dispatcher id componentNames "BlitTo" ["y", sprintf "%s<'a>" name; "lerp", "float -> 'a -> 'a -> 'a"]
 
+        // Item
+        item dim
+
         // CopyTo(other)
         copyTo componentNames name "'a" [] (fun l r -> sprintf "NativePtr.write (NativePtr.ofNativeInt<'a> %s) (NativePtr.read (NativePtr.ofNativeInt<'a> %s))" r l)
         
@@ -969,10 +1011,41 @@ module Generator =
         stop()
         line ""
         
+        let lv, iv = 
+            match Map.tryFind dim vectorNames with
+                | Some t -> t
+                | None -> "int64", "int"
+
+        let dv, fv = 
+            match Map.tryFind dim floatVectorNames with
+                | Some t -> t
+                | None -> "float", "float32"
+
         line "/// The %s module providers convenient F#-style functions for accessing %ss" name name
         start "module %s =" name
+
+        start "let inline private lerpy< ^a, ^b when (^a or ^b) : (static member Lerp : float * ^b * ^b -> ^b)> (_ : ^a) (t : float) (a : ^b) (b : ^b) ="
+        line "((^a or ^b) : (static member Lerp : float * ^b * ^b -> ^b) (t, a,b))"
+        stop()
+
+        line "let inline private lerper t a b = lerpy (Unchecked.defaultof<Fun>) t a b"
+
+
+
         line "/// sets the entire %s to the given value" managedName
         line "let inline set (value : 'a) (dst : %s<'a>) = dst.Set(value)" name 
+        
+        line ""
+        line "/// sets each entry to the value computed by getValue"
+        line "let inline setByCoord (getValue : %s -> 'a) (m : %s<'a>) = m.SetByCoord(getValue)" lv name 
+        
+        if dim > 1 then
+            line ""
+            line "let inline sample (location : %s) (m : %s<'a>) = m.SampleLinear(location, lerper)" dv name 
+        
+        line ""
+        line "let inline blit (src : %s<'a>) (dst : %s<'a>) = src.BlitTo(dst, lerper)" name name 
+        
         line ""
         line "/// copies the content of 'src' to 'dst'"
         line "let inline copy (src : %s<'a>) (dst : %s<'a>) = src.CopyTo(dst)" name name 

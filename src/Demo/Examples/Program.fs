@@ -1373,11 +1373,20 @@ type NativeVolume<'a when 'a : unmanaged> with
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
 
+let inline lerpy< ^a, ^b when (^a or ^b) : (static member Lerp : float * ^b * ^b -> ^b)> (_ : ^a) (t : float) (a : ^b) (b : ^b) =
+    ((^a or ^b) : (static member Lerp : float * ^b * ^b -> ^b) (t, a,b))
+
+let inline lerper t a b = lerpy (Unchecked.defaultof<Fun>) t a b
+
+
+
+
 [<EntryPoint>]
 [<STAThread>]
 let main args =
     //Management.run()
     
+    let sepp = lerper 0.1 0.0 1.0
 
     let useVulkan = true
 
@@ -1420,13 +1429,15 @@ let main args =
         NativeVolume.using vDst (fun pDst -> 
             let lerp = lerp
 
+            let test = pSrc.[0,0,0]
+
             for i in 1 .. 2 do
-                pSrc.BlitTo(pDst, lerp)
+                NativeVolume.blit pSrc pDst
         
             let iter = 10
             let sw = System.Diagnostics.Stopwatch.StartNew()
             for i in 1 .. iter do
-                pSrc.BlitTo(pDst, lerp)
+                NativeVolume.blit pSrc pDst
             sw.Stop()
 
             Log.line "took: %A" (sw.MicroTime / iter)
