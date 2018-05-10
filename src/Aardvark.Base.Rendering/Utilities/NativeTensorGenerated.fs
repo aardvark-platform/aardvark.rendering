@@ -135,6 +135,7 @@ type NativeVector<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VectorInfo
             coord <- coord + step
             icoord <- icoord + 1L
     member private x.BlitToX(y : NativeVector<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size > x.Size then failwith "[NativeTensor] upsampling not implemented"
         if x.SX = y.SX then x.BlitToInternalXE(y, lerp)
         else x.BlitToInternalX(y, lerp)
     member x.BlitTo(y : NativeVector<'a>, lerp : float -> 'a -> 'a -> 'a) = 
@@ -622,6 +623,7 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
     member private x.BlitToXY(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEYE(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalXEY(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalXYE(y, lerp)
@@ -657,9 +659,9 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             icoord.X <- initialiCoord.X
             while py <> yeX do
                 let v00 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                let v01 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                let v10 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                let v11 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
+                let v01 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                let v10 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                let v11 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                 // lerp X
                 let vx0 = lerp.Invoke(frac.X, v00, v10)
                 let vx1 = lerp.Invoke(frac.X, v01, v11)
@@ -709,7 +711,7 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             icoord.X <- initialiCoord.X
             while py <> yeX do
                 let v00 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                let v10 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                let v10 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                 // lerp X
                 let vx0 = lerp.Invoke(frac.X, v00, v10)
                 NativePtr.write (NativePtr.ofNativeInt<'a> py) vx0
@@ -755,7 +757,7 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             icoord.X <- initialiCoord.X
             while py <> yeX do
                 let v00 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                let v01 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                let v01 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                 // lerp Y
                 let v0x = lerp.Invoke(frac.Y, v00, v01)
                 NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x
@@ -811,6 +813,7 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
     member private x.BlitToYX(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEXE(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalYEX(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalYXE(y, lerp)
@@ -2369,11 +2372,12 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
     member private x.BlitToXYZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SX = y.SX && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXEYEZE(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEYEZ(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalXEYZE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalXEYZ(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXYEZE(y, lerp)
+        elif x.SX = y.SX then x.BlitToInternalXEYZ(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalXYEZ(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalXYZE(y, lerp)
         else x.BlitToInternalXYZ(y, lerp)
@@ -2418,12 +2422,12 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 while py <> yeZ do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                     let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                    let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                    let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                    let v111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX + xdZ))
+                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                    let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                    let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                    let v111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                     // lerp X
                     let vx00 = lerp.Invoke(frac.X, v000, v100)
                     let vx01 = lerp.Invoke(frac.X, v001, v101)
@@ -2493,9 +2497,9 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.Z <- initialiCoord.Z
                 while py <> yeZ do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
+                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                     // lerp X
                     let vx00 = lerp.Invoke(frac.X, v000, v100)
                     let vx10 = lerp.Invoke(frac.X, v010, v110)
@@ -2559,8 +2563,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 while py <> yeZ do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                     let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                    let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                    let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                     // lerp X
                     let vx00 = lerp.Invoke(frac.X, v000, v100)
                     let vx01 = lerp.Invoke(frac.X, v001, v101)
@@ -2623,7 +2627,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.Z <- initialiCoord.Z
                 while py <> yeZ do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                     // lerp X
                     let vx00 = lerp.Invoke(frac.X, v000, v100)
                     NativePtr.write (NativePtr.ofNativeInt<'a> py) vx00
@@ -2683,8 +2687,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 while py <> yeZ do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                     let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                    let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                    let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                     // lerp Y
                     let v0x0 = lerp.Invoke(frac.Y, v000, v010)
                     let v0x1 = lerp.Invoke(frac.Y, v001, v011)
@@ -2748,7 +2752,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.Z <- initialiCoord.Z
                 while py <> yeZ do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                     // lerp Y
                     let v0x0 = lerp.Invoke(frac.Y, v000, v010)
                     NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x0
@@ -2880,11 +2884,12 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
     member private x.BlitToYXZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SY = y.SY && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYEXEZE(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEXEZ(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalYEXZE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalYEXZ(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYXEZE(y, lerp)
+        elif x.SY = y.SY then x.BlitToInternalYEXZ(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalYXEZ(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalYXZE(y, lerp)
         else x.BlitToInternalYXZ(y, lerp)
@@ -2928,13 +2933,13 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.X <- initialiCoord.X
                 while py <> yeX do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                    let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                    let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                    let v111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdX))
+                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                    let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                    let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                    let v111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                     // lerp X
                     let vx00 = lerp.Invoke(frac.X, v000, v100)
                     let vx01 = lerp.Invoke(frac.X, v001, v101)
@@ -3004,9 +3009,9 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.X <- initialiCoord.X
                 while py <> yeX do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                     // lerp X
                     let vx00 = lerp.Invoke(frac.X, v000, v100)
                     let vx10 = lerp.Invoke(frac.X, v010, v110)
@@ -3069,9 +3074,9 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.X <- initialiCoord.X
                 while py <> yeX do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                    let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
+                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                    let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                     // lerp X
                     let vx00 = lerp.Invoke(frac.X, v000, v100)
                     let vx01 = lerp.Invoke(frac.X, v001, v101)
@@ -3134,7 +3139,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.X <- initialiCoord.X
                 while py <> yeX do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                     // lerp X
                     let vx00 = lerp.Invoke(frac.X, v000, v100)
                     NativePtr.write (NativePtr.ofNativeInt<'a> py) vx00
@@ -3193,9 +3198,9 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.X <- initialiCoord.X
                 while py <> yeX do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                    let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
+                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                    let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                     // lerp Y
                     let v0x0 = lerp.Invoke(frac.Y, v000, v010)
                     let v0x1 = lerp.Invoke(frac.Y, v001, v011)
@@ -3259,7 +3264,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.X <- initialiCoord.X
                 while py <> yeX do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                     // lerp Y
                     let v0x0 = lerp.Invoke(frac.Y, v000, v010)
                     NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x0
@@ -3318,7 +3323,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.X <- initialiCoord.X
                 while py <> yeX do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                     // lerp Z
                     let v00x = lerp.Invoke(frac.Z, v000, v001)
                     NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x
@@ -3391,11 +3396,12 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
     member private x.BlitToYZX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SY = y.SY && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYEZEXE(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalYEZEX(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEZXE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalYEZX(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYZEXE(y, lerp)
+        elif x.SY = y.SY then x.BlitToInternalYEZX(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalYZEX(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalYZXE(y, lerp)
         else x.BlitToInternalYZX(y, lerp)
@@ -3439,13 +3445,13 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.Y <- initialiCoord.Y
                 while py <> yeY do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                    let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
+                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                    let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                     let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                    let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                    let v111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdY))
+                    let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                    let v111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                     // lerp X
                     let vx00 = lerp.Invoke(frac.X, v000, v100)
                     let vx01 = lerp.Invoke(frac.X, v001, v101)
@@ -3515,9 +3521,9 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.Y <- initialiCoord.Y
                 while py <> yeY do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                     let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                     // lerp X
                     let vx00 = lerp.Invoke(frac.X, v000, v100)
                     let vx10 = lerp.Invoke(frac.X, v010, v110)
@@ -3580,9 +3586,9 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.Y <- initialiCoord.Y
                 while py <> yeY do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                     let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                    let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                    let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                     // lerp X
                     let vx00 = lerp.Invoke(frac.X, v000, v100)
                     let vx01 = lerp.Invoke(frac.X, v001, v101)
@@ -3704,9 +3710,9 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.Y <- initialiCoord.Y
                 while py <> yeY do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                    let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
+                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                    let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                     // lerp Y
                     let v0x0 = lerp.Invoke(frac.Y, v000, v010)
                     let v0x1 = lerp.Invoke(frac.Y, v001, v011)
@@ -3770,7 +3776,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.Y <- initialiCoord.Y
                 while py <> yeY do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                     // lerp Y
                     let v0x0 = lerp.Invoke(frac.Y, v000, v010)
                     NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x0
@@ -3829,7 +3835,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.Y <- initialiCoord.Y
                 while py <> yeY do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                     // lerp Z
                     let v00x = lerp.Invoke(frac.Z, v000, v001)
                     NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x
@@ -3902,11 +3908,12 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
     member private x.BlitToXZY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SX = y.SX && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXEZEYE(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalXEZEY(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEZYE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalXEZY(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXZEYE(y, lerp)
+        elif x.SX = y.SX then x.BlitToInternalXEZY(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalXZEY(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalXZYE(y, lerp)
         else x.BlitToInternalXZY(y, lerp)
@@ -3950,13 +3957,13 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.Y <- initialiCoord.Y
                 while py <> yeY do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                    let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                    let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                    let v111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX + xdY))
+                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                    let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                    let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                    let v111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                     // lerp X
                     let vx00 = lerp.Invoke(frac.X, v000, v100)
                     let vx01 = lerp.Invoke(frac.X, v001, v101)
@@ -4026,9 +4033,9 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.Y <- initialiCoord.Y
                 while py <> yeY do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
+                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                     // lerp X
                     let vx00 = lerp.Invoke(frac.X, v000, v100)
                     let vx10 = lerp.Invoke(frac.X, v010, v110)
@@ -4091,9 +4098,9 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.Y <- initialiCoord.Y
                 while py <> yeY do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                    let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
+                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                    let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                     // lerp X
                     let vx00 = lerp.Invoke(frac.X, v000, v100)
                     let vx01 = lerp.Invoke(frac.X, v001, v101)
@@ -4156,7 +4163,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.Y <- initialiCoord.Y
                 while py <> yeY do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                     // lerp X
                     let vx00 = lerp.Invoke(frac.X, v000, v100)
                     NativePtr.write (NativePtr.ofNativeInt<'a> py) vx00
@@ -4215,9 +4222,9 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.Y <- initialiCoord.Y
                 while py <> yeY do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                    let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                    let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                     // lerp Y
                     let v0x0 = lerp.Invoke(frac.Y, v000, v010)
                     let v0x1 = lerp.Invoke(frac.Y, v001, v011)
@@ -4281,7 +4288,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.Y <- initialiCoord.Y
                 while py <> yeY do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                     // lerp Y
                     let v0x0 = lerp.Invoke(frac.Y, v000, v010)
                     NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x0
@@ -4340,7 +4347,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.Y <- initialiCoord.Y
                 while py <> yeY do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                     // lerp Z
                     let v00x = lerp.Invoke(frac.Z, v000, v001)
                     NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x
@@ -4413,11 +4420,12 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
     member private x.BlitToZXY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SZ = y.SZ && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZEXEYE(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalZEXEY(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalZEXYE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalZEXY(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZXEYE(y, lerp)
+        elif x.SZ = y.SZ then x.BlitToInternalZEXY(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalZXEY(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalZXYE(y, lerp)
         else x.BlitToInternalZXY(y, lerp)
@@ -4461,13 +4469,13 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.X <- initialiCoord.X
                 while py <> yeX do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                     let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                    let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                    let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                    let v111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY + xdX))
+                    let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                    let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                    let v111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                     // lerp X
                     let vx00 = lerp.Invoke(frac.X, v000, v100)
                     let vx01 = lerp.Invoke(frac.X, v001, v101)
@@ -4538,8 +4546,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 while py <> yeX do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                     let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
+                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                     // lerp X
                     let vx00 = lerp.Invoke(frac.X, v000, v100)
                     let vx10 = lerp.Invoke(frac.X, v010, v110)
@@ -4602,9 +4610,9 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.X <- initialiCoord.X
                 while py <> yeX do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                    let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
+                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                    let v101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                     // lerp X
                     let vx00 = lerp.Invoke(frac.X, v000, v100)
                     let vx01 = lerp.Invoke(frac.X, v001, v101)
@@ -4667,7 +4675,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.X <- initialiCoord.X
                 while py <> yeX do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                     // lerp X
                     let vx00 = lerp.Invoke(frac.X, v000, v100)
                     NativePtr.write (NativePtr.ofNativeInt<'a> py) vx00
@@ -4726,9 +4734,9 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.X <- initialiCoord.X
                 while py <> yeX do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                     let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                    let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
+                    let v011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                     // lerp Y
                     let v0x0 = lerp.Invoke(frac.Y, v000, v010)
                     let v0x1 = lerp.Invoke(frac.Y, v001, v011)
@@ -4851,7 +4859,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
                 icoord.X <- initialiCoord.X
                 while py <> yeX do
                     let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                    let v001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                     // lerp Z
                     let v00x = lerp.Invoke(frac.Z, v000, v001)
                     NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x
@@ -4924,11 +4932,12 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
     member private x.BlitToZYX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SZ = y.SZ && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZEYEXE(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalZEYEX(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalZEYXE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalZEYX(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZYEXE(y, lerp)
+        elif x.SZ = y.SZ then x.BlitToInternalZEYX(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalZYEX(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalZYXE(y, lerp)
         else x.BlitToInternalZYX(y, lerp)
@@ -10525,19 +10534,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
     member private x.BlitToXYZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SX = y.SX && x.SY = y.SY && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalXEYEZEWE(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXEYEZEW(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalXEYEZWE(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEYEZW(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalXEYZEWE(y, lerp)
+        elif x.SY = y.SY && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalXYEZEWE(y, lerp)
+        elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEYEZW(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalXEYZEW(y, lerp)
         elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalXEYZWE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalXEYZW(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalXYEZEWE(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXYEZEW(y, lerp)
         elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalXYEZWE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalXYEZW(y, lerp)
         elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalXYZEWE(y, lerp)
+        elif x.SX = y.SX then x.BlitToInternalXEYZW(y, lerp)
+        elif x.SY = y.SY then x.BlitToInternalXYEZW(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalXYZEW(y, lerp)
         elif x.SW = y.SW then x.BlitToInternalXYZWE(y, lerp)
         else x.BlitToInternalXYZW(y, lerp)
@@ -10593,18 +10603,18 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX + xdW))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX + xdZ))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -10699,12 +10709,12 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -10788,12 +10798,12 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -10876,9 +10886,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -10957,10 +10967,10 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -11044,8 +11054,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -11122,8 +11132,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -11199,7 +11209,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) vx000
@@ -11274,10 +11284,10 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -11362,8 +11372,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -11441,8 +11451,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -11519,7 +11529,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x00
@@ -11832,19 +11842,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
     member private x.BlitToYXZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SY = y.SY && x.SX = y.SX && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalYEXEZEWE(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYEXEZEW(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalYEXEZWE(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEXEZW(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalYEXZEWE(y, lerp)
+        elif x.SX = y.SX && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalYXEZEWE(y, lerp)
+        elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEXEZW(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalYEXZEW(y, lerp)
         elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalYEXZWE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalYEXZW(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalYXEZEWE(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYXEZEW(y, lerp)
         elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalYXEZWE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalYXEZW(y, lerp)
         elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalYXZEWE(y, lerp)
+        elif x.SY = y.SY then x.BlitToInternalYEXZW(y, lerp)
+        elif x.SX = y.SX then x.BlitToInternalYXEZW(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalYXZEW(y, lerp)
         elif x.SW = y.SW then x.BlitToInternalYXZWE(y, lerp)
         else x.BlitToInternalYXZW(y, lerp)
@@ -11898,20 +11909,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdX))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdX + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -12005,13 +12016,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -12095,12 +12106,12 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -12183,9 +12194,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -12262,12 +12273,12 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -12350,9 +12361,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -12429,8 +12440,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -12506,7 +12517,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) vx000
@@ -12579,12 +12590,12 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -12668,9 +12679,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -12748,8 +12759,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -12826,7 +12837,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x00
@@ -12899,8 +12910,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -12977,7 +12988,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x0
@@ -13139,19 +13150,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
     member private x.BlitToYZXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SY = y.SY && x.SZ = y.SZ && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalYEZEXEWE(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYEZEXEW(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalYEZEXWE(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalYEZEXW(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalYEZXEWE(y, lerp)
+        elif x.SZ = y.SZ && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalYZEXEWE(y, lerp)
+        elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalYEZEXW(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEZXEW(y, lerp)
         elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalYEZXWE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalYEZXW(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalYZEXEWE(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYZEXEW(y, lerp)
         elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalYZEXWE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalYZEXW(y, lerp)
         elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalYZXEWE(y, lerp)
+        elif x.SY = y.SY then x.BlitToInternalYEZXW(y, lerp)
+        elif x.SZ = y.SZ then x.BlitToInternalYZEXW(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalYZXEW(y, lerp)
         elif x.SW = y.SW then x.BlitToInternalYZXWE(y, lerp)
         else x.BlitToInternalYZXW(y, lerp)
@@ -13204,21 +13216,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdX))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -13312,13 +13324,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -13401,13 +13413,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -13490,9 +13502,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -13568,13 +13580,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -13657,9 +13669,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -13735,9 +13747,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -13813,7 +13825,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) vx000
@@ -13885,13 +13897,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -13975,9 +13987,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -14054,9 +14066,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -14133,7 +14145,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x00
@@ -14205,9 +14217,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -14284,7 +14296,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x0
@@ -14356,7 +14368,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         // lerp W
                         let v000x = lerp.Invoke(frac.W, v0000, v0001)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v000x
@@ -14446,19 +14458,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
     member private x.BlitToYZWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SY = y.SY && x.SZ = y.SZ && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalYEZEWEXE(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalYEZEWEX(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYEZEWXE(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalYEZEWX(y, lerp)
         elif x.SY = y.SY && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalYEZWEXE(y, lerp)
+        elif x.SZ = y.SZ && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalYZEWEXE(y, lerp)
+        elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalYEZEWX(y, lerp)
         elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalYEZWEX(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEZWXE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalYEZWX(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalYZEWEXE(y, lerp)
         elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalYZEWEX(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYZEWXE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalYZEWX(y, lerp)
         elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalYZWEXE(y, lerp)
+        elif x.SY = y.SY then x.BlitToInternalYEZWX(y, lerp)
+        elif x.SZ = y.SZ then x.BlitToInternalYZEWX(y, lerp)
         elif x.SW = y.SW then x.BlitToInternalYZWEX(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalYZWXE(y, lerp)
         else x.BlitToInternalYZWX(y, lerp)
@@ -14512,20 +14525,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdY))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdY + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -14619,13 +14632,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdY))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -14709,12 +14722,12 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -14797,9 +14810,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -14876,12 +14889,12 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -14964,9 +14977,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -15193,12 +15206,12 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -15282,9 +15295,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -15362,8 +15375,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -15440,7 +15453,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x00
@@ -15513,8 +15526,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -15591,7 +15604,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x0
@@ -15753,19 +15766,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
     member private x.BlitToXZYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SX = y.SX && x.SZ = y.SZ && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalXEZEYEWE(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXEZEYEW(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalXEZEYWE(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalXEZEYW(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalXEZYEWE(y, lerp)
+        elif x.SZ = y.SZ && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalXZEYEWE(y, lerp)
+        elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalXEZEYW(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEZYEW(y, lerp)
         elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalXEZYWE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalXEZYW(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalXZEYEWE(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXZEYEW(y, lerp)
         elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalXZEYWE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalXZEYW(y, lerp)
         elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalXZYEWE(y, lerp)
+        elif x.SX = y.SX then x.BlitToInternalXEZYW(y, lerp)
+        elif x.SZ = y.SZ then x.BlitToInternalXZEYW(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalXZYEW(y, lerp)
         elif x.SW = y.SW then x.BlitToInternalXZYWE(y, lerp)
         else x.BlitToInternalXZYW(y, lerp)
@@ -15819,20 +15833,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX + xdW))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX + xdY))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX + xdY + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -15926,13 +15940,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -16016,12 +16030,12 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -16104,9 +16118,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -16183,12 +16197,12 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -16271,9 +16285,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -16350,8 +16364,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -16427,7 +16441,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) vx000
@@ -16500,12 +16514,12 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -16589,9 +16603,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -16669,8 +16683,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -16747,7 +16761,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x00
@@ -16820,8 +16834,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -16898,7 +16912,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x0
@@ -17060,19 +17074,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
     member private x.BlitToZXYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SZ = y.SZ && x.SX = y.SX && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalZEXEYEWE(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZEXEYEW(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalZEXEYWE(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalZEXEYW(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalZEXYEWE(y, lerp)
+        elif x.SX = y.SX && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalZXEYEWE(y, lerp)
+        elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalZEXEYW(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalZEXYEW(y, lerp)
         elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalZEXYWE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalZEXYW(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalZXEYEWE(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZXEYEW(y, lerp)
         elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalZXEYWE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalZXEYW(y, lerp)
         elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalZXYEWE(y, lerp)
+        elif x.SZ = y.SZ then x.BlitToInternalZEXYW(y, lerp)
+        elif x.SX = y.SX then x.BlitToInternalZXEYW(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalZXYEW(y, lerp)
         elif x.SW = y.SW then x.BlitToInternalZXYWE(y, lerp)
         else x.BlitToInternalZXYW(y, lerp)
@@ -17126,20 +17141,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY + xdW))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY + xdX))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY + xdX + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -17233,13 +17248,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY + xdX))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -17325,10 +17340,10 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -17412,8 +17427,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -17490,12 +17505,12 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -17578,9 +17593,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -17657,8 +17672,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -17734,7 +17749,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) vx000
@@ -17807,12 +17822,12 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -17896,9 +17911,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -18127,8 +18142,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -18205,7 +18220,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.W <- initialiCoord.W
                     while py <> yeW do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x0
@@ -18367,19 +18382,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
     member private x.BlitToZYXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SZ = y.SZ && x.SY = y.SY && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalZEYEXEWE(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZEYEXEW(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalZEYEXWE(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalZEYEXW(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalZEYXEWE(y, lerp)
+        elif x.SY = y.SY && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalZYEXEWE(y, lerp)
+        elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalZEYEXW(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalZEYXEW(y, lerp)
         elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalZEYXWE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalZEYXW(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalZYEXEWE(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZYEXEW(y, lerp)
         elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalZYEXWE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalZYEXW(y, lerp)
         elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalZYXEWE(y, lerp)
+        elif x.SZ = y.SZ then x.BlitToInternalZEYXW(y, lerp)
+        elif x.SY = y.SY then x.BlitToInternalZYEXW(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalZYXEW(y, lerp)
         elif x.SW = y.SW then x.BlitToInternalZYXWE(y, lerp)
         else x.BlitToInternalZYXW(y, lerp)
@@ -18432,21 +18448,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY + xdX))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY + xdW))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY + xdW + xdX))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -18540,13 +18556,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -18629,13 +18645,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY + xdX))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -18719,8 +18735,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -18796,13 +18812,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -18885,9 +18901,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -18963,9 +18979,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -19041,7 +19057,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) vx000
@@ -19113,13 +19129,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW + xdX))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -19203,9 +19219,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -19282,9 +19298,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -19433,9 +19449,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -19512,7 +19528,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x0
@@ -19584,7 +19600,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         // lerp W
                         let v000x = lerp.Invoke(frac.W, v0000, v0001)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v000x
@@ -19674,19 +19690,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
     member private x.BlitToZYWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SZ = y.SZ && x.SY = y.SY && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalZEYEWEXE(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalZEYEWEX(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZEYEWXE(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalZEYEWX(y, lerp)
         elif x.SZ = y.SZ && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalZEYWEXE(y, lerp)
+        elif x.SY = y.SY && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalZYEWEXE(y, lerp)
+        elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalZEYEWX(y, lerp)
         elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalZEYWEX(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalZEYWXE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalZEYWX(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalZYEWEXE(y, lerp)
         elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalZYEWEX(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZYEWXE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalZYEWX(y, lerp)
         elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalZYWEXE(y, lerp)
+        elif x.SZ = y.SZ then x.BlitToInternalZEYWX(y, lerp)
+        elif x.SY = y.SY then x.BlitToInternalZYEWX(y, lerp)
         elif x.SW = y.SW then x.BlitToInternalZYWEX(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalZYWXE(y, lerp)
         else x.BlitToInternalZYWX(y, lerp)
@@ -19739,21 +19756,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdY))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW + xdY))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -19847,13 +19864,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -19936,13 +19953,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdY))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -20025,9 +20042,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -20103,13 +20120,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW + xdY))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -20192,9 +20209,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -20270,9 +20287,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -20420,13 +20437,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -20510,9 +20527,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -20589,9 +20606,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -20668,7 +20685,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x00
@@ -20740,9 +20757,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -20819,7 +20836,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x0
@@ -20891,7 +20908,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         // lerp W
                         let v000x = lerp.Invoke(frac.W, v0000, v0001)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v000x
@@ -20981,19 +20998,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
     member private x.BlitToXZWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SX = y.SX && x.SZ = y.SZ && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalXEZEWEYE(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalXEZEWEY(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXEZEWYE(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalXEZEWY(y, lerp)
         elif x.SX = y.SX && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalXEZWEYE(y, lerp)
+        elif x.SZ = y.SZ && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalXZEWEYE(y, lerp)
+        elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalXEZEWY(y, lerp)
         elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalXEZWEY(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEZWYE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalXEZWY(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalXZEWEYE(y, lerp)
         elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalXZEWEY(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXZEWYE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalXZEWY(y, lerp)
         elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalXZWEYE(y, lerp)
+        elif x.SX = y.SX then x.BlitToInternalXEZWY(y, lerp)
+        elif x.SZ = y.SZ then x.BlitToInternalXZEWY(y, lerp)
         elif x.SW = y.SW then x.BlitToInternalXZWEY(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalXZWYE(y, lerp)
         else x.BlitToInternalXZWY(y, lerp)
@@ -21046,21 +21064,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX + xdY))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX + xdW))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX + xdW + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -21154,13 +21172,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -21243,13 +21261,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -21332,9 +21350,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -21410,13 +21428,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -21499,9 +21517,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -21577,9 +21595,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -21655,7 +21673,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) vx000
@@ -21727,13 +21745,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -21817,9 +21835,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -21896,9 +21914,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -21975,7 +21993,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x00
@@ -22047,9 +22065,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -22126,7 +22144,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x0
@@ -22198,7 +22216,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         // lerp W
                         let v000x = lerp.Invoke(frac.W, v0000, v0001)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v000x
@@ -22288,19 +22306,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
     member private x.BlitToZXWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SZ = y.SZ && x.SX = y.SX && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalZEXEWEYE(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalZEXEWEY(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZEXEWYE(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalZEXEWY(y, lerp)
         elif x.SZ = y.SZ && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalZEXWEYE(y, lerp)
+        elif x.SX = y.SX && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalZXEWEYE(y, lerp)
+        elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalZEXEWY(y, lerp)
         elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalZEXWEY(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalZEXWYE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalZEXWY(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalZXEWEYE(y, lerp)
         elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalZXEWEY(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZXEWYE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalZXEWY(y, lerp)
         elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalZXWEYE(y, lerp)
+        elif x.SZ = y.SZ then x.BlitToInternalZEXWY(y, lerp)
+        elif x.SX = y.SX then x.BlitToInternalZXEWY(y, lerp)
         elif x.SW = y.SW then x.BlitToInternalZXWEY(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalZXWYE(y, lerp)
         else x.BlitToInternalZXWY(y, lerp)
@@ -22353,21 +22372,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW + xdY))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW + xdX))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW + xdX + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -22461,13 +22480,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -22550,13 +22569,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -22639,9 +22658,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -22717,13 +22736,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -22806,9 +22825,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -22884,9 +22903,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -22962,7 +22981,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) vx000
@@ -23034,13 +23053,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -23124,9 +23143,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -23203,9 +23222,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -23282,7 +23301,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x00
@@ -23354,9 +23373,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -23433,7 +23452,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x0
@@ -23505,7 +23524,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         // lerp W
                         let v000x = lerp.Invoke(frac.W, v0000, v0001)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v000x
@@ -23595,19 +23614,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
     member private x.BlitToZWXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SZ = y.SZ && x.SW = y.SW && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZEWEXEYE(y, lerp)
         elif x.SZ = y.SZ && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalZEWEXEY(y, lerp)
         elif x.SZ = y.SZ && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalZEWEXYE(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalZEWEXY(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZEWXEYE(y, lerp)
+        elif x.SW = y.SW && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZWEXEYE(y, lerp)
+        elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalZEWEXY(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalZEWXEY(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalZEWXYE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalZEWXY(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZWEXEYE(y, lerp)
         elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalZWEXEY(y, lerp)
         elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalZWEXYE(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalZWEXY(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZWXEYE(y, lerp)
+        elif x.SZ = y.SZ then x.BlitToInternalZEWXY(y, lerp)
+        elif x.SW = y.SW then x.BlitToInternalZWEXY(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalZWXEY(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalZWXYE(y, lerp)
         else x.BlitToInternalZWXY(y, lerp)
@@ -23660,21 +23680,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW + xdX))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW + xdY))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW + xdY + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -23768,13 +23788,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -23857,13 +23877,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -23946,9 +23966,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -24024,13 +24044,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -24113,9 +24133,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -24191,9 +24211,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -24269,7 +24289,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) vx000
@@ -24341,13 +24361,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -24431,9 +24451,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -24510,9 +24530,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -24589,7 +24609,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x00
@@ -24661,9 +24681,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -24740,7 +24760,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x0
@@ -24812,7 +24832,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         // lerp W
                         let v000x = lerp.Invoke(frac.W, v0000, v0001)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v000x
@@ -24902,19 +24922,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
     member private x.BlitToZWYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SZ = y.SZ && x.SW = y.SW && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZEWEYEXE(y, lerp)
         elif x.SZ = y.SZ && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalZEWEYEX(y, lerp)
         elif x.SZ = y.SZ && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalZEWEYXE(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalZEWEYX(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZEWYEXE(y, lerp)
+        elif x.SW = y.SW && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZWEYEXE(y, lerp)
+        elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalZEWEYX(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalZEWYEX(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalZEWYXE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalZEWYX(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZWEYEXE(y, lerp)
         elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalZWEYEX(y, lerp)
         elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalZWEYXE(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalZWEYX(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZWYEXE(y, lerp)
+        elif x.SZ = y.SZ then x.BlitToInternalZEWYX(y, lerp)
+        elif x.SW = y.SW then x.BlitToInternalZWEYX(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalZWYEX(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalZWYXE(y, lerp)
         else x.BlitToInternalZWYX(y, lerp)
@@ -24967,21 +24988,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW + xdZ))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW + xdZ))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW + xdZ))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -25075,13 +25096,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -25164,13 +25185,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -25331,13 +25352,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW + xdZ))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -25420,9 +25441,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -25498,9 +25519,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -25648,13 +25669,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW + xdZ))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -25738,9 +25759,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -25817,9 +25838,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -25968,9 +25989,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -26047,7 +26068,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x0
@@ -26119,7 +26140,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         // lerp W
                         let v000x = lerp.Invoke(frac.W, v0000, v0001)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v000x
@@ -26209,19 +26230,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
     member private x.BlitToXYWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SX = y.SX && x.SY = y.SY && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalXEYEWEZE(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalXEYEWEZ(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXEYEWZE(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEYEWZ(y, lerp)
         elif x.SX = y.SX && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalXEYWEZE(y, lerp)
+        elif x.SY = y.SY && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalXYEWEZE(y, lerp)
+        elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEYEWZ(y, lerp)
         elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalXEYWEZ(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalXEYWZE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalXEYWZ(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalXYEWEZE(y, lerp)
         elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalXYEWEZ(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXYEWZE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalXYEWZ(y, lerp)
         elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalXYWEZE(y, lerp)
+        elif x.SX = y.SX then x.BlitToInternalXEYWZ(y, lerp)
+        elif x.SY = y.SY then x.BlitToInternalXYEWZ(y, lerp)
         elif x.SW = y.SW then x.BlitToInternalXYWEZ(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalXYWZE(y, lerp)
         else x.BlitToInternalXYWZ(y, lerp)
@@ -26274,21 +26296,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX + xdZ))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX + xdW))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX + xdW + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -26382,13 +26404,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -26471,13 +26493,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -26560,9 +26582,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -26638,13 +26660,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -26727,9 +26749,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -26805,9 +26827,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -26883,7 +26905,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) vx000
@@ -26955,13 +26977,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -27045,9 +27067,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -27124,9 +27146,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -27203,7 +27225,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x00
@@ -27275,9 +27297,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -27354,7 +27376,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x0
@@ -27426,7 +27448,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         // lerp W
                         let v000x = lerp.Invoke(frac.W, v0000, v0001)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v000x
@@ -27516,19 +27538,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
     member private x.BlitToYXWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SY = y.SY && x.SX = y.SX && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalYEXEWEZE(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalYEXEWEZ(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYEXEWZE(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEXEWZ(y, lerp)
         elif x.SY = y.SY && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalYEXWEZE(y, lerp)
+        elif x.SX = y.SX && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalYXEWEZE(y, lerp)
+        elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEXEWZ(y, lerp)
         elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalYEXWEZ(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalYEXWZE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalYEXWZ(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalYXEWEZE(y, lerp)
         elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalYXEWEZ(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYXEWZE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalYXEWZ(y, lerp)
         elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalYXWEZE(y, lerp)
+        elif x.SY = y.SY then x.BlitToInternalYEXWZ(y, lerp)
+        elif x.SX = y.SX then x.BlitToInternalYXEWZ(y, lerp)
         elif x.SW = y.SW then x.BlitToInternalYXWEZ(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalYXWZE(y, lerp)
         else x.BlitToInternalYXWZ(y, lerp)
@@ -27581,21 +27604,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW + xdZ))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW + xdX))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW + xdX + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -27689,13 +27712,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -27778,13 +27801,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -27867,9 +27890,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -27945,13 +27968,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -28034,9 +28057,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -28112,9 +28135,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -28190,7 +28213,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) vx000
@@ -28262,13 +28285,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -28352,9 +28375,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -28431,9 +28454,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -28510,7 +28533,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x00
@@ -28582,9 +28605,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -28661,7 +28684,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x0
@@ -28733,7 +28756,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         // lerp W
                         let v000x = lerp.Invoke(frac.W, v0000, v0001)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v000x
@@ -28823,19 +28846,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
     member private x.BlitToYWXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SY = y.SY && x.SW = y.SW && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYEWEXEZE(y, lerp)
         elif x.SY = y.SY && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalYEWEXEZ(y, lerp)
         elif x.SY = y.SY && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalYEWEXZE(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalYEWEXZ(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYEWXEZE(y, lerp)
+        elif x.SW = y.SW && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYWEXEZE(y, lerp)
+        elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalYEWEXZ(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEWXEZ(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalYEWXZE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalYEWXZ(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYWEXEZE(y, lerp)
         elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalYWEXEZ(y, lerp)
         elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalYWEXZE(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalYWEXZ(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYWXEZE(y, lerp)
+        elif x.SY = y.SY then x.BlitToInternalYEWXZ(y, lerp)
+        elif x.SW = y.SW then x.BlitToInternalYWEXZ(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalYWXEZ(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalYWXZE(y, lerp)
         else x.BlitToInternalYWXZ(y, lerp)
@@ -28888,21 +28912,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW + xdX))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW + xdZ))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW + xdZ + xdX))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -28997,12 +29021,12 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -29085,13 +29109,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -29174,9 +29198,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -29252,13 +29276,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdX))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -29342,8 +29366,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -29419,9 +29443,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -29497,7 +29521,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) vx000
@@ -29569,13 +29593,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ + xdX))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -29660,8 +29684,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -29738,9 +29762,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -29817,7 +29841,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x00
@@ -29889,9 +29913,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -30040,7 +30064,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         // lerp W
                         let v000x = lerp.Invoke(frac.W, v0000, v0001)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v000x
@@ -30130,19 +30154,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
     member private x.BlitToYWZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SY = y.SY && x.SW = y.SW && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYEWEZEXE(y, lerp)
         elif x.SY = y.SY && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalYEWEZEX(y, lerp)
         elif x.SY = y.SY && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalYEWEZXE(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalYEWEZX(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYEWZEXE(y, lerp)
+        elif x.SW = y.SW && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYWEZEXE(y, lerp)
+        elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalYEWEZX(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalYEWZEX(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEWZXE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalYEWZX(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYWEZEXE(y, lerp)
         elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalYWEZEX(y, lerp)
         elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalYWEZXE(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalYWEZX(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYWZEXE(y, lerp)
+        elif x.SY = y.SY then x.BlitToInternalYEWZX(y, lerp)
+        elif x.SW = y.SW then x.BlitToInternalYWEZX(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalYWZEX(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalYWZXE(y, lerp)
         else x.BlitToInternalYWZX(y, lerp)
@@ -30195,21 +30220,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW + xdZ))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW + xdY))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW + xdY + xdZ))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -30303,13 +30328,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW + xdY))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -30392,13 +30417,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW + xdZ))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -30481,9 +30506,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -30559,13 +30584,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -30648,9 +30673,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -30726,9 +30751,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -30876,13 +30901,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -30966,9 +30991,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -31045,9 +31070,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -31124,7 +31149,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x00
@@ -31196,9 +31221,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -31275,7 +31300,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x0
@@ -31347,7 +31372,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         // lerp W
                         let v000x = lerp.Invoke(frac.W, v0000, v0001)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v000x
@@ -31437,19 +31462,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
     member private x.BlitToXWYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SX = y.SX && x.SW = y.SW && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXEWEYEZE(y, lerp)
         elif x.SX = y.SX && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalXEWEYEZ(y, lerp)
         elif x.SX = y.SX && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalXEWEYZE(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalXEWEYZ(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXEWYEZE(y, lerp)
+        elif x.SW = y.SW && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXWEYEZE(y, lerp)
+        elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalXEWEYZ(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEWYEZ(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalXEWYZE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalXEWYZ(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXWEYEZE(y, lerp)
         elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalXWEYEZ(y, lerp)
         elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalXWEYZE(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalXWEYZ(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXWYEZE(y, lerp)
+        elif x.SX = y.SX then x.BlitToInternalXEWYZ(y, lerp)
+        elif x.SW = y.SW then x.BlitToInternalXWEYZ(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalXWYEZ(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalXWYZE(y, lerp)
         else x.BlitToInternalXWYZ(y, lerp)
@@ -31502,21 +31528,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX + xdZ))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX + xdY))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX + xdY + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -31610,13 +31636,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -31699,13 +31725,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -31788,9 +31814,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -31866,13 +31892,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -31955,9 +31981,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -32033,9 +32059,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -32111,7 +32137,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) vx000
@@ -32183,13 +32209,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -32273,9 +32299,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -32352,9 +32378,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -32431,7 +32457,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x00
@@ -32503,9 +32529,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -32582,7 +32608,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x0
@@ -32654,7 +32680,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         // lerp W
                         let v000x = lerp.Invoke(frac.W, v0000, v0001)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v000x
@@ -32744,19 +32770,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
     member private x.BlitToWXYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SW = y.SW && x.SX = y.SX && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalWEXEYEZE(y, lerp)
         elif x.SW = y.SW && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalWEXEYEZ(y, lerp)
         elif x.SW = y.SW && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalWEXEYZE(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalWEXEYZ(y, lerp)
         elif x.SW = y.SW && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalWEXYEZE(y, lerp)
+        elif x.SX = y.SX && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalWXEYEZE(y, lerp)
+        elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalWEXEYZ(y, lerp)
         elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalWEXYEZ(y, lerp)
         elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalWEXYZE(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalWEXYZ(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalWXEYEZE(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalWXEYEZ(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalWXEYZE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalWXEYZ(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalWXYEZE(y, lerp)
+        elif x.SW = y.SW then x.BlitToInternalWEXYZ(y, lerp)
+        elif x.SX = y.SX then x.BlitToInternalWXEYZ(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalWXYEZ(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalWXYZE(y, lerp)
         else x.BlitToInternalWXYZ(y, lerp)
@@ -32809,21 +32836,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY + xdZ))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY + xdX))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY + xdX + xdZ))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -32917,13 +32944,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY + xdX))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -33006,13 +33033,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY + xdZ))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -33096,8 +33123,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -33173,13 +33200,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -33262,9 +33289,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -33340,9 +33367,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -33418,7 +33445,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) vx000
@@ -33490,13 +33517,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX + xdZ))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -33580,9 +33607,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -33659,9 +33686,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -33810,9 +33837,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -33889,7 +33916,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x0
@@ -33961,7 +33988,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Z <- initialiCoord.Z
                     while py <> yeZ do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         // lerp W
                         let v000x = lerp.Invoke(frac.W, v0000, v0001)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v000x
@@ -34051,19 +34078,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
     member private x.BlitToWYXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SW = y.SW && x.SY = y.SY && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalWEYEXEZE(y, lerp)
         elif x.SW = y.SW && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalWEYEXEZ(y, lerp)
         elif x.SW = y.SW && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalWEYEXZE(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalWEYEXZ(y, lerp)
         elif x.SW = y.SW && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalWEYXEZE(y, lerp)
+        elif x.SY = y.SY && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalWYEXEZE(y, lerp)
+        elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalWEYEXZ(y, lerp)
         elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalWEYXEZ(y, lerp)
         elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalWEYXZE(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalWEYXZ(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalWYEXEZE(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalWYEXEZ(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalWYEXZE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalWYEXZ(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalWYXEZE(y, lerp)
+        elif x.SW = y.SW then x.BlitToInternalWEYXZ(y, lerp)
+        elif x.SY = y.SY then x.BlitToInternalWYEXZ(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalWYXEZ(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalWYXZE(y, lerp)
         else x.BlitToInternalWYXZ(y, lerp)
@@ -34116,21 +34144,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY + xdX))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY + xdZ))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY + xdZ + xdX))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -34227,10 +34255,10 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -34313,13 +34341,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY + xdX))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -34403,8 +34431,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -34480,13 +34508,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ + xdX))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -34570,8 +34598,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -34647,9 +34675,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -34725,7 +34753,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) vx000
@@ -34797,13 +34825,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdX))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -34966,9 +34994,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -35117,9 +35145,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -35268,7 +35296,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         // lerp W
                         let v000x = lerp.Invoke(frac.W, v0000, v0001)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v000x
@@ -35358,19 +35386,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
     member private x.BlitToWYZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SW = y.SW && x.SY = y.SY && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalWEYEZEXE(y, lerp)
         elif x.SW = y.SW && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalWEYEZEX(y, lerp)
         elif x.SW = y.SW && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalWEYEZXE(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalWEYEZX(y, lerp)
         elif x.SW = y.SW && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalWEYZEXE(y, lerp)
+        elif x.SY = y.SY && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalWYEZEXE(y, lerp)
+        elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalWEYEZX(y, lerp)
         elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalWEYZEX(y, lerp)
         elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalWEYZXE(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalWEYZX(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalWYEZEXE(y, lerp)
         elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalWYEZEX(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalWYEZXE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalWYEZX(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalWYZEXE(y, lerp)
+        elif x.SW = y.SW then x.BlitToInternalWEYZX(y, lerp)
+        elif x.SY = y.SY then x.BlitToInternalWYEZX(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalWYZEX(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalWYZXE(y, lerp)
         else x.BlitToInternalWYZX(y, lerp)
@@ -35423,21 +35452,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ + xdY))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW + xdY))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW + xdZ))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW + xdZ + xdY))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -35532,12 +35561,12 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -35620,13 +35649,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW + xdY))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -35709,9 +35738,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -35787,13 +35816,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdY))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -35954,9 +35983,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -36104,13 +36133,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ + xdY))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -36195,8 +36224,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -36273,9 +36302,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -36352,7 +36381,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x00
@@ -36424,9 +36453,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -36575,7 +36604,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         // lerp W
                         let v000x = lerp.Invoke(frac.W, v0000, v0001)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v000x
@@ -36665,19 +36694,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
     member private x.BlitToXWZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SX = y.SX && x.SW = y.SW && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXEWEZEYE(y, lerp)
         elif x.SX = y.SX && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalXEWEZEY(y, lerp)
         elif x.SX = y.SX && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalXEWEZYE(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalXEWEZY(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXEWZEYE(y, lerp)
+        elif x.SW = y.SW && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXWEZEYE(y, lerp)
+        elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalXEWEZY(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalXEWZEY(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEWZYE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalXEWZY(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXWEZEYE(y, lerp)
         elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalXWEZEY(y, lerp)
         elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalXWEZYE(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalXWEZY(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXWZEYE(y, lerp)
+        elif x.SX = y.SX then x.BlitToInternalXEWZY(y, lerp)
+        elif x.SW = y.SW then x.BlitToInternalXWEZY(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalXWZEY(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalXWZYE(y, lerp)
         else x.BlitToInternalXWZY(y, lerp)
@@ -36730,21 +36760,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX + xdY))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX + xdZ))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX + xdZ + xdY))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -36839,12 +36869,12 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -36927,13 +36957,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -37016,9 +37046,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -37094,13 +37124,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ + xdY))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -37184,8 +37214,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -37261,9 +37291,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -37339,7 +37369,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) vx000
@@ -37411,13 +37441,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdY))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -37502,8 +37532,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -37580,9 +37610,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -37659,7 +37689,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x00
@@ -37731,9 +37761,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -37882,7 +37912,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         // lerp W
                         let v000x = lerp.Invoke(frac.W, v0000, v0001)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v000x
@@ -37972,19 +38002,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
     member private x.BlitToWXZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SW = y.SW && x.SX = y.SX && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalWEXEZEYE(y, lerp)
         elif x.SW = y.SW && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalWEXEZEY(y, lerp)
         elif x.SW = y.SW && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalWEXEZYE(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalWEXEZY(y, lerp)
         elif x.SW = y.SW && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalWEXZEYE(y, lerp)
+        elif x.SX = y.SX && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalWXEZEYE(y, lerp)
+        elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalWEXEZY(y, lerp)
         elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalWEXZEY(y, lerp)
         elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalWEXZYE(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalWEXZY(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalWXEZEYE(y, lerp)
         elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalWXEZEY(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalWXEZYE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalWXEZY(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalWXZEYE(y, lerp)
+        elif x.SW = y.SW then x.BlitToInternalWEXZY(y, lerp)
+        elif x.SX = y.SX then x.BlitToInternalWXEZY(y, lerp)
         elif x.SZ = y.SZ then x.BlitToInternalWXZEY(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalWXZYE(y, lerp)
         else x.BlitToInternalWXZY(y, lerp)
@@ -38037,21 +38068,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ + xdY))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ + xdX))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ + xdX + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -38145,13 +38176,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -38234,13 +38265,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -38323,9 +38354,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -38401,13 +38432,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -38490,9 +38521,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -38568,9 +38599,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -38646,7 +38677,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) vx000
@@ -38718,13 +38749,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -38808,9 +38839,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -38887,9 +38918,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -38966,7 +38997,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x00
@@ -39038,9 +39069,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -39117,7 +39148,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x0
@@ -39189,7 +39220,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.Y <- initialiCoord.Y
                     while py <> yeY do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         // lerp W
                         let v000x = lerp.Invoke(frac.W, v0000, v0001)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v000x
@@ -39279,19 +39310,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
     member private x.BlitToWZXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SW = y.SW && x.SZ = y.SZ && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalWEZEXEYE(y, lerp)
         elif x.SW = y.SW && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalWEZEXEY(y, lerp)
         elif x.SW = y.SW && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalWEZEXYE(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalWEZEXY(y, lerp)
         elif x.SW = y.SW && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalWEZXEYE(y, lerp)
+        elif x.SZ = y.SZ && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalWZEXEYE(y, lerp)
+        elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalWEZEXY(y, lerp)
         elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalWEZXEY(y, lerp)
         elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalWEZXYE(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalWEZXY(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalWZEXEYE(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalWZEXEY(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalWZEXYE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalWZEXY(y, lerp)
         elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalWZXEYE(y, lerp)
+        elif x.SW = y.SW then x.BlitToInternalWEZXY(y, lerp)
+        elif x.SZ = y.SZ then x.BlitToInternalWZEXY(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalWZXEY(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalWZXYE(y, lerp)
         else x.BlitToInternalWZXY(y, lerp)
@@ -39344,21 +39376,21 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ + xdX))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ + xdY))
-                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ + xdY + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
+                        let v1111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -39452,13 +39484,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -39541,13 +39573,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
-                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
+                        let v1101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -39630,9 +39662,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdY))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx100 = lerp.Invoke(frac.X, v0100, v1100)
@@ -39708,13 +39740,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
-                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
+                        let v1011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -39797,9 +39829,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdZ))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx010 = lerp.Invoke(frac.X, v0010, v1010)
@@ -39875,9 +39907,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
-                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v1001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX + xdW))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         let vx001 = lerp.Invoke(frac.X, v0001, v1001)
@@ -39953,7 +39985,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v1000 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
                         // lerp X
                         let vx000 = lerp.Invoke(frac.X, v0000, v1000)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) vx000
@@ -40025,13 +40057,13 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
-                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
+                        let v0111 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -40115,9 +40147,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdZ))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x10 = lerp.Invoke(frac.Y, v0010, v0110)
@@ -40194,9 +40226,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
-                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0101 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdW))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         let v0x01 = lerp.Invoke(frac.Y, v0001, v0101)
@@ -40273,7 +40305,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
                         // lerp Y
                         let v0x00 = lerp.Invoke(frac.Y, v0000, v0100)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v0x00
@@ -40345,9 +40377,9 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
-                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
+                        let v0011 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ + xdW))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         let v00x1 = lerp.Invoke(frac.Z, v0001, v0011)
@@ -40424,7 +40456,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                        let v0010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdZ))
                         // lerp Z
                         let v00x0 = lerp.Invoke(frac.Z, v0000, v0010)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v00x0
@@ -40496,7 +40528,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
                     icoord.X <- initialiCoord.X
                     while py <> yeX do
                         let v0000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
-                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                        let v0001 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdW))
                         // lerp W
                         let v000x = lerp.Invoke(frac.W, v0000, v0001)
                         NativePtr.write (NativePtr.ofNativeInt<'a> py) v000x
@@ -40586,19 +40618,20 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
     member private x.BlitToWZYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
         if x.SW = y.SW && x.SZ = y.SZ && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalWEZEYEXE(y, lerp)
         elif x.SW = y.SW && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalWEZEYEX(y, lerp)
         elif x.SW = y.SW && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalWEZEYXE(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalWEZEYX(y, lerp)
         elif x.SW = y.SW && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalWEZYEXE(y, lerp)
+        elif x.SZ = y.SZ && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalWZEYEXE(y, lerp)
+        elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalWEZEYX(y, lerp)
         elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalWEZYEX(y, lerp)
         elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalWEZYXE(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalWEZYX(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalWZEYEXE(y, lerp)
         elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalWZEYEX(y, lerp)
         elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalWZEYXE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalWZEYX(y, lerp)
         elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalWZYEXE(y, lerp)
+        elif x.SW = y.SW then x.BlitToInternalWEZYX(y, lerp)
+        elif x.SZ = y.SZ then x.BlitToInternalWZEYX(y, lerp)
         elif x.SY = y.SY then x.BlitToInternalWZYEX(y, lerp)
         elif x.SX = y.SX then x.BlitToInternalWZYXE(y, lerp)
         else x.BlitToInternalWZYX(y, lerp)

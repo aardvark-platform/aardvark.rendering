@@ -1303,6 +1303,75 @@ module private NativeSupport =
 
 let lerp : float -> byte -> byte -> byte =
     fun t a b -> Fun.Lerp(t,a,b)
+open DevILSharp
+
+
+type NativeVolume<'a when 'a : unmanaged> with
+    member x.BlitToInternalYXZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
+        let sa = nativeint (sizeof<'a>)
+        let mutable py = y.Pointer |> NativePtr.toNativeInt
+        py <- py + nativeint y.Info.Origin * sa
+        let mutable px = x.Pointer |> NativePtr.toNativeInt
+        px <- px + nativeint x.Info.Origin * sa
+        let xdY = nativeint x.DY * sa
+        let ysY = nativeint (y.SY * y.DY) * sa
+        let yjY = nativeint (y.DY - y.SX * y.DX) * sa
+        let xdX = nativeint x.DX * sa
+        let ysX = nativeint (y.SX * y.DX) * sa
+        let yjX = nativeint (y.DX - y.SZ * y.DZ) * sa
+        let xdZ = nativeint x.DZ * sa
+        let xjZ = nativeint x.DZ * sa
+        let ysZ = nativeint (y.SZ * y.DZ) * sa
+        let yjZ = nativeint y.DZ * sa
+        let ratio = V3d(x.Size) / V3d(y.Size)
+        let initialCoord = 0.5 * ratio - V3d.Half
+        let initialiCoord = V3l(initialCoord.Floor)
+        let initialFrac = initialCoord - V3d(initialiCoord)
+        let step = V3d.One * ratio
+        let mutable coord = initialCoord
+        let mutable icoord = initialiCoord
+        let mutable frac = initialFrac
+        px <- px + xdY * nativeint icoord.Y + xdX * nativeint icoord.X + xdZ * nativeint icoord.Z
+        let yeY = py + ysY
+        while py <> yeY do
+            let yeX = py + ysX
+            coord.X <- initialCoord.X
+            px <- px + xdX * nativeint (initialiCoord.X - icoord.X)
+            frac.X <- initialFrac.X
+            icoord.X <- initialiCoord.X
+            while py <> yeX do
+                let yeZ = py + ysZ
+                coord.Z <- initialCoord.Z
+                px <- px + xdZ * nativeint (initialiCoord.Z - icoord.Z)
+                icoord.Z <- initialiCoord.Z
+                while py <> yeZ do
+                    let v000 : 'a = NativePtr.read (NativePtr.ofNativeInt px)
+                    let v010 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY))
+                    let v100 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdX))
+                    let v110 : 'a = NativePtr.read (NativePtr.ofNativeInt (px + xdY + xdX))
+                    // lerp X
+                    let vx00 = lerp.Invoke(frac.X, v000, v100)
+                    let vx10 = lerp.Invoke(frac.X, v010, v110)
+                    // lerp Y
+                    let vxx0 = lerp.Invoke(frac.Y, vx00, vx10)
+                    NativePtr.write (NativePtr.ofNativeInt<'a> py) vxx0
+                    py <- py + yjZ
+                    px <- px + xjZ
+                    coord.Z <- coord.Z + step.Z
+                    icoord.Z <- icoord.Z + 1L
+                py <- py + yjX
+                coord.X <- coord.X + step.X
+                let ni = int64 (floor coord.X)
+                px <- px + xdX * nativeint (ni - icoord.X)
+                icoord.X <- ni
+                frac.X <- coord.X - float(icoord.X)
+            py <- py + yjY
+            coord.Y <- coord.Y + step.Y
+            let ni = int64 (floor coord.Y)
+            px <- px + xdY * nativeint (ni - icoord.Y)
+            icoord.Y <- ni
+            frac.Y <- coord.Y - float(icoord.Y)
 
 [<EntryPoint>]
 [<STAThread>]
@@ -1334,15 +1403,21 @@ let main args =
 
     //File.WriteAllBytes(sprintf @"C:\volumes\gussHalf_%d_%d_%d.raw" halfSize.X halfSize.Y halfSize.Z, target)
     //System.Environment.Exit 0
-
-    let src = PixImage.Create(@"E:\Development\WorkDirectory\bricksDiffuse0.png").ToPixImage<byte>()
+    let file = @"C:\Users\Schorsch\Desktop\london.jpg"
+    let src = PixImage.Create(file).ToPixImage<byte>()
     //let src = PixImage.Create(@"C:\volumes\dog2.png").ToPixImage<byte>()
-    let dst = PixImage<byte>(src.Format, src.Size / 2)
+    let dst = PixImage<byte>(src.Format, src.Size * 2 / 3)
+    let dst2 = PixImage<byte>(src.Format, src.Size * 2 / 3)
 
     let bla = V3d(0.5 / V2d src.Size,0.0)
 
-    NativeVolume.using src.Volume (fun pSrc -> 
-        NativeVolume.using dst.Volume (fun pDst -> 
+    let vSrc = src.Volume // GetChannel(0L)
+    let vDst = dst.Volume //GetChannel(0L)
+    let vDst2 = dst2.Volume //GetChannel(0L)
+
+
+    NativeVolume.using vSrc (fun pSrc -> 
+        NativeVolume.using vDst (fun pDst -> 
             let lerp = lerp
 
             for i in 1 .. 2 do
@@ -1355,11 +1430,51 @@ let main args =
             sw.Stop()
 
             Log.line "took: %A" (sw.MicroTime / iter)
+            dst.SaveAsImage(@"C:\Users\Schorsch\Desktop\blit.png")
 
         )
     )
+    NativeVolume.using vSrc (fun pSrc -> 
+        NativeVolume.using vDst2 (fun pDst -> 
+            let lerp = lerp
+            pDst.SetByCoord(fun (c : V3d) ->
+                pSrc.SampleLinear(c, lerp)
+            )
+            dst2.SaveAsImage(@"C:\Users\Schorsch\Desktop\sample.png")
+        )
+    )
 
-    dst.SaveAsImage(@"C:\Users\Schorsch\Desktop\blit.png")
+    let gc = GCHandle.Alloc(src.Volume.Data, GCHandleType.Pinned)
+    let img = IL.GenImage()
+    IL.BindImage(img)
+    //IL.LoadImage file |> ignore
+    IL.TexImage(src.Size.X, src.Size.Y, 1, 3uy, ChannelFormat.RGB, ChannelType.UnsignedByte, gc.AddrOfPinnedObject()) |> ignore
+    ILU.ImageParameter(ImageParameterName.Filter, int Filter.Bilinear)
+    ILU.Scale(dst.Size.X, dst.Size.Y, 1) |> ignore
+    ILU.FlipImage() |> ignore
+    //ILU.FlipImage() |> ignore
+    IL.Save(ImageType.Png, @"C:\Users\Schorsch\Desktop\devil.png") |> ignore
+    IL.BindImage(0)
+    IL.DeleteImage(img)
+    gc.Free()
+
+    let mutable maxDiff = 0
+
+
+    let compare (a : byte) (b : byte) =
+        let d = int a - int b |> abs
+        if d <> 0 then
+            maxDiff <- max maxDiff d
+            1
+        else
+            0
+
+    let diff = dst.Volume.InnerProduct(dst2.Volume, System.Func<_,_,_>(compare), 0, System.Func<_,_,_>((+)))
+    Log.warn "size: %A" dst.Size
+    Log.warn "diff <= %A" maxDiff
+    Log.warn "diff: %.2f%%" (100.0 * float diff / float (dst.Size.X * dst.Size.Y * 3))
+
+    //dst.SaveAsImage(@"C:\Users\Schorsch\Desktop\blit.png")
     src.SaveAsImage(@"C:\Users\Schorsch\Desktop\input.png")
     System.Environment.Exit 0
 

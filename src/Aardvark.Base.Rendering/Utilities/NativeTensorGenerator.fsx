@@ -470,7 +470,7 @@ module Generator =
 
                 for o in offsets do
                     let str = o |> List.map string |> String.concat ""
-                    let delta = o |> List.mapi (fun i -> function 0 -> None | _ -> Some (sprintf "xd%s" components.[i])) |> List.choose id |> String.concat " + "
+                    let delta = o |> List.mapi (fun i -> function 0 -> None | _ -> Some (sprintf "xd%s" componentNames.[i])) |> List.choose id |> String.concat " + "
                     if delta <> "" then
                         line "let v%s : 'a = NativePtr.read (NativePtr.ofNativeInt (px + %s))" str delta
                     else
@@ -549,22 +549,20 @@ module Generator =
 
         start "member private x.BlitTo%s(y : %s<'a>, lerp : float -> 'a -> 'a -> 'a) = " suffix selfType
 
+        if dim <= 1 then
+            line "if y.Size > x.Size then failwith \"[NativeTensor] upsampling not implemented\""
+        else
+            line "if y.Size.AnyGreater(x.Size) then failwith \"[NativeTensor] upsampling not implemented\""
 
-        let rec dispatch (i : int) (a : list<list<bool>>) =
+
+        let rec dispatch (i : int) (a : list<string * list<bool>>) =
             match a with
-                | [a] ->
+                | [(c,a)] ->
                     if i > 0 then 
                         line "else %s" (callInner (List.toArray a))
                     else
                         line "%s" (callInner (List.toArray a))
-                | a :: r ->
-                    let check = 
-                        a |> List.mapi (fun i a ->
-                            let mine = components.[i]
-                            if a then Some (sprintf "x.S%s = y.S%s" mine mine)
-                            else None
-                        ) |> List.choose id |> String.concat " && "
-                    
+                | (check, a) :: r ->
                     if i > 0 then
                         line "elif %s then %s" check (callInner (List.toArray a))
                     else
@@ -575,7 +573,21 @@ module Generator =
                 | [] ->
                     failwith ""
 
-        dispatch 0 all
+
+        let conditions = 
+            all |> List.map (fun a ->
+                let cond =
+                    a |> List.mapi (fun i a ->
+                        let mine = components.[i]
+                        if a then Some (sprintf "x.S%s = y.S%s" mine mine)
+                        else None
+                    ) |> List.choose id |> String.concat " && "
+
+                cond, a
+            )
+
+        let conditions = conditions |> List.sortByDescending (fst >> String.length)
+        dispatch 0 conditions
 
             
 
