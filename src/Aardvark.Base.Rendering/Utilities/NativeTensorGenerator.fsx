@@ -46,6 +46,31 @@ module Generator =
             3, ("V3d", "V3f")
             4, ("V4d", "V4f")
         ]
+
+    let getManagedName (dim : int) =
+        match Map.tryFind dim tensorNames with
+            | Some n -> n
+            | None -> sprintf "Tensor%d" dim
+
+    let getNativeName (dim : int) =
+        match Map.tryFind dim tensorNames with
+            | Some n -> "Native" + n
+            | None -> sprintf "NativeTensor%d" dim
+
+
+    
+    let rec allAssignments (values : list<'a>) (len : int) =
+        if len < 0 then
+            []
+        elif len = 0 then
+            [[]]
+        else
+            let inner = allAssignments values (len - 1)
+            [
+                for v in values do
+                    for a in inner do yield v :: a
+            ]
+
     let builder = System.Text.StringBuilder()
 
     let write (str : string) = builder.Append(str) |> ignore
@@ -338,6 +363,227 @@ module Generator =
             
             stop()
 
+    let blitInternalEq (components : string[]) (different : bool[]) =
+        let dim = components.Length
+
+        let selfType = getNativeName dim
+        let suffix = Array.zip components different |> Array.map (fun (c,d) -> if d then c else c + "E") |> String.concat ""
+        
+        let tInt = 
+            match Map.tryFind dim vectorNames with
+                | Some (dv,_) -> dv
+                | None -> "int64"
+
+        let tFloat = 
+            match Map.tryFind dim floatVectorNames with
+                | Some (dv,_) -> dv
+                | None -> "float"
+
+        let zFloat =
+            if dim = 1 then "0.0"
+            else sprintf "%s.Zero" tFloat
+        
+        let hFloat =
+            if dim = 1 then "0.5"
+            else sprintf "%s.Half" tFloat
+            
+        let oFloat =
+            if dim = 1 then "1.0"
+            else sprintf "%s.One" tFloat
+
+        let set (v : string) (d : int) (value : string) =
+            if dim > 1 then
+                let c = components.[d]
+                sprintf "%s.%s <- %s" v c value
+            else
+                sprintf "%s <- %s" v value
+
+        let get (v : string) (d : int) =
+            if dim > 1 then
+                let c = components.[d]
+                sprintf "%s.%s" v c
+            else
+                sprintf "%s" v
+
+        let floor (v : string) =
+            if dim = 1 then sprintf "floor(%s)" v
+            else sprintf "%s.Floor" v
+
+        start "member private x.BlitToInternal%s(y : %s<'a>, lerp : float -> 'a -> 'a -> 'a) = " suffix selfType
+
+        line "let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)"
+        line "let sa = nativeint (sizeof<'a>)"
+        line "let mutable py = y.Pointer |> NativePtr.toNativeInt"
+        line "py <- py + nativeint y.Info.Origin * sa"
+        line "let mutable px = x.Pointer |> NativePtr.toNativeInt"
+        line "px <- px + nativeint x.Info.Origin * sa"
+
+        for d in 0 .. components.Length-1 do
+            let mine = components.[d]
+            let next = 
+                if d < components.Length - 1 then Some components.[d + 1]
+                else None
+                
+            //line "let xs%s = nativeint (x.S%s * x.D%s) * sa" mine mine mine
+            line "let xd%s = nativeint x.D%s * sa" mine mine
+            if not different.[d] then
+                match next with
+                    | Some next -> 
+                        line "let xj%s = nativeint (x.D%s - x.S%s * x.D%s) * sa" mine mine next next
+                    | None ->
+                        line "let xj%s = nativeint x.D%s * sa" mine mine
+
+            line "let ys%s = nativeint (y.S%s * y.D%s) * sa" mine mine mine
+            match next with
+                | Some next -> 
+                    line "let yj%s = nativeint (y.D%s - y.S%s * y.D%s) * sa" mine mine next next
+                | None ->
+                    line "let yj%s = nativeint y.D%s * sa" mine mine
+                    
+        // let initialCoord = V2d(0.5, 0.5) / V2d(y.Size)
+        // let cx = coord * V2d(x.Size) - V2d.Half
+
+        // 0.5 * (V2d(x.Size) / V2d(y.Size)) - V2d(0.5, 0.5)
+        line "let ratio = %s(x.Size) / %s(y.Size)" tFloat tFloat
+        line "let initialCoord = 0.5 * ratio - %s" hFloat
+        line "let initialiCoord = %s(%s)" tInt (floor "initialCoord")
+        line "let initialFrac = initialCoord - %s(initialiCoord)" tFloat 
+        line "let step = %s * ratio" oFloat
+        line "let mutable coord = initialCoord"
+        line "let mutable icoord = initialiCoord" 
+        line "let mutable frac = initialFrac"
+
+        let deltas = components |> Seq.mapi (fun  i c -> sprintf "xd%s * nativeint %s" c (get "icoord" i)) |> String.concat " + "
+        line "px <- px + %s" deltas
+
+        let rec buildLoop (index : int) =
+            if index >= components.Length then
+                let offsets = allAssignments [0;1] dim
+
+                let offsets = 
+                    offsets |> List.filter (fun offset ->
+                        let offset = List.toArray offset
+                        Seq.init dim id |> Seq.forall (fun i ->
+                            different.[i] || offset.[i] = 0
+                        )
+                    )
+
+                for o in offsets do
+                    let str = o |> List.map string |> String.concat ""
+                    let delta = o |> List.mapi (fun i -> function 0 -> None | _ -> Some (sprintf "xd%s" components.[i])) |> List.choose id |> String.concat " + "
+                    if delta <> "" then
+                        line "let v%s : 'a = NativePtr.read (NativePtr.ofNativeInt (px + %s))" str delta
+                    else
+                        line "let v%s : 'a = NativePtr.read (NativePtr.ofNativeInt px)" str
+                        
+
+                let rec buildSample (prefix : string) (d : int) (offsets : list<list<int>>) =
+                    if d >= dim then
+                        line "NativePtr.write (NativePtr.ofNativeInt<'a> py) v%s" prefix
+                    else
+                        let r = dim - d
+
+                        let first = offsets |> List.map List.head |> Set.ofList
+
+                        let offsets = offsets |> List.map (List.skip 1) |> Set.ofList |> Set.toList //allAssignments [0;1] (r - 1)
+                    
+                        let frac = 
+                            if dim = 1 then "frac"
+                            else sprintf "frac.%s" (componentNames.[d])
+
+                        if different.[d] then
+                            line "// lerp %s" (componentNames.[d])
+                            for offset in offsets do
+                                let vName = offset |> List.map string |> String.concat "" |> sprintf "v%sx%s" prefix
+                                let i0 = 0 :: offset |> List.map string |> String.concat "" |> sprintf "v%s%s" prefix
+                                let i1 = 1 :: offset |> List.map string |> String.concat "" |> sprintf "v%s%s" prefix
+                                line "let %s = lerp.Invoke(%s, %s, %s)" vName frac i0 i1
+                            buildSample (prefix + "x") (d + 1) offsets 
+                        else
+                            buildSample (prefix + "0") (d + 1) offsets
+
+            
+                buildSample "" 0 offsets
+                //line "NativePtr.write (NativePtr.ofNativeInt<'a> py) Unchecked.defaultof<'a>"
+            else
+                let mine = components.[index]
+                line "let ye%s = py + ys%s" mine mine
+                if index > 0 then
+                    line "%s" (set "coord" index (get "initialCoord" index))
+                    line "px <- px + xd%s * nativeint (%s - %s)" mine (get "initialiCoord" index) (get "icoord" index)
+                    if different.[index] then 
+                        line "%s" (set "frac" index (get "initialFrac" index))
+                    line "%s" (set "icoord" index (get "initialiCoord" index))
+
+                start "while py <> ye%s do" mine 
+                buildLoop (index + 1)
+                line "py <- py + yj%s" mine
+
+                if different.[index] then
+                    line "%s" (set "coord" index (sprintf "%s + %s" (get "coord" index) (get "step" index)))
+                    line "let ni = int64 (floor %s)" (get "coord" index)
+                    line "px <- px + xd%s * nativeint (ni - %s)" mine (get "icoord" index)
+                    line "%s" (set "icoord" index "ni")
+                    line "%s" (set "frac" index (sprintf "%s - float(%s)" (get "coord" index) (get "icoord" index)))
+                else
+                    line "px <- px + xj%s" mine
+                    line "%s" (set "coord" index (sprintf "%s + %s" (get "coord" index) (get "step" index)))
+                    line "%s" (set "icoord" index (sprintf "%s + 1L" (get "icoord" index)))
+                stop()
+
+        buildLoop 0        
+
+        stop()
+
+    let blitInternal (components : string[]) =
+        let dim = components.Length
+        let all = allAssignments [true; false] dim
+        for a in all do blitInternalEq components (List.toArray a)
+        
+        let selfType = getNativeName dim
+
+        let suffix = components |> String.concat ""
+        let callInner (d : bool[]) = 
+            let suffix = Array.zip components d |> Array.map (fun (c,d) -> if d then c + "E" else c) |> String.concat ""
+            sprintf "x.BlitToInternal%s(y, lerp)" suffix
+
+        start "member private x.BlitTo%s(y : %s<'a>, lerp : float -> 'a -> 'a -> 'a) = " suffix selfType
+
+
+        let rec dispatch (i : int) (a : list<list<bool>>) =
+            match a with
+                | [a] ->
+                    if i > 0 then 
+                        line "else %s" (callInner (List.toArray a))
+                    else
+                        line "%s" (callInner (List.toArray a))
+                | a :: r ->
+                    let check = 
+                        a |> List.mapi (fun i a ->
+                            let mine = components.[i]
+                            if a then Some (sprintf "x.S%s = y.S%s" mine mine)
+                            else None
+                        ) |> List.choose id |> String.concat " && "
+                    
+                    if i > 0 then
+                        line "elif %s then %s" check (callInner (List.toArray a))
+                    else
+                        line "if %s then %s" check (callInner (List.toArray a))
+
+
+                    dispatch (i + 1) r
+                | [] ->
+                    failwith ""
+
+        dispatch 0 all
+
+            
+
+
+        stop()
+
+
+
     let sampleLinear (dim : int) =
         if dim > 1 then
             let coordType = 
@@ -397,17 +643,7 @@ module Generator =
 
             line "let ptr0 = NativePtr.toNativeInt x.Pointer + nativeint (%s) * sa" (System.String.Format(idot, "p0", sprintf "x.Delta.%s" swizzle))
 
-            let rec allAssignments (len : int) =
-                if len < 0 then
-                    []
-                elif len = 0 then
-                    [[]]
-                else
-                    let inner = allAssignments (len - 1)
-                    [
-                        for a in inner do yield 0 :: a
-                        for a in inner do yield 1 :: a
-                    ]
+
 
             let getPtr (offsets : list<int>) =
                 offsets 
@@ -422,7 +658,7 @@ module Generator =
                     line "%s" res
                 else
                     let r = dim - d
-                    let offsets = allAssignments (r - 1)
+                    let offsets = allAssignments [0;1] (r - 1)
                     
                     let frac = 
                         if dim = 1 then "frac"
@@ -436,7 +672,7 @@ module Generator =
                     buildSample (prefix + "x") (d + 1)
             
          
-            let offsets = allAssignments dim
+            let offsets = allAssignments [0;1] dim
 
             for offset in offsets do
                 let ptr0Name = 
@@ -578,15 +814,6 @@ module Generator =
         dispatcher check componentNames "CopyTo" (("y", sprintf "%s<%s>" otherName otherGenArg) :: args)
         
 
-    let getManagedName (dim : int) =
-        match Map.tryFind dim tensorNames with
-            | Some n -> n
-            | None -> sprintf "Tensor%d" dim
-
-    let getNativeName (dim : int) =
-        match Map.tryFind dim tensorNames with
-            | Some n -> "Native" + n
-            | None -> sprintf "NativeTensor%d" dim
 
 
     let sliced (name : string) (args : int -> list<string * string>) (op : int -> string -> string) (pinned : Set<string>) (componentNames : list<string>) =
@@ -666,6 +893,11 @@ module Generator =
         for coord in CoordDescription.all dim do
             for perm in allPermutations componentNames do coordSetter coord (List.toArray perm)
             dispatcher id componentNames "SetByCoord" ["value", sprintf "%s -> 'a" coord.typ]
+
+        // BlitTo(other, lerp) 
+        for perm in allPermutations componentNames do 
+            blitInternal (List.toArray perm)
+        dispatcher id componentNames "BlitTo" ["y", sprintf "%s<'a>" name; "lerp", "float -> 'a -> 'a -> 'a"]
 
         // CopyTo(other)
         copyTo componentNames name "'a" [] (fun l r -> sprintf "NativePtr.write (NativePtr.ofNativeInt<'a> %s) (NativePtr.read (NativePtr.ofNativeInt<'a> %s))" r l)

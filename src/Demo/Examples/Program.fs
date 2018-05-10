@@ -1315,58 +1315,53 @@ let main args =
     Ag.initialize()
     Aardvark.Init()
 
-    let inputVolume = NativeSupport.ReadFile2 @"C:\volumes\GussPK_AlSi_0.5Sn_180kV_925x925x500px.raw"
+    //let inputVolume = NativeSupport.ReadFile2 @"C:\volumes\GussPK_AlSi_0.5Sn_180kV_925x925x500px.raw"
 
-    let size = V3i(925,925,500)
-    let halfSize = size / 2
-    let volume = NativeVolume<uint16>(NativePtr.ofNativeInt inputVolume, VolumeInfo(0L,V3l size,V3l(1,size.X,size.X*size.Y)))
+    //let size = V3i(925,925,500)
+    //let halfSize = size / 2
+    //let volume = NativeVolume<uint16>(NativePtr.ofNativeInt inputVolume, VolumeInfo(0L,V3l size,V3l(1,size.X,size.X*size.Y)))
 
-    let target : byte[] = Array.zeroCreate (halfSize.X*halfSize.Y*halfSize.Z * 2)
-    let gc = GCHandle.Alloc(target,GCHandleType.Pinned)
+    //let target : byte[] = Array.zeroCreate (halfSize.X*halfSize.Y*halfSize.Z * 2)
+    //let gc = GCHandle.Alloc(target,GCHandleType.Pinned)
 
-    let targetVolume = NativeVolume<uint16>(NativePtr.ofNativeInt<| gc.AddrOfPinnedObject(), VolumeInfo(0L,V3l halfSize,V3l(1,halfSize.X,halfSize.X*halfSize.Y)))
+    //let targetVolume = NativeVolume<uint16>(NativePtr.ofNativeInt<| gc.AddrOfPinnedObject(), VolumeInfo(0L,V3l halfSize,V3l(1,halfSize.X,halfSize.X*halfSize.Y)))
 
-    targetVolume.SetByCoord(fun (v : V3d) -> 
-        volume.SampleLinear(v, fun t a b -> Fun.Lerp(t,a,b))
-    )
-
-    gc.Free()
-
-    File.WriteAllBytes(sprintf @"C:\volumes\gussHalf_%d_%d_%d.raw" halfSize.X halfSize.Y halfSize.Z, target)
-    System.Environment.Exit 0
-
-    //let src = PixImage.Create(@"C:\volumes\George-Clooney-014.jpg").ToPixImage<byte>()
-    ////let src = PixImage.Create(@"C:\volumes\dog2.png").ToPixImage<byte>()
-    //let dst = PixImage<byte>(src.Format, src.Size / 2)
-
-    //let bla = V3d(0.5 / V2d src.Size,0.0)
-
-    //NativeMatrix.using (src.GetChannel(0L)) (fun pSrc -> 
-    //    NativeMatrix.using (dst.GetChannel(0L)) (fun pDst -> 
-    //        let lerp = lerp
-
-    //        for i in 1 .. 2 do
-
-    //            pDst.SetByCoord(fun (v : V2d) -> 
-    //                pSrc.SampleLinear(v, lerp)
-    //            )
-        
-    //        let iter = 10
-    //        let sw = System.Diagnostics.Stopwatch.StartNew()
-    //        for i in 1 .. iter do
-    //            pDst.SetByCoord(fun (v : V2d) -> 
-    //                pSrc.SampleLinear(v, lerp)
-    //            )
-    //        sw.Stop()
-
-    //        Log.line "took: %A" (sw.MicroTime / iter)
-
-    //    )
+    //targetVolume.SetByCoord(fun (v : V3d) -> 
+    //    volume.SampleLinear(v, fun t a b -> Fun.Lerp(t,a,b))
     //)
 
-    //dst.SaveAsImage(@"C:\volumes\oida.png")
-    //src.SaveAsImage(@"C:\volumes\input.png")
+    //gc.Free()
+
+    //File.WriteAllBytes(sprintf @"C:\volumes\gussHalf_%d_%d_%d.raw" halfSize.X halfSize.Y halfSize.Z, target)
     //System.Environment.Exit 0
+
+    let src = PixImage.Create(@"E:\Development\WorkDirectory\bricksDiffuse0.png").ToPixImage<byte>()
+    //let src = PixImage.Create(@"C:\volumes\dog2.png").ToPixImage<byte>()
+    let dst = PixImage<byte>(src.Format, src.Size / 2)
+
+    let bla = V3d(0.5 / V2d src.Size,0.0)
+
+    NativeVolume.using src.Volume (fun pSrc -> 
+        NativeVolume.using dst.Volume (fun pDst -> 
+            let lerp = lerp
+
+            for i in 1 .. 2 do
+                pSrc.BlitTo(pDst, lerp)
+        
+            let iter = 10
+            let sw = System.Diagnostics.Stopwatch.StartNew()
+            for i in 1 .. iter do
+                pSrc.BlitTo(pDst, lerp)
+            sw.Stop()
+
+            Log.line "took: %A" (sw.MicroTime / iter)
+
+        )
+    )
+
+    dst.SaveAsImage(@"C:\Users\Schorsch\Desktop\blit.png")
+    src.SaveAsImage(@"C:\Users\Schorsch\Desktop\input.png")
+    System.Environment.Exit 0
 
 
     //Aardvark.Application.OpenVR.UnhateTest.run()
