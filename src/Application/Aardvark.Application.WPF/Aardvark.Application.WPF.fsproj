@@ -53,6 +53,11 @@
       </PropertyGroup>
     </Otherwise>
   </Choose>
+  
+  <Target Name="OSCheck" BeforeTargets="Build">
+    <Warning Text="empty assembly $(AssemblyName) since os is $(OperatingSystem)" Condition="'$(OperatingSystem)' != 'WINDOWS'" />
+  </Target>
+  
   <Import Project="$(FSharpTargetsPath)" Condition="exists('$(FSharpTargetsPath)')" />
   <ItemGroup>
     <Compile Include="RenderControl.fs" />
