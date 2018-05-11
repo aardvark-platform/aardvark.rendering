@@ -53,6 +53,12 @@
       </PropertyGroup>
     </Otherwise>
   </Choose>
+  
+  
+  <Target Name="OSCheck" BeforeTargets="Build">
+    <Warning Text="empty assembly $(AssemblyName) since os is $(OperatingSystem)" Condition="'$(OperatingSystem)' != 'WINDOWS'" />
+  </Target>
+  
   <Import Project="$(FSharpTargetsPath)" Condition="exists('$(FSharpTargetsPath)')" />
   <Choose>
     <When Condition="($(TargetFrameworkIdentifier) == '.NETCoreApp' And $(TargetFrameworkVersion) == 'v2.0') Or ($(TargetFrameworkIdentifier) == '.NETStandard' And $(TargetFrameworkVersion) == 'v2.0')">
