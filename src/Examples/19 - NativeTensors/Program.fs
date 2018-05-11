@@ -76,8 +76,12 @@ let main argv =
             NativeVolume.blit vInput vOutput
 
             // set a rectangular region to black
-            vOutput.[10 .. 100, 10 .. 100, *].Set(0uy)
+            vOutput.[10 .. 100, 10 .. 100, *] <- 0uy
             
+            // set a rectangular region to red
+            vOutput.[924 .. , 668 .., 0] <- 255uy
+            vOutput.[924 .. , 668 .., 1..] <- 0uy
+
             // replicate a mirrored region
             NativeVolume.copy 
                 (vOutput.[462 .. 562, 334 .. 434, *].MirrorY())
@@ -90,7 +94,8 @@ let main argv =
 
             // set a region to a circular gradient
             vOutput.[300 .. 400, 300 .. 400, *].SetByCoord (fun (c : V3d) ->
-                Fun.Lerp((Vec.length (c.XY - V2d.Half) * 2.0) / Constant.Sqrt2, 0uy, 255uy)
+                let d = Vec.length (c.XY - V2d.Half) * 2.0
+                Fun.Lerp(d / Constant.Sqrt2, 0uy, 255uy)
             )
 
         
