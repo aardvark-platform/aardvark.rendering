@@ -409,7 +409,7 @@ module Generator =
             if dim = 1 then sprintf "floor(%s)" v
             else sprintf "%s.Floor" v
 
-        start "member inline private x.BlitToInternal%s(y : %s<'a>, lerp : float -> 'a -> 'a -> 'a) = " suffix selfType
+        start "member inline private x.BlitToInternal%s(y : %s<'a>, srcOffset : %s, srcSize : %s, lerp : float -> 'a -> 'a -> 'a) = " suffix selfType tFloat tFloat
 
         line "let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)"
         line "let sa = nativeint (sizeof<'a>)"
@@ -444,8 +444,8 @@ module Generator =
         // let cx = coord * V2d(x.Size) - V2d.Half
 
         // 0.5 * (V2d(x.Size) / V2d(y.Size)) - V2d(0.5, 0.5)
-        line "let ratio = %s(x.Size) / %s(y.Size)" tFloat tFloat
-        line "let initialCoord = 0.5 * ratio - %s" hFloat
+        line "let ratio = (%s(x.Size) * srcSize) / %s(y.Size)" tFloat tFloat
+        line "let initialCoord = (0.5 * ratio) + srcOffset * %s(x.Size) - %s" tFloat hFloat
         line "let initialiCoord = %s(%s)" tInt (floor "initialCoord")
         line "let initialFrac = initialCoord - %s(initialiCoord)" tFloat 
         line "let step = %s * ratio" oFloat
@@ -542,12 +542,17 @@ module Generator =
         
         let selfType = getNativeName dim
 
+        let tFloat = 
+            match Map.tryFind dim floatVectorNames with
+                | Some (dv,_) -> dv
+                | None -> "float"
+
         let suffix = components |> String.concat ""
         let callInner (d : bool[]) = 
             let suffix = Array.zip components d |> Array.map (fun (c,d) -> if d then c + "E" else c) |> String.concat ""
-            sprintf "x.BlitToInternal%s(y, lerp)" suffix
+            sprintf "x.BlitToInternal%s(y, srcOffset, srcSize, lerp)" suffix
 
-        start "member inline private x.BlitTo%s(y : %s<'a>, lerp : float -> 'a -> 'a -> 'a) = " suffix selfType
+        start "member inline private x.BlitTo%s(y : %s<'a>, srcOffset : %s, srcSize : %s, lerp : float -> 'a -> 'a -> 'a) = " suffix selfType tFloat tFloat
 
         if dim <= 1 then
             line "if y.Size > x.Size then failwith \"[NativeTensor] upsampling not implemented\""
@@ -579,7 +584,12 @@ module Generator =
                 let cond =
                     a |> List.mapi (fun i a ->
                         let mine = components.[i]
-                        if a then Some (sprintf "x.S%s = y.S%s" mine mine)
+                        
+                        if a then 
+                            if dim = 1 then
+                                Some (sprintf "x.S%s = y.S%s && srcOffset = 0.0 && srcSize = 1.0" mine mine)
+                            else
+                                Some (sprintf "x.S%s = y.S%s && srcOffset.%s = 0.0 && srcSize.%s = 1.0" mine mine mine mine)
                         else None
                     ) |> List.choose id |> String.concat " && "
 
@@ -922,6 +932,20 @@ module Generator =
         let name = getNativeName dim
         let componentNames = Array.take dim componentNames |> Array.toList
 
+
+        let tFloat = 
+            match Map.tryFind dim floatVectorNames with
+                | Some (dv,_) -> dv
+                | None -> "float"
+
+        let zFloat =
+            if dim = 1 then "0.0"
+            else sprintf "%s.Zero" tFloat
+        
+        let oFloat =
+            if dim = 1 then "1.0"
+            else sprintf "%s.One" tFloat
+
         line "[<Sealed>]"
         start "type %s<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : %s) = " name infoName
         line "member x.Pointer = ptr"
@@ -948,8 +972,10 @@ module Generator =
         // BlitTo(other, lerp) 
         for perm in allPermutations componentNames do 
             blitInternal (List.toArray perm)
-        dispatcher id componentNames "BlitTo" ["y", sprintf "%s<'a>" name; "lerp", "float -> 'a -> 'a -> 'a"]
+        dispatcher id componentNames "BlitTo" ["y", sprintf "%s<'a>" name; "srcOffset", tFloat; "srcSize", tFloat; "lerp", "float -> 'a -> 'a -> 'a"]
 
+        line "member x.BlitTo(y : %s<'a>, lerp : float -> 'a -> 'a -> 'a) = x.BlitTo(y, %s, %s, lerp)" name zFloat oFloat
+        
         // Item
         item dim
 
