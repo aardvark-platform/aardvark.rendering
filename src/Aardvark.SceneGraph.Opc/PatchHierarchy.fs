@@ -89,3 +89,42 @@ module PatchHierarchy =
         else
             loadAndCache folder xmlPath pickle cachefile
 
+    let getPatchKdTreePath (h:PatchHierarchy) patchName = 
+            let rootpatch = h.tree |> QTree.getRoot 
+
+            let fileName = sprintf "%s-0.aakd" patchName            
+            Path.combine [h.baseDir; "patches"; rootpatch.info.Name; fileName]
+
+    let getPatchKdTreePath2d (h:PatchHierarchy) patchName = 
+            let rootpatch = h.tree |> QTree.getRoot 
+
+            let fileName = sprintf "%s-0-2d.aakd" patchName
+            Path.combine [h.baseDir; "patches"; rootpatch.info.Name; fileName]
+
+    let getPatchPositionPath (h:PatchHierarchy) patchName =
+        let fileName = "positions.aara"
+        Path.combine [h.baseDir; "patches"; patchName; fileName]
+
+    let getPatch2dPositionPath (h:PatchHierarchy) patchName = 
+        let fileName = "positions2d.aara"
+        Path.combine [h.baseDir; "patches"; patchName; fileName]
+
+    let getProfileLutPath (h:PatchHierarchy) = 
+        let fileName = "profilelut8.bin"
+        Path.combine [h.baseDir; "patches"; fileName]
+
+    let getkdTreePath (h:PatchHierarchy) (s) =
+        let rootpatch = h.tree |> QTree.getRoot 
+                                
+        let fileName = sprintf s rootpatch.info.Name
+        Path.combine [h.baseDir; "patches"; rootpatch.info.Name; fileName]
+
+    let getLevelNKdTreePath (h:PatchHierarchy) =
+        getkdTreePath h "%s.aakd"
+        
+    let getMasterKdTreePath (h:PatchHierarchy) =
+        getkdTreePath h "%s-0.aakd"
+
+    let getMasterKdTreePath2d (h:PatchHierarchy) =
+        getkdTreePath h "%s-0-2d.aakd"
+
