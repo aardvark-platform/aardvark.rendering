@@ -73,6 +73,7 @@ type PatchFileInfo =
 module PatchFileInfo =
     open XmlHelpers
     open Aardvark.Prinziple
+    open Aardvark.Base.Rendering
 
     [<AutoOpen>]
     module Parsers =
@@ -192,17 +193,17 @@ module PatchFileInfo =
             Coordinates         = coords              
             Attributes          = attributes
         }    
-
-    let load (opcFolder : string) (patchName : string) =
-        let path = Path.combine [opcFolder; "Patches"; patchName; "Patch.xml"]
+    
+    let load (opcPaths : OpcPaths) (patchName : string) =
+        let path = opcPaths.Patches_DirAbsPath +/ patchName +/ OpcPaths.PatchFileInfo_FileName
         let doc = Prinziple.readXmlDoc path
         ofXDoc doc patchName false
 
     /// <summary>
     /// Loads patchfileinfo with positions2d.aara as attribute
     /// </summary>    
-    let load' (opcFolder : string) (patchName : string) =
-        let path = Path.combine [opcFolder; "Patches"; patchName; "Patch.xml"]
+    let load' (opcPaths : OpcPaths) (patchName : string) =
+        let path = opcPaths.Patches_DirAbsPath +/ patchName +/ OpcPaths.PatchFileInfo_FileName
         let doc = Prinziple.readXmlDoc path
         ofXDoc doc patchName true
 
@@ -232,3 +233,10 @@ module QTree =
         match tree with
             | Leaf v -> v
             | Node(v,_) -> v
+
+    let rec flatten (tree : QTree<'a>) = 
+        match tree with
+            | Leaf v -> [|v|]
+            | Node(v,children) ->
+                let cs = children |> Array.map flatten |> Array.concat
+                Array.append [|v|] cs

@@ -86,6 +86,9 @@ module Aara =
     let inline isNan (v : V3f) = 
         v.X.IsNaN() || v.Y.IsNaN() || v.Z.IsNaN()
 
+    let inline triangleIsNan (t:Triangle3d) =
+        t.P0.AnyNaN || t.P1.AnyNaN || t.P2.AnyNaN
+
     let createIndex (vi : Matrix<V3f>) =
         let dx = vi.Info.DX
         let dy = vi.Info.DY
@@ -149,6 +152,65 @@ module Aara =
         )
         Array.Resize(&arr, cnt)
         arr
+    
+    // Patch Size to index array (skipping faces with invalid points)
+    let computeIndexArray (size : V2i) (invalidPoints : int Set) =
+      // vertex x/y to point index of face
+      let getFaceIndices y x sizeX =
+        let pntA = y * sizeX + x
+        let pntB = (y + 1) * sizeX + x
+        let pntC = pntA + 1
+        let pntD = pntB + 1
+
+        [| pntA; pntB; pntC;
+           pntC; pntB; pntD |]
+    
+      let getFaceIndicesWithInvalidChecking y x sizeX =
+        let faceIndices = getFaceIndices y x sizeX
+        if faceIndices |> Array.exists (fun i -> Set.contains i invalidPoints)
+          then Array.empty
+          else faceIndices
+
+      // choose function to use
+      let f = if invalidPoints.IsEmptyOrNull()
+              then getFaceIndices
+              else getFaceIndicesWithInvalidChecking
+
+      // step through all vertices to get index-array per face
+      let indexArray =
+        [| 0..(size.Y) |]
+        |> Array.map (fun y ->
+          [| 0..(size.X) |]
+          |> Array.map (fun x -> f y x size.X)
+        |> Array.concat)
+    
+      let invalidFaceCount = indexArray |> Array.filter (fun a -> a.IsEmpty()) |> Array.length
+      if invalidFaceCount > 0 then
+        Report.Line(5, "Invalid faces found: " + invalidFaceCount.ToString())
+
+      indexArray |> Array.concat
+
+    let getInvalidIndices (positions : V3d[]) =
+      positions |> List.ofArray |> List.mapi (fun i x -> if x.AnyNaN then Some i else None) |> List.choose id
+    
+    // load triangles from aaraFile and transform them with matrix
+    let loadTrianglesFromFile (aaraFile : string) (matrix : M44d) =
+        let positions = aaraFile |> fromFile<V3f>
+
+        let data = 
+            positions.Data |> Array.map (fun x ->  x.ToV3d() |> matrix.TransformPos)
+
+        let invalidIndices = getInvalidIndices data
+        let index = computeIndexArray (positions.Size.XY.ToV2i()) (Set.ofList invalidIndices)
+              
+        let triangles =             
+            index 
+                |> Seq.map(fun x -> data.[x])
+                |> Seq.chunkBySize 3
+                |> Seq.map(fun x -> Triangle3d(x))
+                |> Seq.filter(fun x -> triangleIsNan x |> not) |> Seq.toArray
+
+        triangles
 
     module Offset = 
 
@@ -238,7 +300,3 @@ module Aara =
       let fromFileColumnsWithOffsetAndSize<'a when 'a : unmanaged and 'a : (new : unit -> 'a) and 'a : struct and 'a :> ValueType> (offset : int) (size : int) (fileName : string) =
         let stream = File.OpenRead fileName
         loadFromStreamColumnsWithOffset<'a> offset size stream
-
-
-
-

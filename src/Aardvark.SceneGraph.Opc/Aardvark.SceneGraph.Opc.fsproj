@@ -15,6 +15,7 @@
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="PrinZiple.fs" />
     <Compile Include="Aara.fs" />
+    <Compile Include="OpcPaths.fs" />
     <Compile Include="PatchFileInfo.fs" />
     <Compile Include="Patch.fs" />
     <Compile Include="PatchHierarchy.fs" />
