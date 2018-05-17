@@ -60,7 +60,7 @@ type PatchFileInfo =
         LocalBoundingBox2d  : Box3d
 
         Positions           : string
-        Positions2d         : string
+        Positions2d         : option<string>
         Normals             : string
         Offsets             : string
 
@@ -114,6 +114,13 @@ module PatchFileInfo =
     let get (name : string) (node : XmlNode)=
         node.SelectSingleNode(name).InnerText.Trim()
 
+    let tryGet (name : string) (node : XmlNode)=
+        let n = node.SelectSingleNode(name)
+        if (n = null) then
+          None
+        else
+          Some (n.InnerText.Trim())
+
     let xvalue (p : XmlNode) = p.Value.Trim()
 
     let inner (node : XmlNode) = 
@@ -147,13 +154,15 @@ module PatchFileInfo =
               |> List.map (string << get "DiffuseColor1Coordinates")
         
         let attributes =
-          if hasDeviations then
+          //if hasDeviations then
             patch 
               |> childNodes' "Attributes"
               |> Seq.map inner
               |> Seq.toList 
-          else
-            [ "positions2d.aara" ]
+
+        Log.line "%A" attributes
+          //else
+          //  [ "positions2d.aara" ]
 
         let split (s:string) =
             (s.Split ' ') |> Array.toList
@@ -174,26 +183,26 @@ module PatchFileInfo =
             LocalBoundingBox2d  = patch |> get "LocalBoundingBox"    |> Box3d.Parse
 
             Positions           = patch |> get "Positions"
-            Positions2d         = ""
+            Positions2d         = patch |> tryGet "Positions2d"
             Normals             = ""
             Offsets             = ""
             Textures            = textures
             Coordinates         = coords              
-            Attributes          = attributes
+            Attributes          = [] //attributes
         }    
 
-    let load (dir : string) (f : string) =
-        let path = Path.combine [dir; "Patches"; f; "Patch.xml"]
+    let load (opcFolder : string) (patchName : string) =
+        let path = Path.combine [opcFolder; "Patches"; patchName; "Patch.xml"]
         let doc = Prinziple.readXmlDoc path
-        ofXDoc doc f false
+        ofXDoc doc patchName false
 
     /// <summary>
     /// Loads patchfileinfo with positions2d.aara as attribute
     /// </summary>    
-    let load' (dir : string) (f : string) =
-        let path = Path.combine [dir; "Patches"; f; "Patch.xml"]
+    let load' (opcFolder : string) (patchName : string) =
+        let path = Path.combine [opcFolder; "Patches"; patchName; "Patch.xml"]
         let doc = Prinziple.readXmlDoc path
-        ofXDoc doc f true
+        ofXDoc doc patchName true
 
 type QTree<'a> = Node of 'a * array<QTree<'a>>
                 | Leaf of 'a
