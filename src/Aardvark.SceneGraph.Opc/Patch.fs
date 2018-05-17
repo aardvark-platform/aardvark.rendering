@@ -26,11 +26,12 @@ type Patch =
 module Patch =
     let ofInfo (level : int) (size: float) (p : PatchFileInfo) = { level = level; info = p; triangleSize = size }
         
-    let load (baseDir : string) (p : PatchFileInfo)  =
+    let load (opcPaths : OpcPaths) (p : PatchFileInfo)  =
         let sw = System.Diagnostics.Stopwatch()
         sw.Start()
-        let positions = Path.combine [baseDir; "Patches"; p.Name; p.Positions] |> fromFile<V3f>
-        let coordinates = Path.combine [baseDir; "Patches"; p.Name; (List.head p.Coordinates)] |> fromFile<V2f>        
+        let patch_DirAbsPath = opcPaths.Patches_DirAbsPath +/ p.Name
+        let positions   = patch_DirAbsPath +/ p.Positions               |> fromFile<V3f>
+        let coordinates = patch_DirAbsPath +/ (List.head p.Coordinates) |> fromFile<V2f>
                 
         sw.Stop()
 
@@ -57,9 +58,9 @@ module Patch =
                                         
         geometry, sw.MicroTime
 
-    let extractTexturePath (baseDir : string) (patchInfo : PatchFileInfo) (texNumber : int) =
+    let extractTexturePath (opcPaths : OpcPaths) (patchInfo : PatchFileInfo) (texNumber : int) =
         let t = patchInfo.Textures |> List.item texNumber
-        let sourcePath = Path.combine [ baseDir; "Images"; t.fileName]
+        let sourcePath = opcPaths.Images_DirAbsPath +/ t.fileName
         let extensions = [ ".dds"; ".tif"; ".tiff"]
 
         let rec tryFindTex exts path =
