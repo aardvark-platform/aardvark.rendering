@@ -119,7 +119,7 @@ module PatchFileInfo =
     let inner (node : XmlNode) = 
         node.InnerText.Trim()
     
-    let private ofXDoc (doc : XmlDocument) (name : string) =        
+    let private ofXDoc (doc : XmlDocument) (name : string) (hasDeviations : bool) =        
 
         let trafo (m : M44d) =
             Trafo3d(m, m.Inverse)
@@ -147,10 +147,13 @@ module PatchFileInfo =
               |> List.map (string << get "DiffuseColor1Coordinates")
         
         let attributes =
+          if hasDeviations then
             patch 
-              |> childNodes' "Attributes" 
+              |> childNodes' "Attributes"
               |> Seq.map inner
               |> Seq.toList 
+          else
+            [ "positions2d.aara" ]
 
         let split (s:string) =
             (s.Split ' ') |> Array.toList
@@ -182,7 +185,15 @@ module PatchFileInfo =
     let load (dir : string) (f : string) =
         let path = Path.combine [dir; "Patches"; f; "Patch.xml"]
         let doc = Prinziple.readXmlDoc path
-        ofXDoc doc f
+        ofXDoc doc f false
+
+    /// <summary>
+    /// Loads patchfileinfo with positions2d.aara as attribute
+    /// </summary>    
+    let load' (dir : string) (f : string) =
+        let path = Path.combine [dir; "Patches"; f; "Patch.xml"]
+        let doc = Prinziple.readXmlDoc path
+        ofXDoc doc f true
 
 type QTree<'a> = Node of 'a * array<QTree<'a>>
                 | Leaf of 'a

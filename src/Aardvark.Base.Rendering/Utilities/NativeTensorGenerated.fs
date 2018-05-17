@@ -74,7 +74,7 @@ type NativeVector<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VectorInfo
             ptr <- ptr + jX
     member x.SetByCoord(value : float -> 'a) = 
         x.SetByCoordX(value)
-    member inline private x.BlitToInternalX(y : NativeVector<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalX(y : NativeVector<'a>, srcOffset : float, srcSize : float, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -84,8 +84,8 @@ type NativeVector<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VectorInfo
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = float(x.Size) / float(y.Size)
-        let initialCoord = 0.5 * ratio - 0.5
+        let ratio = (float(x.Size) * srcSize) / float(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * float(x.Size) - 0.5
         let initialiCoord = int64(floor(initialCoord))
         let initialFrac = initialCoord - float(initialiCoord)
         let step = 1.0 * ratio
@@ -106,7 +106,7 @@ type NativeVector<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VectorInfo
             px <- px + xdX * nativeint (ni - icoord)
             icoord <- ni
             frac <- coord - float(icoord)
-    member inline private x.BlitToInternalXE(y : NativeVector<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXE(y : NativeVector<'a>, srcOffset : float, srcSize : float, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -117,8 +117,8 @@ type NativeVector<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VectorInfo
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = float(x.Size) / float(y.Size)
-        let initialCoord = 0.5 * ratio - 0.5
+        let ratio = (float(x.Size) * srcSize) / float(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * float(x.Size) - 0.5
         let initialiCoord = int64(floor(initialCoord))
         let initialFrac = initialCoord - float(initialiCoord)
         let step = 1.0 * ratio
@@ -134,12 +134,13 @@ type NativeVector<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VectorInfo
             px <- px + xjX
             coord <- coord + step
             icoord <- icoord + 1L
-    member inline private x.BlitToX(y : NativeVector<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToX(y : NativeVector<'a>, srcOffset : float, srcSize : float, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size > x.Size then failwith "[NativeTensor] upsampling not implemented"
-        if x.SX = y.SX then x.BlitToInternalXE(y, lerp)
-        else x.BlitToInternalX(y, lerp)
-    member x.BlitTo(y : NativeVector<'a>, lerp : float -> 'a -> 'a -> 'a) = 
-        x.BlitToX(y, lerp)
+        if x.SX = y.SX && srcOffset = 0.0 && srcSize = 1.0 then x.BlitToInternalXE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalX(y, srcOffset, srcSize, lerp)
+    member x.BlitTo(y : NativeVector<'a>, srcOffset : float, srcSize : float, lerp : float -> 'a -> 'a -> 'a) = 
+        x.BlitToX(y, srcOffset, srcSize, lerp)
+    member x.BlitTo(y : NativeVector<'a>, lerp : float -> 'a -> 'a -> 'a) = x.BlitTo(y, 0.0, 1.0, lerp)
     member x.Item
         with get(c0 : int64) : 'a = 
             let i = x.Delta * c0
@@ -460,7 +461,7 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let cXY = compare (abs info.DX) (abs info.DY)
         if cXY >= 0  then x.SetByCoordXY(value)
         else x.SetByCoordYX(value)
-    member inline private x.BlitToInternalXY(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXY(y : NativeMatrix<'a>, srcOffset : V2d, srcSize : V2d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -473,8 +474,8 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V2d(x.Size) / V2d(y.Size)
-        let initialCoord = 0.5 * ratio - V2d.Half
+        let ratio = (V2d(x.Size) * srcSize) / V2d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V2d(x.Size) - V2d.Half
         let initialiCoord = V2l(initialCoord.Floor)
         let initialFrac = initialCoord - V2d(initialiCoord)
         let step = V2d.One * ratio
@@ -512,7 +513,7 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXYE(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYE(y : NativeMatrix<'a>, srcOffset : V2d, srcSize : V2d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -526,8 +527,8 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V2d(x.Size) / V2d(y.Size)
-        let initialCoord = 0.5 * ratio - V2d.Half
+        let ratio = (V2d(x.Size) * srcSize) / V2d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V2d(x.Size) - V2d.Half
         let initialiCoord = V2l(initialCoord.Floor)
         let initialFrac = initialCoord - V2d(initialiCoord)
         let step = V2d.One * ratio
@@ -557,7 +558,7 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXEY(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEY(y : NativeMatrix<'a>, srcOffset : V2d, srcSize : V2d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -571,8 +572,8 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V2d(x.Size) / V2d(y.Size)
-        let initialCoord = 0.5 * ratio - V2d.Half
+        let ratio = (V2d(x.Size) * srcSize) / V2d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V2d(x.Size) - V2d.Half
         let initialiCoord = V2l(initialCoord.Floor)
         let initialFrac = initialCoord - V2d(initialiCoord)
         let step = V2d.One * ratio
@@ -603,7 +604,7 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEYE(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYE(y : NativeMatrix<'a>, srcOffset : V2d, srcSize : V2d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -618,8 +619,8 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V2d(x.Size) / V2d(y.Size)
-        let initialCoord = 0.5 * ratio - V2d.Half
+        let ratio = (V2d(x.Size) * srcSize) / V2d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V2d(x.Size) - V2d.Half
         let initialiCoord = V2l(initialCoord.Floor)
         let initialFrac = initialCoord - V2d(initialiCoord)
         let step = V2d.One * ratio
@@ -644,13 +645,13 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToXY(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToXY(y : NativeMatrix<'a>, srcOffset : V2d, srcSize : V2d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEYE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalXEY(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalXYE(y, lerp)
-        else x.BlitToInternalXY(y, lerp)
-    member inline private x.BlitToInternalYX(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXEYE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalXEY(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXYE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalXY(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalYX(y : NativeMatrix<'a>, srcOffset : V2d, srcSize : V2d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -663,8 +664,8 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V2d(x.Size) / V2d(y.Size)
-        let initialCoord = 0.5 * ratio - V2d.Half
+        let ratio = (V2d(x.Size) * srcSize) / V2d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V2d(x.Size) - V2d.Half
         let initialiCoord = V2l(initialCoord.Floor)
         let initialFrac = initialCoord - V2d(initialiCoord)
         let step = V2d.One * ratio
@@ -702,7 +703,7 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYXE(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXE(y : NativeMatrix<'a>, srcOffset : V2d, srcSize : V2d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -716,8 +717,8 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V2d(x.Size) / V2d(y.Size)
-        let initialCoord = 0.5 * ratio - V2d.Half
+        let ratio = (V2d(x.Size) * srcSize) / V2d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V2d(x.Size) - V2d.Half
         let initialiCoord = V2l(initialCoord.Floor)
         let initialFrac = initialCoord - V2d(initialiCoord)
         let step = V2d.One * ratio
@@ -747,7 +748,7 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYEX(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEX(y : NativeMatrix<'a>, srcOffset : V2d, srcSize : V2d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -761,8 +762,8 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V2d(x.Size) / V2d(y.Size)
-        let initialCoord = 0.5 * ratio - V2d.Half
+        let ratio = (V2d(x.Size) * srcSize) / V2d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V2d(x.Size) - V2d.Half
         let initialiCoord = V2l(initialCoord.Floor)
         let initialFrac = initialCoord - V2d(initialiCoord)
         let step = V2d.One * ratio
@@ -793,7 +794,7 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEXE(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXE(y : NativeMatrix<'a>, srcOffset : V2d, srcSize : V2d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -808,8 +809,8 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V2d(x.Size) / V2d(y.Size)
-        let initialCoord = 0.5 * ratio - V2d.Half
+        let ratio = (V2d(x.Size) * srcSize) / V2d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V2d(x.Size) - V2d.Half
         let initialiCoord = V2l(initialCoord.Floor)
         let initialFrac = initialCoord - V2d(initialiCoord)
         let step = V2d.One * ratio
@@ -834,16 +835,17 @@ type NativeMatrix<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : MatrixInfo
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToYX(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToYX(y : NativeMatrix<'a>, srcOffset : V2d, srcSize : V2d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEXE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalYEX(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalYXE(y, lerp)
-        else x.BlitToInternalYX(y, lerp)
-    member x.BlitTo(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYEXE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalYEX(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYXE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalYX(y, srcOffset, srcSize, lerp)
+    member x.BlitTo(y : NativeMatrix<'a>, srcOffset : V2d, srcSize : V2d, lerp : float -> 'a -> 'a -> 'a) = 
         let cXY = compare (abs info.DX) (abs info.DY)
-        if cXY >= 0  then x.BlitToXY(y, lerp)
-        else x.BlitToYX(y, lerp)
+        if cXY >= 0  then x.BlitToXY(y, srcOffset, srcSize, lerp)
+        else x.BlitToYX(y, srcOffset, srcSize, lerp)
+    member x.BlitTo(y : NativeMatrix<'a>, lerp : float -> 'a -> 'a -> 'a) = x.BlitTo(y, V2d.Zero, V2d.One, lerp)
     member x.Item
         with get(c0 : V2l) : 'a = 
             let i = V2l.Dot(x.Delta, c0)
@@ -1929,7 +1931,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         elif cXY >= 0  && cXZ >= 0  && cYZ <= 0 then x.SetByCoordXZY(value)
         elif cXY >= 0  && cXZ <= 0 && cYZ <= 0 then x.SetByCoordZXY(value)
         else x.SetByCoordZYX(value)
-    member inline private x.BlitToInternalXYZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYZ(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -1945,8 +1947,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -2005,7 +2007,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXYZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYZE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2022,8 +2024,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -2070,7 +2072,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXYEZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYEZ(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2087,8 +2089,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -2135,7 +2137,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXYEZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYEZE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2153,8 +2155,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -2193,7 +2195,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXEYZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYZ(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2210,8 +2212,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -2259,7 +2261,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEYZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYZE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2277,8 +2279,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -2318,7 +2320,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEYEZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYEZ(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2336,8 +2338,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -2377,7 +2379,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEYEZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYEZE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2396,8 +2398,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -2431,17 +2433,17 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToXYZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToXYZ(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SX = y.SX && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXEYEZE(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEYEZ(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalXEYZE(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXYEZE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalXEYZ(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalXYEZ(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalXYZE(y, lerp)
-        else x.BlitToInternalXYZ(y, lerp)
-    member inline private x.BlitToInternalYXZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXEYEZE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXEYEZ(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXEYZE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXYEZE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalXEYZ(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXYEZ(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXYZE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalXYZ(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalYXZ(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2457,8 +2459,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -2517,7 +2519,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYXZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXZE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2534,8 +2536,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -2582,7 +2584,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYXEZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXEZ(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2599,8 +2601,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -2647,7 +2649,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYXEZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXEZE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2665,8 +2667,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -2705,7 +2707,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYEXZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXZ(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2722,8 +2724,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -2771,7 +2773,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEXZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXZE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2789,8 +2791,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -2830,7 +2832,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEXEZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXEZ(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2848,8 +2850,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -2889,7 +2891,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEXEZE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXEZE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2908,8 +2910,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -2943,17 +2945,17 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToYXZ(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToYXZ(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SY = y.SY && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYEXEZE(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEXEZ(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalYEXZE(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYXEZE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalYEXZ(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalYXEZ(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalYXZE(y, lerp)
-        else x.BlitToInternalYXZ(y, lerp)
-    member inline private x.BlitToInternalYZX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYEXEZE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYEXEZ(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYEXZE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYXEZE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalYEXZ(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYXEZ(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYXZE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalYXZ(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalYZX(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -2969,8 +2971,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -3029,7 +3031,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYZXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZXE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3046,8 +3048,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -3094,7 +3096,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYZEX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZEX(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3111,8 +3113,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -3159,7 +3161,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYZEXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZEXE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3177,8 +3179,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -3217,7 +3219,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYEZX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZX(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3234,8 +3236,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -3283,7 +3285,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEZXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZXE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3301,8 +3303,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -3342,7 +3344,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEZEX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZEX(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3360,8 +3362,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -3401,7 +3403,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEZEXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZEXE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3420,8 +3422,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -3455,17 +3457,17 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToYZX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToYZX(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SY = y.SY && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYEZEXE(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalYEZEX(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEZXE(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYZEXE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalYEZX(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalYZEX(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalYZXE(y, lerp)
-        else x.BlitToInternalYZX(y, lerp)
-    member inline private x.BlitToInternalXZY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYEZEXE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYEZEX(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYEZXE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYZEXE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalYEZX(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYZEX(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYZXE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalYZX(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalXZY(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3481,8 +3483,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -3541,7 +3543,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXZYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZYE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3558,8 +3560,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -3606,7 +3608,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXZEY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZEY(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3623,8 +3625,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -3671,7 +3673,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXZEYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZEYE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3689,8 +3691,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -3729,7 +3731,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXEZY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZY(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3746,8 +3748,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -3795,7 +3797,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEZYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZYE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3813,8 +3815,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -3854,7 +3856,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEZEY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZEY(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3872,8 +3874,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -3913,7 +3915,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEZEYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZEYE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3932,8 +3934,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -3967,17 +3969,17 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToXZY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToXZY(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SX = y.SX && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXEZEYE(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalXEZEY(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEZYE(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXZEYE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalXEZY(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalXZEY(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalXZYE(y, lerp)
-        else x.BlitToInternalXZY(y, lerp)
-    member inline private x.BlitToInternalZXY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXEZEYE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXEZEY(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXEZYE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXZEYE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalXEZY(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXZEY(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXZYE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalXZY(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalZXY(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -3993,8 +3995,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -4053,7 +4055,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZXYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXYE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4070,8 +4072,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -4118,7 +4120,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZXEY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXEY(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4135,8 +4137,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -4183,7 +4185,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZXEYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXEYE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4201,8 +4203,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -4241,7 +4243,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZEXY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXY(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4258,8 +4260,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -4307,7 +4309,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEXYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXYE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4325,8 +4327,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -4366,7 +4368,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEXEY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXEY(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4384,8 +4386,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -4425,7 +4427,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEXEYE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXEYE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4444,8 +4446,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -4479,17 +4481,17 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToZXY(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToZXY(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SZ = y.SZ && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZEXEYE(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalZEXEY(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalZEXYE(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZXEYE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalZEXY(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalZXEY(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalZXYE(y, lerp)
-        else x.BlitToInternalZXY(y, lerp)
-    member inline private x.BlitToInternalZYX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZEXEYE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZEXEY(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZEXYE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZXEYE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalZEXY(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZXEY(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZXYE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalZXY(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalZYX(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4505,8 +4507,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -4565,7 +4567,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZYXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYXE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4582,8 +4584,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -4630,7 +4632,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZYEX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYEX(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4647,8 +4649,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -4695,7 +4697,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZYEXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYEXE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4713,8 +4715,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -4753,7 +4755,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZEYX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYX(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4770,8 +4772,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -4819,7 +4821,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEYXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYXE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4837,8 +4839,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -4878,7 +4880,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEYEX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYEX(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4896,8 +4898,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -4937,7 +4939,7 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEYEXE(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYEXE(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -4956,8 +4958,8 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V3d(x.Size) / V3d(y.Size)
-        let initialCoord = 0.5 * ratio - V3d.Half
+        let ratio = (V3d(x.Size) * srcSize) / V3d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V3d(x.Size) - V3d.Half
         let initialiCoord = V3l(initialCoord.Floor)
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
@@ -4991,26 +4993,27 @@ type NativeVolume<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : VolumeInfo
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToZYX(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToZYX(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SZ = y.SZ && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZEYEXE(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalZEYEX(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalZEYXE(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZYEXE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalZEYX(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalZYEX(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalZYXE(y, lerp)
-        else x.BlitToInternalZYX(y, lerp)
-    member x.BlitTo(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZEYEXE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZEYEX(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZEYXE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZYEXE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalZEYX(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZYEX(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZYXE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalZYX(y, srcOffset, srcSize, lerp)
+    member x.BlitTo(y : NativeVolume<'a>, srcOffset : V3d, srcSize : V3d, lerp : float -> 'a -> 'a -> 'a) = 
         let cXY = compare (abs info.DX) (abs info.DY)
         let cXZ = compare (abs info.DX) (abs info.DZ)
         let cYZ = compare (abs info.DY) (abs info.DZ)
-        if cXY >= 0  && cXZ >= 0  && cYZ >= 0  then x.BlitToXYZ(y, lerp)
-        elif cXY <= 0 && cXZ >= 0  && cYZ >= 0  then x.BlitToYXZ(y, lerp)
-        elif cXY <= 0 && cXZ <= 0 && cYZ >= 0  then x.BlitToYZX(y, lerp)
-        elif cXY >= 0  && cXZ >= 0  && cYZ <= 0 then x.BlitToXZY(y, lerp)
-        elif cXY >= 0  && cXZ <= 0 && cYZ <= 0 then x.BlitToZXY(y, lerp)
-        else x.BlitToZYX(y, lerp)
+        if cXY >= 0  && cXZ >= 0  && cYZ >= 0  then x.BlitToXYZ(y, srcOffset, srcSize, lerp)
+        elif cXY <= 0 && cXZ >= 0  && cYZ >= 0  then x.BlitToYXZ(y, srcOffset, srcSize, lerp)
+        elif cXY <= 0 && cXZ <= 0 && cYZ >= 0  then x.BlitToYZX(y, srcOffset, srcSize, lerp)
+        elif cXY >= 0  && cXZ >= 0  && cYZ <= 0 then x.BlitToXZY(y, srcOffset, srcSize, lerp)
+        elif cXY >= 0  && cXZ <= 0 && cYZ <= 0 then x.BlitToZXY(y, srcOffset, srcSize, lerp)
+        else x.BlitToZYX(y, srcOffset, srcSize, lerp)
+    member x.BlitTo(y : NativeVolume<'a>, lerp : float -> 'a -> 'a -> 'a) = x.BlitTo(y, V3d.Zero, V3d.One, lerp)
     member x.Item
         with get(c0 : V3l) : 'a = 
             let i = V3l.Dot(x.Delta, c0)
@@ -9341,7 +9344,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         elif cXW <= 0 && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.SetByCoordWXZY(value)
         elif cXW <= 0 && cXY >= 0  && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.SetByCoordWZXY(value)
         else x.SetByCoordWZYX(value)
-    member inline private x.BlitToInternalXYZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYZW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -9360,8 +9363,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -9449,7 +9452,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXYZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYZWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -9469,8 +9472,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -9538,7 +9541,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXYZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYZEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -9558,8 +9561,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -9627,7 +9630,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXYZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYZEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -9648,8 +9651,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -9705,7 +9708,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXYEZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYEZW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -9725,8 +9728,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -9794,7 +9797,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXYEZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYEZWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -9815,8 +9818,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -9872,7 +9875,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXYEZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYEZEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -9893,8 +9896,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -9950,7 +9953,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXYEZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYEZEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -9972,8 +9975,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -10021,7 +10024,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXEYZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYZW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10041,8 +10044,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -10111,7 +10114,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEYZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYZWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10132,8 +10135,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -10190,7 +10193,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEYZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYZEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10211,8 +10214,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -10269,7 +10272,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEYZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYZEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10291,8 +10294,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -10341,7 +10344,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEYEZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYEZW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10362,8 +10365,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -10420,7 +10423,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEYEZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYEZWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10442,8 +10445,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -10492,7 +10495,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEYEZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYEZEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10514,8 +10517,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -10564,7 +10567,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEYEZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYEZEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10587,8 +10590,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -10631,25 +10634,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToXYZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToXYZW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SX = y.SX && x.SY = y.SY && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalXEYEZEWE(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXEYEZEW(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalXEYEZWE(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalXEYZEWE(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalXYEZEWE(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEYEZW(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalXEYZEW(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalXEYZWE(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXYEZEW(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalXYEZWE(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalXYZEWE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalXEYZW(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalXYEZW(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalXYZEW(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalXYZWE(y, lerp)
-        else x.BlitToInternalXYZW(y, lerp)
-    member inline private x.BlitToInternalYXZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXEYEZEWE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXEYEZEW(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXEYEZWE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXEYZEWE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXYEZEWE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXEYEZW(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXEYZEW(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXEYZWE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXYEZEW(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXYEZWE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXYZEWE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalXEYZW(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXYEZW(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXYZEW(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXYZWE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalXYZW(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalYXZW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10668,8 +10671,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -10757,7 +10760,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYXZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXZWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10777,8 +10780,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -10846,7 +10849,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYXZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXZEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10866,8 +10869,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -10935,7 +10938,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYXZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXZEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -10956,8 +10959,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -11013,7 +11016,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYXEZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXEZW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11033,8 +11036,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -11102,7 +11105,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYXEZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXEZWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11123,8 +11126,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -11180,7 +11183,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYXEZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXEZEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11201,8 +11204,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -11258,7 +11261,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYXEZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXEZEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11280,8 +11283,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -11329,7 +11332,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYEXZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXZW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11349,8 +11352,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -11419,7 +11422,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEXZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXZWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11440,8 +11443,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -11498,7 +11501,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEXZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXZEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11519,8 +11522,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -11577,7 +11580,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEXZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXZEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11599,8 +11602,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -11649,7 +11652,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEXEZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXEZW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11670,8 +11673,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -11728,7 +11731,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEXEZWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXEZWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11750,8 +11753,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -11800,7 +11803,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEXEZEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXEZEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11822,8 +11825,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -11872,7 +11875,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEXEZEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXEZEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11895,8 +11898,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -11939,25 +11942,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToYXZW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToYXZW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SY = y.SY && x.SX = y.SX && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalYEXEZEWE(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYEXEZEW(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalYEXEZWE(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalYEXZEWE(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalYXEZEWE(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEXEZW(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalYEXZEW(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalYEXZWE(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYXEZEW(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalYXEZWE(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalYXZEWE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalYEXZW(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalYXEZW(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalYXZEW(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalYXZWE(y, lerp)
-        else x.BlitToInternalYXZW(y, lerp)
-    member inline private x.BlitToInternalYZXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYEXEZEWE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYEXEZEW(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYEXEZWE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYEXZEWE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYXEZEWE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYEXEZW(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYEXZEW(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYEXZWE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYXEZEW(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYXEZWE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYXZEWE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalYEXZW(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYXEZW(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYXZEW(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYXZWE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalYXZW(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalYZXW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -11976,8 +11979,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -12065,7 +12068,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYZXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZXWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12085,8 +12088,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -12154,7 +12157,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYZXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZXEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12174,8 +12177,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -12243,7 +12246,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYZXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZXEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12264,8 +12267,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -12321,7 +12324,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYZEXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZEXW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12341,8 +12344,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -12410,7 +12413,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYZEXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZEXWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12431,8 +12434,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -12488,7 +12491,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYZEXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZEXEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12509,8 +12512,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -12566,7 +12569,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYZEXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZEXEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12588,8 +12591,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -12637,7 +12640,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYEZXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZXW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12657,8 +12660,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -12727,7 +12730,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEZXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZXWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12748,8 +12751,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -12806,7 +12809,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEZXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZXEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12827,8 +12830,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -12885,7 +12888,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEZXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZXEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12907,8 +12910,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -12957,7 +12960,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEZEXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZEXW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -12978,8 +12981,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -13036,7 +13039,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEZEXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZEXWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13058,8 +13061,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -13108,7 +13111,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEZEXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZEXEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13130,8 +13133,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -13180,7 +13183,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEZEXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZEXEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13203,8 +13206,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -13247,25 +13250,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToYZXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToYZXW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SY = y.SY && x.SZ = y.SZ && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalYEZEXEWE(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYEZEXEW(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalYEZEXWE(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalYEZXEWE(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalYZEXEWE(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalYEZEXW(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEZXEW(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalYEZXWE(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYZEXEW(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalYZEXWE(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalYZXEWE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalYEZXW(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalYZEXW(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalYZXEW(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalYZXWE(y, lerp)
-        else x.BlitToInternalYZXW(y, lerp)
-    member inline private x.BlitToInternalYZWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYEZEXEWE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYEZEXEW(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYEZEXWE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYEZXEWE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYZEXEWE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYEZEXW(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYEZXEW(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYEZXWE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYZEXEW(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYZEXWE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYZXEWE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalYEZXW(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYZEXW(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYZXEW(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYZXWE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalYZXW(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalYZWX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13284,8 +13287,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -13373,7 +13376,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYZWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZWXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13393,8 +13396,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -13462,7 +13465,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYZWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZWEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13482,8 +13485,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -13551,7 +13554,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYZWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZWEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13572,8 +13575,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -13629,7 +13632,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYZEWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZEWX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13649,8 +13652,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -13718,7 +13721,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYZEWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZEWXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13739,8 +13742,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -13796,7 +13799,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYZEWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZEWEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13817,8 +13820,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -13874,7 +13877,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYZEWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYZEWEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13896,8 +13899,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -13945,7 +13948,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYEZWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZWX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -13965,8 +13968,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -14035,7 +14038,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEZWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZWXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14056,8 +14059,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -14114,7 +14117,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEZWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZWEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14135,8 +14138,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -14193,7 +14196,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEZWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZWEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14215,8 +14218,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -14265,7 +14268,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEZEWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZEWX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14286,8 +14289,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -14344,7 +14347,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEZEWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZEWXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14366,8 +14369,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -14416,7 +14419,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEZEWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZEWEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14438,8 +14441,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -14488,7 +14491,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEZEWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEZEWEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14511,8 +14514,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -14555,25 +14558,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToYZWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToYZWX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SY = y.SY && x.SZ = y.SZ && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalYEZEWEXE(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalYEZEWEX(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYEZEWXE(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalYEZWEXE(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalYZEWEXE(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalYEZEWX(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalYEZWEX(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEZWXE(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalYZEWEX(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYZEWXE(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalYZWEXE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalYEZWX(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalYZEWX(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalYZWEX(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalYZWXE(y, lerp)
-        else x.BlitToInternalYZWX(y, lerp)
-    member inline private x.BlitToInternalXZYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYEZEWEXE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYEZEWEX(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYEZEWXE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYEZWEXE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYZEWEXE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYEZEWX(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYEZWEX(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYEZWXE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYZEWEX(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYZEWXE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYZWEXE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalYEZWX(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYZEWX(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYZWEX(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYZWXE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalYZWX(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalXZYW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14592,8 +14595,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -14681,7 +14684,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXZYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZYWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14701,8 +14704,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -14770,7 +14773,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXZYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZYEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14790,8 +14793,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -14859,7 +14862,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXZYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZYEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14880,8 +14883,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -14937,7 +14940,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXZEYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZEYW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -14957,8 +14960,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -15026,7 +15029,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXZEYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZEYWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15047,8 +15050,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -15104,7 +15107,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXZEYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZEYEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15125,8 +15128,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -15182,7 +15185,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXZEYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZEYEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15204,8 +15207,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -15253,7 +15256,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXEZYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZYW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15273,8 +15276,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -15343,7 +15346,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEZYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZYWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15364,8 +15367,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -15422,7 +15425,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEZYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZYEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15443,8 +15446,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -15501,7 +15504,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEZYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZYEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15523,8 +15526,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -15573,7 +15576,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEZEYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZEYW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15594,8 +15597,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -15652,7 +15655,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEZEYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZEYWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15674,8 +15677,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -15724,7 +15727,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEZEYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZEYEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15746,8 +15749,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -15796,7 +15799,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEZEYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZEYEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15819,8 +15822,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -15863,25 +15866,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToXZYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToXZYW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SX = y.SX && x.SZ = y.SZ && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalXEZEYEWE(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXEZEYEW(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalXEZEYWE(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalXEZYEWE(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalXZEYEWE(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalXEZEYW(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEZYEW(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalXEZYWE(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXZEYEW(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalXZEYWE(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalXZYEWE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalXEZYW(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalXZEYW(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalXZYEW(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalXZYWE(y, lerp)
-        else x.BlitToInternalXZYW(y, lerp)
-    member inline private x.BlitToInternalZXYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXEZEYEWE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXEZEYEW(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXEZEYWE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXEZYEWE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXZEYEWE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXEZEYW(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXEZYEW(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXEZYWE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXZEYEW(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXZEYWE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXZYEWE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalXEZYW(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXZEYW(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXZYEW(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXZYWE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalXZYW(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalZXYW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -15900,8 +15903,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -15989,7 +15992,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZXYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXYWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16009,8 +16012,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -16078,7 +16081,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZXYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXYEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16098,8 +16101,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -16167,7 +16170,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZXYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXYEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16188,8 +16191,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -16245,7 +16248,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZXEYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXEYW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16265,8 +16268,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -16334,7 +16337,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZXEYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXEYWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16355,8 +16358,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -16412,7 +16415,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZXEYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXEYEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16433,8 +16436,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -16490,7 +16493,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZXEYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXEYEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16512,8 +16515,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -16561,7 +16564,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZEXYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXYW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16581,8 +16584,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -16651,7 +16654,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEXYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXYWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16672,8 +16675,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -16730,7 +16733,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEXYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXYEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16751,8 +16754,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -16809,7 +16812,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEXYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXYEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16831,8 +16834,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -16881,7 +16884,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEXEYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXEYW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16902,8 +16905,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -16960,7 +16963,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEXEYWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXEYWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -16982,8 +16985,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -17032,7 +17035,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEXEYEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXEYEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17054,8 +17057,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -17104,7 +17107,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEXEYEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXEYEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17127,8 +17130,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -17171,25 +17174,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToZXYW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToZXYW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SZ = y.SZ && x.SX = y.SX && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalZEXEYEWE(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZEXEYEW(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalZEXEYWE(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalZEXYEWE(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalZXEYEWE(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalZEXEYW(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalZEXYEW(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalZEXYWE(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZXEYEW(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalZXEYWE(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalZXYEWE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalZEXYW(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalZXEYW(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalZXYEW(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalZXYWE(y, lerp)
-        else x.BlitToInternalZXYW(y, lerp)
-    member inline private x.BlitToInternalZYXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZEXEYEWE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZEXEYEW(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZEXEYWE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZEXYEWE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZXEYEWE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZEXEYW(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZEXYEW(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZEXYWE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZXEYEW(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZXEYWE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZXYEWE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalZEXYW(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZXEYW(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZXYEW(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZXYWE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalZXYW(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalZYXW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17208,8 +17211,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -17297,7 +17300,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZYXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYXWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17317,8 +17320,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -17386,7 +17389,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZYXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYXEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17406,8 +17409,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -17475,7 +17478,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZYXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYXEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17496,8 +17499,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -17553,7 +17556,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZYEXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYEXW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17573,8 +17576,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -17642,7 +17645,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZYEXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYEXWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17663,8 +17666,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -17720,7 +17723,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZYEXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYEXEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17741,8 +17744,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -17798,7 +17801,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZYEXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYEXEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17820,8 +17823,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -17869,7 +17872,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZEYXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYXW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17889,8 +17892,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -17959,7 +17962,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEYXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYXWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -17980,8 +17983,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -18038,7 +18041,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEYXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYXEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18059,8 +18062,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -18117,7 +18120,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEYXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYXEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18139,8 +18142,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -18189,7 +18192,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEYEXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYEXW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18210,8 +18213,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -18268,7 +18271,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEYEXWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYEXWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18290,8 +18293,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -18340,7 +18343,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEYEXEW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYEXEW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18362,8 +18365,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -18412,7 +18415,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEYEXEWE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYEXEWE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18435,8 +18438,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjW = nativeint x.DW * sa
         let ysW = nativeint (y.SW * y.DW) * sa
         let yjW = nativeint y.DW * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -18479,25 +18482,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToZYXW(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToZYXW(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SZ = y.SZ && x.SY = y.SY && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalZEYEXEWE(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZEYEXEW(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalZEYEXWE(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalZEYXEWE(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalZYEXEWE(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalZEYEXW(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalZEYXEW(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalZEYXWE(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZYEXEW(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalZYEXWE(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalZYXEWE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalZEYXW(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalZYEXW(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalZYXEW(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalZYXWE(y, lerp)
-        else x.BlitToInternalZYXW(y, lerp)
-    member inline private x.BlitToInternalZYWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZEYEXEWE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZEYEXEW(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZEYEXWE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZEYXEWE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZYEXEWE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZEYEXW(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZEYXEW(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZEYXWE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZYEXEW(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZYEXWE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZYXEWE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalZEYXW(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZYEXW(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZYXEW(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZYXWE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalZYXW(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalZYWX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18516,8 +18519,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -18605,7 +18608,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZYWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYWXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18625,8 +18628,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -18694,7 +18697,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZYWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYWEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18714,8 +18717,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -18783,7 +18786,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZYWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYWEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18804,8 +18807,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -18861,7 +18864,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZYEWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYEWX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18881,8 +18884,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -18950,7 +18953,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZYEWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYEWXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -18971,8 +18974,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -19028,7 +19031,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZYEWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYEWEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19049,8 +19052,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -19106,7 +19109,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZYEWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZYEWEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19128,8 +19131,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -19177,7 +19180,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZEYWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYWX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19197,8 +19200,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -19267,7 +19270,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEYWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYWXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19288,8 +19291,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -19346,7 +19349,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEYWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYWEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19367,8 +19370,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -19425,7 +19428,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEYWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYWEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19447,8 +19450,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -19497,7 +19500,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEYEWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYEWX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19518,8 +19521,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -19576,7 +19579,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEYEWXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYEWXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19598,8 +19601,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -19648,7 +19651,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEYEWEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYEWEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19670,8 +19673,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -19720,7 +19723,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEYEWEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEYEWEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19743,8 +19746,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -19787,25 +19790,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToZYWX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToZYWX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SZ = y.SZ && x.SY = y.SY && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalZEYEWEXE(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalZEYEWEX(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZEYEWXE(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalZEYWEXE(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalZYEWEXE(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalZEYEWX(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalZEYWEX(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalZEYWXE(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalZYEWEX(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZYEWXE(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalZYWEXE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalZEYWX(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalZYEWX(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalZYWEX(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalZYWXE(y, lerp)
-        else x.BlitToInternalZYWX(y, lerp)
-    member inline private x.BlitToInternalXZWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZEYEWEXE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZEYEWEX(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZEYEWXE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZEYWEXE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZYEWEXE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZEYEWX(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZEYWEX(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZEYWXE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZYEWEX(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZYEWXE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZYWEXE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalZEYWX(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZYEWX(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZYWEX(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZYWXE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalZYWX(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalXZWY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19824,8 +19827,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -19913,7 +19916,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXZWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZWYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -19933,8 +19936,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -20002,7 +20005,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXZWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZWEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20022,8 +20025,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -20091,7 +20094,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXZWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZWEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20112,8 +20115,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -20169,7 +20172,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXZEWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZEWY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20189,8 +20192,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -20258,7 +20261,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXZEWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZEWYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20279,8 +20282,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -20336,7 +20339,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXZEWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZEWEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20357,8 +20360,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -20414,7 +20417,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXZEWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXZEWEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20436,8 +20439,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -20485,7 +20488,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXEZWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZWY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20505,8 +20508,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -20575,7 +20578,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEZWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZWYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20596,8 +20599,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -20654,7 +20657,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEZWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZWEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20675,8 +20678,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -20733,7 +20736,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEZWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZWEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20755,8 +20758,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -20805,7 +20808,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEZEWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZEWY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20826,8 +20829,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -20884,7 +20887,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEZEWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZEWYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20906,8 +20909,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -20956,7 +20959,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEZEWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZEWEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -20978,8 +20981,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -21028,7 +21031,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEZEWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEZEWEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21051,8 +21054,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -21095,25 +21098,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToXZWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToXZWY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SX = y.SX && x.SZ = y.SZ && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalXEZEWEYE(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalXEZEWEY(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXEZEWYE(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalXEZWEYE(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalXZEWEYE(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalXEZEWY(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalXEZWEY(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEZWYE(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalXZEWEY(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXZEWYE(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalXZWEYE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalXEZWY(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalXZEWY(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalXZWEY(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalXZWYE(y, lerp)
-        else x.BlitToInternalXZWY(y, lerp)
-    member inline private x.BlitToInternalZXWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXEZEWEYE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXEZEWEY(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXEZEWYE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXEZWEYE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXZEWEYE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXEZEWY(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXEZWEY(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXEZWYE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXZEWEY(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXZEWYE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXZWEYE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalXEZWY(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXZEWY(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXZWEY(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXZWYE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalXZWY(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalZXWY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21132,8 +21135,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -21221,7 +21224,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZXWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXWYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21241,8 +21244,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -21310,7 +21313,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZXWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXWEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21330,8 +21333,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -21399,7 +21402,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZXWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXWEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21420,8 +21423,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -21477,7 +21480,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZXEWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXEWY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21497,8 +21500,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -21566,7 +21569,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZXEWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXEWYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21587,8 +21590,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -21644,7 +21647,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZXEWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXEWEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21665,8 +21668,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -21722,7 +21725,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZXEWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZXEWEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21744,8 +21747,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -21793,7 +21796,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZEXWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXWY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21813,8 +21816,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -21883,7 +21886,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEXWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXWYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21904,8 +21907,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -21962,7 +21965,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEXWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXWEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -21983,8 +21986,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -22041,7 +22044,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEXWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXWEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22063,8 +22066,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -22113,7 +22116,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEXEWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXEWY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22134,8 +22137,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -22192,7 +22195,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEXEWYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXEWYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22214,8 +22217,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -22264,7 +22267,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEXEWEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXEWEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22286,8 +22289,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -22336,7 +22339,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEXEWEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEXEWEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22359,8 +22362,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -22403,25 +22406,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToZXWY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToZXWY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SZ = y.SZ && x.SX = y.SX && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalZEXEWEYE(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalZEXEWEY(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZEXEWYE(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalZEXWEYE(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalZXEWEYE(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalZEXEWY(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalZEXWEY(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalZEXWYE(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalZXEWEY(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZXEWYE(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalZXWEYE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalZEXWY(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalZXEWY(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalZXWEY(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalZXWYE(y, lerp)
-        else x.BlitToInternalZXWY(y, lerp)
-    member inline private x.BlitToInternalZWXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZEXEWEYE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZEXEWEY(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZEXEWYE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZEXWEYE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZXEWEYE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZEXEWY(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZEXWEY(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZEXWYE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZXEWEY(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZXEWYE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZXWEYE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalZEXWY(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZXEWY(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZXWEY(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZXWYE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalZXWY(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalZWXY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22440,8 +22443,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -22529,7 +22532,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZWXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWXYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22549,8 +22552,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -22618,7 +22621,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZWXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWXEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22638,8 +22641,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -22707,7 +22710,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZWXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWXEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22728,8 +22731,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -22785,7 +22788,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZWEXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWEXY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22805,8 +22808,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -22874,7 +22877,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZWEXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWEXYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22895,8 +22898,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -22952,7 +22955,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZWEXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWEXEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -22973,8 +22976,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -23030,7 +23033,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZWEXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWEXEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23052,8 +23055,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -23101,7 +23104,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZEWXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWXY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23121,8 +23124,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -23191,7 +23194,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEWXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWXYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23212,8 +23215,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -23270,7 +23273,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEWXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWXEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23291,8 +23294,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -23349,7 +23352,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEWXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWXEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23371,8 +23374,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -23421,7 +23424,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEWEXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWEXY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23442,8 +23445,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -23500,7 +23503,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEWEXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWEXYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23522,8 +23525,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -23572,7 +23575,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEWEXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWEXEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23594,8 +23597,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -23644,7 +23647,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEWEXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWEXEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23667,8 +23670,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -23711,25 +23714,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToZWXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToZWXY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SZ = y.SZ && x.SW = y.SW && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZEWEXEYE(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalZEWEXEY(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalZEWEXYE(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZEWXEYE(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZWEXEYE(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalZEWEXY(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalZEWXEY(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalZEWXYE(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalZWEXEY(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalZWEXYE(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalZWXEYE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalZEWXY(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalZWEXY(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalZWXEY(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalZWXYE(y, lerp)
-        else x.BlitToInternalZWXY(y, lerp)
-    member inline private x.BlitToInternalZWYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZEWEXEYE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZEWEXEY(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZEWEXYE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZEWXEYE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZWEXEYE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZEWEXY(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZEWXEY(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZEWXYE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZWEXEY(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZWEXYE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZWXEYE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalZEWXY(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZWEXY(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZWXEY(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZWXYE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalZWXY(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalZWYX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23748,8 +23751,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -23837,7 +23840,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZWYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWYXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23857,8 +23860,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -23926,7 +23929,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZWYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWYEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -23946,8 +23949,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -24015,7 +24018,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZWYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWYEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24036,8 +24039,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -24093,7 +24096,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZWEYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWEYX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24113,8 +24116,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -24182,7 +24185,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZWEYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWEYXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24203,8 +24206,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -24260,7 +24263,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZWEYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWEYEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24281,8 +24284,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -24338,7 +24341,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZWEYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZWEYEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24360,8 +24363,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -24409,7 +24412,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdZ * nativeint (ni - icoord.Z)
             icoord.Z <- ni
             frac.Z <- coord.Z - float(icoord.Z)
-    member inline private x.BlitToInternalZEWYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWYX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24429,8 +24432,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -24499,7 +24502,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEWYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWYXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24520,8 +24523,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -24578,7 +24581,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEWYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWYEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24599,8 +24602,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -24657,7 +24660,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEWYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWYEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24679,8 +24682,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -24729,7 +24732,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEWEYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWEYX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24750,8 +24753,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -24808,7 +24811,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEWEYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWEYXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24830,8 +24833,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -24880,7 +24883,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEWEYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWEYEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24902,8 +24905,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -24952,7 +24955,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToInternalZEWEYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalZEWEYEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -24975,8 +24978,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -25019,25 +25022,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjZ
             coord.Z <- coord.Z + step.Z
             icoord.Z <- icoord.Z + 1L
-    member inline private x.BlitToZWYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToZWYX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SZ = y.SZ && x.SW = y.SW && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZEWEYEXE(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalZEWEYEX(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalZEWEYXE(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZEWYEXE(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZWEYEXE(y, lerp)
-        elif x.SZ = y.SZ && x.SW = y.SW then x.BlitToInternalZEWEYX(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalZEWYEX(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalZEWYXE(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalZWEYEX(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalZWEYXE(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalZWYEXE(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalZEWYX(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalZWEYX(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalZWYEX(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalZWYXE(y, lerp)
-        else x.BlitToInternalZWYX(y, lerp)
-    member inline private x.BlitToInternalXYWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZEWEYEXE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZEWEYEX(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZEWEYXE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZEWYEXE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZWEYEXE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZEWEYX(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZEWYEX(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZEWYXE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZWEYEX(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZWEYXE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZWYEXE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalZEWYX(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalZWEYX(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalZWYEX(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalZWYXE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalZWYX(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalXYWZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25056,8 +25059,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -25145,7 +25148,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXYWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYWZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25165,8 +25168,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -25234,7 +25237,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXYWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYWEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25254,8 +25257,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -25323,7 +25326,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXYWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYWEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25344,8 +25347,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -25401,7 +25404,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXYEWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYEWZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25421,8 +25424,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -25490,7 +25493,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXYEWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYEWZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25511,8 +25514,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -25568,7 +25571,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXYEWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYEWEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25589,8 +25592,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -25646,7 +25649,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXYEWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXYEWEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25668,8 +25671,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -25717,7 +25720,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXEYWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYWZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25737,8 +25740,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -25807,7 +25810,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEYWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYWZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25828,8 +25831,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -25886,7 +25889,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEYWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYWEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25907,8 +25910,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -25965,7 +25968,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEYWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYWEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -25987,8 +25990,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -26037,7 +26040,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEYEWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYEWZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26058,8 +26061,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -26116,7 +26119,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEYEWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYEWZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26138,8 +26141,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -26188,7 +26191,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEYEWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYEWEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26210,8 +26213,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -26260,7 +26263,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEYEWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEYEWEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26283,8 +26286,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -26327,25 +26330,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToXYWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToXYWZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SX = y.SX && x.SY = y.SY && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalXEYEWEZE(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY && x.SW = y.SW then x.BlitToInternalXEYEWEZ(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXEYEWZE(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalXEYWEZE(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalXYEWEZE(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEYEWZ(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalXEYWEZ(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalXEYWZE(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalXYEWEZ(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXYEWZE(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalXYWEZE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalXEYWZ(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalXYEWZ(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalXYWEZ(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalXYWZE(y, lerp)
-        else x.BlitToInternalXYWZ(y, lerp)
-    member inline private x.BlitToInternalYXWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXEYEWEZE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXEYEWEZ(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXEYEWZE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXEYWEZE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXYEWEZE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXEYEWZ(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXEYWEZ(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXEYWZE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXYEWEZ(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXYEWZE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXYWEZE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalXEYWZ(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXYEWZ(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXYWEZ(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXYWZE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalXYWZ(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalYXWZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26364,8 +26367,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -26453,7 +26456,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYXWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXWZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26473,8 +26476,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -26542,7 +26545,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYXWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXWEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26562,8 +26565,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -26631,7 +26634,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYXWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXWEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26652,8 +26655,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -26709,7 +26712,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYXEWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXEWZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26729,8 +26732,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -26798,7 +26801,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYXEWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXEWZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26819,8 +26822,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -26876,7 +26879,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYXEWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXEWEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26897,8 +26900,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -26954,7 +26957,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYXEWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYXEWEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -26976,8 +26979,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -27025,7 +27028,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYEXWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXWZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27045,8 +27048,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -27115,7 +27118,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEXWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXWZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27136,8 +27139,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -27194,7 +27197,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEXWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXWEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27215,8 +27218,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -27273,7 +27276,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEXWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXWEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27295,8 +27298,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -27345,7 +27348,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEXEWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXEWZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27366,8 +27369,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -27424,7 +27427,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEXEWZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXEWZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27446,8 +27449,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -27496,7 +27499,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEXEWEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXEWEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27518,8 +27521,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -27568,7 +27571,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEXEWEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEXEWEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27591,8 +27594,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -27635,25 +27638,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToYXWZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToYXWZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SY = y.SY && x.SX = y.SX && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalYEXEWEZE(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX && x.SW = y.SW then x.BlitToInternalYEXEWEZ(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYEXEWZE(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalYEXWEZE(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalYXEWEZE(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEXEWZ(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalYEXWEZ(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalYEXWZE(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalYXEWEZ(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYXEWZE(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalYXWEZE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalYEXWZ(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalYXEWZ(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalYXWEZ(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalYXWZE(y, lerp)
-        else x.BlitToInternalYXWZ(y, lerp)
-    member inline private x.BlitToInternalYWXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYEXEWEZE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYEXEWEZ(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYEXEWZE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYEXWEZE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYXEWEZE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYEXEWZ(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYEXWEZ(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYEXWZE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYXEWEZ(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYXEWZE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYXWEZE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalYEXWZ(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYXEWZ(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYXWEZ(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYXWZE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalYXWZ(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalYWXZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27672,8 +27675,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -27761,7 +27764,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYWXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWXZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27781,8 +27784,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -27850,7 +27853,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYWXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWXEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27870,8 +27873,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -27939,7 +27942,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYWXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWXEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -27960,8 +27963,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -28017,7 +28020,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYWEXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWEXZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28037,8 +28040,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -28106,7 +28109,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYWEXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWEXZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28127,8 +28130,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -28184,7 +28187,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYWEXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWEXEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28205,8 +28208,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -28262,7 +28265,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYWEXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWEXEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28284,8 +28287,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -28333,7 +28336,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYEWXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWXZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28353,8 +28356,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -28423,7 +28426,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEWXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWXZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28444,8 +28447,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -28502,7 +28505,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEWXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWXEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28523,8 +28526,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -28581,7 +28584,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEWXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWXEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28603,8 +28606,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -28653,7 +28656,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEWEXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWEXZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28674,8 +28677,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -28732,7 +28735,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEWEXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWEXZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28754,8 +28757,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -28804,7 +28807,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEWEXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWEXEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28826,8 +28829,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -28876,7 +28879,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEWEXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWEXEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28899,8 +28902,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -28943,25 +28946,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToYWXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToYWXZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SY = y.SY && x.SW = y.SW && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYEWEXEZE(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalYEWEXEZ(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalYEWEXZE(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYEWXEZE(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYWEXEZE(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalYEWEXZ(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEWXEZ(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalYEWXZE(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalYWEXEZ(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalYWEXZE(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalYWXEZE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalYEWXZ(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalYWEXZ(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalYWXEZ(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalYWXZE(y, lerp)
-        else x.BlitToInternalYWXZ(y, lerp)
-    member inline private x.BlitToInternalYWZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYEWEXEZE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYEWEXEZ(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYEWEXZE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYEWXEZE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYWEXEZE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYEWEXZ(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYEWXEZ(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYEWXZE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYWEXEZ(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYWEXZE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYWXEZE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalYEWXZ(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYWEXZ(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYWXEZ(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYWXZE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalYWXZ(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalYWZX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -28980,8 +28983,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -29069,7 +29072,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYWZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWZXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29089,8 +29092,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -29158,7 +29161,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYWZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWZEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29178,8 +29181,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -29247,7 +29250,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYWZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWZEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29268,8 +29271,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -29325,7 +29328,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYWEZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWEZX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29345,8 +29348,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -29414,7 +29417,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYWEZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWEZXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29435,8 +29438,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -29492,7 +29495,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYWEZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWEZEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29513,8 +29516,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -29570,7 +29573,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYWEZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYWEZEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29592,8 +29595,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -29641,7 +29644,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdY * nativeint (ni - icoord.Y)
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
-    member inline private x.BlitToInternalYEWZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWZX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29661,8 +29664,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -29731,7 +29734,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEWZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWZXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29752,8 +29755,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -29810,7 +29813,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEWZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWZEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29831,8 +29834,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -29889,7 +29892,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEWZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWZEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29911,8 +29914,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -29961,7 +29964,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEWEZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWEZX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -29982,8 +29985,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -30040,7 +30043,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEWEZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWEZXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30062,8 +30065,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -30112,7 +30115,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEWEZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWEZEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30134,8 +30137,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -30184,7 +30187,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToInternalYEWEZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalYEWEZEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30207,8 +30210,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -30251,25 +30254,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjY
             coord.Y <- coord.Y + step.Y
             icoord.Y <- icoord.Y + 1L
-    member inline private x.BlitToYWZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToYWZX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SY = y.SY && x.SW = y.SW && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYEWEZEXE(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalYEWEZEX(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW && x.SX = y.SX then x.BlitToInternalYEWEZXE(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYEWZEXE(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYWEZEXE(y, lerp)
-        elif x.SY = y.SY && x.SW = y.SW then x.BlitToInternalYEWEZX(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalYEWZEX(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalYEWZXE(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalYWEZEX(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalYWEZXE(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalYWZEXE(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalYEWZX(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalYWEZX(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalYWZEX(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalYWZXE(y, lerp)
-        else x.BlitToInternalYWZX(y, lerp)
-    member inline private x.BlitToInternalXWYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYEWEZEXE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYEWEZEX(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYEWEZXE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYEWZEXE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYWEZEXE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYEWEZX(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYEWZEX(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYEWZXE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYWEZEX(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYWEZXE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYWZEXE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalYEWZX(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalYWEZX(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalYWZEX(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalYWZXE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalYWZX(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalXWYZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30288,8 +30291,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -30377,7 +30380,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXWYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWYZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30397,8 +30400,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -30466,7 +30469,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXWYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWYEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30486,8 +30489,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -30555,7 +30558,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXWYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWYEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30576,8 +30579,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -30633,7 +30636,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXWEYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWEYZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30653,8 +30656,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -30722,7 +30725,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXWEYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWEYZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30743,8 +30746,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -30800,7 +30803,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXWEYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWEYEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30821,8 +30824,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -30878,7 +30881,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXWEYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWEYEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30900,8 +30903,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -30949,7 +30952,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXEWYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWYZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -30969,8 +30972,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -31039,7 +31042,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEWYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWYZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31060,8 +31063,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -31118,7 +31121,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEWYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWYEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31139,8 +31142,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -31197,7 +31200,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEWYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWYEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31219,8 +31222,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -31269,7 +31272,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEWEYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWEYZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31290,8 +31293,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -31348,7 +31351,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEWEYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWEYZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31370,8 +31373,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -31420,7 +31423,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEWEYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWEYEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31442,8 +31445,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -31492,7 +31495,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEWEYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWEYEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31515,8 +31518,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -31559,25 +31562,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToXWYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToXWYZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SX = y.SX && x.SW = y.SW && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXEWEYEZE(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalXEWEYEZ(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalXEWEYZE(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXEWYEZE(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXWEYEZE(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalXEWEYZ(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEWYEZ(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalXEWYZE(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalXWEYEZ(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalXWEYZE(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalXWYEZE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalXEWYZ(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalXWEYZ(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalXWYEZ(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalXWYZE(y, lerp)
-        else x.BlitToInternalXWYZ(y, lerp)
-    member inline private x.BlitToInternalWXYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXEWEYEZE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXEWEYEZ(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXEWEYZE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXEWYEZE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXWEYEZE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXEWEYZ(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXEWYEZ(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXEWYZE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXWEYEZ(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXWEYZE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXWYEZE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalXEWYZ(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXWEYZ(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXWYEZ(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXWYZE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalXWYZ(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalWXYZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31596,8 +31599,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -31685,7 +31688,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWXYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXYZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31705,8 +31708,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -31774,7 +31777,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWXYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXYEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31794,8 +31797,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -31863,7 +31866,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWXYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXYEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31884,8 +31887,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -31941,7 +31944,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWXEYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXEYZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -31961,8 +31964,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -32030,7 +32033,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWXEYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXEYZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32051,8 +32054,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -32108,7 +32111,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWXEYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXEYEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32129,8 +32132,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -32186,7 +32189,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWXEYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXEYEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32208,8 +32211,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -32257,7 +32260,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWEXYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXYZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32277,8 +32280,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -32347,7 +32350,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEXYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXYZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32368,8 +32371,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -32426,7 +32429,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEXYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXYEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32447,8 +32450,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -32505,7 +32508,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEXYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXYEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32527,8 +32530,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -32577,7 +32580,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEXEYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXEYZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32598,8 +32601,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -32656,7 +32659,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEXEYZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXEYZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32678,8 +32681,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -32728,7 +32731,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEXEYEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXEYEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32750,8 +32753,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -32800,7 +32803,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEXEYEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXEYEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32823,8 +32826,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -32867,25 +32870,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToWXYZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToWXYZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SW = y.SW && x.SX = y.SX && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalWEXEYEZE(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalWEXEYEZ(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalWEXEYZE(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalWEXYEZE(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalWXEYEZE(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalWEXEYZ(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalWEXYEZ(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalWEXYZE(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalWXEYEZ(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalWXEYZE(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalWXYEZE(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalWEXYZ(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalWXEYZ(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalWXYEZ(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalWXYZE(y, lerp)
-        else x.BlitToInternalWXYZ(y, lerp)
-    member inline private x.BlitToInternalWYXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWEXEYEZE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWEXEYEZ(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWEXEYZE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWEXYEZE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWXEYEZE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWEXEYZ(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWEXYEZ(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWEXYZE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWXEYEZ(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWXEYZE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWXYEZE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalWEXYZ(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWXEYZ(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWXYEZ(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWXYZE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalWXYZ(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalWYXZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -32904,8 +32907,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -32993,7 +32996,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWYXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYXZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33013,8 +33016,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -33082,7 +33085,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWYXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYXEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33102,8 +33105,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -33171,7 +33174,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWYXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYXEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33192,8 +33195,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -33249,7 +33252,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWYEXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYEXZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33269,8 +33272,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -33338,7 +33341,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWYEXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYEXZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33359,8 +33362,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -33416,7 +33419,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWYEXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYEXEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33437,8 +33440,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -33494,7 +33497,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWYEXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYEXEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33516,8 +33519,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -33565,7 +33568,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWEYXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYXZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33585,8 +33588,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -33655,7 +33658,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEYXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYXZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33676,8 +33679,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -33734,7 +33737,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEYXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYXEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33755,8 +33758,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -33813,7 +33816,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEYXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYXEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33835,8 +33838,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -33885,7 +33888,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEYEXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYEXZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33906,8 +33909,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -33964,7 +33967,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEYEXZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYEXZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -33986,8 +33989,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -34036,7 +34039,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEYEXEZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYEXEZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34058,8 +34061,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -34108,7 +34111,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEYEXEZE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYEXEZE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34131,8 +34134,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjZ = nativeint x.DZ * sa
         let ysZ = nativeint (y.SZ * y.DZ) * sa
         let yjZ = nativeint y.DZ * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -34175,25 +34178,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToWYXZ(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToWYXZ(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SW = y.SW && x.SY = y.SY && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalWEYEXEZE(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalWEYEXEZ(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalWEYEXZE(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalWEYXEZE(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalWYEXEZE(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalWEYEXZ(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalWEYXEZ(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalWEYXZE(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalWYEXEZ(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalWYEXZE(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalWYXEZE(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalWEYXZ(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalWYEXZ(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalWYXEZ(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalWYXZE(y, lerp)
-        else x.BlitToInternalWYXZ(y, lerp)
-    member inline private x.BlitToInternalWYZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWEYEXEZE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWEYEXEZ(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWEYEXZE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWEYXEZE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWYEXEZE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWEYEXZ(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWEYXEZ(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWEYXZE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWYEXEZ(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWYEXZE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWYXEZE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalWEYXZ(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWYEXZ(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWYXEZ(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWYXZE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalWYXZ(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalWYZX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34212,8 +34215,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -34301,7 +34304,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWYZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYZXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34321,8 +34324,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -34390,7 +34393,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWYZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYZEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34410,8 +34413,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -34479,7 +34482,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWYZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYZEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34500,8 +34503,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -34557,7 +34560,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWYEZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYEZX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34577,8 +34580,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -34646,7 +34649,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWYEZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYEZXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34667,8 +34670,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -34724,7 +34727,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWYEZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYEZEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34745,8 +34748,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -34802,7 +34805,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWYEZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWYEZEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34824,8 +34827,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -34873,7 +34876,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWEYZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYZX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34893,8 +34896,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -34963,7 +34966,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEYZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYZXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -34984,8 +34987,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -35042,7 +35045,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEYZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYZEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35063,8 +35066,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -35121,7 +35124,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEYZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYZEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35143,8 +35146,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -35193,7 +35196,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEYEZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYEZX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35214,8 +35217,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -35272,7 +35275,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEYEZXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYEZXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35294,8 +35297,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -35344,7 +35347,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEYEZEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYEZEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35366,8 +35369,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -35416,7 +35419,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEYEZEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEYEZEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35439,8 +35442,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -35483,25 +35486,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToWYZX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToWYZX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SW = y.SW && x.SY = y.SY && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalWEYEZEXE(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalWEYEZEX(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalWEYEZXE(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalWEYZEXE(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalWYEZEXE(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalWEYEZX(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalWEYZEX(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalWEYZXE(y, lerp)
-        elif x.SY = y.SY && x.SZ = y.SZ then x.BlitToInternalWYEZEX(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalWYEZXE(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalWYZEXE(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalWEYZX(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalWYEZX(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalWYZEX(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalWYZXE(y, lerp)
-        else x.BlitToInternalWYZX(y, lerp)
-    member inline private x.BlitToInternalXWZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWEYEZEXE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWEYEZEX(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWEYEZXE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWEYZEXE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWYEZEXE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWEYEZX(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWEYZEX(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWEYZXE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWYEZEX(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWYEZXE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWYZEXE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalWEYZX(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWYEZX(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWYZEX(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWYZXE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalWYZX(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalXWZY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35520,8 +35523,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -35609,7 +35612,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXWZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWZYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35629,8 +35632,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -35698,7 +35701,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXWZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWZEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35718,8 +35721,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -35787,7 +35790,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXWZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWZEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35808,8 +35811,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -35865,7 +35868,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXWEZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWEZY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35885,8 +35888,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -35954,7 +35957,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXWEZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWEZYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -35975,8 +35978,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -36032,7 +36035,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXWEZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWEZEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36053,8 +36056,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -36110,7 +36113,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXWEZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXWEZEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36132,8 +36135,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -36181,7 +36184,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdX * nativeint (ni - icoord.X)
             icoord.X <- ni
             frac.X <- coord.X - float(icoord.X)
-    member inline private x.BlitToInternalXEWZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWZY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36201,8 +36204,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -36271,7 +36274,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEWZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWZYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36292,8 +36295,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -36350,7 +36353,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEWZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWZEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36371,8 +36374,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -36429,7 +36432,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEWZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWZEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36451,8 +36454,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -36501,7 +36504,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEWEZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWEZY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36522,8 +36525,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -36580,7 +36583,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEWEZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWEZYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36602,8 +36605,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -36652,7 +36655,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEWEZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWEZEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36674,8 +36677,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -36724,7 +36727,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToInternalXEWEZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalXEWEZEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36747,8 +36750,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -36791,25 +36794,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjX
             coord.X <- coord.X + step.X
             icoord.X <- icoord.X + 1L
-    member inline private x.BlitToXWZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToXWZY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SX = y.SX && x.SW = y.SW && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXEWEZEYE(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalXEWEZEY(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW && x.SY = y.SY then x.BlitToInternalXEWEZYE(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXEWZEYE(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXWEZEYE(y, lerp)
-        elif x.SX = y.SX && x.SW = y.SW then x.BlitToInternalXEWEZY(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalXEWZEY(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalXEWZYE(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalXWEZEY(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalXWEZYE(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalXWZEYE(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalXEWZY(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalXWEZY(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalXWZEY(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalXWZYE(y, lerp)
-        else x.BlitToInternalXWZY(y, lerp)
-    member inline private x.BlitToInternalWXZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXEWEZEYE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXEWEZEY(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXEWEZYE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXEWZEYE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXWEZEYE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXEWEZY(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXEWZEY(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXEWZYE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXWEZEY(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXWEZYE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXWZEYE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalXEWZY(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalXWEZY(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalXWZEY(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalXWZYE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalXWZY(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalWXZY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36828,8 +36831,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -36917,7 +36920,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWXZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXZYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -36937,8 +36940,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -37006,7 +37009,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWXZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXZEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37026,8 +37029,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -37095,7 +37098,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWXZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXZEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37116,8 +37119,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -37173,7 +37176,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWXEZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXEZY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37193,8 +37196,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -37262,7 +37265,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWXEZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXEZYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37283,8 +37286,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -37340,7 +37343,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWXEZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXEZEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37361,8 +37364,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -37418,7 +37421,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWXEZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWXEZEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37440,8 +37443,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -37489,7 +37492,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWEXZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXZY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37509,8 +37512,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -37579,7 +37582,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEXZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXZYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37600,8 +37603,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -37658,7 +37661,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEXZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXZEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37679,8 +37682,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -37737,7 +37740,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEXZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXZEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37759,8 +37762,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -37809,7 +37812,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEXEZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXEZY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37830,8 +37833,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -37888,7 +37891,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEXEZYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXEZYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37910,8 +37913,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -37960,7 +37963,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEXEZEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXEZEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -37982,8 +37985,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -38032,7 +38035,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEXEZEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEXEZEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38055,8 +38058,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -38099,25 +38102,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToWXZY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToWXZY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SW = y.SW && x.SX = y.SX && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalWEXEZEYE(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalWEXEZEY(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalWEXEZYE(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalWEXZEYE(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalWXEZEYE(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalWEXEZY(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalWEXZEY(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalWEXZYE(y, lerp)
-        elif x.SX = y.SX && x.SZ = y.SZ then x.BlitToInternalWXEZEY(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalWXEZYE(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalWXZEYE(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalWEXZY(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalWXEZY(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalWXZEY(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalWXZYE(y, lerp)
-        else x.BlitToInternalWXZY(y, lerp)
-    member inline private x.BlitToInternalWZXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWEXEZEYE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWEXEZEY(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWEXEZYE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWEXZEYE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWXEZEYE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWEXEZY(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWEXZEY(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWEXZYE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWXEZEY(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWXEZYE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWXZEYE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalWEXZY(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWXEZY(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWXZEY(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWXZYE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalWXZY(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalWZXY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38136,8 +38139,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -38225,7 +38228,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWZXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZXYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38245,8 +38248,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -38314,7 +38317,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWZXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZXEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38334,8 +38337,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -38403,7 +38406,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWZXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZXEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38424,8 +38427,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -38481,7 +38484,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWZEXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZEXY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38501,8 +38504,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -38570,7 +38573,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWZEXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZEXYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38591,8 +38594,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -38648,7 +38651,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWZEXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZEXEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38669,8 +38672,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -38726,7 +38729,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWZEXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZEXEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38748,8 +38751,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -38797,7 +38800,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWEZXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZXY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38817,8 +38820,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -38887,7 +38890,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEZXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZXYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38908,8 +38911,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -38966,7 +38969,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEZXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZXEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -38987,8 +38990,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -39045,7 +39048,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEZXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZXEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39067,8 +39070,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -39117,7 +39120,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEZEXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZEXY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39138,8 +39141,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -39196,7 +39199,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEZEXYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZEXYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39218,8 +39221,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -39268,7 +39271,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEZEXEY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZEXEY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39290,8 +39293,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -39340,7 +39343,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEZEXEYE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZEXEYE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39363,8 +39366,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjY = nativeint x.DY * sa
         let ysY = nativeint (y.SY * y.DY) * sa
         let yjY = nativeint y.DY * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -39407,25 +39410,25 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToWZXY(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToWZXY(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SW = y.SW && x.SZ = y.SZ && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalWEZEXEYE(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalWEZEXEY(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalWEZEXYE(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalWEZXEYE(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX && x.SY = y.SY then x.BlitToInternalWZEXEYE(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalWEZEXY(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalWEZXEY(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalWEZXYE(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalWZEXEY(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalWZEXYE(y, lerp)
-        elif x.SX = y.SX && x.SY = y.SY then x.BlitToInternalWZXEYE(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalWEZXY(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalWZEXY(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalWZXEY(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalWZXYE(y, lerp)
-        else x.BlitToInternalWZXY(y, lerp)
-    member inline private x.BlitToInternalWZYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWEZEXEYE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWEZEXEY(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWEZEXYE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWEZXEYE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWZEXEYE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWEZEXY(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWEZXEY(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWEZXYE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWZEXEY(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWZEXYE(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWZXEYE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalWEZXY(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWZEXY(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWZXEY(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWZXYE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalWZXY(y, srcOffset, srcSize, lerp)
+    member inline private x.BlitToInternalWZYX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39444,8 +39447,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -39533,7 +39536,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWZYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZYXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39553,8 +39556,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -39622,7 +39625,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWZYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZYEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39642,8 +39645,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -39711,7 +39714,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWZYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZYEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39732,8 +39735,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -39789,7 +39792,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWZEYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZEYX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39809,8 +39812,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -39878,7 +39881,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWZEYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZEYXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39899,8 +39902,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -39956,7 +39959,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWZEYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZEYEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -39977,8 +39980,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -40034,7 +40037,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWZEYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWZEYEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -40056,8 +40059,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -40105,7 +40108,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xdW * nativeint (ni - icoord.W)
             icoord.W <- ni
             frac.W <- coord.W - float(icoord.W)
-    member inline private x.BlitToInternalWEZYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZYX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -40125,8 +40128,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -40195,7 +40198,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEZYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZYXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -40216,8 +40219,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -40274,7 +40277,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEZYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZYEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -40295,8 +40298,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -40353,7 +40356,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEZYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZYEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -40375,8 +40378,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -40425,7 +40428,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEZEYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZEYX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -40446,8 +40449,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -40504,7 +40507,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEZEYXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZEYXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -40526,8 +40529,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -40576,7 +40579,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEZEYEX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZEYEX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -40598,8 +40601,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xdX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -40648,7 +40651,7 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToInternalWEZEYEXE(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToInternalWEZEYEXE(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let lerp = OptimizedClosures.FSharpFunc<float, 'a, 'a, 'a>.Adapt(lerp)
         let sa = nativeint (sizeof<'a>)
         let mutable py = y.Pointer |> NativePtr.toNativeInt
@@ -40671,8 +40674,8 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
         let xjX = nativeint x.DX * sa
         let ysX = nativeint (y.SX * y.DX) * sa
         let yjX = nativeint y.DX * sa
-        let ratio = V4d(x.Size) / V4d(y.Size)
-        let initialCoord = 0.5 * ratio - V4d.Half
+        let ratio = (V4d(x.Size) * srcSize) / V4d(y.Size)
+        let initialCoord = (0.5 * ratio) + srcOffset * V4d(x.Size) - V4d.Half
         let initialiCoord = V4l(initialCoord.Floor)
         let initialFrac = initialCoord - V4d(initialiCoord)
         let step = V4d.One * ratio
@@ -40715,55 +40718,56 @@ type NativeTensor4<'a when 'a : unmanaged>(ptr : nativeptr<'a>, info : Tensor4In
             px <- px + xjW
             coord.W <- coord.W + step.W
             icoord.W <- icoord.W + 1L
-    member inline private x.BlitToWZYX(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+    member inline private x.BlitToWZYX(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         if y.Size.AnyGreater(x.Size) then failwith "[NativeTensor] upsampling not implemented"
-        if x.SW = y.SW && x.SZ = y.SZ && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalWEZEYEXE(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalWEZEYEX(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalWEZEYXE(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalWEZYEXE(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY && x.SX = y.SX then x.BlitToInternalWZEYEXE(y, lerp)
-        elif x.SW = y.SW && x.SZ = y.SZ then x.BlitToInternalWEZEYX(y, lerp)
-        elif x.SW = y.SW && x.SY = y.SY then x.BlitToInternalWEZYEX(y, lerp)
-        elif x.SW = y.SW && x.SX = y.SX then x.BlitToInternalWEZYXE(y, lerp)
-        elif x.SZ = y.SZ && x.SY = y.SY then x.BlitToInternalWZEYEX(y, lerp)
-        elif x.SZ = y.SZ && x.SX = y.SX then x.BlitToInternalWZEYXE(y, lerp)
-        elif x.SY = y.SY && x.SX = y.SX then x.BlitToInternalWZYEXE(y, lerp)
-        elif x.SW = y.SW then x.BlitToInternalWEZYX(y, lerp)
-        elif x.SZ = y.SZ then x.BlitToInternalWZEYX(y, lerp)
-        elif x.SY = y.SY then x.BlitToInternalWZYEX(y, lerp)
-        elif x.SX = y.SX then x.BlitToInternalWZYXE(y, lerp)
-        else x.BlitToInternalWZYX(y, lerp)
-    member x.BlitTo(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = 
+        if x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWEZEYEXE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWEZEYEX(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWEZEYXE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWEZYEXE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWZEYEXE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWEZEYX(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWEZYEX(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWEZYXE(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWZEYEX(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWZEYXE(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 && x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWZYEXE(y, srcOffset, srcSize, lerp)
+        elif x.SW = y.SW && srcOffset.W = 0.0 && srcSize.W = 1.0 then x.BlitToInternalWEZYX(y, srcOffset, srcSize, lerp)
+        elif x.SZ = y.SZ && srcOffset.Z = 0.0 && srcSize.Z = 1.0 then x.BlitToInternalWZEYX(y, srcOffset, srcSize, lerp)
+        elif x.SY = y.SY && srcOffset.Y = 0.0 && srcSize.Y = 1.0 then x.BlitToInternalWZYEX(y, srcOffset, srcSize, lerp)
+        elif x.SX = y.SX && srcOffset.X = 0.0 && srcSize.X = 1.0 then x.BlitToInternalWZYXE(y, srcOffset, srcSize, lerp)
+        else x.BlitToInternalWZYX(y, srcOffset, srcSize, lerp)
+    member x.BlitTo(y : NativeTensor4<'a>, srcOffset : V4d, srcSize : V4d, lerp : float -> 'a -> 'a -> 'a) = 
         let cXW = compare (abs info.DX) (abs info.DW)
         let cXY = compare (abs info.DX) (abs info.DY)
         let cXZ = compare (abs info.DX) (abs info.DZ)
         let cYW = compare (abs info.DY) (abs info.DW)
         let cYZ = compare (abs info.DY) (abs info.DZ)
         let cZW = compare (abs info.DZ) (abs info.DW)
-        if cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW >= 0  then x.BlitToXYZW(y, lerp)
-        elif cXW >= 0  && cXY <= 0 && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW >= 0  then x.BlitToYXZW(y, lerp)
-        elif cXW >= 0  && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ >= 0  && cZW >= 0  then x.BlitToYZXW(y, lerp)
-        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ >= 0  && cZW >= 0  then x.BlitToYZWX(y, lerp)
-        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW >= 0  && cYZ <= 0 && cZW >= 0  then x.BlitToXZYW(y, lerp)
-        elif cXW >= 0  && cXY >= 0  && cXZ <= 0 && cYW >= 0  && cYZ <= 0 && cZW >= 0  then x.BlitToZXYW(y, lerp)
-        elif cXW >= 0  && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ <= 0 && cZW >= 0  then x.BlitToZYXW(y, lerp)
-        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ <= 0 && cZW >= 0  then x.BlitToZYWX(y, lerp)
-        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ <= 0 && cZW >= 0  then x.BlitToXZWY(y, lerp)
-        elif cXW >= 0  && cXY >= 0  && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW >= 0  then x.BlitToZXWY(y, lerp)
-        elif cXW <= 0 && cXY >= 0  && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW >= 0  then x.BlitToZWXY(y, lerp)
-        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW >= 0  then x.BlitToZWYX(y, lerp)
-        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW <= 0 then x.BlitToXYWZ(y, lerp)
-        elif cXW >= 0  && cXY <= 0 && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW <= 0 then x.BlitToYXWZ(y, lerp)
-        elif cXW <= 0 && cXY <= 0 && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW <= 0 then x.BlitToYWXZ(y, lerp)
-        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ >= 0  && cZW <= 0 then x.BlitToYWZX(y, lerp)
-        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ >= 0  && cZW <= 0 then x.BlitToXWYZ(y, lerp)
-        elif cXW <= 0 && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ >= 0  && cZW <= 0 then x.BlitToWXYZ(y, lerp)
-        elif cXW <= 0 && cXY <= 0 && cXZ >= 0  && cYW <= 0 && cYZ >= 0  && cZW <= 0 then x.BlitToWYXZ(y, lerp)
-        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW <= 0 && cYZ >= 0  && cZW <= 0 then x.BlitToWYZX(y, lerp)
-        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.BlitToXWZY(y, lerp)
-        elif cXW <= 0 && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.BlitToWXZY(y, lerp)
-        elif cXW <= 0 && cXY >= 0  && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.BlitToWZXY(y, lerp)
-        else x.BlitToWZYX(y, lerp)
+        if cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW >= 0  then x.BlitToXYZW(y, srcOffset, srcSize, lerp)
+        elif cXW >= 0  && cXY <= 0 && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW >= 0  then x.BlitToYXZW(y, srcOffset, srcSize, lerp)
+        elif cXW >= 0  && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ >= 0  && cZW >= 0  then x.BlitToYZXW(y, srcOffset, srcSize, lerp)
+        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ >= 0  && cZW >= 0  then x.BlitToYZWX(y, srcOffset, srcSize, lerp)
+        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW >= 0  && cYZ <= 0 && cZW >= 0  then x.BlitToXZYW(y, srcOffset, srcSize, lerp)
+        elif cXW >= 0  && cXY >= 0  && cXZ <= 0 && cYW >= 0  && cYZ <= 0 && cZW >= 0  then x.BlitToZXYW(y, srcOffset, srcSize, lerp)
+        elif cXW >= 0  && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ <= 0 && cZW >= 0  then x.BlitToZYXW(y, srcOffset, srcSize, lerp)
+        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ <= 0 && cZW >= 0  then x.BlitToZYWX(y, srcOffset, srcSize, lerp)
+        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ <= 0 && cZW >= 0  then x.BlitToXZWY(y, srcOffset, srcSize, lerp)
+        elif cXW >= 0  && cXY >= 0  && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW >= 0  then x.BlitToZXWY(y, srcOffset, srcSize, lerp)
+        elif cXW <= 0 && cXY >= 0  && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW >= 0  then x.BlitToZWXY(y, srcOffset, srcSize, lerp)
+        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW >= 0  then x.BlitToZWYX(y, srcOffset, srcSize, lerp)
+        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW <= 0 then x.BlitToXYWZ(y, srcOffset, srcSize, lerp)
+        elif cXW >= 0  && cXY <= 0 && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW <= 0 then x.BlitToYXWZ(y, srcOffset, srcSize, lerp)
+        elif cXW <= 0 && cXY <= 0 && cXZ >= 0  && cYW >= 0  && cYZ >= 0  && cZW <= 0 then x.BlitToYWXZ(y, srcOffset, srcSize, lerp)
+        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW >= 0  && cYZ >= 0  && cZW <= 0 then x.BlitToYWZX(y, srcOffset, srcSize, lerp)
+        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ >= 0  && cZW <= 0 then x.BlitToXWYZ(y, srcOffset, srcSize, lerp)
+        elif cXW <= 0 && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ >= 0  && cZW <= 0 then x.BlitToWXYZ(y, srcOffset, srcSize, lerp)
+        elif cXW <= 0 && cXY <= 0 && cXZ >= 0  && cYW <= 0 && cYZ >= 0  && cZW <= 0 then x.BlitToWYXZ(y, srcOffset, srcSize, lerp)
+        elif cXW <= 0 && cXY <= 0 && cXZ <= 0 && cYW <= 0 && cYZ >= 0  && cZW <= 0 then x.BlitToWYZX(y, srcOffset, srcSize, lerp)
+        elif cXW >= 0  && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.BlitToXWZY(y, srcOffset, srcSize, lerp)
+        elif cXW <= 0 && cXY >= 0  && cXZ >= 0  && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.BlitToWXZY(y, srcOffset, srcSize, lerp)
+        elif cXW <= 0 && cXY >= 0  && cXZ <= 0 && cYW <= 0 && cYZ <= 0 && cZW <= 0 then x.BlitToWZXY(y, srcOffset, srcSize, lerp)
+        else x.BlitToWZYX(y, srcOffset, srcSize, lerp)
+    member x.BlitTo(y : NativeTensor4<'a>, lerp : float -> 'a -> 'a -> 'a) = x.BlitTo(y, V4d.Zero, V4d.One, lerp)
     member x.Item
         with get(c0 : V4l) : 'a = 
             let i = V4l.Dot(x.Delta, c0)

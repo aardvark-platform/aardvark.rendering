@@ -6,6 +6,15 @@ open Aardvark.Base
 open Aardvark.Base.IO
 open Aardvark.Prinziple
 
+type ViewerModality = XYZ | SvBR
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module ViewerModality =
+  let matchy threeD twoD (modality : ViewerModality)= 
+      match modality with
+      | XYZ  -> threeD
+      | SvBR -> twoD
+
 type Patch =
     {
         level           : int

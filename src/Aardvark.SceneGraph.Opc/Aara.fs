@@ -50,11 +50,6 @@ module Aara =
             if r <> arr.Length then failwith "asdfj2"
         )
         target
-//        let byteSize = elementCount * sizeof<'a>
-//        let buffer = Array.zeroCreate<byte> byteSize
-//        let r = f.Read(buffer, 0, byteSize)
-//        if r <> byteSize then failwith "asdfj2"
-//        buffer.UnsafeCoerce()
 
     let loadFromStream<'a when 'a : unmanaged> (f : Stream) =
         let binaryReader = new BinaryReader(f,Text.Encoding.ASCII, true)
@@ -155,6 +150,94 @@ module Aara =
         Array.Resize(&arr, cnt)
         arr
 
+    module Offset = 
+
+      let loadRawWithOffset<'a when 'a : (new : unit -> 'a) and 'a : struct and 'a :> ValueType> (offset : int) (elementCount : int) (f : Stream) =
+        let result = Array.zeroCreate<'a> elementCount
+        let buffer = Array.zeroCreate<byte> (1 <<< 22)
+
+        let gc = GCHandle.Alloc(result, GCHandleType.Pinned)
+        try
+            let mutable ptr = gc.AddrOfPinnedObject()
+            let mutable remaining = sizeof<'a> * result.Length
+            while remaining > 0 do
+                let s = f.Read(buffer, offset, buffer.Length)
+                Marshal.Copy(buffer, 0, ptr, s)
+                ptr <- ptr + nativeint s
+                remaining <- remaining - s
+        finally
+            gc.Free()
+        result
+
+      let loadRawColumnWithOffset<'a when 'a : (new : unit -> 'a) and 'a : struct and 'a :> ValueType> (offset : int) (elementCount : int) (f : Stream) = 
+        let result = Array.zeroCreate<'a> elementCount
+        let buffer = Array.zeroCreate<byte> sizeof<'a>
+        let startPos = f.Position
+        let mutable counter = 1
+        let byteOffset = offset*sizeof<'a>
+
+        let gc = GCHandle.Alloc(result, GCHandleType.Pinned)
+        try
+            let mutable ptr = gc.AddrOfPinnedObject()
+            while counter <= elementCount do
+                f.Seek((startPos + (int64(byteOffset * counter))), SeekOrigin.Begin) |> ignore
+                let s = f.Read(buffer, 0, buffer.Length)
+                Marshal.Copy(buffer, 0, ptr, s)
+                ptr <- ptr + nativeint s
+                counter <- counter+1                
+        finally
+            gc.Free()
+        result
+
+      let loadFromStreamWithOffset<'a when 'a : unmanaged> (offset : int) (size : int) (f : Stream) : 'a[]=
+          let binaryReader = new BinaryReader(f,Text.Encoding.ASCII, true)
+          let typeName = readerChars2String f
+          let dimensions = f.ReadByte() |> int
+          let sizes = [| for d in 0 .. dimensions - 1 do yield binaryReader.ReadInt32() |]
+      
+          let elementCount = sizes |> Array.fold ((*)) 1
+          
+          let result =
+                  match typeName with
+                      | "V3d" -> f |> loadRawWithOffset<V3d> offset elementCount |> PrimitiveValueConverter.arrayConverter typeof<V3d>
+                      | "V3f" -> f |> loadRawWithOffset<V3f> offset elementCount |> PrimitiveValueConverter.arrayConverter typeof<V3f>
+                      | "V2d" -> f |> loadRawWithOffset<V2d> offset elementCount |> PrimitiveValueConverter.arrayConverter typeof<V2d>
+                      | "double" -> f |> loadRawWithOffset<double> offset elementCount |> PrimitiveValueConverter.arrayConverter typeof<double>
+                      | "float" -> f |> loadRawWithOffset<float32> offset elementCount |> PrimitiveValueConverter.arrayConverter typeof<float32>
+                      | _ -> failwith ("Aara.fs: No support for loading type " + typeName)
+                      
+      
+          result
+      
+      let loadFromStreamColumnsWithOffset<'a when 'a : unmanaged> (offset : int) (size : int) (f : Stream) : 'a[]=
+          f.Seek ((int64 0), SeekOrigin.Begin) |> ignore
+          
+          let binaryReader = new BinaryReader(f,Text.Encoding.ASCII, true)
+          let typeName = readerChars2String f
+          let dimensions = f.ReadByte() |> int
+          let sizes = [| for d in 0 .. dimensions - 1 do yield binaryReader.ReadInt32() |]
+      
+          let elementCount = sizes |> Array.fold ((*)) 1
+          
+          let result =
+                  match typeName with
+                      | "V3d" -> f |> loadRawColumnWithOffset<V3d> offset sizes.[1] |> PrimitiveValueConverter.arrayConverter typeof<V3d>
+                      | "V3f" -> f |> loadRawColumnWithOffset<V3f> offset sizes.[1] |> PrimitiveValueConverter.arrayConverter typeof<V3f>
+                      | "V2d" -> f |> loadRawColumnWithOffset<V2d> offset sizes.[1] |> PrimitiveValueConverter.arrayConverter typeof<V2d>
+                      | "double" -> f |> loadRawColumnWithOffset<double> offset sizes.[1] |> PrimitiveValueConverter.arrayConverter typeof<double>
+                      | "float" -> f |> loadRawColumnWithOffset<float32> offset sizes.[1] |> PrimitiveValueConverter.arrayConverter typeof<float32>
+                      | _ -> failwith ("Aara.fs: No support for loading type " + typeName)
+                      
+      
+          result
+
+      let fromFileWithOffsetAndSize<'a when 'a : unmanaged and 'a : (new : unit -> 'a) and 'a : struct and 'a :> ValueType> (offset : int) (size : int) (fileName : string) =
+        let stream = File.OpenRead fileName
+        loadFromStreamWithOffset<'a> offset size stream
+
+      let fromFileColumnsWithOffsetAndSize<'a when 'a : unmanaged and 'a : (new : unit -> 'a) and 'a : struct and 'a :> ValueType> (offset : int) (size : int) (fileName : string) =
+        let stream = File.OpenRead fileName
+        loadFromStreamColumnsWithOffset<'a> offset size stream
 
 
 
