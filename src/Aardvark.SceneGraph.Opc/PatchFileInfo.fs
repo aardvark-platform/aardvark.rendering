@@ -160,10 +160,12 @@ module PatchFileInfo =
               |> Seq.map inner
               |> Seq.toList 
 
-        Log.line "%A" attributes
-          //else
-          //  [ "positions2d.aara" ]
-
+        let pos2d = patch |> tryGet "Positions2d"
+        let attributes =
+          match pos2d with
+          | Some _ ->  "Positions2d.aara" :: attributes
+          | None   -> attributes
+        
         let split (s:string) =
             (s.Split ' ') |> Array.toList
 
@@ -188,7 +190,7 @@ module PatchFileInfo =
             Offsets             = ""
             Textures            = textures
             Coordinates         = coords              
-            Attributes          = [] //attributes
+            Attributes          = attributes
         }    
 
     let load (opcFolder : string) (patchName : string) =
