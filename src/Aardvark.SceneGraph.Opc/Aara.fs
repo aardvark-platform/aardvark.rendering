@@ -167,22 +167,25 @@ module Aara =
     
       let getFaceIndicesWithInvalidChecking y x sizeX =
         let faceIndices = getFaceIndices y x sizeX
-        if faceIndices |> Array.exists (fun i -> Set.contains i invalidPoints)
-          then Array.empty
-          else faceIndices
+        if faceIndices |> Array.exists (fun i -> Set.contains i invalidPoints) then 
+          Array.empty
+        else 
+          faceIndices
 
       // choose function to use
-      let f = if invalidPoints.IsEmptyOrNull()
-              then getFaceIndices
-              else getFaceIndicesWithInvalidChecking
+      let f = 
+        if invalidPoints.IsEmptyOrNull() then 
+          getFaceIndices
+        else 
+          getFaceIndicesWithInvalidChecking
 
-      // step through all vertices to get index-array per face
-      let indexArray =
-        [| 0..(size.Y) |]
-        |> Array.map (fun y ->
-          [| 0..(size.X) |]
-          |> Array.map (fun x -> f y x size.X)
-        |> Array.concat)
+      // step through all vertices to get index-array per face      
+      let indexArray = 
+        [|
+          for y in [| 0..(size.Y) |] do
+            for x in [| 0..(size.X) |] do
+              yield f y x size.X
+        |]
     
       let invalidFaceCount = indexArray |> Array.filter (fun a -> a.IsEmpty()) |> Array.length
       if invalidFaceCount > 0 then
