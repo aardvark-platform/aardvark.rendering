@@ -153,8 +153,8 @@ module Aara =
         Array.Resize(&arr, cnt)
         arr
     
-    // Patch Size to index array (skipping faces with invalid points)
-    let computeIndexArray (size : V2i) (invalidPoints : int Set) =
+    // Patch Size to index array (faces with invalid points will be degenerated or skipped)
+    let computeIndexArray (size : V2i) (degenerateInvalids : bool) (invalidPoints : int Set) =
       // vertex x/y to point index of face
       let getFaceIndices y x sizeX =
         let pntA = y * sizeX + x
@@ -165,25 +165,31 @@ module Aara =
         [| pntA; pntB; pntC;
            pntC; pntB; pntD |]
     
-      let getFaceIndicesWithInvalidChecking y x sizeX =
+      // replace invalid faces with another array (invalidReplacement)
+      let getFaceIndicesWReplacedInvalids invalidReplacement y x sizeX =
         let faceIndices = getFaceIndices y x sizeX
         if faceIndices |> Array.exists (fun i -> Set.contains i invalidPoints) then 
-          Array.empty
+          invalidReplacement
         else 
           faceIndices
-
+          
       // choose function to use
       let f = 
-        if invalidPoints.IsEmptyOrNull() then 
-          getFaceIndices
-        else 
-          getFaceIndicesWithInvalidChecking
-
+        match (invalidPoints.IsEmptyOrNull(), degenerateInvalids) with
+        | (true, _)      -> getFaceIndices
+        // skip faces with invalid points
+        | (false, false) -> getFaceIndicesWReplacedInvalids Array.empty
+        // replace invalid faces with degenerated face
+        | (false, true)  ->
+            // find first valid point
+            let p = [| 0..(size.X * size.Y - 1) |] |> Array.find (fun i -> not (Set.contains i invalidPoints))
+            getFaceIndicesWReplacedInvalids [| p; p; p; p; p; p |]
+        
       // step through all vertices to get index-array per face      
       let indexArray = 
         [|
-          for y in [| 0..(size.Y) |] do
-            for x in [| 0..(size.X) |] do
+          for y in [| 0..(size.Y-2) |] do
+            for x in [| 0..(size.X-2) |] do
               yield f y x size.X
         |]
     
@@ -204,7 +210,7 @@ module Aara =
             positions.Data |> Array.map (fun x ->  x.ToV3d() |> matrix.TransformPos)
 
         let invalidIndices = getInvalidIndices data
-        let index = computeIndexArray (positions.Size.XY.ToV2i()) (Set.ofList invalidIndices)
+        let index = computeIndexArray (positions.Size.XY.ToV2i()) true (Set.ofList invalidIndices)
               
         let triangles =             
             index 
