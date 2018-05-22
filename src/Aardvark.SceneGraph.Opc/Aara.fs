@@ -86,9 +86,6 @@ module Aara =
     let inline isNan (v : V3f) = 
         v.X.IsNaN() || v.Y.IsNaN() || v.Z.IsNaN()
 
-    let inline triangleIsNan (t:Triangle3d) =
-        t.P0.AnyNaN || t.P1.AnyNaN || t.P2.AnyNaN
-
     let createIndex (vi : Matrix<V3f>) =
         let dx = vi.Info.DX
         let dy = vi.Info.DY
@@ -200,7 +197,7 @@ module Aara =
       indexArray |> Array.concat
 
     let getInvalidIndices (positions : V3d[]) =
-      positions |> List.ofArray |> List.mapi (fun i x -> if x.AnyNaN then Some i else None) |> List.choose id
+      positions |> Array.mapi (fun i x -> if x.AnyNaN then Some i else None) |> Array.choose id
     
     // load triangles from aaraFile and transform them with matrix
     let loadTrianglesFromFile (aaraFile : string) (matrix : M44d) =
@@ -210,14 +207,14 @@ module Aara =
             positions.Data |> Array.map (fun x ->  x.ToV3d() |> matrix.TransformPos)
 
         let invalidIndices = getInvalidIndices data
-        let index = computeIndexArray (positions.Size.XY.ToV2i()) true (Set.ofList invalidIndices)
+        let index = computeIndexArray (positions.Size.XY.ToV2i()) false (Set.ofArray invalidIndices)
               
         let triangles =             
             index 
                 |> Seq.map(fun x -> data.[x])
                 |> Seq.chunkBySize 3
                 |> Seq.map(fun x -> Triangle3d(x))
-                |> Seq.filter(fun x -> triangleIsNan x |> not) |> Seq.toArray
+                |> Seq.toArray
 
         triangles
 
