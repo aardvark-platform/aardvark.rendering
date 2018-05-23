@@ -212,17 +212,19 @@ type QTree<'a> = Node of 'a * array<QTree<'a>>
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module QTree =
-    let rec map f t = 
-        match t with
+    let rec map (f : 'a->'a0) (tree : QTree<'a>) = 
+        match tree with
             | Leaf v -> Leaf (f v)
             | Node(v,children) ->
                 Node(f v, children |> Array.map (map f))
 
-    let rec mapLevel (l : int) f t = 
-        match t with
-            | Leaf v -> Leaf (f l v)
-            | Node(v,children) ->
-                Node(f l v, children |> Array.map (mapLevel (l + 1) f))
+    let mapLevel (f : int->'a->'a0) (tree : QTree<'a>) =
+      let rec mapLevel lvl f t = 
+          match t with
+              | Leaf v -> Leaf (f lvl v)
+              | Node(v,children) ->
+                  Node(f lvl v, children |> Array.map (mapLevel (lvl + 1) f))
+      mapLevel 0 f tree
 
     let rec getLeaves (tree : QTree<'a>) =      
         match tree with
@@ -240,3 +242,13 @@ module QTree =
             | Node(v,children) ->
                 let cs = children |> Array.map flatten |> Array.concat
                 Array.append [|v|] cs
+
+    let height (tree : QTree<'a>) =
+      let rec height lvl tree = 
+        match tree with
+        | Leaf _ -> lvl
+        | Node (_, children) ->
+          children
+          |> Array.map (height (lvl+1))
+          |> Array.max
+      height 0 tree

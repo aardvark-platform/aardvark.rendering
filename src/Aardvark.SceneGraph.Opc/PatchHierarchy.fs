@@ -49,10 +49,10 @@ module PatchHierarchyExtensions =
         member this.kdTreeAgg_FileAbsPath (lvl:int) (posType:ViewerModality) =
             this.kdTree_FileAbsPath this.rootPatch_DirName lvl posType
 
-        member this.kdTreeAggN_FileAbsPath =
+        member this.kdTreeN_FileAbsPath =
             this.kdTreeAgg_FileAbsPath -1 XYZ
 
-        member this.kdTreeAggN2d_FileAbsPath =
+        member this.kdTreeN2d_FileAbsPath =
             this.kdTreeAgg_FileAbsPath -1 SvBR
 
         member this.kdTreeAggZero_FileAbsPath =
@@ -114,7 +114,7 @@ module PatchHierarchy =
            XDocument.Load(xml) |> ofDoc
        let hierarchy = 
            tree
-               |> QTree.mapLevel 0 (fun level p -> 
+               |> QTree.mapLevel (fun level p -> 
                        p |> PatchFileInfo.load opcPaths |> Patch.ofInfo level sizes.[level]
                    )
        hierarchy |> pickle |> File.writeAllBytes cache
@@ -138,6 +138,16 @@ module PatchHierarchy =
                 loadAndCache opcPaths pickle
         else
             loadAndCache opcPaths pickle
+
+    let getLevelFromResolution (resolution : float) (ph : PatchHierarchy) =
+            let (lvl, _) = 
+              ph.tree
+                |> QTree.flatten
+                |> Array.map (fun patch -> (patch.level, patch.triangleSize))
+                |> Array.distinct
+                |> Array.sortByDescending (fun (lvl, _) -> lvl)
+                |> Array.find (fun (_, triSize) -> resolution >= triSize)
+            lvl
 
     [<Obsolete("getPatchKdTreePath is deprecated, please use h.kdTree_FileAbsPath instead.")>]
     let getPatchKdTreePath (h:PatchHierarchy) patchName = 
@@ -164,14 +174,14 @@ module PatchHierarchy =
         let fileName = sprintf s h.rootPatch_DirName
         h.rootPatch_DirAbsPath +/ fileName
 
-    [<Obsolete("getLevelNKdTreePath is deprecated, please use h.kdTreeAggN_FileAbsPath instead.")>]
+    [<Obsolete("getLevelNKdTreePath is deprecated, please use h.kdTreeN_FileAbsPath instead.")>]
     let getLevelNKdTreePath (h:PatchHierarchy) =
-      h.kdTreeAggN_FileAbsPath
+      h.kdTreeN_FileAbsPath
         
     [<Obsolete("getMasterKdTreePath is deprecated, please use h.kdTreeAggZero_FileAbsPath instead.")>]
     let getMasterKdTreePath (h:PatchHierarchy) =
       h.kdTreeAggZero_FileAbsPath
 
-    [<Obsolete("getMasterKdTreePath2d is deprecated, please use h.kdTreeAggN2d_FileAbsPath instead.")>]
+    [<Obsolete("getMasterKdTreePath2d is deprecated, please use h.kdTreeN2d_FileAbsPath instead.")>]
     let getMasterKdTreePath2d (h:PatchHierarchy) =
-      h.kdTreeAggN2d_FileAbsPath
+      h.kdTreeN2d_FileAbsPath
