@@ -65,10 +65,11 @@ module Aara =
             else
                 match typeName with
                     | "V3d" -> f |> loadRaw<V3d> elementCount |> PrimitiveValueConverter.arrayConverter typeof<V3d>
+                    | "V3f" -> f |> loadRaw<V3f> elementCount |> PrimitiveValueConverter.arrayConverter typeof<V3f>
                     | "V2d" -> f |> loadRaw<V2d> elementCount |> PrimitiveValueConverter.arrayConverter typeof<V2d>
                     | "double" -> f |> loadRaw<double> elementCount |> PrimitiveValueConverter.arrayConverter typeof<double>
-                //    | "float" -> f |> loadRaw<float32> elementCount |> PrimitiveValueConverter.arrayConverter typeof<float32>
-                    | _ -> failwith ""
+                    | "float" -> f |> loadRaw<float32> elementCount |> PrimitiveValueConverter.arrayConverter typeof<float32>
+                    | _ -> failwith ("Aara.fs: No support for loading type " + typeName)
 
         let dim =
             match sizes with
@@ -300,9 +301,9 @@ module Aara =
           result
 
       let fromFileWithOffsetAndSize<'a when 'a : unmanaged and 'a : (new : unit -> 'a) and 'a : struct and 'a :> ValueType> (offset : int) (size : int) (fileName : string) =
-        let stream = File.OpenRead fileName
+        let stream = Prinziple.openRead fileName
         loadFromStreamWithOffset<'a> offset size stream
 
       let fromFileColumnsWithOffsetAndSize<'a when 'a : unmanaged and 'a : (new : unit -> 'a) and 'a : struct and 'a :> ValueType> (offset : int) (size : int) (fileName : string) =
-        let stream = File.OpenRead fileName
+        let stream = Prinziple.openRead fileName
         loadFromStreamColumnsWithOffset<'a> offset size stream

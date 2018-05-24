@@ -184,4 +184,4 @@ module PatchHierarchy =
 
     [<Obsolete("getMasterKdTreePath2d is deprecated, please use h.kdTreeN2d_FileAbsPath instead.")>]
     let getMasterKdTreePath2d (h:PatchHierarchy) =
-      h.kdTreeN2d_FileAbsPath
+      h.kdTreeAggZero2d_FileAbsPath

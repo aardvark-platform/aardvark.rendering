@@ -181,13 +181,13 @@ module PatchFileInfo =
             GlobalBoundingBox   = patch |> get "GlobalBoundingBox"   |> Box3d.Parse
             LocalBoundingBox    = patch |> get "LocalBoundingBox"    |> Box3d.Parse
 
-            Local2Global2d      = patch |> get "Local2Global"        |> M44d.Parse |> trafo
-            GlobalBoundingBox2d = patch |> get "GlobalBoundingBox"   |> Box3d.Parse
-            LocalBoundingBox2d  = patch |> get "LocalBoundingBox"    |> Box3d.Parse
+            Local2Global2d      = patch |> get "Local2Global2D"      |> M44d.Parse |> trafo
+            GlobalBoundingBox2d = patch |> get "GlobalBoundingBox2D" |> Box3d.Parse
+            LocalBoundingBox2d  = patch |> get "LocalBoundingBox2D"  |> Box3d.Parse
 
             Positions           = patch |> get "Positions"
             Positions2d         = patch |> tryGet "Positions2d"
-            Normals             = ""
+            Normals             = patch |> get "Normals"
             Offsets             = ""
             Textures            = textures
             Coordinates         = coords              
