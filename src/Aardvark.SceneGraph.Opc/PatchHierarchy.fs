@@ -88,9 +88,9 @@ module PatchHierarchy =
         else
             loadAndCache opcPaths pickle
 
-    let getLevelFromResolution (resolution : float) (ph : PatchHierarchy) =
+    let getLevelFromResolution (resolution : float) (patchTree : QTree<Patch>) =
             let (lvl, _) = 
-              ph.tree
+              patchTree
                 |> QTree.flatten
                 |> Array.map (fun patch -> (patch.level, patch.triangleSize))
                 |> Array.distinct
