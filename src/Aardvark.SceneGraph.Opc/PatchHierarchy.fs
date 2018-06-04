@@ -10,57 +10,6 @@ type PatchHierarchy =
         tree     : QTree<Patch>
     }
 
-[<AutoOpen>]
-module PatchHierarchyExtensions =
-    module PatchHierarchy =
-        let kdTree_FileName (patch_Name : string) (patch_Level : int) (posType : ViewerModality) =
-              let lvl_Sub = 
-                  match patch_Level > -1 with
-                  | true  -> sprintf "-%i" patch_Level
-                  | false -> ""
-              let pos_Sub =
-                  match posType with
-                  | XYZ -> ""
-                  | SvBR -> "-2d"
-              sprintf "%s%s%s.%s" patch_Name lvl_Sub pos_Sub OpcPaths.KdTree_Ext
-
-    type PatchHierarchy with
-
-        [<Obsolete("baseDir is deprecated, please use opcPaths.Opc_DirAbsPath instead.")>]
-        member this.baseDir = this.opcPaths.Opc_DirAbsPath
-
-        // == Patch methods ==
-        member this.rootPatch_DirName =
-            let rootpatch = this.tree |> QTree.getRoot
-            rootpatch.info.Name
-
-        member this.rootPatch_DirAbsPath =
-            this.opcPaths.Patches_DirAbsPath +/ this.rootPatch_DirName
-    
-        // == PatchTree methods ==
-        member this.patchTree_DirAbsPaths =
-            let patches_DirAbsPath = this.opcPaths.Patches_DirAbsPath
-            this.tree |> QTree.map (fun patch -> patches_DirAbsPath +/ patch.info.Name)
-
-        // == KdTree methods ==
-        member this.kdTree_FileAbsPath patch_Name patch_Level posType =
-            this.rootPatch_DirAbsPath +/ (PatchHierarchy.kdTree_FileName patch_Name patch_Level posType)
-
-        member this.kdTreeAgg_FileAbsPath (lvl:int) (posType:ViewerModality) =
-            this.kdTree_FileAbsPath this.rootPatch_DirName lvl posType
-
-        member this.kdTreeAggN_FileAbsPath =
-            this.kdTreeAgg_FileAbsPath -1 XYZ
-
-        member this.kdTreeAggN2d_FileAbsPath =
-            this.kdTreeAgg_FileAbsPath -1 SvBR
-
-        member this.kdTreeAggZero_FileAbsPath =
-            this.kdTreeAgg_FileAbsPath 0 XYZ
-
-        member this.kdTreeAggZero2d_FileAbsPath =
-            this.kdTreeAgg_FileAbsPath 0 SvBR
-
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module PatchHierarchy =
     open XmlHelpers
@@ -114,7 +63,7 @@ module PatchHierarchy =
            XDocument.Load(xml) |> ofDoc
        let hierarchy = 
            tree
-               |> QTree.mapLevel 0 (fun level p -> 
+               |> QTree.mapLevel (fun level p -> 
                        p |> PatchFileInfo.load opcPaths |> Patch.ofInfo level sizes.[level]
                    )
        hierarchy |> pickle |> File.writeAllBytes cache
@@ -139,39 +88,57 @@ module PatchHierarchy =
         else
             loadAndCache opcPaths pickle
 
-    [<Obsolete("getPatchKdTreePath is deprecated, please use h.kdTree_FileAbsPath instead.")>]
-    let getPatchKdTreePath (h:PatchHierarchy) patchName = 
-      h.kdTree_FileAbsPath patchName 0 XYZ
-            
-    [<Obsolete("getPatchKdTreePath2d is deprecated, please use h.kdTree_FileAbsPath instead.")>]
-    let getPatchKdTreePath2d (h:PatchHierarchy) patchName = 
-      h.kdTree_FileAbsPath patchName 0 SvBR
-            
-    [<Obsolete("getPatchPositionPath is deprecated, please use opcPaths.Patches_DirAbsPath and PatchFileInfo instead.")>]
-    let getPatchPositionPath (h:PatchHierarchy) patchName =
-      h.opcPaths.Patches_DirAbsPath +/ patchName +/ "positions.aara"
-        
-    [<Obsolete("getPatch2dPositionPath is deprecated, please use opcPaths.Patches_DirAbsPath and PatchFileInfo instead.")>]
-    let getPatch2dPositionPath (h:PatchHierarchy) patchName = 
-      h.opcPaths.Patches_DirAbsPath +/ patchName +/ "positions2d.aara"
-        
-    [<Obsolete("getProfileLutPath is deprecated, please use opcPaths.profileLut_FileAbsPath instead.")>]
-    let getProfileLutPath (h:PatchHierarchy) = 
-      h.opcPaths.profileLut_FileAbsPath
-        
-    [<Obsolete("getkdTreePath is deprecated, please use PatchHierarchy members instead.")>]
-    let getkdTreePath (h:PatchHierarchy) (s) =
-        let fileName = sprintf s h.rootPatch_DirName
-        h.rootPatch_DirAbsPath +/ fileName
+    let getLevelFromResolution (resolution : float) (patchTree : QTree<Patch>) =
+            let (lvl, _) = 
+              patchTree
+                |> QTree.flatten
+                |> Array.map (fun patch -> (patch.level, patch.triangleSize))
+                |> Array.distinct
+                |> Array.sortByDescending (fun (lvl, _) -> lvl)
+                |> Array.find (fun (_, triSize) -> resolution >= triSize)
+            lvl
 
-    [<Obsolete("getLevelNKdTreePath is deprecated, please use h.kdTreeAggN_FileAbsPath instead.")>]
-    let getLevelNKdTreePath (h:PatchHierarchy) =
-      h.kdTreeAggN_FileAbsPath
-        
-    [<Obsolete("getMasterKdTreePath is deprecated, please use h.kdTreeAggZero_FileAbsPath instead.")>]
-    let getMasterKdTreePath (h:PatchHierarchy) =
-      h.kdTreeAggZero_FileAbsPath
+    let kdTree_FileName (patch_Name : string) (patch_Level : int) (posType : ViewerModality) =
+      let lvl_Sub = 
+          match patch_Level > -1 with
+          | true  -> sprintf "-%i" patch_Level
+          | false -> ""
+      let pos_Sub =
+          match posType with
+          | XYZ -> ""
+          | SvBR -> "-2d"
+      sprintf "%s%s%s.%s" patch_Name lvl_Sub pos_Sub OpcPaths.KdTree_Ext
 
-    [<Obsolete("getMasterKdTreePath2d is deprecated, please use h.kdTreeAggN2d_FileAbsPath instead.")>]
-    let getMasterKdTreePath2d (h:PatchHierarchy) =
-      h.kdTreeAggN2d_FileAbsPath
+type PatchHierarchy with
+
+  // == Patch methods ==
+  member this.rootPatch_DirName =
+      let rootpatch = this.tree |> QTree.getRoot
+      rootpatch.info.Name
+
+  member this.rootPatch_DirAbsPath =
+      this.opcPaths.Patches_DirAbsPath +/ this.rootPatch_DirName
+    
+  // == PatchTree methods ==
+  member this.patchTree_DirAbsPaths =
+      let patches_DirAbsPath = this.opcPaths.Patches_DirAbsPath
+      this.tree |> QTree.map (fun patch -> patches_DirAbsPath +/ patch.info.Name)
+
+  // == KdTree methods ==
+  member this.kdTree_FileAbsPath patch_Name patch_Level posType =
+      this.rootPatch_DirAbsPath +/ (PatchHierarchy.kdTree_FileName patch_Name patch_Level posType)
+
+  member this.kdTreeAgg_FileAbsPath (lvl:int) (posType:ViewerModality) =
+      this.kdTree_FileAbsPath this.rootPatch_DirName lvl posType
+
+  member this.kdTreeN_FileAbsPath =
+      this.kdTreeAgg_FileAbsPath -1 XYZ
+
+  member this.kdTreeN2d_FileAbsPath =
+      this.kdTreeAgg_FileAbsPath -1 SvBR
+
+  member this.kdTreeAggZero_FileAbsPath =
+      this.kdTreeAgg_FileAbsPath 0 XYZ
+
+  member this.kdTreeAggZero2d_FileAbsPath =
+      this.kdTreeAgg_FileAbsPath 0 SvBR
