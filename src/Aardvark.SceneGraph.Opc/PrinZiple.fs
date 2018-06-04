@@ -18,7 +18,7 @@ module Prinziple =
     let bufferSize = 4096;     
     use ms = new MemoryStream()
         
-    let buffer = Array.init bufferSize (fun _ -> byte(0))
+    let buffer : byte[] = Array.zeroCreate bufferSize //(fun _ -> byte(0))
     let mutable count = 0
     
     while (count <- reader.Read(buffer, 0, buffer.Length); count <> 0) do
