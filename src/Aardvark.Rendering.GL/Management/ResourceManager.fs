@@ -14,207 +14,6 @@ open OpenTK.Graphics.OpenGL4
 open Aardvark.Base.ShaderReflection
 open Aardvark.Rendering.GL
 
-module Sharing =
-    
-    type RefCountedBuffer(ctx, create : unit -> Buffer, destroy : unit -> unit) =
-        inherit Buffer(ctx, 0n, 0)
-
-        let mutable refCount = 0
-
-
-
-        member x.Acquire() =
-            if Interlocked.Increment &refCount = 1 then
-                let b = using ctx.ResourceLock (fun _ -> create())
-                x.Handle <- b.Handle
-                x.SizeInBytes <- b.SizeInBytes
-
-        member x.Release() =
-            if Interlocked.Decrement &refCount = 0 then
-                destroy()
-                using ctx.ResourceLock (fun _ -> ctx.Delete x)
-                x.Handle <- 0
-                x.SizeInBytes <- 0n
-
-    type RefCountedTexture(ctx, create : unit -> Texture, destroy : unit -> unit) =
-        inherit Texture(ctx, 0, TextureDimension.Texture2D, 0, 0, V3i.Zero, None, TextureFormat.Rgba, 0L, true)
-
-        let mutable refCount = 0
-
-        member x.Acquire() =
-            if Interlocked.Increment &refCount = 1 then
-                let b = using ctx.ResourceLock (fun _ -> create())
-                x.IsArray <- b.IsArray
-                x.Handle <- b.Handle
-                x.Dimension <- b.Dimension
-                x.Multisamples <- b.Multisamples
-                x.Size <- b.Size
-                x.Count <- b.Count
-                x.Format <- b.Format
-                x.MipMapLevels <- b.MipMapLevels
-                x.SizeInBytes <- b.SizeInBytes
-                x.ImmutableFormat <- b.ImmutableFormat
-
-        member x.Release() =
-            if Interlocked.Decrement &refCount = 0 then
-                destroy()
-                using ctx.ResourceLock (fun _ -> ctx.Delete x)
-                x.Handle <- 0
-
-
-    type BufferManager(ctx : Context, active : bool) =
-        let cache = ConcurrentDictionary<IBuffer, RefCountedBuffer>()
-
-        let get (b : IBuffer) =
-            cache.GetOrAdd(b, fun v -> 
-                new RefCountedBuffer(
-                    ctx,
-                    (fun () -> ctx.CreateBuffer b),
-                    (fun () -> cache.TryRemove b |> ignore)
-                )
-            )
-
-        member x.Create(data : IBuffer) =
-            match data with
-                | _ ->
-                    if active then
-                        let shared = get data
-                        shared.Acquire()
-                        shared :> Buffer
-                    else
-                        ctx.CreateBuffer data
-
-        member x.Update(b : Buffer, data : IBuffer) : Buffer =
-            match b with
-                | :? RefCountedBuffer as b when active ->
-                    
-                    let newShared = get data
-                    if newShared = b then
-                        b :> Buffer
-                    else
-                        newShared.Acquire()
-                        b.Release()
-                        newShared :> Buffer
-                | _ ->
-                    if b.Handle = 0 then
-                        x.Create(data)
-                    else
-                        ctx.Upload(b, data)
-                        b
-
-        member x.Delete(b : Buffer) =
-            if b.Handle <> 0 then
-                if active then
-                    match b with
-                        | :? RefCountedBuffer as b -> b.Release()
-                        | _ -> ctx.Delete b
-                else
-                    ctx.Delete b
-
-    type ArrayBufferManager(ctx : Context, active : bool) =
-        let cache = ConcurrentDictionary<Array, RefCountedBuffer>()
-        
-        let nullBuffer = new Buffer(ctx, 0n, 0)
-
-        let get (b : Array) =
-            cache.GetOrAdd(b, fun v -> 
-                new RefCountedBuffer(
-                    ctx,
-                    (fun () -> ctx.CreateBuffer b),
-                    (fun () -> cache.TryRemove b |> ignore)
-                )
-            )
-
-        member x.Create(data : Array) =
-            if isNull data then
-                nullBuffer
-            else
-                if active then
-                    let shared = get data
-                    shared.Acquire()
-                    shared :> Buffer
-                else
-                    ctx.CreateBuffer data
-
-        member x.Update(b : Buffer, data : Array) : Buffer =
-            match b with
-                | :? RefCountedBuffer as b when active ->
-                    
-                    let newShared = get data
-                    if newShared = b then
-                        b :> Buffer
-                    else
-                        newShared.Acquire()
-                        b.Release()
-                        newShared :> Buffer
-                | _ ->
-                    if b.Handle = 0 then
-                        x.Create data
-                    else
-                        ctx.Upload(b, data)
-                        b
-
-        member x.Delete(b : Buffer) =
-            if b.Handle <> 0 then
-                if active then
-                    match b with
-                        | :? RefCountedBuffer as b -> b.Release()
-                        | _ -> ctx.Delete b
-                else
-                    ctx.Delete b
-
-    type TextureManager(ctx : Context, active : bool) =
-        let cache = ConcurrentDictionary<ITexture, RefCountedTexture>()
-
-        let nullTex = Texture(ctx, 0, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba, 0L, true)
-
-        let get (b : ITexture) =
-            cache.GetOrAdd(b, fun v -> 
-                RefCountedTexture(
-                    ctx,
-                    (fun () -> ctx.CreateTexture b),
-                    (fun () -> cache.TryRemove b |> ignore)
-                )
-            )
-
-        member x.Create(data : ITexture) =
-            match data with
-                | :? NullTexture as t -> nullTex
-                | _ ->
-                    if active then
-                        let shared = get data
-                        shared.Acquire()
-                        shared :> Texture
-                    else
-                        ctx.CreateTexture data
-
-        member x.Update(b : Texture, data : ITexture) : Texture =
-            match b with
-                | :? RefCountedTexture as b when active ->
-                    
-                    let newShared = get data
-                    if newShared = b then
-                        b :> Texture
-                    else
-                        newShared.Acquire()
-                        b.Release()
-                        newShared :> Texture
-                | _ ->
-                    if b.Handle = 0 then
-                        x.Create(data)
-                    else
-                        ctx.Upload(b, data)
-                        b
-
-        member x.Delete(b : Texture) =
-            if b.Handle <> 0 then
-                if active then
-                    match b with
-                        | :? RefCountedTexture as b -> b.Release()
-                        | _ -> ctx.Delete b
-                else
-                    ctx.Delete b
-
 
         
 type UniformBufferManager(ctx : Context, block : FShade.GLSL.GLSLUniformBuffer) =
@@ -430,16 +229,14 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let derivedCache (f : ResourceManager -> ResourceCache<'a, 'b>) =
         ResourceCache<'a, 'b>(Option.map f parent, Option.map snd renderTaskInfo)
 
-   
-    let bufferManager           = Sharing.BufferManager(ctx, shareBuffers)
-    let arrayBufferManager      = Sharing.ArrayBufferManager(ctx, shareBuffers)
-    let textureManager          = Sharing.TextureManager(ctx, shareTextures)
+    let bufferManager           = match parent with | Some p -> p.BufferManager
+                                                    | None -> Sharing.BufferManager(ctx, shareBuffers)
+    let textureManager          = match parent with | Some p -> p.TextureManager
+                                                    | None -> Sharing.TextureManager(ctx, shareTextures)
 
-    let arrayBufferCache        = derivedCache (fun m -> m.ArrayBufferCache)
     let bufferCache             = derivedCache (fun m -> m.BufferCache)
     let textureCache            = derivedCache (fun m -> m.TextureCache)
     let indirectBufferCache     = derivedCache (fun m -> m.IndirectBufferCache)
-    let programCache            = match parent with | Some p -> p.ProgramCache | None -> ConcurrentDictionary<Aardvark.Base.Surface * IFramebufferSignature * IndexedGeometryMode, FShade.GLSL.GLSLProgramInterface * IMod<Program>>()
     let programHandleCache      = ResourceCache<Program, int>(None, Option.map snd renderTaskInfo)
     let samplerCache            = derivedCache (fun m -> m.SamplerCache)
     let vertexInputCache        = derivedCache (fun m -> m.VertexInputCache)
@@ -470,31 +267,32 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         )
 
     let samplerDescriptionCache = UnaryCache(fun (samplerState : FShade.SamplerState) -> samplerState.SamplerStateDescription)
+    
+    member private x.BufferManager = bufferManager
+    member private x.TextureManager = textureManager
 
-    member private x.ArrayBufferCache       : ResourceCache<Buffer, int>                    = arrayBufferCache
     member private x.BufferCache            : ResourceCache<Buffer, int>                    = bufferCache
     member private x.TextureCache           : ResourceCache<Texture, V2i>                   = textureCache
     member private x.IndirectBufferCache    : ResourceCache<IndirectBuffer, V2i>            = indirectBufferCache
-    member private x.ProgramCache           : ConcurrentDictionary<_, _>                    = programCache
     member private x.SamplerCache           : ResourceCache<Sampler, int>                   = samplerCache
     member private x.VertexInputCache       : ResourceCache<VertexInputBindingHandle, int>  = vertexInputCache
     member private x.UniformLocationCache   : ResourceCache<UniformLocation, nativeint>     = uniformLocationCache
     member private x.UniformBufferManagers                                                  = uniformBufferManagers
                                                                                     
-    member private x.IsActiveCache          : ResourceCache<bool, int>         = isActiveCache
-    member private x.BeginModeCache         : ResourceCache<GLBeginMode, GLBeginMode>        = beginModeCache
+    member private x.IsActiveCache          : ResourceCache<bool, int>                      = isActiveCache
+    member private x.BeginModeCache         : ResourceCache<GLBeginMode, GLBeginMode>       = beginModeCache
     member private x.DrawCallInfoCache      : ResourceCache<DrawCallInfoList, DrawCallInfoList> = drawCallInfoCache
-    member private x.DepthTestCache         : ResourceCache<DepthTestInfo, DepthTestInfo>    = depthTestCache
-    member private x.CullModeCache          : ResourceCache<int, int>         = cullModeCache
-    member private x.PolygonModeCache       : ResourceCache<int, int>      = polygonModeCache
-    member private x.BlendModeCache         : ResourceCache<GLBlendMode, GLBlendMode>        = blendModeCache
-    member private x.StencilModeCache       : ResourceCache<GLStencilMode, GLStencilMode>      = stencilModeCache
-    member private x.FlagCache              : ResourceCache<bool, int>      = flagCache
+    member private x.DepthTestCache         : ResourceCache<DepthTestInfo, DepthTestInfo>   = depthTestCache
+    member private x.CullModeCache          : ResourceCache<int, int>                       = cullModeCache
+    member private x.PolygonModeCache       : ResourceCache<int, int>                       = polygonModeCache
+    member private x.BlendModeCache         : ResourceCache<GLBlendMode, GLBlendMode>       = blendModeCache
+    member private x.StencilModeCache       : ResourceCache<GLStencilMode, GLStencilMode>   = stencilModeCache
+    member private x.FlagCache              : ResourceCache<bool, int>                      = flagCache
     member private x.TextureBindingCache    : ResourceCache<TextureBinding, TextureBinding> = textureBindingCache
 
     member x.RenderTaskLock = renderTaskInfo
 
-    new(parent, ctx, lock, shareTextures, shareBuffers) = ResourceManager(Some parent, ctx, lock, shareTextures, shareBuffers)
+    new(parent, lock, shareTextures, shareBuffers) = ResourceManager(Some parent, parent.Context, lock, shareTextures, shareBuffers)
     new(ctx, lock, shareTextures, shareBuffers) = ResourceManager(None, ctx, lock, shareTextures, shareBuffers)
 
     interface IResourceManager with
@@ -515,17 +313,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     member x.DrawBufferManager = drawBufferManager.Value
     member x.Context = ctx
-
-    member x.CreateBuffer(data : IMod<Array>) =
-        bufferCache.GetOrCreate<Array>(data, {
-            create = fun b      -> arrayBufferManager.Create b
-            update = fun h b    -> arrayBufferManager.Update(h, b)
-            delete = fun h      -> arrayBufferManager.Delete h
-            info =   fun h      -> h.SizeInBytes |> Mem |> ResourceInfo
-            view =   fun h      -> h.Handle
-            kind = ResourceKind.Buffer
-        })
-
+        
     member x.CreateBuffer(data : IMod<IBuffer>) =
         match data with
             | :? IAdaptiveBuffer as data ->
@@ -606,10 +394,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     member x.CreateSurface(signature : IFramebufferSignature, surface : Aardvark.Base.Surface, topology : IndexedGeometryMode) =
 
-        let (signature, result) = 
-            programCache.GetOrAdd((surface, signature, topology), fun (surface, signature, topology) ->
-                ctx.CreateProgram(signature, surface, topology)
-            )
+        let (iface, result) = ctx.CreateProgram(signature, surface, topology)
 
         let programHandle = 
             programHandleCache.GetOrCreate<Program>(result, {
@@ -621,7 +406,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 kind = ResourceKind.ShaderProgram
             })
 
-        signature, programHandle
+        iface, programHandle
 
 
     member x.CreateSampler (sam : IMod<SamplerStateDescription>) =

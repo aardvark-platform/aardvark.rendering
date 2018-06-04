@@ -49,6 +49,7 @@
     <Compile Include="Resources\MappedBuffer.fs" />
     <Compile Include="Resources\SparseTexture.fs" />
     <Compile Include="Management\SurfaceCompilers.fs" />
+    <Compile Include="Management\ResourceSharing.fs" />
     <Compile Include="Management\ResourceManager.fs" />
     <Compile Include="Management\PreparedRenderObject.fs" />
     <Compile Include="Runtime\Statistics.fs" />

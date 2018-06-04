@@ -172,7 +172,7 @@ type PreparedRenderObject =
                         x.Textures.Dispose()
                         x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
                         x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
-                        //x.Program.Dispose() // dont want anymore
+                        x.Program.Dispose()
 
                         x.IsActive.Dispose()
                         x.BeginMode.Dispose()

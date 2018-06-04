@@ -102,7 +102,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     let compute = lazy ( new GLCompute(ctx) )
 
-    new(ctx) = new Runtime(ctx, false, false)
+    new(ctx) = new Runtime(ctx, true, true)
 
     member x.SupportsUniformBuffers =
         ExecutionContext.uniformBuffersSupported

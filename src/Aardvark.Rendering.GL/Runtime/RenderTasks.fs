@@ -32,7 +32,7 @@ module RenderTasks =
         inherit AbstractRenderTask()
         let ctx = manager.Context
         let renderTaskLock = RenderTaskLock()
-        let manager = ResourceManager(manager.Context, Some (fboSignature, renderTaskLock), shareTextures, shareBuffers)
+        let manager = ResourceManager(manager, Some (fboSignature, renderTaskLock), shareTextures, shareBuffers)
         let allBuffers = manager.DrawBufferManager.CreateConfig(fboSignature.ColorAttachments |> Map.toSeq |> Seq.map (snd >> fst) |> Set.ofSeq)
         let structureChanged = Mod.custom ignore
         let runtimeStats = NativePtr.alloc 1
