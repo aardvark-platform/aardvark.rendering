@@ -17,6 +17,7 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.Quotations
 open Aardvark.Rendering.GL
+open System.Runtime.CompilerServices
 
 
 [<AutoOpen>]
@@ -428,7 +429,8 @@ module ProgramExtensions =
 
     let private codeCache = ConcurrentDictionary<Context * string * IFramebufferSignature, Error<Program>>()
     
-    let private shaderCache = ConcurrentDictionary<Context * Surface * IFramebufferSignature, Error<FShade.GLSL.GLSLProgramInterface * IMod<Program>>>()
+    let private staticShaderCache = ConcurrentDictionary<Context * FShade.Effect * IFramebufferSignature, Error<FShade.GLSL.GLSLProgramInterface * IMod<Program>>>()
+    let private dynamicShaderCache = ConditionalWeakTable<(FShade.EffectConfig -> FShade.EffectInputLayout * IMod<FShade.Imperative.Module>), Error<FShade.GLSL.GLSLProgramInterface * IMod<Program>>>()
     let private shaderPickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
 
 //    let private useDiskCache = true
@@ -630,10 +632,9 @@ module ProgramExtensions =
             )
 
         member x.TryCreateProgram(signature : IFramebufferSignature, surface : Surface, topology : IndexedGeometryMode) : Error<GLSL.GLSLProgramInterface * IMod<Program>> =
-            shaderCache.GetOrAdd((x, surface, signature), fun (x, surface, signature) ->
-                match surface with
-                    | Surface.FShadeSimple effect ->
-                    
+            match surface with
+                | Surface.FShadeSimple effect ->
+                    staticShaderCache.GetOrAdd((x, effect, signature), fun (x, effect, signature) ->
                         let glsl = 
                             lazy (
                                 let module_ = signature.Link(effect, Range1d(-1.0, 1.0), false, topology)
@@ -645,52 +646,55 @@ module ProgramExtensions =
                                 Success (prog.InterfaceNew, Mod.constant prog)
                             | Error e ->
                                 Error e
+                        )
 
-                    | Surface.FShade create ->
-                        let (inputLayout,b) = create (signature.EffectConfig(Range1d(-1.0, 1.0), false))
-
-                        let initial = Mod.force b
-                        let effect = initial.userData |> unbox<Effect>
-                        let iface =
-                            match x.TryCompileProgram(effect.Id + "TODO: InputLayoutHash", signature, lazy (ModuleCompiler.compileGLSL430 initial)) with  
-                                | Success prog -> 
-                                    let iface = prog.InterfaceNew
-                                    { iface with
-                                        samplers = iface.samplers |> List.map (fun sam ->
-                                            match MapExt.tryFind sam.samplerName inputLayout.eTextures with
-                                                | Some infos -> { sam with samplerTextures = infos }
-                                                | None -> sam
-                                        )
-                                    }
-                                | Error e ->
-                                    failwithf "[GL] shader compiler returned errors: %s" e
-
-
-
-
-                        let changeableProgram = 
-                            b |> Mod.map (fun m ->
-                                let effect = m.userData |> unbox<Effect>
-
-                                match x.TryCompileProgram(effect.Id + "TODO: InputLayoutHash", signature, lazy (ModuleCompiler.compileGLSL430 m)) with
-                                    | Success p -> p
+                | Surface.FShade create ->
+                    lock dynamicShaderCache (fun () ->
+                        
+                        match dynamicShaderCache.TryGetValue(create) with
+                        | (true, b) -> b
+                        | _ ->
+                            let (inputLayout,b) = create (signature.EffectConfig(Range1d(-1.0, 1.0), false))
+                    
+                            let initial = Mod.force b
+                            let effect = initial.userData |> unbox<Effect>
+                            let iface =
+                                match x.TryCompileProgram(effect.Id + "TODO: InputLayoutHash", signature, lazy (ModuleCompiler.compileGLSL430 initial)) with  
+                                    | Success prog -> 
+                                        let iface = prog.InterfaceNew
+                                        { iface with
+                                            samplers = iface.samplers |> List.map (fun sam ->
+                                                match MapExt.tryFind sam.samplerName inputLayout.eTextures with
+                                                    | Some infos -> { sam with samplerTextures = infos }
+                                                    | None -> sam
+                                            )
+                                        }
                                     | Error e ->
-                                        Log.error "[GL] shader compiler returned errors: %A" e
-                                        failwithf "[GL] shader compiler returned errors: %A" e
-                            )
+                                        failwithf "[GL] shader compiler returned errors: %s" e
 
-                        Success (iface, changeableProgram)
+                            let changeableProgram = 
+                                b |> Mod.map (fun m ->
+                                    let effect = m.userData |> unbox<Effect>
 
-                    | Surface.None ->
-                        Error "[GL] empty shader"
+                                    match x.TryCompileProgram(effect.Id + "TODO: InputLayoutHash", signature, lazy (ModuleCompiler.compileGLSL430 m)) with
+                                        | Success p -> p
+                                        | Error e ->
+                                            Log.error "[GL] shader compiler returned errors: %A" e
+                                            failwithf "[GL] shader compiler returned errors: %A" e
+                                )
 
-                    | Surface.Backend surface ->
-                        match surface with
-                            | :? Program as p -> 
-                                Success (p.InterfaceNew, Mod.constant p)
-                            | _ ->
-                                Error (sprintf "[GL] bad surface: %A (hi lui)" surface)
-            )
+                            Success (iface, changeableProgram)
+                    )
+
+                | Surface.None ->
+                    Error "[GL] empty shader"
+
+                | Surface.Backend surface ->
+                    match surface with
+                        | :? Program as p -> 
+                            Success (p.InterfaceNew, Mod.constant p)
+                        | _ ->
+                            Error (sprintf "[GL] bad surface: %A (hi lui)" surface)
 
         member x.CreateProgram(signature : IFramebufferSignature, surface : Surface, topology : IndexedGeometryMode) : GLSL.GLSLProgramInterface * IMod<Program> =
             match x.TryCreateProgram(signature, surface, topology) with
