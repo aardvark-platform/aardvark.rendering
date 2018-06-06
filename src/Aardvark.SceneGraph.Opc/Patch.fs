@@ -35,7 +35,7 @@ module Patch =
           match mode, p.Positions2d with
           | ViewerModality.SvBR, Some p2 -> p2
           | _ -> p.Positions          
-
+        
         let positions   = patch_DirAbsPath +/ pos |> fromFile<V3f>
         let coordinates = patch_DirAbsPath +/ (List.head p.Coordinates) |> fromFile<V2f>
                 

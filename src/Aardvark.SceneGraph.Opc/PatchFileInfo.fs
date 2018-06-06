@@ -160,8 +160,8 @@ module PatchFileInfo =
               |> childNodes' "Attributes"
               |> Seq.map inner
               |> Seq.toList 
-
-        let pos2d = patch |> tryGet "Positions2d"
+                
+        let pos2d = patch |> tryGet "Positions2D"
         let attributes =
           match pos2d with
           | Some _ ->  "Positions2d.aara" :: attributes
@@ -186,7 +186,7 @@ module PatchFileInfo =
             LocalBoundingBox2d  = patch |> get "LocalBoundingBox2D"  |> Box3d.Parse
 
             Positions           = patch |> get "Positions"
-            Positions2d         = patch |> tryGet "Positions2D"
+            Positions2d         = pos2d
             Normals             = patch |> get "Normals"
             Offsets             = ""
             Textures            = textures
