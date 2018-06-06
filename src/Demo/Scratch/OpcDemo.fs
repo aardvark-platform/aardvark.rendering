@@ -18,7 +18,7 @@ module OpcDemo =
   let loadPatches (paths:list<OpcPaths*string>) (infos : list<PatchFileInfo>) = 
     infos 
       |> List.zip paths
-      |> List.map(fun ((opc,_),info) -> Patch.load opc info)
+      |> List.map(fun ((opc,_),info) -> Patch.load opc ViewerModality.XYZ info)
 
   let start() =
     let infos = input |> loadPatchFileInfos

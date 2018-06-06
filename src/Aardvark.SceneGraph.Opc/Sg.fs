@@ -10,6 +10,8 @@ module Sg2 =
   
   let createFlatISg pickle unpickle (patchHierarchies) : ISg =
         
+    let mode = ViewerModality.XYZ
+
     let patchHierarchies =       
       patchHierarchies |> Seq.map(fun x -> PatchHierarchy.load pickle unpickle x) |> Seq.toList
     
@@ -22,7 +24,7 @@ module Sg2 =
       let config = { wantMipMaps = true; wantSrgb = false; wantCompressed = false }
 
       leaves 
-        |> List.map(fun (opcPaths,patch) -> (Patch.load opcPaths patch.info, opcPaths, patch.info)) 
+        |> List.map(fun (opcPaths,patch) -> (Patch.load opcPaths mode patch.info, opcPaths, patch.info)) 
         |> List.map(fun ((a,_),c,d) -> (a,c,d))
         |> List.map (fun (g,opcPaths,info) -> 
 

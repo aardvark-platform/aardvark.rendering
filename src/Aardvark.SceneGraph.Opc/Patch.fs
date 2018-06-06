@@ -26,11 +26,17 @@ type Patch =
 module Patch =
     let ofInfo (level : int) (size: float) (p : PatchFileInfo) = { level = level; info = p; triangleSize = size }
         
-    let load (opcPaths : OpcPaths) (p : PatchFileInfo)  =
+    let load (opcPaths : OpcPaths) (mode : ViewerModality) (p : PatchFileInfo)  =
         let sw = System.Diagnostics.Stopwatch()
         sw.Start()
         let patch_DirAbsPath = opcPaths.Patches_DirAbsPath +/ p.Name
-        let positions   = patch_DirAbsPath +/ p.Positions               |> fromFile<V3f>
+
+        let pos = 
+          match mode, p.Positions2d with
+          | ViewerModality.SvBR, Some p2 -> p2
+          | _ -> p.Positions          
+
+        let positions   = patch_DirAbsPath +/ pos |> fromFile<V3f>
         let coordinates = patch_DirAbsPath +/ (List.head p.Coordinates) |> fromFile<V2f>
                 
         sw.Stop()

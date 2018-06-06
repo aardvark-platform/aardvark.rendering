@@ -186,7 +186,7 @@ module PatchFileInfo =
             LocalBoundingBox2d  = patch |> get "LocalBoundingBox2D"  |> Box3d.Parse
 
             Positions           = patch |> get "Positions"
-            Positions2d         = patch |> tryGet "Positions2d"
+            Positions2d         = patch |> tryGet "Positions2D"
             Normals             = patch |> get "Normals"
             Offsets             = ""
             Textures            = textures
