@@ -1,21 +1,18 @@
 ﻿namespace Aardvark.SceneGraph.Opc
 
 open System
-open System.IO
 open Aardvark.Base
-open Aardvark.Base.IO
 open Aardvark.Prinziple
 
 type PatchHierarchy =
     { 
-        baseDir : string
-        tree    : QTree<Patch>
+        opcPaths : OpcPaths
+        tree     : QTree<Patch>
     }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module PatchHierarchy =
     open XmlHelpers
-    open System.Xml
     open System.Xml.Linq
     
     let parseDouble d =
@@ -57,22 +54,24 @@ module PatchHierarchy =
         let tree = mkTree rootPatch
         tree, avgSizes |> Array.rev
     
-    let loadAndCache dir (xml:string) (pickle : QTree<Patch> -> byte[]) cache =
+    let loadAndCache (opcPaths : OpcPaths) (pickle : QTree<Patch> -> byte[]) =
        Log.startTimed "loading from hierarchy"
+       let xml   = opcPaths.PatchHierarchy_FileAbsPath
+       let cache = opcPaths.PatchHierarchyCache_FileAbsPath
+
        let tree, sizes =
            XDocument.Load(xml) |> ofDoc
        let hierarchy = 
            tree
-               |> QTree.mapLevel 0 (fun level p -> 
-                       p |> PatchFileInfo.load dir |> Patch.ofInfo level sizes.[level]
+               |> QTree.mapLevel (fun level p -> 
+                       p |> PatchFileInfo.load opcPaths |> Patch.ofInfo level sizes.[level]
                    )
        hierarchy |> pickle |> File.writeAllBytes cache
        Log.stop()
-       { baseDir = dir; tree = hierarchy }
+       { opcPaths = opcPaths; tree = hierarchy }
 
-    let load (pickle : QTree<Patch> -> byte[]) (unpickle :  byte[] -> QTree<Patch>) (folder : string) =
-        let xmlPath   = Path.combine [folder; @"Patches\patchhierarchy.xml"]
-        let cachefile = Path.combine [folder; "hierarchy.cache"]
+    let load (pickle : QTree<Patch> -> byte[]) (unpickle :  byte[] -> QTree<Patch>) (opcPaths : OpcPaths) =
+        let cachefile = opcPaths.PatchHierarchyCache_FileAbsPath
                 
         if Prinziple.exists cachefile then
             try
@@ -80,51 +79,66 @@ module PatchHierarchy =
 
                 let readFile = Prinziple.readAllBytes cachefile
 
-                let r = { baseDir = folder; tree = readFile |> unpickle }
+                let r = { opcPaths = opcPaths; tree = readFile |> unpickle }
                 Log.stop()
                 r
             with e -> 
                 Log.warn "could not parse cache file. recomputing."
-                loadAndCache folder xmlPath pickle cachefile
+                loadAndCache opcPaths pickle
         else
-            loadAndCache folder xmlPath pickle cachefile
+            loadAndCache opcPaths pickle
 
-    let getPatchKdTreePath (h:PatchHierarchy) patchName = 
-            let rootpatch = h.tree |> QTree.getRoot 
+    let getLevelFromResolution (resolution : float) (patchTree : QTree<Patch>) =
+            let (lvl, _) = 
+              patchTree
+                |> QTree.flatten
+                |> Array.map (fun patch -> (patch.level, patch.triangleSize))
+                |> Array.distinct
+                |> Array.sortByDescending (fun (lvl, _) -> lvl)
+                |> Array.find (fun (_, triSize) -> resolution >= triSize)
+            lvl
 
-            let fileName = sprintf "%s-0.aakd" patchName            
-            Path.combine [h.baseDir; "patches"; rootpatch.info.Name; fileName]
+    let kdTree_FileName (patch_Name : string) (patch_Level : int) (posType : ViewerModality) =
+      let lvl_Sub = 
+          match patch_Level > -1 with
+          | true  -> sprintf "-%i" patch_Level
+          | false -> ""
+      let pos_Sub =
+          match posType with
+          | XYZ -> ""
+          | SvBR -> "-2d"
+      sprintf "%s%s%s.%s" patch_Name lvl_Sub pos_Sub OpcPaths.KdTree_Ext
 
-    let getPatchKdTreePath2d (h:PatchHierarchy) patchName = 
-            let rootpatch = h.tree |> QTree.getRoot 
+type PatchHierarchy with
 
-            let fileName = sprintf "%s-0-2d.aakd" patchName
-            Path.combine [h.baseDir; "patches"; rootpatch.info.Name; fileName]
+  // == Patch methods ==
+  member this.rootPatch_DirName =
+      let rootpatch = this.tree |> QTree.getRoot
+      rootpatch.info.Name
 
-    let getPatchPositionPath (h:PatchHierarchy) patchName =
-        let fileName = "positions.aara"
-        Path.combine [h.baseDir; "patches"; patchName; fileName]
+  member this.rootPatch_DirAbsPath =
+      this.opcPaths.Patches_DirAbsPath +/ this.rootPatch_DirName
+    
+  // == PatchTree methods ==
+  member this.patchTree_DirAbsPaths =
+      let patches_DirAbsPath = this.opcPaths.Patches_DirAbsPath
+      this.tree |> QTree.map (fun patch -> patches_DirAbsPath +/ patch.info.Name)
 
-    let getPatch2dPositionPath (h:PatchHierarchy) patchName = 
-        let fileName = "positions2d.aara"
-        Path.combine [h.baseDir; "patches"; patchName; fileName]
+  // == KdTree methods ==
+  member this.kdTree_FileAbsPath patch_Name patch_Level posType =
+      this.rootPatch_DirAbsPath +/ (PatchHierarchy.kdTree_FileName patch_Name patch_Level posType)
 
-    let getProfileLutPath (h:PatchHierarchy) = 
-        let fileName = "profilelut8.bin"
-        Path.combine [h.baseDir; "patches"; fileName]
+  member this.kdTreeAgg_FileAbsPath (lvl:int) (posType:ViewerModality) =
+      this.kdTree_FileAbsPath this.rootPatch_DirName lvl posType
 
-    let getkdTreePath (h:PatchHierarchy) (s) =
-        let rootpatch = h.tree |> QTree.getRoot 
-                                
-        let fileName = sprintf s rootpatch.info.Name
-        Path.combine [h.baseDir; "patches"; rootpatch.info.Name; fileName]
+  member this.kdTreeN_FileAbsPath =
+      this.kdTreeAgg_FileAbsPath -1 XYZ
 
-    let getLevelNKdTreePath (h:PatchHierarchy) =
-        getkdTreePath h "%s.aakd"
-        
-    let getMasterKdTreePath (h:PatchHierarchy) =
-        getkdTreePath h "%s-0.aakd"
+  member this.kdTreeN2d_FileAbsPath =
+      this.kdTreeAgg_FileAbsPath -1 SvBR
 
-    let getMasterKdTreePath2d (h:PatchHierarchy) =
-        getkdTreePath h "%s-0-2d.aakd"
+  member this.kdTreeAggZero_FileAbsPath =
+      this.kdTreeAgg_FileAbsPath 0 XYZ
 
+  member this.kdTreeAggZero2d_FileAbsPath =
+      this.kdTreeAgg_FileAbsPath 0 SvBR

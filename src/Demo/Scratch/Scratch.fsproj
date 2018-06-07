@@ -94,6 +94,7 @@
     <Compile Include="ImageFormat.fs" />
     <Compile Include="Volumes.fs" />
     <Compile Include="TPL.fs" />
+    <Compile Include="OpcDemo.fs" />
     <Compile Include="DDS.fs" />
     <Compile Include="Program.fs" />
     <None Include="paket.references" />
@@ -135,6 +136,11 @@
     <ProjectReference Include="..\..\Aardvark.SceneGraph.IO\Aardvark.SceneGraph.IO.fsproj">
       <Name>Aardvark.SceneGraph.IO</Name>
       <Project>{d7b02e89-dc77-462d-a3d4-a28daa403aaf}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Aardvark.SceneGraph.Opc\Aardvark.SceneGraph.Opc.fsproj">
+      <Name>Aardvark.SceneGraph.Opc</Name>
+      <Project>{97cf1a7d-9858-4552-8ebf-adbd6ff68ffa}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj">
@@ -451,6 +457,26 @@
         <Reference Include="Microsoft.Win32.Registry">
           <HintPath>..\..\..\packages\Microsoft.Win32.Registry\ref\netstandard2.0\Microsoft.Win32.Registry.dll</HintPath>
           <Private>False</Private>
+          <Paket>True</Paket>
+        </Reference>
+      </ItemGroup>
+    </When>
+  </Choose>
+  <Choose>
+    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.7.1'">
+      <ItemGroup>
+        <Reference Include="ICSharpCode.SharpZipLib">
+          <HintPath>..\..\..\packages\SharpZipLib.NETStandard\lib\net45\ICSharpCode.SharpZipLib.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+      </ItemGroup>
+    </When>
+    <When Condition="($(TargetFrameworkIdentifier) == '.NETCoreApp' And $(TargetFrameworkVersion) == 'v2.0') Or ($(TargetFrameworkIdentifier) == '.NETStandard' And $(TargetFrameworkVersion) == 'v2.0')">
+      <ItemGroup>
+        <Reference Include="ICSharpCode.SharpZipLib">
+          <HintPath>..\..\..\packages\SharpZipLib.NETStandard\lib\netstandard1.3\ICSharpCode.SharpZipLib.dll</HintPath>
+          <Private>True</Private>
           <Paket>True</Paket>
         </Reference>
       </ItemGroup>

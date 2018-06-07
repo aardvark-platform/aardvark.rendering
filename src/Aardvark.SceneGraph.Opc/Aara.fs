@@ -65,10 +65,11 @@ module Aara =
             else
                 match typeName with
                     | "V3d" -> f |> loadRaw<V3d> elementCount |> PrimitiveValueConverter.arrayConverter typeof<V3d>
+                    | "V3f" -> f |> loadRaw<V3f> elementCount |> PrimitiveValueConverter.arrayConverter typeof<V3f>
                     | "V2d" -> f |> loadRaw<V2d> elementCount |> PrimitiveValueConverter.arrayConverter typeof<V2d>
                     | "double" -> f |> loadRaw<double> elementCount |> PrimitiveValueConverter.arrayConverter typeof<double>
-                //    | "float" -> f |> loadRaw<float32> elementCount |> PrimitiveValueConverter.arrayConverter typeof<float32>
-                    | _ -> failwith ""
+                    | "float" -> f |> loadRaw<float32> elementCount |> PrimitiveValueConverter.arrayConverter typeof<float32>
+                    | _ -> failwith ("Aara.fs: No support for loading type " + typeName)
 
         let dim =
             match sizes with
@@ -149,6 +150,74 @@ module Aara =
         )
         Array.Resize(&arr, cnt)
         arr
+    
+    // Patch Size to index array (faces with invalid points will be degenerated or skipped)
+    let computeIndexArray (size : V2i) (degenerateInvalids : bool) (invalidPoints : int Set) =
+      // vertex x/y to point index of face
+      let getFaceIndices y x sizeX =
+        let pntA = y * sizeX + x
+        let pntB = (y + 1) * sizeX + x
+        let pntC = pntA + 1
+        let pntD = pntB + 1
+
+        [| pntA; pntB; pntC;
+           pntC; pntB; pntD |]
+    
+      // replace invalid faces with another array (invalidReplacement)
+      let getFaceIndicesWReplacedInvalids invalidReplacement y x sizeX =
+        let faceIndices = getFaceIndices y x sizeX
+        if faceIndices |> Array.exists (fun i -> Set.contains i invalidPoints) then 
+          invalidReplacement
+        else 
+          faceIndices
+          
+      // choose function to use
+      let f = 
+        match (invalidPoints.IsEmptyOrNull(), degenerateInvalids) with
+        | (true, _)      -> getFaceIndices
+        // skip faces with invalid points
+        | (false, false) -> getFaceIndicesWReplacedInvalids Array.empty
+        // replace invalid faces with degenerated face
+        | (false, true)  ->
+            // find first valid point
+            let p = [| 0..(size.X * size.Y - 1) |] |> Array.find (fun i -> not (Set.contains i invalidPoints))
+            getFaceIndicesWReplacedInvalids [| p; p; p; p; p; p |]
+        
+      // step through all vertices to get index-array per face      
+      let indexArray = 
+        [|
+          for y in [| 0..(size.Y-2) |] do
+            for x in [| 0..(size.X-2) |] do
+              yield f y x size.X
+        |]
+    
+      let invalidFaceCount = indexArray |> Array.filter (fun a -> a.IsEmpty()) |> Array.length
+      if invalidFaceCount > 0 then
+        Report.Line(5, "Invalid faces found: " + invalidFaceCount.ToString())
+
+      indexArray |> Array.concat
+
+    let getInvalidIndices (positions : V3d[]) =
+      positions |> Array.mapi (fun i x -> if x.AnyNaN then Some i else None) |> Array.choose id
+    
+    // load triangles from aaraFile and transform them with matrix
+    let loadTrianglesFromFile (aaraFile : string) (matrix : M44d) =
+        let positions = aaraFile |> fromFile<V3f>
+
+        let data = 
+            positions.Data |> Array.map (fun x ->  x.ToV3d() |> matrix.TransformPos)
+
+        let invalidIndices = getInvalidIndices data
+        let index = computeIndexArray (positions.Size.XY.ToV2i()) false (Set.ofArray invalidIndices)
+              
+        let triangles =             
+            index 
+                |> Seq.map(fun x -> data.[x])
+                |> Seq.chunkBySize 3
+                |> Seq.map(fun x -> Triangle3d(x))
+                |> Seq.toArray
+
+        triangles
 
     module Offset = 
 
@@ -232,13 +301,9 @@ module Aara =
           result
 
       let fromFileWithOffsetAndSize<'a when 'a : unmanaged and 'a : (new : unit -> 'a) and 'a : struct and 'a :> ValueType> (offset : int) (size : int) (fileName : string) =
-        let stream = File.OpenRead fileName
+        let stream = Prinziple.openRead fileName
         loadFromStreamWithOffset<'a> offset size stream
 
       let fromFileColumnsWithOffsetAndSize<'a when 'a : unmanaged and 'a : (new : unit -> 'a) and 'a : struct and 'a :> ValueType> (offset : int) (size : int) (fileName : string) =
-        let stream = File.OpenRead fileName
+        let stream = Prinziple.openRead fileName
         loadFromStreamColumnsWithOffset<'a> offset size stream
-
-
-
-

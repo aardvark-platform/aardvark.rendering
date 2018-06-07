@@ -60,7 +60,7 @@ type PatchFileInfo =
         LocalBoundingBox2d  : Box3d
 
         Positions           : string
-        Positions2d         : string
+        Positions2d         : option<string>
         Normals             : string
         Offsets             : string
 
@@ -73,6 +73,7 @@ type PatchFileInfo =
 module PatchFileInfo =
     open XmlHelpers
     open Aardvark.Prinziple
+    open Aardvark.Base.Rendering
 
     [<AutoOpen>]
     module Parsers =
@@ -114,6 +115,13 @@ module PatchFileInfo =
     let get (name : string) (node : XmlNode)=
         node.SelectSingleNode(name).InnerText.Trim()
 
+    let tryGet (name : string) (node : XmlNode)=
+        let n = node.SelectSingleNode(name)
+        if (n = null) then
+          None
+        else
+          Some (n.InnerText.Trim())
+
     let xvalue (p : XmlNode) = p.Value.Trim()
 
     let inner (node : XmlNode) = 
@@ -147,14 +155,18 @@ module PatchFileInfo =
               |> List.map (string << get "DiffuseColor1Coordinates")
         
         let attributes =
-          if hasDeviations then
+          //if hasDeviations then
             patch 
               |> childNodes' "Attributes"
               |> Seq.map inner
               |> Seq.toList 
-          else
-            [ "positions2d.aara" ]
-
+                
+        let pos2d = patch |> tryGet "Positions2D"
+        let attributes =
+          match pos2d with
+          | Some _ ->  "Positions2d.aara" :: attributes
+          | None   -> attributes
+        
         let split (s:string) =
             (s.Split ' ') |> Array.toList
 
@@ -169,48 +181,50 @@ module PatchFileInfo =
             GlobalBoundingBox   = patch |> get "GlobalBoundingBox"   |> Box3d.Parse
             LocalBoundingBox    = patch |> get "LocalBoundingBox"    |> Box3d.Parse
 
-            Local2Global2d      = patch |> get "Local2Global"        |> M44d.Parse |> trafo
-            GlobalBoundingBox2d = patch |> get "GlobalBoundingBox"   |> Box3d.Parse
-            LocalBoundingBox2d  = patch |> get "LocalBoundingBox"    |> Box3d.Parse
+            Local2Global2d      = patch |> get "Local2Global2D"      |> M44d.Parse |> trafo
+            GlobalBoundingBox2d = patch |> get "GlobalBoundingBox2D" |> Box3d.Parse
+            LocalBoundingBox2d  = patch |> get "LocalBoundingBox2D"  |> Box3d.Parse
 
             Positions           = patch |> get "Positions"
-            Positions2d         = ""
-            Normals             = ""
+            Positions2d         = pos2d
+            Normals             = patch |> get "Normals"
             Offsets             = ""
             Textures            = textures
             Coordinates         = coords              
             Attributes          = attributes
         }    
-
-    let load (dir : string) (f : string) =
-        let path = Path.combine [dir; "Patches"; f; "Patch.xml"]
+    
+    let load (opcPaths : OpcPaths) (patchName : string) =
+        let path = opcPaths.Patches_DirAbsPath +/ patchName +/ OpcPaths.PatchFileInfo_FileName
         let doc = Prinziple.readXmlDoc path
-        ofXDoc doc f false
+        ofXDoc doc patchName false
 
     /// <summary>
     /// Loads patchfileinfo with positions2d.aara as attribute
     /// </summary>    
-    let load' (dir : string) (f : string) =
-        let path = Path.combine [dir; "Patches"; f; "Patch.xml"]
+    let load' (opcPaths : OpcPaths) (patchName : string) =
+        let path = opcPaths.Patches_DirAbsPath +/ patchName +/ OpcPaths.PatchFileInfo_FileName
         let doc = Prinziple.readXmlDoc path
-        ofXDoc doc f true
+        ofXDoc doc patchName true
 
 type QTree<'a> = Node of 'a * array<QTree<'a>>
                 | Leaf of 'a
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module QTree =
-    let rec map f t = 
-        match t with
+    let rec map (f : 'a->'a0) (tree : QTree<'a>) = 
+        match tree with
             | Leaf v -> Leaf (f v)
             | Node(v,children) ->
                 Node(f v, children |> Array.map (map f))
 
-    let rec mapLevel (l : int) f t = 
-        match t with
-            | Leaf v -> Leaf (f l v)
-            | Node(v,children) ->
-                Node(f l v, children |> Array.map (mapLevel (l + 1) f))
+    let mapLevel (f : int->'a->'a0) (tree : QTree<'a>) =
+      let rec mapLevel lvl f t = 
+          match t with
+              | Leaf v -> Leaf (f lvl v)
+              | Node(v,children) ->
+                  Node(f lvl v, children |> Array.map (mapLevel (lvl + 1) f))
+      mapLevel 0 f tree
 
     let rec getLeaves (tree : QTree<'a>) =      
         match tree with
@@ -221,3 +235,20 @@ module QTree =
         match tree with
             | Leaf v -> v
             | Node(v,_) -> v
+
+    let rec flatten (tree : QTree<'a>) = 
+        match tree with
+            | Leaf v -> [|v|]
+            | Node(v,children) ->
+                let cs = children |> Array.map flatten |> Array.concat
+                Array.append [|v|] cs
+
+    let height (tree : QTree<'a>) =
+      let rec height lvl tree = 
+        match tree with
+        | Leaf _ -> lvl
+        | Node (_, children) ->
+          children
+          |> Array.map (height (lvl+1))
+          |> Array.max
+      height 0 tree

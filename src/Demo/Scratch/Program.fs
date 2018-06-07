@@ -846,8 +846,9 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
     
-    App.run(Aardvark.SceneGraph.Pool.``Shader Switch``.sg())
+    //App.run(Aardvark.SceneGraph.Pool.``Shader Switch``.sg())
     
+    OpcDemo.OpcDemo.start()
 
     Environment.Exit 0
 
