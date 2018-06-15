@@ -167,6 +167,24 @@ module PatchFileInfo =
           | Some _ ->  "Positions2d.aara" :: attributes
           | None   -> attributes
         
+        let local2Global2d = patch |> tryGet "Local2Global2D"
+        let local2Global2d =
+          match local2Global2d with
+          | Some x -> x |> M44d.Parse |> trafo
+          | None -> Trafo3d.Identity
+
+        let globalBoundingBox2d = patch |> tryGet "GlobalBoundingBox2D"
+        let globalBoundingBox2d =
+          match globalBoundingBox2d with
+          | Some x -> x |> Box3d.Parse
+          | None -> Box3d.Invalid
+
+        let localBoundingBox2d = patch |> tryGet "LocalBoundingBox2d"
+        let localBoundingBox2d =
+          match localBoundingBox2d with
+          | Some x -> x |> Box3d.Parse
+          | None -> Box3d.Invalid
+
         let split (s:string) =
             (s.Split ' ') |> Array.toList
 
@@ -181,13 +199,13 @@ module PatchFileInfo =
             GlobalBoundingBox   = patch |> get "GlobalBoundingBox"   |> Box3d.Parse
             LocalBoundingBox    = patch |> get "LocalBoundingBox"    |> Box3d.Parse
 
-            Local2Global2d      = patch |> get "Local2Global2D"      |> M44d.Parse |> trafo
-            GlobalBoundingBox2d = patch |> get "GlobalBoundingBox2D" |> Box3d.Parse
-            LocalBoundingBox2d  = patch |> get "LocalBoundingBox2D"  |> Box3d.Parse
+            Local2Global2d      = local2Global2d
+            GlobalBoundingBox2d = globalBoundingBox2d
+            LocalBoundingBox2d  = localBoundingBox2d
 
             Positions           = patch |> get "Positions"
             Positions2d         = pos2d
-            Normals             = patch |> get "Normals"
+            Normals             = "" //patch |> get "Normals"
             Offsets             = ""
             Textures            = textures
             Coordinates         = coords              
