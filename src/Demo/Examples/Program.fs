@@ -1394,116 +1394,116 @@ let main args =
     Ag.initialize()
     Aardvark.Init()
 
-    //let inputVolume = NativeSupport.ReadFile2 @"C:\volumes\GussPK_AlSi_0.5Sn_180kV_925x925x500px.raw"
+    ////let inputVolume = NativeSupport.ReadFile2 @"C:\volumes\GussPK_AlSi_0.5Sn_180kV_925x925x500px.raw"
 
-    //let size = V3i(925,925,500)
-    //let halfSize = size / 2
-    //let volume = NativeVolume<uint16>(NativePtr.ofNativeInt inputVolume, VolumeInfo(0L,V3l size,V3l(1,size.X,size.X*size.Y)))
+    ////let size = V3i(925,925,500)
+    ////let halfSize = size / 2
+    ////let volume = NativeVolume<uint16>(NativePtr.ofNativeInt inputVolume, VolumeInfo(0L,V3l size,V3l(1,size.X,size.X*size.Y)))
 
-    //let target : byte[] = Array.zeroCreate (halfSize.X*halfSize.Y*halfSize.Z * 2)
-    //let gc = GCHandle.Alloc(target,GCHandleType.Pinned)
+    ////let target : byte[] = Array.zeroCreate (halfSize.X*halfSize.Y*halfSize.Z * 2)
+    ////let gc = GCHandle.Alloc(target,GCHandleType.Pinned)
 
-    //let targetVolume = NativeVolume<uint16>(NativePtr.ofNativeInt<| gc.AddrOfPinnedObject(), VolumeInfo(0L,V3l halfSize,V3l(1,halfSize.X,halfSize.X*halfSize.Y)))
+    ////let targetVolume = NativeVolume<uint16>(NativePtr.ofNativeInt<| gc.AddrOfPinnedObject(), VolumeInfo(0L,V3l halfSize,V3l(1,halfSize.X,halfSize.X*halfSize.Y)))
 
-    //targetVolume.SetByCoord(fun (v : V3d) -> 
-    //    volume.SampleLinear(v, fun t a b -> Fun.Lerp(t,a,b))
+    ////targetVolume.SetByCoord(fun (v : V3d) -> 
+    ////    volume.SampleLinear(v, fun t a b -> Fun.Lerp(t,a,b))
+    ////)
+
+    ////gc.Free()
+
+    ////File.WriteAllBytes(sprintf @"C:\volumes\gussHalf_%d_%d_%d.raw" halfSize.X halfSize.Y halfSize.Z, target)
+    ////System.Environment.Exit 0
+    //let file = @"C:\Users\Schorsch\Desktop\london.jpg"
+    //let src = PixImage.Create(file).ToPixImage<byte>()
+    ////let src = PixImage.Create(@"C:\volumes\dog2.png").ToPixImage<byte>()
+    //let dst = PixImage<byte>(src.Format, src.Size * 2 / 3)
+    //let dst2 = PixImage<byte>(src.Format, src.Size * 2 / 3)
+
+    //let bla = V3d(0.5 / V2d src.Size,0.0)
+
+    //let vSrc = src.Volume // GetChannel(0L)
+    //let vDst = dst.Volume //GetChannel(0L)
+    //let vDst2 = dst2.Volume //GetChannel(0L)
+
+
+    //NativeVolume.using vSrc (fun pSrc -> 
+    //    NativeVolume.using vDst (fun pDst -> 
+    //        let lerp = lerp
+
+    //        let test = pSrc.[0,0,0]
+
+    //        for i in 1 .. 2 do
+    //            NativeVolume.blit pSrc pDst
+        
+    //        let iter = 10
+    //        let sw = System.Diagnostics.Stopwatch.StartNew()
+    //        for i in 1 .. iter do
+    //            NativeVolume.blit pSrc pDst
+    //        sw.Stop()
+
+    //        Log.line "took: %A" (sw.MicroTime / iter)
+    //        dst.SaveAsImage(@"C:\Users\Schorsch\Desktop\blit.png")
+
+    //    )
+    //)
+    //NativeVolume.using vSrc (fun pSrc -> 
+    //    NativeVolume.using vDst2 (fun pDst -> 
+    //        let lerp = lerp
+    //        pDst.SetByCoord(fun (c : V3d) ->
+    //            pSrc.SampleLinear(c, lerp)
+    //        )
+    //        dst2.SaveAsImage(@"C:\Users\Schorsch\Desktop\sample.png")
+    //    )
     //)
 
+    //let gc = GCHandle.Alloc(src.Volume.Data, GCHandleType.Pinned)
+    //let img = IL.GenImage()
+    //IL.BindImage(img)
+    ////IL.LoadImage file |> ignore
+    //IL.TexImage(src.Size.X, src.Size.Y, 1, 3uy, ChannelFormat.RGB, ChannelType.UnsignedByte, gc.AddrOfPinnedObject()) |> ignore
+    //ILU.ImageParameter(ImageParameterName.Filter, int Filter.Bilinear)
+    //ILU.Scale(dst.Size.X, dst.Size.Y, 1) |> ignore
+    //ILU.FlipImage() |> ignore
+    ////ILU.FlipImage() |> ignore
+    //IL.Save(ImageType.Png, @"C:\Users\Schorsch\Desktop\devil.png") |> ignore
+    //IL.BindImage(0)
+    //IL.DeleteImage(img)
     //gc.Free()
 
-    //File.WriteAllBytes(sprintf @"C:\volumes\gussHalf_%d_%d_%d.raw" halfSize.X halfSize.Y halfSize.Z, target)
+    //let mutable maxDiff = 0
+
+
+    //let compare (a : byte) (b : byte) =
+    //    let d = int a - int b |> abs
+    //    if d <> 0 then
+    //        maxDiff <- max maxDiff d
+    //        1
+    //    else
+    //        0
+
+    //let diff = dst.Volume.InnerProduct(dst2.Volume, System.Func<_,_,_>(compare), 0, System.Func<_,_,_>((+)))
+    //Log.warn "size: %A" dst.Size
+    //Log.warn "diff <= %A" maxDiff
+    //Log.warn "diff: %.2f%%" (100.0 * float diff / float (dst.Size.X * dst.Size.Y * 3))
+
+    ////dst.SaveAsImage(@"C:\Users\Schorsch\Desktop\blit.png")
+    //src.SaveAsImage(@"C:\Users\Schorsch\Desktop\input.png")
     //System.Environment.Exit 0
-    let file = @"C:\Users\Schorsch\Desktop\london.jpg"
-    let src = PixImage.Create(file).ToPixImage<byte>()
-    //let src = PixImage.Create(@"C:\volumes\dog2.png").ToPixImage<byte>()
-    let dst = PixImage<byte>(src.Format, src.Size * 2 / 3)
-    let dst2 = PixImage<byte>(src.Format, src.Size * 2 / 3)
-
-    let bla = V3d(0.5 / V2d src.Size,0.0)
-
-    let vSrc = src.Volume // GetChannel(0L)
-    let vDst = dst.Volume //GetChannel(0L)
-    let vDst2 = dst2.Volume //GetChannel(0L)
 
 
-    NativeVolume.using vSrc (fun pSrc -> 
-        NativeVolume.using vDst (fun pDst -> 
-            let lerp = lerp
-
-            let test = pSrc.[0,0,0]
-
-            for i in 1 .. 2 do
-                NativeVolume.blit pSrc pDst
-        
-            let iter = 10
-            let sw = System.Diagnostics.Stopwatch.StartNew()
-            for i in 1 .. iter do
-                NativeVolume.blit pSrc pDst
-            sw.Stop()
-
-            Log.line "took: %A" (sw.MicroTime / iter)
-            dst.SaveAsImage(@"C:\Users\Schorsch\Desktop\blit.png")
-
-        )
-    )
-    NativeVolume.using vSrc (fun pSrc -> 
-        NativeVolume.using vDst2 (fun pDst -> 
-            let lerp = lerp
-            pDst.SetByCoord(fun (c : V3d) ->
-                pSrc.SampleLinear(c, lerp)
-            )
-            dst2.SaveAsImage(@"C:\Users\Schorsch\Desktop\sample.png")
-        )
-    )
-
-    let gc = GCHandle.Alloc(src.Volume.Data, GCHandleType.Pinned)
-    let img = IL.GenImage()
-    IL.BindImage(img)
-    //IL.LoadImage file |> ignore
-    IL.TexImage(src.Size.X, src.Size.Y, 1, 3uy, ChannelFormat.RGB, ChannelType.UnsignedByte, gc.AddrOfPinnedObject()) |> ignore
-    ILU.ImageParameter(ImageParameterName.Filter, int Filter.Bilinear)
-    ILU.Scale(dst.Size.X, dst.Size.Y, 1) |> ignore
-    ILU.FlipImage() |> ignore
-    //ILU.FlipImage() |> ignore
-    IL.Save(ImageType.Png, @"C:\Users\Schorsch\Desktop\devil.png") |> ignore
-    IL.BindImage(0)
-    IL.DeleteImage(img)
-    gc.Free()
-
-    let mutable maxDiff = 0
-
-
-    let compare (a : byte) (b : byte) =
-        let d = int a - int b |> abs
-        if d <> 0 then
-            maxDiff <- max maxDiff d
-            1
-        else
-            0
-
-    let diff = dst.Volume.InnerProduct(dst2.Volume, System.Func<_,_,_>(compare), 0, System.Func<_,_,_>((+)))
-    Log.warn "size: %A" dst.Size
-    Log.warn "diff <= %A" maxDiff
-    Log.warn "diff: %.2f%%" (100.0 * float diff / float (dst.Size.X * dst.Size.Y * 3))
-
-    //dst.SaveAsImage(@"C:\Users\Schorsch\Desktop\blit.png")
-    src.SaveAsImage(@"C:\Users\Schorsch\Desktop\input.png")
-    System.Environment.Exit 0
-
-
-    //Aardvark.Application.OpenVR.UnhateTest.run()
+    ////Aardvark.Application.OpenVR.UnhateTest.run()
     
-    let lerp = OptimizedClosures.FSharpFunc<float, float, float>.Adapt(fun a b -> a)
+    //let lerp = OptimizedClosures.FSharpFunc<float, float, float>.Adapt(fun a b -> a)
 
     //Examples.Tessellation.run()
     //Examples.Stereo.runNew()
     //Examples.ComputeShader.run()
-    Examples.CommandTest.run()
+    //Examples.CommandTest.run()
     //Examples.LoD.run()
     //Examples.LevelOfDetail.run()
     //Examples.Wobble.run()
     //Examples.GeometryComposition.run()
-    //Examples.Eigi.run()
+    Examples.Eigi.run()
     //Examples.Sponza.run()
     //Examples.IGPrimitives.run()
     //Examples.LevelOfDetail.run()

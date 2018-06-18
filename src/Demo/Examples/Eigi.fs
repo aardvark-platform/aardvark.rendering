@@ -358,14 +358,14 @@ module Eigi =
 
         let win = 
             window {
-                display Display.OpenVR
+                display Display.Mono
                 samples 8
-                backend Backend.Vulkan
-                debug false
+                backend Backend.GL
+                debug true
             }
 
         // load the model
-        let scene = Loader.Assimp.loadFrom @"C:\Aardwork\raptor\test2.dae" (Loader.Assimp.defaultFlags)// ||| Assimp.PostProcessSteps.FlipUVs)
+        let scene = Loader.Assimp.loadFrom @"C:\Users\Schorsch\Desktop\raptor\raptor.dae" (Loader.Assimp.defaultFlags)// ||| Assimp.PostProcessSteps.FlipUVs)
 
         let sw = System.Diagnostics.Stopwatch()
         sw.Start()
@@ -399,7 +399,7 @@ module Eigi =
             [|
                 for x in -s.X .. s.X do
                     for y in -s.Y .. s.Y do
-                            yield Trafo3d.Translation(float x, float y, 0.0)
+                        yield Trafo3d.Translation(float x, float y, 0.0)
             |]
 
         let timeOffsets =
@@ -433,7 +433,7 @@ module Eigi =
 
                 |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero) * Trafo3d.Scale 20.0)
 
-                |> instanced (Mod.constant trafos)
+                //|> instanced (Mod.constant trafos)
 
                 // apply all shaders we have
                 |> Sg.shader {

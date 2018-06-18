@@ -394,6 +394,13 @@ module RenderTasks =
             x.PushArg(int OpenGl.Enums.BufferTarget.UniformBuffer)
             x.Call(OpenGl.Pointers.BindBufferRange)
 
+        member x.BindStorageBuffer(slot : int, view : IResource<Buffer, int>) =
+            x.BeginCall(3)
+            x.PushIntArg(NativePtr.toNativeInt view.Pointer)
+            x.PushArg(slot)
+            x.PushArg(int OpenGl.Enums.BufferTarget.ShaderStorageBuffer)
+            x.Call(OpenGl.Pointers.BindBufferBase)
+
         member x.BindBuffer(target : int, buffer : int) =
             x.BeginCall(2)
             x.PushArg(buffer)
@@ -723,6 +730,14 @@ module RenderTasks =
                         ()
                     | _ -> 
                         x.BindUniformBufferView(id, ub)
+
+            for (id, ssb) in Map.toSeq me.StorageBuffers do
+                match Map.tryFind id prev.StorageBuffers with
+                    | Some old when old = ssb -> 
+                        // the same UniformBuffer has already been bound
+                        ()
+                    | _ -> 
+                        x.BindStorageBuffer(id, ssb)
 
             // bind all textures/samplers (if needed)
 

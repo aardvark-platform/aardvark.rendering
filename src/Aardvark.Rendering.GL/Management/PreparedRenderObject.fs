@@ -12,6 +12,19 @@ open Microsoft.FSharp.NativeInterop
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
 
+[<AutoOpen>]
+module private Hacky =
+    let toBufferCache = 
+        UnaryCache<IMod, IMod<IBuffer>>(fun m ->
+            Mod.custom (fun t -> 
+                match m.GetValue t with
+                    | :? Array as a -> ArrayBuffer(a) :> IBuffer
+                    | :? IBuffer as b -> b
+                    | _ -> failwith "invalid storage buffer content"
+            )
+        )
+        
+
 
 [<CustomEquality;CustomComparison>]
 type PreparedRenderObject =
@@ -24,6 +37,7 @@ type PreparedRenderObject =
         LastTextureSlot : int
         Program : IResource<Program, int>
         UniformBuffers : Map<int, IResource<UniformBufferView, int>>
+        StorageBuffers : Map<int, IResource<Buffer, int>>
         Uniforms : Map<int, IResource<UniformLocation, nativeint>>
         Textures : IResource<TextureBinding, TextureBinding>
         Buffers : list<int * BufferView * AttributeFrequency * IResource<Buffer, int>>
@@ -74,6 +88,9 @@ type PreparedRenderObject =
             yield x.Program :> IResource
             for (_,b) in Map.toSeq x.UniformBuffers do
                 yield b :> _
+                
+            for (_,b) in Map.toSeq x.StorageBuffers do
+                yield b :> _
 
             for (_,u) in Map.toSeq x.Uniforms do
                 yield u :> _
@@ -110,6 +127,9 @@ type PreparedRenderObject =
         x.Program.Update(caller, token)
 
         for (_,ub) in x.UniformBuffers |> Map.toSeq do
+            ub.Update(caller, token)
+            
+        for (_,ub) in x.StorageBuffers |> Map.toSeq do
             ub.Update(caller, token)
 
         for (_,ul) in x.Uniforms |> Map.toSeq do
@@ -172,6 +192,7 @@ type PreparedRenderObject =
                         x.Textures.Dispose()
                         x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
                         x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
+                        x.StorageBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
                         x.Program.Dispose()
 
                         x.IsActive.Dispose()
@@ -217,6 +238,7 @@ module PreparedRenderObject =
             FramebufferSignature = null
             LastTextureSlot = -1
             Program = Unchecked.defaultof<_>
+            StorageBuffers = Map.empty
             UniformBuffers = Map.empty
             Uniforms = Map.empty
             Textures = Unchecked.defaultof<_>
@@ -262,6 +284,7 @@ module PreparedRenderObject =
                 FramebufferSignature = o.FramebufferSignature
                 LastTextureSlot = o.LastTextureSlot
                 Program = o.Program
+                StorageBuffers = o.StorageBuffers
                 UniformBuffers = o.UniformBuffers
                 Uniforms = o.Uniforms
                 Textures = o.Textures
@@ -404,6 +427,25 @@ type ResourceManagerExtensions private() =
                 |> Map.ofList
 
         GL.Check "[Prepare] Uniform Buffers"
+
+        let storageBuffers = 
+            iface.storageBuffers
+                |> List.map (fun buf ->
+                    
+                    let buffer = 
+                        match rj.Uniforms.TryGetUniform(rj.AttributeScope, Symbol.Create buf.ssbName) with
+                            | Some (:? IMod<IBuffer> as b) ->
+                                x.CreateBuffer(b)
+                            | Some m ->
+                                let o = toBufferCache.Invoke(m)
+                                x.CreateBuffer(o)
+                            | _ ->
+                                failwithf "[GL] could not find storage buffer %A" buf.ssbName
+
+                    buf.ssbBinding, buffer
+                )
+                |> Map.ofList
+
 
 //        // partition all requested (top-level) uniforms into Textures and other
 //        let textureUniforms, otherUniforms = 
@@ -634,6 +676,7 @@ type ResourceManagerExtensions private() =
                 FramebufferSignature = fboSignature
                 LastTextureSlot = !lastTextureSlot
                 Program = program
+                StorageBuffers = storageBuffers
                 UniformBuffers = uniformBuffers
                 Uniforms = Map.empty
                 Textures = textureBinding
