@@ -37,6 +37,7 @@ static PFNGLSTENCILOPSEPARATEPROC						glStencilOpSeparate;
 static PFNGLPATCHPARAMETERIPROC							glPatchParameteri;
 static PFNGLDRAWARRAYSINSTANCEDPROC						glDrawArraysInstanced;
 static PFNGLVERTEXATTRIBPOINTERPROC						glVertexAttribPointer;
+static PFNGLVERTEXATTRIBIPOINTERPROC					glVertexAttribIPointer;
 static PFNGLUNIFORM1FVPROC								glUniform1fv;
 static PFNGLUNIFORM1IVPROC								glUniform1iv;
 static PFNGLUNIFORM2FVPROC								glUniform2fv;

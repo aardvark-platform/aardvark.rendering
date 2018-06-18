@@ -96,6 +96,7 @@ DllExport(void) vmInit()
 	glDrawArraysInstanced = (PFNGLDRAWARRAYSINSTANCEDPROC)getProc("glDrawArraysInstanced");
 	glDrawElementsBaseVertex = (PFNGLDRAWELEMENTSBASEVERTEXPROC)getProc("glDrawElementsBaseVertex");
 	glVertexAttribPointer = (PFNGLVERTEXATTRIBPOINTERPROC)getProc("glVertexAttribPointer");
+	glVertexAttribIPointer = (PFNGLVERTEXATTRIBIPOINTERPROC)getProc("glVertexAttribIPointer");
 	glUniform1fv = (PFNGLUNIFORM1FVPROC)getProc("glUniform1fv");
 	glUniform1iv = (PFNGLUNIFORM1IVPROC)getProc("glUniform1iv");
 	glUniform2fv = (PFNGLUNIFORM2FVPROC)getProc("glUniform2fv");
@@ -1151,7 +1152,22 @@ DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding
 				auto index = b->Index;
 				glEnableVertexAttribArray(index);
 				glBindBuffer(GL_ARRAY_BUFFER, b->Buffer);
-				glVertexAttribPointer(index, b->Size, b->Type, b->Normalized, b->Stride, (void*)(size_t)b->Offset);
+
+				switch (b->Type) {
+				case GL_BYTE:
+				case GL_UNSIGNED_BYTE:
+				case GL_SHORT:
+				case GL_UNSIGNED_SHORT:
+				case GL_INT:
+				case GL_UNSIGNED_INT:
+					if(b->Size == GL_BGRA) glVertexAttribPointer(index, b->Size, b->Type, b->Normalized, b->Stride, (void*)(size_t)b->Offset);
+					else glVertexAttribIPointer(index, b->Size, b->Type, b->Stride, (void*)(size_t)b->Offset);
+					break;
+				default:
+					glVertexAttribPointer(index, b->Size, b->Type, b->Normalized, b->Stride, (void*)(size_t)b->Offset);
+					break;
+
+				}
 				glVertexAttribDivisor(index, (uint32_t)b->Divisor);
 			}
 
