@@ -193,7 +193,7 @@ module PatchFileInfo =
             TagList             = patch |> get "TagList" |> split
 
             GeometryType        = patch |> get "GeometryType"        |> geomtryType
-            QuadVertexSortOrder = VertexOrder.ColumnMajor //patch |> prop "QuadVertexSortOrder" |> majority
+            QuadVertexSortOrder = patch |> get "QuadVertexSortOrder" |> majority
                                                                       
             Local2Global        = patch |> get "Local2Global"        |> M44d.Parse |> trafo
             GlobalBoundingBox   = patch |> get "GlobalBoundingBox"   |> Box3d.Parse

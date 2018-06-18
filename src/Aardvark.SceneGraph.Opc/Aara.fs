@@ -274,9 +274,27 @@ module Aara =
                       | "double" -> f |> loadRawWithOffset<double> offset elementCount |> PrimitiveValueConverter.arrayConverter typeof<double>
                       | "float" -> f |> loadRawWithOffset<float32> offset elementCount |> PrimitiveValueConverter.arrayConverter typeof<float32>
                       | _ -> failwith ("Aara.fs: No support for loading type " + typeName)
-                      
-      
+                            
           result
+
+      let loadFromStreamWithOffset'<'a when 'a : unmanaged> (offset : int) (size : int) (f : Stream) : 'a[]=
+        let binaryReader = new BinaryReader(f,Text.Encoding.ASCII, true)
+        let typeName = readerChars2String f
+        let dimensions = f.ReadByte() |> int
+        let sizes = [| for d in 0 .. dimensions - 1 do yield binaryReader.ReadInt32() |]
+      
+        //let elementCount = sizes |> Array.fold ((*)) 1
+        
+        let result =
+                match typeName with
+                    | "V3d"    -> f |> loadRawWithOffset<V3d> offset size     |> PrimitiveValueConverter.arrayConverter typeof<V3d>
+                    | "V3f"    -> f |> loadRawWithOffset<V3f> offset size     |> PrimitiveValueConverter.arrayConverter typeof<V3f>
+                    | "V2d"    -> f |> loadRawWithOffset<V2d> offset size     |> PrimitiveValueConverter.arrayConverter typeof<V2d>
+                    | "double" -> f |> loadRawWithOffset<double> offset size  |> PrimitiveValueConverter.arrayConverter typeof<double>
+                    | "float"  -> f |> loadRawWithOffset<float32> offset size |> PrimitiveValueConverter.arrayConverter typeof<float32>
+                    | _ -> failwith ("Aara.fs: No support for loading type " + typeName)
+                          
+        result
       
       let loadFromStreamColumnsWithOffset<'a when 'a : unmanaged> (offset : int) (size : int) (f : Stream) : 'a[]=
           f.Seek ((int64 0), SeekOrigin.Begin) |> ignore
