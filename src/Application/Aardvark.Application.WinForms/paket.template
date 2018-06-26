@@ -9,3 +9,5 @@ description
 frameworkAssemblies
     System.Windows.Forms
 include-pdbs true
+excludeddependencies 
+	SourceLink.Create.CommandLine

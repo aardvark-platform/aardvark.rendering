@@ -41,9 +41,12 @@ nuget NUnit.Console                      ~> 3.8.0
 nuget NUnit                              ~> 3.9.0
 nuget FsUnit                             ~> 3.1.0
 
+nuget SourceLink.Create.CommandLine copy_local: true ~> 2.8.2
+clitool dotnet-sourcelink
+
 group Build
 framework: net45
 content: none
 source https://api.nuget.org/v3/index.json
 source https://vrvis.myget.org/F/aardvark_public/api/v3/index.json
-github aardvark-platform/aardvark.fake:v4
+github aardvark-platform/aardvark.fake:v4-temp

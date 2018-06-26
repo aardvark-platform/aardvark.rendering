@@ -9,3 +9,5 @@ description
 files
     ..\..\bin\Release\Aardvark.Rendering.Interactive.dll ==> lib\net471
     ..\..\bin\Release\LoadReferences.fsx ==> scripts\
+excludeddependencies 
+	SourceLink.Create.CommandLine

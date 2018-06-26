@@ -15,6 +15,16 @@ DefaultSetup.install ["src/Aardvark.Rendering.sln"]
 do System.Diagnostics.Debugger.Launch() |> ignore
 #endif
 
+Target "SourceLink.Test" (fun _ ->
+    !! "bin/*.nupkg" 
+    |> Seq.iter (fun nupkg ->
+        DotNetCli.RunCommand
+            (fun p -> { p with WorkingDir = __SOURCE_DIRECTORY__ @@ "src" @@ "Demo" @@ "SlimJim" } )
+            (sprintf "sourcelink test %s" nupkg)
+    )
+)
+
+
 Target "PerfTest" (fun () ->
     let exeFile = "bin/Release/perfTest.exe"
     let exeModified =
@@ -47,6 +57,8 @@ Target "PerfTest" (fun () ->
         tracefn "executable up-to-date"
 )
 
+"CreatePackage" ==> "SourceLink.Test"
+"SourceLink.Test" ==> "Push"
 
 
 "Restore" ==> "PerfTest"
