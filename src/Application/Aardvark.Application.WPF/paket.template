@@ -14,3 +14,5 @@ frameworkAssemblies
     WindowsBase
     WindowsFormsIntegration
 include-pdbs true
+excludeddependencies 
+	SourceLink.Create.CommandLine

@@ -13,7 +13,7 @@ if NOT exist paket.lock (
     .paket\paket.exe install
 )
 
-.paket\paket.exe restore --group Build
+.paket\paket.exe restore
 if errorlevel 1 (
   exit /b %errorlevel%
 )
