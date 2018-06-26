@@ -58,7 +58,6 @@ Target "PerfTest" (fun () ->
 )
 
 "CreatePackage" ==> "SourceLink.Test"
-"SourceLink.Test" ==> "Push"
 
 
 "Restore" ==> "PerfTest"
