@@ -31,11 +31,11 @@ module Jpeg =
 
         use comp = new JpegCompressor(runtime)
 
-        let outputPath = @"/home/schorsch/Desktop/test.jpg"
-        let diffPath = @"/home/schorsch/Desktop/diff.png"
+        let outputPath = @"C:\volumes\test.jpg"
+        let diffPath = @"C:\volumes\diff.png"
 
         // load the input
-        let input = PixImage.Create @"vs.png"
+        let input = PixImage.Create @"C:\Users\steinlechner\Desktop\screenshots\2018-06-14 18_09_41-dropoff.tex.png"
         let tex = runtime.PrepareTexture(PixTexture2d(PixImageMipMap [| input |], TextureParams.empty))
 
 

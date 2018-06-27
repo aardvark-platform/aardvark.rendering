@@ -3,6 +3,7 @@
 open Microsoft.FSharp.Quotations
 open System.Collections.Generic
 open FShade.ExprExtensions
+open FShade.ExprHashExtensions
 
 module private Kernels =
     open FShade 
@@ -1060,7 +1061,7 @@ type private MapReduceImage<'b when 'b : unmanaged>(runtime : IComputeRuntime, r
                 target.[0]
 
         }
-    
+  
 type private ExpressionCache() =
     let store = System.Collections.Concurrent.ConcurrentDictionary<list<string>, obj>()
     

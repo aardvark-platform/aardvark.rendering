@@ -1394,6 +1394,10 @@ let main args =
     Ag.initialize()
     Aardvark.Init()
 
+
+    Examples.Jpeg.run()
+    System.Environment.Exit 0
+
     ////let inputVolume = NativeSupport.ReadFile2 @"C:\volumes\GussPK_AlSi_0.5Sn_180kV_925x925x500px.raw"
 
     ////let size = V3i(925,925,500)
