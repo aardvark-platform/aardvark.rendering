@@ -21,10 +21,10 @@ open Aardvark.SceneGraph.IO
 module Jpeg =
 
     let run() =
-        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication(true)
+        //use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication(true)
 
         
-        //use app = new Aardvark.Application.WinForms.OpenGlApplication(true)
+        use app = new Aardvark.Application.WinForms.OpenGlApplication(true)
 
         Aardvark.Rendering.GL.Config.CheckErrors <- true
         let runtime = app.Runtime
@@ -35,12 +35,13 @@ module Jpeg =
         let diffPath = @"C:\volumes\diff.png"
 
         // load the input
-        let input = PixImage.Create @"C:\Users\steinlechner\Desktop\screenshots\2018-06-14 18_09_41-dropoff.tex.png"
+        let input = PixImage.Create @"C:\volumes\dog2.tif"
         let tex = runtime.PrepareTexture(PixTexture2d(PixImageMipMap [| input |], TextureParams.empty))
 
 
         // compress the image
         use comp = comp.NewInstance(input.Size, Quantization.photoshop10)
+        let data = comp.Compress(tex.[TextureAspect.Color, 0, 0])
         let data = comp.Compress(tex.[TextureAspect.Color, 0, 0])
         File.WriteAllBytes(outputPath, data)
         

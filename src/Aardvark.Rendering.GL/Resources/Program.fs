@@ -371,17 +371,10 @@ module ProgramExtensions =
 
                     try
                         try
-
-//                            let iface = ShaderInterface.ofProgram firstTexture x handle
-//                            let iface = 
-//                                if expectsRowMajorMatrices then ShaderInterface.flipMatrixMajority iface
-//                                else iface
-
                             Success {
                                 Context = x
                                 Code = code
                                 Handle = handle
-                                //ShadersNew = shaders
                                 HasTessellation = shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl || s.Stage = ShaderStage.TessEval)
                                 UniformGetters = SymDict.empty
                                 SupportedModes = supported

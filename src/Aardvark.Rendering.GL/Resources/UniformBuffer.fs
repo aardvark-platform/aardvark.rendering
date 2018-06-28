@@ -96,6 +96,20 @@ module UniformBufferExtensions =
     open System.Diagnostics
 
     type Context with
+        member x.CreateUniformBuffer(dataSize : nativeint) =
+            using x.ResourceLock (fun _ ->
+                
+                let handle = GL.GenBuffer()
+                GL.Check "could not create uniform buffer"
+
+                GL.NamedBufferData(handle, dataSize, 0n, BufferUsageHint.DynamicDraw)
+                GL.Check "could not allocate uniform buffer"
+
+                addUniformBuffer x (int64 dataSize)
+                UniformBuffer(x, handle, int dataSize, Unchecked.defaultof<ShaderBlock>)
+            )
+
+
         member x.CreateUniformBuffer(block : ShaderBlock) =
             using x.ResourceLock (fun _ ->
                 

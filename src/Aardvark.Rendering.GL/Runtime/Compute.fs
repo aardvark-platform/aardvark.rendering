@@ -36,48 +36,48 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
         references <- Map.add name (r :: o) references
 
 
-    let uniformLocations : list<int * UniformLocation> = 
-        shader.Uniforms |> List.map (fun l ->
-            failwith "[GL] not implemented"
-        )
+    //let uniformLocations : list<int * UniformLocation> = 
+    //    shader.Uniforms |> List.map (fun l ->
+    //        failwith "[GL] not implemented"
+    //    )
 
     let inputImages =
-        shader.Images |> List.map (fun (l, b, name, valueType, dim, isMS, isArray) ->
+        shader.Images |> List.map (fun (b, name) ->
             addReference name (Image b)
             b, (Texture.empty, 0, false, 0)
         ) |> Dictionary.ofList
 
     let inputBuffers =
         shader.Buffers |> List.map (fun (l,name,t) ->
-            addReference name (ComputeShaderInputReference.StorageBuffer(l, t))
+            addReference name (ComputeShaderInputReference.StorageBuffer(l, ShaderParameterType.ofGLSLType t))
             let empty = new GL.Buffer(shader.Context, 0n, 0)
             l, (empty, 0n, 0n)
         )
         |> Dictionary.ofList
 
     let inputSamplers =
-        shader.Samplers |> List.map (fun (l, b, name, valueType, dim, isMS, isArray, isShadow, sampler) ->
-            let target = TextureTarget.ofParameters dim isArray isMS
+        shader.Samplers |> List.map (fun (b, name, sampler) ->
+            let target = TextureTarget.Texture2D //TODO: wrong here //TextureTarget.ofParameters dim isArray isMS
             addReference name (Texture b)
             b, (target, Texture.empty, sampler)
         ) |> Dictionary.ofList
 
     let uniformBuffers = 
         shader.UniformBlocks |> List.map (fun b ->
-            let buffer = ctx.CreateUniformBuffer(b)
+            let buffer = ctx.CreateUniformBuffer(nativeint b.ubSize)
 
-            for f in b.Fields do
+            for f in b.ubFields do
                 let write (o : obj) =
                     match o with
                         | null -> ()
                         | o ->
                             let t = o.GetType()
-                            let sem = ShaderParameterWriter.get t f.Type 
-                            sem.WriteUnsafe(buffer.Data + nativeint f.Offset, o)
+                            let sem = ShaderParameterWriter.get t (ShaderParameterType.ofGLSLType f.ufType)
+                            sem.WriteUnsafe(buffer.Data + nativeint f.ufOffset, o)
                             buffer.Dirty <- true
                             lock dirtyBuffers (fun () -> dirtyBuffers.Add buffer |> ignore)
 
-                let name = ShaderPath.name f.Path
+                let name = f.ufName
 
                 let nameFixed =
                     if name.StartsWith "cs_" then name.Substring(3) else name
@@ -85,7 +85,7 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
                 let ref = ComputeShaderInputReference.Uniform(write)
                 addReference nameFixed ref
 
-            b.Index, buffer
+            b.ubBinding, buffer
         )
 
     member internal x.Bind(boundThings : HashSet<Bound>) =
@@ -189,93 +189,94 @@ and ComputeShader(prog : Program, localSize : V3i) =
     let mutable isDisposed = 0
 
     let ctx = prog.Context
-    let iface = prog.Interface
+    let iface = prog.InterfaceNew
 
     let bufferTypes =
-        iface.StorageBlocks |> List.map (fun b -> 
-            match b.Fields with
-                | [f] -> 
-                    match f.Path with
-                        | ShaderPath.Value name -> name, f.Type
-                        | _ -> failwith "[FShade] found structured storage buffer (not supported atm.)"
-                | _ -> 
-                    failwith "[FShade] found structured storage buffer (not supported atm.)"
+        iface.storageBuffers |> List.map (fun b -> 
+            b.ssbName, b.ssbType
+
         ) |> Map.ofList
 
     let buffers =
-        iface.StorageBlocks |> List.map (fun b ->
-            match b.Fields with
-                | [f] -> 
-                    match f.Path with
-                        | ShaderPath.Value name -> b.Index, name, f.Type
-                        | _ -> failwith "[FShade] found structured storage buffer (not supported atm.)"
-                | _ -> 
-                    failwith "[FShade] found structured storage buffer (not supported atm.)"
+        iface.storageBuffers |> List.map (fun b ->
+            b.ssbBinding, b.ssbName, b.ssbType
+            //match b.Fields with
+            //    | [f] -> 
+            //        match f.Path with
+            //            | ShaderPath.Value name -> b.Index, name, f.Type
+            //            | _ -> failwith "[FShade] found structured storage buffer (not supported atm.)"
+            //    | _ -> 
+            //        failwith "[FShade] found structured storage buffer (not supported atm.)"
         )
 
     let images =
-        iface.Uniforms |> List.choose (fun u ->
-            match u.Type with
-                | ShaderParameterType.Image(valueType,dim,isMS,isArray) ->
-                    match u.Path with
-                        | ShaderPath.Value name ->
-                            if name.StartsWith "cs_" then
+        iface.images |> List.map (fun u ->
+            u.imageBinding, u.imageName
+            //match u.Type with
+            //    | ShaderParameterType.Image(valueType,dim,isMS,isArray) ->
+            //        match u.Path with
+            //            | ShaderPath.Value name ->
+            //                if name.StartsWith "cs_" then
                                                     
-                                Some (u.Location, u.Binding, name.Substring 3, valueType, dim, isMS, isArray)
-                            else
-                                failwithf "[FShade] found non-primitive image uniform %A" u
-                        | _ ->
-                            failwithf "[FShade] found non-primitive image uniform %A" u
+            //                    Some (u.Location, u.Binding, name.Substring 3, valueType, dim, isMS, isArray)
+            //                else
+            //                    failwithf "[FShade] found non-primitive image uniform %A" u
+            //            | _ ->
+            //                failwithf "[FShade] found non-primitive image uniform %A" u
                                             
-                | _ ->
-                    None
+            //    | _ ->
+            //        None
         )
 
     let samplers =
-        iface.Uniforms |> List.choose (fun u ->
-            match u.Type with
-                | ShaderParameterType.FixedArray(ShaderParameterType.Sampler(valueType,dim,isMS,isArray,isShadow),_,l) ->
-                    failwith "not implemented"
-
-                | ShaderParameterType.Sampler(valueType,dim,isMS,isArray,isShadow) ->
-                    match u.Path with
-                        | ShaderPath.Value name ->
-                            match Map.tryFind (name,0) prog.TextureInfo with
-                                | Some info ->
-                                    let sampler = ctx.CreateSampler info.samplerState
-                                    Some (u.Location, u.Binding, string info.textureName, valueType, dim, isMS, isArray, isShadow, sampler)
-
-                                | _ ->
-                                    failwithf "[FShade] found non-primitive image uniform %A" u
-                        
-                        | _ ->
-                            failwithf "[FShade] found non-primitive image uniform %A" u
-                                            
+        iface.samplers |> List.map (fun u ->
+            match u.samplerTextures with
+                | [(name, state)] ->
+                    u.samplerBinding, name, ctx.CreateSampler state.SamplerStateDescription
                 | _ ->
-                    None
+                    failwith "not implemented"
+            //match u.Type with
+            //    | ShaderParameterType.FixedArray(ShaderParameterType.Sampler(valueType,dim,isMS,isArray,isShadow),_,l) ->
+            //        failwith "not implemented"
+
+            //    | ShaderParameterType.Sampler(valueType,dim,isMS,isArray,isShadow) ->
+            //        match u.Path with
+            //            | ShaderPath.Value name ->
+            //                match Map.tryFind (name,0) prog.TextureInfo with
+            //                    | Some info ->
+            //                        let sampler = ctx.CreateSampler info.samplerState
+            //                        Some (u.Location, u.Binding, string info.textureName, valueType, dim, isMS, isArray, isShadow, sampler)
+
+            //                    | _ ->
+            //                        failwithf "[FShade] found non-primitive image uniform %A" u
+                        
+            //            | _ ->
+            //                failwithf "[FShade] found non-primitive image uniform %A" u
+                                            
+            //    | _ ->
+            //        None
         )
 
-    let uniforms =
-        iface.Uniforms |> List.choose (fun u ->
-            match u.Type with
-                | ShaderParameterType.Image _ -> None
-                | ShaderParameterType.Sampler _ -> None
-                | _ -> Some u
-        )
+    //let uniforms =
+    //    iface.Uniforms |> List.choose (fun u ->
+    //        match u.Type with
+    //            | ShaderParameterType.Image _ -> None
+    //            | ShaderParameterType.Sampler _ -> None
+    //            | _ -> Some u
+    //    )
 
-    let uniformBlocks = iface.UniformBlocks
+    let uniformBlocks = iface.uniformBuffers
 
     member x.Context : Context = ctx
-    member x.Buffers : list<int * string * ShaderParameterType> = buffers
-    member x.Images : list<int * int * string * ShaderParameterType * TextureDimension * bool * bool> = images
-    member x.Samplers : list<int * int * string * ShaderParameterType * TextureDimension * bool * bool * bool * Sampler> = samplers
-    member x.Uniforms : list<ShaderParameter>  = uniforms
-    member x.UniformBlocks : list<ShaderBlock> = uniformBlocks
+    member x.Buffers : list<int * string * GLSL.GLSLType>  = buffers
+    member x.Images : list<int * string> = images
+    member x.Samplers : list<int * string * Sampler> = samplers
+    member x.UniformBlocks : list<GLSL.GLSLUniformBuffer> = uniformBlocks
     member x.Handle = prog.Handle
 
     member x.Dispose() =
         use __ = ctx.ResourceLock
-        for (_,_,_,_,_,_,_,_,s) in samplers do
+        for (_,_,s) in samplers do
             ctx.Delete s
 
     interface IDisposable with
@@ -324,22 +325,38 @@ type private GLCompute(ctx : Context) =
             | ComputeCommand.SetInputCmd(input) ->
                 let input = unbox<ComputeShaderInputBinding> input
                 input.Bind(boundThings)
+                GL.Sync()
+                GL.Check()
             | ComputeCommand.DispatchCmd groups ->
                 GL.DispatchCompute(groups.X, groups.Y, groups.Z)
+                GL.Sync()
+                GL.Check()
 
             | ComputeCommand.SyncBufferCmd _ -> 
-                GL.MemoryBarrier(MemoryBarrierFlags.BufferUpdateBarrierBit ||| MemoryBarrierFlags.ClientMappedBufferBarrierBit ||| MemoryBarrierFlags.ShaderStorageBarrierBit)
+                GL.MemoryBarrier(MemoryBarrierFlags.BufferUpdateBarrierBit 
+                                 ||| MemoryBarrierFlags.ClientMappedBufferBarrierBit 
+                                 ||| MemoryBarrierFlags.ShaderStorageBarrierBit
+                                 ||| MemoryBarrierFlags.AllBarrierBits)
+                GL.Sync()
+                GL.Check()
 
              | ComputeCommand.SyncImageCmd _ -> 
-                GL.MemoryBarrier(MemoryBarrierFlags.ShaderImageAccessBarrierBit ||| MemoryBarrierFlags.ShaderStorageBarrierBit ||| MemoryBarrierFlags.TextureFetchBarrierBit ||| MemoryBarrierFlags.TextureUpdateBarrierBit)
-
+                GL.MemoryBarrier(MemoryBarrierFlags.ShaderImageAccessBarrierBit ||| MemoryBarrierFlags.ShaderStorageBarrierBit ||| MemoryBarrierFlags.TextureFetchBarrierBit ||| MemoryBarrierFlags.TextureUpdateBarrierBit ||| MemoryBarrierFlags.AllBarrierBits)
+                GL.Sync()
+                GL.Check()
             | ComputeCommand.TransformLayoutCmd _ ->
-                GL.MemoryBarrier(MemoryBarrierFlags.ShaderImageAccessBarrierBit ||| MemoryBarrierFlags.ShaderStorageBarrierBit ||| MemoryBarrierFlags.TextureFetchBarrierBit ||| MemoryBarrierFlags.TextureUpdateBarrierBit ||| MemoryBarrierFlags.BufferUpdateBarrierBit ||| MemoryBarrierFlags.ClientMappedBufferBarrierBit ||| MemoryBarrierFlags.ShaderStorageBarrierBit)
+                GL.MemoryBarrier(MemoryBarrierFlags.ShaderImageAccessBarrierBit ||| MemoryBarrierFlags.ShaderStorageBarrierBit ||| MemoryBarrierFlags.TextureFetchBarrierBit ||| MemoryBarrierFlags.TextureUpdateBarrierBit ||| MemoryBarrierFlags.BufferUpdateBarrierBit ||| MemoryBarrierFlags.ClientMappedBufferBarrierBit ||| MemoryBarrierFlags.ShaderStorageBarrierBit ||| MemoryBarrierFlags.AllBarrierBits)
+                GL.Sync()
+                GL.Check()
 
             | ComputeCommand.CopyBufferCmd(src, dst) ->
+                GL.Sync()
+                GL.Check()
                 let srcBuffer = unbox<GL.Buffer> src.Buffer
                 let dstBuffer = unbox<GL.Buffer> dst.Buffer
                 ctx.Copy(srcBuffer, src.Offset, dstBuffer, dst.Offset, src.Size)
+                GL.Sync()
+                GL.Check()
                 ()
                 
             | ComputeCommand.UploadBufferCmd _ 
@@ -351,8 +368,12 @@ type private GLCompute(ctx : Context) =
                 let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
                 GL.NamedClearBufferSubData(dstBuffer.Handle, PixelInternalFormat.R32ui, dst.Offset, dst.Size, PixelFormat.Red, PixelType.UnsignedInt, gc.AddrOfPinnedObject())
                 gc.Free()
+                GL.Sync()
+                GL.Check()
 
             | ComputeCommand.DownloadBufferCmd(src, dst) ->
+                GL.Sync()
+                GL.Check()
                 let srcBuffer = unbox<GL.Buffer> src.Buffer
                 match dst with
                     | HostMemory.Managed(arr,index) ->
@@ -391,11 +412,11 @@ module GLComputeExtensions =
 
     type Context with
 
-        member x.TryCompileKernel (code : string, textureInfo : Map<_,_>, localSize : V3i) =
+        member x.TryCompileKernel (code : string, iface : FShade.GLSL.GLSLProgramInterface, localSize : V3i) =
             using x.ResourceLock (fun token ->
                 match x.TryCompileCompute(true, code) with
                     | Success prog ->
-                        let kernel = new ComputeShader({ prog with TextureInfo = textureInfo }, localSize)
+                        let kernel = new ComputeShader({ prog with InterfaceNew = iface }, localSize)
                         Success kernel
 
                     | Error err ->
@@ -420,7 +441,24 @@ module GLComputeExtensions =
                     { textureName = Symbol.Create texName; samplerState = samplerState.SamplerStateDescription }
                 )
 
-            x.TryCompileKernel(glsl.code, samplerDescriptions, localSize)
+            let adjust (s : GLSL.GLSLSampler) =
+                let textures =
+                    List.init s.samplerCount (fun i -> 
+                        let texName = 
+                            match Map.tryFind (s.samplerName, i) shader.csTextureNames with
+                                | Some ti -> ti
+                                | _ -> s.samplerName
+                        let samplerState =
+                            match Map.tryFind (s.samplerName, i) shader.csSamplerStates with
+                                | Some sam -> sam
+                                | _ -> SamplerState.empty
+                        texName, samplerState
+                    )
+                { s with samplerTextures = textures }
+
+            let iface = { glsl.iface with samplers = glsl.iface.samplers |> List.map adjust }
+            //glsl.iface.samplers
+            x.TryCompileKernel(glsl.code, iface, localSize)
 
         member x.CompileKernel (shader : FShade.ComputeShader) =
             match x.TryCompileKernel shader with

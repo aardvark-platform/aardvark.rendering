@@ -815,15 +815,15 @@ module private JpegKernels =
     module Ballot = 
         [<GLSLIntrinsic("ballotARB({0})", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
         let ballot (b : bool) : uint64 =
-            failwith ""
+            onlyInShaderCode "ballot"
 
         [<GLSLIntrinsic("gl_SubGroupLtMaskARB", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
         let lessMask() : uint64 =
-            failwith ""
+            onlyInShaderCode "lessMask"
 
         [<GLSLIntrinsic("gl_SubGroupGtMaskARB", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
         let greaterMask() : uint64 =
-            failwith ""
+            onlyInShaderCode "greaterMask"
          
     module Tools =
         [<GLSLIntrinsic("findMSB({0})")>]
@@ -832,7 +832,11 @@ module private JpegKernels =
 
         [<GLSLIntrinsic("atomicOr({0}, {1})")>]
         let atomicOr (buf : uint32) (v : uint32) : unit =
-            failwith ""
+            onlyInShaderCode "atomicOr"
+
+        [<GLSLIntrinsic("memoryBarrier()")>]
+        let memoryBarrier () : unit =
+            onlyInShaderCode "memoryBarrier"
         
             
     let leadingIsLast (b : bool) =
@@ -1156,6 +1160,18 @@ module private Align =
     let next2 (a : int) (v : V2i) =
         V2i(next a v.X, next a v.Y)
 
+[<AutoOpen>]
+module Tools = 
+
+    let toByteArray<'a when 'a : unmanaged> (arr : 'a[]) : byte[] =
+        let handle = GCHandle.Alloc(arr,GCHandleType.Pinned)
+        try
+            let target : byte[] = Array.zeroCreate (sizeof<'a> * arr.Length)
+            Marshal.Copy(handle.AddrOfPinnedObject(), target, 0, target.Length)
+            target
+        finally 
+            handle.Free()
+
 
 type JpegCompressor(runtime : IRuntime) =
     let dct         = runtime.CreateComputeShader JpegKernels.dct
@@ -1338,9 +1354,14 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
             ComputeCommand.Dispatch (alignedSize / V2i(8,8))
         ]
 
+
+    //let dctData : array<V4i> = Array.zeroCreate dctBuffer.Count 
+    let codewordData : array<V2i> = Array.zeroCreate codewordBuffer.Count
+
     let codewordCommand =
         [
             ComputeCommand.Sync dctBuffer.Buffer
+            //ComputeCommand.Copy(dctBuffer.[0..], dctData)
             ComputeCommand.Bind parent.CodewordShader
             ComputeCommand.SetInput codewordInput
             ComputeCommand.Dispatch(V2i(int dctBuffer.Count / 64, 3))
@@ -1356,10 +1377,11 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
             ComputeCommand.Dispatch(int codewordBuffer.Count / 64)
         ]
        
-    let overallCommand =
-        runtime.Compile [
+    let cmds =
+        [
             yield! dctCommand
             yield! codewordCommand
+            //yield ComputeCommand.Copy(codewordBuffer.[0..], codewordData)
             
             yield ComputeCommand.Sync(codewordBuffer.Buffer, ResourceAccess.ShaderWrite, ResourceAccess.ShaderRead)
             yield ComputeCommand.Execute scan
@@ -1369,6 +1391,8 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
             yield ComputeCommand.Copy(codewordBuffer.[codewordBuffer.Count - 2 .. codewordBuffer.Count - 1], bitCountBuffer)
         ]
 
+    let overallCommand =
+        runtime.Compile cmds
 
     member x.Quality
         with get() = quality
@@ -1545,6 +1569,17 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         dctInput.Flush()
 
         overallCommand.Run()
+
+        //let dctData = Array.zeroCreate (dctBuffer.Count * sizeof<V4i>)
+        //dctBuffer.Buffer.Coerce<byte>().Download(0, dctData, 0, dctData.Length)
+        //File.writeAllBytes @"C:\volumes\comp\dct" dctData
+
+        //let br = toByteArray codewordData
+        //File.writeAllBytes @"C:\volumes\comp\codewords" br
+
+        //let codewordData = Array.zeroCreate (codewordBuffer.Count * sizeof<V2i>)
+        //codewordBuffer.Buffer.Coerce<byte>().Download(0, codewordData, 0, codewordData.Length)
+
         x.Download()
 
     member x.Dispose() =
