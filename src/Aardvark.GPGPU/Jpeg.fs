@@ -1355,13 +1355,9 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         ]
 
 
-    //let dctData : array<V4i> = Array.zeroCreate dctBuffer.Count 
-    let codewordData : array<V2i> = Array.zeroCreate codewordBuffer.Count
-
     let codewordCommand =
         [
             ComputeCommand.Sync dctBuffer.Buffer
-            //ComputeCommand.Copy(dctBuffer.[0..], dctData)
             ComputeCommand.Bind parent.CodewordShader
             ComputeCommand.SetInput codewordInput
             ComputeCommand.Dispatch(V2i(int dctBuffer.Count / 64, 3))
@@ -1381,7 +1377,6 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         [
             yield! dctCommand
             yield! codewordCommand
-            //yield ComputeCommand.Copy(codewordBuffer.[0..], codewordData)
             
             yield ComputeCommand.Sync(codewordBuffer.Buffer, ResourceAccess.ShaderWrite, ResourceAccess.ShaderRead)
             yield ComputeCommand.Execute scan
@@ -1569,16 +1564,6 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         dctInput.Flush()
 
         overallCommand.Run()
-
-        //let dctData = Array.zeroCreate (dctBuffer.Count * sizeof<V4i>)
-        //dctBuffer.Buffer.Coerce<byte>().Download(0, dctData, 0, dctData.Length)
-        //File.writeAllBytes @"C:\volumes\comp\dct" dctData
-
-        //let br = toByteArray codewordData
-        //File.writeAllBytes @"C:\volumes\comp\codewords" br
-
-        //let codewordData = Array.zeroCreate (codewordBuffer.Count * sizeof<V2i>)
-        //codewordBuffer.Buffer.Coerce<byte>().Download(0, codewordData, 0, codewordData.Length)
 
         x.Download()
 
