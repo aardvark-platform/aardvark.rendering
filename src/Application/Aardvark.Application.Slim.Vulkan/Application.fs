@@ -231,6 +231,9 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
             yield Instance.Extensions.XcbSurface
             yield Instance.Extensions.XlibSurface
 
+            yield "VK_EXT_shader_subgroup_ballot"
+            yield "VK_EXT_shader_subgroup_vote"
+
             if debug then
                 yield Instance.Extensions.DebugReport
                 yield Instance.Extensions.DebugUtils

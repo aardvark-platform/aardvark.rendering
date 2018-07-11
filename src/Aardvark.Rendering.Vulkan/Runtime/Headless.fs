@@ -5,36 +5,21 @@ open System
 type HeadlessVulkanApplication(debug : bool, instanceExtensions : list<string>, deviceExtensions : PhysicalDevice -> list<string>) =
     let requestedExtensions =
         [
-            yield Instance.Extensions.Surface
-            yield Instance.Extensions.SwapChain
-            yield Instance.Extensions.Win32Surface
-            yield Instance.Extensions.XcbSurface
-            yield Instance.Extensions.XlibSurface
-
             yield! instanceExtensions
 
             yield "VK_EXT_shader_subgroup_ballot"
             yield "VK_EXT_shader_subgroup_vote"
+
             if debug then
                 yield Instance.Extensions.DebugReport
+                yield Instance.Extensions.DebugUtils
         ]
 
     let requestedLayers =
         [
             if debug then
-                yield Instance.Layers.Nsight
-                yield Instance.Layers.SwapChain
-                yield Instance.Layers.DrawState
-                yield Instance.Layers.ParamChecker
                 yield Instance.Layers.StandardValidation
-                yield Instance.Layers.DeviceLimits
-                yield Instance.Layers.CoreValidation
-                yield Instance.Layers.ParameterValidation
-                yield Instance.Layers.ObjectTracker
-                // complaining about concurrent usage of a concurrent image
-                yield Instance.Layers.Threading
-                yield Instance.Layers.UniqueObjects
-                yield Instance.Layers.Image
+                yield "VK_LAYER_LUNARG_assistant_layer"
         ]
 
     let instance = 
