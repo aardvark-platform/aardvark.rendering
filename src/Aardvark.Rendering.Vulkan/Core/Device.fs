@@ -593,7 +593,9 @@ and CopyEngine(family : DeviceQueueFamily) =
     let mutable copyTime = MicroTime.Zero
     let mutable minBatchSize = Mem(1UL <<< 60)
     let mutable maxBatchSize = Mem(0UL)
-
+    let enqueueMon = obj()
+    let mutable vEnqueue = 0L
+    let mutable vDone = -1L
     let run (threadName : string) (queue : DeviceQueue) () =
         let family = queue.FamilyIndex
         let device = queue.Device
@@ -739,7 +741,10 @@ and CopyEngine(family : DeviceQueueFamily) =
                     )
 
                 VkRaw.vkQueueSubmit(queue.Handle, 1u, &&submit, fence.Handle) |> ignore
-            
+                lock enqueueMon (fun () -> 
+                    vDone <- vEnqueue
+                    Monitor.PulseAll enqueueMon
+                )
                 fence.Wait()
                 sw.Stop()
 
@@ -815,6 +820,24 @@ and CopyEngine(family : DeviceQueueFamily) =
                 s
             )
 
+        if size > 0L then () // trigger.Signal()
+
+    member x.EnqueueSafe(commands : seq<CopyCommand>) =
+        let v = Interlocked.Increment(&vEnqueue)
+        let size = 
+            lock lockObj (fun () ->
+                pending.AddRange commands
+                        
+                //pending.AddRange commands
+                let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0L 
+                totalSize <- totalSize + s
+                s
+            )
+
+        lock enqueueMon (fun () -> 
+            while vDone < v do
+                Monitor.Wait enqueueMon |> ignore
+        )
         if size > 0L then () // trigger.Signal()
 
     member x.Wait() =

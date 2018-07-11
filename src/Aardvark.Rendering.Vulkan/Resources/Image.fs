@@ -2356,6 +2356,9 @@ module Image =
                 if mayHavePeers then VkImageCreateFlags.AliasBit ||| flags
                 else flags
 
+            let canUpload =
+                usage.HasFlag VkImageCre
+
             let mutable info =
                 VkImageCreateInfo(
                     VkStructureType.ImageCreateInfo, 0n,
@@ -2506,7 +2509,7 @@ module Image =
                 let imageRange = image.[ImageAspect.Color]
                 image.Layout <- VkImageLayout.TransferDstOptimal
 
-                device.CopyEngine.Enqueue [
+                device.CopyEngine.EnqueueSafe [
                     yield CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
                     yield! tempImages |> List.mapi (fun level src -> CopyCommand.Copy(src, imageRange.[level, 0]))
                     
@@ -2581,7 +2584,7 @@ module Image =
                 let imageRange = image.[ImageAspect.Color]
                 image.Layout <- VkImageLayout.TransferDstOptimal
 
-                device.CopyEngine.Enqueue [
+                device.CopyEngine.EnqueueSafe [
                     CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
                     CopyCommand.Copy(temp, imageRange.[0,0])
 
@@ -2672,7 +2675,7 @@ module Image =
             | UploadMode.Async ->
                 let imageRange = image.[ImageAspect.Color]
                 image.Layout <- VkImageLayout.TransferDstOptimal
-                device.CopyEngine.Enqueue [
+                device.CopyEngine.EnqueueSafe [
                     yield CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
                     
                     for (level, faces) in Seq.indexed tempImages do
@@ -2860,7 +2863,7 @@ module Image =
 
             match device.UploadMode with
                 | UploadMode.Async ->
-                    device.CopyEngine.Enqueue [
+                    device.CopyEngine.EnqueueSafe [
                         yield CopyCommand.TransformLayout(result.[ImageAspect.Color], VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
 
                         for level in 0 .. levels.Length - 1 do
@@ -2903,7 +2906,7 @@ module Image =
                             buffer, data.Size
                         ) 
 
-                    device.CopyEngine.Enqueue [
+                    device.CopyEngine.EnqueueSafe [
 
                         yield CopyCommand.TransformLayout(result.[ImageAspect.Color], VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
 
@@ -2968,7 +2971,7 @@ module Image =
                 let imageRange = image.[ImageAspect.Color]
                 
                 image.Layout <- VkImageLayout.TransferDstOptimal
-                device.CopyEngine.Enqueue [
+                device.CopyEngine.EnqueueSafe [
                     CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
                     CopyCommand.Copy(temp, imageRange.[0,0])
                     CopyCommand.SyncImage(imageRange, VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)

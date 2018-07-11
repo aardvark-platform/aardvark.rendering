@@ -503,7 +503,7 @@ module Buffer =
                     let hostBuffer = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit deviceAlignedSize
                     hostBuffer.Memory.Mapped (fun dst -> writer dst)
 
-                    device.CopyEngine.Enqueue [
+                    device.CopyEngine.EnqueueSafe [
                         CopyCommand.Copy(hostBuffer, buffer, int64 size)
                         CopyCommand.Release(buffer, device.GraphicsFamily)
                         CopyCommand.Callback (fun () -> delete hostBuffer device)
