@@ -14,7 +14,12 @@ module BoundingBoxExtensions =
 
     open System.Runtime.CompilerServices
 
+    let private composeCache = BinaryCache<IMod<Box3d>, IMod<Box3d>, IMod<Box3d>>(Mod.map2 (fun l r -> Box3d.Union(l,r)))
+    let private (<+>) l r = composeCache.Invoke(l,r)
+    let private invalid = Mod.constant Box3d.Invalid
+
     let private bbCache = ConditionalWeakTable<RenderObject, IMod<Box3d>>()
+    
     type RenderObject with
         member x.GetBoundingBox() =
             match bbCache.TryGetValue x with
@@ -41,6 +46,54 @@ module BoundingBoxExtensions =
                     bbCache.Add(x,v)
                     v
 
+    let rec private objBB (o : IRenderObject) =
+        match o with
+            | :? RenderObject as o -> o.GetBoundingBox()
+            | :? MultiRenderObject as o ->
+                let boxes = o.Children |> List.map objBB
+                Mod.custom (fun t ->
+                    boxes |> List.map (fun b -> b.GetValue t) |> Box3d
+                )
+            | :? IPreparedRenderObject as o ->
+                match o.Original with
+                    | Some o -> o.GetBoundingBox()
+                    | _ -> Mod.constant Box3d.Invalid
+
+            | :? CommandRenderObject as o ->
+                match cmdBB o.Command with
+                    | Some bb -> bb
+                    | None -> invalid
+            | _ ->
+                invalid
+
+    and private cmdBB (c : RuntimeCommand) : Option<IMod<Box3d>> =
+        match c with
+            | RuntimeCommand.EmptyCmd -> None
+            | RuntimeCommand.ClearCmd _ -> None
+            | RuntimeCommand.IfThenElseCmd(_,i,e) ->
+                match cmdBB i, cmdBB e with
+                    | Some i, Some e -> Some (i <+> e)
+                    | Some i, None -> Some i
+                    | None, Some e -> Some e
+                    | None, None -> None
+            | RuntimeCommand.DispatchCmd _ ->
+                None
+            | RuntimeCommand.OrderedCmd l ->
+                let merge (s : Box3d) (v : Box3d) : Box3d = Box3d.Union(s,v)
+                l |> AList.toASet |> ASet.choose cmdBB |> ASet.flattenM |> ASet.fold merge Box3d.Invalid |> Some
+    
+            | RuntimeCommand.RenderCmd objs ->
+                let merge (s : Box3d) (v : Box3d) : Box3d = Box3d.Union(s,v)
+                objs |> ASet.mapM objBB |> ASet.fold merge Box3d.Invalid |> Some
+            | _ ->
+                Log.warn "[Sg] bouningbox for %A not implemented" c 
+                None
+
+
+    type IRenderObject with
+        member x.GetBoundingBox() = objBB x
+    type RuntimeCommand with
+        member x.GetBoundingBox() = cmdBB x
 [<AutoOpen>]
 module BoundingBoxes =
 
@@ -85,6 +138,17 @@ module BoundingBoxes =
             let t = r.ModelTrafo
             Mod.map2 (fun (t : Trafo3d) (b : Box3d) -> b.Transformed(t)) t l
 
+        member x.GlobalBoundingBox(r : Sg.RenderObjectNode) : IMod<Box3d> =
+            r.Objects |> ASet.mapM (fun o -> o.GetBoundingBox()) |> ASet.fold  (curry Box3d.Union) Box3d.Invalid
+
+        member x.LocalBoundingBox(r : Sg.RenderObjectNode) : IMod<Box3d> =
+            r.GlobalBoundingBox()
+
+        member x.GlobalBoundingBox(r : Sg.IndirectRenderNode) : IMod<Box3d> =
+            Mod.constant Box3d.Infinite
+
+        member x.LocalBoundingBox(r : Sg.IndirectRenderNode) : IMod<Box3d> =
+            Mod.constant Box3d.Infinite
 
         member x.LocalBoundingBox(p : Sg.OverlayNode) : IMod<Box3d> =
             Mod.constant Box3d.Invalid

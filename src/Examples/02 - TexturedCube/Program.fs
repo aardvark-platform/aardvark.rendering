@@ -38,8 +38,8 @@ let main argv =
     // show the scene in a simple window
     show {
         backend Backend.Vulkan
-        display Display.OpenVR
-        debug false
+        display Display.Mono
+        debug true
         samples 8
         scene sg
     }
