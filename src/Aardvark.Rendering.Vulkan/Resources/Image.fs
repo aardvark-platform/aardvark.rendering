@@ -1706,6 +1706,9 @@ module DeviceTensorCommandExtensions =
         static member Release(img : ImageSubresourceRange, layout : VkImageLayout, dstQueueFamily : DeviceQueueFamily) =
             CopyCommand.Release(img.Image.Handle, img.VkImageSubresourceRange, layout, layout, dstQueueFamily.Index)
             
+        static member SyncImage(img : ImageSubresourceRange, layout : VkImageLayout, srcAccess : VkAccessFlags) =
+            CopyCommand.SyncImage(img.Image.Handle, img.VkImageSubresourceRange, layout, srcAccess)
+
     module private MustCompile =
 
         let createImage (device : Device) =
@@ -2506,6 +2509,9 @@ module Image =
                 device.CopyEngine.Enqueue [
                     yield CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
                     yield! tempImages |> List.mapi (fun level src -> CopyCommand.Copy(src, imageRange.[level, 0]))
+                    
+                    yield CopyCommand.SyncImage(imageRange, VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)
+
                     yield CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
                     yield CopyCommand.Callback (fun () -> tempImages |> List.iter device.Delete)
                 ]

@@ -40,6 +40,7 @@ let main argv =
         backend Backend.Vulkan
         display Display.Mono
         debug true
+        verbosity DebugVerbosity.Warning
         samples 8
         scene sg
     }

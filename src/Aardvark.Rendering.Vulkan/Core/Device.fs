@@ -513,9 +513,13 @@ and [<RequireQualifiedAccess>] CopyCommand =
         | ReleaseBufferCmd of buffer : VkBuffer * offset : int64 * size : int64 * dstQueueFamily : uint32
         | ReleaseImageCmd of image : VkImage * range : VkImageSubresourceRange * srcLayout : VkImageLayout * dstLayout : VkImageLayout * dstQueueFamily : uint32
         | TransformLayoutCmd of image : VkImage * range : VkImageSubresourceRange * srcLayout : VkImageLayout * dstLayout : VkImageLayout
+        | SyncImageCmd of image : VkImage * range : VkImageSubresourceRange * layout : VkImageLayout * srcAccess : VkAccessFlags
 
     static member TransformLayout(image : VkImage, range : VkImageSubresourceRange, srcLayout : VkImageLayout, dstLayout : VkImageLayout) =
         CopyCommand.TransformLayoutCmd(image, range, srcLayout, dstLayout)
+
+    static member SyncImage(image : VkImage, range : VkImageSubresourceRange, layout : VkImageLayout, srcAccess : VkAccessFlags) =
+        CopyCommand.SyncImageCmd(image, range, layout, srcAccess)
 
     static member Copy(src : VkBuffer, srcOffset : int64, dst : VkBuffer, dstOffset : int64, size : int64) =
         CopyCommand.BufferToBufferCmd(
@@ -703,7 +707,25 @@ and CopyEngine(family : DeviceQueueFamily) =
                                 |]
                             ) |> ignore
 
-
+                        | CopyCommand.SyncImageCmd(image, range, layout, srcAccess) ->
+                            stream.PipelineBarrier(
+                                VkAccessFlags.toVkPipelineStageFlags srcAccess,
+                                VkPipelineStageFlags.TopOfPipeBit,
+                                [||],
+                                [||],
+                                [|
+                                    VkImageMemoryBarrier(
+                                        VkStructureType.ImageMemoryBarrier, 0n,
+                                        srcAccess,
+                                        VkAccessFlags.None,
+                                        layout, layout,
+                                        uint32 familyIndex,
+                                        uint32 familyIndex,
+                                        image,
+                                        range
+                                    )
+                                |]
+                            ) |> ignore
                 stream.Run cmd.Handle
                 cmd.End()
 
