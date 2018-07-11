@@ -2584,6 +2584,9 @@ module Image =
                 device.CopyEngine.Enqueue [
                     CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
                     CopyCommand.Copy(temp, imageRange.[0,0])
+
+                    CopyCommand.SyncImage(imageRange, VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)
+
                     CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)   
                     CopyCommand.Callback(fun () -> device.Delete temp)
                 ]
@@ -2675,6 +2678,8 @@ module Image =
                     for (level, faces) in Seq.indexed tempImages do
                         for (face, temp) in Seq.indexed faces do
                             yield CopyCommand.Copy(temp, image.[ImageAspect.Color, level, face])
+
+                    yield CopyCommand.SyncImage(imageRange, VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)
 
                     yield CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
                     yield CopyCommand.Callback (fun () -> tempImages |> List.iter (List.iter device.Delete))
@@ -2864,6 +2869,8 @@ module Image =
                             yield CopyCommand.TransformLayout(src.[ImageAspect.Color], VkImageLayout.Preinitialized, VkImageLayout.TransferSrcOptimal)
                             yield CopyCommand.Copy(src.[ImageAspect.Color, 0, 0], result.[ImageAspect.Color, level, 0])
                                
+                        yield CopyCommand.SyncImage(result.[ImageAspect.Color], VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)
+
                         yield CopyCommand.Release(result.[ImageAspect.Color], VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
                         yield CopyCommand.Callback (fun () -> levels |> Array.iter (fun i -> delete i device))
                     ]
@@ -2915,7 +2922,8 @@ module Image =
                                 )
                             )
 
-                            
+                        yield CopyCommand.SyncImage(result.[ImageAspect.Color], VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)
+
                         yield CopyCommand.Release(result.[ImageAspect.Color], VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
                         yield CopyCommand.Callback(fun () -> tempImages |> Array.iter (fst >> device.Delete))
                     ]
@@ -2963,6 +2971,8 @@ module Image =
                 device.CopyEngine.Enqueue [
                     CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
                     CopyCommand.Copy(temp, imageRange.[0,0])
+                    CopyCommand.SyncImage(imageRange, VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)
+
                     CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
                     CopyCommand.Callback(fun () -> device.Delete temp)
                 ]
