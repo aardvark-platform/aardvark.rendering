@@ -107,6 +107,9 @@ module ShaderModule =
                 Log.error "%s" err
                 failf "shader compiler returned errors %A" err
 
+    
+
+
     let delete (shader : ShaderModule) (device : Device) =
         if shader.Handle.IsValid then
             VkRaw.vkDestroyShaderModule(device.Handle, shader.Handle, NativePtr.zero)
@@ -119,6 +122,100 @@ module ShaderModule =
         match Map.tryFind stage m.Interface with
             | Some i -> Some (Shader(m, stage, i))
             | _ -> None
+
+    let private effectCache = System.Collections.Concurrent.ConcurrentDictionary<string, Error<Map<ShaderStage, ShaderModule>>>()
+    
+    open FShade
+    open FShade.Imperative
+    open FShade.GLSL
+
+    let rec private (|LSuccess|LError|) (l : list<'x * Error<'a>>) =
+        match l with
+            | [] -> LSuccess []
+            | (k,h) :: t ->
+                match h with
+                    | Error e -> 
+                        match t with
+                            | LSuccess t -> LError [k, e]
+                            | LError t -> LError ((k,e) :: t)
+                    | Success v ->
+                        match t with 
+                            | LSuccess t -> LSuccess ((k,v) :: t)
+                            | LError t -> LError t
+
+    let private toBaseShaderStage =
+        LookupTable.lookupTable [
+            FShade.ShaderStage.Vertex, Aardvark.Base.ShaderStage.Vertex
+            FShade.ShaderStage.TessControl, Aardvark.Base.ShaderStage.TessControl
+            FShade.ShaderStage.TessEval, Aardvark.Base.ShaderStage.TessEval
+            FShade.ShaderStage.Geometry, Aardvark.Base.ShaderStage.Geometry
+            FShade.ShaderStage.Fragment, Aardvark.Base.ShaderStage.Fragment
+            FShade.ShaderStage.Compute, Aardvark.Base.ShaderStage.Compute
+        ]
+
+    module private String =
+        open System.Text.RegularExpressions
+
+        let private lineBreak = Regex @"\r\n"
+        
+        let lines (str : String) = lineBreak.Split str
+
+        
+    let private shaderCachePath = ""
+
+
+
+
+    let tryOfModule (module_ : Module) (device : Device) =
+        effectCache.GetOrAdd(module_.hash, fun _ ->
+            let effect = module_.userData |> unbox<Effect>
+        
+            let glsl = 
+                module_ 
+                |> ModuleCompiler.compile PipelineInfo.fshadeBackend
+                |> Assembler.assemble PipelineInfo.fshadeBackend
+
+            let code = glsl.code
+            
+            let stages = 
+                module_.entries |> List.choose (fun e ->
+                    e.decorations |> List.tryPick (
+                        function 
+                        | EntryDecoration.Stages { self = s } -> Some (toBaseShaderStage s) 
+                        | _ -> None
+                    )
+                )
+
+            let results = 
+                stages |> List.map (fun stage ->
+                    match GLSLang.GLSLang.tryCompile (glslangStage stage) "main" [string stage] code with
+                        | Some binary, _ ->
+                            let handle = device |> createRaw binary
+                            let iface = ShaderInfo.ofBinary binary
+                            let result = ShaderModule(device, handle, stage, iface, binary)
+                            
+                            stage, Success result
+                        | None, err ->
+                            stage, Error err
+                )
+
+            match results with
+                | LSuccess modules ->
+                    modules
+                    |> Map.ofList
+                    |> Success
+                | LError errors ->
+                    errors |> Seq.map (fun (stage, error) ->
+                        let error = String.lines error |> Array.map (sprintf "    %s") |> String.concat "\r\n"
+                        sprintf "%A:\r\n%s" stage error
+                    )
+                    |> String.concat "\r\n"
+                    |> Error
+
+            
+        )
+        
+
 
 
 [<AbstractClass; Sealed; Extension>]

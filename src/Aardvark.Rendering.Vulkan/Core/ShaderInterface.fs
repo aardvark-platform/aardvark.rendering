@@ -936,8 +936,8 @@ type ShaderInfo =
     { 
         kind            : ShaderKind
         entryPoint      : string
-        builtInInputs   : Map<BuiltIn, ShaderType>
-        builtInOutputs  : Map<BuiltIn, ShaderType>
+        builtInInputs   : MapExt<string, ShaderType>
+        builtInOutputs  : MapExt<string, ShaderType>
 
         inputs          : list<ShaderIOParameter>
         uniformBlocks   : list<ShaderUniformBlock>
@@ -1278,15 +1278,17 @@ module private ShaderInfo =
                                                             | _ -> kind
                                                 | _ ->
                                                     ()
-                                            builtInInputs.[sem] <- t
+                                            // TODO: propert names?????
+                                            builtInInputs.[string sem] <- t
                                         | None -> inputs.Add(ShaderIOParameter.ofShaderParameter vPar)
 
                         | Ptr(StorageClass.Output,t) ->
                             match t with
                                 | ShaderType.Struct(name,fields) when name.StartsWith "gl_" -> ()
                                 | _ -> 
+                                    // TODO: propert names?????
                                     match ShaderParameter.tryGetBuiltInSemantic vPar with
-                                        | Some sem -> builtInOutputs.[sem] <- t
+                                        | Some sem -> builtInOutputs.[string sem] <- t
                                         | None -> outputs.Add(ShaderIOParameter.ofShaderParameter vPar)
 
                         | Ptr((StorageClass.Uniform | StorageClass.Image | StorageClass.UniformConstant),_) ->
@@ -1304,8 +1306,8 @@ module private ShaderInfo =
                 stage, { 
                     kind            = kind
                     entryPoint      = m.entryName
-                    builtInInputs   = Dict.toMap builtInInputs
-                    builtInOutputs  = Dict.toMap builtInOutputs
+                    builtInInputs   = Dict.toSeq builtInInputs |> MapExt.ofSeq
+                    builtInOutputs  = Dict.toSeq builtInOutputs |> MapExt.ofSeq
                     inputs          = CSharpList.toList inputs
                     uniformBlocks   = CSharpList.toList uniformBlocks
                     storageBlocks   = CSharpList.toList storageBlocks
@@ -1335,6 +1337,7 @@ module private ShaderInfo =
 //            |> ofModule
 
 
+
     let resolveSamplerDescriptions (resolve : ShaderTextureInfo -> list<SamplerDescription>) (info : ShaderInfo) =
         { info with
             textures = info.textures |> List.map (fun t ->
@@ -1344,3 +1347,42 @@ module private ShaderInfo =
             )
         }
 
+    open FShade
+    open FShade.GLSL
+
+    [<AutoOpen>]
+    module private FShadeInterop =
+        let toShaderType (t : GLSLType) : ShaderType =
+            failwith ""
+
+        let toShaderKind (stage : ShaderStage) : ShaderKind =
+            failwith ""
+
+        let toShaderIOParameter (p : FShade.GLSL.GLSLParameter) : ShaderIOParameter =
+            failwith ""
+
+        let toShaderUniformBlock (p : FShade.GLSL.GLSLUniformBuffer) : ShaderUniformBlock =
+            failwith ""
+            
+        let toShaderStorageBlock (p : FShade.GLSL.GLSLStorageBuffer) : ShaderUniformBlock =
+            failwith ""
+
+        let imageToShaderTexture (p : FShade.GLSL.GLSLImage) : ShaderTextureInfo =
+            failwith ""
+
+        let samplerToShaderTexture (p : FShade.GLSL.GLSLSampler) : ShaderTextureInfo =
+            failwith ""
+
+    let ofFShade (iface : GLSLShaderInterface) =
+        { 
+            kind            = toShaderKind iface.shaderStage
+            entryPoint      = iface.shaderEntry
+            builtInInputs   = iface.shaderBuiltInInputs |> MapExt.map (fun _ -> toShaderType)
+            builtInOutputs  = iface.shaderBuiltInOutputs |> MapExt.map (fun _ -> toShaderType)
+            inputs          = iface.shaderInputs |> List.map toShaderIOParameter
+            uniformBlocks   = iface.shaderUniformBuffers |> Seq.map (fun name -> toShaderUniformBlock iface.program.uniformBuffers.[name]) |> Seq.toList
+            storageBlocks   = iface.shaderStorageBuffers |> Seq.map (fun name -> toShaderStorageBlock iface.program.storageBuffers.[name]) |> Seq.toList
+            textures        = Seq.append (Seq.map (fun n -> samplerToShaderTexture iface.program.samplers.[n]) iface.shaderSamplers) (Seq.map (fun n -> imageToShaderTexture iface.program.images.[n]) iface.shaderImages) |> Seq.toList
+            outputs         = iface.shaderOutputs |> List.map toShaderIOParameter
+        }
+        

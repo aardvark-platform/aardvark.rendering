@@ -2355,10 +2355,7 @@ module Image =
             let flags =
                 if mayHavePeers then VkImageCreateFlags.AliasBit ||| flags
                 else flags
-
-            let canUpload =
-                usage.HasFlag VkImageCre
-
+                
             let mutable info =
                 VkImageCreateInfo(
                     VkStructureType.ImageCreateInfo, 0n,
