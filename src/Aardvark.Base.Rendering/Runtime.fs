@@ -939,6 +939,6 @@ module NullResources =
         match m with
             | :? SingleValueBuffer -> Mod.constant false
             | _ -> 
-              [m :> IAdaptiveObject] |> Mod.mapCustom (fun s ->
-                    not <| isNullResource (m.GetValue s)
-              ) 
+                Mod.custom (fun t ->
+                    not <| isNullResource (m.GetValue t)
+                )

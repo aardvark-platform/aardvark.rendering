@@ -381,9 +381,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                         |> Dictionary.ofSeq
 
                 let builtIns =
-                    glsl.iface.usedBuiltIns
+                    glsl.iface.shaders
                         |> MapExt.toSeq 
-                        |> Seq.map (fun (k,v) -> aardStage k, v |> MapExt.toSeq |> Map.ofSeq)
+                        |> Seq.map (fun (k,v) -> aardStage k, v.shaderBuiltIns |> MapExt.toSeq |> Seq.map (fun (k,v) -> k, v |> MapExt.toSeq |> Seq.map fst |> Set.ofSeq) |> Map.ofSeq)
                         |> Map.ofSeq
 
                     

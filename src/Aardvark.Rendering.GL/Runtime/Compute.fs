@@ -192,13 +192,13 @@ and ComputeShader(prog : Program, localSize : V3i) =
     let iface = prog.InterfaceNew
 
     let bufferTypes =
-        iface.storageBuffers |> List.map (fun b -> 
-            b.ssbName, b.ssbType
+        iface.storageBuffers |> MapExt.map (fun _ b -> 
+            b.ssbType
 
-        ) |> Map.ofList
+        )
 
     let buffers =
-        iface.storageBuffers |> List.map (fun b ->
+        iface.storageBuffers |> MapExt.toList |> List.map (fun (_,b) ->
             b.ssbBinding, b.ssbName, b.ssbType
             //match b.Fields with
             //    | [f] -> 
@@ -210,7 +210,7 @@ and ComputeShader(prog : Program, localSize : V3i) =
         )
 
     let images =
-        iface.images |> List.map (fun u ->
+        iface.images |> MapExt.toList |> List.map (fun (_,u) ->
             u.imageBinding, u.imageName
             //match u.Type with
             //    | ShaderParameterType.Image(valueType,dim,isMS,isArray) ->
@@ -229,7 +229,7 @@ and ComputeShader(prog : Program, localSize : V3i) =
         )
 
     let samplers =
-        iface.samplers |> List.map (fun u ->
+        iface.samplers |> MapExt.toList |> List.map (fun (_,u) ->
             match u.samplerTextures with
                 | [(name, state)] ->
                     u.samplerBinding, name, ctx.CreateSampler state.SamplerStateDescription
@@ -271,7 +271,7 @@ and ComputeShader(prog : Program, localSize : V3i) =
     member x.Buffers : list<int * string * GLSL.GLSLType>  = buffers
     member x.Images : list<int * string> = images
     member x.Samplers : list<int * string * Sampler> = samplers
-    member x.UniformBlocks : list<GLSL.GLSLUniformBuffer> = uniformBlocks
+    member x.UniformBlocks : list<GLSL.GLSLUniformBuffer> = MapExt.toList uniformBlocks |> List.map snd
     member x.Handle = prog.Handle
 
     member x.Dispose() =
@@ -456,7 +456,7 @@ module GLComputeExtensions =
                     )
                 { s with samplerTextures = textures }
 
-            let iface = { glsl.iface with samplers = glsl.iface.samplers |> List.map adjust }
+            let iface = { glsl.iface with samplers = glsl.iface.samplers |> MapExt.map (constF adjust) }
             //glsl.iface.samplers
             x.TryCompileKernel(glsl.code, iface, localSize)
 

@@ -19,7 +19,6 @@ open Microsoft.FSharp.Quotations
 open Aardvark.Rendering.GL
 open System.Runtime.CompilerServices
 
-
 [<AutoOpen>]
 module private ShaderProgramCounters =
     let addProgram (ctx : Context) =
@@ -77,7 +76,7 @@ type Program =
     } with
 
     member x.WritesPointSize =
-        x.InterfaceNew.usedBuiltIns |> MapExt.exists (MapExt.tryFind FShade.Imperative.ParameterKind.Output >> Option.defaultValue Set.empty >> Set.contains "gl_PointSize" |> constF)
+        FShade.GLSL.GLSLProgramInterface.usesPointSize x.InterfaceNew
 
     interface IBackendSurface with
         member x.Handle = x.Handle :> obj
@@ -384,11 +383,11 @@ module ProgramExtensions =
                                     {
                                         inputs          = []
                                         outputs         = []
-                                        samplers        = []
-                                        images          = []
-                                        storageBuffers  = []
-                                        uniformBuffers  = []
-                                        usedBuiltIns    = MapExt.empty
+                                        samplers        = MapExt.empty
+                                        images          = MapExt.empty
+                                        storageBuffers  = MapExt.empty
+                                        uniformBuffers  = MapExt.empty
+                                        shaders         = MapExt.empty
                                     }
                             }
 
@@ -656,7 +655,7 @@ module ProgramExtensions =
                                     | Success prog -> 
                                         let iface = prog.InterfaceNew
                                         { iface with
-                                            samplers = iface.samplers |> List.map (fun sam ->
+                                            samplers = iface.samplers |> MapExt.map (fun _ sam ->
                                                 match MapExt.tryFind sam.samplerName inputLayout.eTextures with
                                                     | Some infos -> { sam with samplerTextures = infos }
                                                     | None -> sam
