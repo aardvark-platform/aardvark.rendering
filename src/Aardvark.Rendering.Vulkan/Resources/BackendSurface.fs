@@ -14,11 +14,12 @@ open Microsoft.FSharp.NativeInterop
 
 type PipelineInfo =
     {
-        pInputs         : list<ShaderIOParameter>
-        pOutputs        : list<ShaderIOParameter>
-        pUniformBlocks  : list<ShaderUniformBlock>
-        pStorageBlocks  : list<ShaderUniformBlock>
-        pTextures       : list<ShaderTextureInfo>
+        pInputs         : list<FShade.GLSL.GLSLParameter>
+        pOutputs        : list<FShade.GLSL.GLSLParameter>
+        pUniformBlocks  : list<FShade.GLSL.GLSLUniformBuffer>
+        pStorageBlocks  : list<FShade.GLSL.GLSLStorageBuffer>
+        pTextures       : list<FShade.GLSL.GLSLSampler>
+        pImages         : list<FShade.GLSL.GLSLImage>
         pEffectLayout   : Option<FShade.EffectInputLayout>
     }
 
@@ -215,183 +216,184 @@ module PipelineInfo =
                         | Success t -> t
                         | Error e -> failwithf "[Vulkan] bad anarchy motherf***er 666: %A" e
 
-    let ofEffectLayout (layout : EffectInputLayout) (outputs : Map<int, Symbol * AttachmentSignature>) =
+    //let ofEffectLayout (layout : EffectInputLayout) (outputs : Map<int, Symbol * AttachmentSignature>) =
             
-        let inputs = 
-            layout.eInputs
-                |> MapExt.toList
-                |> List.mapi (fun i (name, t) ->
-                    let st, count =
-                        match ShaderType.ofType t with
-                            | ShaderType.Array(t, len) -> t, len
-                            | t -> t, 1
+    //    let inputs = 
+    //        layout.eInputs
+    //            |> MapExt.toList
+    //            |> List.mapi (fun i (name, t) ->
+    //                let st, count =
+    //                    match ShaderType.ofType t with
+    //                        | ShaderType.Array(t, len) -> t, len
+    //                        | t -> t, 1
 
-                    let st = PrimitiveType.ofShaderType st
+    //                let st = PrimitiveType.ofShaderType st
 
-                    {
-                        location = i
-                        name = name
-                        semantic = Symbol.Create name
-                        shaderType = st
-                        hostType = t
-                        count = count
-                        isRowMajor = false
-                    }
-                )
+    //                {
+    //                    location = i
+    //                    name = name
+    //                    semantic = Symbol.Create name
+    //                    shaderType = st
+    //                    hostType = t
+    //                    count = count
+    //                    isRowMajor = false
+    //                }
+    //            )
 
-        let outputs =
-            outputs
-                |> Map.toList
-                |> List.map (fun (i,(name,att)) ->
-                    let t = att.GetType name
-                    let st, count =
-                        match ShaderType.ofType t with
-                            | ShaderType.Array(t, len) -> t, len
-                            | t -> t, 1
+    //    let outputs =
+    //        outputs
+    //            |> Map.toList
+    //            |> List.map (fun (i,(name,att)) ->
+    //                let t = att.GetType name
+    //                let st, count =
+    //                    match ShaderType.ofType t with
+    //                        | ShaderType.Array(t, len) -> t, len
+    //                        | t -> t, 1
 
-                    let st = PrimitiveType.ofShaderType st
-                    {
-                        location = i
-                        name = name.ToString()
-                        semantic = name
-                        shaderType = st
-                        hostType = t
-                        count = count
-                        isRowMajor = false
-                    }
-                ) 
+    //                let st = PrimitiveType.ofShaderType st
+    //                {
+    //                    location = i
+    //                    name = name.ToString()
+    //                    semantic = name
+    //                    shaderType = st
+    //                    hostType = t
+    //                    count = count
+    //                    isRowMajor = false
+    //                }
+    //            ) 
 
-        let eImages, eUniforms =
-            layout.eUniforms
-                |> MapExt.partition (fun name t ->
-                    match t with
-                        | ArrOf (_, (ImageType _ | SamplerType _))
-                        | ArrayOf (ImageType _ | SamplerType _)
-                        | ImageType _ 
-                        | SamplerType _ -> 
-                            true
-                        | _ -> 
-                            false
+    //    let eImages, eUniforms =
+    //        layout.eUniforms
+    //            |> MapExt.partition (fun name t ->
+    //                match t with
+    //                    | ArrOf (_, (ImageType _ | SamplerType _))
+    //                    | ArrayOf (ImageType _ | SamplerType _)
+    //                    | ImageType _ 
+    //                    | SamplerType _ -> 
+    //                        true
+    //                    | _ -> 
+    //                        false
                         
-                )
+    //            )
                 
-        let eUniformBuffers =
-            if MapExt.isEmpty eUniforms then
-                layout.eUniformBuffers
-            else
-                MapExt.add "Global" eUniforms layout.eUniformBuffers
+    //    let eUniformBuffers =
+    //        if MapExt.isEmpty eUniforms then
+    //            layout.eUniformBuffers
+    //        else
+    //            MapExt.add "Global" eUniforms layout.eUniformBuffers
 
-        let mutable currentBinding = 0
-        let newBinding() =
-            let b = currentBinding
-            currentBinding <- currentBinding + 1
-            b
+    //    let mutable currentBinding = 0
+    //    let newBinding() =
+    //        let b = currentBinding
+    //        currentBinding <- currentBinding + 1
+    //        b
 
-        let uniformBuffers = 
-            eUniformBuffers
-                |> MapExt.toList
-                |> List.map (fun (bufferName, fields) ->
-                    if bufferName = "StorageBuffer" then
-                        let bindings = 
-                            fields |> MapExt.toList |> List.map (fun (name, typ) ->
-                                let t = ShaderType.ofType typ
-                                {
-                                    set = 0
-                                    binding = newBinding()
-                                    name = name + "SSB"
-                                    layout = UniformBufferLayoutStd140.structLayout [t, name, []]
-                                }
-                            )
-                        Choice1Of2 bindings
-                    else
-                        let fields =
-                            fields
-                                |> MapExt.toList
-                                |> List.map (fun (name, typ) ->
-                                    let t = ShaderType.ofType typ
-                                    (t, name, [])
-                                )
+    //    let uniformBuffers = 
+    //        eUniformBuffers
+    //            |> MapExt.toList
+    //            |> List.map (fun (bufferName, fields) ->
+    //                if bufferName = "StorageBuffer" then
+    //                    let bindings = 
+    //                        fields |> MapExt.toList |> List.map (fun (name, typ) ->
+    //                            let t = ShaderType.ofType typ
+    //                            {
+    //                                set = 0
+    //                                binding = newBinding()
+    //                                name = name + "SSB"
+    //                                layout = UniformBufferLayoutStd140.structLayout [t, name, []]
+    //                            }
+    //                        )
+    //                    Choice1Of2 bindings
+    //                else
+    //                    let fields =
+    //                        fields
+    //                            |> MapExt.toList
+    //                            |> List.map (fun (name, typ) ->
+    //                                let t = ShaderType.ofType typ
+    //                                (t, name, [])
+    //                            )
 
-                        Choice2Of2 {
-                            set = 0
-                            binding = newBinding()
-                            name = bufferName
-                            layout = UniformBufferLayoutStd140.structLayout fields
-                        }
-                )
+    //                    Choice2Of2 {
+    //                        set = 0
+    //                        binding = newBinding()
+    //                        name = bufferName
+    //                        layout = UniformBufferLayoutStd140.structLayout fields
+    //                    }
+    //            )
 
-        let textures =
-            eImages
-                |> MapExt.toList
-                |> List.mapi (fun bi (name, typ) ->
-                    let set = 0
-                    let binding = newBinding()
-                    let typ = ShaderType.ofType typ
+    //    let textures =
+    //        eImages
+    //            |> MapExt.toList
+    //            |> List.mapi (fun bi (name, typ) ->
+    //                let set = 0
+    //                let binding = newBinding()
+    //                let typ = ShaderType.ofType typ
 
-                    match typ with
-                        | ShaderType.SampledImage(ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt))
-                        | ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt) ->
+    //                match typ with
+    //                    | ShaderType.SampledImage(ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt))
+    //                    | ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt) ->
 
-                            let description = 
-                                match MapExt.tryFind name layout.eTextures with
-                                    | Some l -> l |> List.map (fun (n,s) -> { textureName = Symbol.Create n; samplerState = s.SamplerStateDescription })
-                                    | None -> []
+    //                        let description = 
+    //                            match MapExt.tryFind name layout.eTextures with
+    //                                | Some l -> l |> List.map (fun (n,s) -> { textureName = Symbol.Create n; samplerState = s.SamplerStateDescription })
+    //                                | None -> []
 
-                            {
-                                set             = set
-                                binding         = binding
-                                name            = name
-                                count           = 1
-                                description     = description
-                                resultType      = PrimitiveType.ofShaderType resultType
-                                isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
-                                isSampled       = isSampled
-                                format          = ShaderUniformParameter.ImageFormat.toTextureFormat fmt
-                                samplerType =
-                                    {
-                                        dimension       = ShaderUniformParameter.Dim.toTextureDimension dim
-                                        isArray         = isArray
-                                        isMultisampled  = (if isMS = 0 then false else true)
-                                    }
-                            }
+    //                        {
+    //                            set             = set
+    //                            binding         = binding
+    //                            name            = name
+    //                            count           = 1
+    //                            description     = description
+    //                            resultType      = PrimitiveType.ofShaderType resultType
+    //                            isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
+    //                            isSampled       = isSampled
+    //                            format          = ShaderUniformParameter.ImageFormat.toTextureFormat fmt
+    //                            samplerType =
+    //                                {
+    //                                    dimension       = ShaderUniformParameter.Dim.toTextureDimension dim
+    //                                    isArray         = isArray
+    //                                    isMultisampled  = (if isMS = 0 then false else true)
+    //                                }
+    //                        }
 
-                        | ShaderType.Array((ShaderType.SampledImage(ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt)) | ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt)), len) ->
-                            let description = 
-                                match MapExt.tryFind name layout.eTextures with
-                                    | Some l -> l |> List.map (fun (n,s) -> { textureName = Symbol.Create n; samplerState = s.SamplerStateDescription })
-                                    | None -> []
+    //                    | ShaderType.Array((ShaderType.SampledImage(ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt)) | ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt)), len) ->
+    //                        let description = 
+    //                            match MapExt.tryFind name layout.eTextures with
+    //                                | Some l -> l |> List.map (fun (n,s) -> { textureName = Symbol.Create n; samplerState = s.SamplerStateDescription })
+    //                                | None -> []
 
                             
-                            {
-                                set             = set
-                                binding         = binding
-                                name            = name
-                                count           = len
-                                description     = description
-                                resultType      = PrimitiveType.ofShaderType resultType
-                                isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
-                                isSampled       = isSampled
-                                format          = ShaderUniformParameter.ImageFormat.toTextureFormat fmt
-                                samplerType =
-                                    {
-                                        dimension       = ShaderUniformParameter.Dim.toTextureDimension dim
-                                        isArray         = isArray
-                                        isMultisampled  = (if isMS = 0 then false else true)
-                                    }
-                            }
-                        | _ ->
-                            failwith "invalid texture uniform"
+    //                        {
+    //                            set             = set
+    //                            binding         = binding
+    //                            name            = name
+    //                            count           = len
+    //                            description     = description
+    //                            resultType      = PrimitiveType.ofShaderType resultType
+    //                            isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
+    //                            isSampled       = isSampled
+    //                            format          = ShaderUniformParameter.ImageFormat.toTextureFormat fmt
+    //                            samplerType =
+    //                                {
+    //                                    dimension       = ShaderUniformParameter.Dim.toTextureDimension dim
+    //                                    isArray         = isArray
+    //                                    isMultisampled  = (if isMS = 0 then false else true)
+    //                                }
+    //                        }
+    //                    | _ ->
+    //                        failwith "invalid texture uniform"
                                 
-                )
+    //            )
  
-        { 
-            pInputs          = inputs
-            pUniformBlocks   = uniformBuffers |> List.choose (function Choice2Of2 b -> Some b | _ -> None)
-            pStorageBlocks   = uniformBuffers |> List.collect (function Choice1Of2 b -> b | _ -> [])
-            pTextures        = textures
-            pOutputs         = outputs
-            pEffectLayout    = Some layout
-        }
+    //    { 
+    //        pInputs          = inputs
+    //        pUniformBlocks   = uniformBuffers |> List.choose (function Choice2Of2 b -> Some b | _ -> None)
+    //        pStorageBlocks   = uniformBuffers |> List.collect (function Choice1Of2 b -> b | _ -> [])
+    //        pTextures        = textures
+    //        pImages          = images
+    //        pOutputs         = outputs
+    //        pEffectLayout    = Some layout
+    //    }
        
   
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -399,15 +401,7 @@ module BackendSurface =
     open FShade
     open FShade.Imperative
 
-    // WTF????   
-    let shaderStages =
-        LookupTable.lookupTable [
-            FShade.ShaderStage.Vertex, Aardvark.Base.ShaderStage.Vertex
-            FShade.ShaderStage.TessControl, Aardvark.Base.ShaderStage.TessControl
-            FShade.ShaderStage.TessEval, Aardvark.Base.ShaderStage.TessEval
-            FShade.ShaderStage.Geometry, Aardvark.Base.ShaderStage.Geometry
-            FShade.ShaderStage.Fragment, Aardvark.Base.ShaderStage.Fragment
-        ]
+
 
     let ofModule (module_ : Module) = 
         let effect = unbox<FShade.Effect> module_.userData
@@ -421,7 +415,7 @@ module BackendSurface =
                     let stage = e.decorations |> List.tryPick (function Imperative.EntryDecoration.Stages { self = self } -> Some self | _ -> None)
                     match stage with
                         | Some stage ->
-                            Some (shaderStages stage, "main")
+                            Some (ShaderStage.ofFShade stage, "main")
                         | None ->
                             None
                 ) 
@@ -442,7 +436,7 @@ module BackendSurface =
                     ()
 
         // TODO: gl_PointSize (builtIn)
-        BackendSurface(glsl.code, entries, Map.empty, SymDict.empty, samplers, true)
+        BackendSurface(glsl.code, entries, Map.empty, SymDict.empty, samplers, true, glsl.iface)
 
     let ofEffectSimple (signature : IFramebufferSignature) (effect : FShade.Effect) (topology : IndexedGeometryMode) =
         let module_ = signature.Link(effect, Range1d(0.0, 1.0), false, topology)

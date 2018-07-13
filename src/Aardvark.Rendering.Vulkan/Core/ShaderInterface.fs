@@ -671,23 +671,31 @@ type ShaderTextureInfo =
     }
 
 type ShaderUniformParameter =
-    | UniformBlockParameter of ShaderUniformBlock
-    | ImageParameter of ShaderTextureInfo
+    | UniformBlockParameter of FShade.GLSL.GLSLUniformBuffer
+    | StorageBufferParameter of FShade.GLSL.GLSLStorageBuffer
+    | ImageParameter of FShade.GLSL.GLSLImage
+    | SamplerParameter of FShade.GLSL.GLSLSampler
 
     member x.Name =
         match x with
-            | UniformBlockParameter b -> b.name
-            | ImageParameter i -> i.name
+            | UniformBlockParameter b -> b.ubName
+            | StorageBufferParameter b -> b.ssbName
+            | ImageParameter i -> i.imageName
+            | SamplerParameter i -> i.samplerName
             
     member x.DescriptorSet =
         match x with
-            | UniformBlockParameter b -> b.set
-            | ImageParameter i -> i.set
+            | UniformBlockParameter b -> b.ubSet
+            | StorageBufferParameter b -> b.ssbSet
+            | ImageParameter i -> i.imageSet
+            | SamplerParameter b -> b.samplerSet
             
     member x.Binding =
         match x with
-            | UniformBlockParameter b -> b.binding
-            | ImageParameter i -> i.binding
+            | UniformBlockParameter b -> b.ubBinding
+            | StorageBufferParameter b -> b.ssbBinding
+            | ImageParameter i -> i.imageBinding
+            | SamplerParameter b -> b.samplerBinding
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderUniformParameter =
@@ -755,85 +763,85 @@ module ShaderUniformParameter =
             if fmt < 1 || fmt >= textureFormats.Length then None
             else Some textureFormats.[fmt]
 
-    let ofShaderParameter (p : ShaderParameter) =
-        match p.paramType with
-            | ShaderType.Ptr((StorageClass.Uniform | StorageClass.UniformConstant), realType) ->
-                let set =
-                    match ShaderParameter.tryGetDescriptorSet p with
-                        | Some set -> set
-                        | None -> failf "uniform %A does not provide a DescriptorSet" p.paramName
+    //let ofShaderParameter (p : ShaderParameter) =
+    //    match p.paramType with
+    //        | ShaderType.Ptr((StorageClass.Uniform | StorageClass.UniformConstant), realType) ->
+    //            let set =
+    //                match ShaderParameter.tryGetDescriptorSet p with
+    //                    | Some set -> set
+    //                    | None -> failf "uniform %A does not provide a DescriptorSet" p.paramName
                         
-                let binding =
-                    match ShaderParameter.tryGetBinding p with
-                        | Some set -> set
-                        | None -> failf "uniform %A does not provide a binding" p.paramName
+    //            let binding =
+    //                match ShaderParameter.tryGetBinding p with
+    //                    | Some set -> set
+    //                    | None -> failf "uniform %A does not provide a binding" p.paramName
 
-                match realType with
-                    | ShaderType.SampledImage(ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt))
-                    | ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt) ->
-                        ImageParameter {
-                            set             = set
-                            binding         = binding
-                            name            = p.paramName
-                            count           = 1
-                            description     = []
-                            resultType      = PrimitiveType.ofShaderType resultType
-                            isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
-                            isSampled       = isSampled
-                            format          = ImageFormat.toTextureFormat fmt
-                            samplerType =
-                                {
-                                    dimension       = Dim.toTextureDimension dim
-                                    isArray         = isArray
-                                    isMultisampled  = (if isMS = 0 then false else true)
-                                }
-                        }
+    //            match realType with
+    //                | ShaderType.SampledImage(ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt))
+    //                | ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt) ->
+    //                    ImageParameter {
+    //                        set             = set
+    //                        binding         = binding
+    //                        name            = p.paramName
+    //                        count           = 1
+    //                        description     = []
+    //                        resultType      = PrimitiveType.ofShaderType resultType
+    //                        isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
+    //                        isSampled       = isSampled
+    //                        format          = ImageFormat.toTextureFormat fmt
+    //                        samplerType =
+    //                            {
+    //                                dimension       = Dim.toTextureDimension dim
+    //                                isArray         = isArray
+    //                                isMultisampled  = (if isMS = 0 then false else true)
+    //                            }
+    //                    }
 
-                    | ShaderType.Array((ShaderType.SampledImage(ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt)) | ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt)), len) ->
-                        ImageParameter {
-                            set             = set
-                            binding         = binding
-                            name            = p.paramName
-                            count           = len
-                            description     = []
-                            resultType      = PrimitiveType.ofShaderType resultType
-                            isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
-                            format          = ImageFormat.toTextureFormat fmt
-                            isSampled       = isSampled
-                            samplerType =
-                                {
-                                    dimension       = Dim.toTextureDimension dim
-                                    isMultisampled  = (if isMS = 0 then false else true)
-                                    isArray         = isArray
-                                }
-                        }
+    //                | ShaderType.Array((ShaderType.SampledImage(ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt)) | ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt)), len) ->
+    //                    ImageParameter {
+    //                        set             = set
+    //                        binding         = binding
+    //                        name            = p.paramName
+    //                        count           = len
+    //                        description     = []
+    //                        resultType      = PrimitiveType.ofShaderType resultType
+    //                        isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
+    //                        format          = ImageFormat.toTextureFormat fmt
+    //                        isSampled       = isSampled
+    //                        samplerType =
+    //                            {
+    //                                dimension       = Dim.toTextureDimension dim
+    //                                isMultisampled  = (if isMS = 0 then false else true)
+    //                                isArray         = isArray
+    //                            }
+    //                    }
 
-                    | ShaderType.Struct(name, fields) ->
-                        let layout = UniformBufferLayoutStd140.structLayout fields
-                        UniformBlockParameter {
-                            set         = set
-                            binding     = binding
-                            name        = p.paramName
-                            layout      = layout
-                        }
+    //                | ShaderType.Struct(name, fields) ->
+    //                    let layout = UniformBufferLayoutStd140.structLayout fields
+    //                    UniformBlockParameter {
+    //                        set         = set
+    //                        binding     = binding
+    //                        name        = p.paramName
+    //                        layout      = layout
+    //                    }
 
-                    | other ->
-                        let uniformType = UniformBufferLayoutStd140.toUniformType other
-                        let layout = 
-                            { 
-                                align = uniformType.align
-                                size = uniformType.size
-                                fields = [ { name = p.paramName; fieldType = uniformType; offset = 0 } ] 
-                            }
+    //                | other ->
+    //                    let uniformType = UniformBufferLayoutStd140.toUniformType other
+    //                    let layout = 
+    //                        { 
+    //                            align = uniformType.align
+    //                            size = uniformType.size
+    //                            fields = [ { name = p.paramName; fieldType = uniformType; offset = 0 } ] 
+    //                        }
                         
-                        UniformBlockParameter {
-                            set         = set
-                            binding     = binding
-                            name        = ""
-                            layout      = layout
-                        }
-            | t ->
-                failf "uniform %A has unexpected type %A" p.paramName t
+    //                    UniformBlockParameter {
+    //                        set         = set
+    //                        binding     = binding
+    //                        name        = ""
+    //                        layout      = layout
+    //                    }
+    //        | t ->
+    //            failf "uniform %A has unexpected type %A" p.paramName t
 
 [<System.Flags>]
 type TessellationFlags =
