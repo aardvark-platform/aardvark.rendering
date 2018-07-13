@@ -48,12 +48,12 @@ type ResourceManagerExtensions private() =
 
         let inputs = 
             layout.PipelineInfo.pInputs |> List.map (fun p ->
-                let name = Symbol.Create p.name
+                let name = Symbol.Create p.paramName
                 match Map.tryFind name state.vertexInputTypes with
                     | Some t -> (name, (false, t))
                     | None -> 
-                        match Map.tryFind p.name state.perGeometryUniforms with
-                            | Some t -> (name, (true, p.hostType))
+                        match Map.tryFind p.paramName state.perGeometryUniforms with
+                            | Some t -> (name, (true, GLSLType.toType p.paramType))
                             | None -> failf "could not get shader input %A" name
             )
             |> Map.ofList
@@ -107,9 +107,9 @@ type ResourceManagerExtensions private() =
 
         let vertexBuffers = 
             layout.PipelineInfo.pInputs 
-                |> List.sortBy (fun i -> i.location) 
+                |> List.sortBy (fun i -> i.paramLocation) 
                 |> List.map (fun i ->
-                    let sem = i.semantic 
+                    let sem = Symbol.Create i.paramSemantic 
                     match Map.tryFind sem g.vertexAttributes with
                         | Some b ->
                             this.CreateBuffer(b), 0L
@@ -493,19 +493,19 @@ module private RuntimeCommands =
             }
 
 
-        type InstanceBufferPool(device : Device, types : Map<string, ShaderIOParameter * Type>, initialCapacity : int) =
+        type InstanceBufferPool(device : Device, types : Map<string, FShade.GLSL.GLSLParameter * Type>, initialCapacity : int) =
             inherit AbstractResourceLocation<unit>(noOwner, [])
 
             let elementSizes =
                 types |> Map.map (fun name (i,_) ->
-                    PrimitiveType.sizeof i.shaderType
+                    GLSLType.sizeof i.paramType
                 )
 
 
             let writers =
                 types |> Map.map (fun name (input, typ) ->
-                    let size = PrimitiveType.sizeof input.shaderType
-                    let writer = UniformWriters.getWriter 0 (UniformType.Primitive(input.shaderType, size, 1)) typ
+                    let size = GLSLType.sizeof input.paramType
+                    let writer = UniformWriters.getWriter 0 input.paramType typ
                     writer
                 )
 
@@ -513,7 +513,7 @@ module private RuntimeCommands =
             let elementSize = 
                 types 
                     |> Map.toSeq 
-                    |> Seq.sumBy (fun (_,(i,_)) -> PrimitiveType.sizeof i.shaderType) 
+                    |> Seq.sumBy (fun (_,(i,_)) -> GLSLType.sizeof i.paramType) 
                     |> int64
 
             let dead = List<Buffer>()
@@ -614,7 +614,7 @@ module private RuntimeCommands =
 
                 { handle = (); version = 0}
 
-        type BufferMemoryManager(device : Device, vertexTypes : Map<Symbol, ShaderIOParameter * Type>, vertexCount : int) =
+        type BufferMemoryManager(device : Device, vertexTypes : Map<Symbol, FShade.GLSL.GLSLParameter * Type>, vertexCount : int) =
             
             let freeBuffers = System.Collections.Generic.List<Buffer>()
             let freeSlots = System.Collections.Generic.List<GeometrySlot>()
@@ -1752,26 +1752,26 @@ module private RuntimeCommands =
         let pipelineInfo = pipeline.ppLayout.PipelineInfo
 
         let instanceInputs =
-            pipelineInfo.pInputs |> List.choose (fun i -> match Map.tryFind i.name state.perGeometryUniforms with | Some typ -> Some(i.name, (i, typ)) | _ -> None) |> Map.ofList
+            pipelineInfo.pInputs |> List.choose (fun i -> match Map.tryFind i.paramName state.perGeometryUniforms with | Some typ -> Some(i.paramName, (i, typ)) | _ -> None) |> Map.ofList
             
         let vertexInputs =
-            pipelineInfo.pInputs |> List.choose (fun i -> match Map.tryFind (Symbol.Create i.name) state.vertexInputTypes with | Some typ -> Some(Symbol.Create i.name, (i, typ)) | _ -> None) |> Map.ofList
+            pipelineInfo.pInputs |> List.choose (fun i -> match Map.tryFind (Symbol.Create i.paramName) state.vertexInputTypes with | Some typ -> Some(Symbol.Create i.paramName, (i, typ)) | _ -> None) |> Map.ofList
 
   
 
         let instanceWriters =
             instanceInputs |> Map.map (fun name (i, typ) ->
-                UniformWriters.getWriter 0 (UniformType.Primitive(i.shaderType, 0, 0)) typ
+                UniformWriters.getWriter 0 i.paramType typ
             )
 
         let slotSems =
-            let lastSlot = pipelineInfo.pInputs |> List.map (fun i -> i.location) |> List.max
+            let lastSlot = pipelineInfo.pInputs |> List.map (fun i -> i.paramLocation) |> List.max
             let slots = 1 + lastSlot
 
             let sems = Array.zeroCreate slots
 
             for s in pipelineInfo.pInputs do
-                sems.[s.location] <- Symbol.Create s.name
+                sems.[s.paramLocation] <- Symbol.Create s.paramName
             sems
 
         let vertexChunkSize = 1048576

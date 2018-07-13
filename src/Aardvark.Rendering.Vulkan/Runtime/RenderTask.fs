@@ -110,7 +110,7 @@ module RenderCommands =
 
             let inputs = 
                 layout.PipelineInfo.pInputs |> List.map (fun p ->
-                    let name = Symbol.Create p.name
+                    let name = Symbol.Create p.paramSemantic
                     match Map.tryFind name state.vertexInputTypes with
                         | Some t -> (name, (false, t))
                         | None -> failf "could not get shader input %A" name
@@ -164,9 +164,9 @@ module RenderCommands =
 
             let vertexBuffers = 
                 layout.PipelineInfo.pInputs 
-                    |> List.sortBy (fun i -> i.location) 
+                    |> List.sortBy (fun i -> i.paramLocation) 
                     |> List.map (fun i ->
-                        let sem = i.semantic 
+                        let sem = Symbol.Create i.paramSemantic 
                         match Map.tryFind sem g.vertexAttributes with
                             | Some b ->
                                 x.CreateBuffer(b), 0L

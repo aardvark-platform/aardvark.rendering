@@ -83,6 +83,18 @@ module ShaderModule =
 
             handle
         )
+        
+    let ofGLSL (stage : ShaderStage) (info : FShade.GLSL.GLSLShader) (device : Device) =
+        let siface = info.iface.shaders.[ShaderStage.toFShade stage]
+        match GLSLang.GLSLang.tryCompile (glslangStage stage) siface.shaderEntry [string stage] info.code with
+            | Some binary, _ ->
+                let iface = Map.ofList [stage, siface]
+                let handle = device |> createRaw binary
+                let result = ShaderModule(device, handle, stage, iface, binary)
+                result
+            | None, err ->
+                Log.error "[Vulkan] %A shader compilation failed: %A" stage err
+                failf "%A shader compilation failed: %A" stage err
 
     let ofBinaryWithInfo (stage : ShaderStage) (info : FShade.GLSL.GLSLShaderInterface) (binary : byte[]) (device : Device) =
         let iface = Map.ofList [stage, info]

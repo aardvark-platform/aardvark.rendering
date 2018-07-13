@@ -261,7 +261,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
     member x.PrepareSurface (fboSignature : IFramebufferSignature, surface : ISurface) =
-        device.CreateShaderProgram(unbox fboSignature, surface, IndexedGeometryMode.TriangleList) :> IBackendSurface
+        device.CreateShaderProgram(surface) :> IBackendSurface
 
     member x.DeleteSurface (bs : IBackendSurface) =
         device.Delete(unbox<ShaderProgram> bs)
@@ -627,7 +627,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             signature.Link(effect, Range1d(0.0, 1.0), false, topology)
 
         member x.AssembleEffect (effect : FShade.Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
-            BackendSurface.ofEffectSimple signature effect topology
+            failf "AssembleEffect is obsolete"
+            //BackendSurface.ofEffectSimple signature effect topology
 
         member x.ResourceManager = failf "not implemented"
 

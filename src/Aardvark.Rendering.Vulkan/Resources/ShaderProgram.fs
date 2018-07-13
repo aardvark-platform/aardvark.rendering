@@ -218,6 +218,7 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderProgram =
+    open System.IO
     open FShade.GLSL
 
     let private versionRx = System.Text.RegularExpressions.Regex @"\#version.*$"
@@ -282,7 +283,7 @@ module ShaderProgram =
             sb.Append(lastLine) |> ignore
             Report.Line("{0}", sb.ToString())
 
-    let private ofBackendSurfaceInternal (layout : Option<PipelineLayout>) (iface : FShade.GLSL.GLSLProgramInterface) (code : string) (device : Device) =
+    let private ofGLSLInteral (layout : Option<PipelineLayout>) (iface : FShade.GLSL.GLSLProgramInterface) (code : string) (device : Device) =
         let code = 
             layoutRx.Replace(code, fun m ->
                 let set = m.Groups.["set"].Value
@@ -346,10 +347,12 @@ module ShaderProgram =
 
 
     let private backendSurfaceCache = Symbol.Create "BackendSurfaceCache"
+    let private effectCache = Symbol.Create "effectCache"
+    let private moduleCache = Symbol.Create "moduleCache"
 
     let ofGLSL (code : FShade.GLSL.GLSLShader) (device : Device) =
         device.GetCached(backendSurfaceCache, code, fun code ->
-            let program = ofBackendSurfaceInternal None code.iface code.code device
+            let program = ofGLSLInteral None code.iface code.code device
             program.CacheName <- backendSurfaceCache
             // leak programs
             program.RefCount <- 1
@@ -357,6 +360,14 @@ module ShaderProgram =
         )
 
     let private pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
+
+    let private shaderCachePath =
+        Path.combine [
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
+            "Aardvark"
+            "VulkanShaderCache"
+        ]
+
     type private ShaderProgramData =
         {
             glsl    : string
@@ -396,6 +407,80 @@ module ShaderProgram =
             | Some p -> p
             | None -> failf "could not load program"
 
+    let private hashFileName (value : obj) : string =
+        let hash = pickler.ComputeHash value
+        hash.Hash |> Guid |> string
+
+    let private tryRead (file : string) (device : Device) =
+        try
+            if File.Exists file then
+                let data = File.ReadAllBytes file
+                tryOfByteArray data device
+            else
+                None
+        with _ ->
+            None
+    
+    let private write (file : string) (program : ShaderProgram) =
+        try
+            let data = toByteArray program
+            File.WriteAllBytes(file, data)
+        with _ ->
+            ()
+
+    let ofModule (module_ : FShade.Imperative.Module) (device : Device) =
+        device.GetCached(moduleCache, module_, fun module_ ->
+            let hash = module_.hash
+        
+            let cacheFile = Path.Combine(shaderCachePath, hash + ".module")
+            match tryRead cacheFile device with
+                | Some p ->
+                    p.CacheName <- moduleCache
+                    p.RefCount <- 1 // leak
+                    p
+
+                | None ->
+
+                    let glsl = 
+                        module_ 
+                        |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
+                        |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
+                
+                    let res = ofGLSL glsl device
+                    write cacheFile res
+                    res.CacheName <- moduleCache
+                    res.RefCount <- 1 // leak
+                    res
+        )
+    
+    let ofEffect (effect : FShade.Effect) (mode : IndexedGeometryMode) (pass : RenderPass) (device : Device) =
+        device.GetCached(effectCache, (effect, pass), fun (effect, cfg) ->
+            let fileName = 
+                if pass.LayerCount > 1 then
+                    hashFileName (effect, mode, pass.ColorAttachments, pass.DepthStencilAttachment, pass.LayerCount, pass.PerLayerUniforms)
+                else
+                    hashFileName (effect, pass.ColorAttachments, pass.DepthStencilAttachment)
+                    
+            let cacheFile = Path.Combine(shaderCachePath, fileName + ".effect")
+            match tryRead cacheFile device with
+                | Some p ->
+                    p.CacheName <- effectCache
+                    p.RefCount <- 1 // leak
+                    p
+
+                | None ->
+                    let glsl = 
+                        pass.Link(effect, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, mode)
+                        |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
+                        |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
+                
+                    let res = ofGLSL glsl device
+                    write cacheFile res
+                    res.CacheName <- effectCache
+                    res.RefCount <- 1 // leak
+                    res
+        )
+
     let delete (program : ShaderProgram) (device : Device) =
         if program.CacheName <> Symbol.Empty then
             device.RemoveCached(program.CacheName, program)
@@ -409,24 +494,22 @@ module ShaderProgram =
 [<AbstractClass; Sealed; Extension>]
 type ContextShaderProgramExtensions private() =
     [<Extension>]
-    static member CreateShaderProgram(this : Device, signature : IFramebufferSignature, surface : Aardvark.Base.Surface, top : IndexedGeometryMode) =
-        match surface with
-            | Aardvark.Base.Surface.FShadeSimple e ->
-                failwith ""
-            | _ ->
-                
-                failwith ""
+    static member CreateShaderProgram(this : Device, pass : RenderPass, effect : FShade.Effect, top : IndexedGeometryMode) =
+        ShaderProgram.ofEffect effect top pass this
 
-        //match surface with
-        //    | :? SignaturelessBackendSurface as s -> 
-        //        s.Get signature |> unbox<ShaderProgram>
-        //    | :? ShaderProgram as p -> p
-        //    | :? BackendSurface as bs -> this |> ShaderProgram.ofBackendSurface bs
-        //    | :? IGeneratedSurface as gs ->
-        //        let bs = gs.Generate(this.Runtime, signature, top) 
-        //        this |> ShaderProgram.ofBackendSurface bs
-        //    | _ ->
-        //        failf "bad surface type: %A" surface
+    [<Extension>]
+    static member CreateShaderProgram(this : Device, module_ : FShade.Imperative.Module) =
+        ShaderProgram.ofModule module_ this
+
+    [<Extension>]
+    static member CreateShaderProgram(this : Device, surface : ISurface) =
+        match surface with
+            | :? ShaderProgram as p ->
+                Interlocked.Increment(&p.RefCount) |> ignore
+                p
+            | _ ->
+                failf "unknown surface %A" surface
+             
 
     [<Extension>]
     static member inline Delete(this : Device, program : ShaderProgram) =

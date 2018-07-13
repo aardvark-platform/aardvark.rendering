@@ -57,6 +57,83 @@ module RenderbufferFormat =
             Vec(4, Float(64)),      RenderbufferFormat.Rgba32f
         ]
 
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module GLSLType =
+    open FShade
+    open FShade.GLSL
+    
+    let private b = glslVulkan
+
+    let toType =
+        LookupTable.lookupTable [
+            Bool, typeof<int>
+            Void, typeof<unit>
+            
+            Int(true, 8), typeof<sbyte>
+            Int(true, 16), typeof<int16>
+            Int(true, 32), typeof<int32>
+            Int(true, 64), typeof<int64>
+
+            Int(false, 8), typeof<byte>
+            Int(false, 16), typeof<uint16>
+            Int(false, 32), typeof<uint32>
+            Int(false, 64), typeof<uint64>
+
+            Float(16), typeof<float16>
+            Float(32), typeof<float32>
+            Float(64), typeof<float32>
+
+            Vec(2, Int(true, 32)), typeof<V2i>
+            Vec(3, Int(true, 32)), typeof<V3i>
+            Vec(4, Int(true, 32)), typeof<V4i>
+
+            Vec(3, Int(false, 32)), typeof<C3ui>
+            Vec(4, Int(false, 32)), typeof<C4ui>
+            
+            Vec(2, Float(32)), typeof<V2f>
+            Vec(3, Float(32)), typeof<V3f>
+            Vec(4, Float(32)), typeof<V4f>
+
+            Vec(2, Float(64)), typeof<V2f>
+            Vec(3, Float(64)), typeof<V3f>
+            Vec(4, Float(64)), typeof<V4f>
+
+            Mat(2,2,Int(true,32)), typeof<M22i>
+            Mat(2,3,Int(true,32)), typeof<M23i>
+            Mat(3,3,Int(true,32)), typeof<M33i>
+            Mat(3,4,Int(true,32)), typeof<M34i>
+            Mat(4,4,Int(true,32)), typeof<M44i>
+
+            Mat(2,2,Float(32)), typeof<M22f>
+            Mat(2,3,Float(32)), typeof<M23f>
+            Mat(3,3,Float(32)), typeof<M33f>
+            Mat(3,4,Float(32)), typeof<M34f>
+            Mat(4,4,Float(32)), typeof<M44f>
+
+            Mat(2,2,Float(64)), typeof<M22f>
+            Mat(2,3,Float(64)), typeof<M23f>
+            Mat(3,3,Float(64)), typeof<M33f>
+            Mat(3,4,Float(64)), typeof<M34f>
+            Mat(4,4,Float(64)), typeof<M44f>
+            
+        ]
+    
+    let ofType t = FShade.Imperative.CType.ofType b t |> GLSLType.ofCType
+
+    let rec sizeof (t : GLSLType) =
+        match t with
+            | Bool -> 4
+            | Int(_,b) -> b / 32
+            | Float(64 | 32) -> 4
+            | Float(w) -> w / 4
+            | Vec(d,e) -> d * sizeof e
+            | Mat(r,c,e) -> r * c * sizeof e
+            | Array(len, e, stride) -> len * stride
+            | Struct(_,f,size) -> size
+            | Void -> failf "void does not have a size"
+            | Image _ -> failf "image does not have a size"
+            | Sampler _ -> failf "sampler does not have a size"
+
 type PipelineLayout =
     class
         inherit Resource<VkPipelineLayout>
@@ -255,12 +332,23 @@ module PipelineLayout =
 
     let delete (layout : PipelineLayout) (device : Device) =
         layout.RemoveRef()
+    
+    open FShade
+    open FShade.Imperative
+
+    let ofEffectInputLayout (layout : EffectInputLayout) (layers : int) (perLayer : Set<string>) (device : Device) : PipelineLayout =
+        
+        failf "not implemented"
 
 [<AbstractClass; Sealed; Extension>]
 type ContextPipelineLayoutExtensions private() =
     [<Extension>]
     static member inline CreatePipelineLayout(this : Device, shaders : array<Shader>, layers : int, perLayer : Set<string>) =
         this |> PipelineLayout.ofShaders shaders layers perLayer
+
+    [<Extension>]
+    static member inline CreatePipelineLayout(this : Device, layout : FShade.EffectInputLayout, layers : int, perLayer : Set<string>) =
+        this |> PipelineLayout.ofEffectInputLayout layout layers perLayer
 
     [<Extension>]
     static member inline Delete(this : Device, layout : PipelineLayout) =

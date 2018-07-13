@@ -82,28 +82,26 @@ type UniformBuffer =
     class
         inherit Buffer
         val mutable public Storage : UnmanagedStruct
-        val mutable public Layout : UniformBufferLayout
+        val mutable public Layout : FShade.GLSL.GLSLUniformBuffer
 
-        new(device : Device, handle : VkBuffer, mem : DevicePtr, storage : UnmanagedStruct, layout : UniformBufferLayout) = 
+        new(device : Device, handle : VkBuffer, mem : DevicePtr, storage : UnmanagedStruct, layout : FShade.GLSL.GLSLUniformBuffer) = 
             { inherit Buffer(device, handle, mem, mem.Size, VkBufferUsageFlags.UniformBufferBit); Storage = storage; Layout = layout }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module UniformBuffer =
 
-    let create (layout : UniformBufferLayout) (device : Device) =
-        match layout.size with
-            | Fixed size ->
-                let storage = UnmanagedStruct.alloc size
+    let create (layout : FShade.GLSL.GLSLUniformBuffer) (device : Device) =
+        let size = layout.ubSize
+        let storage = UnmanagedStruct.alloc size
 
-                let align = device.MinUniformBufferOffsetAlignment
-                let alignedSize = Alignment.next align (int64 size)
+        let align = device.MinUniformBufferOffsetAlignment
+        let alignedSize = Alignment.next align (int64 size)
 
-                let buffer = device.CreateBuffer(VkBufferUsageFlags.UniformBufferBit ||| VkBufferUsageFlags.TransferDstBit, alignedSize)
+        let buffer = device.CreateBuffer(VkBufferUsageFlags.UniformBufferBit ||| VkBufferUsageFlags.TransferDstBit, alignedSize)
 
-                new UniformBuffer(device, buffer.Handle, buffer.Memory, storage, layout)
-            | Dynamic ->
-                failf "cannot create UniformBuffer with dynamic size"
+        new UniformBuffer(device, buffer.Handle, buffer.Memory, storage, layout)
+
 
     let upload (b : UniformBuffer) (device : Device) =
         use t = device.Token
@@ -134,7 +132,7 @@ module UniformBuffer =
 [<AbstractClass; Sealed; Extension>]
 type ContextUniformBufferExtensions private() =
     [<Extension>]
-    static member inline CreateUniformBuffer(this : Device, layout : UniformBufferLayout) =
+    static member inline CreateUniformBuffer(this : Device, layout : FShade.GLSL.GLSLUniformBuffer) =
         this |> UniformBuffer.create layout
 
     [<Extension>]
@@ -576,81 +574,66 @@ module UniformWriters =
                     | :? MethodInfo as mi -> mi.ReturnType
                     | _ -> failf "invalid member info"
 
-        let rec tryCreateWriterInternal (target : UniformType) (tSource : Type) =
+        let rec tryCreateWriterInternal (target : FShade.GLSL.GLSLType) (tSource : Type) =
             match target with
-                | UniformType.Primitive(t, s, a) ->
-                    let tTarget = PrimitiveType.toType t
 
-                    let prim = newPrimitiveWriter tTarget
-
-                    if tTarget = tSource then
-                        Some prim
-                    else
-                        let converter = PrimitiveValueConverter.getConverter tSource tTarget
-                        newMapWriter tSource tTarget converter prim |> Some
-
-                
-                | UniformType.Struct(layout) ->
-                    match layout.size with
-                        | Size.Fixed s ->
-                            let fieldWriters =
-                                if FSharpType.IsUnion(tSource, true) then
-                                    let cases = FSharpType.GetUnionCases(tSource, true)
-                                    let table = 
-                                        cases |> Seq.collect (fun ci ->
-                                            ci.GetFields() |> Seq.map (fun pi ->
-                                                ci.Name + "_" + pi.Name, pi :> MemberInfo
-                                            )
-                                        )
-                                        |> Map.ofSeq
-                                        |> Map.add "tag" (FSharpValue.PreComputeUnionTagMemberInfo(tSource, true))
+                | FShade.GLSL.Struct(name, fields, size) ->
+                    let fieldWriters =
+                        if FSharpType.IsUnion(tSource, true) then
+                            let cases = FSharpType.GetUnionCases(tSource, true)
+                            let table = 
+                                cases |> Seq.collect (fun ci ->
+                                    ci.GetFields() |> Seq.map (fun pi ->
+                                        ci.Name + "_" + pi.Name, pi :> MemberInfo
+                                    )
+                                )
+                                |> Map.ofSeq
+                                |> Map.add "tag" (FSharpValue.PreComputeUnionTagMemberInfo(tSource, true))
                                     
 
-                                    layout.fields |> List.mapOption (fun f ->
-                                        match Map.tryFind f.name table with
-                                            | Some pi ->
-                                                match tryCreateWriterInternal f.fieldType pi.Type with
-                                                    | Some inner ->
-                                                        let w = newMemberWriter pi inner
-                                                        let w = if f.name <> "tag" then newSubTypeTestWriter tSource pi.DeclaringType w else w
-                                                        Some (nativeint f.offset, w)
-                                                    | None ->
-                                                        None
+                            fields |> List.mapOption (fun (name, typ, offset) ->
+                                match Map.tryFind name table with
+                                    | Some pi ->
+                                        match tryCreateWriterInternal typ pi.Type with
+                                            | Some inner ->
+                                                let w = newMemberWriter pi inner
+                                                let w = if name <> "tag" then newSubTypeTestWriter tSource pi.DeclaringType w else w
+                                                Some (nativeint offset, w)
                                             | None ->
                                                 None
+                                    | None ->
+                                        None
 
-                                    )
-                                else
-                                    layout.fields |> List.mapOption (fun f ->
-                                        let fi = tSource.GetField(f.name, BindingFlags.Public ||| BindingFlags.NonPublic ||| BindingFlags.Instance)
+                            )
+                        else
+                            fields |> List.mapOption (fun (name, typ, offset) ->
+                                let fi = tSource.GetField(name, BindingFlags.Public ||| BindingFlags.NonPublic ||| BindingFlags.Instance)
 
-                                        if isNull fi then
-                                            let pi = tSource.GetProperty(f.name, BindingFlags.Public ||| BindingFlags.NonPublic ||| BindingFlags.Instance)
-                                            if isNull pi then
+                                if isNull fi then
+                                    let pi = tSource.GetProperty(name, BindingFlags.Public ||| BindingFlags.NonPublic ||| BindingFlags.Instance)
+                                    if isNull pi then
+                                        None
+                                    else
+                                        match tryCreateWriterInternal typ pi.PropertyType with
+                                            | Some inner -> 
+                                                Some (nativeint offset, newPropertyWriter pi inner)
+                                            | None ->
                                                 None
-                                            else
-                                                match tryCreateWriterInternal f.fieldType pi.PropertyType with
-                                                    | Some inner -> 
-                                                        Some (nativeint f.offset, newPropertyWriter pi inner)
-                                                    | None ->
-                                                        None
                             
-                                        else
-                                            match tryCreateWriterInternal f.fieldType fi.FieldType with
-                                                | Some inner -> 
-                                                    Some (nativeint f.offset, newFieldWriter fi inner)
-                                                | None ->
-                                                    None
-                                    )
-                            match fieldWriters with
-                                | Some fieldWriters ->
-                                    Some (newStructWriter tSource (nativeint s) fieldWriters)
-                                | None ->
-                                    None
-                        | _ ->
+                                else
+                                    match tryCreateWriterInternal typ fi.FieldType with
+                                        | Some inner -> 
+                                            Some (nativeint offset, newFieldWriter fi inner)
+                                        | None ->
+                                            None
+                            )
+                    match fieldWriters with
+                        | Some fieldWriters ->
+                            Some (newStructWriter tSource (nativeint size) fieldWriters)
+                        | None ->
                             None
 
-                | UniformType.Array(itemType, len, size, stride) ->
+                | FShade.GLSL.Array(len, itemType, stride) ->
                     let stride = nativeint stride
                     match tSource with
                         | ArrayOf tSourceElem ->
@@ -684,12 +667,20 @@ module UniformWriters =
                         | _ ->
                             None
 
-                | UniformType.RuntimeArray _ ->
-                    None
+                | t -> 
+                    let tTarget = GLSLType.toType t
 
-    let cache = System.Collections.Concurrent.ConcurrentDictionary<UniformType * Type, Option<IWriter>>()
+                    let prim = newPrimitiveWriter tTarget
 
-    let tryGetWriter (offset : int) (tTarget : UniformType) (tSource : Type) =
+                    if tTarget = tSource then
+                        Some prim
+                    else
+                        let converter = PrimitiveValueConverter.getConverter tSource tTarget
+                        newMapWriter tSource tTarget converter prim |> Some
+
+    let cache = System.Collections.Concurrent.ConcurrentDictionary<FShade.GLSL.GLSLType * Type, Option<IWriter>>()
+
+    let tryGetWriter (offset : int) (tTarget : FShade.GLSL.GLSLType) (tSource : Type) =
         let key = (tTarget, tSource)
         let writer = cache.GetOrAdd(key, fun (tTarget, tSource) -> NewWriters.tryCreateWriterInternal tTarget tSource)
 
@@ -699,7 +690,7 @@ module UniformWriters =
             | None ->
                 None
     
-    let getWriter (offset : int) (tTarget : UniformType) (tSource : Type) =
+    let getWriter (offset : int) (tTarget : FShade.GLSL.GLSLType) (tSource : Type) =
         match tryGetWriter offset tTarget tSource with
             | Some w -> w
             | None -> failf "could not create UniformWriter for field %A (input-type: %A)" tTarget tSource

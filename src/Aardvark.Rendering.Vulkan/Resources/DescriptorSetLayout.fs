@@ -32,7 +32,7 @@ module DescriptorSetLayoutBinding =
     let create (descriptorType : VkDescriptorType) (stages : VkShaderStageFlags) (parameter : ShaderUniformParameter) (device : Device) =
         let count = 
             match parameter with
-                | ImageParameter p -> p.count
+                | SamplerParameter p -> p.samplerCount
                 | _ -> 1
 
         let handle = 

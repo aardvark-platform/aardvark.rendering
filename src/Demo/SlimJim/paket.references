@@ -1,6 +1,7 @@
 Aardvark.Base.Essentials
 Aardvark.Base.Incremental
 FShade.Core
+FShade.GLSL
 FSharp.Core
 Unofficial.Typography
 Unofficial.LibTessDotNet

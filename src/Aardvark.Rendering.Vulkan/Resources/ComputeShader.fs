@@ -36,38 +36,36 @@ type ComputeShader =
     end
 
 type BindingReference =
-    | UniformRef of buffer : UniformBuffer * offset : int * valueType : UniformType
-    | StorageBufferRef of set : int * binding : int * elementType : UniformType
-    | SampledImageRef of set : int * binding : int * index : int * info : ShaderSamplerType * sampler : Sampler
-    | StorageImageRef of set : int * binding : int * info : ShaderSamplerType
+    | UniformRef of buffer : UniformBuffer * offset : int * valueType : FShade.GLSL.GLSLType
+    | StorageBufferRef of set : int * binding : int * elementType : FShade.GLSL.GLSLType
+    | SampledImageRef of set : int * binding : int * index : int * info : FShade.GLSL.GLSLSamplerType * sampler : Sampler
+    | StorageImageRef of set : int * binding : int * info : FShade.GLSL.GLSLImageType
 
 [<StructuredFormatDisplay("{AsString}")>]
 type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : Map<string, list<BindingReference>>, imageArrays : MapExt<int * int, Option<ImageView * Sampler>[]>, buffers : List<UniformBuffer>) =
     
     
-    static let rec prettyPrimitive (t : PrimitiveType) =
+    static let rec prettyName (t : FShade.GLSL.GLSLType) =
         match t with
-            | PrimitiveType.Bool -> "bool"
-            | PrimitiveType.Float(32) -> "float"
-            | PrimitiveType.Float(64) -> "double"
-            | PrimitiveType.Float(w) -> sprintf "float%d" w
-            | PrimitiveType.Int(32, true) -> "int"
-            | PrimitiveType.Int(w, true) -> sprintf "int%d" w
-            | PrimitiveType.Int(32, false) -> "uint"
-            | PrimitiveType.Int(w, false) -> sprintf "uint%d" w
-            | PrimitiveType.Vector(et, dim) -> sprintf "%s%d" (prettyPrimitive et) dim
-            | PrimitiveType.Matrix(et, dim) -> sprintf "%sx%d" (prettyPrimitive et) dim
-
-    static let rec prettyName (t : UniformType) =
-        match t with
-            | Primitive(t,_,_) -> prettyPrimitive t
-            | Array(et,len,_,_) -> sprintf "%s[%d]" (prettyName et) len
-            | RuntimeArray(et,_,_) -> sprintf "%s[]" (prettyName et) 
-            | Struct layout -> 
-                layout.fields 
-                    |> List.map (fun f -> sprintf "%s : %s" f.name (prettyName f.fieldType))
+            | FShade.GLSL.GLSLType.Bool -> "bool"
+            | FShade.GLSL.GLSLType.Void -> "void"
+            | FShade.GLSL.GLSLType.Float(32) -> "float"
+            | FShade.GLSL.GLSLType.Float(64) -> "double"
+            | FShade.GLSL.GLSLType.Float(w) -> sprintf "float%d" w
+            | FShade.GLSL.GLSLType.Int(true, 32) -> "int"
+            | FShade.GLSL.GLSLType.Int(true, w) -> sprintf "int%d" w
+            | FShade.GLSL.GLSLType.Int(false, 32) -> "uint"
+            | FShade.GLSL.GLSLType.Int(false, w) -> sprintf "uint%d" w
+            | FShade.GLSL.GLSLType.Vec(dim, et) -> sprintf "%s%d" (prettyName et) dim
+            | FShade.GLSL.GLSLType.Mat(r, c, et) -> sprintf "%sx%dx%d" (prettyName et) r c
+            | FShade.GLSL.GLSLType.Struct(name, fields, size) ->
+                fields 
+                    |> List.map (fun (name, typ,_) -> sprintf "%s : %s" name (prettyName typ))
                     |> String.concat "; "
                     |> sprintf "struct { %s }"
+            | FShade.GLSL.GLSLType.Array(len, et, _) -> sprintf "%s[%d]" (prettyName et) len 
+            | FShade.GLSL.GLSLType.Image _ -> "image"
+            | FShade.GLSL.GLSLType.Sampler _ -> "sampler"
 
     
     let device = shader.Device
@@ -977,7 +975,7 @@ module ComputeShader =
             if shader.csLocalSize.AllGreater 0 then shader.csLocalSize
             else V3i.III
 
-        let sm = ShaderModule.ofGLSL ShaderStage.Compute glsl.code device
+        let sm = ShaderModule.ofGLSL ShaderStage.Compute glsl device
 
         match sm.TryGetShader ShaderStage.Compute with
             | (true, shaderInfo) ->
@@ -1027,20 +1025,18 @@ module ComputeShader =
         match b.DescriptorType with
             | VkDescriptorType.UniformBuffer ->
                 match b.Parameter with
-                    | UniformBlockParameter p -> UniformBufferBinding p.layout
+                    | UniformBlockParameter p -> UniformBufferBinding p
                     | _ -> Other
             | VkDescriptorType.StorageBuffer ->
                 match b.Parameter with
-                    | UniformBlockParameter p ->
-                        match p.layout.fields with
-                            | [f] -> StorageBufferBinding(f.name, f.fieldType)
-                            | _ -> Other
+                    | StorageBufferParameter p ->
+                        StorageBufferBinding(p.ssbName, p.ssbType)
                     | _ ->
                         Other
 
             | VkDescriptorType.CombinedImageSampler ->
                 match b.Parameter with
-                    | ImageParameter i -> SampledImageBinding i
+                    | SamplerParameter i -> SampledImageBinding i
                     | _ -> Other
 
             | VkDescriptorType.StorageImage ->
@@ -1073,12 +1069,12 @@ module ComputeShader =
                         let buffer = device.CreateUniformBuffer layout
                         buffers.Add buffer
 
-                        for field in layout.fields do
+                        for field in layout.ubFields do
                             let name = 
-                                if field.name.StartsWith "cs_" then field.name.Substring 3
-                                else field.name
+                                if field.ufName.StartsWith "cs_" then field.ufName.Substring 3
+                                else field.ufName
                             
-                            let reference = UniformRef(buffer, field.offset, field.fieldType)
+                            let reference = UniformRef(buffer, field.ufOffset, field.ufType)
                             references.[name] <- [reference]
                             
                         descriptors.Add (Descriptor.UniformBuffer(bi, buffer))
@@ -1089,9 +1085,9 @@ module ComputeShader =
                         //descriptors.[bi] <- Descriptor.StorageBuffer(bi, Buffer(device, VkBuffer.Null, DevicePtr.Null))
 
                     | SampledImageBinding img ->
-                        let name = img.name
-                        let images : Option<ImageView * Sampler>[] = Array.zeroCreate img.count 
-                        for i in 0 .. img.count - 1 do
+                        let name = img.samplerName
+                        let images : Option<ImageView * Sampler>[] = Array.zeroCreate img.samplerCount 
+                        for i in 0 .. img.samplerCount - 1 do
                             match Map.tryFind (name, i) shader.Samplers, Map.tryFind (name, i) shader.TextureNames with
                                 | Some sampler, Some texName ->
                                     let reference = SampledImageRef(si, bi, i, img.samplerType, sampler)
@@ -1104,10 +1100,10 @@ module ComputeShader =
 
                     | StorageImageBinding i ->
                         let name = 
-                            if i.name.StartsWith "cs_" then i.name.Substring 3
-                            else i.name
+                            if i.imageName.StartsWith "cs_" then i.imageName.Substring 3
+                            else i.imageName
 
-                        let reference = StorageImageRef(si, bi, i.samplerType)
+                        let reference = StorageImageRef(si, bi, i.imageType)
                         references.[name] <- [reference]
                         //descriptors.[bi] <- Descriptor.StorageImage(bi, Unchecked.defaultof<_>)
 
