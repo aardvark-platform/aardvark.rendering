@@ -185,7 +185,7 @@ type DevicePreparedRenderObjectExtensions private() =
                             | None ->
                                 match ro.InstanceAttributes.TryGetAttribute sem with
                                     | Some att -> true, att
-                                    | None -> failwithf "could not get vertex data for shader input: %A" sem
+                                    | None -> failf "could not get vertex data for shader input: %A" sem
 
                     (sem, p.paramLocation, perInstance, view)
                 )

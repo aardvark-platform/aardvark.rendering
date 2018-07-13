@@ -1294,13 +1294,9 @@ type ResourceManager(user : IResourceUser, device : Device) =
         program.PipelineLayout, resource
 
     member x.CreateShaderProgram(signature : RenderPass, data : FShade.Effect, top : IndexedGeometryMode) =
-        let programKey = (signature, data, top) :> obj
 
-        let program = 
-            simpleSurfaceCache.GetOrAdd(programKey, fun _ ->
-                device.CreateShaderProgram(signature, data, top)
-            )
-
+        let program = device.CreateShaderProgram(signature, data, top)
+         
         if FShade.EffectDebugger.isAttached then
             FShade.EffectDebugger.saveCode data program.Surface
 

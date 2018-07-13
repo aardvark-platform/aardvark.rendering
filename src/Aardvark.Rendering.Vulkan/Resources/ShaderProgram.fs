@@ -346,27 +346,23 @@ module ShaderProgram =
         new ShaderProgram(device, shaders, layout, code, iface)
 
 
-    let private backendSurfaceCache = Symbol.Create "BackendSurfaceCache"
     let private effectCache = Symbol.Create "effectCache"
     let private moduleCache = Symbol.Create "moduleCache"
 
     let ofGLSL (code : FShade.GLSL.GLSLShader) (device : Device) =
-        device.GetCached(backendSurfaceCache, code, fun code ->
-            let program = ofGLSLInteral None code.iface code.code device
-            program.CacheName <- backendSurfaceCache
-            // leak programs
-            program.RefCount <- 1
-            program
-        )
+        ofGLSLInteral None code.iface code.code device
 
     let private pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
 
     let private shaderCachePath =
-        Path.combine [
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
-            "Aardvark"
-            "VulkanShaderCache"
-        ]
+        let path = 
+            Path.combine [
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
+                "Aardvark"
+                "VulkanShaderCache"
+            ]
+        if not (Directory.Exists path) then Directory.CreateDirectory path |> ignore
+        path
 
     type private ShaderProgramData =
         {
@@ -411,11 +407,16 @@ module ShaderProgram =
         let hash = pickler.ComputeHash value
         hash.Hash |> Guid |> string
 
-    let private tryRead (file : string) (device : Device) =
+    let private tryRead (file : string) (device : Device) : Option<ShaderProgram> =
         try
             if File.Exists file then
                 let data = File.ReadAllBytes file
-                tryOfByteArray data device
+                match tryOfByteArray data device with
+                    | Some c -> 
+                        Some c
+                    | None ->
+                        Log.warn "[Vulkan] bad shader cache %s" (Path.GetFileName file)
+                        None
             else
                 None
         with _ ->
@@ -430,9 +431,9 @@ module ShaderProgram =
 
     let ofModule (module_ : FShade.Imperative.Module) (device : Device) =
         device.GetCached(moduleCache, module_, fun module_ ->
-            let hash = module_.hash
+            let fileName = hashFileName (module_.hash)
         
-            let cacheFile = Path.Combine(shaderCachePath, hash + ".module")
+            let cacheFile = Path.Combine(shaderCachePath, fileName + ".module")
             match tryRead cacheFile device with
                 | Some p ->
                     p.CacheName <- moduleCache
@@ -454,12 +455,12 @@ module ShaderProgram =
         )
     
     let ofEffect (effect : FShade.Effect) (mode : IndexedGeometryMode) (pass : RenderPass) (device : Device) =
-        device.GetCached(effectCache, (effect, pass), fun (effect, cfg) ->
+        device.GetCached(effectCache, (effect, mode, pass), fun (effect, mode, cfg) ->
             let fileName = 
                 if pass.LayerCount > 1 then
-                    hashFileName (effect, mode, pass.ColorAttachments, pass.DepthStencilAttachment, pass.LayerCount, pass.PerLayerUniforms)
+                    hashFileName (effect.Id, mode, pass.ColorAttachments, pass.DepthStencilAttachment, pass.LayerCount, pass.PerLayerUniforms)
                 else
-                    hashFileName (effect, pass.ColorAttachments, pass.DepthStencilAttachment)
+                    hashFileName (effect.Id, pass.ColorAttachments, pass.DepthStencilAttachment)
                     
             let cacheFile = Path.Combine(shaderCachePath, fileName + ".effect")
             match tryRead cacheFile device with

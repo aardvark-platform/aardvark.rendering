@@ -14804,18 +14804,6 @@ module NVExternalMemoryCapabilities =
     
     
     
-    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    module VkRaw =
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkGetPhysicalDeviceExternalImageFormatPropertiesNVDel = delegate of VkPhysicalDevice * VkFormat * VkImageType * VkImageTiling * VkImageUsageFlags * VkImageCreateFlags * VkExternalMemoryHandleTypeFlagsNV * nativeptr<VkExternalImageFormatPropertiesNV> -> VkResult
-        
-        [<AbstractClass; Sealed>]
-        type private Loader<'d> private() =
-            static do Report.Begin(3, "[Vulkan] loading VK_NV_external_memory_capabilities")
-            static let s_vkGetPhysicalDeviceExternalImageFormatPropertiesNVDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceExternalImageFormatPropertiesNVDel> "vkGetPhysicalDeviceExternalImageFormatPropertiesNV"
-            static do Report.End(3) |> ignore
-            static member vkGetPhysicalDeviceExternalImageFormatPropertiesNV = s_vkGetPhysicalDeviceExternalImageFormatPropertiesNVDel
-        let vkGetPhysicalDeviceExternalImageFormatPropertiesNV(physicalDevice : VkPhysicalDevice, format : VkFormat, _type : VkImageType, tiling : VkImageTiling, usage : VkImageUsageFlags, flags : VkImageCreateFlags, externalHandleType : VkExternalMemoryHandleTypeFlagsNV, pExternalImageFormatProperties : nativeptr<VkExternalImageFormatPropertiesNV>) = Loader<unit>.vkGetPhysicalDeviceExternalImageFormatPropertiesNV.Invoke(physicalDevice, format, _type, tiling, usage, flags, externalHandleType, pExternalImageFormatProperties)
 
 module NVExternalMemory =
     let Name = "VK_NV_external_memory"
