@@ -133,6 +133,7 @@ module GLSLType =
             | Void -> failf "void does not have a size"
             | Image _ -> failf "image does not have a size"
             | Sampler _ -> failf "sampler does not have a size"
+            | DynamicArray _ -> failf "dynamic arrays do not have a size"
 
 type PipelineLayout =
     class

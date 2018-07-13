@@ -396,6 +396,26 @@ module UniformWriters =
                 if remaining > 0n then
                     Marshal.Set(ptr + offset, 0, remaining)
 
+        type ReplicateWriter<'a>(targetCount : int, stride : nativeint, inner : IWriter<'a>) =
+            inherit AbstractWriter<'a>()
+            
+            let targetSize = nativeint (targetCount - 1) * stride + inner.TargetSize
+
+            override x.TargetSize = targetSize
+                
+            override x.Write(value : 'a, ptr : nativeint) =
+                let mutable offset = 0n
+
+                let mutable cnt = 0
+                while cnt < targetCount do
+                    inner.WriteValue(value, ptr + offset)
+                    offset <- offset + stride
+                    cnt <- cnt + 1
+
+                let remaining = targetSize - offset
+                if remaining > 0n then
+                    Marshal.Set(ptr + offset, 0, remaining)
+
         type SubTypeTestWriter<'a, 'b when 'a : not struct>(inner : IWriter<'b>) =
             inherit AbstractWriter<'a>()
             
@@ -546,6 +566,12 @@ module UniformWriters =
             ctor.Invoke [| cnt :> obj |] |> unbox<IWriter>
 
 
+        let private newReplicateWriter (inner : IWriter) (stride : nativeint) (cnt : int) =
+            let t = typedefof<ReplicateWriter<_>>.MakeGenericType [| inner.ValueType |]
+            let ctor = t.GetConstructor [| typeof<int>; typeof<nativeint>; (typedefof<IWriter<_>>.MakeGenericType [| inner.ValueType |]) |]
+            ctor.Invoke [| cnt :> obj; stride :> obj; inner :> obj |] |> unbox<IWriter>
+
+
         let (|ArrayOf|_|) (t : Type) =
             if t.IsArray then
                 Some (t.GetElementType())
@@ -664,8 +690,12 @@ module UniformWriters =
                                 | None ->
                                     None
 
-                        | _ ->
-                            None
+                        | t ->
+                            match tryCreateWriterInternal itemType tSource with
+                                | Some elemWriter ->
+                                    newReplicateWriter elemWriter stride len |> Some
+                                | None ->
+                                    None
 
                 | t -> 
                     let tTarget = GLSLType.toType t

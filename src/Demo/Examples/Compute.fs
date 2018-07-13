@@ -141,7 +141,7 @@ module ComputeTest =
                             if name.EndsWith "_length" then
                                 let name = name.Substring(0, name.Length - 7)
                                 match Map.tryFind name bufferTypes, get name with
-                                    | Some (DynamicArray(contentType,_)), Some (:? Buffer as b) ->
+                                    | Some (ShaderParameterType.DynamicArray(contentType,_)), Some (:? Buffer as b) ->
                                         let es = ShaderParameterType.sizeof contentType
                                         let cnt = b.SizeInBytes / nativeint es |> int
                                         intWriter.Write(res.Data + nativeint f.Offset, cnt)

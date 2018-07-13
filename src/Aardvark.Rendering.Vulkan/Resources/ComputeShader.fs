@@ -66,7 +66,7 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
             | FShade.GLSL.GLSLType.Array(len, et, _) -> sprintf "%s[%d]" (prettyName et) len 
             | FShade.GLSL.GLSLType.Image _ -> "image"
             | FShade.GLSL.GLSLType.Sampler _ -> "sampler"
-
+            | FShade.GLSL.GLSLType.DynamicArray t -> sprintf "%s[]" (prettyName t) 
     
     let device = shader.Device
     let lockObj = obj()
