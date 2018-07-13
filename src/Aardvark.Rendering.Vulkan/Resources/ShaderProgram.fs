@@ -457,10 +457,12 @@ module ShaderProgram =
     let ofEffect (effect : FShade.Effect) (mode : IndexedGeometryMode) (pass : RenderPass) (device : Device) =
         device.GetCached(effectCache, (effect, mode, pass), fun (effect, mode, cfg) ->
             let fileName = 
+                let colors = pass.ColorAttachments |> Map.map (fun _ (a,b) -> a.ToString())
+                let depth = pass.DepthStencilAttachment |> Option.map (fun (a,b) -> a)
                 if pass.LayerCount > 1 then
-                    hashFileName (effect.Id, mode, pass.ColorAttachments, pass.DepthStencilAttachment, pass.LayerCount, pass.PerLayerUniforms)
+                    hashFileName (effect.Id, mode, colors, depth, pass.LayerCount, pass.PerLayerUniforms)
                 else
-                    hashFileName (effect.Id, pass.ColorAttachments, pass.DepthStencilAttachment)
+                    hashFileName (effect.Id, colors, depth)
                     
             let cacheFile = Path.Combine(shaderCachePath, fileName + ".effect")
             match tryRead cacheFile device with
