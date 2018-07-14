@@ -294,6 +294,16 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
     // create a runtime
     let runtime = new Runtime(device, false, false, debug)
 
+    let defaultCachePath =
+        let dir =
+            Path.combine [
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
+                "Aardvark"
+                "VulkanShaderCache"
+            ]
+        runtime.ShaderCachePath <- Some dir
+        dir
+
     let canCreateRenderControl =
         List.contains Instance.Extensions.SwapChain device.EnabledExtensions
 

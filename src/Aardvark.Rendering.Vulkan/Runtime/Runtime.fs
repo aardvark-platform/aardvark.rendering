@@ -166,6 +166,10 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     let onDispose = Event<unit>()
 
+    member x.ShaderCachePath
+        with get() = device.ShaderCachePath
+        and set v = device.ShaderCachePath <- v
+
 
     member x.Device = device
     member x.ResourceManager = manager

@@ -120,6 +120,8 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
     let transferQueues  = pool.TryTakeExplicit(QueueFlags.Transfer, QueueFlags.Compute ||| QueueFlags.Graphics, 1)
     let onDispose = Event<unit>()
     
+    let mutable shaderCachePath : Option<string> = None
+
     let allIndicesArr = 
         [|
             let mutable mask = 1u
@@ -329,6 +331,19 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
         )
 
     member x.CopyEngine = copyEngine.Value
+
+    member x.ShaderCachePath
+        with get() = shaderCachePath
+        and set v = 
+            match v with    
+                | Some path ->
+                    try
+                        if not (System.IO.Directory.Exists path) then System.IO.Directory.CreateDirectory path |> ignore 
+                        shaderCachePath <- Some path
+                    with _ ->
+                        shaderCachePath <- None
+                | None -> 
+                    shaderCachePath <- None
 
     member x.UploadMode = uploadMode
 

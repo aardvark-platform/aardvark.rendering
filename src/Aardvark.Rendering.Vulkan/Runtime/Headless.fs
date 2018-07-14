@@ -58,6 +58,16 @@ type HeadlessVulkanApplication(debug : bool, instanceExtensions : list<string>, 
     // create a runtime
     let runtime = new Runtime(device, false, false, debug)
 
+    let defaultCachePath =
+        let dir =
+            System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Aardvark",
+                "VulkanShaderCache"
+            )
+        runtime.ShaderCachePath <- Some dir
+        dir
+
     member x.Dispose() =
         runtime.Dispose()
         device.Dispose()

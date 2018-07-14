@@ -354,15 +354,15 @@ module ShaderProgram =
 
     let private pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
 
-    let private shaderCachePath =
-        let path = 
-            Path.combine [
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
-                "Aardvark"
-                "VulkanShaderCache"
-            ]
-        if not (Directory.Exists path) then Directory.CreateDirectory path |> ignore
-        path
+    //let private shaderCachePath =
+    //    let path = 
+    //        Path.combine [
+    //            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
+    //            "Aardvark"
+    //            "VulkanShaderCache"
+    //        ]
+    //    if not (Directory.Exists path) then Directory.CreateDirectory path |> ignore
+    //    path
 
     type private ShaderProgramData =
         {
@@ -431,45 +431,71 @@ module ShaderProgram =
 
     let ofModule (module_ : FShade.Imperative.Module) (device : Device) =
         device.GetCached(moduleCache, module_, fun module_ ->
-            let fileName = hashFileName (module_.hash)
+            match device.ShaderCachePath with
+                | Some shaderCachePath ->
+                    let fileName = hashFileName (module_.hash)
         
-            let cacheFile = Path.Combine(shaderCachePath, fileName + ".module")
-            match tryRead cacheFile device with
-                | Some p ->
-                    p.CacheName <- moduleCache
-                    p.RefCount <- 1 // leak
-                    p
+                    let cacheFile = Path.Combine(shaderCachePath, fileName + ".module")
+                    match tryRead cacheFile device with
+                        | Some p ->
+                            p.CacheName <- moduleCache
+                            p.RefCount <- 1 // leak
+                            p
 
+                        | None ->
+                            let glsl = 
+                                module_ 
+                                |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
+                                |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
+                
+                            let res = ofGLSL glsl device
+                            write cacheFile res
+                            res.CacheName <- moduleCache
+                            res.RefCount <- 1 // leak
+                            res
                 | None ->
-
                     let glsl = 
                         module_ 
                         |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
                         |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
                 
                     let res = ofGLSL glsl device
-                    write cacheFile res
                     res.CacheName <- moduleCache
                     res.RefCount <- 1 // leak
                     res
+                    
         )
     
     let ofEffect (effect : FShade.Effect) (mode : IndexedGeometryMode) (pass : RenderPass) (device : Device) =
         device.GetCached(effectCache, (effect, mode, pass), fun (effect, mode, cfg) ->
-            let fileName = 
-                let colors = pass.ColorAttachments |> Map.map (fun _ (a,b) -> a.ToString())
-                let depth = pass.DepthStencilAttachment |> Option.map (fun (a,b) -> a)
-                if pass.LayerCount > 1 then
-                    hashFileName (effect.Id, mode, colors, depth, pass.LayerCount, pass.PerLayerUniforms)
-                else
-                    hashFileName (effect.Id, colors, depth)
+            match device.ShaderCachePath with
+                | Some shaderCachePath ->
+                    let fileName = 
+                        let colors = pass.ColorAttachments |> Map.map (fun _ (a,b) -> a.ToString())
+                        let depth = pass.DepthStencilAttachment |> Option.map (fun (a,b) -> a)
+                        if pass.LayerCount > 1 then
+                            hashFileName (effect.Id, mode, colors, depth, pass.LayerCount, pass.PerLayerUniforms)
+                        else
+                            hashFileName (effect.Id, colors, depth)
                     
-            let cacheFile = Path.Combine(shaderCachePath, fileName + ".effect")
-            match tryRead cacheFile device with
-                | Some p ->
-                    p.CacheName <- effectCache
-                    p.RefCount <- 1 // leak
-                    p
+                    let cacheFile = Path.Combine(shaderCachePath, fileName + ".effect")
+                    match tryRead cacheFile device with
+                        | Some p ->
+                            p.CacheName <- effectCache
+                            p.RefCount <- 1 // leak
+                            p
+
+                        | None ->
+                            let glsl = 
+                                pass.Link(effect, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, mode)
+                                |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
+                                |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
+                
+                            let res = ofGLSL glsl device
+                            write cacheFile res
+                            res.CacheName <- effectCache
+                            res.RefCount <- 1 // leak
+                            res
 
                 | None ->
                     let glsl = 
@@ -478,10 +504,10 @@ module ShaderProgram =
                         |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
                 
                     let res = ofGLSL glsl device
-                    write cacheFile res
                     res.CacheName <- effectCache
                     res.RefCount <- 1 // leak
                     res
+                    
         )
 
     let delete (program : ShaderProgram) (device : Device) =

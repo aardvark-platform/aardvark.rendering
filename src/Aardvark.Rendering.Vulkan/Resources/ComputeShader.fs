@@ -966,6 +966,8 @@ module ComputeShader =
             shader.TextureNames <- Map.empty
             shader.Samplers <- Map.empty
 
+
+
     let ofFShade (shader : FShade.ComputeShader) (device : Device) =
         let glsl = shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSLVulkan
         
