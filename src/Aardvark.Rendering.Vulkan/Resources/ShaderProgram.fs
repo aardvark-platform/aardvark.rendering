@@ -352,7 +352,7 @@ module ShaderProgram =
     let ofGLSL (code : FShade.GLSL.GLSLShader) (device : Device) =
         ofGLSLInteral None code.iface code.code device
 
-    let private pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
+    let internal pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
 
     //let private shaderCachePath =
     //    let path = 
@@ -403,7 +403,7 @@ module ShaderProgram =
             | Some p -> p
             | None -> failf "could not load program"
 
-    let private hashFileName (value : obj) : string =
+    let internal hashFileName (value : obj) : string =
         let hash = pickler.ComputeHash value
         hash.Hash |> Guid |> string
 

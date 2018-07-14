@@ -19,6 +19,8 @@ open Microsoft.FSharp.Core.LanguagePrimitives.IntrinsicOperators
 
 type ComputeShader =
     class
+        inherit RefCountedResource
+
         val mutable public Device : Device
         val mutable public ShaderModule : ShaderModule
         val mutable public Layout : PipelineLayout
@@ -26,13 +28,28 @@ type ComputeShader =
         val mutable public TextureNames : Map<string * int, string>
         val mutable public Samplers : Map<string * int, Sampler>
         val mutable public GroupSize : V3i
+        val mutable public CacheName : Symbol
 
         interface IComputeShader with
             member x.Runtime = x.Device.Runtime :> IComputeRuntime
             member x.LocalSize = x.GroupSize
 
+        override x.Destroy() =
+            let device = x.Device
+            VkRaw.vkDestroyPipeline(device.Handle, x.Handle, NativePtr.zero)
 
-        new(d,s,l,p,tn,sd,gs) = { Device = d; ShaderModule = s; Layout = l; Handle = p; TextureNames = tn; Samplers = sd; GroupSize = gs }
+            for (_,s) in Map.toSeq x.Samplers do device.Delete s
+            device.Delete x.Layout
+            device.Delete x.ShaderModule
+
+            x.ShaderModule <- Unchecked.defaultof<_>
+            x.Layout <- Unchecked.defaultof<_>
+            x.Handle <- VkPipeline.Null
+            x.TextureNames <- Map.empty
+            x.Samplers <- Map.empty
+
+
+        new(d,s,l,p,tn,sd,gs) = { inherit RefCountedResource(); Device = d; ShaderModule = s; Layout = l; Handle = p; TextureNames = tn; Samplers = sd; GroupSize = gs; CacheName = Symbol.Empty }
     end
 
 type BindingReference =
@@ -948,27 +965,87 @@ module ``Compute Commands`` =
             
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ComputeShader =  
+    open System.IO
+
+
+    let private cache = Symbol.Create "ComputeShaderCache" 
+
     let private main = CStr.malloc "main"
 
     let delete (shader : ComputeShader) =
-        let device = shader.Device
-        if shader.Handle.IsValid then
+        shader.Device.RemoveCached(cache, shader)
 
-            VkRaw.vkDestroyPipeline(device.Handle, shader.Handle, NativePtr.zero)
+    let toByteArray (shader : ComputeShader) =
+        ShaderProgram.pickler.Pickle( 
+            (
+                shader.ShaderModule.SpirV,
+                shader.ShaderModule.Interface.[ShaderStage.Compute],
+                shader.GroupSize,
+                shader.TextureNames,
+                shader.Samplers |> Map.map (fun _ s -> s.Description)
+            ) 
+        )
 
-            for (_,s) in Map.toSeq shader.Samplers do device.Delete s
-            device.Delete shader.Layout
-            device.Delete shader.ShaderModule
+    let tryOfByteArray (data : byte[]) (device : Device) =
+        try
+            let (spirv : byte[], iface : FShade.GLSL.GLSLShaderInterface, groupSize : V3i, textureNames : Map<string * int, string>, samplers : Map<string * int, SamplerStateDescription>) = 
+                ShaderProgram.pickler.UnPickle data
+                
+            let module_ =
+                device.CreateShaderModule(ShaderStage.Compute, spirv, iface)
 
-            shader.ShaderModule <- Unchecked.defaultof<_>
-            shader.Layout <- Unchecked.defaultof<_>
-            shader.Handle <- VkPipeline.Null
-            shader.TextureNames <- Map.empty
-            shader.Samplers <- Map.empty
+            let layout =
+                device.CreatePipelineLayout([| Shader(module_, ShaderStage.Compute, iface) |], 1, Set.empty)
+                
+            let shaderInfo =
+                VkPipelineShaderStageCreateInfo(
+                    VkStructureType.PipelineShaderStageCreateInfo, 0n,
+                    VkPipelineShaderStageCreateFlags.MinValue,
+                    VkShaderStageFlags.ComputeBit,
+                    module_.Handle,
+                    main,
+                    NativePtr.zero
+                )
 
+            let mutable pipelineInfo =
+                VkComputePipelineCreateInfo(
+                    VkStructureType.ComputePipelineCreateInfo, 0n,
+                    VkPipelineCreateFlags.None,
+                    shaderInfo,
+                    layout.Handle,
+                    VkPipeline.Null,
+                    0
+                )
 
+            let mutable handle = VkPipeline.Null
+            VkRaw.vkCreateComputePipelines(device.Handle, VkPipelineCache.Null, 1u, &&pipelineInfo, NativePtr.zero, &&handle)
+                |> check "could not create compute pipeline"
 
-    let ofFShade (shader : FShade.ComputeShader) (device : Device) =
+            let samplers =
+                samplers |> Map.map (fun _ d -> device.CreateSampler(d))
+
+            ComputeShader(device, module_, layout, handle, textureNames, samplers, groupSize)
+                |> Some
+        with _ ->
+            None
+
+    let private tryRead (file : string) (device : Device) =
+        try
+            if File.Exists file then
+                let data = File.ReadAllBytes file
+                tryOfByteArray data device
+            else
+                None
+        with _ ->
+            None
+            
+    let private write (file : string) (shader : ComputeShader) =
+        try
+            File.WriteAllBytes(file, toByteArray shader)
+        with _ ->
+            ()
+
+    let private ofFShadeInternal (shader : FShade.ComputeShader) (device : Device) =
         let glsl = shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSLVulkan
         
         ShaderProgram.logLines glsl.code
@@ -1017,12 +1094,37 @@ module ComputeShader =
             | _ ->
                 failf "could not create compute shader"
 
+    let ofFShade (shader : FShade.ComputeShader) (device : Device) =
+        device.GetCached(cache, (shader.csId, shader.csLocalSize), fun _ ->
+            match device.ShaderCachePath with
+                | Some shaderCachePath ->
+                    let fileName = ShaderProgram.hashFileName (shader.csId, shader.csLocalSize)
+                    let file = Path.Combine(shaderCachePath, fileName + ".compute")
+
+                    match tryRead file device with
+                        | Some shader -> 
+                            shader.CacheName <- cache
+                            shader.RefCount <- 1 // leak
+                            shader
+                        | None ->
+                            let shader = ofFShadeInternal shader device
+                            write file shader
+                            shader.CacheName <- cache
+                            shader.RefCount <- 1 // leak
+                            shader
+
+
+                | None -> 
+                    let shader = ofFShadeInternal shader device
+                    shader.CacheName <- cache
+                    shader.RefCount <- 1 // leak
+                    shader
+        )
+
     let ofFunction (f : 'a -> 'b) (device : Device) =
         let shader = FShade.ComputeShader.ofFunction device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize f
         ofFShade shader device
-
-
-
+        
     let private (|UniformBufferBinding|StorageBufferBinding|SampledImageBinding|StorageImageBinding|Other|) (b : DescriptorSetLayoutBinding) =
         match b.DescriptorType with
             | VkDescriptorType.UniformBuffer ->

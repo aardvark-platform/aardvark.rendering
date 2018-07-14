@@ -60,8 +60,9 @@ module ``Sampler Extensions`` =
 type Sampler =
     class
         inherit Resource<VkSampler>
+        val mutable public Description : SamplerStateDescription
 
-        new(device : Device, handle : VkSampler) = { inherit Resource<_>(device, handle) }
+        new(device : Device, desc : SamplerStateDescription, handle : VkSampler) = { inherit Resource<_>(device, handle); Description = desc  }
     end
 
 
@@ -99,7 +100,7 @@ module Sampler =
         VkRaw.vkCreateSampler(device.Handle, &&info, NativePtr.zero, &&handle)
             |> check "could not create sampler"
 
-        Sampler(device, handle)
+        Sampler(device, desc, handle)
 
     let delete (sampler : Sampler) (device : Device) =
         if sampler.Handle.IsValid then
