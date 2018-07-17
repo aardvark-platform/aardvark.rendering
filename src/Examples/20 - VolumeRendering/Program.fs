@@ -244,7 +244,7 @@ let main argv =
 
 
     win.Scene <- 
-        Sg.fullScreenQuad |> Sg.diffuseTexture scatterTexture 
+        Sg.fullScreenQuad |> Sg.diffuseTexture (Mod.constant (scatterTexture :> ITexture))
         |> Sg.shader { 
             do! DefaultSurfaces.diffuseTexture; 
             do! Scatter.vis 
