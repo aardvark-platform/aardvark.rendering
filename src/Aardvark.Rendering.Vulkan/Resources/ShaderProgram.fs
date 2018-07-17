@@ -98,20 +98,47 @@ module private FShadeAdapter =
         }
 
     let fragmentInfo (iface : GLSLShaderInterface) =
+        let writesDepth = 
+            MapExt.containsKey "gl_Depth" iface.shaderBuiltInOutputs
+
+        let sampleShading =
+            MapExt.containsKey "gl_SampleLocation" iface.shaderBuiltInInputs ||
+            MapExt.containsKey "gl_SampleID" iface.shaderBuiltInInputs || 
+            MapExt.containsKey "gl_SampleIndex" iface.shaderBuiltInInputs
+
         {
-            flags = FragmentFlags.None
+            flags = (if writesDepth then FragmentFlags.DepthReplacing else FragmentFlags.DepthUnchanged)
             discard = GLSLShaderInterface.usesDiscard iface
-            sampleShading = MapExt.containsKey "gl_SampleLocation" iface.shaderBuiltInInputs
+            sampleShading = sampleShading
         }
 
 type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLayout, original : string, iface : FShade.GLSL.GLSLProgramInterface) =
     inherit RefCountedResource()
 
     static let allTopologies = Enum.GetValues(typeof<IndexedGeometryMode>) |> unbox<IndexedGeometryMode[]> |> Set.ofArray
+    
+    //static let stagesRev =
+    //    [|
+    //        FShade.ShaderStage.Compute
+    //        FShade.ShaderStage.Fragment
+    //        FShade.ShaderStage.Geometry
+    //        FShade.ShaderStage.TessEval
+    //        FShade.ShaderStage.TessControl
+    //        FShade.ShaderStage.Vertex
+    //    |]
+    //static let stages =
+    //    [|
+    //        FShade.ShaderStage.Vertex
+    //        FShade.ShaderStage.TessControl
+    //        FShade.ShaderStage.TessEval
+    //        FShade.ShaderStage.Geometry
+    //        FShade.ShaderStage.Fragment
+    //        FShade.ShaderStage.Compute
+    //    |]
 
     // get in-/outputs
-    let inputs  = shaders.[0].Interface.shaderInputs
-    let outputs = shaders.[shaders.Length - 1].Interface.shaderOutputs
+    let inputs  = iface.inputs //stages |> Array.tryPick (fun s -> MapExt.tryFind s iface.shaders) |> Option.get |> FShade.GLSL.GLSLShaderInterface.inputs
+    let outputs = iface.outputs //stagesRev |> Array.tryPick (fun s -> MapExt.tryFind s iface.shaders) |> Option.get |> FShade.GLSL.GLSLShaderInterface.outputs
 
     let mutable geometryInfo = None
     let mutable tessInfo = None
@@ -152,7 +179,7 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
     let fragInfo =
         match fragInfo with
             | Some i -> i
-            | None -> { flags = FragmentFlags.None; discard = false; sampleShading = false }
+            | None -> { flags = FragmentFlags.DepthUnchanged; discard = false; sampleShading = false }
 
     let createInfos =
         shaders |> Array.map (fun shader ->
