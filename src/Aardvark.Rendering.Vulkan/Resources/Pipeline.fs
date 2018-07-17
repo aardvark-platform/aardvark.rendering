@@ -48,7 +48,7 @@ module Pipeline =
 
         let prog = desc.shaderProgram
 
-        let inputs = prog.Inputs |> List.sortBy (fun p -> p.paramInterpolation)
+        let inputs = prog.Inputs |> List.sortBy (fun p -> p.paramLocation)
 
         let paramsWithInputs =
             inputs |> List.map (fun p ->
