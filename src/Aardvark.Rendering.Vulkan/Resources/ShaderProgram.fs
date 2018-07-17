@@ -12,16 +12,133 @@ open Microsoft.FSharp.NativeInterop
 #nowarn "9"
 #nowarn "51"
 
+module private FShadeAdapter =
+    open FShade
+    open FShade.GLSL
+    open Aardvark.Base.MultimethodTest
 
 
-type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLayout, original : BackendSurface) =
+    let private toGeometryFlags (d : GLSLShaderDecoration) =
+        match d with
+            | GLSLInputTopology t ->
+                match t with
+                    | InputTopology.Point -> GeometryFlags.InputPoints
+                    | InputTopology.Line -> GeometryFlags.InputLines
+                    | InputTopology.LineAdjacency -> GeometryFlags.InputLinesAdjacency
+                    | InputTopology.Triangle -> GeometryFlags.InputTriangles
+                    | InputTopology.TriangleAdjacency -> GeometryFlags.InputTrianglesAdjacency
+                    | InputTopology.Patch 1 -> GeometryFlags.InputPoints
+                    | InputTopology.Patch 2 -> GeometryFlags.InputLines
+                    | InputTopology.Patch 3 -> GeometryFlags.InputTriangles
+                    | InputTopology.Patch 4 -> GeometryFlags.InputLinesAdjacency
+                    | InputTopology.Patch 6 -> GeometryFlags.InputTrianglesAdjacency
+                    | InputTopology.Patch _ -> GeometryFlags.None
+
+            | GLSLOutputTopology t ->
+                match t with
+                    | OutputTopology.Points -> GeometryFlags.OutputPoints
+                    | OutputTopology.LineStrip -> GeometryFlags.OutputLineStrip
+                    | OutputTopology.TriangleStrip -> GeometryFlags.OutputTriangleStrip
+
+            | _ ->
+                GeometryFlags.None
+    
+    let private toTessellationFlags (d : GLSLShaderDecoration) =
+        match d with
+            | GLSLOutputTopology t ->
+                match t with
+                    | OutputTopology.Points -> TessellationFlags.OutputPoints
+                    | OutputTopology.LineStrip -> TessellationFlags.OutputIsolines
+                    | OutputTopology.TriangleStrip -> TessellationFlags.OutputTriangles
+
+            | GLSLSpacing s ->
+                match s with
+                    | GLSLSpacing.Equal -> TessellationFlags.SpacingEqual
+                    | GLSLSpacing.FractionalEven -> TessellationFlags.SpacingFractionalEven
+                    | GLSLSpacing.FractionalOdd -> TessellationFlags.SpacingFractionalOdd
+                    
+            | GLSLWinding w ->
+                match w with
+                    | GLSLWinding.CCW -> TessellationFlags.VertexOrderCcw
+                    | GLSLWinding.CW -> TessellationFlags.VertexOrderCw
+
+            | _ ->
+                TessellationFlags.None
+    
+    let geometryInfo (iface : GLSLShaderInterface) =
+        {
+            outputVertices =
+                iface.shaderDecorations 
+                |> List.tryPick (function GLSLMaxVertices v -> Some v | _ -> None)
+                |> Option.defaultValue 1
+        
+            invocations =
+                iface.shaderDecorations 
+                |> List.tryPick (function GLSLInvocations v -> Some v | _ -> None)
+                |> Option.defaultValue 1
+
+            flags =
+                iface.shaderDecorations
+                |> List.fold (fun f d -> f ||| toGeometryFlags d) GeometryFlags.None
+                
+        }
+
+    let tessControlInfo (ctrl : GLSLShaderInterface) (eval : GLSLShaderInterface) =
+        {
+            
+            inputPatchSize =
+                ctrl.shaderDecorations 
+                |> List.tryPick (function GLSLInputTopology (InputTopology.Patch v) -> Some v | _ -> None)
+                |> Option.defaultValue 1
+        
+            flags =
+                eval.shaderDecorations
+                |> List.fold (fun f d -> f ||| toTessellationFlags d) TessellationFlags.None
+                
+        }
+
+    let fragmentInfo (iface : GLSLShaderInterface) =
+        let writesDepth = 
+            MapExt.containsKey "gl_Depth" iface.shaderBuiltInOutputs
+
+        let sampleShading =
+            MapExt.containsKey "gl_SampleLocation" iface.shaderBuiltInInputs ||
+            MapExt.containsKey "gl_SampleID" iface.shaderBuiltInInputs || 
+            MapExt.containsKey "gl_SampleIndex" iface.shaderBuiltInInputs
+
+        {
+            flags = (if writesDepth then FragmentFlags.DepthReplacing else FragmentFlags.DepthUnchanged)
+            discard = GLSLShaderInterface.usesDiscard iface
+            sampleShading = sampleShading
+        }
+
+type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLayout, original : string, iface : FShade.GLSL.GLSLProgramInterface) =
     inherit RefCountedResource()
 
     static let allTopologies = Enum.GetValues(typeof<IndexedGeometryMode>) |> unbox<IndexedGeometryMode[]> |> Set.ofArray
+    
+    //static let stagesRev =
+    //    [|
+    //        FShade.ShaderStage.Compute
+    //        FShade.ShaderStage.Fragment
+    //        FShade.ShaderStage.Geometry
+    //        FShade.ShaderStage.TessEval
+    //        FShade.ShaderStage.TessControl
+    //        FShade.ShaderStage.Vertex
+    //    |]
+    //static let stages =
+    //    [|
+    //        FShade.ShaderStage.Vertex
+    //        FShade.ShaderStage.TessControl
+    //        FShade.ShaderStage.TessEval
+    //        FShade.ShaderStage.Geometry
+    //        FShade.ShaderStage.Fragment
+    //        FShade.ShaderStage.Compute
+    //    |]
 
     // get in-/outputs
-    let inputs  = shaders.[0].Interface.inputs
-    let outputs = shaders.[shaders.Length - 1].Interface.outputs
+    let inputs  = iface.inputs //stages |> Array.tryPick (fun s -> MapExt.tryFind s iface.shaders) |> Option.get |> FShade.GLSL.GLSLShaderInterface.inputs
+    let outputs = iface.outputs //stagesRev |> Array.tryPick (fun s -> MapExt.tryFind s iface.shaders) |> Option.get |> FShade.GLSL.GLSLShaderInterface.outputs
 
     let mutable geometryInfo = None
     let mutable tessInfo = None
@@ -29,23 +146,28 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
 
     do for shader in shaders do
         let iface = shader.Interface
-        match iface.kind with
-            | Geometry info -> geometryInfo <- Some info
-            | TessControl info -> tessInfo <- Some info
-            | Fragment info -> fragInfo <- Some info
+        match iface.shaderStage with
+            | FShade.ShaderStage.Geometry -> geometryInfo <- Some <| FShadeAdapter.geometryInfo iface
+            | FShade.ShaderStage.TessControl -> 
+                match shaders |> Array.tryFind (fun (s : Shader) -> s.Interface.shaderStage = FShade.ShaderStage.TessEval) with
+                    | Some eval -> 
+                        tessInfo <- Some <| FShadeAdapter.tessControlInfo iface eval.Interface
+                    | None ->
+                        ()
+            | FShade.ShaderStage.Fragment-> fragInfo <- Some <| FShadeAdapter.fragmentInfo iface
             | _ -> ()
 
     let acceptedTopologies =
         match tessInfo, geometryInfo with
             | Some i, _ ->
                 let flags = i.flags
-                match i.outputVertices with
+                match i.inputPatchSize with
                     | 1 -> Set.singleton IndexedGeometryMode.PointList
                     | 2 -> Set.ofList [ IndexedGeometryMode.LineList; IndexedGeometryMode.LineStrip ]
                     | 3 -> Set.ofList [ IndexedGeometryMode.TriangleList; IndexedGeometryMode.TriangleStrip ]
                     | 4 -> Set.ofList [ IndexedGeometryMode.LineAdjacencyList; IndexedGeometryMode.QuadList ]
                     | 6 -> Set.ofList [ IndexedGeometryMode.TriangleAdjacencyList ]
-                    | _ -> failf "bad tess-control vertex-count: %A" i.outputVertices
+                    | _ -> failf "bad tess-control vertex-count: %A" i.inputPatchSize
 
             | None, Some i ->
                 let flags = i.flags
@@ -62,7 +184,7 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
     let fragInfo =
         match fragInfo with
             | Some i -> i
-            | None -> { flags = FragmentFlags.None; discard = false; sampleShading = false }
+            | None -> { flags = FragmentFlags.DepthUnchanged; discard = false; sampleShading = false }
 
     let createInfos =
         shaders |> Array.map (fun shader ->
@@ -71,12 +193,14 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
                 VkPipelineShaderStageCreateFlags.MinValue,
                 VkShaderStageFlags.ofShaderStage shader.Stage,
                 shader.Module.Handle,
-                CStr.malloc shader.Interface.entryPoint,
+                CStr.malloc shader.Interface.shaderEntry,
                 NativePtr.zero
             )
         )
 
     let mutable cacheName = Symbol.Empty
+
+    member x.Interface = iface
 
     member internal x.CacheName
         with get() = cacheName
@@ -86,14 +210,15 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
     member x.Shaders = shaders
     member x.PipelineLayout = layout
 
+    member x.GLSL = original
     member x.Inputs = inputs
     member x.Outputs = outputs
-    member x.UniformBlocks = layout.UniformBlocks
-    member x.Textures = layout.Textures
+    //member x.UniformBlocks = layout.UniformBlocks
+    //member x.Textures = layout.Textures
 
     member x.Surface = original
-    member x.UniformGetters = original.Uniforms
-    member x.Samplers = original.Samplers
+    //member x.UniformGetters = original.Uniforms
+    //member x.Samplers = original.Samplers
 
     member x.HasTessellation = Option.isSome tessInfo
     member x.HasDiscard = fragInfo.discard
@@ -102,7 +227,7 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
     member x.ShaderCreateInfos = createInfos
     member x.TessellationPatchSize = 
         match tessInfo with
-            | Some i -> i.outputVertices
+            | Some i -> i.inputPatchSize
             | None -> 0
 
     override x.Destroy() =
@@ -117,14 +242,17 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
 
     interface IBackendSurface with
         member x.Handle = x :> obj
-        member x.Inputs = inputs |> List.map (fun p -> p.name, p.hostType)
-        member x.Outputs = outputs |> List.map (fun p -> p.name, p.hostType)
+        member x.Inputs = failwith "obsolete" //inputs |> List.map (fun p -> p.paramName, p.paramType)
+        member x.Outputs = failwith "obsolete" //outputs |> List.map (fun p -> p.paramName, p.paramType)
         member x.Uniforms = failf "not implemented"
-        member x.Samplers = original.Samplers |> Dictionary.toList |> List.map (fun ((a,b),c) -> (a,b,c))
-        member x.UniformGetters = original.Uniforms
+        member x.Samplers = failf "not implemented" //original.Samplers |> Dictionary.toList |> List.map (fun ((a,b),c) -> (a,b,c))
+        member x.UniformGetters = failf "not implemented" //original.Uniforms
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderProgram =
+    open System.IO
+    open FShade.GLSL
+
     let private versionRx = System.Text.RegularExpressions.Regex @"\#version.*$"
     let private layoutRx = System.Text.RegularExpressions.Regex @"layout[ \t]*\([ \t]*set[ \t]*\=[ \t]*(?<set>[0-9]+),[ \t]*binding[ \t]*\=[ \t]*(?<binding>[0-9]+)[ \t]*\)[ \t\r\n]*uniform[ \t]+(?<name>[_a-zA-Z0-9]+)[ \t\r\n]*\{"
     
@@ -187,9 +315,9 @@ module ShaderProgram =
             sb.Append(lastLine) |> ignore
             Report.Line("{0}", sb.ToString())
 
-    let private ofBackendSurfaceInternal (layout : Option<PipelineLayout>) (surface : BackendSurface) (device : Device) =
+    let private ofGLSLInteral (layout : Option<PipelineLayout>) (iface : FShade.GLSL.GLSLProgramInterface) (code : string) (layers : int) (perLayer : Set<string>) (device : Device) =
         let code = 
-            layoutRx.Replace(surface.Code, fun m ->
+            layoutRx.Replace(code, fun m ->
                 let set = m.Groups.["set"].Value
                 let binding = m.Groups.["binding"].Value
                 let name = m.Groups.["name"].Value
@@ -206,35 +334,29 @@ module ShaderProgram =
 
         let logs = System.Collections.Generic.Dictionary<ShaderStage, string>()
 
-        let tryGetSamplerDescription (info : ShaderTextureInfo) =
-            List.init info.count (fun index ->
-                match surface.Samplers.TryGetValue((info.name, index)) with
-                    | (true, sam) -> sam
-                    | _ -> 
-                        Log.warn "[Vulkan] could not resolve sampler/texture for %s[%d]" info.name index
-                        { textureName = Symbol.Create(info.name + string index); samplerState = SamplerStateDescription() }
-            )
-
         let binaries =
-            surface.EntryPoints
-                |> Dictionary.toMap
-                |> Map.map (fun stage entry ->
+            iface.shaders
+                |> MapExt.toArray
+                |> Array.map (fun (fshadeStage, shader) ->
+                    let entry = shader.shaderEntry
+                    let stage = ShaderStage.ofFShade fshadeStage
                     let define =
-                        match stage with
-                            | ShaderStage.Vertex -> "Vertex"
-                            | ShaderStage.Fragment -> "Fragment"
-                            | ShaderStage.Geometry -> "Geometry"
-                            | ShaderStage.TessControl -> "TessControl"
-                            | ShaderStage.TessEval -> "TessEval"
-                            | ShaderStage.Compute -> "Compute"
+                        match fshadeStage with
+                            | FShade.ShaderStage.Vertex -> "Vertex"
+                            | FShade.ShaderStage.Fragment -> "Fragment"
+                            | FShade.ShaderStage.Geometry -> "Geometry"
+                            | FShade.ShaderStage.TessControl -> "TessControl"
+                            | FShade.ShaderStage.TessEval -> "TessEval"
+                            | FShade.ShaderStage.Compute -> "Compute"
                             | _ -> failwithf "unsupported shader stage: %A" stage
+
 
                     let gStage = ShaderModule.glslangStage stage 
 
                     match GLSLang.GLSLang.tryCompile gStage entry [define] code with
                         | Some binary, log ->
                             logs.[stage] <- log
-                            binary
+                            stage, binary, iface.shaders.[fshadeStage]
                         | None, err ->
                             Log.error "[Vulkan] %A shader compilation failed: %A" stage err
                             failf "%A shader compilation failed: %A" stage err
@@ -242,142 +364,229 @@ module ShaderProgram =
 
         let shaders = 
             binaries
-                |> Map.toArray
-                |> Array.map (fun (stage, binary) ->
-                    let shaderModule = device.CreateShaderModule(stage, binary)
+                |> Array.map (fun (stage, binary, iface) ->
+                    let shaderModule = device.CreateShaderModule(stage, binary, iface)
                     let shader = shaderModule.[stage]
-                    shader.ResolveSamplerDescriptions tryGetSamplerDescription
+                    shader 
                 )
 
         let layout = 
             match layout with
                 | Some l -> l.AddRef(); l
-                | None -> device.CreatePipelineLayout(shaders, 1, Set.empty)
+                | None -> device.CreatePipelineLayout(shaders, layers, perLayer)
 
-        new ShaderProgram(device, shaders, layout, surface)
+        new ShaderProgram(device, shaders, layout, code, iface)
 
-    module private FShadeStuff = 
-        open FShade
-        open System.IO
 
-        type EffectId =
-            {
-                hash : string
-                info : PipelineInfo
-            }
+    let private effectCache = Symbol.Create "effectCache"
+    let private moduleCache = Symbol.Create "moduleCache"
 
-        type EffectData =
-            {
-                shaders     : list<ShaderInfo * byte[]>
-                samplers    : Map<string * int, string * SamplerStateDescription>
-                glsl        : string
-                entries     : Map<Aardvark.Base.ShaderStage, string>
-                builtIns    : Map<Aardvark.Base.ShaderStage, Map<Imperative.ParameterKind, Set<string>>>
-            }
+    let ofGLSL (code : FShade.GLSL.GLSLShader) (device : Device) =
+        ofGLSLInteral None code.iface code.code 1 Set.empty device
 
- 
-        let pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
+    let internal pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
 
-        let ofData (pipelineLayout : PipelineLayout) (data : EffectData) (device : Device) =
+    //let private shaderCachePath =
+    //    let path = 
+    //        Path.combine [
+    //            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
+    //            "Aardvark"
+    //            "VulkanShaderCache"
+    //        ]
+    //    if not (Directory.Exists path) then Directory.CreateDirectory path |> ignore
+    //    path
+
+    type private ShaderProgramData =
+        {
+            glsl        : string
+            code        : Map<ShaderStage, byte[]>
+            iface       : GLSLProgramInterface
+            layers      : int
+            perLayer    : Set<string>
+        }
+
+    let toByteArray (program : ShaderProgram) =
+        pickler.Pickle {
+            glsl = program.GLSL
+            code = program.Shaders |> Seq.map (fun s -> s.Module.Stage, s.Module.SpirV) |> Map.ofSeq
+            iface = program.Interface
+            layers = program.PipelineLayout.LayerCount
+            perLayer = program.PipelineLayout.PerLayerUniforms
+        }
+
+    let tryOfByteArray (data : byte[]) (device : Device) =
+        try
+            let data : ShaderProgramData = pickler.UnPickle data
+
             let shaders = 
-                data.shaders |> List.toArray |> Array.map (fun (info, binary) ->
-                    let stage =
-                        match info.kind with
-                            | ShaderKind.Vertex -> Aardvark.Base.ShaderStage.Vertex
-                            | ShaderKind.TessControl _ -> Aardvark.Base.ShaderStage.TessControl
-                            | ShaderKind.TessEval _ -> Aardvark.Base.ShaderStage.TessEval
-                            | ShaderKind.Geometry _ -> Aardvark.Base.ShaderStage.Geometry
-                            | ShaderKind.Fragment _ -> Aardvark.Base.ShaderStage.Fragment
-                            | ShaderKind.Compute -> Aardvark.Base.ShaderStage.Compute
-                        
-                    let m = ShaderModule.ofBinaryWithInfo stage info binary device
-                    m.[stage]
+                data.code 
+                |> Map.toArray 
+                |> Array.map (fun (stage, arr) -> 
+                    let iface = data.iface.shaders.[ShaderStage.toFShade stage]
+                    let module_ = device.CreateShaderModule(stage, arr, iface)
+                    new Shader(module_, stage, iface)
+                    
                 )
                 
-            let samplers =
-                data.samplers
-                    |> Map.toList 
-                    |> List.map (fun ((name, idx), (texName, desc)) ->
-                        (name, idx), { textureName = Symbol.Create texName; samplerState = desc }
-                    )
-                    |> Dictionary.ofList
+            Report.Begin(4, "Interface")
+            let str = FShade.GLSL.GLSLProgramInterface.toString data.iface
+            for line in str.Split([|"\r\n"|], StringSplitOptions.None) do
+                Report.Line(4, "{0}", line)
+            Report.End(4) |> ignore
 
-            let bs = BackendSurface(data.glsl, Dictionary.ofMap data.entries, data.builtIns, SymDict.empty, samplers, true)
-            new ShaderProgram(device, shaders, pipelineLayout, bs)
 
-        let shaderCachePath = 
-            let temp = Path.Combine(Path.GetTempPath(), "AardvarkVulkanShaderCache")
-            if not (Directory.Exists temp) then Directory.CreateDirectory temp |> ignore
-            temp
+            let layout = device.CreatePipelineLayout(shaders, data.layers, data.perLayer)
 
-        let ofModule  (layout : PipelineLayout) (effect : Imperative.Module) (device : Device) =
+            let program = new ShaderProgram(device, shaders, layout, data.glsl, data.iface)
+            Some program
+        with _ ->
+            None
+            
+    let ofByteArray (data : byte[]) (device : Device) =
+        match tryOfByteArray data device with
+            | Some p -> p
+            | None -> failf "could not load program"
 
-            let surf = BackendSurface.ofModule effect
+    let internal hashFileName (value : obj) : string =
+        let hash = pickler.ComputeHash value
+        hash.Hash |> Guid |> string
 
-            let prog = ofBackendSurfaceInternal (Some layout) surf device
-
-            let data =
-                { 
-                    shaders =
-                        prog.Shaders |> Array.toList |> List.map (fun shader ->
-                            shader.Interface, shader.Module.SpirV
-                        )
-
-                    samplers = 
-                        surf.Samplers 
-                            |> Dictionary.toSeq 
-                            |> Seq.map (fun (key, v) -> key, (string v.textureName, v.samplerState))
-                            |> Map.ofSeq
-
-                    glsl = surf.Code
-                    entries = surf.EntryPoints |> Dictionary.toMap
-                    builtIns = surf.BuiltIns
-                }
-
-            prog, data
-
+    let private tryRead (file : string) (device : Device) : Option<ShaderProgram> =
+        if File.Exists file then
+            Report.Begin(4, "[Vulkan] loading shader {0}", Path.GetFileName file)
+            try
+                let data = File.ReadAllBytes file
+                match tryOfByteArray data device with
+                    | Some c -> 
+                        Report.End(4) |> ignore
+                        Some c
+                    | None ->
+                        Log.warn "[Vulkan] bad shader cache %s" (Path.GetFileName file)
+                        Report.End(4) |> ignore
+                        None
+            with _ ->
+                Report.End(4) |> ignore
+                None
+        else
+            None
     
-    let backendSurfaceCache = Symbol.Create "BackendSurfaceCache"
-    let effectSurfaceCache = Symbol.Create "EffectSurfaceCache"
+    let private write (file : string) (program : ShaderProgram) =
+        try
+            let data = toByteArray program
+            File.WriteAllBytes(file, data)
+        with _ ->
+            ()
 
-    let ofBackendSurface (surface : BackendSurface) (device : Device) =
-        device.GetCached(backendSurfaceCache, surface, fun surface ->
-            let program = ofBackendSurfaceInternal None surface device
-            program.CacheName <- backendSurfaceCache
-            // leak programs
-            program.RefCount <- 1
-            program
+    let ofModule (module_ : FShade.Imperative.Module) (device : Device) =
+        device.GetCached(moduleCache, module_, fun module_ ->
+            match device.ShaderCachePath with
+                | Some shaderCachePath ->
+                    let fileName = hashFileName (module_.hash)
+        
+                    let cacheFile = Path.Combine(shaderCachePath, fileName + ".module")
+                    match tryRead cacheFile device with
+                        | Some p ->
+                            p.CacheName <- moduleCache
+                            p.RefCount <- 1 // leak
+                            p
+
+                        | None ->
+                            let glsl = 
+                                module_ 
+                                |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
+                                |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
+                
+                            let res = ofGLSL glsl device
+                            write cacheFile res
+                            res.CacheName <- moduleCache
+                            res.RefCount <- 1 // leak
+                            res
+                | None ->
+                    let glsl = 
+                        module_ 
+                        |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
+                        |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
+                
+                    let res = ofGLSL glsl device
+                    res.CacheName <- moduleCache
+                    res.RefCount <- 1 // leak
+                    res
+                    
         )
+    
+    let ofEffect (effect : FShade.Effect) (mode : IndexedGeometryMode) (pass : RenderPass) (device : Device) =
+        device.GetCached(effectCache, (effect, mode, pass), fun (effect, mode, cfg) ->
+            match device.ShaderCachePath with
+                | Some shaderCachePath ->
+                    let fileName = 
+                        let colors = pass.ColorAttachments |> Map.map (fun _ (a,b) -> a.ToString())
+                        let depth = pass.DepthStencilAttachment |> Option.map (fun (a,b) -> a)
+                        if pass.LayerCount > 1 then
+                            hashFileName (effect.Id, mode, colors, depth, pass.LayerCount, pass.PerLayerUniforms)
+                        else
+                            hashFileName (effect.Id, colors, depth)
+                    
+                    let cacheFile = Path.Combine(shaderCachePath, fileName + ".effect")
+                    match tryRead cacheFile device with
+                        | Some p ->
+                            p.CacheName <- effectCache
+                            p.RefCount <- 1 // leak
+                            p
 
-    let ofModule (layout : PipelineLayout) (effect : FShade.Imperative.Module) (device : Device) =
-        device.GetCached(effectSurfaceCache, (layout, effect), fun (layout, effect) ->
-            let (program, data) = FShadeStuff.ofModule layout effect device
-            program.CacheName <- effectSurfaceCache
-            // leak programs
-            program.RefCount <- 1
-            program
+                        | None ->
+                            let glsl = 
+                                pass.Link(effect, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, mode)
+                                |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
+                                |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
+                
+                            let res = ofGLSL glsl device
+                            write cacheFile res
+                            res.CacheName <- effectCache
+                            res.RefCount <- 1 // leak
+                            res
+
+                | None ->
+                    let glsl = 
+                        pass.Link(effect, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, mode)
+                        |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
+                        |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
+                
+                    let res = ofGLSL glsl device
+                    res.CacheName <- effectCache
+                    res.RefCount <- 1 // leak
+                    res
+                    
         )
 
     let delete (program : ShaderProgram) (device : Device) =
-        device.RemoveCached(program.CacheName, program)
-        //Log.warn "ref: %s %A" (string program.CacheName) program.RefCount
+        if program.CacheName <> Symbol.Empty then
+            device.RemoveCached(program.CacheName, program)
+        else
+            program.Shaders |> Array.iter (fun s -> device.Delete s.Module)
+            device.Delete program.PipelineLayout
+
 
 
 
 [<AbstractClass; Sealed; Extension>]
 type ContextShaderProgramExtensions private() =
     [<Extension>]
-    static member CreateShaderProgram(this : Device, signature : IFramebufferSignature, surface : ISurface, top : IndexedGeometryMode) =
+    static member CreateShaderProgram(this : Device, pass : RenderPass, effect : FShade.Effect, top : IndexedGeometryMode) =
+        ShaderProgram.ofEffect effect top pass this
+
+    [<Extension>]
+    static member CreateShaderProgram(this : Device, module_ : FShade.Imperative.Module) =
+        ShaderProgram.ofModule module_ this
+
+    [<Extension>]
+    static member CreateShaderProgram(this : Device, surface : ISurface) =
         match surface with
-            | :? SignaturelessBackendSurface as s -> 
-                s.Get signature |> unbox<ShaderProgram>
-            | :? ShaderProgram as p -> p
-            | :? BackendSurface as bs -> this |> ShaderProgram.ofBackendSurface bs
-            | :? IGeneratedSurface as gs ->
-                let bs = gs.Generate(this.Runtime, signature, top) 
-                this |> ShaderProgram.ofBackendSurface bs
+            | :? ShaderProgram as p ->
+                Interlocked.Increment(&p.RefCount) |> ignore
+                p
             | _ ->
-                failf "bad surface type: %A" surface
+                failf "unknown surface %A" surface
+             
 
     [<Extension>]
     static member inline Delete(this : Device, program : ShaderProgram) =

@@ -11,6 +11,7 @@ open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 open System.Collections.Generic
+open Microsoft.FSharp.Core.LanguagePrimitives.IntrinsicOperators
 
 #nowarn "9"
 #nowarn "51"

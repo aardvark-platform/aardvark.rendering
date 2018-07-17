@@ -24,7 +24,116 @@ module VkShaderStageFlags =
             ShaderStage.Fragment, VkShaderStageFlags.FragmentBit
             ShaderStage.Compute, VkShaderStageFlags.ComputeBit
         ]
+        
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module RenderbufferFormat =
+    open FShade.GLSL
 
+    let ofGLSLType =
+        LookupTable.lookupTable [   
+            Int(true, 8),           RenderbufferFormat.R8i
+            Vec(2, Int(true, 8)),   RenderbufferFormat.Rg8i
+            Vec(3, Int(true, 8)),   RenderbufferFormat.Rgb8i
+            Vec(4, Int(true, 8)),   RenderbufferFormat.Rgba8i
+
+            Int(true, 16),          RenderbufferFormat.R16i
+            Vec(2, Int(true, 16)),  RenderbufferFormat.Rg16i
+            Vec(3, Int(true, 16)),  RenderbufferFormat.Rgb16i
+            Vec(4, Int(true, 16)),  RenderbufferFormat.Rgba16i
+
+            Int(true, 32),          RenderbufferFormat.R32i
+            Vec(2, Int(true, 32)),  RenderbufferFormat.Rg32i
+            Vec(3, Int(true, 32)),  RenderbufferFormat.Rgb32i
+            Vec(4, Int(true, 32)),  RenderbufferFormat.Rgba32i
+            
+            Float(32),              RenderbufferFormat.R32f
+            Vec(2, Float(32)),      RenderbufferFormat.Rg32f
+            Vec(3, Float(32)),      RenderbufferFormat.Rgb32f
+            Vec(4, Float(32)),      RenderbufferFormat.Rgba32f
+
+            Float(64),              RenderbufferFormat.R32f
+            Vec(2, Float(64)),      RenderbufferFormat.Rg32f
+            Vec(3, Float(64)),      RenderbufferFormat.Rgb32f
+            Vec(4, Float(64)),      RenderbufferFormat.Rgba32f
+        ]
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module GLSLType =
+    open FShade
+    open FShade.GLSL
+    
+    let private b = glslVulkan
+
+    let toType =
+        LookupTable.lookupTable [
+            Bool, typeof<int>
+            Void, typeof<unit>
+            
+            Int(true, 8), typeof<sbyte>
+            Int(true, 16), typeof<int16>
+            Int(true, 32), typeof<int32>
+            Int(true, 64), typeof<int64>
+
+            Int(false, 8), typeof<byte>
+            Int(false, 16), typeof<uint16>
+            Int(false, 32), typeof<uint32>
+            Int(false, 64), typeof<uint64>
+
+            Float(16), typeof<float16>
+            Float(32), typeof<float32>
+            Float(64), typeof<float32>
+
+            Vec(2, Int(true, 32)), typeof<V2i>
+            Vec(3, Int(true, 32)), typeof<V3i>
+            Vec(4, Int(true, 32)), typeof<V4i>
+
+            Vec(3, Int(false, 32)), typeof<C3ui>
+            Vec(4, Int(false, 32)), typeof<C4ui>
+            
+            Vec(2, Float(32)), typeof<V2f>
+            Vec(3, Float(32)), typeof<V3f>
+            Vec(4, Float(32)), typeof<V4f>
+
+            Vec(2, Float(64)), typeof<V2f>
+            Vec(3, Float(64)), typeof<V3f>
+            Vec(4, Float(64)), typeof<V4f>
+
+            Mat(2,2,Int(true,32)), typeof<M22i>
+            Mat(2,3,Int(true,32)), typeof<M23i>
+            Mat(3,3,Int(true,32)), typeof<M34i>
+            Mat(3,4,Int(true,32)), typeof<M34i>
+            Mat(4,4,Int(true,32)), typeof<M44i>
+
+            Mat(2,2,Float(32)), typeof<M22f>
+            Mat(2,3,Float(32)), typeof<M23f>
+            Mat(3,3,Float(32)), typeof<M34f>
+            Mat(3,4,Float(32)), typeof<M34f>
+            Mat(4,4,Float(32)), typeof<M44f>
+
+            Mat(2,2,Float(64)), typeof<M22f>
+            Mat(2,3,Float(64)), typeof<M23f>
+            Mat(3,3,Float(64)), typeof<M34f>
+            Mat(3,4,Float(64)), typeof<M34f>
+            Mat(4,4,Float(64)), typeof<M44f>
+            
+        ]
+    
+    let ofType t = FShade.Imperative.CType.ofType b t |> GLSLType.ofCType
+
+    let rec sizeof (t : GLSLType) =
+        match t with
+            | Bool -> 4
+            | Int(_,b) -> b / 8
+            | Float(64 | 32) -> 4
+            | Float(w) -> w / 4
+            | Vec(d,e) -> d * sizeof e
+            | Mat(r,c,e) -> r * c * sizeof e
+            | Array(len, e, stride) -> len * stride
+            | Struct(_,f,size) -> size
+            | Void -> failf "void does not have a size"
+            | Image _ -> failf "image does not have a size"
+            | Sampler _ -> failf "sampler does not have a size"
+            | DynamicArray _ -> failf "dynamic arrays do not have a size"
 
 type PipelineLayout =
     class
@@ -32,9 +141,7 @@ type PipelineLayout =
 
         val mutable public DescriptorSetLayouts : array<DescriptorSetLayout>
         val mutable public PipelineInfo : PipelineInfo
-
-        val mutable public UniformBlocks : list<ShaderUniformBlock * VkShaderStageFlags>
-        val mutable public Textures : list<ShaderTextureInfo * VkShaderStageFlags>
+        
         val mutable public ReferenceCount : int
         val mutable public LayerCount : int
         val mutable public PerLayerUniforms : Set<string>
@@ -56,7 +163,7 @@ type PipelineLayout =
             member x.ColorAttachments = 
                 let a : AttachmentSignature = failwith ""
                 x.PipelineInfo.pOutputs 
-                    |> List.map (fun p -> p.location, (Symbol.Create p.name, AttachmentSignature.ofType p.hostType)) 
+                    |> List.map (fun p -> p.paramLocation, (Symbol.Create p.paramSemantic, { samples = 1; format = RenderbufferFormat.ofGLSLType p.paramType })) 
                     |> Map.ofList
             member x.IsAssignableFrom _ = false
             member x.Images = Map.empty
@@ -66,118 +173,18 @@ type PipelineLayout =
             member x.LayerCount = x.LayerCount
             member x.PerLayerUniforms = x.PerLayerUniforms
 
-        new(device, handle, descriptorSetLayouts, ubs, tex, info, layerCount : int, perLayer : Set<string>) = 
-            { inherit Resource<_>(device, handle); DescriptorSetLayouts = descriptorSetLayouts; UniformBlocks = ubs; Textures = tex; PipelineInfo = info; ReferenceCount = 1; LayerCount = layerCount; PerLayerUniforms = perLayer }
+        new(device, handle, descriptorSetLayouts, info, layerCount : int, perLayer : Set<string>) = 
+            { inherit Resource<_>(device, handle); DescriptorSetLayouts = descriptorSetLayouts; PipelineInfo = info; ReferenceCount = 1; LayerCount = layerCount; PerLayerUniforms = perLayer }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module PipelineLayout =
 
-    let ofPipelineInfo (layout : PipelineInfo) (layers : int) (perLayer : Set<string>) (device : Device) =
-        let uniformBlocks = Dict.empty
-        let textures = Dict.empty
-        let storageBlocks = Dict.empty
-        let mutable setCount = 0
-
-        for block in layout.pUniformBlocks do
-            setCount <- max setCount (block.set + 1)
-            let key = (block.set, block.binding)
-            uniformBlocks.[key] <- block
-                         
-        for block in layout.pStorageBlocks do
-            setCount <- max setCount (block.set + 1)
-            let key = (block.set, block.binding) 
-            storageBlocks.[key] <- block
-                                   
-        for tex in layout.pTextures do
-            setCount <- max setCount (tex.set + 1)
-            let key = (tex.set, tex.binding)
-            textures.[key] <- tex
-        let uniformBlocks = uniformBlocks.Values |> Seq.toList
-        let storageBlocks = storageBlocks.Values |> Seq.toList
-        let textures = textures.Values |> Seq.toList
-
-        // create DescriptorSetLayouts for all used slots (empty if no bindings)
-        let sets = Array.init setCount (fun set -> CSharpList.empty)
-
-        for block in uniformBlocks do
-            let binding = 
-                DescriptorSetLayoutBinding.create
-                    VkDescriptorType.UniformBuffer
-                    VkShaderStageFlags.All
-                    (UniformBlockParameter block)
-                    device
-
-            sets.[block.set].Add binding
-
-        for block in storageBlocks do
-            let binding = 
-                DescriptorSetLayoutBinding.create
-                    VkDescriptorType.StorageBuffer
-                    VkShaderStageFlags.All
-                    (UniformBlockParameter block)
-                    device
-
-            sets.[block.set].Add binding
-            
-
-        for tex in textures do
-            let descriptorType = 
-                if tex.isSampled then VkDescriptorType.CombinedImageSampler
-                else VkDescriptorType.StorageImage
-
-            let binding = 
-                DescriptorSetLayoutBinding.create
-                    descriptorType
-                    VkShaderStageFlags.All
-                    (ImageParameter tex)
-                    device
-
-            sets.[tex.set].Add binding
-
-        let setLayouts =
-            sets |> Array.map (fun l -> 
-                if l.Count = 0 then
-                    device |> DescriptorSetLayout.empty
-                else
-                    let arr = CSharpList.toArray l
-                    arr.QuickSortAscending(fun v -> v.Binding) |> ignore
-                    device |> DescriptorSetLayout.create arr
-            )
-
-
-        // create a pipeline layout from the given DescriptorSetLayouts
-        let handles = setLayouts |> Array.map (fun d -> d.Handle)
-        handles |> NativePtr.withA (fun pHandles ->
-            let mutable info =
-                VkPipelineLayoutCreateInfo(
-                    VkStructureType.PipelineLayoutCreateInfo, 0n,
-                    VkPipelineLayoutCreateFlags.MinValue,
-                    uint32 handles.Length, pHandles,
-                    0u, NativePtr.zero
-                )
-            let mutable handle = VkPipelineLayout.Null
-            VkRaw.vkCreatePipelineLayout(device.Handle, &&info, NativePtr.zero, &&handle)
-                |> check "could not create PipelineLayout"
-            
-            let uniformBlocks =
-                uniformBlocks |> List.map (fun b -> (b, VkShaderStageFlags.All))
-
-            let textures =
-                textures |> List.map (fun t -> (t, VkShaderStageFlags.All))
-
-            PipelineLayout(device, handle, setLayouts, uniformBlocks, textures, layout, layers, perLayer)
-        )
-
-    let ofEffectLayout (layout : FShade.EffectInputLayout) (layers : int) (perLayer : Set<string>) (device : Device) =
-        let info = PipelineInfo.ofEffectLayout layout Map.empty
-        ofPipelineInfo info layers perLayer device
- 
-
     let ofShaders (shaders : array<Shader>) (layers : int) (perLayer : Set<string>) (device : Device) =
         // figure out which stages reference which uniforms/textures
         let uniformBlocks = Dict.empty
         let textures = Dict.empty
+        let images = Dict.empty
         let storageBlocks = Dict.empty
         let mutable setCount = 0
 
@@ -189,41 +196,56 @@ module PipelineLayout =
             let iface = shader.Interface
 
             match shader.Stage with
-                | ShaderStage.Vertex -> inputs <- iface.inputs
-                | ShaderStage.Fragment -> outputs <- iface.outputs
+                | ShaderStage.Vertex -> inputs <- iface.shaderInputs
+                | ShaderStage.Fragment -> outputs <- iface.shaderOutputs
                 | _ -> ()
 
-            for block in iface.uniformBlocks do
-                setCount <- max setCount (block.set + 1)
-                let key = (block.set, block.binding)
+            for block in iface.shaderUniformBuffers do
+                let block = iface.program.uniformBuffers.[block]
+                setCount <- max setCount (block.ubSet + 1)
+                let key = (block.ubSet, block.ubBinding)
                 let referenced = 
                     match uniformBlocks.TryGetValue key with
                         | (true, (_, referencedBy)) -> referencedBy
                         | _ -> VkShaderStageFlags.None  
                 uniformBlocks.[key] <- (block, referenced ||| flags)
                          
-            for block in iface.storageBlocks do
-                setCount <- max setCount (block.set + 1)
-                let key = (block.set, block.binding)
+            for block in iface.shaderStorageBuffers do
+                let block = iface.program.storageBuffers.[block]
+                setCount <- max setCount (block.ssbSet + 1)
+                let key = (block.ssbSet, block.ssbBinding)
                 let referenced = 
                     match uniformBlocks.TryGetValue key with
                         | (true, (_, referencedBy)) -> referencedBy
                         | _ -> VkShaderStageFlags.None  
                 storageBlocks.[key] <- (block, referenced ||| flags)
                                    
-            for tex in iface.textures do
-                setCount <- max setCount (tex.set + 1)
-                let key = (tex.set, tex.binding)
+            for tex in iface.shaderSamplers do
+                let tex = iface.program.samplers.[tex]
+                setCount <- max setCount (tex.samplerSet + 1)
+                let key = (tex.samplerSet, tex.samplerBinding)
                 let referenced = 
                     match textures.TryGetValue key with
                         | (true, (_, referencedBy)) -> referencedBy
                         | _ -> VkShaderStageFlags.None
                                     
                 textures.[key] <- (tex, referenced ||| flags)
+
+            for img in iface.shaderImages do
+                let img = iface.program.images.[img]
+                setCount <- max setCount (img.imageSet + 1)
+                let key = (img.imageSet, img.imageBinding)
+                let referenced = 
+                    match images.TryGetValue key with
+                        | (true, (_, referencedBy)) -> referencedBy
+                        | _ -> VkShaderStageFlags.None
+                                    
+                images.[key] <- (img, referenced ||| flags)
                             
         let uniformBlocks = uniformBlocks.Values |> Seq.toList
         let storageBlocks = storageBlocks.Values |> Seq.toList
         let textures = textures.Values |> Seq.toList
+        let images = images.Values |> Seq.toList
 
         // create DescriptorSetLayouts for all used slots (empty if no bindings)
         let sets = Array.init setCount (fun set -> CSharpList.empty)
@@ -236,33 +258,38 @@ module PipelineLayout =
                     (UniformBlockParameter block)
                     device
 
-            sets.[block.set].Add binding
+            sets.[block.ubSet].Add binding
 
         for (block, stageFlags) in storageBlocks do
             let binding = 
                 DescriptorSetLayoutBinding.create
                     VkDescriptorType.StorageBuffer
                     stageFlags
-                    (UniformBlockParameter block)
+                    (StorageBufferParameter block)
                     device
 
-            sets.[block.set].Add binding
+            sets.[block.ssbSet].Add binding
             
 
         for (tex, stageFlags) in textures do
-            let descriptorType = 
-                if tex.isSampled then VkDescriptorType.CombinedImageSampler
-                else VkDescriptorType.StorageImage
-
             let binding = 
                 DescriptorSetLayoutBinding.create
-                    descriptorType
+                    VkDescriptorType.CombinedImageSampler
                     stageFlags
-                    (ImageParameter tex)
+                    (SamplerParameter tex)
                     device
 
-            sets.[tex.set].Add binding
+            sets.[tex.samplerSet].Add binding
 
+        for (img, stageFlags) in images do
+            let binding = 
+                DescriptorSetLayoutBinding.create
+                    VkDescriptorType.StorageImage
+                    stageFlags
+                    (ImageParameter img)
+                    device
+
+            sets.[img.imageSet].Add binding
 
 
         let setLayouts =
@@ -297,29 +324,32 @@ module PipelineLayout =
                     pUniformBlocks  = List.map fst uniformBlocks
                     pStorageBlocks  = List.map fst storageBlocks
                     pTextures       = List.map fst textures
+                    pImages         = List.map fst images
                     pEffectLayout   = None
                 }    
                       
-            PipelineLayout(device, handle, setLayouts, uniformBlocks, textures, info, layers, perLayer)
+            PipelineLayout(device, handle, setLayouts, info, layers, perLayer)
         )
 
     let delete (layout : PipelineLayout) (device : Device) =
         layout.RemoveRef()
+    
+    open FShade
+    open FShade.Imperative
+
+    let ofEffectInputLayout (layout : EffectInputLayout) (layers : int) (perLayer : Set<string>) (device : Device) : PipelineLayout =
+        
+        failf "not implemented"
 
 [<AbstractClass; Sealed; Extension>]
 type ContextPipelineLayoutExtensions private() =
     [<Extension>]
     static member inline CreatePipelineLayout(this : Device, shaders : array<Shader>, layers : int, perLayer : Set<string>) =
         this |> PipelineLayout.ofShaders shaders layers perLayer
-        
-    [<Extension>]
-    static member inline CreatePipelineLayout(this : Device, info : PipelineInfo, layers : int, perLayer : Set<string>) =
-        this |> PipelineLayout.ofPipelineInfo info layers perLayer
 
     [<Extension>]
-    static member inline CreatePipelineLayout(this : Device, info : FShade.EffectInputLayout, layers : int, perLayer : Set<string>) =
-        this |> PipelineLayout.ofEffectLayout info layers perLayer
-
+    static member inline CreatePipelineLayout(this : Device, layout : FShade.EffectInputLayout, layers : int, perLayer : Set<string>) =
+        this |> PipelineLayout.ofEffectInputLayout layout layers perLayer
 
     [<Extension>]
     static member inline Delete(this : Device, layout : PipelineLayout) =

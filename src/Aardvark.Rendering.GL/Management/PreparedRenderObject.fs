@@ -421,7 +421,8 @@ type ResourceManagerExtensions private() =
         // create all UniformBuffers requested by the program
         let uniformBuffers =
             iface.uniformBuffers
-                |> List.map (fun block ->
+                |> MapExt.toList
+                |> List.map (fun (_,block) ->
                     block.ubBinding, x.CreateUniformBuffer(rj.AttributeScope, block, rj.Uniforms)
                    )
                 |> Map.ofList
@@ -430,7 +431,8 @@ type ResourceManagerExtensions private() =
 
         let storageBuffers = 
             iface.storageBuffers
-                |> List.map (fun buf ->
+                |> MapExt.toList
+                |> List.map (fun (_,buf) ->
                     
                     let buffer = 
                         match rj.Uniforms.TryGetUniform(rj.AttributeScope, Symbol.Create buf.ssbName) with
@@ -468,7 +470,8 @@ type ResourceManagerExtensions private() =
 
         let textures =
             iface.samplers
-                |> List.collect (fun u ->
+                |> MapExt.toList
+                |> List.collect (fun (_,u) ->
                     u.samplerTextures |> List.mapi (fun i  info ->
                         u, i, info
                     )

@@ -2,6 +2,7 @@ Aardvark.Base.Incremental
 Aardvark.Base.Runtime
 Aardvark.Base.Essentials
 FShade
+FShade.GLSL
 FSharp.Core
 Unofficial.OpenTK
 GLSLangSharp

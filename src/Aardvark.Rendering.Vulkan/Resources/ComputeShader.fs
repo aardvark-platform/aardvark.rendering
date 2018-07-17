@@ -11,6 +11,7 @@ open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 open System.Collections.Generic
+open Microsoft.FSharp.Core.LanguagePrimitives.IntrinsicOperators
 
 #nowarn "9"
 #nowarn "51"
@@ -18,6 +19,8 @@ open System.Collections.Generic
 
 type ComputeShader =
     class
+        inherit RefCountedResource
+
         val mutable public Device : Device
         val mutable public ShaderModule : ShaderModule
         val mutable public Layout : PipelineLayout
@@ -25,49 +28,62 @@ type ComputeShader =
         val mutable public TextureNames : Map<string * int, string>
         val mutable public Samplers : Map<string * int, Sampler>
         val mutable public GroupSize : V3i
+        val mutable public CacheName : Symbol
 
         interface IComputeShader with
             member x.Runtime = x.Device.Runtime :> IComputeRuntime
             member x.LocalSize = x.GroupSize
 
+        override x.Destroy() =
+            let device = x.Device
+            VkRaw.vkDestroyPipeline(device.Handle, x.Handle, NativePtr.zero)
 
-        new(d,s,l,p,tn,sd,gs) = { Device = d; ShaderModule = s; Layout = l; Handle = p; TextureNames = tn; Samplers = sd; GroupSize = gs }
+            for (_,s) in Map.toSeq x.Samplers do device.Delete s
+            device.Delete x.Layout
+            device.Delete x.ShaderModule
+
+            x.ShaderModule <- Unchecked.defaultof<_>
+            x.Layout <- Unchecked.defaultof<_>
+            x.Handle <- VkPipeline.Null
+            x.TextureNames <- Map.empty
+            x.Samplers <- Map.empty
+
+
+        new(d,s,l,p,tn,sd,gs) = { inherit RefCountedResource(); Device = d; ShaderModule = s; Layout = l; Handle = p; TextureNames = tn; Samplers = sd; GroupSize = gs; CacheName = Symbol.Empty }
     end
 
 type BindingReference =
-    | UniformRef of buffer : UniformBuffer * offset : int * valueType : UniformType
-    | StorageBufferRef of set : int * binding : int * elementType : UniformType
-    | SampledImageRef of set : int * binding : int * index : int * info : ShaderSamplerType * sampler : Sampler
-    | StorageImageRef of set : int * binding : int * info : ShaderSamplerType
+    | UniformRef of buffer : UniformBuffer * offset : int * valueType : FShade.GLSL.GLSLType
+    | StorageBufferRef of set : int * binding : int * elementType : FShade.GLSL.GLSLType
+    | SampledImageRef of set : int * binding : int * index : int * info : FShade.GLSL.GLSLSamplerType * sampler : Sampler
+    | StorageImageRef of set : int * binding : int * info : FShade.GLSL.GLSLImageType
 
 [<StructuredFormatDisplay("{AsString}")>]
 type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : Map<string, list<BindingReference>>, imageArrays : MapExt<int * int, Option<ImageView * Sampler>[]>, buffers : List<UniformBuffer>) =
     
     
-    static let rec prettyPrimitive (t : PrimitiveType) =
+    static let rec prettyName (t : FShade.GLSL.GLSLType) =
         match t with
-            | PrimitiveType.Bool -> "bool"
-            | PrimitiveType.Float(32) -> "float"
-            | PrimitiveType.Float(64) -> "double"
-            | PrimitiveType.Float(w) -> sprintf "float%d" w
-            | PrimitiveType.Int(32, true) -> "int"
-            | PrimitiveType.Int(w, true) -> sprintf "int%d" w
-            | PrimitiveType.Int(32, false) -> "uint"
-            | PrimitiveType.Int(w, false) -> sprintf "uint%d" w
-            | PrimitiveType.Vector(et, dim) -> sprintf "%s%d" (prettyPrimitive et) dim
-            | PrimitiveType.Matrix(et, dim) -> sprintf "%sx%d" (prettyPrimitive et) dim
-
-    static let rec prettyName (t : UniformType) =
-        match t with
-            | Primitive(t,_,_) -> prettyPrimitive t
-            | Array(et,len,_,_) -> sprintf "%s[%d]" (prettyName et) len
-            | RuntimeArray(et,_,_) -> sprintf "%s[]" (prettyName et) 
-            | Struct layout -> 
-                layout.fields 
-                    |> List.map (fun f -> sprintf "%s : %s" f.name (prettyName f.fieldType))
+            | FShade.GLSL.GLSLType.Bool -> "bool"
+            | FShade.GLSL.GLSLType.Void -> "void"
+            | FShade.GLSL.GLSLType.Float(32) -> "float"
+            | FShade.GLSL.GLSLType.Float(64) -> "double"
+            | FShade.GLSL.GLSLType.Float(w) -> sprintf "float%d" w
+            | FShade.GLSL.GLSLType.Int(true, 32) -> "int"
+            | FShade.GLSL.GLSLType.Int(true, w) -> sprintf "int%d" w
+            | FShade.GLSL.GLSLType.Int(false, 32) -> "uint"
+            | FShade.GLSL.GLSLType.Int(false, w) -> sprintf "uint%d" w
+            | FShade.GLSL.GLSLType.Vec(dim, et) -> sprintf "%s%d" (prettyName et) dim
+            | FShade.GLSL.GLSLType.Mat(r, c, et) -> sprintf "%sx%dx%d" (prettyName et) r c
+            | FShade.GLSL.GLSLType.Struct(name, fields, size) ->
+                fields 
+                    |> List.map (fun (name, typ,_) -> sprintf "%s : %s" name (prettyName typ))
                     |> String.concat "; "
                     |> sprintf "struct { %s }"
-
+            | FShade.GLSL.GLSLType.Array(len, et, _) -> sprintf "%s[%d]" (prettyName et) len 
+            | FShade.GLSL.GLSLType.Image _ -> "image"
+            | FShade.GLSL.GLSLType.Sampler _ -> "sampler"
+            | FShade.GLSL.GLSLType.DynamicArray(t,_) -> sprintf "%s[]" (prettyName t) 
     
     let device = shader.Device
     let lockObj = obj()
@@ -949,25 +965,87 @@ module ``Compute Commands`` =
             
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ComputeShader =  
+    open System.IO
+
+
+    let private cache = Symbol.Create "ComputeShaderCache" 
+
     let private main = CStr.malloc "main"
 
     let delete (shader : ComputeShader) =
-        let device = shader.Device
-        if shader.Handle.IsValid then
+        shader.Device.RemoveCached(cache, shader)
 
-            VkRaw.vkDestroyPipeline(device.Handle, shader.Handle, NativePtr.zero)
+    let toByteArray (shader : ComputeShader) =
+        ShaderProgram.pickler.Pickle( 
+            (
+                shader.ShaderModule.SpirV,
+                shader.ShaderModule.Interface.[ShaderStage.Compute],
+                shader.GroupSize,
+                shader.TextureNames,
+                shader.Samplers |> Map.map (fun _ s -> s.Description)
+            ) 
+        )
 
-            for (_,s) in Map.toSeq shader.Samplers do device.Delete s
-            device.Delete shader.Layout
-            device.Delete shader.ShaderModule
+    let tryOfByteArray (data : byte[]) (device : Device) =
+        try
+            let (spirv : byte[], iface : FShade.GLSL.GLSLShaderInterface, groupSize : V3i, textureNames : Map<string * int, string>, samplers : Map<string * int, SamplerStateDescription>) = 
+                ShaderProgram.pickler.UnPickle data
+                
+            let module_ =
+                device.CreateShaderModule(ShaderStage.Compute, spirv, iface)
 
-            shader.ShaderModule <- Unchecked.defaultof<_>
-            shader.Layout <- Unchecked.defaultof<_>
-            shader.Handle <- VkPipeline.Null
-            shader.TextureNames <- Map.empty
-            shader.Samplers <- Map.empty
+            let layout =
+                device.CreatePipelineLayout([| Shader(module_, ShaderStage.Compute, iface) |], 1, Set.empty)
+                
+            let shaderInfo =
+                VkPipelineShaderStageCreateInfo(
+                    VkStructureType.PipelineShaderStageCreateInfo, 0n,
+                    VkPipelineShaderStageCreateFlags.MinValue,
+                    VkShaderStageFlags.ComputeBit,
+                    module_.Handle,
+                    main,
+                    NativePtr.zero
+                )
 
-    let ofFShade (shader : FShade.ComputeShader) (device : Device) =
+            let mutable pipelineInfo =
+                VkComputePipelineCreateInfo(
+                    VkStructureType.ComputePipelineCreateInfo, 0n,
+                    VkPipelineCreateFlags.None,
+                    shaderInfo,
+                    layout.Handle,
+                    VkPipeline.Null,
+                    0
+                )
+
+            let mutable handle = VkPipeline.Null
+            VkRaw.vkCreateComputePipelines(device.Handle, VkPipelineCache.Null, 1u, &&pipelineInfo, NativePtr.zero, &&handle)
+                |> check "could not create compute pipeline"
+
+            let samplers =
+                samplers |> Map.map (fun _ d -> device.CreateSampler(d))
+
+            ComputeShader(device, module_, layout, handle, textureNames, samplers, groupSize)
+                |> Some
+        with _ ->
+            None
+
+    let private tryRead (file : string) (device : Device) =
+        try
+            if File.Exists file then
+                let data = File.ReadAllBytes file
+                tryOfByteArray data device
+            else
+                None
+        with _ ->
+            None
+            
+    let private write (file : string) (shader : ComputeShader) =
+        try
+            File.WriteAllBytes(file, toByteArray shader)
+        with _ ->
+            ()
+
+    let private ofFShadeInternal (shader : FShade.ComputeShader) (device : Device) =
         let glsl = shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSLVulkan
         
         ShaderProgram.logLines glsl.code
@@ -976,7 +1054,7 @@ module ComputeShader =
             if shader.csLocalSize.AllGreater 0 then shader.csLocalSize
             else V3i.III
 
-        let sm = ShaderModule.ofGLSL ShaderStage.Compute glsl.code device
+        let sm = ShaderModule.ofGLSL ShaderStage.Compute glsl device
 
         match sm.TryGetShader ShaderStage.Compute with
             | (true, shaderInfo) ->
@@ -1016,30 +1094,53 @@ module ComputeShader =
             | _ ->
                 failf "could not create compute shader"
 
+    let ofFShade (shader : FShade.ComputeShader) (device : Device) =
+        device.GetCached(cache, shader, fun shader ->
+            match device.ShaderCachePath with
+                | Some shaderCachePath ->
+                    let fileName = ShaderProgram.hashFileName (shader.csId, shader.csLocalSize)
+                    let file = Path.Combine(shaderCachePath, fileName + ".compute")
+
+                    match tryRead file device with
+                        | Some shader -> 
+                            shader.CacheName <- cache
+                            shader.RefCount <- 1 // leak
+                            shader
+                        | None ->
+                            let shader = ofFShadeInternal shader device
+                            write file shader
+                            shader.CacheName <- cache
+                            shader.RefCount <- 1 // leak
+                            shader
+
+
+                | None -> 
+                    let shader = ofFShadeInternal shader device
+                    shader.CacheName <- cache
+                    shader.RefCount <- 1 // leak
+                    shader
+        )
+
     let ofFunction (f : 'a -> 'b) (device : Device) =
         let shader = FShade.ComputeShader.ofFunction device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize f
         ofFShade shader device
-
-
-
+        
     let private (|UniformBufferBinding|StorageBufferBinding|SampledImageBinding|StorageImageBinding|Other|) (b : DescriptorSetLayoutBinding) =
         match b.DescriptorType with
             | VkDescriptorType.UniformBuffer ->
                 match b.Parameter with
-                    | UniformBlockParameter p -> UniformBufferBinding p.layout
+                    | UniformBlockParameter p -> UniformBufferBinding p
                     | _ -> Other
             | VkDescriptorType.StorageBuffer ->
                 match b.Parameter with
-                    | UniformBlockParameter p ->
-                        match p.layout.fields with
-                            | [f] -> StorageBufferBinding(f.name, f.fieldType)
-                            | _ -> Other
+                    | StorageBufferParameter p ->
+                        StorageBufferBinding(p.ssbName, p.ssbType)
                     | _ ->
                         Other
 
             | VkDescriptorType.CombinedImageSampler ->
                 match b.Parameter with
-                    | ImageParameter i -> SampledImageBinding i
+                    | SamplerParameter i -> SampledImageBinding i
                     | _ -> Other
 
             | VkDescriptorType.StorageImage ->
@@ -1072,12 +1173,12 @@ module ComputeShader =
                         let buffer = device.CreateUniformBuffer layout
                         buffers.Add buffer
 
-                        for field in layout.fields do
+                        for field in layout.ubFields do
                             let name = 
-                                if field.name.StartsWith "cs_" then field.name.Substring 3
-                                else field.name
+                                if field.ufName.StartsWith "cs_" then field.ufName.Substring 3
+                                else field.ufName
                             
-                            let reference = UniformRef(buffer, field.offset, field.fieldType)
+                            let reference = UniformRef(buffer, field.ufOffset, field.ufType)
                             references.[name] <- [reference]
                             
                         descriptors.Add (Descriptor.UniformBuffer(bi, buffer))
@@ -1088,9 +1189,9 @@ module ComputeShader =
                         //descriptors.[bi] <- Descriptor.StorageBuffer(bi, Buffer(device, VkBuffer.Null, DevicePtr.Null))
 
                     | SampledImageBinding img ->
-                        let name = img.name
-                        let images : Option<ImageView * Sampler>[] = Array.zeroCreate img.count 
-                        for i in 0 .. img.count - 1 do
+                        let name = img.samplerName
+                        let images : Option<ImageView * Sampler>[] = Array.zeroCreate img.samplerCount 
+                        for i in 0 .. img.samplerCount - 1 do
                             match Map.tryFind (name, i) shader.Samplers, Map.tryFind (name, i) shader.TextureNames with
                                 | Some sampler, Some texName ->
                                     let reference = SampledImageRef(si, bi, i, img.samplerType, sampler)
@@ -1103,10 +1204,10 @@ module ComputeShader =
 
                     | StorageImageBinding i ->
                         let name = 
-                            if i.name.StartsWith "cs_" then i.name.Substring 3
-                            else i.name
+                            if i.imageName.StartsWith "cs_" then i.imageName.Substring 3
+                            else i.imageName
 
-                        let reference = StorageImageRef(si, bi, i.samplerType)
+                        let reference = StorageImageRef(si, bi, i.imageType)
                         references.[name] <- [reference]
                         //descriptors.[bi] <- Descriptor.StorageImage(bi, Unchecked.defaultof<_>)
 

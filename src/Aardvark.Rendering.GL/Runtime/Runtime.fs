@@ -81,15 +81,6 @@ module private Align =
         V2i(next a v.X, next a v.Y)
 
 type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
-    static let aardStage =
-        LookupTable.lookupTable [
-            FShade.ShaderStage.Vertex, Aardvark.Base.ShaderStage.Vertex
-            FShade.ShaderStage.TessControl, Aardvark.Base.ShaderStage.TessControl
-            FShade.ShaderStage.TessEval, Aardvark.Base.ShaderStage.TessEval
-            FShade.ShaderStage.Geometry, Aardvark.Base.ShaderStage.Geometry
-            FShade.ShaderStage.Fragment, Aardvark.Base.ShaderStage.Fragment
-            FShade.ShaderStage.Compute, Aardvark.Base.ShaderStage.Compute
-        ]
 
     static let versionRx = System.Text.RegularExpressions.Regex @"([0-9]+\.)*[0-9]+"
 
@@ -377,13 +368,13 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 let entries =
                     effect.Shaders 
                         |> Map.toSeq
-                        |> Seq.map (fun (stage,_) -> aardStage stage, "main") 
+                        |> Seq.map (fun (stage,_) -> ShaderStage.ofFShade stage, "main") 
                         |> Dictionary.ofSeq
 
                 let builtIns =
-                    glsl.iface.usedBuiltIns
+                    glsl.iface.shaders
                         |> MapExt.toSeq 
-                        |> Seq.map (fun (k,v) -> aardStage k, v |> MapExt.toSeq |> Map.ofSeq)
+                        |> Seq.map (fun (k,v) -> ShaderStage.ofFShade k, v.shaderBuiltIns |> MapExt.toSeq |> Seq.map (fun (k,v) -> k, v |> MapExt.toSeq |> Seq.map fst |> Set.ofSeq) |> Map.ofSeq)
                         |> Map.ofSeq
 
                     
@@ -400,7 +391,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                         | _ ->
                             ()
 
-                BackendSurface(glsl.code, entries, builtIns, SymDict.empty, samplers, true)
+                BackendSurface(glsl.code, entries, builtIns, SymDict.empty, samplers, true, null)
 
             )
 

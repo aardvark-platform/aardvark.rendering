@@ -2,6 +2,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.26730.10
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "20 - VolumeRendering", "Examples\20 - VolumeRendering\20 - VolumeRendering.fsproj", "{015672E1-0260-4374-83D1-97210F52FB4C}"
+EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "19 - NativeTensors", "Examples\19 - NativeTensors\19 - NativeTensors.fsproj", "{86B49AE2-55FA-42E4-9DE7-B4AD3D3A79AB}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "18 - RenderCommands", "Examples\18 - RenderCommands\18 - RenderCommands.fsproj", "{227587AA-4E5F-4AB6-887A-471DC887131E}"
@@ -122,6 +124,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{015672E1-0260-4374-83D1-97210F52FB4C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{015672E1-0260-4374-83D1-97210F52FB4C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{015672E1-0260-4374-83D1-97210F52FB4C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{015672E1-0260-4374-83D1-97210F52FB4C}.Release|Any CPU.Build.0 = Release|Any CPU
 		{86B49AE2-55FA-42E4-9DE7-B4AD3D3A79AB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{86B49AE2-55FA-42E4-9DE7-B4AD3D3A79AB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{86B49AE2-55FA-42E4-9DE7-B4AD3D3A79AB}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -319,6 +325,7 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{015672E1-0260-4374-83D1-97210F52FB4C} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{86B49AE2-55FA-42E4-9DE7-B4AD3D3A79AB} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{227587AA-4E5F-4AB6-887A-471DC887131E} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{61C4E66D-887B-4AD5-831D-AEDCE7F67CB7} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}

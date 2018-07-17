@@ -5,6 +5,8 @@ open System
 open System.IO
 open System.Diagnostics
 open Aardvark.Fake
+open Fake.AssemblyInfoFile
+
 
 //do MSBuildDefaults <- { MSBuildDefaults with Verbosity = Some Minimal }
 do Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
@@ -14,6 +16,47 @@ DefaultSetup.install ["src/Aardvark.Rendering.sln"]
 #if DEBUG
 do System.Diagnostics.Debugger.Launch() |> ignore
 #endif
+
+
+
+Target "CreateAssemblyInfos" (fun () ->
+    let projects = !!"src/**/*.fsproj" ++ "src/**/*.csproj"
+
+    let version = getGitTag()
+    let currentHash = Git.Information.getCurrentHash()
+
+    for p in projects do
+        let dir = Path.GetDirectoryName(p)
+        let template = Path.Combine(dir, "paket.template")
+        if File.Exists template then
+            let create, infoFile =
+                match Path.GetExtension(p) with 
+                    | ".csproj" -> CreateCSharpAssemblyInfo, "AssemblyInfo.cs"
+                    | _ -> CreateFSharpAssemblyInfo, "AssemblyInfo.fs"
+
+            let assDir = Path.Combine(dir, "Properties")
+
+            if not (Directory.Exists assDir) then
+                Directory.CreateDirectory assDir |> ignore
+
+            let ass = Path.Combine(assDir, infoFile)
+            
+
+            let name = Path.GetFileNameWithoutExtension(p)
+
+
+            create ass [
+                Attribute.Title name
+                Attribute.Description "Aardvark Rendering"
+                Attribute.Version version
+                Attribute.Product "Aardvark.Rendering"
+                Attribute.FileVersion version
+                Attribute.Configuration (if Aardvark.Fake.Startup.config.debug then "Debug" else "Release")
+                Attribute.Metadata("githash", currentHash)
+                Attribute.Copyright "Aardvark Platform Team"
+            ]
+    ()
+)
 
 Target "SourceLink.Test" (fun _ ->
     !! "bin/*.nupkg" 

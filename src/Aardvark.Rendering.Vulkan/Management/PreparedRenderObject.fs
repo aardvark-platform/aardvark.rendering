@@ -109,31 +109,31 @@ type DevicePreparedRenderObjectExtensions private() =
                     ds.Bindings |> Array.choosei (fun i b ->
                         match b.Parameter with
                             | UniformBlockParameter block ->
-                                let buffer = this.CreateUniformBuffer(ro.AttributeScope, block.layout, ro.Uniforms, SymDict.empty)
-                                match buffer with
-                                    | Choice2Of2 buffer ->
-                                        resources.Add buffer
-                                        AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
+                                let buffer = this.CreateUniformBuffer(Ag.emptyScope, block, ro.Uniforms, SymDict.empty)
+                                resources.Add buffer
+                                AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
 
-                                    | Choice1Of2 storage ->
-                                        AdaptiveDescriptor.AdaptiveStorageBuffer (i, storage) |> Some
+                            | StorageBufferParameter block ->
+                                let buffer = this.CreateStorageBuffer(Ag.emptyScope, block, ro.Uniforms, SymDict.empty)
+                                AdaptiveDescriptor.AdaptiveStorageBuffer (i, buffer) |> Some
 
-                            | ImageParameter img ->
-                                match img.description with
+                            | SamplerParameter sam ->
+                                match sam.samplerTextures with
                                     | [] ->
-                                        Log.warn "could not get sampler information for: %A" img
+                                        Log.warn "could not get sampler information for: %A" sam
                                         None
 
                                     | descriptions ->
                                         let viewSam = 
-                                            descriptions |> List.map (fun desc -> 
-                                                let textureName = desc.textureName
-                                                let samplerState = desc.samplerState
+                                            descriptions |> List.map (fun (textureName, samplerState) -> 
+                                                let textureName = Symbol.Create textureName
+                                                let samplerState = samplerState.SamplerStateDescription
+
                                                 match ro.Uniforms.TryGetUniform(Ag.emptyScope, textureName) with
                                                 | Some (:? IMod<ITexture> as tex) ->
 
                                                     let tex = this.CreateImage(tex)
-                                                    let view = this.CreateImageView(img.samplerType, tex)
+                                                    let view = this.CreateImageView(sam.samplerType, tex)
                                                     let sam = this.CreateSampler(Mod.constant samplerState)
 
                                                     Some(view, sam)
@@ -145,6 +145,24 @@ type DevicePreparedRenderObjectExtensions private() =
 
                                         AdaptiveDescriptor.AdaptiveCombinedImageSampler(i, List.toArray viewSam) |> Some
                                 
+
+                            | ImageParameter img ->
+                                let viewSam = 
+                                    let textureName = Symbol.Create img.imageName
+                                    match ro.Uniforms.TryGetUniform(Ag.emptyScope, textureName) with
+                                    | Some (:? IMod<ITexture> as tex) ->
+
+                                        let tex = this.CreateImage(tex)
+                                        let view = this.CreateImageView(img.imageType, tex)
+
+                                        view
+
+                                    | _ ->
+                                        failf "could not find texture: %A" textureName
+
+                                AdaptiveDescriptor.AdaptiveStorageImage(i, viewSam) |> Some
+                                
+                                
                     )
 
                 let res = this.CreateDescriptorSet(ds, Array.toList descriptors)
@@ -152,23 +170,24 @@ type DevicePreparedRenderObjectExtensions private() =
                 res
             )
 
-        let isCompatible (shaderType : ShaderType) (dataType : Type) =
+        let isCompatible (shaderType : FShade.GLSL.GLSLType) (dataType : Type) =
             // TODO: verify type compatibility
             true
 
         let bufferViews =
             programLayout.PipelineInfo.pInputs
-                |> List.sortBy (fun p -> p.location)
+                |> List.sortBy (fun p -> p.paramLocation)
                 |> List.map (fun p ->
+                    let sem = Symbol.Create p.paramSemantic
                     let perInstance, view =
-                        match ro.VertexAttributes.TryGetAttribute p.semantic with
+                        match ro.VertexAttributes.TryGetAttribute sem with
                             | Some att -> false, att
                             | None ->
-                                match ro.InstanceAttributes.TryGetAttribute p.semantic with
+                                match ro.InstanceAttributes.TryGetAttribute sem with
                                     | Some att -> true, att
-                                    | None -> failwithf "could not get vertex data for shader input: %A" p.semantic
+                                    | None -> failf "could not get vertex data for shader input: %A" sem
 
-                    (p.semantic, p.location, perInstance, view)
+                    (sem, p.paramLocation, perInstance, view)
                 )
 
         let buffers =
@@ -271,30 +290,31 @@ type DevicePreparedRenderObjectExtensions private() =
                     ds.Bindings |> Array.choosei (fun i b ->
                         match b.Parameter with
                             | UniformBlockParameter block ->
-                                let buffer = this.CreateUniformBuffer(Ag.emptyScope, block.layout, uniforms, SymDict.empty)
-                                match buffer with
-                                    | Choice2Of2 buffer -> 
-                                        resources.Add buffer
-                                        AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
-                                    | Choice1Of2 buffer -> 
-                                        AdaptiveDescriptor.AdaptiveStorageBuffer (i, buffer) |> Some
+                                let buffer = this.CreateUniformBuffer(Ag.emptyScope, block, uniforms, SymDict.empty)
+                                resources.Add buffer
+                                AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
 
-                            | ImageParameter img ->
-                                match img.description with
+                            | StorageBufferParameter block ->
+                                let buffer = this.CreateStorageBuffer(Ag.emptyScope, block, uniforms, SymDict.empty)
+                                AdaptiveDescriptor.AdaptiveStorageBuffer (i, buffer) |> Some
+
+                            | SamplerParameter sam ->
+                                match sam.samplerTextures with
                                     | [] ->
-                                        Log.warn "could not get sampler information for: %A" img
+                                        Log.warn "could not get sampler information for: %A" sam
                                         None
 
                                     | descriptions ->
                                         let viewSam = 
-                                            descriptions |> List.map (fun desc -> 
-                                                let textureName = desc.textureName
-                                                let samplerState = desc.samplerState
+                                            descriptions |> List.map (fun (textureName, samplerState) -> 
+                                                let textureName = Symbol.Create textureName
+                                                let samplerState = samplerState.SamplerStateDescription
+
                                                 match uniforms.TryGetUniform(Ag.emptyScope, textureName) with
                                                 | Some (:? IMod<ITexture> as tex) ->
 
                                                     let tex = this.CreateImage(tex)
-                                                    let view = this.CreateImageView(img.samplerType, tex)
+                                                    let view = this.CreateImageView(sam.samplerType, tex)
                                                     let sam = this.CreateSampler(Mod.constant samplerState)
 
                                                     Some(view, sam)
@@ -305,6 +325,23 @@ type DevicePreparedRenderObjectExtensions private() =
                                             )
 
                                         AdaptiveDescriptor.AdaptiveCombinedImageSampler(i, List.toArray viewSam) |> Some
+                                
+
+                            | ImageParameter img ->
+                                let viewSam = 
+                                    let textureName = Symbol.Create img.imageName
+                                    match uniforms.TryGetUniform(Ag.emptyScope, textureName) with
+                                    | Some (:? IMod<ITexture> as tex) ->
+
+                                        let tex = this.CreateImage(tex)
+                                        let view = this.CreateImageView(img.imageType, tex)
+
+                                        view
+
+                                    | _ ->
+                                        failf "could not find texture: %A" textureName
+
+                                AdaptiveDescriptor.AdaptiveStorageImage(i, viewSam) |> Some
                                 
                     )
 

@@ -435,6 +435,7 @@ module Resources =
         | AdaptiveUniformBuffer of int * IResourceLocation<UniformBuffer>
         | AdaptiveCombinedImageSampler of int * array<Option<IResourceLocation<ImageView> * IResourceLocation<Sampler>>>
         | AdaptiveStorageBuffer of int * IResourceLocation<Buffer>
+        | AdaptiveStorageImage of int * IResourceLocation<ImageView>
 
     type BufferResource(owner : IResourceCache, key : list<obj>, device : Device, usage : VkBufferUsageFlags, input : IMod<IBuffer>) =
         inherit MutableResourceLocation<IBuffer, Buffer>(
@@ -468,7 +469,7 @@ module Resources =
             }
         )
 
-    type UniformBufferResource(owner : IResourceCache, key : list<obj>, device : Device, layout : UniformBufferLayout, writers : list<IMod * UniformWriters.IWriter>) =
+    type UniformBufferResource(owner : IResourceCache, key : list<obj>, device : Device, layout : FShade.GLSL.GLSLUniformBuffer, writers : list<IMod * UniformWriters.IWriter>) =
         inherit AbstractResourceLocation<UniformBuffer>(owner, key)
         
         let mutable handle : UniformBuffer = Unchecked.defaultof<_>
@@ -523,7 +524,7 @@ module Resources =
             owner, key, 
             input,
             {
-                icreate = fun (e : FShade.Imperative.Module) -> ShaderProgram.ofModule layout e device
+                icreate = fun (e : FShade.Imperative.Module) -> ShaderProgram.ofModule e device
                 idestroy = fun b -> device.Delete b
                 ieagerDestroy = false
             }
@@ -535,7 +536,7 @@ module Resources =
             owner, key, 
             Mod.constant input,
             {
-                icreate = fun (b : ISurface) -> device.CreateShaderProgram(signature, b, top)
+                icreate = fun (b : ISurface) -> device.CreateShaderProgram(b)
                 idestroy = fun b -> device.Delete b
                 ieagerDestroy = false
             }
@@ -578,13 +579,14 @@ module Resources =
         override x.Compute(token) =
             let state = input.GetValue token
 
-            let inputs = prog.pInputs |> List.sortBy (fun p -> p.location)
+            let inputs = prog.pInputs |> List.sortBy (fun p -> p.paramLocation)
 
             let paramsWithInputs =
                 inputs |> List.map (fun p ->
-                    match Map.tryFind p.semantic state with
+                    let sem = Symbol.Create p.paramSemantic
+                    match Map.tryFind sem state with
                         | Some ip -> 
-                            p.location, p, ip
+                            p.paramLocation, p, ip
                         | None ->
                             failf "could not get vertex input-type for %A" p
                 )
@@ -746,6 +748,10 @@ module Resources =
 
                     | AdaptiveStorageBuffer(_,b) ->
                         b.Acquire()
+
+                    | AdaptiveStorageImage(_,v) ->
+                        v.Acquire()
+
                     | AdaptiveUniformBuffer(_,b) ->
                         b.Acquire()
 
@@ -759,6 +765,9 @@ module Resources =
                             match a with
                                 | Some (i,s) -> i.Release(); s.Release()
                                 | None -> ()
+                                
+                    | AdaptiveStorageImage(_,v) ->
+                        v.Release()
                     | AdaptiveStorageBuffer(_,b) ->
                         b.Release()
                     | AdaptiveUniformBuffer(_,b) ->
@@ -784,6 +793,10 @@ module Resources =
 
                                 UniformBuffer(slot,  handle)
                                 
+                            | AdaptiveStorageImage(slot,v) ->
+                                let image = v.Update(token).handle
+                                StorageImage(slot, image)
+
                             | AdaptiveStorageBuffer(slot, b) ->
                                 let buffer = b.Update(token).handle
                                 StorageBuffer(slot, buffer, 0L, buffer.Size)
@@ -1072,7 +1085,7 @@ module Resources =
             //ibo.TryDispose()
             ()
 
-    type ImageViewResource(owner : IResourceCache, key : list<obj>, device : Device, samplerType : ShaderSamplerType, image : IResourceLocation<Image>) =
+    type ImageViewResource(owner : IResourceCache, key : list<obj>, device : Device, samplerType : FShade.GLSL.GLSLSamplerType, image : IResourceLocation<Image>) =
         inherit AbstractResourceLocation<ImageView>(owner, key)
 
         let mutable handle : Option<ImageView> = None
@@ -1107,6 +1120,50 @@ module Resources =
                         | None -> ()
 
                     let h = device.CreateInputImageView(image.handle, samplerType, VkComponentMapping.Identity)
+                    handle <- Some h
+                    viewVersion <- contentVersion
+
+                    { handle = h; version = 0 }
+            else
+                match handle with
+                    | Some h -> { handle = h; version = 0 }
+                    | None -> failwith "[Resource] inconsistent state"
+    
+    type StorageImageViewResource(owner : IResourceCache, key : list<obj>, device : Device, imageType : FShade.GLSL.GLSLImageType, image : IResourceLocation<Image>) =
+        inherit AbstractResourceLocation<ImageView>(owner, key)
+
+        let mutable handle : Option<ImageView> = None
+        let mutable viewVersion = -1
+
+        override x.Create() =
+            image.Acquire()
+
+        override x.Destroy() =
+            match handle with   
+                | Some h -> 
+                    device.Delete h
+                    handle <- None
+                | None -> ()
+            image.Release()
+
+        override x.GetHandle(token : AdaptiveToken) =
+            if x.OutOfDate then
+                let image = image.Update token
+                let contentVersion = image.handle.Version.GetValue token
+
+                let isIdentical =
+                    match handle with
+                        | Some h -> h.Image = image.handle && viewVersion = contentVersion
+                        | None -> false
+
+                if isIdentical then
+                    { handle = handle.Value; version = 0 }
+                else
+                    match handle with
+                        | Some h -> device.Delete h
+                        | None -> ()
+
+                    let h = device.CreateStorageView(image.handle, imageType, VkComponentMapping.Identity)
                     handle <- Some h
                     viewVersion <- contentVersion
 
@@ -1209,26 +1266,39 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateImage(input : IMod<ITexture>) =
         imageCache.GetOrCreate([input :> obj], fun cache key -> new ImageResource(cache, key, device, input))
         
-    member x.CreateImageView(samplerType : ShaderSamplerType, input : IResourceLocation<Image>) =
+    member x.CreateImageView(samplerType : FShade.GLSL.GLSLSamplerType, input : IResourceLocation<Image>) =
         imageViewCache.GetOrCreate([samplerType :> obj; input :> obj], fun cache key -> new ImageViewResource(cache, key, device, samplerType, input))
+        
+    member x.CreateImageView(imageType : FShade.GLSL.GLSLImageType, input : IResourceLocation<Image>) =
+        imageViewCache.GetOrCreate([imageType :> obj; input :> obj], fun cache key -> new StorageImageViewResource(cache, key, device, imageType, input))
         
     member x.CreateSampler(data : IMod<SamplerStateDescription>) =
         samplerCache.GetOrCreate([data :> obj], fun cache key -> new SamplerResource(cache, key, device, data))
         
-    member x.CreateShaderProgram(signature : IFramebufferSignature, data : ISurface, top : IndexedGeometryMode) =
-        let programKey = (signature, data) :> obj
+    member x.CreateShaderProgram(data : ISurface) =
+        let programKey = (data) :> obj
 
         let program = 
             simpleSurfaceCache.GetOrAdd(programKey, fun _ ->
-                device.CreateShaderProgram(signature, data, top)
+                device.CreateShaderProgram(data)
             )
 
+        let resource = 
+            programCache.GetOrCreate([program :> obj], fun cache key -> 
+                { new AbstractResourceLocation<ShaderProgram>(cache, key) with
+                    override x.Create () = ()
+                    override x.Destroy () = ()
+                    override x.GetHandle t = { handle = program; version = 0 }
+                }
+            )
+        program.PipelineLayout, resource
+
+    member x.CreateShaderProgram(signature : RenderPass, data : FShade.Effect, top : IndexedGeometryMode) =
+
+        let program = device.CreateShaderProgram(signature, data, top)
+         
         if FShade.EffectDebugger.isAttached then
-            match data with
-                | :? FShadeSurface as fs ->
-                    FShade.EffectDebugger.saveCode fs.Effect program.Surface.Code
-                | _ ->
-                    ()
+            FShade.EffectDebugger.saveCode data program.Surface
 
         let resource = 
             programCache.GetOrCreate([program :> obj], fun cache key -> 
@@ -1247,10 +1317,10 @@ type ResourceManager(user : IResourceUser, device : Device) =
             prog
         )
 
-    member x.CreateShaderProgram(signature : IFramebufferSignature, data : Aardvark.Base.Surface, top : IndexedGeometryMode) =
+    member x.CreateShaderProgram(signature : RenderPass, data : Aardvark.Base.Surface, top : IndexedGeometryMode) =
         match data with
             | Surface.FShadeSimple effect ->
-                x.CreateShaderProgram(signature, FShadeSurface.Get(effect), top)
+                x.CreateShaderProgram(signature, effect, top)
                 //let module_ = signature.Link(effect, Range1d(0.0, 1.0), false, top)
                 //let layout = FShade.EffectInputLayout.ofModule module_
                 //let layout = device.CreatePipelineLayout(layout, signature.LayerCount, signature.PerLayerUniforms)
@@ -1277,19 +1347,48 @@ type ResourceManager(user : IResourceUser, device : Device) =
                 layout, x.CreateShaderProgram(layout, module_)
 
             | Surface.Backend s -> 
-                
-                x.CreateShaderProgram(signature, s, top)
+                x.CreateShaderProgram(s)
 
             | Surface.None -> 
                 failwith "[Vulkan] encountered empty surface"
-    
-    member x.CreateUniformBuffer(scope : Ag.Scope, layout : UniformBufferLayout, u : IUniformProvider, additional : SymbolDict<IMod>) =
-        let values =
-            layout.fields 
-            |> List.map (fun (f) ->
-                let sem = Symbol.Create f.name
 
-                match Uniforms.tryGetDerivedUniform f.name u with
+    member x.CreateStorageBuffer(scope : Ag.Scope, layout : FShade.GLSL.GLSLStorageBuffer, u : IUniformProvider, additional : SymbolDict<IMod>) =
+        let value =
+            let sem = Symbol.Create layout.ssbName
+
+            match Uniforms.tryGetDerivedUniform layout.ssbName u with
+                | Some r -> r
+                | None -> 
+                    match u.TryGetUniform(scope, sem) with
+                        | Some v -> v
+                        | None -> 
+                            match additional.TryGetValue sem with
+                                | (true, m) -> m
+                                | _ -> failwithf "[Vulkan] could not get storage buffer: %A" layout.ssbName
+   
+
+
+        let usage = VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.StorageBufferBit
+
+        bufferCache.GetOrCreate([usage :> obj; value :> obj], fun cache key ->
+           
+            let buffer =
+                Mod.custom (fun t ->
+                    match value.GetValue t with
+                    | :? Array as a -> ArrayBuffer(a) :> IBuffer
+                    | :? IBuffer as b -> b
+                    | _ -> failf "invalid storage buffer"
+                )
+            new BufferResource(cache, key, device, usage, buffer)
+        ) 
+
+    member x.CreateUniformBuffer(scope : Ag.Scope, layout : FShade.GLSL.GLSLUniformBuffer, u : IUniformProvider, additional : SymbolDict<IMod>) =
+        let values =
+            layout.ubFields 
+            |> List.map (fun (f) ->
+                let sem = Symbol.Create f.ufName
+
+                match Uniforms.tryGetDerivedUniform f.ufName u with
                     | Some r -> f, r
                     | None -> 
                         match u.TryGetUniform(scope, sem) with
@@ -1300,32 +1399,16 @@ type ResourceManager(user : IResourceUser, device : Device) =
                                     | _ -> failwithf "[Vulkan] could not get uniform: %A" f
             )
 
-        match layout.size, layout.fields with
-            | Dynamic, [field] ->
-                let usage = VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.StorageBufferBit
 
-                bufferCache.GetOrCreate([usage :> obj; values :> obj], fun cache key ->
-                    let _,value = values |> List.head
-                    let buffer =
-                        Mod.custom (fun t ->
-                            match value.GetValue t with
-                            | :? Array as a -> ArrayBuffer(a) :> IBuffer
-                            | :? IBuffer as b -> b
-                            | _ -> failf "invalid storage buffer"
-                        )
-                    new BufferResource(cache, key, device, usage, buffer)
-                ) |> Choice1Of2
+        let writers = 
+            values |> List.map (fun (target, m) ->
+                match m.GetType() with
+                    | ModOf tSource -> m, UniformWriters.getWriter target.ufOffset target.ufType tSource
+                    | t -> failwithf "[UniformBuffer] unexpected input-type %A" t
+            )
 
-            | _ -> 
-                let writers = 
-                    values |> List.map (fun (target, m) ->
-                        match m.GetType() with
-                            | ModOf tSource -> m, UniformWriters.getWriter target.offset target.fieldType tSource
-                            | t -> failwithf "[UniformBuffer] unexpected input-type %A" t
-                    )
-
-                let key = (layout :> obj) :: (values |> List.map (fun (_,v) -> v :> obj))
-                uniformBufferCache.GetOrCreate(key, fun cache key -> UniformBufferResource(cache, key, device, layout, writers)) |> Choice2Of2
+        let key = (layout :> obj) :: (values |> List.map (fun (_,v) -> v :> obj))
+        uniformBufferCache.GetOrCreate(key, fun cache key -> UniformBufferResource(cache, key, device, layout, writers))
 
     member x.CreateDescriptorSet(layout : DescriptorSetLayout, bindings : list<AdaptiveDescriptor>) =
         descriptorSetCache.GetOrCreate([layout :> obj; bindings :> obj], fun cache key -> new DescriptorSetResource(cache, key, layout, bindings))

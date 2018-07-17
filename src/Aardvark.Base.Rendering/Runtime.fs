@@ -679,7 +679,28 @@ type ShaderStage =
     | Fragment = 5
     | Compute = 6
 
-type BackendSurface(code : string, entryPoints : Dictionary<ShaderStage, string>, builtIns : Map<ShaderStage, Map<FShade.Imperative.ParameterKind, Set<string>>>, uniforms : SymbolDict<IMod>, samplers : Dictionary<string * int, SamplerDescription>, expectsRowMajorMatrices : bool) =
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module ShaderStage =
+    let ofFShade =
+        LookupTable.lookupTable [
+            FShade.ShaderStage.Vertex,      ShaderStage.Vertex
+            FShade.ShaderStage.TessControl, ShaderStage.TessControl
+            FShade.ShaderStage.TessEval,    ShaderStage.TessEval
+            FShade.ShaderStage.Geometry,    ShaderStage.Geometry
+            FShade.ShaderStage.Fragment,    ShaderStage.Fragment
+            FShade.ShaderStage.Compute,     ShaderStage.Compute
+        ]
+
+    let toFShade =
+        LookupTable.lookupTable [
+            ShaderStage.Vertex,         FShade.ShaderStage.Vertex
+            ShaderStage.TessControl,    FShade.ShaderStage.TessControl
+            ShaderStage.TessEval,       FShade.ShaderStage.TessEval
+            ShaderStage.Geometry,       FShade.ShaderStage.Geometry
+            ShaderStage.Fragment,       FShade.ShaderStage.Fragment
+            ShaderStage.Compute,        FShade.ShaderStage.Compute
+        ]
+type BackendSurface(code : string, entryPoints : Dictionary<ShaderStage, string>, builtIns : Map<ShaderStage, Map<FShade.Imperative.ParameterKind, Set<string>>>, uniforms : SymbolDict<IMod>, samplers : Dictionary<string * int, SamplerDescription>, expectsRowMajorMatrices : bool, iface : obj) =
     interface ISurface
     member x.Code = code
     member x.EntryPoints = entryPoints
@@ -687,10 +708,12 @@ type BackendSurface(code : string, entryPoints : Dictionary<ShaderStage, string>
     member x.Uniforms = uniforms
     member x.Samplers = samplers
     member x.ExpectsRowMajorMatrices = expectsRowMajorMatrices
-    new(code, entryPoints) = BackendSurface(code, entryPoints, Map.empty, SymDict.empty, Dictionary.empty, false)
-    new(code, entryPoints, builtIns) = BackendSurface(code, entryPoints, builtIns, SymDict.empty, Dictionary.empty, false)
-    new(code, entryPoints, builtIns, uniforms) = BackendSurface(code, entryPoints, builtIns, uniforms, Dictionary.empty, false)
-    new(code, entryPoints, builtIns, uniforms, samplers) = BackendSurface(code, entryPoints, builtIns, uniforms, samplers, false)
+    member x.Interface = iface
+
+    new(code, entryPoints) = BackendSurface(code, entryPoints, Map.empty, SymDict.empty, Dictionary.empty, false, null)
+    new(code, entryPoints, builtIns) = BackendSurface(code, entryPoints, builtIns, SymDict.empty, Dictionary.empty, false, null)
+    new(code, entryPoints, builtIns, uniforms) = BackendSurface(code, entryPoints, builtIns, uniforms, Dictionary.empty, false, null)
+    new(code, entryPoints, builtIns, uniforms, samplers) = BackendSurface(code, entryPoints, builtIns, uniforms, samplers, false, null)
 
 
 type IGeometryPool =
@@ -939,6 +962,6 @@ module NullResources =
         match m with
             | :? SingleValueBuffer -> Mod.constant false
             | _ -> 
-              [m :> IAdaptiveObject] |> Mod.mapCustom (fun s ->
-                    not <| isNullResource (m.GetValue s)
-              ) 
+                Mod.custom (fun t ->
+                    not <| isNullResource (m.GetValue t)
+                )

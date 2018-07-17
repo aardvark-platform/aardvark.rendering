@@ -68,8 +68,8 @@ module Mod =
                 
                 let result = 
                     c |> Mod.bind (fun f ->
-                        [initial :> IAdaptiveObject; f :> IAdaptiveObject] |> Mod.mapCustom (fun s -> 
-                            f.Run(s,(initial.GetValue s))
+                        Mod.custom (fun t ->
+                            f.Run(t,(initial.GetValue t))
                         )
                     )
 

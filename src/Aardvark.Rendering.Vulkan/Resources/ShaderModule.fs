@@ -16,7 +16,7 @@ type ShaderModule =
     class
         inherit Resource<VkShaderModule>
         val mutable public Stage : ShaderStage
-        val mutable public Interface : Map<ShaderStage, ShaderInfo>
+        val mutable public Interface : Map<ShaderStage, FShade.GLSL.GLSLShaderInterface>
         val mutable public SpirV : byte[]
 
         member x.TryGetShader(stage : ShaderStage, [<Out>] shader : byref<Shader>) =
@@ -40,10 +40,10 @@ and Shader =
     class
         val mutable public Module : ShaderModule
         val mutable public Stage : ShaderStage
-        val mutable public Interface : ShaderInfo
+        val mutable public Interface : FShade.GLSL.GLSLShaderInterface
 
-        member x.ResolveSamplerDescriptions (resolve : ShaderTextureInfo -> list<SamplerDescription>) =
-            Shader(x.Module, x.Stage, x.Interface |> ShaderInfo.resolveSamplerDescriptions resolve)
+        //member x.ResolveSamplerDescriptions (resolve : ShaderTextureInfo -> list<SamplerDescription>) =
+        //    Shader(x.Module, x.Stage, x.Interface |> ShaderInfo.resolveSamplerDescriptions resolve)
 
         override x.GetHashCode() = HashCode.Combine(x.Module.GetHashCode(), x.Stage.GetHashCode())
         override x.Equals o =
@@ -83,29 +83,24 @@ module ShaderModule =
 
             handle
         )
+        
+    let ofGLSL (stage : ShaderStage) (info : FShade.GLSL.GLSLShader) (device : Device) =
+        let siface = info.iface.shaders.[ShaderStage.toFShade stage]
+        match GLSLang.GLSLang.tryCompile (glslangStage stage) siface.shaderEntry [string stage] info.code with
+            | Some binary, _ ->
+                let iface = Map.ofList [stage, siface]
+                let handle = device |> createRaw binary
+                let result = ShaderModule(device, handle, stage, iface, binary)
+                result
+            | None, err ->
+                Log.error "[Vulkan] %A shader compilation failed: %A" stage err
+                failf "%A shader compilation failed: %A" stage err
 
-    let ofBinary (stage : ShaderStage) (binary : byte[]) (device : Device) =
-        let iface = ShaderInfo.ofBinary binary
-        let handle = device |> createRaw binary
-        let result = ShaderModule(device, handle, stage, iface, binary)
-        result
-
-    let ofBinaryWithInfo (stage : ShaderStage) (info : ShaderInfo) (binary : byte[]) (device : Device) =
+    let ofBinaryWithInfo (stage : ShaderStage) (info : FShade.GLSL.GLSLShaderInterface) (binary : byte[]) (device : Device) =
         let iface = Map.ofList [stage, info]
         let handle = device |> createRaw binary
         let result = ShaderModule(device, handle, stage, iface, binary)
         result
-
-    let ofGLSL (stage : ShaderStage) (code : string) (device : Device) =
-        match GLSLang.GLSLang.tryCompile (glslangStage stage) "main" [string stage] code with
-            | Some binary, _ ->
-                let handle = device |> createRaw binary
-                let iface = ShaderInfo.ofBinary binary
-                let result = ShaderModule(device, handle, stage, iface, binary)
-                result
-            | None, err ->
-                Log.error "%s" err
-                failf "shader compiler returned errors %A" err
 
     let delete (shader : ShaderModule) (device : Device) =
         if shader.Handle.IsValid then
@@ -121,18 +116,20 @@ module ShaderModule =
             | _ -> None
 
 
+
+
 [<AbstractClass; Sealed; Extension>]
 type ContextShaderModuleExtensions private() =
-    [<Extension>]
-    static member inline CreateShaderModule(this : Device, stage : ShaderStage, glsl : string) =
-        this |> ShaderModule.ofGLSL stage glsl
+    //[<Extension>]
+    //static member inline CreateShaderModule(this : Device, stage : ShaderStage, glsl : string) =
+    //    this |> ShaderModule.ofGLSL stage glsl
 
-    [<Extension>]
-    static member inline CreateShaderModule(this : Device, stage : ShaderStage, spirv : byte[]) =
-        this |> ShaderModule.ofBinary stage spirv
+    //[<Extension>]
+    //static member inline CreateShaderModule(this : Device, stage : ShaderStage, spirv : byte[]) =
+    //    this |> ShaderModule.ofBinary stage spirv
         
     [<Extension>]
-    static member inline CreateShaderModule(this : Device, stage : ShaderStage, spirv : byte[], info : ShaderInfo) =
+    static member inline CreateShaderModule(this : Device, stage : ShaderStage, spirv : byte[], info : FShade.GLSL.GLSLShaderInterface) =
         this |> ShaderModule.ofBinaryWithInfo stage info spirv
         
     [<Extension>]

@@ -48,13 +48,13 @@ module Pipeline =
 
         let prog = desc.shaderProgram
 
-        let inputs = prog.Inputs |> List.sortBy (fun p -> p.location)
+        let inputs = prog.Inputs |> List.sortBy (fun p -> p.paramLocation)
 
         let paramsWithInputs =
             inputs |> List.map (fun p ->
-                match Map.tryFind p.semantic desc.vertexInputState with
+                match Map.tryFind (Symbol.Create p.paramSemantic) desc.vertexInputState with
                     | Some ip -> 
-                        p.location, p, ip
+                        p.paramLocation, p, ip
                     | None ->
                         failf "could not get vertex input-type for %A" p
             )
