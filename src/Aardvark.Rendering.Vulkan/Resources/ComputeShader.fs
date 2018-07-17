@@ -1095,7 +1095,7 @@ module ComputeShader =
                 failf "could not create compute shader"
 
     let ofFShade (shader : FShade.ComputeShader) (device : Device) =
-        device.GetCached(cache, (shader.csId, shader.csLocalSize), fun _ ->
+        device.GetCached(cache, shader, fun shader ->
             match device.ShaderCachePath with
                 | Some shaderCachePath ->
                     let fileName = ShaderProgram.hashFileName (shader.csId, shader.csLocalSize)
