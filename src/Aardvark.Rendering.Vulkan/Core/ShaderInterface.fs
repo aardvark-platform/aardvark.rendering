@@ -100,7 +100,7 @@ type TessellationInfo =
         /// Tessellation flags specifying execution aspects of the  shader
         flags           : TessellationFlags
         /// The number of vertices in the output patch produced by the tessellation control shader, which also specifies the number of times the tessellation control shader is invoked.
-        outputVertices  : int
+        inputPatchSize  : int
     }
 
 type GeometryInfo =

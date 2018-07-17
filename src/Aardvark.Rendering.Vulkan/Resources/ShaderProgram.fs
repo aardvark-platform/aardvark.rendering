@@ -83,16 +83,16 @@ module private FShadeAdapter =
                 
         }
 
-    let tessControlInfo (iface : GLSLShaderInterface) =
+    let tessControlInfo (ctrl : GLSLShaderInterface) (eval : GLSLShaderInterface) =
         {
             
-            outputVertices =
-                iface.shaderDecorations 
-                |> List.tryPick (function GLSLMaxVertices v -> Some v | _ -> None)
+            inputPatchSize =
+                ctrl.shaderDecorations 
+                |> List.tryPick (function GLSLInputTopology (InputTopology.Patch v) -> Some v | _ -> None)
                 |> Option.defaultValue 1
         
             flags =
-                iface.shaderDecorations
+                eval.shaderDecorations
                 |> List.fold (fun f d -> f ||| toTessellationFlags d) TessellationFlags.None
                 
         }
@@ -148,7 +148,12 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
         let iface = shader.Interface
         match iface.shaderStage with
             | FShade.ShaderStage.Geometry -> geometryInfo <- Some <| FShadeAdapter.geometryInfo iface
-            | FShade.ShaderStage.TessControl -> tessInfo <- Some <| FShadeAdapter.tessControlInfo iface
+            | FShade.ShaderStage.TessControl -> 
+                match shaders |> Array.tryFind (fun (s : Shader) -> s.Interface.shaderStage = FShade.ShaderStage.TessEval) with
+                    | Some eval -> 
+                        tessInfo <- Some <| FShadeAdapter.tessControlInfo iface eval.Interface
+                    | None ->
+                        ()
             | FShade.ShaderStage.Fragment-> fragInfo <- Some <| FShadeAdapter.fragmentInfo iface
             | _ -> ()
 
@@ -156,13 +161,13 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
         match tessInfo, geometryInfo with
             | Some i, _ ->
                 let flags = i.flags
-                match i.outputVertices with
+                match i.inputPatchSize with
                     | 1 -> Set.singleton IndexedGeometryMode.PointList
                     | 2 -> Set.ofList [ IndexedGeometryMode.LineList; IndexedGeometryMode.LineStrip ]
                     | 3 -> Set.ofList [ IndexedGeometryMode.TriangleList; IndexedGeometryMode.TriangleStrip ]
                     | 4 -> Set.ofList [ IndexedGeometryMode.LineAdjacencyList; IndexedGeometryMode.QuadList ]
                     | 6 -> Set.ofList [ IndexedGeometryMode.TriangleAdjacencyList ]
-                    | _ -> failf "bad tess-control vertex-count: %A" i.outputVertices
+                    | _ -> failf "bad tess-control vertex-count: %A" i.inputPatchSize
 
             | None, Some i ->
                 let flags = i.flags
@@ -222,7 +227,7 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
     member x.ShaderCreateInfos = createInfos
     member x.TessellationPatchSize = 
         match tessInfo with
-            | Some i -> i.outputVertices
+            | Some i -> i.inputPatchSize
             | None -> 0
 
     override x.Destroy() =
