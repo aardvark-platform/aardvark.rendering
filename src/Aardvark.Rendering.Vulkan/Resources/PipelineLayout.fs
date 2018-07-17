@@ -123,7 +123,7 @@ module GLSLType =
     let rec sizeof (t : GLSLType) =
         match t with
             | Bool -> 4
-            | Int(_,b) -> b / 32
+            | Int(_,b) -> b / 8
             | Float(64 | 32) -> 4
             | Float(w) -> w / 4
             | Vec(d,e) -> d * sizeof e
@@ -163,7 +163,7 @@ type PipelineLayout =
             member x.ColorAttachments = 
                 let a : AttachmentSignature = failwith ""
                 x.PipelineInfo.pOutputs 
-                    |> List.map (fun p -> p.paramLocation, (Symbol.Create p.paramName, { samples = 1; format = RenderbufferFormat.ofGLSLType p.paramType })) 
+                    |> List.map (fun p -> p.paramLocation, (Symbol.Create p.paramSemantic, { samples = 1; format = RenderbufferFormat.ofGLSLType p.paramType })) 
                     |> Map.ofList
             member x.IsAssignableFrom _ = false
             member x.Images = Map.empty

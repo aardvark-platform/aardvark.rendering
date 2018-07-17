@@ -48,11 +48,11 @@ type ResourceManagerExtensions private() =
 
         let inputs = 
             layout.PipelineInfo.pInputs |> List.map (fun p ->
-                let name = Symbol.Create p.paramName
+                let name = Symbol.Create p.paramSemantic
                 match Map.tryFind name state.vertexInputTypes with
                     | Some t -> (name, (false, t))
                     | None -> 
-                        match Map.tryFind p.paramName state.perGeometryUniforms with
+                        match Map.tryFind p.paramSemantic state.perGeometryUniforms with
                             | Some t -> (name, (true, GLSLType.toType p.paramType))
                             | None -> failf "could not get shader input %A" name
             )
@@ -1752,10 +1752,10 @@ module private RuntimeCommands =
         let pipelineInfo = pipeline.ppLayout.PipelineInfo
 
         let instanceInputs =
-            pipelineInfo.pInputs |> List.choose (fun i -> match Map.tryFind i.paramName state.perGeometryUniforms with | Some typ -> Some(i.paramName, (i, typ)) | _ -> None) |> Map.ofList
+            pipelineInfo.pInputs |> List.choose (fun i -> match Map.tryFind i.paramSemantic state.perGeometryUniforms with | Some typ -> Some(i.paramName, (i, typ)) | _ -> None) |> Map.ofList
             
         let vertexInputs =
-            pipelineInfo.pInputs |> List.choose (fun i -> match Map.tryFind (Symbol.Create i.paramName) state.vertexInputTypes with | Some typ -> Some(Symbol.Create i.paramName, (i, typ)) | _ -> None) |> Map.ofList
+            pipelineInfo.pInputs |> List.choose (fun i -> match Map.tryFind (Symbol.Create i.paramSemantic) state.vertexInputTypes with | Some typ -> Some(Symbol.Create i.paramName, (i, typ)) | _ -> None) |> Map.ofList
 
   
 
@@ -1771,7 +1771,7 @@ module private RuntimeCommands =
             let sems = Array.zeroCreate slots
 
             for s in pipelineInfo.pInputs do
-                sems.[s.paramLocation] <- Symbol.Create s.paramName
+                sems.[s.paramLocation] <- Symbol.Create s.paramSemantic
             sems
 
         let vertexChunkSize = 1048576

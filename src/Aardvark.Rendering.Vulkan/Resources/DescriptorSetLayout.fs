@@ -61,7 +61,7 @@ module DescriptorSetLayout =
 
     let create (bindings : array<DescriptorSetLayoutBinding>) (device : Device) =
         let arr = bindings |> Array.map (fun b -> b.Handle)
-
+        assert (bindings |> Seq.mapi (fun i b -> b.Binding = i) |> Seq.forall id)
         arr |> NativePtr.withA (fun pArr ->
             let mutable info =
                 VkDescriptorSetLayoutCreateInfo(

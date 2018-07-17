@@ -283,7 +283,7 @@ module ShaderProgram =
             sb.Append(lastLine) |> ignore
             Report.Line("{0}", sb.ToString())
 
-    let private ofGLSLInteral (layout : Option<PipelineLayout>) (iface : FShade.GLSL.GLSLProgramInterface) (code : string) (device : Device) =
+    let private ofGLSLInteral (layout : Option<PipelineLayout>) (iface : FShade.GLSL.GLSLProgramInterface) (code : string) (layers : int) (perLayer : Set<string>) (device : Device) =
         let code = 
             layoutRx.Replace(code, fun m ->
                 let set = m.Groups.["set"].Value
@@ -335,13 +335,13 @@ module ShaderProgram =
                 |> Array.map (fun (stage, binary, iface) ->
                     let shaderModule = device.CreateShaderModule(stage, binary, iface)
                     let shader = shaderModule.[stage]
-                    shader //.ResolveSamplerDescriptions tryGetSamplerDescription
+                    shader 
                 )
 
         let layout = 
             match layout with
                 | Some l -> l.AddRef(); l
-                | None -> device.CreatePipelineLayout(shaders, 1, Set.empty)
+                | None -> device.CreatePipelineLayout(shaders, layers, perLayer)
 
         new ShaderProgram(device, shaders, layout, code, iface)
 
@@ -350,7 +350,7 @@ module ShaderProgram =
     let private moduleCache = Symbol.Create "moduleCache"
 
     let ofGLSL (code : FShade.GLSL.GLSLShader) (device : Device) =
-        ofGLSLInteral None code.iface code.code device
+        ofGLSLInteral None code.iface code.code 1 Set.empty device
 
     let internal pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
 
@@ -366,9 +366,11 @@ module ShaderProgram =
 
     type private ShaderProgramData =
         {
-            glsl    : string
-            code    : Map<ShaderStage, byte[]>
-            iface   : GLSLProgramInterface
+            glsl        : string
+            code        : Map<ShaderStage, byte[]>
+            iface       : GLSLProgramInterface
+            layers      : int
+            perLayer    : Set<string>
         }
 
     let toByteArray (program : ShaderProgram) =
@@ -376,6 +378,8 @@ module ShaderProgram =
             glsl = program.GLSL
             code = program.Shaders |> Seq.map (fun s -> s.Module.Stage, s.Module.SpirV) |> Map.ofSeq
             iface = program.Interface
+            layers = program.PipelineLayout.LayerCount
+            perLayer = program.PipelineLayout.PerLayerUniforms
         }
 
     let tryOfByteArray (data : byte[]) (device : Device) =
@@ -391,7 +395,15 @@ module ShaderProgram =
                     new Shader(module_, stage, iface)
                     
                 )
-            let layout = device.CreatePipelineLayout(shaders, 1, Set.empty)
+                
+            Report.Begin(4, "Interface")
+            let str = FShade.GLSL.GLSLProgramInterface.toString data.iface
+            for line in str.Split([|"\r\n"|], StringSplitOptions.None) do
+                Report.Line(4, "{0}", line)
+            Report.End(4) |> ignore
+
+
+            let layout = device.CreatePipelineLayout(shaders, data.layers, data.perLayer)
 
             let program = new ShaderProgram(device, shaders, layout, data.glsl, data.iface)
             Some program
@@ -408,18 +420,22 @@ module ShaderProgram =
         hash.Hash |> Guid |> string
 
     let private tryRead (file : string) (device : Device) : Option<ShaderProgram> =
-        try
-            if File.Exists file then
+        if File.Exists file then
+            Report.Begin(4, "[Vulkan] loading shader {0}", Path.GetFileName file)
+            try
                 let data = File.ReadAllBytes file
                 match tryOfByteArray data device with
                     | Some c -> 
+                        Report.End(4) |> ignore
                         Some c
                     | None ->
                         Log.warn "[Vulkan] bad shader cache %s" (Path.GetFileName file)
+                        Report.End(4) |> ignore
                         None
-            else
+            with _ ->
+                Report.End(4) |> ignore
                 None
-        with _ ->
+        else
             None
     
     let private write (file : string) (program : ShaderProgram) =
