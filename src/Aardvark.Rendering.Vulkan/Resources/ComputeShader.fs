@@ -981,14 +981,13 @@ module ComputeShader =
                 shader.ShaderModule.SpirV,
                 shader.ShaderModule.Interface.[ShaderStage.Compute],
                 shader.GroupSize,
-                shader.TextureNames,
-                shader.Samplers |> Map.map (fun _ s -> s.Description)
+                shader.TextureNames
             ) 
         )
 
     let tryOfByteArray (data : byte[]) (device : Device) =
         try
-            let (spirv : byte[], iface : FShade.GLSL.GLSLShaderInterface, groupSize : V3i, textureNames : Map<string * int, string>, samplers : Map<string * int, SamplerStateDescription>) = 
+            let (spirv : byte[], iface : FShade.GLSL.GLSLShaderInterface, groupSize : V3i, textureNames : Map<string * int, string>) = 
                 ShaderProgram.pickler.UnPickle data
                 
             let module_ =
@@ -1020,10 +1019,16 @@ module ComputeShader =
             let mutable handle = VkPipeline.Null
             VkRaw.vkCreateComputePipelines(device.Handle, VkPipelineCache.Null, 1u, &&pipelineInfo, NativePtr.zero, &&handle)
                 |> check "could not create compute pipeline"
-
+                
             let samplers =
-                samplers |> Map.map (fun _ d -> device.CreateSampler(d))
-
+                iface.shaderSamplers |> Seq.collect (fun samName ->
+                    let sam = iface.program.samplers.[samName]
+                    sam.samplerTextures |> Seq.mapi (fun i (_, state) ->
+                        (samName, i), device.CreateSampler state.SamplerStateDescription
+                    )
+                )
+                |> Map.ofSeq
+                
             ComputeShader(device, module_, layout, handle, textureNames, samplers, groupSize)
                 |> Some
         with _ ->
