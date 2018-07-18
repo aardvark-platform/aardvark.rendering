@@ -138,7 +138,7 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
                 |> check "could not get physical devices"
         )
 
-        devices |> Array.map (fun d -> PhysicalDevice(this, d, extensions))
+        devices |> Array.map (fun d -> PhysicalDevice(this, d, extensions, apiVersion))
 
     let groups =    
         if apiVersion >= Version(1,1) then
@@ -160,7 +160,7 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
                         let handle = d.physicalDevices.[ii]
                         devices |> Array.find (fun dd -> dd.Handle = handle)
                     )
-                PhysicalDeviceGroup(this, devices, extensions)
+                PhysicalDeviceGroup(this, devices, extensions, apiVersion)
             )
             |> Array.filter (fun g -> g.Devices.Length > 1)
         else
@@ -175,7 +175,7 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
     override x.Release() =
         VkRaw.vkDestroyInstance(instance, NativePtr.zero)
         instance <- VkInstance.Zero
-
+        
     member x.EnabledLayers = layers
     member x.EnabledExtensions = extensions
 
@@ -295,7 +295,7 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
 
         )
 
-and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enabledInstanceExtensions : list<string>) =
+and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enabledInstanceExtensions : list<string>, apiVersion : Version) =
     static let allFormats = Enum.GetValues(typeof<VkFormat>) |> unbox<VkFormat[]>
 
     let availableLayers = 
@@ -328,47 +328,55 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
 
 
     let maxAllocationSize, maxPerSetDescriptors =
-        let mutable main3 = 
-            VkPhysicalDeviceMaintenance3Properties(
-                VkStructureType.PhysicalDeviceMaintenance3Properties, 0n, 10u, 10UL
-            )
+        if apiVersion >= Version(1,1,0) then
+            let mutable main3 = 
+                VkPhysicalDeviceMaintenance3Properties(
+                    VkStructureType.PhysicalDeviceMaintenance3Properties, 0n, 10u, 10UL
+                )
 
-        let mutable props = 
-            VkPhysicalDeviceProperties2KHR(
-                VkStructureType.PhysicalDeviceProperties2,
-                NativePtr.toNativeInt &&main3,
-                VkPhysicalDeviceProperties()
-            )
+            let mutable props = 
+                VkPhysicalDeviceProperties2KHR(
+                    VkStructureType.PhysicalDeviceProperties2,
+                    NativePtr.toNativeInt &&main3,
+                    VkPhysicalDeviceProperties()
+                )
 
-        VkRaw.vkGetPhysicalDeviceProperties2(handle, &&props)
+            VkRaw.vkGetPhysicalDeviceProperties2(handle, &&props)
 
 
-        let maxMemoryAllocationSize = min (uint64 Int64.MaxValue) main3.maxMemoryAllocationSize |> int64
-        let maxPerSetDescriptors = min (uint32 Int32.MaxValue) main3.maxPerSetDescriptors |> int
+            let maxMemoryAllocationSize = min (uint64 Int64.MaxValue) main3.maxMemoryAllocationSize |> int64
+            let maxPerSetDescriptors = min (uint32 Int32.MaxValue) main3.maxPerSetDescriptors |> int
 
-        maxMemoryAllocationSize, maxPerSetDescriptors
+            maxMemoryAllocationSize, maxPerSetDescriptors
+        else
+            Int64.MaxValue, Int32.MaxValue
   
     let uniqueId, deviceMask =
-        let mutable id =
-            KHRExternalMemoryCapabilities.VkPhysicalDeviceIDPropertiesKHR(
-                VkStructureType.PhysicalDeviceIdProperties,
-                0n,
-                Guid.Empty,
-                Guid.Empty,
-                byte_8 (),
-                0u,
-                0u
-            )
+        if apiVersion >= Version(1,1,0) then
+            let mutable id =
+                KHRExternalMemoryCapabilities.VkPhysicalDeviceIDPropertiesKHR(
+                    VkStructureType.PhysicalDeviceIdProperties,
+                    0n,
+                    Guid.Empty,
+                    Guid.Empty,
+                    byte_8 (),
+                    0u,
+                    0u
+                )
             
-        let mutable khrProps = 
-            VkPhysicalDeviceProperties2KHR(
-                VkStructureType.PhysicalDeviceProperties2,
-                NativePtr.toNativeInt &&id,
-                VkPhysicalDeviceProperties()
-            )
-        VkRaw.vkGetPhysicalDeviceProperties2(handle, &&khrProps)
-        let uid = sprintf "{ GUID = %A; Mask = %d }" id.deviceUUID id.deviceNodeMask
-        uid, id.deviceNodeMask
+            let mutable khrProps = 
+                VkPhysicalDeviceProperties2KHR(
+                    VkStructureType.PhysicalDeviceProperties2,
+                    NativePtr.toNativeInt &&id,
+                    VkPhysicalDeviceProperties()
+                )
+            VkRaw.vkGetPhysicalDeviceProperties2(handle, &&khrProps)
+            let uid = sprintf "{ GUID = %A; Mask = %d }" id.deviceUUID id.deviceNodeMask
+            uid, id.deviceNodeMask
+        else
+            let uid = Guid.NewGuid() |> string
+            let mask = 1u
+            uid, mask
      
 
     let limits = DeviceLimits.ofVkDeviceLimits (Mem maxAllocationSize) properties.limits
@@ -466,8 +474,8 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
         sprintf "{ name = %s; type = %A; api = %A }" name x.Type x.APIVersion
     
 
-and PhysicalDeviceGroup internal(instance : Instance, devices : PhysicalDevice[], enabledInstanceExtensions : list<string>) =
-    inherit PhysicalDevice(instance, devices.[0].Handle, enabledInstanceExtensions)
+and PhysicalDeviceGroup internal(instance : Instance, devices : PhysicalDevice[], enabledInstanceExtensions : list<string>, apiVersion : Version) =
+    inherit PhysicalDevice(instance, devices.[0].Handle, enabledInstanceExtensions, apiVersion)
    
     let mask = devices |> Seq.map (fun d -> d.DeviceMask) |> Seq.fold (|||) 0u
 
