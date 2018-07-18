@@ -82,44 +82,48 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
     
     let appName = CStr.malloc "Aardvark"
 
-    let mutable instance =
+    let mutable instance, apiVersion =
         let layers = List.toArray layers
         let extensions = List.toArray extensions
 
         layers |> CStr.susemany (fun cLayers pLayers ->
             extensions |> CStr.susemany (fun cExtensions pExtensions ->
+            
+                let rec tryCreate (apiVersion : Version) =
+                    let version = apiVersion.ToVulkan()
+                
+                    let mutable applicationInfo =
+                        VkApplicationInfo(
+                            VkStructureType.ApplicationInfo, 0n,
+                            appName,
+                            0u,
+                            appName,
+                            0u,
+                            version
+                        )
 
-        //let pLayers = CStr.sallocMany layers
-        //let pExtensions = CStr.sallocMany extensions
+                    let mutable info =
+                        VkInstanceCreateInfo(
+                            VkStructureType.InstanceCreateInfo, 0n,
+                            VkInstanceCreateFlags.MinValue,
+                            &&applicationInfo,
+                            uint32 cLayers, pLayers,
+                            uint32 cExtensions, pExtensions
+                        )
 
-                let apiVersion = apiVersion.ToVulkan()
+                    let mutable instance = VkInstance.Zero
 
-                let mutable applicationInfo =
-                    VkApplicationInfo(
-                        VkStructureType.ApplicationInfo, 0n,
-                        appName,
-                        0u,
-                        appName,
-                        0u,
-                        apiVersion
-                    )
-
-                let mutable info =
-                    VkInstanceCreateInfo(
-                        VkStructureType.InstanceCreateInfo, 0n,
-                        VkInstanceCreateFlags.MinValue,
-                        &&applicationInfo,
-                        uint32 cLayers, pLayers,
-                        uint32 cExtensions, pExtensions
-                    )
-
-                let mutable instance = VkInstance.Zero
-
-                VkRaw.vkCreateInstance(&&info, NativePtr.zero, &&instance)
-                    |> check "could not create instance"
-
-
-                instance
+                    let res = VkRaw.vkCreateInstance(&&info, NativePtr.zero, &&instance)
+                    if res = VkResult.VkSuccess then 
+                        Some (instance, apiVersion)
+                    elif apiVersion.Minor > 0 then
+                        tryCreate (Version(apiVersion.Major, apiVersion.Minor - 1, apiVersion.Build))
+                    else
+                        None
+                        
+                match tryCreate apiVersion with
+                    | Some instance -> instance
+                    | None -> failf "could not create instance"
             )
         )
 
@@ -137,28 +141,30 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
         devices |> Array.map (fun d -> PhysicalDevice(this, d, extensions))
 
     let groups =    
-        let mutable groupCount = 0u
-
-        VkRaw.vkEnumeratePhysicalDeviceGroups(instance, &&groupCount, NativePtr.zero)
-            |> check "could not get physical device groups"
-
-
-        let groups = Array.zeroCreate (int groupCount)
-        groups |> NativePtr.withA (fun ptr ->
-            VkRaw.vkEnumeratePhysicalDeviceGroups(instance, &&groupCount, ptr)
+        if apiVersion >= Version(1,1) then
+            let mutable groupCount = 0u
+        
+            VkRaw.vkEnumeratePhysicalDeviceGroups(instance, &&groupCount, NativePtr.zero)
                 |> check "could not get physical device groups"
-        )
 
-        groups |> Array.mapi (fun i d -> 
-            let devices = 
-                Array.init (int d.physicalDeviceCount) (fun ii ->
-                    let handle = d.physicalDevices.[ii]
-                    devices |> Array.find (fun dd -> dd.Handle = handle)
-                )
-            PhysicalDeviceGroup(this, devices, extensions)
-        )
-        |> Array.filter (fun g -> g.Devices.Length > 1)
-      
+
+            let groups = Array.zeroCreate (int groupCount)
+            groups |> NativePtr.withA (fun ptr ->
+                VkRaw.vkEnumeratePhysicalDeviceGroups(instance, &&groupCount, ptr)
+                    |> check "could not get physical device groups"
+            )
+
+            groups |> Array.mapi (fun i d -> 
+                let devices = 
+                    Array.init (int d.physicalDeviceCount) (fun ii ->
+                        let handle = d.physicalDevices.[ii]
+                        devices |> Array.find (fun dd -> dd.Handle = handle)
+                    )
+                PhysicalDeviceGroup(this, devices, extensions)
+            )
+            |> Array.filter (fun g -> g.Devices.Length > 1)
+        else
+            [||]
 
     let devicesAndGroups =
         Array.append devices (groups |> Array.map (fun a -> a :> _))
