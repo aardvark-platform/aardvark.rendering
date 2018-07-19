@@ -39,12 +39,12 @@ module Prinziple =
   let splitPath (path : string) =    
     let p = zipTable |> HMap.filter(fun _ v -> path.StartsWith v) |> HMap.toList |> List.map snd |> List.tryHead    
     match p with
-    | Some zipped -> Some (Path.ChangeExtension(zipped, ".zip"), path.[zipped.Length+1..path.Length-1])
+    | Some zipped -> Some (Path.ChangeExtension(zipped, ".opc"), path.[zipped.Length+1..path.Length-1])
     | None -> None
 
   let registerIfZipped dir =
     let dir   = Path.GetFullPath(dir)
-    let zPath = Path.ChangeExtension(dir, ".zip")
+    let zPath = Path.ChangeExtension(dir, ".opc")
     if File.Exists zPath then
       zipTable <- HMap.add dir dir zipTable    
     dir
