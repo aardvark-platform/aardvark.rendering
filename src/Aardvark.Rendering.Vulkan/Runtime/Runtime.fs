@@ -170,6 +170,9 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         with get() = device.ShaderCachePath
         and set v = device.ShaderCachePath <- v
 
+    member x.ValidateShaderCaches
+        with get() = device.ValidateShaderCaches
+        and set v = device.ValidateShaderCaches <- v
 
     member x.Device = device
     member x.ResourceManager = manager

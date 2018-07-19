@@ -121,6 +121,8 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
     let onDispose = Event<unit>()
     
     let mutable shaderCachePath : Option<string> = None
+    let mutable validateShaderCaches = false
+
 
     let allIndicesArr = 
         [|
@@ -331,6 +333,10 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
         )
 
     member x.CopyEngine = copyEngine.Value
+
+    member x.ValidateShaderCaches
+        with get() = validateShaderCaches
+        and set v = validateShaderCaches <- v
 
     member x.ShaderCachePath
         with get() = shaderCachePath

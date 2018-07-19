@@ -11,6 +11,7 @@ open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
 #nowarn "51"
+#nowarn "8989"
 
 module private FShadeAdapter =
     open FShade
@@ -384,7 +385,212 @@ module ShaderProgram =
     let ofGLSL (code : FShade.GLSL.GLSLShader) (device : Device) =
         ofGLSLInteral None code.iface code.code 1 Set.empty device
 
-    let internal pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
+    module private PicklerExtensions = 
+        open MBrace.FsPickler
+        open System.Reflection
+        open System.Reflection.Emit
+
+
+        let tryUnifyTypes (decl : Type) (real : Type) =
+            let assignment = System.Collections.Generic.Dictionary<Type, Type>()
+
+            let rec recurse (decl : Type) (real : Type) =
+                if decl = real then
+                    true
+
+                elif decl.IsGenericParameter then
+                    match assignment.TryGetValue decl with
+                        | (true, old) ->
+                            if old.IsAssignableFrom real then 
+                                true
+
+                            elif real.IsAssignableFrom old then
+                                assignment.[decl] <- real
+                                true
+
+                            else 
+                                false
+                        | _ ->
+                            assignment.[decl] <- real
+                            true
+            
+                elif decl.IsArray then
+                    if real.IsArray then
+                        let de = decl.GetElementType()
+                        let re = real.GetElementType()
+                        recurse de re
+                    else
+                        false
+
+                elif decl.ContainsGenericParameters then
+                    let dgen = decl.GetGenericTypeDefinition()
+                    let rgen = 
+                        if real.IsGenericType then real.GetGenericTypeDefinition()
+                        else real
+
+                    if dgen = rgen then
+                        let dargs = decl.GetGenericArguments()
+                        let rargs = real.GetGenericArguments()
+                        Array.forall2 recurse dargs rargs
+
+                    elif dgen.IsInterface then
+                        let rface = real.GetInterface(dgen.FullName)
+                        if isNull rface then
+                            false
+                        else
+                            recurse decl rface
+
+                    elif not (isNull real.BaseType) then
+                        recurse decl real.BaseType
+
+                    else
+                        false
+
+                elif decl.IsAssignableFrom real then
+                    true
+
+                else
+                    false
+
+
+            if recurse decl real then
+                Some (assignment |> Dictionary.toSeq |> HMap.ofSeq)
+            else
+                None
+
+        type PicklerRegistry(types : list<Type>) =
+
+            let picklerGen = typedefof<Pickler<_>>
+            let allMeths = types |> List.collect (fun t -> t.GetMethods(BindingFlags.Static ||| BindingFlags.Public ||| BindingFlags.NonPublic) |> Array.toList) //Introspection.GetAllMethodsWithAttribute<MyCrazyAttribute>() |> Seq.map (fun m -> m.E0) |> Seq.toArray
+
+            let upcastToPicker (mi : MethodInfo) =
+                let meth = 
+                    DynamicMethod(
+                        sprintf "upcasted.%s" mi.Name,
+                        MethodAttributes.Public ||| MethodAttributes.Static,
+                        CallingConventions.Standard,
+                        typeof<Pickler>,
+                        [| typeof<IPicklerResolver> |],
+                        typeof<obj>,
+                        true
+                    )
+                let il = meth.GetILGenerator()
+
+                il.Emit(OpCodes.Ldarg_0)
+                il.Emit(OpCodes.Tailcall)
+                il.EmitCall(OpCodes.Call, mi, null)
+                il.Emit(OpCodes.Ret)
+                let func = 
+                    meth.CreateDelegate(typeof<Func<IPicklerResolver, Pickler>>) 
+                        |> unbox<Func<IPicklerResolver, Pickler>>        
+                fun (r : IPicklerResolver) -> func.Invoke(r)
+
+            let genericThings = 
+                allMeths
+                    |> List.filter (fun mi -> mi.GetGenericArguments().Length > 0)
+                    |> List.choose (fun mi ->
+                        let ret = mi.ReturnType
+                        if ret.IsGenericType && ret.GetGenericTypeDefinition() = picklerGen && mi.GetParameters().Length = 1 then
+                            let pickledType = ret.GetGenericArguments().[0]
+
+                            let tryInstantiate (t : Type) =
+                                match tryUnifyTypes pickledType t with
+                                    | Some ass ->
+                                        let targs = mi.GetGenericArguments() |> Array.map (fun a -> ass.[a])
+                                        let mi = mi.MakeGenericMethod targs
+                                        Some (upcastToPicker mi)
+                                            
+                                    | None ->
+                                        None
+                                        
+
+                            Some tryInstantiate
+                        else
+                            None
+                    )
+
+            let nonGenericThings = 
+                allMeths
+                    |> List.filter (fun mi -> mi.GetGenericArguments().Length = 0)
+                    |> List.choose (fun mi ->
+                        let ret = mi.ReturnType
+                        if ret.IsGenericType && ret.GetGenericTypeDefinition() = picklerGen && mi.GetParameters().Length = 1 then
+                            let pickledType = ret.GetGenericArguments().[0]
+
+                            let create = upcastToPicker mi
+                            Some (pickledType, create)
+
+                        else
+                            None
+                    )
+                    |> Dictionary.ofList
+
+
+
+                    
+            member x.GetRegistration(t : Type) : CustomPicklerRegistration =
+                if t.IsGenericType then
+                    match genericThings |> List.tryPick (fun a -> a t) with
+                        | Some r -> 
+                            CustomPicklerRegistration.CustomPickler r
+                        | None ->
+                            match nonGenericThings.TryGetValue t with   
+                                | (true, r) -> CustomPicklerRegistration.CustomPickler r
+                                | _ -> CustomPicklerRegistration.UnRegistered
+                else
+                    match nonGenericThings.TryGetValue t with   
+                        | (true, r) -> CustomPicklerRegistration.CustomPickler r
+                        | _ -> CustomPicklerRegistration.UnRegistered
+    //                            let pickler = 
+    //                                nonGenericThings |> Seq.tryPick (fun (KeyValue(tdecl, pickler)) ->
+    //                                    if tdecl.IsAssignableFrom t then
+    //                                        let tc = typedefof<CoercePickler<_,_>>.MakeGenericType [| tdecl; t |]
+    //                                        let resolve (r : IPicklerResolver) =
+    //                                            let res = Activator.CreateInstance(tc, [| pickler r :> obj|])
+    //                                            let prop = tc.GetProperty("Pickler", BindingFlags.NonPublic ||| BindingFlags.Public ||| BindingFlags.Instance)
+    //                                            let real = prop.GetValue(res) |> unbox<Pickler>
+    //                                            real
+    //
+    //                                        Some resolve
+    //                                    else
+    //                                        None
+    //                                )
+    //                            match pickler with
+    //                                | Some p -> CustomPicklerRegistration.CustomPickler p
+    //                                | _ -> CustomPicklerRegistration.UnRegistered
+
+            interface ICustomPicklerRegistry with
+                /// Look up pickler registration for particular type
+                member x.GetRegistration(t : Type) : CustomPicklerRegistration = x.GetRegistration t
+
+
+        type CustomPicklers private() =
+            
+            static member HSetPickler (r : IPicklerResolver) : Pickler<hset<'a>> =
+                let l = r.Resolve<list<'a>>()
+
+                let read (rs : ReadState) =
+                    l.Read rs "AsList" |> HSet.ofList
+                    
+                let write (ws : WriteState) (set : hset<'a>) =
+                    l.Write ws "AsList" (set |> HSet.toList)
+
+                Pickler.FromPrimitives(read, write)
+
+            static member MapExtPickler (r : IPicklerResolver) : Pickler<MapExt<'a, 'b>> =
+                let l = r.Resolve<list<'a * 'b>>()
+
+                let read (rs : ReadState) =
+                    l.Read rs "AsMap" |> MapExt.ofList
+                    
+                let write (ws : WriteState) (set : MapExt<'a, 'b>) =
+                    l.Write ws "AsMap" (set |> MapExt.toList)
+
+                Pickler.FromPrimitives(read, write)
+
+    let internal registry = PicklerExtensions.PicklerRegistry [ typeof<PicklerExtensions.CustomPicklers> ] :> MBrace.FsPickler.ICustomPicklerRegistry
+    let internal cache = MBrace.FsPickler.PicklerCache.FromCustomPicklerRegistry(registry)
+    let internal pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer(picklerResolver = cache)
 
     //let private shaderCachePath =
     //    let path = 
@@ -529,6 +735,26 @@ module ShaderProgram =
                     let cacheFile = Path.Combine(shaderCachePath, fileName + ".effect")
                     match tryRead cacheFile device with
                         | Some p ->
+                            if device.ValidateShaderCaches then
+                                let glsl = 
+                                    pass.Link(effect, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, mode)
+                                    |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
+                                    |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
+                
+                                let temp = ofGLSL glsl device
+                                let real = toByteArray p
+                                let should = toByteArray temp
+                                temp.Destroy()
+
+                                if real <> should then
+                                    let tmp = Path.GetTempFileName()
+                                    let tmpReal = tmp + ".real"
+                                    let tmpShould = tmp + ".should"
+                                    File.WriteAllBytes(tmpReal, real)
+                                    File.WriteAllBytes(tmpShould, should)
+                                    failf "invalid cache for Effect: real: %s vs. should: %s" tmpReal tmpShould
+                                    
+
                             p.CacheName <- effectCache
                             p.RefCount <- 1 // leak
                             p

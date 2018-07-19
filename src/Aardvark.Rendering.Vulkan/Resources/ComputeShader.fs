@@ -29,6 +29,8 @@ type ComputeShader =
         val mutable public Samplers : Map<string * int, Sampler>
         val mutable public GroupSize : V3i
         val mutable public CacheName : Symbol
+        val mutable public Interface : FShade.GLSL.GLSLShaderInterface
+        val mutable public GLSL : Option<string>
 
         interface IComputeShader with
             member x.Runtime = x.Device.Runtime :> IComputeRuntime
@@ -49,7 +51,7 @@ type ComputeShader =
             x.Samplers <- Map.empty
 
 
-        new(d,s,l,p,tn,sd,gs) = { inherit RefCountedResource(); Device = d; ShaderModule = s; Layout = l; Handle = p; TextureNames = tn; Samplers = sd; GroupSize = gs; CacheName = Symbol.Empty }
+        new(d,s : ShaderModule,l,p,tn,sd,gs,glsl) = { inherit RefCountedResource(); Device = d; ShaderModule = s; Layout = l; Handle = p; TextureNames = tn; Samplers = sd; GroupSize = gs; CacheName = Symbol.Empty; Interface = s.Interface.[ShaderStage.Compute]; GLSL = glsl }
     end
 
 type BindingReference =
@@ -967,6 +969,14 @@ module ``Compute Commands`` =
 module ComputeShader =  
     open System.IO
 
+    type private FailReason =
+        | NoCache
+        | BrokenCache
+        | NoAccess
+
+    type private LoadResult<'a> =
+        | Failed of FailReason
+        | Loaded of 'a
 
     let private cache = Symbol.Create "ComputeShaderCache" 
 
@@ -979,22 +989,25 @@ module ComputeShader =
         ShaderProgram.pickler.Pickle( 
             (
                 shader.ShaderModule.SpirV,
-                shader.ShaderModule.Interface.[ShaderStage.Compute],
+                shader.Interface,
                 shader.GroupSize,
-                shader.TextureNames
+                shader.GLSL
             ) 
         )
 
-    let tryOfByteArray (data : byte[]) (device : Device) =
+    let private tryOfByteArray (data : byte[]) (device : Device) =
         try
-            let (spirv : byte[], iface : FShade.GLSL.GLSLShaderInterface, groupSize : V3i, textureNames : Map<string * int, string>) = 
+            let (spirv : byte[], iface : FShade.GLSL.GLSLShaderInterface, groupSize : V3i, glsl : Option<string>) = 
                 ShaderProgram.pickler.UnPickle data
-                
+             
             let module_ =
                 device.CreateShaderModule(ShaderStage.Compute, spirv, iface)
 
+            let shader = 
+                 Shader(module_, ShaderStage.Compute, iface)
+
             let layout =
-                device.CreatePipelineLayout([| Shader(module_, ShaderStage.Compute, iface) |], 1, Set.empty)
+                device.CreatePipelineLayout([| shader |], 1, Set.empty)
                 
             let shaderInfo =
                 VkPipelineShaderStageCreateInfo(
@@ -1019,7 +1032,16 @@ module ComputeShader =
             let mutable handle = VkPipeline.Null
             VkRaw.vkCreateComputePipelines(device.Handle, VkPipelineCache.Null, 1u, &&pipelineInfo, NativePtr.zero, &&handle)
                 |> check "could not create compute pipeline"
-                
+
+            let textureNames =
+                iface.shaderSamplers |> Seq.collect (fun samName ->
+                    let sam = iface.program.samplers.[samName]
+                    sam.samplerTextures |> Seq.mapi (fun i (texName, state) ->
+                        (samName, i), texName
+                    )
+                )
+                |> Map.ofSeq
+
             let samplers =
                 iface.shaderSamplers |> Seq.collect (fun samName ->
                     let sam = iface.program.samplers.[samName]
@@ -1029,10 +1051,10 @@ module ComputeShader =
                 )
                 |> Map.ofSeq
                 
-            ComputeShader(device, module_, layout, handle, textureNames, samplers, groupSize)
-                |> Some
+            ComputeShader(device, module_, layout, handle, textureNames, samplers, groupSize, glsl)
+                |> LoadResult.Loaded
         with _ ->
-            None
+            Failed BrokenCache
 
     let private tryRead (file : string) (device : Device) =
         try
@@ -1040,13 +1062,26 @@ module ComputeShader =
                 let data = File.ReadAllBytes file
                 tryOfByteArray data device
             else
-                None
+                Failed NoCache
         with _ ->
-            None
+            Failed NoAccess
             
-    let private write (file : string) (shader : ComputeShader) =
+    let private write (failReason : FailReason) (file : string) (shader : ComputeShader) =
         try
-            File.WriteAllBytes(file, toByteArray shader)
+            let data = toByteArray shader
+            
+            if File.Exists file then
+                match failReason with
+                    | BrokenCache -> 
+                        File.WriteAllBytes(file, data)
+                    | _ ->
+                        let fileData = File.ReadAllBytes file
+                        if data <> fileData then
+                            failf "[Vulkan] bad compute cache: %s" (Path.GetFileName file)
+                        else
+                            Log.warn "[Vulkan] duplicate cache write on %s" (Path.GetFileName file)
+            else
+                File.WriteAllBytes(file, data)
         with _ ->
             ()
 
@@ -1095,7 +1130,7 @@ module ComputeShader =
                     shader.csSamplerStates |> Map.map (fun _ s -> device.CreateSampler s.SamplerStateDescription)
                 
 
-                ComputeShader(device, sm, layout, handle, shader.csTextureNames, samplers, shader.csLocalSize)
+                ComputeShader(device, sm, layout, handle, shader.csTextureNames, samplers, shader.csLocalSize, Some glsl.code)
             | _ ->
                 failf "could not create compute shader"
 
@@ -1107,13 +1142,28 @@ module ComputeShader =
                     let file = Path.Combine(shaderCachePath, fileName + ".compute")
 
                     match tryRead file device with
-                        | Some shader -> 
-                            shader.CacheName <- cache
-                            shader.RefCount <- 1 // leak
-                            shader
-                        | None ->
+                        | Loaded loaded -> 
+                            
+                            if device.ValidateShaderCaches then
+                                let temp = ofFShadeInternal shader device
+                                let real = toByteArray loaded
+                                let should = toByteArray temp
+                                temp.Destroy()
+
+                                if real <> should then
+                                    let tmp = Path.GetTempFileName()
+                                    let tmpReal = tmp + ".real"
+                                    let tmpShould = tmp + ".should"
+                                    File.WriteAllBytes(tmpReal, real)
+                                    File.WriteAllBytes(tmpShould, should)
+                                    failf "invalid cache for ComputeShader: real: %s vs. should: %s" tmpReal tmpShould
+                                    
+                            loaded.CacheName <- cache
+                            loaded.RefCount <- 1 // leak
+                            loaded
+                        | Failed reason ->
                             let shader = ofFShadeInternal shader device
-                            write file shader
+                            write reason file shader
                             shader.CacheName <- cache
                             shader.RefCount <- 1 // leak
                             shader
