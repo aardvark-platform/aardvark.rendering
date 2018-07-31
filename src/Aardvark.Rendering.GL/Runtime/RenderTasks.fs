@@ -284,12 +284,15 @@ module RenderTasks =
                 | _ -> failwithf "[ProjectionComparer] unknown RenderObject: %A" ro
 
         let mutable constantId = 0
-        let constantTable = Dict<obj, int>()
+        let constantTable = ConditionalWeakTable<obj, obj>()
 
-        let getConstantId (m : obj) =
-            constantTable.GetOrCreate(m, fun m ->
-                Interlocked.Increment(&constantId)
-            )
+        let getConstantId (m : obj) : int =
+            match constantTable.TryGetValue m with
+                | (true, id) -> id |> unbox
+                | _ -> 
+                    let id = Interlocked.Increment(&constantId)
+                    constantTable.Add(m, box id)
+                    id
 
         let getId (m : obj) =
             getConstantId m
