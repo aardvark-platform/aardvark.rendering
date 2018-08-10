@@ -717,10 +717,12 @@ module RenderTasks =
             if prev.Program <> me.Program then
                 let myProg = me.Program.Handle.GetValue()
                 x.UseProgram(me.Program)
-                if myProg.WritesPointSize then
-                    x.Enable(int OpenTK.Graphics.OpenGL4.EnableCap.ProgramPointSize)
-                else
-                    x.Disable(int OpenTK.Graphics.OpenGL4.EnableCap.ProgramPointSize)
+
+                if obj.ReferenceEquals(prev.Program, null) || prev.Program.Handle.GetValue().WritesPointSize <> myProg.WritesPointSize then
+                    if myProg.WritesPointSize then
+                        x.Enable(int OpenTK.Graphics.OpenGL4.EnableCap.ProgramPointSize)
+                    else
+                        x.Disable(int OpenTK.Graphics.OpenGL4.EnableCap.ProgramPointSize)
             
 
             // bind all uniform-buffers (if needed)
