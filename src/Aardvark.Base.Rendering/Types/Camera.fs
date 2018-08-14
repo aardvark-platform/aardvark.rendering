@@ -142,13 +142,14 @@ type Frustum =
         top    : float
         near   : float
         far    : float  
+        isOrtho : bool
     }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Frustum =
     let perspective (horizontalFieldOfViewInDegrees : float) (near : float) (far : float) (aspect : float) =
         let d = tan (0.5 * Conversion.RadiansFromDegrees horizontalFieldOfViewInDegrees) * near
-        { left = -d; right = +d; bottom = -d / aspect; top = +d / aspect; near = near; far = far}
+        { left = -d; right = +d; bottom = -d / aspect; top = +d / aspect; near = near; far = far; isOrtho = false }
 
     let ortho (b : Box3d) =
         { 
@@ -158,44 +159,50 @@ module Frustum =
             top = b.Max.Y
             near = b.Min.Z
             far = b.Max.Z
+            isOrtho = true
         }
 
-    let projTrafo {left = l; right = r; top = t; bottom = b; near = n; far = f} : Trafo3d = 
-        Trafo3d(
-            M44d(
-                (2.0 * n) / (r - l),                     0.0,         (r + l) / (r - l),                        0.0,
-                                0.0,     (2.0 * n) / (t - b),         (t + b) / (t - b),                        0.0,
-                                0.0,                     0.0,         (f + n) / (n - f),    (2.0 * f * n) / (n - f),
-                                0.0,                     0.0,                      -1.0,                        0.0
+    let projTrafo {left = l; right = r; top = t; bottom = b; near = n; far = f; isOrtho = isOrtho } : Trafo3d = 
+        if isOrtho then 
+            Trafo3d(
+                M44d(
+                    2.0 / (r - l),               0.0,               0.0,      (r + l) / (l - r),
+                              0.0,     2.0 / (t - b),               0.0,      (t + b) / (b - t),
+                              0.0,               0.0,      2.0 / (n - f),     (f + n) / (n - f),
+                              0.0,               0.0,               0.0,      1.0
                 ),                                                     
                                                                        
-            M44d(                                      
-                (r - l) / (2.0 * n),                     0.0,                       0.0,        (r + l) / (2.0 * n),
-                                0.0,     (t - b) / (2.0 * n),                       0.0,        (t + b) / (2.0 * n),
-                                0.0,                     0.0,                       0.0,                       -1.0,
-                                0.0,                     0.0,   (n - f) / (2.0 * f * n),     (f + n) / (2.0 * f * n)
+                M44d(
+                    (r - l) / 2.0,               0.0,               0.0,      (r + l) / 2.0,
+                              0.0,     (t - b) / 2.0,               0.0,      (t + b) / 2.0,
+                              0.0,               0.0,     (n - f) / 2.0,     -(f + n) / 2.0,
+                              0.0,               0.0,               0.0,      1.0
+
                 )
-        )
-
-    let orthoTrafo {left = l; right = r; top = t; bottom = b; near = n; far = f} : Trafo3d = 
-        Trafo3d(
-            M44d(
-                2.0 / (r - l),               0.0,               0.0,      (r + l) / (l - r),
-                          0.0,     2.0 / (t - b),               0.0,      (t + b) / (b - t),
-                          0.0,               0.0,      2.0 / (n - f),     (f + n) / (n - f),
-                          0.0,               0.0,               0.0,      1.0
-            ),                                                     
-                                                                       
-            M44d(
-                (r - l) / 2.0,               0.0,               0.0,      (r + l) / 2.0,
-                          0.0,     (t - b) / 2.0,               0.0,      (t + b) / 2.0,
-                          0.0,               0.0,     (n - f) / 2.0,     -(f + n) / 2.0,
-                          0.0,               0.0,               0.0,      1.0
-
             )
-        )
+        else 
+            Trafo3d(
+                M44d(
+                    (2.0 * n) / (r - l),                     0.0,         (r + l) / (r - l),                        0.0,
+                                    0.0,     (2.0 * n) / (t - b),         (t + b) / (t - b),                        0.0,
+                                    0.0,                     0.0,         (f + n) / (n - f),    (2.0 * f * n) / (n - f),
+                                    0.0,                     0.0,                      -1.0,                        0.0
+                    ),                                                     
+                                                                       
+                M44d(                                      
+                    (r - l) / (2.0 * n),                     0.0,                       0.0,        (r + l) / (2.0 * n),
+                                    0.0,     (t - b) / (2.0 * n),                       0.0,        (t + b) / (2.0 * n),
+                                    0.0,                     0.0,                       0.0,                       -1.0,
+                                    0.0,                     0.0,   (n - f) / (2.0 * f * n),     (f + n) / (2.0 * f * n)
+                    )
+            )
+            
+    [<Obsolete("use projTrafo instead (Frustum tracks whether isOrtho now)")>]
+    let orthoTrafo (f : Frustum) : Trafo3d = 
+        projTrafo f
 
-
+    let private isTrafoOrtho (t : Trafo3d) =
+        t.Forward.M30.IsTiny() && t.Forward.M31.IsTiny() && t.Forward.M32.IsTiny()
 
     let ofTrafo (t : Trafo3d) =
         let bw = t.Backward
@@ -205,6 +212,7 @@ module Frustum =
         let cy = bw.M13 * near
         let hsx = bw.M00 * near
         let hsy = bw.M11 * near
+        let isOrtho = isTrafoOrtho t
 
         {
             left = cx - hsx
@@ -213,6 +221,7 @@ module Frustum =
             bottom = cy - hsy
             near = near
             far = far
+            isOrtho = isOrtho
         }
 
     [<Obsolete("use projTrafo instead")>]
@@ -231,8 +240,8 @@ module Frustum =
 
     let aspect { left = l; right = r; top = t; bottom = b } = (r - l) / (t - b)
     let withAspect (newAspect : float) ( { left = l; right = r; top = t; bottom = b } as f )  = 
-        let factor = 1.0 - (newAspect / aspect f)
-        { f with right = factor * l + r; left  = factor * r + l }
+        let factor = newAspect / aspect f
+        { f with right = factor * r; left  = factor * l }
 
     [<Obsolete("use pickRayDirection instead")>]
     let unproject { near = n } (xyOnPlane : V2d) = Ray3d(V3d.Zero, V3d(xyOnPlane, -n))
@@ -365,6 +374,7 @@ module ViewProjection =
                 bottom = b
                 near = near
                 far = far
+                isOrtho = false
             }
 
         view, proj
@@ -514,6 +524,7 @@ module ViewProjection =
     let mergeStereo (lProj : Trafo3d) (rProj : Trafo3d) =
         let p (v : V4d) = Plane3d(v.XYZ, -v.W)
 
+
         let lPlane = rightPlane lProj |> p
         let rPlane = leftPlane rProj |> p
 
@@ -542,6 +553,7 @@ module ViewProjection =
                 bottom      = bounds.Min.Y * near
                 near        = near
                 far         = far
+                isOrtho     = false
             }
 
         let proj = Frustum.projTrafo frustum
