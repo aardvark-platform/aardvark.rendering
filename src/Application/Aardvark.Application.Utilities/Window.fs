@@ -544,8 +544,8 @@ module Utilities =
                 let y = tan (120.0 * Constant.RadiansPerDegree / 2.0) / aspect //(outer + inner) / (2.0 * aspect)
 
                 [|
-                    { left = -outer * near; right = inner * near; top = y * near; bottom = -y * near; near = near; far = far } |> Frustum.projTrafo 
-                    { left = -inner * near; right = outer * near; top = y * near; bottom = -y * near; near = near; far = far } |> Frustum.projTrafo 
+                    { left = -outer * near; right = inner * near; top = y * near; bottom = -y * near; near = near; far = far; isOrtho = false } |> Frustum.projTrafo 
+                    { left = -inner * near; right = outer * near; top = y * near; bottom = -y * near; near = near; far = far; isOrtho = false } |> Frustum.projTrafo 
                 |]
             )
 

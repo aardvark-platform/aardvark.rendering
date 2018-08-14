@@ -404,8 +404,8 @@ let picking() =
 [<Demo("Frustum Merge")>]
 let frustumMerge() =
 
-    let lProj = { left = -0.2; right = 0.3; top = 0.25; bottom = -0.25; near = 1.0; far = 10.0 }
-    let rProj = { left = -0.3; right = 0.2; top = 0.25; bottom = -0.25; near = 1.0; far = 10.0 }
+    let lProj = { left = -0.2; right = 0.3; top = 0.25; bottom = -0.25; near = 1.0; far = 10.0; isOrtho = false }
+    let rProj = { left = -0.3; right = 0.2; top = 0.25; bottom = -0.25; near = 1.0; far = 10.0; isOrtho = false }
 
     let lViewProj = Trafo3d.Translation(0.7, 0.0, 0.0) * Frustum.projTrafo lProj
     let rViewProj = Trafo3d.Translation(-0.7, 0.0, 0.0) * Frustum.projTrafo rProj
