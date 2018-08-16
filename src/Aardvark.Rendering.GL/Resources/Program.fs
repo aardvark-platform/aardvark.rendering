@@ -675,7 +675,9 @@ module ProgramExtensions =
                                             failwithf "[GL] shader compiler returned errors: %A" e
                                 )
 
-                            Success (iface, changeableProgram)
+                            let res = Success (iface, changeableProgram)
+                            dynamicShaderCache.Add(create, res)
+                            res
                     )
 
                 | Surface.None ->
