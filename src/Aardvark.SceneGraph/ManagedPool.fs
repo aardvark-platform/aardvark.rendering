@@ -479,7 +479,7 @@ type ManagedPool(runtime : IRuntime, signature : GeometrySignature) =
     member x.VertexAttributes =
         { new IAttributeProvider with
             member x.Dispose() = ()
-            member x.All = Seq.empty
+            member x.All = vertexBuffers |> Seq.map (fun v -> (v.Key, BufferView(v.Value, v.Value.ElementType)))
             member x.TryGetAttribute(sem : Symbol) =
                 match vertexBuffers.TryGetValue sem with
                     | (true, v) -> Some (BufferView(v, v.ElementType))
@@ -489,7 +489,7 @@ type ManagedPool(runtime : IRuntime, signature : GeometrySignature) =
     member x.InstanceAttributes =
         { new IAttributeProvider with
             member x.Dispose() = ()
-            member x.All = Seq.empty
+            member x.All = instanceBuffers |> Seq.map (fun v -> (v.Key, BufferView(v.Value, v.Value.ElementType)))
             member x.TryGetAttribute(sem : Symbol) =
                 match instanceBuffers.TryGetValue sem with
                     | (true, v) -> Some (BufferView(v, v.ElementType))
