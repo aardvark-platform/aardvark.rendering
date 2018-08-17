@@ -600,7 +600,7 @@ module ManagedPoolSg =
             member x.Pool = pool
             member x.Calls = calls
             member x.Mode = mode
-
+                
         let pool (pool : ManagedPool) (calls : aset<ManagedDrawCall>) (mode : IndexedGeometryMode)=
             PoolNode(pool, calls, mode) :> ISg
 
@@ -609,36 +609,31 @@ module ``Pool Semantics`` =
     [<Aardvark.Base.Ag.Semantic>]
     type PoolSem() =
         member x.RenderObjects(p : Sg.PoolNode) =
-            aset {
-                let pool = p.Pool
-                let ro = Aardvark.SceneGraph.Semantics.RenderObject.create()
+            
+            let pool = p.Pool
+            let ro = Aardvark.SceneGraph.Semantics.RenderObject.create()
 
 
-                let r = (p.Calls |> ASet.map (fun mdc -> mdc.Call)).GetReader()
-                let calls =
-                    let buffer = DrawCallBuffer(pool.Runtime, true) // who manages this? using finalizer for now
-                    Mod.custom (fun self ->
-                        let deltas = r.GetOperations self
-                        for d in deltas do
-                            match d with
-                                | Add(_,v) -> buffer.Add v |> ignore
-                                | Rem(_,v) -> buffer.Remove v |> ignore
+            let r = (p.Calls |> ASet.map (fun mdc -> mdc.Call)).GetReader()
+            let calls =
+                let buffer = DrawCallBuffer(pool.Runtime, true) // who manages this? using finalizer for now
+                Mod.custom (fun self ->
+                    let deltas = r.GetOperations self
+                    for d in deltas do
+                        match d with
+                            | Add(_,v) -> buffer.Add v |> ignore
+                            | Rem(_,v) -> buffer.Remove v |> ignore
 
-                        buffer.GetValue()
-                    )
+                    buffer.GetValue()
+                )
+            ro.Mode <- p.Mode
+            ro.Indices <- Some pool.IndexBuffer
+            ro.VertexAttributes <- pool.VertexAttributes
+            ro.InstanceAttributes <- pool.InstanceAttributes
+            ro.IndirectBuffer <- calls // |> ASet.toMod
 
-                ro.Mode <- p.Mode
-                ro.Indices <- Some pool.IndexBuffer
-                ro.VertexAttributes <- pool.VertexAttributes
-                ro.InstanceAttributes <- pool.InstanceAttributes
-                ro.IndirectBuffer <- calls // |> ASet.toMod |> Mod.map (fun calls -> calls |> Seq.toArray |> ArrayBuffer :> IBuffer)
-                //ro.DrawCallInfos <- p.Calls |> ASet.toMod |> Mod.map Seq.toList
-                yield ro :> IRenderObject
-                    
-            }
+            let res = ASet.single (ro :> IRenderObject)
 
-
-
-
+            calls |> ASet.bind (fun c -> if c.Count > 0 then res else ASet.empty<_>)
 
    
