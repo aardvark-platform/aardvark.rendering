@@ -282,10 +282,18 @@ module LoD =
     let pointCloud data config =
         Sg.pointCloud data config
 
+
+    let fr = Mod.init false
+    win.Keyboard.KeyDown(Keys.C).Values.Add ( fun _ ->
+        transact ( fun _ -> fr.Value <- not fr.Value )
+        Log.line "frozen now: %A" fr.Value
+    )
+
+
     let cloud =
         pointCloud data {
             lodRasterizer           = Mod.constant (LodData.defaultRasterizeSet 5.0)
-            freeze                  = Mod.constant false
+            freeze                  = fr
             maxReuseRatio           = 0.5
             minReuseCount           = 1L <<< 20
             pruneInterval           = 500
@@ -317,8 +325,11 @@ module LoD =
 
         ]
 
+    let ssg =
+        Sg.ofList (List.init 10 ( fun i -> sg |> (Sg.translate (float i * 0.01) 0.0 0.0) ) )
+
     let final =
-        sg |> Sg.effect [
+        ssg |> Sg.effect [
                 DefaultSurfaces.trafo |> toEffect                
                 DefaultSurfaces.vertexColor  |> toEffect 
                 ]

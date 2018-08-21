@@ -592,6 +592,7 @@ module PointCloudRenderObjectSemantics =
                     submitDelay         = TimeSpan.FromMilliseconds 120.0
                     progressInterval    = TimeSpan.FromSeconds 1.0
                     progress            = progress
+                    frozen              = config.freeze
                 }
                 
                 let load = Loader.load

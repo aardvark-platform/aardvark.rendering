@@ -352,6 +352,7 @@ type LoadConfig<'a, 'b> =
         submitDelay         : TimeSpan
         progressInterval    : TimeSpan
         progress            : LoaderProgress -> unit
+        frozen              : IMod<bool>
     }
 
 module Loader =
@@ -590,74 +591,77 @@ module Loader =
                     try
                         let sw = System.Diagnostics.Stopwatch()
                         while config.continueLoader() do
-                            let op = queue.Dequeue(cancel.Token)
-                            queueAdds <- queue.AddCount
-                            queueRemoves <- queue.RemoveCount
-                            if config.continueLoader() then
-                                match op with
-                                    | Add(_,v) ->
-                                        sw.Restart()
-                                        let cts = new CancellationTokenSource()
-                                        let tcs = TaskCompletionSource<'b>()
-                                        if tasks.ContainsKey v then Log.warn "[LoD] duplicate add"
-
-                                        tasks.[v] <- (tcs.Task, cts)
-
-                                        try
-                                            let loaded = config.load cts.Token v
-                                            lock resultDeltaLock (fun () -> 
-                                                resultDeltas <- HDeltaSet.add (Add loaded) resultDeltas
-                                            )
-                                            MVar.put resultDeltaReady ()
-                                            tcs.SetResult(loaded)
-                                        with
-                                            | CancelExn -> tcs.SetCanceled()
-                                            | e -> tcs.SetException e
-
-
-                                        sw.Stop()
-                                        Interlocked.Increment(&loadCount) |> ignore
-                                        Interlocked.Add(&loadTicks, sw.Elapsed.Ticks) |> ignore
-
-                                    | Rem(_,v) ->
-                                        sw.Restart()
-                                        let mutable tup = Unchecked.defaultof<_>
-                                        while not (tasks.TryRemove(v, &tup)) do
-                                            Log.warn "[LoD] the craziest thing just happened"
-                                            Thread.Yield() |> ignore
-
-                                        let (task, cts) = tup
-                                        cts.Cancel()
-                                        try
-                                            let res = task.Result
-                                            lock resultDeltaLock (fun () -> 
-                                                let m = resultDeltas |> HDeltaSet.toHMap
-
-                                                let newMap = 
-                                                    m |> HMap.alter res (fun o ->
-                                                        match o with
-                                                            | Some 1 -> 
-                                                                dead <- HSet.add res dead
-                                                                None
-                                                            | Some o ->
-                                                                Some (o - 1)
-                                                            | None ->
-                                                                Some (-1)
-                                                    )
-
-                                                resultDeltas <- HDeltaSet.ofHMap newMap
-                                            )
-                                            MVar.put resultDeltaReady ()
-                                        with
-                                            | CancelExn -> ()
-                                            | e -> Log.error "[LoD] load of %A faulted: %A" v e
-                                
-                                        cts.Dispose()
-                                        sw.Stop()
-                                        Interlocked.Increment(&remCount) |> ignore
-                                        Interlocked.Add(&remTicks, sw.Elapsed.Ticks) |> ignore
+                            if config.frozen.GetValue() then
+                                Thread.Sleep 100
                             else
-                                Log.line "processing ended."
+                                let op = queue.Dequeue(cancel.Token)
+                                queueAdds <- queue.AddCount
+                                queueRemoves <- queue.RemoveCount
+                                if config.continueLoader() then
+                                    match op with
+                                        | Add(_,v) ->
+                                            sw.Restart()
+                                            let cts = new CancellationTokenSource()
+                                            let tcs = TaskCompletionSource<'b>()
+                                            if tasks.ContainsKey v then Log.warn "[LoD] duplicate add"
+
+                                            tasks.[v] <- (tcs.Task, cts)
+
+                                            try
+                                                let loaded = config.load cts.Token v
+                                                lock resultDeltaLock (fun () -> 
+                                                    resultDeltas <- HDeltaSet.add (Add loaded) resultDeltas
+                                                )
+                                                MVar.put resultDeltaReady ()
+                                                tcs.SetResult(loaded)
+                                            with
+                                                | CancelExn -> tcs.SetCanceled()
+                                                | e -> tcs.SetException e
+
+
+                                            sw.Stop()
+                                            Interlocked.Increment(&loadCount) |> ignore
+                                            Interlocked.Add(&loadTicks, sw.Elapsed.Ticks) |> ignore
+
+                                        | Rem(_,v) ->
+                                            sw.Restart()
+                                            let mutable tup = Unchecked.defaultof<_>
+                                            while not (tasks.TryRemove(v, &tup)) do
+                                                Log.warn "[LoD] the craziest thing just happened"
+                                                Thread.Yield() |> ignore
+
+                                            let (task, cts) = tup
+                                            cts.Cancel()
+                                            try
+                                                let res = task.Result
+                                                lock resultDeltaLock (fun () -> 
+                                                    let m = resultDeltas |> HDeltaSet.toHMap
+
+                                                    let newMap = 
+                                                        m |> HMap.alter res (fun o ->
+                                                            match o with
+                                                                | Some 1 -> 
+                                                                    dead <- HSet.add res dead
+                                                                    None
+                                                                | Some o ->
+                                                                    Some (o - 1)
+                                                                | None ->
+                                                                    Some (-1)
+                                                        )
+
+                                                    resultDeltas <- HDeltaSet.ofHMap newMap
+                                                )
+                                                MVar.put resultDeltaReady ()
+                                            with
+                                                | CancelExn -> ()
+                                                | e -> Log.error "[LoD] load of %A faulted: %A" v e
+                                
+                                            cts.Dispose()
+                                            sw.Stop()
+                                            Interlocked.Increment(&remCount) |> ignore
+                                            Interlocked.Add(&remTicks, sw.Elapsed.Ticks) |> ignore
+                                else
+                                    Log.line "processing ended."
                                 
                     with
                         | CancelExn ->
