@@ -69,8 +69,8 @@ module Config =
 module RuntimeConfig =
 
     /// ResourceSet.Update and Program.Run use a GL fence sync if true.
-    /// This flag improves timings for gpu uploads but also incurs a (possible) performance
-    /// penality as well as incompatibiliy on some drivers.
+    /// This flag improves timings for GPU uploads but also incurs a (possible) performance
+    /// penalty as well as incompatibility on some drivers.
     let mutable SyncUploadsAndFrames = false
   
     /// If true, no OpenGL queries take place, i.e. no primitive counting etc.
@@ -123,7 +123,7 @@ module Error =
 
     // in release the literal value of CheckErrors in combination
     // with this inline function leads to a complete elimination of
-    // the enire call including the allocation of its arguments
+    // the entire call including the allocation of its arguments
     type GL with
         static member Check str =
             if Config.CheckErrors then

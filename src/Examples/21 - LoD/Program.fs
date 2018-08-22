@@ -1,16 +1,5 @@
-﻿#if INTERACTIVE
-#I @"../../../bin/Debug"
-#I @"../../../bin/Release"
-#load "LoadReferences.fsx"
-#else
-namespace Examples
-#endif
-
-open System
-open System.Collections.Generic
-
+﻿open System
 open Aardvark.Base
-open Aardvark.Rendering.Interactive
 open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
@@ -72,14 +61,12 @@ module Helpers =
         geometry
             |> Sg.ofIndexedGeometry
             |> Sg.trafo invViewProj
+
+type Mode =
+    | Main
+    | Test
             
 module LoD = 
-
-    //Interactive.Renderer <- RendererConfiguration.GL
-    //FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
-
-    let win = Interactive.Window
-
 
     // ===================================================================================
     // example usage
@@ -169,76 +156,6 @@ module LoD =
 
     let data = DummyDataProvider(Box3d(V3d.OOO, 20.0 * V3d.III)) :> ILodData
 
-    [<AutoOpen>]
-    module Camera =
-        type Mode =
-            | Main
-            | Test
-
-        let mode = Mod.init Main
-
-        let currentMain = ref (CameraView.lookAt (V3d(3,3,3)) V3d.Zero V3d.OOI)
-        let currentTest = ref (CameraView.lookAt (V3d(3,3,3)) V3d.Zero V3d.OOI)
-
-        let mainCam =
-            adaptive {
-                let! mode = mode
-                match mode with
-                    | Main ->
-                        let! m = DefaultCameraController.control win.Mouse win.Keyboard win.Time !currentMain
-                        currentMain := m
-                        return m
-                    | _ ->
-                        return !currentMain
-            }
-
-        let gridCam =
-            adaptive {
-                let! mode = mode
-                match mode with
-                    | Test ->
-                        let! m = DefaultCameraController.control win.Mouse win.Keyboard win.Time !currentTest
-                        currentTest := m
-                        return m
-                    | _ ->
-                        return !currentTest
-            }
-
-        let view =
-            adaptive {
-                let! mode = mode
-                match mode with
-                    | Main -> return! mainCam
-                    | Test -> return! gridCam
-            }
-
-        win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ ->
-            transact (fun () ->
-                match mode.Value with
-                    | Main -> Mod.change mode Test
-                    | Test -> Mod.change mode Main
-
-                printfn "mode: %A" mode.Value
-            )
-        )
-
-        win.Keyboard.KeyDown(Keys.P).Values.Add(fun _ ->
-            let task = win.RenderTask
-            
-            printfn "%A (%A)" task task.OutOfDate
-            printfn "%A" view
-        )
-
-        let mainProj = Interactive.DefaultFrustum  
-        let gridProj = Frustum.perspective 60.0 1.0 50.0 1.0 |> Mod.constant
-
-        let proj =
-            adaptive {
-                let! mode = mode 
-                match mode with
-                    | Main -> return! mainProj
-                    | Test -> return! gridProj
-            }
 
     module Instanced =
         open FShade
@@ -264,12 +181,7 @@ module LoD =
         ]
         let e = FShade.Effect.compose effects
         FShadeSurface.Get(e) :> ISurface 
-//
-//    let surf = 
-//        win.Runtime.PrepareSurface(
-//            win.FramebufferSignature,
-//            eff
-//        ) :> ISurface |> Mod.constant
+
 
     let progress = 
         {   
@@ -282,18 +194,85 @@ module LoD =
     let pointCloud data config =
         Sg.pointCloud data config
 
+      
+ open LoD
 
-    let fr = Mod.init false
-    win.Keyboard.KeyDown(Keys.C).Values.Add ( fun _ ->
-        transact ( fun _ -> fr.Value <- not fr.Value )
-        Log.line "frozen now: %A" fr.Value
+[<EntryPoint>]
+let main argv = 
+    Ag.initialize()
+    Aardvark.Init()
+    
+    let win = window {
+        backend Backend.GL
+        display Display.Mono
+        debug true
+        verbosity DebugVerbosity.Warning
+        samples 1
+    }
+
+    let mode = Mod.init Main
+
+    let currentMain = ref (CameraView.lookAt (V3d(3,3,3)) V3d.Zero V3d.OOI)
+    let currentTest = ref (CameraView.lookAt (V3d(3,3,3)) V3d.Zero V3d.OOI)
+
+    let mainCam =
+        adaptive {
+            let! mode = mode
+            match mode with
+                | Main ->
+                    let! m = DefaultCameraController.control win.Mouse win.Keyboard win.Time !currentMain
+                    currentMain := m
+                    return m
+                | _ ->
+                    return !currentMain
+        }
+
+    let gridCam =
+        adaptive {
+            let! mode = mode
+            match mode with
+                | Test ->
+                    let! m = DefaultCameraController.control win.Mouse win.Keyboard win.Time !currentTest
+                    currentTest := m
+                    return m
+                | _ ->
+                    return !currentTest
+        }
+
+    let view =
+        adaptive {
+            let! mode = mode
+            match mode with
+                | Main -> return! mainCam
+                | Test -> return! gridCam
+        }
+
+    win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ ->
+        transact (fun () ->
+            match mode.Value with
+                | Main -> Mod.change mode Test
+                | Test -> Mod.change mode Main
+
+            printfn "mode: %A" mode.Value
+        )
     )
 
+
+    let mainProj = win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.01 10.0 (float s.X / float s.Y))
+    let gridProj = Frustum.perspective 60.0 1.0 50.0 1.0 |> Mod.constant
+
+    let proj =
+        adaptive {
+            let! mode = mode 
+            match mode with
+                | Main -> return! mainProj
+                | Test -> return! gridProj
+        }
 
     let cloud =
         pointCloud data {
             lodRasterizer           = Mod.constant (LodData.defaultRasterizeSet 5.0)
-            freeze                  = fr
+            freeze                  = Mod.constant false
             maxReuseRatio           = 0.5
             minReuseCount           = 1L <<< 20
             pruneInterval           = 500
@@ -307,16 +286,14 @@ module LoD =
             boundingBoxSurface      = None //Some surf
             progressCallback        = None
         } 
-                     
+
     let sg = 
         Sg.group' [
             cloud
                 |> Sg.effect [
-                    DefaultSurfaces.trafo |> toEffect 
-                    Instanced.trafo |> toEffect                  
+                    DefaultSurfaces.trafo        |> toEffect 
+                    Instanced.trafo              |> toEffect                  
                     DefaultSurfaces.vertexColor  |> toEffect         
-                    //DefaultSurfaces.pointSprite  |> toEffect     
-                    //DefaultSurfaces.pointSpriteFragment  |> toEffect 
                 ]
             Helpers.frustum gridCam gridProj
 
@@ -325,11 +302,8 @@ module LoD =
 
         ]
 
-    let ssg =
-        Sg.ofList (List.init 10 ( fun i -> sg |> (Sg.translate (float i * 0.01) 0.0 0.0) ) )
-
     let final =
-        ssg |> Sg.effect [
+        sg |> Sg.effect [
                 DefaultSurfaces.trafo |> toEffect                
                 DefaultSurfaces.vertexColor  |> toEffect 
                 ]
@@ -337,19 +311,9 @@ module LoD =
             |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo    )
             |> Sg.uniform "PointSize" (Mod.constant 4.0)
             |> Sg.uniform "ViewportSize" win.Sizes
-    
-    let run() =
-        //Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
-        //Interactive.Renderer <- RendererConfiguration.Vulkan
-        Aardvark.Rendering.GL.Config.CheckErrors <- true
-        Interactive.SceneGraph <- final
-        Interactive.RunMainLoop()
 
 
+    win.Scene <- final
+    win.Run()
 
-open LoD
-
-#if INTERACTIVE
-Interactive.SceneGraph <- final
-#else
-#endif
+    0

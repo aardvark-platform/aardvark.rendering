@@ -79,13 +79,13 @@ module DeltaCompiler =
             // bind the program (if needed)
             if prev.Program <> me.Program then
                 let myProg = me.Program.Handle.GetValue()
-
                 yield Instructions.bindProgram me.Program
-            
-                if myProg.WritesPointSize then
-                    yield Instruction.Enable(int OpenTK.Graphics.OpenGL4.EnableCap.ProgramPointSize)
-                else
-                    yield Instruction.Disable(int OpenTK.Graphics.OpenGL4.EnableCap.ProgramPointSize)
+   
+                if obj.ReferenceEquals(prev.Program, null) || prev.Program.Handle.GetValue().WritesPointSize <> myProg.WritesPointSize then 
+                    if myProg.WritesPointSize then
+                        yield Instruction.Enable(int OpenTK.Graphics.OpenGL4.EnableCap.ProgramPointSize)
+                    else
+                        yield Instruction.Disable(int OpenTK.Graphics.OpenGL4.EnableCap.ProgramPointSize)
 
 
             // bind all uniform-buffers (if needed)
