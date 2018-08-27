@@ -88,6 +88,7 @@ module ShaderModule =
         let siface = info.iface.shaders.[ShaderStage.toFShade stage]
         match GLSLang.GLSLang.tryCompile (glslangStage stage) siface.shaderEntry [string stage] info.code with
             | Some binary, _ ->
+                let binary = GLSLang.GLSLang.optimizeDefault binary
                 let iface = Map.ofList [stage, siface]
                 let handle = device |> createRaw binary
                 let result = ShaderModule(device, handle, stage, iface, binary)

@@ -356,6 +356,7 @@ module ShaderProgram =
 
                     match GLSLang.GLSLang.tryCompile gStage entry [define] code with
                         | Some binary, log ->
+                            let binary = GLSLang.GLSLang.optimizeDefault binary
                             logs.[stage] <- log
                             stage, binary, iface.shaders.[fshadeStage]
                         | None, err ->

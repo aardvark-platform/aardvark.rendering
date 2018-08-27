@@ -17,7 +17,7 @@ nuget FShade.Debug                       ~> 4.1.13
 nuget Unofficial.OpenVR					 ~> 1.1.0 
 nuget Unofficial.Typography              ~> 0.0.2
 nuget CommonMark.NET                     ~> 0.15.1
-nuget GLSLangSharp                       ~> 0.4.0
+nuget GLSLangSharp                       ~> 0.4.1
 
 nuget BruTile                            ~> 2.0.0-alpha1
 nuget Unofficial.LibTessDotNet           ~> 2.0.0
