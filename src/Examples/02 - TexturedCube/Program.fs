@@ -39,7 +39,7 @@ let main argv =
     show {
         backend Backend.Vulkan
         display Display.Mono
-        debug true
+        debug false
         verbosity DebugVerbosity.Warning
         samples 8
         scene sg
