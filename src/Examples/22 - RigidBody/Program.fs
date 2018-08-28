@@ -57,6 +57,51 @@ type RigidBodyInstance =
 
 type Force = { pos : V3d; force : V3d }
 
+
+module Seq =
+    let chooseMinBy (f : 'b -> 'x) (mapping : 'a -> Option<'b>) (seq : seq<'a>) =
+        let a = seq |> Seq.choose mapping |> Seq.cache
+        if Seq.isEmpty a then
+            None
+        else
+            Seq.minBy f a |> Some
+
+    let tryMinBy (f : 'a -> 'c) (s : seq<'a>) =
+        use e = s.GetEnumerator()
+        if e.MoveNext() then
+            let mutable minE = e.Current
+            let mutable min = f minE
+
+            while e.MoveNext() do
+                let v = f e.Current
+                if v < min then
+                    min <- v
+                    minE <- e.Current
+
+            Some minE
+
+        else
+            None
+
+    let tryChooseMin (f : 'a -> Option<'c * 'b>) (s : seq<'a>) =
+        let filtered = s |> Seq.choose f
+        let e = filtered.GetEnumerator()
+
+        if e.MoveNext() then
+            let (c,b) = e.Current
+            let mutable min = c
+            let mutable minE = b
+            while e.MoveNext() do
+                let (c,b) = e.Current
+                if c < min then
+                    min <- c
+                    minE <- b
+
+            Some minE
+        else
+            None
+
+
 module RigidBodyInstance =
     open Aardvark.Base
 
@@ -196,70 +241,87 @@ module RigidBodyInstance =
             else
                 instance
 
-    let intersects (dt : float) (lf : RigidBodyInstance -> list<Force>) (rf : RigidBodyInstance -> list<Force>) (l : RigidBodyInstance) (r : RigidBodyInstance) =
-        let l' = step lf dt l
-        let r' = step rf dt r
+    let rec intersects (dt : float) (lf : RigidBodyInstance -> list<Force>) (rf : RigidBodyInstance -> list<Force>) (l : RigidBodyInstance) (r : RigidBodyInstance) =
+        let l1 = step lf dt l
+        let r1 = step rf dt r
 
         match l.body.shape, r.body.shape with
             | Box ls, Box rs ->
                 let lb = Box3d.FromCenterAndSize(V3d.Zero, ls)
                 let rb = Box3d.FromCenterAndSize(V3d.Zero, rs)
-            
-                let r2l = l.trafo.Inverse * r.trafo
-                let r2l' = l'.trafo.Inverse * r'.trafo
+
+                let inline m (e : Euclidean3d) : M44d = Euclidean3d.op_Explicit e
+
+                let r2l = m l.trafo.Inverse * m r.trafo
+                let r2l1 = m l1.trafo.Inverse * m r1.trafo
                 
-                rb.ComputeCorners() |> Array.tryPick (fun pt ->
-                    let pt = r2l.TransformPos pt
-                    let pt' = r2l'.TransformPos pt
+                let intersection = 
+                    rb.ComputeCorners() |> Seq.chooseMinBy (fun (a,_,_) -> a) (fun ptr ->
+                        let pt = r2l.TransformPos ptr
+                        let pt1 = r2l1.TransformPos ptr
 
-                    let dir = pt - pt'
-                    let len = Vec.length dir
-                    let ray = Ray3d(pt, dir / len) //Line3d(pt, pt')
+                        let dir = pt1 - pt
+                        let len = Vec.length dir
+                        let ray = Ray3d(pt, dir / len) //Line3d(pt, pt')
                     
-                    let mutable t = System.Double.PositiveInfinity
-                    lb.Intersects(ray, &t) |> ignore
-                    printfn "%A" t
+                        let mutable t = System.Double.PositiveInfinity
+                        lb.Intersects(ray, &t) |> ignore
 
-                    if lb.Intersects(ray, &t) && t >= 0.0 && t <= len then
-                        let pi = ray.GetPointOnRay t
-                        let t = t / len
+                        if lb.Intersects(ray, &t) && t >= 0.0 && t <= len then
+                            let pi = ray.GetPointOnRay t
+                            let t = t / len
 
-                        let eps = 0.01
-                        let x = Fun.ApproximateEquals(abs pi.X, lb.Max.X, eps)
-                        let y = Fun.ApproximateEquals(abs pi.Y, lb.Max.Y, eps)
-                        let z = Fun.ApproximateEquals(abs pi.Z, lb.Max.Z, eps)
+                            let eps = 0.01
+                            let x = Fun.ApproximateEquals(abs pi.X, lb.Max.X, eps)
+                            let y = Fun.ApproximateEquals(abs pi.Y, lb.Max.Y, eps)
+                            let z = Fun.ApproximateEquals(abs pi.Z, lb.Max.Z, eps)
 
-                        let dir = 
-                            match x,y,z with 
-                                | false, false, false -> V3d.Zero
-                                | true, false, false -> V3d.IOO
-                                | false, true, false -> V3d.OIO
-                                | false, false, true -> V3d.OOI
+                            let dir = 
+                                match x,y,z with 
+                                    | false, false, false -> V3d.Zero
+                                    | true, false, false -> V3d.IOO
+                                    | false, true, false -> V3d.OIO
+                                    | false, false, true -> V3d.OOI
 
-                                | true, true, false -> 
-                                    let mutable dir = ray.Direction
-                                    dir.Z <- 0.0
-                                    Vec.normalize dir
+                                    | true, true, false -> 
+                                        let mutable dir = ray.Direction
+                                        dir.Z <- 0.0
+                                        Vec.normalize dir
                                 
-                                | true, false, true -> 
-                                    let mutable dir = ray.Direction
-                                    dir.Y <- 0.0
-                                    Vec.normalize dir
+                                    | true, false, true -> 
+                                        let mutable dir = ray.Direction
+                                        dir.Y <- 0.0
+                                        Vec.normalize dir
                                 
-                                | false, true, true -> 
-                                    let mutable dir = ray.Direction
-                                    dir.X <- 0.0
-                                    Vec.normalize dir
-                                | true, true, true ->
-                                    Vec.normalize  ray.Direction
+                                    | false, true, true -> 
+                                        let mutable dir = ray.Direction
+                                        dir.X <- 0.0
+                                        Vec.normalize dir
+                                    | true, true, true ->
+                                        Vec.normalize  ray.Direction
 
-                        let dt' = t * dt
+                            let dt' = t * dt
 
-                        Some (t * dt, l'.trafo.TransformPos pi, l'.trafo.TransformDir dir)
-                    else
+                            Some (t * dt, l1.trafo.TransformPos pi, l1.trafo.TransformDir dir)
+                        else
+                            None
+
+                    )
+                   
+                match intersection with
+                    | Some (ti, a, b) ->
+                        if ti > 0.001 then
+                            failwith "implement me"
+                            //match intersects ti lf rf l r with
+                            //    | Some(ti,a,b) -> Some(ti, a, b)
+                            //    | None ->
+                            //        let l1
+                            //        intersects
+                        else
+                            Some (ti, a, b)
+                    | None ->
                         None
-
-                )
+                        
             | _ ->
                 failwith ""
 
@@ -272,14 +334,16 @@ type World =
     }
 
 module World =
+    
 
     let rec step (dt : float) (world : World) =
         if dt <= 0.0 then
             world
         else
             let test = 
-                world.objects |> Seq.tryPick (fun (ln, lo) ->
-                    world.objects |> Seq.tryPick (fun (rn, ro) ->
+                let inline thrd (_,_,a,_,_) = a
+                world.objects |> Seq.chooseMinBy thrd (fun (ln, lo) ->
+                    world.objects |> Seq.chooseMinBy thrd (fun (rn, ro) ->
                         if ln < rn then    
                             match RigidBodyInstance.intersects dt (world.forces ln) (world.forces rn) lo ro with
                                 | Some(dt, pos, dir) ->
