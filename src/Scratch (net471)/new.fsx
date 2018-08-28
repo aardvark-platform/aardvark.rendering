@@ -559,7 +559,7 @@ module ProjectDirectory =
 let private numberedRx = System.Text.RegularExpressions.Regex @"(?<number>[0-9]+) \- .*"
 let newExample (name : string) (dir : string) =
     let dirs = Directory.GetDirectories(dir, "*", SearchOption.TopDirectoryOnly)
-    let sourceProjectName = "00 - Hello World"
+    let sourceProjectName = "00 - HelloWorld (net471)"
     let template = Path.Combine(dir, sourceProjectName)
 
     let maxIndex =

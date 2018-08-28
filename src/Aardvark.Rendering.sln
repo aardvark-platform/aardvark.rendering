@@ -132,7 +132,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Scratch (net471)", "Scratch
 		Scratch (net471)\new.fsx = Scratch (net471)\new.fsx
 	EndProjectSection
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "00 - HelloWorld", "Scratch (net471)\HelloWorld\00 - HelloWorld.fsproj", "{0D5B9ADB-7EFE-44ED-BB73-FB232B74F17C}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "00 - HelloWorld (net471)", "Scratch (net471)\00 - HelloWorld (net471)\00 - HelloWorld (net471).fsproj", "{0D5B9ADB-7EFE-44ED-BB73-FB232B74F17C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
