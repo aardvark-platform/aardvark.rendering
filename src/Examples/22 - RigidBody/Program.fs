@@ -8,6 +8,7 @@ type Shape =
     | Box of size : V3d
     | Sphere of radius : float
 
+
 type RigidBody =
     {
         shape       : Shape
@@ -25,9 +26,15 @@ module RigidBody =
                     M33d(
                         mass * (size.Y * size.Y + size.Z * size.Z) / 12.0, 0.0, 0.0,
                         0.0, mass * (size.X * size.X + size.Z * size.Z) / 12.0, 0.0,
-                        0.0, 0.0, mass * (size.Y * size.Y + size.Z * size.Z) / 12.0
+                        0.0, 0.0, mass * (size.X * size.X + size.Y * size.Y) / 12.0
                     )
-                let invI = I.Inverse
+
+                let invI =
+                    M33d(
+                        12.0 / (mass * (size.Y * size.Y + size.Z * size.Z)), 0.0, 0.0,
+                        0.0, 12.0 / (mass * (size.X * size.X + size.Z * size.Z)), 0.0,
+                        0.0, 0.0, 12.0 / (mass * (size.X * size.X + size.Y * size.Y))
+                    )
 
                 { 
                     shape = shape
@@ -40,33 +47,23 @@ module RigidBody =
                 failwith "not implemented"
 
 
-[<Struct>]
-type Euclidean = { rot : V3d; trans : V3d } with
-    member x.Inverse = { rot = -x.rot; trans = -x.trans }
-
-    member x.TransformDir(dir : V3d) =
-        Vec.cross x.rot dir
-
-    member x.TransformPos(pos : V3d) =
-        Vec.cross x.rot pos + x.trans
-    
-    member x.ToM33d() =
-        let angle = Vec.length
-        Rot3d(x.rot)
-
-
 type RigidBodyInstance =
     {
         body                : RigidBody
-        trafo               : Euclidean
+        trafo               : Euclidean3d
         linearMomentum      : V3d
         angularMomentum     : V3d
     }
 
+type Force = { pos : V3d; force : V3d }
+
 module RigidBodyInstance =
     open Aardvark.Base
 
-    let ofBody (trafo : Euclidean) (body : RigidBody) =
+
+
+
+    let ofBody (trafo : Euclidean3d) (body : RigidBody) =
         {
             body = body
             trafo = trafo
@@ -75,38 +72,54 @@ module RigidBodyInstance =
         }
 
 
+    let getVelocity (worldPoint : V3d) (instance : RigidBodyInstance) =
+        let vl = instance.body.invMass * instance.linearMomentum 
+
+        let m : M33d = Rot3d.op_Explicit instance.trafo.Rot
+        let inv = m * instance.body.invInertia * m.Transposed
+
+        let omega = inv * instance.angularMomentum
+        let vr = Vec.cross omega (worldPoint - instance.trafo.Trans)
+
+        vl + vr
+
+
+
     let applyMomentum (worldPoint : V3d) (worldMomentum : V3d) (instance : RigidBodyInstance) =
 
         // vector from center of mass to point
-        let p = worldPoint - instance.trafo.trans
+        let r = worldPoint - instance.trafo.Trans
 
         // momentum in object space
-        let m = worldMomentum
+        let p = worldMomentum
 
-        // decompose the momentum into a linear and a normal part
-        let dist2 = Vec.lengthSquared p
-
-
-        let L = Vec.cross p m
+        // decompose the momentum into a linear and a angular part
+        let angularPart = 
+            Vec.cross r p
         
-        let P = m
-        let linearPart = V3d.Zero // TODO: correct p * Vec.dot p m / dist2
-        //let normalPart = m - linearPart
+        let linearPart = //V3d.Zero
+            let r2 = Vec.lengthSquared r
+            if Fun.IsTiny r2 then p
+            else r * Vec.dot r p / r2
 
         { instance with
             linearMomentum = instance.linearMomentum + linearPart
-            angularMomentum = instance.angularMomentum + Vec.cross p m
+            angularMomentum = instance.angularMomentum + angularPart
         }
 
-    let private decomposeForces (forces : list<V3d * V3d>) (instance : RigidBodyInstance) =
+    let private decomposeForces (forces : list<Force>) (instance : RigidBodyInstance) =
         let mutable F = V3d.Zero
         let mutable M = V3d.Zero
 
-        for (p, f) in forces do
-            let p = p - instance.trafo.trans
+        for { pos = p; force = f } in forces do
+            let p = p - instance.trafo.Trans
 
             let dist2 = Vec.lengthSquared p
-            let linear = p * Vec.dot p f / dist2
+            let linear = 
+                if Fun.IsTiny dist2 then
+                    f
+                else 
+                    p * Vec.dot p f / dist2
             
             F <- F + linear
             M <- M + Vec.cross p f
@@ -125,54 +138,194 @@ module RigidBodyInstance =
         if Fun.IsTiny angleInRadians then
             Rot3d.Identity
         else
-            let halfAngle = 0.5 * angleInRadians
-            Rot3d(V = sin halfAngle * v / angleInRadians, W = cos halfAngle)
+            let axis = v / angleInRadians
+            Rot3d(axis, angleInRadians)
 
-    let private toV3d (r : Rot3d) =
-        let mutable axis = V3d.Zero
-        let mutable angle = 0.0
-        r.ToAxisAngle(&axis, &angle)
-        axis * angle
-
-
-    let step (forces : RigidBodyInstance -> list<V3d * V3d>) (dt : float) (instance : RigidBodyInstance) =
+    let step (forces : RigidBodyInstance -> list<Force>) (dt : float) (instance : RigidBodyInstance) =
         let F0, M0 = decomposeForces (forces instance) instance
         
-        // dP / dt = F
-        // dL / dt = M
+        if not (V3d.ApproxEqual(F0, V3d.Zero)) || 
+           not (V3d.ApproxEqual(M0, V3d.Zero)) || 
+           not (V3d.ApproxEqual(instance.linearMomentum, V3d.Zero)) ||
+           not (V3d.ApproxEqual(instance.angularMomentum, V3d.Zero)) then
 
-        // dPos / dt = P
-        // dRot / dt = omega = I^-1 * L
+                let m : M33d = Rot3d.op_Explicit instance.trafo.Rot
+                let mInv = m.Transposed
+                
+                // dP / dt = F
+                // dL / dt = M
 
-        let a0 = instance.body.invMass * F0
-        let v0 = instance.body.invMass * instance.linearMomentum
-
-        let m : M33d = Rot3d.op_Explicit instance.trafo.rot.Inverse
-        let invInertia = m * instance.body.invInertia * m.Transposed
-
-        let alpha0 = invInertia * m.Transposed * M0
-        let omega0 = invInertia * instance.angularMomentum
+                // dPos / dt = P
+                // dRot / dt = omega = I^-1 * L
+                let invInertia = instance.body.invInertia
         
-        let dp = v0 * dt + 0.5 * a0 * dt * dt
-        let dr = omega0 * dt + 0.5 * alpha0 * dt * dt
+                let a0 = instance.body.invMass * (mInv * F0)
+                let v0 = instance.body.invMass * (mInv * instance.linearMomentum)
 
-        let p1 = instance.trafo.Trans + dp
-        let r1 = toV3d instance.trafo.Rot + dr
+                let alpha0 = invInertia * (mInv * M0)
+                let omega0 = invInertia * (mInv * instance.angularMomentum)
+        
+                let dp = v0 * dt + 0.5 * a0 * dt * dt
+                let dr = omega0 * dt + 0.5 * alpha0 * dt * dt
+
+
+                //let ra = Rot3d(V3d.III.Normalized, 0.4)
+                //let rb = Rot3d(V3d.OOI.Normalized, 0.2)
+                //let ma = M44d.Rotation(ra)
+                //let mb = M44d.Rotation(rb)
+                //let rc : M33d = ra * rb |> Rot3d.op_Explicit
+                //let mc = (ma * mb).UpperLeftM33()
+                //let eq = M33d.ApproximatelyEquals(rc, mc, 0.000001)
+                
+                //let dr = 
+                //    instance.trafo.Rot * (toRot3d dr) * instance.trafo.Rot.Inverse
+                
+                let p1 = instance.trafo.Trans + m * dp
+                let r1 = instance.trafo.Rot * (toRot3d dr)
        
-        let newInstance = { instance with trafo = Euclidean3d(toRot3d r1, p1) }
-        let F1, M1 = decomposeForces (forces newInstance) newInstance
+                // intersects(trafo * p, prim)
 
-        
-        let m1 : M33d = Rot3d.op_Explicit newInstance.trafo.Rot
-        { newInstance with
-            linearMomentum = newInstance.linearMomentum + 0.5 * (F0 + F1) * dt
-            angularMomentum = newInstance.angularMomentum + 0.5 * (M0 + M1) * dt
-        }
-        
+                let newInstance = { instance with trafo = Euclidean3d(r1, p1) }
+                let F1, M1 = decomposeForces (forces newInstance) newInstance
+                
+
+                { newInstance with
+                    linearMomentum = newInstance.linearMomentum + 0.5 * (F0 + F1) * dt
+                    angularMomentum = newInstance.angularMomentum + 0.5 * (M0 + M1) * dt
+                }
+            else
+                instance
+
+    let intersects (dt : float) (lf : RigidBodyInstance -> list<Force>) (rf : RigidBodyInstance -> list<Force>) (l : RigidBodyInstance) (r : RigidBodyInstance) =
+        let l' = step lf dt l
+        let r' = step rf dt r
+
+        match l.body.shape, r.body.shape with
+            | Box ls, Box rs ->
+                let lb = Box3d.FromCenterAndSize(V3d.Zero, ls)
+                let rb = Box3d.FromCenterAndSize(V3d.Zero, rs)
+            
+                let r2l = l.trafo.Inverse * r.trafo
+                let r2l' = l'.trafo.Inverse * r'.trafo
+                
+                rb.ComputeCorners() |> Array.tryPick (fun pt ->
+                    let pt = r2l.TransformPos pt
+                    let pt' = r2l'.TransformPos pt
+
+                    let ray = Ray3d(pt, pt' - pt) //Line3d(pt, pt')
+                    
+                    let mutable t = System.Double.PositiveInfinity
+                    if lb.Intersects(ray, &t) && t >= 0.0 then
+                        let pi = ray.GetPointOnRay t
+
+                        let eps = 0.00001
+                        let x = Fun.ApproximateEquals(abs pi.X, lb.Max.X, eps)
+                        let y = Fun.ApproximateEquals(abs pi.Y, lb.Max.Y, eps)
+                        let z = Fun.ApproximateEquals(abs pi.Z, lb.Max.Z, eps)
+
+                        let dir = 
+                            match x,y,z with 
+                                | false, false, false -> failwith ""
+                                | true, false, false -> V3d.IOO
+                                | false, true, false -> V3d.OIO
+                                | false, false, true -> V3d.OOI
+
+                                | true, true, false -> 
+                                    let mutable dir = ray.Direction
+                                    dir.Z <- 0.0
+                                    Vec.normalize dir
+                                
+                                | true, false, true -> 
+                                    let mutable dir = ray.Direction
+                                    dir.Y <- 0.0
+                                    Vec.normalize dir
+                                
+                                | false, true, true -> 
+                                    let mutable dir = ray.Direction
+                                    dir.X <- 0.0
+                                    Vec.normalize dir
+                                | true, true, true ->
+                                    Vec.normalize  ray.Direction
+
+                        let dt' = t * dt
+
+                        Some (t * dt, l'.trafo.TransformPos pi, l'.trafo.TransformDir dir)
+                    else
+                        None
+
+                )
+            | _ ->
+                failwith ""
 
 
 
+type World =
+    {
+        objects : hmap<string, RigidBodyInstance>
+        forces : string -> RigidBodyInstance -> list<Force>
+    }
 
+module World =
+
+    let rec step (dt : float) (world : World) =
+        if dt <= 0.0 then
+            world
+        else
+            let test = 
+                world.objects |> Seq.tryPick (fun (ln, lo) ->
+                    world.objects |> Seq.tryPick (fun (rn, ro) ->
+                        if ln < rn then    
+                            match RigidBodyInstance.intersects dt (world.forces ln) (world.forces rn) lo ro with
+                                | Some(dt, pos, dir) ->
+                                    Some (ln, rn, dt, pos, dir)
+                                | None ->
+                                    None
+                        else
+                            None
+                    )
+                )
+
+            match test with
+                | Some (ln, rn, ti, pos, dir) ->
+                    let newWorld = { world with objects = world.objects |> HMap.map (fun id -> RigidBodyInstance.step (world.forces id) ti)  }
+
+                    let lo = newWorld.objects.[ln]
+                    let ro = newWorld.objects.[rn]
+                    let vl = RigidBodyInstance.getVelocity pos lo
+                    let vr = RigidBodyInstance.getVelocity pos ro
+
+                    let vld = Vec.dot dir vl
+                    let vrd = Vec.dot dir vr
+
+                    // vl' = 2 * (ml * vl + mr * vr) / (ml + mr) - vl
+                    // vl' = 2 * (ml * vl + mr * vr) / (ml + mr) - vl * (ml + mr) / (ml + mr)
+                    // vl' = [2 * (ml * vl + mr * vr) - vl * ml + vl * mr] / (ml + mr)
+                    // vl' = [2 * ml * vl + 2 * mr * vr - vl * ml + vl * mr] / (ml + mr)
+                    // vl' = [ml*vl + mr*(2*vr + vl)] / (ml + mr)
+                    // vl' = [(ml + mr)*vl - mr*vl + mr*(2*vr + vl)] / (ml + mr)
+                    // vl' = vl + 2*mr*vr / (ml + mr)
+
+                    let dvld = 2.0 * ro.body.mass * vrd / (lo.body.mass + ro.body.mass)
+                    let dvrd = 2.0 * lo.body.mass * vld / (lo.body.mass + ro.body.mass)
+
+                    let lo = RigidBodyInstance.applyMomentum pos (dir * lo.body.mass * dvld) lo
+                    let ro = RigidBodyInstance.applyMomentum pos (dir * ro.body.mass * dvrd) ro
+
+                    let newWorld = 
+                        { newWorld with
+                            objects = HMap.add ln lo (HMap.add rn ro newWorld.objects)
+                        }
+                    if ti < dt then
+                        step (dt - ti) newWorld
+                    else
+                        newWorld
+
+
+                | None -> 
+                    let newWorld = { world with objects = world.objects |> HMap.map (fun id -> RigidBodyInstance.step (world.forces id) dt)  }
+                    newWorld
+
+     
 
 
 
@@ -197,10 +350,32 @@ let main argv =
     let initialthing =
         Box size
             |> RigidBody.ofShape 10.0
+            |> RigidBodyInstance.ofBody (Euclidean3d(Rot3d.Identity, V3d.OOI))
+
+    let floorSize = V3d(10.0, 10.0, 0.1)
+    let floor =
+        Box floorSize
+            |> RigidBody.ofShape 100000.0
             |> RigidBodyInstance.ofBody Euclidean3d.Identity
 
-    let mutable thing = initialthing
-    let mthing =
+
+    let initialWorld =
+        {
+            objects =
+                HMap.ofList [
+                    "thing", initialthing
+                    "floor", floor
+                ]
+
+            forces = fun name b ->
+                if name = "thing" then
+                    [ { pos = b.trafo.Trans; force = V3d(0.0, 0.0, -2.0) } ]
+                else
+                    []
+        }
+
+    let mutable world = initialWorld
+    let mworld =
         let sw = System.Diagnostics.Stopwatch.StartNew()
         let mutable lastTime = None
         win.Time |> Mod.map (fun _ ->
@@ -213,30 +388,60 @@ let main argv =
             lastTime <- Some now
 
             if dt.TotalSeconds <= 0.16666 then
-                thing <- RigidBodyInstance.step (fun _ -> []) dt.TotalSeconds thing
+                world <- World.step dt.TotalSeconds world
 
-            thing
+            world
         )
 
 
-    win.Keyboard.KeyDown(Keys.Enter).Values.Add(fun _ ->
-        thing <- RigidBodyInstance.applyMomentum (-size / 2.0) (0.2 * thing.body.mass * V3d.OOI) thing
-    )
-    
-    win.Keyboard.KeyDown(Keys.Back).Values.Add(fun _ ->
-        thing <- RigidBodyInstance.applyMomentum (V3d(0.0, 0.0, -size.Z / 2.0)) (0.2 * thing.body.mass * V3d.OOI) thing
-    )
-
     win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ ->
-        thing <- initialthing
+        world <- initialWorld
     )
 
+    let mthing = mworld |> Mod.map (fun w -> w.objects.["thing"])
+    let mfloor = mworld |> Mod.map (fun w -> w.objects.["floor"])
 
     // lets define the bounds/color for our box
     // NOTE that the color is going to be ignored since we're using a texture
     let box = Box3d(-V3d.III, V3d.III)
     let color = C4b.Red
 
+
+    let ang =
+        let trafo (t : RigidBodyInstance) =
+            let v = t.angularMomentum
+            let l = Vec.length v
+            Trafo3d.Scale(1.0, 1.0, l) *
+            Trafo3d.RotateInto(V3d.OOI,  v / l) * 
+            Trafo3d.Translation t.trafo.Trans 
+
+        Sg.cylinder' 16 C4b.Red 0.01 1.0
+            |> Sg.trafo (mthing |> Mod.map trafo)
+            |> Sg.shader {
+                do! DefaultSurfaces.trafo
+                do! DefaultSurfaces.constantColor C4f.Red
+                do! DefaultSurfaces.simpleLighting
+            }
+
+    let coord =
+        Sg.coordinateCross' 1.0
+            |> Sg.shader {
+                do! DefaultSurfaces.trafo
+            }
+
+    let floor = 
+        Sg.box (Mod.constant color) (Mod.constant (Box3d.FromCenterAndSize(V3d.Zero, floorSize)))
+            |> Sg.trafo (mfloor |> Mod.map (fun t -> Trafo3d(Euclidean3d.op_Explicit t.trafo, Euclidean3d.op_Explicit t.trafo.Inverse)))
+            
+            // apply a shader ...
+            // * transforming all vertices
+            // * looking up the DiffuseTexture 
+            // * applying a simple lighting to the geometry (headlight)
+            |> Sg.shader {
+                do! DefaultSurfaces.trafo
+                do! DefaultSurfaces.constantColor C4f.Red
+                do! DefaultSurfaces.simpleLighting
+            }
     let sg = 
         // thankfully aardvark defines a primitive box
         Sg.box (Mod.constant color) (Mod.constant (Box3d.FromCenterAndSize(V3d.Zero, size)))
@@ -251,7 +456,9 @@ let main argv =
                 do! DefaultSurfaces.constantColor C4f.White
                 do! DefaultSurfaces.simpleLighting
             }
-    
+        |> Sg.andAlso ang
+        |> Sg.andAlso coord
+        |> Sg.andAlso floor
     win.Scene <- sg
     win.Run()
     
