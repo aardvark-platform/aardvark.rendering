@@ -212,20 +212,26 @@ module RigidBodyInstance =
                     let pt = r2l.TransformPos pt
                     let pt' = r2l'.TransformPos pt
 
-                    let ray = Ray3d(pt, pt' - pt) //Line3d(pt, pt')
+                    let dir = pt - pt'
+                    let len = Vec.length dir
+                    let ray = Ray3d(pt, dir / len) //Line3d(pt, pt')
                     
                     let mutable t = System.Double.PositiveInfinity
-                    if lb.Intersects(ray, &t) && t >= 0.0 then
-                        let pi = ray.GetPointOnRay t
+                    lb.Intersects(ray, &t) |> ignore
+                    printfn "%A" t
 
-                        let eps = 0.00001
+                    if lb.Intersects(ray, &t) && t >= 0.0 && t <= len then
+                        let pi = ray.GetPointOnRay t
+                        let t = t / len
+
+                        let eps = 0.01
                         let x = Fun.ApproximateEquals(abs pi.X, lb.Max.X, eps)
                         let y = Fun.ApproximateEquals(abs pi.Y, lb.Max.Y, eps)
                         let z = Fun.ApproximateEquals(abs pi.Z, lb.Max.Z, eps)
 
                         let dir = 
                             match x,y,z with 
-                                | false, false, false -> failwith ""
+                                | false, false, false -> V3d.Zero
                                 | true, false, false -> V3d.IOO
                                 | false, true, false -> V3d.OIO
                                 | false, false, true -> V3d.OOI
