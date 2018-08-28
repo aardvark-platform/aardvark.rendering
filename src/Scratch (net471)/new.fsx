@@ -559,7 +559,7 @@ module ProjectDirectory =
 let private numberedRx = System.Text.RegularExpressions.Regex @"(?<number>[0-9]+) \- .*"
 let newExample (name : string) (dir : string) =
     let dirs = Directory.GetDirectories(dir, "*", SearchOption.TopDirectoryOnly)
-    let sourceProjectName = "01 - Triangle"
+    let sourceProjectName = "00 - Hello World"
     let template = Path.Combine(dir, sourceProjectName)
 
     let maxIndex =
@@ -573,7 +573,7 @@ let newExample (name : string) (dir : string) =
 
     let slnPath = Path.Combine(dir, "..\\Aardvark.Rendering.sln")
     let sln = slnPath |> Solution.load
-    let examples = Solution.tryFindFolder "Scratch" sln
+    let examples = Solution.tryFindFolder "Scratch (net471)" sln
 
     match Solution.tryFind sourceProjectName sln with
         | Some p -> 
