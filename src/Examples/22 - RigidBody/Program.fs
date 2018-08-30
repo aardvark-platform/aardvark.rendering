@@ -306,7 +306,7 @@ module RigidBodyInstance =
 
                             let dir = 
                                 match x,y,z with 
-                                    | false, false, false -> V3d.Zero
+                                    | false, false, false -> V3d.OOI
                                     | true, false, false -> V3d.IOO
                                     | false, true, false -> V3d.OIO
                                     | false, false, true -> V3d.OOI
@@ -420,46 +420,100 @@ module World =
         
                     let world = { world with objects = world.objects |> HMap.map (fun id -> RigidBodyInstance.step (world.forces id) ti)  }
 
-                    let newWorld = 
-                        intersections |> List.fold (fun world (pos, dir) ->
+                    let velocities = 
+                        intersections |> List.map (fun (pos, dir) ->
                             if not (V3d.ApproxEqual(dir, V3d.Zero)) then
                                 let lo = world.objects.[ln]
                                 let ro = world.objects.[rn]
                                 let vl = RigidBodyInstance.getVelocity pos lo
                                 let vr = RigidBodyInstance.getVelocity pos ro
 
+                                let vld = Vec.dot vl dir
+                                let vrd = Vec.dot vr dir
+
                                 let dvld = 
                                     (2.0 * ro.body.mass / (lo.body.mass + ro.body.mass)) *
-                                    (Vec.dot (vr - vl) dir) * dir
+                                    (Vec.dot (vr - vl) dir)
                         
                                 let dvrd = 
                                     (2.0 * lo.body.mass / (lo.body.mass + ro.body.mass)) *
-                                    (Vec.dot (vl - vr) dir) * dir
+                                    (Vec.dot (vl - vr) dir)
                         
 
-                                let lo1 = RigidBodyInstance.addVelocity pos dvld lo
-                                let ro1 = RigidBodyInstance.addVelocity pos dvrd ro
+                                let dvld = 0.9 * (dvld + vld) - vld
+                                let dvrd = 0.9 * (dvrd + vrd) - vrd
 
-                                let a = RigidBodyInstance.getVelocity pos lo1 |> Vec.dot dir
-                                let a1 = vl + dvld |> Vec.dot dir
-                                if not (Fun.IsTiny(a - a1)) then
-                                    printfn "bad"
+                                let vln = vl - dir * vld
+                                let vrn = vr - dir * vrd
 
-                                let b = RigidBodyInstance.getVelocity pos ro1 |> Vec.dot dir
-                                let b1 = vr + dvrd |> Vec.dot dir
-                                if not (Fun.IsTiny(b - b1)) then
-                                    printfn "bad"
+                                let dvl = dir * dvld - 0.1*vln
+                                let dvr = dir * dvrd - 0.1*vrn
 
 
-                                let newWorld = 
-                                    { world with
-                                        objects = HMap.add ln lo1 (HMap.add rn ro1 world.objects)
-                                    }
+
+                                //let lo1 = RigidBodyInstance.addVelocity pos dvld lo
+                                //let ro1 = RigidBodyInstance.addVelocity pos dvrd ro
+
+                                //let a = RigidBodyInstance.getVelocity pos lo1 |> Vec.dot dir
+                                //let a1 = vl + dvld |> Vec.dot dir
+                                //if not (Fun.IsTiny(a - a1)) then
+                                //    printfn "bad"
+
+                                //let b = RigidBodyInstance.getVelocity pos ro1 |> Vec.dot dir
+                                //let b1 = vr + dvrd |> Vec.dot dir
+                                //if not (Fun.IsTiny(b - b1)) then
+                                //    printfn "bad"
+
+
+                                //let newWorld = 
+                                //    { world with
+                                //        objects = HMap.add ln lo1 (HMap.add rn ro1 world.objects)
+                                //    }
                                 
-                                newWorld
+                                (pos, dvl, dvr)
                             else
-                                world
-                        ) world
+                                (pos, V3d.Zero, V3d.Zero)
+                        )
+
+
+
+                    let lo1, ro1 = 
+                        match velocities with
+                            | [(pos, dvld, dvrd)] ->
+                                let lo1 = RigidBodyInstance.addVelocity pos dvld world.objects.[ln]
+                                let ro1 = RigidBodyInstance.addVelocity pos dvld world.objects.[rn]
+                                lo1, ro1
+
+                            
+                            | [(p0, a0, b0); (p1, a1, b1); (p2, a2, b2); (p3, a3, b3)] ->
+                                
+                                let p = 0.25 * (p0 + p1 + p2 + p3)
+                                let a = 0.25 * (a0 + a1 + a2 + a3)
+                                let b = 0.25 * (b0 + b1 + b2 + b3)
+
+                                
+                                let lo1 = RigidBodyInstance.addVelocity p a world.objects.[ln]
+                                let ro1 = RigidBodyInstance.addVelocity p b world.objects.[rn]
+                                lo1, ro1
+
+                            | l ->
+                                let (p, a, b, cnt) = l |> List.fold(fun (a,b,c,cnt) (x,y,z)-> (a + x, b + y, c + z, cnt + 1)) (V3d.Zero, V3d.Zero, V3d.Zero, 0)
+                                let p = p / float cnt
+                                let a = a / float cnt
+                                let b = b / float cnt
+
+                                let lo1 = RigidBodyInstance.addVelocity p a world.objects.[ln]
+                                let ro1 = RigidBodyInstance.addVelocity p b world.objects.[rn]
+                                lo1, ro1
+                                
+                                //velocities |> List.fold (fun (lo, ro) (pos, dvld, dvrd) ->
+                                //    let lo1 = RigidBodyInstance.addVelocity pos dvld lo
+                                //    let ro1 = RigidBodyInstance.addVelocity pos dvld ro
+                                //    lo1, ro1
+                                //) (world.objects.[ln], world.objects.[rn])
+
+                    let newWorld =
+                        { world with objects = HMap.add ln lo1 (HMap.add rn ro1 world.objects)}
 
                     if ti < dt then
                         step (dt - ti) newWorld
@@ -494,7 +548,7 @@ let main argv =
     let initialthing =
         Box size
             |> RigidBody.ofShape 10.0
-            |> RigidBodyInstance.ofBody (Euclidean3d(Rot3d.Identity, V3d.OOI))
+            |> RigidBodyInstance.ofBody (Euclidean3d(Rot3d(V3d.OIO.Normalized, 1.0), V3d.OOI))
 
     let floorSize = V3d(10.0, 10.0, 0.1)
     let floor =
@@ -513,7 +567,7 @@ let main argv =
 
             forces = fun name b ->
                 if name = "thing" then
-                    [ { pos = b.trafo.Trans; force = V3d(0.0, 0.0, -2.0) } ]
+                    [ { pos = b.trafo.Trans; force = V3d(0.0, 0.0, -9.81) } ]
                 else
                     []
         }
