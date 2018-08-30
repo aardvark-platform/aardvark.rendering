@@ -152,6 +152,34 @@ module RigidBodyInstance =
             angularMomentum = instance.angularMomentum + angularPart
         }
 
+    let addVelocity (worldPoint : V3d) (worldVelocity : V3d) (instance : RigidBodyInstance) =
+        let m = instance.trafo
+        let mi = instance.trafo.Inverse
+
+        let p = mi.TransformPos worldPoint
+        let dv = mi.TransformDir worldVelocity
+
+        let domega = 
+            Vec.cross p dv / Vec.lengthSquared p
+
+        let dv =
+            let len2 = Vec.lengthSquared p
+            if Fun.IsTiny len2 then dv
+            else
+                (Vec.dot p dv / len2) * p
+
+        let L = instance.body.inertia * domega
+        let p = instance.body.mass * dv
+
+        { instance with
+            angularMomentum = instance.angularMomentum + m.TransformDir L
+            linearMomentum = instance.linearMomentum + m.TransformDir p
+        }
+
+
+
+
+
     let private decomposeForces (forces : list<Force>) (instance : RigidBodyInstance) =
         let mutable F = V3d.Zero
         let mutable M = V3d.Zero
@@ -241,7 +269,7 @@ module RigidBodyInstance =
             else
                 instance
 
-    let rec intersects (dt : float) (lf : RigidBodyInstance -> list<Force>) (rf : RigidBodyInstance -> list<Force>) (l : RigidBodyInstance) (r : RigidBodyInstance) =
+    let rec intersects (t : float) (dt : float) (lf : RigidBodyInstance -> list<Force>) (rf : RigidBodyInstance -> list<Force>) (l : RigidBodyInstance) (r : RigidBodyInstance) =
         let l1 = step lf dt l
         let r1 = step rf dt r
 
@@ -255,19 +283,19 @@ module RigidBodyInstance =
                 let r2l = m l.trafo.Inverse * m r.trafo
                 let r2l1 = m l1.trafo.Inverse * m r1.trafo
                 
-                let intersection = 
-                    rb.ComputeCorners() |> Seq.chooseMinBy (fun (a,_,_) -> a) (fun ptr ->
-                        let pt = r2l.TransformPos ptr
+                let intersections = 
+                    rb.ComputeCorners() |> Array.toList |> List.choose (fun ptr ->
+                        let pt0 = r2l.TransformPos ptr
                         let pt1 = r2l1.TransformPos ptr
 
-                        let dir = pt1 - pt
+                        let dir = pt1 - pt0
                         let len = Vec.length dir
-                        let ray = Ray3d(pt, dir / len) //Line3d(pt, pt')
+                        let ray = Ray3d(pt0, dir / len) //Line3d(pt, pt')
                     
                         let mutable t = System.Double.PositiveInfinity
                         lb.Intersects(ray, &t) |> ignore
 
-                        if lb.Intersects(ray, &t) && t >= 0.0 && t <= len then
+                        if lb.Intersects(ray, &t) && t >= 0.0 && t <= len && not (lb.Contains ray.Origin) then
                             let pi = ray.GetPointOnRay t
                             let t = t / len
 
@@ -308,19 +336,32 @@ module RigidBodyInstance =
 
                     )
                    
-                match intersection with
-                    | Some (ti, a, b) ->
-                        if ti > 0.001 then
-                            failwith "implement me"
-                            //match intersects ti lf rf l r with
-                            //    | Some(ti,a,b) -> Some(ti, a, b)
-                            //    | None ->
-                            //        let l1
-                            //        intersects
-                        else
-                            Some (ti, a, b)
-                    | None ->
-                        None
+                match intersections with
+                    | [] -> None
+                    | l -> 
+                        let l = List.sortBy (fun (t,_,_) -> t) l
+                        Some (l)
+
+                //intersections
+                //match intersections with
+                //    | [] ->
+                //        None
+                //    | l ->
+                //        l
+                //    | Some (ti, a, b) ->
+                //        if ti > 0.001 then
+                //            //failwith "implement me"
+                //            match intersects t ti lf rf l r with
+                //                | Some(ti,a,b) -> 
+                //                    Some(ti, a, b)
+                //                | None ->
+                //                    let l1 = step lf ti l
+                //                    let r1 = step rf ti r
+                //                    intersects ti (dt - ti) lf rf l1 r1
+                //        else
+                //            Some (t + ti, a, b)
+                //    | None ->
+                //        None
                         
             | _ ->
                 failwith ""
@@ -341,56 +382,89 @@ module World =
             world
         else
             let test = 
-                let inline thrd (_,_,a,_,_) = a
-                world.objects |> Seq.chooseMinBy thrd (fun (ln, lo) ->
-                    world.objects |> Seq.chooseMinBy thrd (fun (rn, ro) ->
+                let inline fst3 (a,_,_) = a
+                let inline thrd (_,_,a) = a
+                world.objects |> Seq.chooseMinBy (thrd >> List.head >> fst3) (fun (ln, lo) ->
+                    world.objects |> Seq.chooseMinBy (thrd >> List.head >> fst3) (fun (rn, ro) ->
                         if ln < rn then    
-                            match RigidBodyInstance.intersects dt (world.forces ln) (world.forces rn) lo ro with
-                                | Some(dt, pos, dir) ->
-                                    Some (ln, rn, dt, pos, dir)
-                                | None ->
-                                    None
+                            match RigidBodyInstance.intersects 0.0 dt (world.forces ln) (world.forces rn) lo ro with
+                                | Some l -> Some (ln, rn, l)
+                                | None -> None
+                                //| Some(dt, pos, dir) ->
+                                //    Some (ln, rn, dt, pos, dir)
+                                //| None ->
+                                //    None
                         else
                             None
                     )
                 )
 
             match test with
-                | Some (ln, rn, ti, pos, dir) ->
-                    let newWorld = { world with objects = world.objects |> HMap.map (fun id -> RigidBodyInstance.step (world.forces id) ti)  }
+                | Some (ln, rn, intersections) ->
+                    
+                    let ti, intersections =
+                        match intersections with
+                            | (tmin,a,b) :: rest ->
+                                let mutable tmin = tmin
+                                let mutable res = [a,b]
 
-                    let lo = newWorld.objects.[ln]
-                    let ro = newWorld.objects.[rn]
-                    let vl = RigidBodyInstance.getVelocity pos lo
-                    let vr = RigidBodyInstance.getVelocity pos ro
+                                tmin, [
+                                    yield a,b
+                                    for (t,a,b) in rest do
+                                        if Fun.ApproximateEquals(t, tmin, 0.0001) then
+                                            yield (a,b)
+                                ]
+                            | _ ->
+                                failwith ""
 
-                    let vld = Vec.dot dir vl
-                    let vrd = Vec.dot dir vr
-
-                    // vl' = 2 * (ml * vl + mr * vr) / (ml + mr) - vl
-                    // vl' = 2 * (ml * vl + mr * vr) / (ml + mr) - vl * (ml + mr) / (ml + mr)
-                    // vl' = [2 * (ml * vl + mr * vr) - vl * ml + vl * mr] / (ml + mr)
-                    // vl' = [2 * ml * vl + 2 * mr * vr - vl * ml + vl * mr] / (ml + mr)
-                    // vl' = [ml*vl + mr*(2*vr + vl)] / (ml + mr)
-                    // vl' = [(ml + mr)*vl - mr*vl + mr*(2*vr + vl)] / (ml + mr)
-                    // vl' = vl + 2*mr*vr / (ml + mr)
-
-                    let dvld = 2.0 * ro.body.mass * vrd / (lo.body.mass + ro.body.mass)
-                    let dvrd = 2.0 * lo.body.mass * vld / (lo.body.mass + ro.body.mass)
-
-                    let lo = RigidBodyInstance.applyMomentum pos (dir * lo.body.mass * dvld) lo
-                    let ro = RigidBodyInstance.applyMomentum pos (dir * ro.body.mass * dvrd) ro
+        
+                    let world = { world with objects = world.objects |> HMap.map (fun id -> RigidBodyInstance.step (world.forces id) ti)  }
 
                     let newWorld = 
-                        { newWorld with
-                            objects = HMap.add ln lo (HMap.add rn ro newWorld.objects)
-                        }
+                        intersections |> List.fold (fun world (pos, dir) ->
+                            if not (V3d.ApproxEqual(dir, V3d.Zero)) then
+                                let lo = world.objects.[ln]
+                                let ro = world.objects.[rn]
+                                let vl = RigidBodyInstance.getVelocity pos lo
+                                let vr = RigidBodyInstance.getVelocity pos ro
+
+                                let dvld = 
+                                    (2.0 * ro.body.mass / (lo.body.mass + ro.body.mass)) *
+                                    (Vec.dot (vr - vl) dir) * dir
+                        
+                                let dvrd = 
+                                    (2.0 * lo.body.mass / (lo.body.mass + ro.body.mass)) *
+                                    (Vec.dot (vl - vr) dir) * dir
+                        
+
+                                let lo1 = RigidBodyInstance.addVelocity pos dvld lo
+                                let ro1 = RigidBodyInstance.addVelocity pos dvrd ro
+
+                                let a = RigidBodyInstance.getVelocity pos lo1 |> Vec.dot dir
+                                let a1 = vl + dvld |> Vec.dot dir
+                                if not (Fun.IsTiny(a - a1)) then
+                                    printfn "bad"
+
+                                let b = RigidBodyInstance.getVelocity pos ro1 |> Vec.dot dir
+                                let b1 = vr + dvrd |> Vec.dot dir
+                                if not (Fun.IsTiny(b - b1)) then
+                                    printfn "bad"
+
+
+                                let newWorld = 
+                                    { world with
+                                        objects = HMap.add ln lo1 (HMap.add rn ro1 world.objects)
+                                    }
+                                
+                                newWorld
+                            else
+                                world
+                        ) world
+
                     if ti < dt then
                         step (dt - ti) newWorld
                     else
                         newWorld
-
-
                 | None -> 
                     let newWorld = { world with objects = world.objects |> HMap.map (fun id -> RigidBodyInstance.step (world.forces id) dt)  }
                     newWorld
