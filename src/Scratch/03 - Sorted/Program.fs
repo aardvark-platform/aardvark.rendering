@@ -21,6 +21,9 @@ module Shaders =
             //[<TexCoord>]  
             //texCoord : V3d
 
+            [<Semantic("CameraModel")>]
+            cam : V3d
+
             [<Semantic("Offset")>]
             offsetAndScale : V4d
 
@@ -42,6 +45,7 @@ module Shaders =
             let p = (v.position.XYZ * v.offsetAndScale.W) + v.offsetAndScale.XYZ
             return 
                 { v with 
+                    cam = uniform.ModelTrafoInv.TransformPos(uniform.CameraLocation)
                     objPos = p
                     position = V4d(p,1.0)
                     boxSize = v.offsetAndScale.W
@@ -114,22 +118,27 @@ module Shaders =
             tymin <- (box.max.Y - origin.Y) / dir.Y
             tymax <- (box.min.Y - origin.Y) / dir.Y
             
-            
-        if abs dir.Z < eps then
-            tzmin <- -100000.0
-            tzmax <- 100000.0
-
-        if dir.Z > 0.0 then
-            tzmin <- (box.min.Z - origin.Z) / dir.Z
-            tzmax <- (box.max.Z - origin.Z) / dir.Z
+        if txmin > tymax || tymin > txmax then
+            Nothing
         else
-            tzmin <- (box.max.Z - origin.Z) / dir.Z
-            tzmax <- (box.min.Z - origin.Z) / dir.Z
+            let tmin = max txmin tymin
+            let tmax = min txmax tymax
 
-        //if txmin > tymax || tymin > txmax || txmin > tzmax || tzmin > txmax then
-        //    Nothing
-        //else
-        Just (max (max txmin tymin) tzmin, min (min txmax tymax) tzmax)
+            if abs dir.Z < eps then
+                tzmin <- -100000.0
+                tzmax <- 100000.0
+
+            if dir.Z > 0.0 then
+                tzmin <- (box.min.Z - origin.Z) / dir.Z
+                tzmax <- (box.max.Z - origin.Z) / dir.Z
+            else
+                tzmin <- (box.max.Z - origin.Z) / dir.Z
+                tzmax <- (box.min.Z - origin.Z) / dir.Z
+
+            if tmin > tzmax || tzmin > tmax  then
+                Nothing
+            else
+                Just (max tmin tzmin, min tmax tzmax)
 
         //if abs dir.X >= eps then
         //    let t = (box.min.X - origin.X) / dir.X
@@ -173,14 +182,18 @@ module Shaders =
     let max1 (v : V3d) =
         if abs v.X > abs v.Y then
             if abs v.X > abs v.Z then
-                v / v.X
+                v / abs v.X
+            elif v.Z <> 0.0 then
+                v / abs v.Z
             else
-                v / v.Z
+                V3d.Zero
         else
             if abs v.Y > abs v.Z then
-                v / v.Y
+                v / abs v.Y
+            elif v.Z <> 0.0 then
+                v / abs v.Z
             else
-                v / v.Z
+                V3d.Zero
 
     
     [<ReflectedDefinition>]
@@ -203,6 +216,10 @@ module Shaders =
             | 5 -> V3d(v,p,q)
             | _ -> V3d(v,t,p)
 
+    type UniformScope with
+        member x.GridSize : V3i = uniform?GridSize
+        member x.ShowPlanes : bool = uniform?ShowPlanes
+
     let intersectsSphere (center : V3d) (r : float) (p0 : V3d) (p1 : V3d) =
         let eps = 0.000001
         let h0 = Vec.length (p0 - center)
@@ -211,18 +228,41 @@ module Shaders =
         elif h1 < r + eps && h0 >= r - eps then 1
         else 0
 
+    let sampleVolume (pt : V3d) =
+        let center = V3d(0.5, 0.5, 0.5)
+        let r = 0.4
+        let h = Vec.length (pt - center) - r
+        
+        let c0 = 
+            if h < 0.2 && h > -0.2 then
+                let s = 0.005
+                let alpha = (0.0001 / sqrt (2.0 * Constant.Pi * s * s)) * exp (-h*h / (2.0*s*s))
+                V4d(pt * alpha, alpha)
+            else
+                V4d.Zero
+
+        let center = V3d(0.55, 0.5, 0.5)
+        let r = 0.2
+        let h = Vec.length (pt - center) - r
+        
+        let c1 = 
+            if h < 0.2 && h > -0.2 then
+                let s = 0.005
+                let alpha = (0.0001 / sqrt (2.0 * Constant.Pi * s * s)) * exp (-h*h / (2.0*s*s))
+                V4d(V3d.III * alpha, alpha)
+            else
+                V4d.Zero 
+
+        c0 + c1
+
     [<ReflectedDefinition>]
     let compose (a : V4d) (b : V4d) =
         a + (1.0 - a.W) * b
-
-    type UniformScope with
-        member x.GridSize : V3i = uniform?GridSize
+        
 
     let march (v : Vertex) =
         fragment {
-            let origin = uniform.ModelViewProjTrafoInv * V4d(0.0, 0.0, -1000000.0, 1.0)
-            let origin = origin.XYZ / origin.W
-            
+            let origin = v.cam
             let delta = v.objPos - origin
             let dir1 = Vec.normalize delta
 
@@ -234,17 +274,14 @@ module Shaders =
             //return V4d(a, 1.0) //V4d(0.1 * a.X, 0.1 * a.Y, 0.1 * a.Z, 0.1)
 
             
-            let delta = V3d.Zero // V3d(0.05, 0.05, 0.05)
-
-            let mutable cnt = 0
-            let box = { min = v.offsetAndScale.XYZ + delta; max = v.offsetAndScale.XYZ + v.offsetAndScale.W * V3d.III - 2.0 * delta }
+            let box = { min = v.offsetAndScale.XYZ; max = v.offsetAndScale.XYZ + v.offsetAndScale.W * V3d.III }
             match intersection origin dir1 box with
                 | Just (tenter, texit) ->
                     
                     let step = dir1
                     let mutable t = tenter
                     
-                    let dt =0.07//0.1
+                    let dt = 1.0 / 128.0 //0.1
 
                     let len = texit - tenter
 
@@ -256,8 +293,11 @@ module Shaders =
                     else
                         t <- t + (dt - m)
                     
+                    let c = 
+                        if uniform.ShowPlanes then V4d(0.02,0.0,0.0,0.02)
+                        else V4d.Zero
 
-                    let mutable color = V4d.Zero
+                    let mutable color = c
                     let mutable coord = (origin + t * dir1) / V3d uniform.GridSize
                     let step = (dir1 * dt) / V3d uniform.GridSize
                     let mutable lastCoord = coord - step
@@ -266,16 +306,23 @@ module Shaders =
                     let mutable iter = 0
                     while t <= texit && iter < 512 do
                         
-                        let v = intersectsSphere (V3d(0.5,0.5,0.5)) 0.4 lastCoord coord
-                        if v > 0 then
-                            cnt <- cnt + 1
-                            ()
-                            color <- compose color (V4d(0.0, 1.0, 0.0, 0.2))
-                            //color <- color + (1.0 - color.W) * (V4d.OIOI * 0.2)
-                        elif v < 0 then
-                            cnt <- cnt + 1
-                            color <- compose color (V4d(1.0, 0.0, 0.0, 0.2))
-                            //color <- color + (1.0 - color.W) * (V4d.IOOI * 0.2)
+                        let v = sampleVolume coord
+
+
+                        if v.W > 0.0 then
+                            color <- compose color v
+
+
+                        //let v = intersectsSphere (V3d(0.5,0.5,0.5)) 0.4 lastCoord coord
+                        //if v > 0 then
+                        //    cnt <- cnt + 1
+                        //    ()
+                        //    color <- compose color (V4d(0.0, 1.0, 0.0, 0.2))
+                        //    //color <- color + (1.0 - color.W) * (V4d.OIOI * 0.2)
+                        //elif v < 0 then
+                        //    cnt <- cnt + 1
+                        //    color <- compose color (V4d(1.0, 0.0, 0.0, 0.2))
+                        //    //color <- color + (1.0 - color.W) * (V4d.IOOI * 0.2)
                         //if intersectsSphere (V3d(0.5,0.5,0.5)) 0.2 lastCoord coord then
                         //    color <- color + (1.0 - color.W) * (V4d.OIOI * 0.2)
 
@@ -286,10 +333,8 @@ module Shaders =
 
                     if iter = 512 then
                         color <- V4d.IOOI
-
-                    if cnt > 2 then
-                        color <- V4d(0.0, 0.0, 1.0, 1.0)
-
+                        
+                    color <- compose color c
 
 
 
@@ -298,7 +343,7 @@ module Shaders =
 
 
 
-                    return V4d(hsv2rgb ((texit - tenter) / 10.0) 1.0 1.0, 1.0)
+                    return color //V4d(hsv2rgb ((texit - tenter) / 10.0) 1.0 1.0, 1.0)
 
 
 
@@ -353,10 +398,10 @@ let main argv =
     // and may show it later.
     let win =
         window {
-            backend Backend.GL
+            backend Backend.Vulkan
             display Display.Mono
-            debug true
-            samples 8
+            debug false
+            samples 1
         }
 
     let box = Box3d(-V3d.III, V3d.III)
@@ -364,7 +409,7 @@ let main argv =
 
 
     //let size = V3d(12.0,12.0,12.0)
-    let cells = V3i(12,7,4)
+    let cells = V3i(4,4,4)
     let worldSize = V3d(3.0, 3.0, 3.0)
 
 
@@ -414,6 +459,13 @@ let main argv =
                 | _ -> fillMode.Value <- FillMode.Fill
         )
     ) |> ignore
+    
+    let planes = Mod.init false
+    win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ ->
+        transact (fun () ->
+            planes.Value <- not planes.Value
+        )
+    )
 
     let box = ofIndexedGeometry2 boxes.Length Primitives.unitBox
 
@@ -434,7 +486,12 @@ let main argv =
                 do! DefaultSurfaces.constantColor (C4f(0.0,0.0,0.0,0.0))
             }
             |> Sg.depthTest (Mod.constant DepthTestMode.None)
-            
+          
+    let pa = RenderPass.after "a" RenderPassOrder.Arbitrary RenderPass.main
+    let pb = RenderPass.after "b" RenderPassOrder.Arbitrary pa
+
+  
+
     let sg = 
         // create a red box with a simple shader
         box
@@ -450,11 +507,12 @@ let main argv =
             |> Sg.blendMode (Mod.constant blendMode)
             |> Sg.cullMode (Mod.constant CullMode.CounterClockwise)
             |> Sg.depthTest (Mod.constant DepthTestMode.None)
-            |> Sg.pass (RenderPass.after "a" RenderPassOrder.Arbitrary RenderPass.main)
+            |> Sg.pass pa
             |> Sg.transform trafo
             |> Sg.uniform "GridSize" (Mod.constant cells)
+            |> Sg.uniform "ShowPlanes" planes
             |> Sg.andAlso clear
-
+            
     // show the window
     win.Scene <- sg
     win.Run()
