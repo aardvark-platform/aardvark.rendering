@@ -39,6 +39,7 @@ module Shaders =
 
     type UniformScope with
         member x.PaddedTextureSize : V3d = uniform?PaddedTextureSize
+        member x.CellSize : int = uniform?CellSize
 
     let instanceTrafo (v : Vertex) =
         vertex {
@@ -233,39 +234,92 @@ module Shaders =
         let r = 0.4
         let h = Vec.length (pt - center) - r
         
-        let c0 = 
-            if h < 0.2 && h > -0.2 then
-                let s = 0.005
-                let alpha = (0.0001 / sqrt (2.0 * Constant.Pi * s * s)) * exp (-h*h / (2.0*s*s))
-                V4d(pt * alpha, alpha)
-            else
-                V4d.Zero
+        let s = 0.01
+        let alpha = (0.008 / sqrt (2.0 * Constant.Pi * s * s)) * exp (-h*h / (2.0*s*s))
+        let c0 = V4d(pt * alpha, alpha)
 
         let center = V3d(0.55, 0.5, 0.5)
         let r = 0.2
         let h = Vec.length (pt - center) - r
         
-        let c1 = 
-            if h < 0.2 && h > -0.2 then
-                let s = 0.005
-                let alpha = (0.0001 / sqrt (2.0 * Constant.Pi * s * s)) * exp (-h*h / (2.0*s*s))
-                V4d(V3d.III * alpha, alpha)
-            else
-                V4d.Zero 
+        let s = 0.01
+        let alpha = (0.008 / sqrt (2.0 * Constant.Pi * s * s)) * exp (-h*h / (2.0*s*s))
+        let c1 = V4d(V3d.III * alpha, alpha)
 
         c0 + c1
+
+    [<ReflectedDefinition>]
+    let nextMultiple (a : float) (v : float) =
+        let eps = 0.00001
+        let m = v % a
+        if m < eps || m > a - eps then
+            v
+        else
+            v + (a - m)
+
+    [<ReflectedDefinition>]
+    let prevMultiple (a : float) (v : float) =
+        let eps = 0.00001
+        let m = v % a
+        if m < eps || m > a - eps then
+            v
+        else
+            v - m
+
+    let sampleVolumeOfSize (size : V3d) (pt : V3d) =
+        let invSize = 1.0 / size
+        let px = pt * size - V3d(0.5, 0.5, 0.5)
+        let p000 = V3d(floor px.X, floor px.Y, floor px.Z)
+        let p100 = p000 + V3d.IOO
+        let p010 = p000 + V3d.OIO
+        let p110 = p000 + V3d.IIO
+        let p001 = p000 + V3d.OOI
+        let p101 = p000 + V3d.IOI
+        let p011 = p000 + V3d.OII
+        let p111 = p000 + V3d.III
+
+        let v000 = sampleVolume ((p000 + V3d(0.5,0.5,0.5)) / size)
+        let v100 = sampleVolume ((p100 + V3d(0.5,0.5,0.5)) / size)
+        let v010 = sampleVolume ((p010 + V3d(0.5,0.5,0.5)) / size)
+        let v110 = sampleVolume ((p110 + V3d(0.5,0.5,0.5)) / size)
+        let v001 = sampleVolume ((p001 + V3d(0.5,0.5,0.5)) / size)
+        let v101 = sampleVolume ((p101 + V3d(0.5,0.5,0.5)) / size)
+        let v011 = sampleVolume ((p011 + V3d(0.5,0.5,0.5)) / size)
+        let v111 = sampleVolume ((p111 + V3d(0.5,0.5,0.5)) / size)
+
+        let t = px - p000
+
+        let vx00 = v000 * (1.0 - t.X) + v100 * t.X
+        let vx01 = v001 * (1.0 - t.X) + v101 * t.X
+        let vx10 = v010 * (1.0 - t.X) + v110 * t.X
+        let vx11 = v011 * (1.0 - t.X) + v111 * t.X
+        let vxx0 = vx00 * (1.0 - t.Y) + vx10 * t.Y
+        let vxx1 = vx01 * (1.0 - t.Y) + vx11 * t.Y
+        vxx0 * (1.0 - t.Z) + vxx1 * t.Z
+        //(sampleVolume p000 + p001 + p010 + p011 + p001 + p011 + p101 + p111) / 8.0
+
+
+    let sampleVolumeOfSizeNearest (size : V3d) (pt : V3d) =
+        let px = pt * size - V3d(0.5, 0.5, 0.5)
+
+        let p = (V3d(round px.X, round px.Y, round px.Z) + V3d(0.5,0.5,0.5)) / size
+
+        
+        sampleVolume p
+        
 
     [<ReflectedDefinition>]
     let compose (a : V4d) (b : V4d) =
         a + (1.0 - a.W) * b
         
+    
 
     let march (v : Vertex) =
         fragment {
             let origin = v.cam
             let delta = v.objPos - origin
-            let dir1 = Vec.normalize delta
-
+            let dir = max1 delta
+            let l = Vec.length dir
             //let texit = Vec.length delta / Vec.length dir1
             
             
@@ -274,67 +328,53 @@ module Shaders =
             //return V4d(a, 1.0) //V4d(0.1 * a.X, 0.1 * a.Y, 0.1 * a.Z, 0.1)
 
             
+            let size = float uniform.CellSize
+            //let invSize = 1.0 / size
+            
+
+            let overall = { min = V3d.Zero; max = V3d uniform.GridSize }
             let box = { min = v.offsetAndScale.XYZ; max = v.offsetAndScale.XYZ + v.offsetAndScale.W * V3d.III }
-            match intersection origin dir1 box with
-                | Just (tenter, texit) ->
-                    
-                    let step = dir1
-                    let mutable t = tenter
-                    
-                    let dt = 1.0 / 128.0 //0.1
+            let dt = 
+                if size > 256.0 then 1.0 / 256.0
+                else 1.0 / size
 
-                    let len = texit - tenter
+            match intersection origin dir overall with
+                | Just (tmin, tmax) ->
+                    match intersection origin dir box with
+                        | Just (tenter, texit) ->
+                            let tenter = max tenter tmin
+                            let tenter = prevMultiple dt (tenter - tmin) + tmin + dt
+                   
+                            let planeColor = 
+                                if uniform.ShowPlanes then V4d(0.02,0.0,0.0,0.02)
+                                else V4d.Zero
 
-                    let eps = 0.00001
-
-                    let m = t % dt
-                    if m <= eps || m >= dt - eps then
-                        t <- t + dt
-                    else
-                        t <- t + (dt - m)
-                    
-                    let c = 
-                        if uniform.ShowPlanes then V4d(0.02,0.0,0.0,0.02)
-                        else V4d.Zero
-
-                    let mutable color = c
-                    let mutable coord = (origin + t * dir1) / V3d uniform.GridSize
-                    let step = (dir1 * dt) / V3d uniform.GridSize
-                    let mutable lastCoord = coord - step
+                            let mutable t = tenter
+                            let mutable color = planeColor
+                            let mutable coord = (origin + t * dir) / V3d uniform.GridSize
+                            let step = (dir * dt) / V3d uniform.GridSize
 
 
-                    let mutable iter = 0
-                    while t <= texit && iter < 512 do
+                            let mutable iter = 0
+                            while t <= texit && iter < 512 do
+                                let v = sampleVolumeOfSize (V3d uniform.GridSize * size) coord
+                                
+                                if v.W > 0.0 then
+                                    // opacity correction
+                                    let alpha = 1.0 - (1.0 - v.W) ** (l * dt)
+                                    let v = V4d(v.XYZ * (alpha / v.W), alpha)
+
+                                    // compose color
+                                    color <- compose color v
+                                    
+                                t <- t + dt
+                                coord <- coord + step
+                                iter <- iter + 1
+
+                            if iter = 512 then
+                                color <- compose color V4d.IOOI
                         
-                        let v = sampleVolume coord
-
-
-                        if v.W > 0.0 then
-                            color <- compose color v
-
-
-                        //let v = intersectsSphere (V3d(0.5,0.5,0.5)) 0.4 lastCoord coord
-                        //if v > 0 then
-                        //    cnt <- cnt + 1
-                        //    ()
-                        //    color <- compose color (V4d(0.0, 1.0, 0.0, 0.2))
-                        //    //color <- color + (1.0 - color.W) * (V4d.OIOI * 0.2)
-                        //elif v < 0 then
-                        //    cnt <- cnt + 1
-                        //    color <- compose color (V4d(1.0, 0.0, 0.0, 0.2))
-                        //    //color <- color + (1.0 - color.W) * (V4d.IOOI * 0.2)
-                        //if intersectsSphere (V3d(0.5,0.5,0.5)) 0.2 lastCoord coord then
-                        //    color <- color + (1.0 - color.W) * (V4d.OIOI * 0.2)
-
-                        t <- t + dt
-                        lastCoord <- coord
-                        coord <- coord + step
-                        iter <- iter + 1
-
-                    if iter = 512 then
-                        color <- V4d.IOOI
-                        
-                    color <- compose color c
+                            color <- compose color planeColor
 
 
 
@@ -343,14 +383,18 @@ module Shaders =
 
 
 
-                    return color //V4d(hsv2rgb ((texit - tenter) / 10.0) 1.0 1.0, 1.0)
+                            return color //V4d(hsv2rgb ((texit - tenter) / 10.0) 1.0 1.0, 1.0)
 
 
 
-                    //return color
+                            //return color
+
+                        | Nothing ->
+                            return V4d.OOII
 
                 | Nothing ->
-                    return V4d.OOII
+                    return V4d.OOOO
+                    
         }
 
     
@@ -440,8 +484,6 @@ let main argv =
             let b = trafo.Backward.TransformPos (vs.[0].Backward.TransformPos(-V3d.OOI))
             let fw = Vec.normalize (b - cam)
 
-
-
             boxes |> Array.sortBy (fun min -> 
                 let c = Box3d.FromMinAndSize(V3d min.XYZ, V3d.III * float min.W).Center
                 
@@ -451,6 +493,17 @@ let main argv =
         )
 
     let fillMode = Mod.init FillMode.Fill
+    let cellSize = Mod.init 64
+
+    win.Keyboard.KeyDown(Keys.Add).Values.Add(fun _ ->
+        transact (fun () -> cellSize.Value <- 2 * cellSize.Value)
+        Log.warn "cell size: %A" cellSize.Value
+    )
+    
+    win.Keyboard.KeyDown(Keys.Subtract).Values.Add(fun _ ->
+        transact (fun () -> cellSize.Value <- max 2 (cellSize.Value / 2))
+        Log.warn "cell size: %A" cellSize.Value
+    )
 
     win.Keyboard.KeyDown(Keys.F).Values.Subscribe(fun _ -> 
         transact (fun _ -> 
@@ -511,6 +564,7 @@ let main argv =
             |> Sg.transform trafo
             |> Sg.uniform "GridSize" (Mod.constant cells)
             |> Sg.uniform "ShowPlanes" planes
+            |> Sg.uniform "CellSize" cellSize
             |> Sg.andAlso clear
             
     // show the window
