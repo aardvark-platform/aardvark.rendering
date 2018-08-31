@@ -611,9 +611,7 @@ module ``Pool Semantics`` =
         member x.RenderObjects(p : Sg.PoolNode) =
             
             let pool = p.Pool
-            let ro = Aardvark.SceneGraph.Semantics.RenderObject.create()
-
-
+            
             let r = (p.Calls |> ASet.map (fun mdc -> mdc.Call)).GetReader()
             let calls =
                 let buffer = DrawCallBuffer(pool.Runtime, true) // who manages this? using finalizer for now
@@ -626,14 +624,17 @@ module ``Pool Semantics`` =
 
                     buffer.GetValue()
                 )
-            ro.Mode <- p.Mode
-            ro.Indices <- Some pool.IndexBuffer
-            ro.VertexAttributes <- pool.VertexAttributes
-            ro.InstanceAttributes <- pool.InstanceAttributes
-            ro.IndirectBuffer <- calls // |> ASet.toMod
 
-            let res = ASet.single (ro :> IRenderObject)
-
-            calls |> ASet.bind (fun c -> if c.Count > 0 then res else ASet.empty<_>)
+            aset {
+                let! c = calls;
+                if c.Count > 0 then
+                    let ro = Aardvark.SceneGraph.Semantics.RenderObject.create()
+                    ro.Mode <- p.Mode
+                    ro.Indices <- Some pool.IndexBuffer
+                    ro.VertexAttributes <- pool.VertexAttributes
+                    ro.InstanceAttributes <- pool.InstanceAttributes
+                    ro.IndirectBuffer <- calls
+                    yield (ro :> IRenderObject)
+            }
 
    
