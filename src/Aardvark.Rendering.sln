@@ -2,7 +2,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.26730.10
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "21 - OpcDemo", "Examples\21 - OpcDemo\21 - OpcDemo.fsproj", "{A70DFC8C-E670-4458-A928-7A2C60642EB1}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "03 - Sorted", "Scratch\03 - Sorted\03 - Sorted.fsproj", "{B53765D0-623D-4BDA-BFC8-D8DB5A3A114A}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "01 - HardwareFeatures", "Scratch (net471)\01 - HardwareFeatures\01 - HardwareFeatures.fsproj", "{C132A4EC-FC02-4629-A906-1684369BBB6B}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "20 - VolumeRendering", "Examples\20 - VolumeRendering\20 - VolumeRendering.fsproj", "{015672E1-0260-4374-83D1-97210F52FB4C}"
 EndProject
@@ -120,16 +122,36 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.SceneGraph.Opc", "Aardvark.SceneGraph.Opc\Aardvark.SceneGraph.Opc.fsproj", "{97CF1A7D-9858-4552-8EBF-ADBD6FF68FFA}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Scratch", "Scratch", "{29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}"
+	ProjectSection(SolutionItems) = preProject
+		Scratch\new.fsx = Scratch\new.fsx
+	EndProjectSection
+EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "01 - Triangle", "Scratch\01 - Triangle\01 - Triangle.fsproj", "{3D31F226-6712-42B7-A7B7-84C46A4E7D14}"
+EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "02 - OpcDemo", "Scratch\02 - OpcDemo\02 - OpcDemo.fsproj", "{58F57989-D8C7-4FA8-82F8-35DDC6BCC38A}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Scratch (net471)", "Scratch (net471)", "{ACAD9454-10F3-4673-BC50-BD1B50A04D3B}"
+	ProjectSection(SolutionItems) = preProject
+		Scratch (net471)\new.fsx = Scratch (net471)\new.fsx
+	EndProjectSection
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "00 - HelloWorld (net471)", "Scratch (net471)\00 - HelloWorld (net471)\00 - HelloWorld (net471).fsproj", "{0D5B9ADB-7EFE-44ED-BB73-FB232B74F17C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{A70DFC8C-E670-4458-A928-7A2C60642EB1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A70DFC8C-E670-4458-A928-7A2C60642EB1}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A70DFC8C-E670-4458-A928-7A2C60642EB1}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A70DFC8C-E670-4458-A928-7A2C60642EB1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B53765D0-623D-4BDA-BFC8-D8DB5A3A114A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B53765D0-623D-4BDA-BFC8-D8DB5A3A114A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B53765D0-623D-4BDA-BFC8-D8DB5A3A114A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B53765D0-623D-4BDA-BFC8-D8DB5A3A114A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C132A4EC-FC02-4629-A906-1684369BBB6B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C132A4EC-FC02-4629-A906-1684369BBB6B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C132A4EC-FC02-4629-A906-1684369BBB6B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C132A4EC-FC02-4629-A906-1684369BBB6B}.Release|Any CPU.Build.0 = Release|Any CPU
 		{015672E1-0260-4374-83D1-97210F52FB4C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{015672E1-0260-4374-83D1-97210F52FB4C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{015672E1-0260-4374-83D1-97210F52FB4C}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -326,12 +348,25 @@ Global
 		{97CF1A7D-9858-4552-8EBF-ADBD6FF68FFA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{97CF1A7D-9858-4552-8EBF-ADBD6FF68FFA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{97CF1A7D-9858-4552-8EBF-ADBD6FF68FFA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3D31F226-6712-42B7-A7B7-84C46A4E7D14}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3D31F226-6712-42B7-A7B7-84C46A4E7D14}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3D31F226-6712-42B7-A7B7-84C46A4E7D14}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3D31F226-6712-42B7-A7B7-84C46A4E7D14}.Release|Any CPU.Build.0 = Release|Any CPU
+		{58F57989-D8C7-4FA8-82F8-35DDC6BCC38A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{58F57989-D8C7-4FA8-82F8-35DDC6BCC38A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{58F57989-D8C7-4FA8-82F8-35DDC6BCC38A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{58F57989-D8C7-4FA8-82F8-35DDC6BCC38A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0D5B9ADB-7EFE-44ED-BB73-FB232B74F17C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0D5B9ADB-7EFE-44ED-BB73-FB232B74F17C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0D5B9ADB-7EFE-44ED-BB73-FB232B74F17C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0D5B9ADB-7EFE-44ED-BB73-FB232B74F17C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{A70DFC8C-E670-4458-A928-7A2C60642EB1} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
+		{B53765D0-623D-4BDA-BFC8-D8DB5A3A114A} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
+		{C132A4EC-FC02-4629-A906-1684369BBB6B} = {ACAD9454-10F3-4673-BC50-BD1B50A04D3B}
 		{015672E1-0260-4374-83D1-97210F52FB4C} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{86B49AE2-55FA-42E4-9DE7-B4AD3D3A79AB} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{227587AA-4E5F-4AB6-887A-471DC887131E} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
@@ -373,6 +408,9 @@ Global
 		{72A7471E-7BF7-41BD-A654-0DC904B49D1F} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{77AF53B0-FE23-4DE2-B218-5726B295F6BD} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{2C25EACD-8E56-4BE5-8BB7-0CB9ED004096} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
+		{3D31F226-6712-42B7-A7B7-84C46A4E7D14} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
+		{58F57989-D8C7-4FA8-82F8-35DDC6BCC38A} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
+		{0D5B9ADB-7EFE-44ED-BB73-FB232B74F17C} = {ACAD9454-10F3-4673-BC50-BD1B50A04D3B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C41172B9-09C3-4327-8CE2-CB47CBAA29AC}
