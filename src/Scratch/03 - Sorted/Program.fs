@@ -57,128 +57,28 @@ module Shaders =
 
     type Box = { min : V3d; max : V3d }
 
-    type Maybe<'a> =
-        | Nothing
-        | Just of 'a
+    let intersectsBox (origin : V3d) (invDir : V3d) (box : Box) (tmin : ref<float>) (tmax : ref<float>) =
+        let mutable temp = Unchecked.defaultof<_>
+        let mutable t0 = (box.min - origin) * invDir
+        let mutable t1 = (box.max - origin) * invDir
 
-    let eps = 0.0001
-
-    let contains (p : V3d) (box : Box) =
-        p.X >= box.min.X - eps && p.X <= box.max.X + eps && p.Y >= box.min.Y - eps && p.Y <= box.max.Y + eps && p.Z >= box.min.Z - eps && p.Z <= box.max.Z + eps
-
-    let containsYZ (p : V3d) (box : Box) =
-        p.Y >= box.min.Y - eps && p.Y <= box.max.Y + eps && p.Z >= box.min.Z - eps && p.Z <= box.max.Z + eps
-
-    let containsXY (p : V3d) (box : Box) =
-        p.X >= box.min.X - eps && p.X <= box.max.X + eps && p.Y >= box.min.Y - eps && p.Y <= box.max.Y + eps
-
-    let containsXZ (p : V3d) (box : Box) =
-        p.X >= box.min.X - eps && p.X <= box.max.X + eps && p.Z >= box.min.Z - eps && p.Z <= box.max.Z + eps
-
-    let intersection (origin : V3d) (dir : V3d) (box : Box) =
-        // tlx = (bbmin.X - o.X) / d.X
-
-        // contained (box, o + d * t)
-
-        let mutable cnt = 0
-        let mutable tenter = 100000.0
-        let mutable texit = -100000.0
-
-        let mutable txmin = 0.0
-        let mutable txmax = 0.0
-        
-        let mutable tymin = 0.0
-        let mutable tymax = 0.0
-        
-        let mutable tzmin = 0.0
-        let mutable tzmax = 0.0
-
-        //let divx = 1.0 / dir.X
-
-        let eps = 0.00000001
-        if abs dir.X < eps then
-            txmin <- -100000.0
-            txmax <- 100000.0
-
-        elif dir.X > 0.0 then
-            txmin <- (box.min.X - origin.X) / dir.X
-            txmax <- (box.max.X - origin.X) / dir.X
-
+        if invDir.X < 0.0 then temp <- t0.X; t0.X <- t1.X; t1.X <- temp
+        if invDir.Y < 0.0 then temp <- t0.Y; t0.Y <- t1.Y; t1.Y <- temp
+         
+        if (t0.X > t1.Y || t0.Y > t1.X) then
+            false
         else
-            txmin <- (box.max.X - origin.X) / dir.X
-            txmax <- (box.min.X - origin.X) / dir.X
+            if invDir.Z < 0.0 then temp <- t0.Z; t0.Z <- t1.Z; t1.Z <- temp
+
+            t0.X <- max t0.X t0.Y
+            t1.X <- min t1.X t1.Y
             
-        if abs dir.Y < eps then
-            tymin <- -100000.0
-            tymax <- 100000.0
-
-        elif dir.Y > 0.0 then
-            tymin <- (box.min.Y - origin.Y) / dir.Y
-            tymax <- (box.max.Y - origin.Y) / dir.Y
-        else
-            tymin <- (box.max.Y - origin.Y) / dir.Y
-            tymax <- (box.min.Y - origin.Y) / dir.Y
-            
-        if txmin > tymax || tymin > txmax then
-            Nothing
-        else
-            let tmin = max txmin tymin
-            let tmax = min txmax tymax
-
-            if abs dir.Z < eps then
-                tzmin <- -100000.0
-                tzmax <- 100000.0
-
-            if dir.Z > 0.0 then
-                tzmin <- (box.min.Z - origin.Z) / dir.Z
-                tzmax <- (box.max.Z - origin.Z) / dir.Z
+            if (t0.X > t1.Z || t0.Z > t1.X) then
+                false
             else
-                tzmin <- (box.max.Z - origin.Z) / dir.Z
-                tzmax <- (box.min.Z - origin.Z) / dir.Z
-
-            if tmin > tzmax || tzmin > tmax  then
-                Nothing
-            else
-                Just (max tmin tzmin, min tmax tzmax)
-
-        //if abs dir.X >= eps then
-        //    let t = (box.min.X - origin.X) / dir.X
-        //    if containsYZ (origin + t * dir) box then
-        //        if t < tenter then tenter <- t
-        //        if t > texit then texit <- t
-
-        //    let t = (box.max.X - origin.X) / dir.X
-        //    if containsYZ (origin + t * dir) box then
-        //        if t < tenter then tenter <- t
-        //        if t > texit then texit <- t
-
-        //if abs dir.Y >= eps then
-        //    let t = (box.min.Y - origin.Y) / dir.Y
-        //    if containsXZ (origin + t * dir) box then
-        //        if t < tenter then tenter <- t
-        //        if t > texit then texit <- t
-
-        //    let t = (box.max.Y - origin.Y) / dir.Y
-        //    if containsXZ (origin + t * dir) box then
-        //        if t < tenter then tenter <- t
-        //        if t > texit then texit <- t
-
-        //if abs dir.Z >= eps then
-        //    let t = (box.min.Z - origin.Z) / dir.Z
-        //    if containsXY (origin + t * dir) box then
-        //        if t < tenter then tenter <- t
-        //        if t > texit then texit <- t
-
-        //    let t = (box.max.Z - origin.Z) / dir.Z
-        //    if containsXY (origin + t * dir) box then
-        //        if t < tenter then tenter <- t
-        //        if t > texit then texit <- t
-
-        //if tenter <= texit then
-        //    Just (tenter, texit)
-        //else
-        //    Nothing
-
+                tmin := max t0.X (max t0.Y t0.Z)
+                tmax := min t1.X (min t1.Y t1.Z)
+                true
 
     let max1 (v : V3d) =
         if abs v.X > abs v.Y then
@@ -196,7 +96,6 @@ module Shaders =
             else
                 V3d.Zero
 
-    
     [<ReflectedDefinition>]
     let hsv2rgb (h : float) (s : float) (v : float) =
         let s = clamp 0.0 1.0 s
@@ -221,13 +120,7 @@ module Shaders =
         member x.GridSize : V3i = uniform?GridSize
         member x.ShowPlanes : bool = uniform?ShowPlanes
 
-    let intersectsSphere (center : V3d) (r : float) (p0 : V3d) (p1 : V3d) =
-        let eps = 0.000001
-        let h0 = Vec.length (p0 - center)
-        let h1 = Vec.length (p1 - center)
-        if h0 < r + eps && h1 > r - eps then -1
-        elif h1 < r + eps && h0 >= r - eps then 1
-        else 0
+
 
     let sampleVolume (pt : V3d) =
         let center = V3d(0.5, 0.5, 0.5)
@@ -247,8 +140,7 @@ module Shaders =
         let c1 = V4d(V3d.III * alpha, alpha)
 
         c0 + c1
-
-    [<ReflectedDefinition>]
+        
     let nextMultiple (a : float) (v : float) =
         let eps = 0.00001
         let m = v % a
@@ -256,8 +148,7 @@ module Shaders =
             v
         else
             v + (a - m)
-
-    [<ReflectedDefinition>]
+            
     let prevMultiple (a : float) (v : float) =
         let eps = 0.00001
         let m = v % a
@@ -296,9 +187,7 @@ module Shaders =
         let vxx0 = vx00 * (1.0 - t.Y) + vx10 * t.Y
         let vxx1 = vx01 * (1.0 - t.Y) + vx11 * t.Y
         vxx0 * (1.0 - t.Z) + vxx1 * t.Z
-        //(sampleVolume p000 + p001 + p010 + p011 + p001 + p011 + p101 + p111) / 8.0
-
-
+    
     let sampleVolumeOfSizeNearest (size : V3d) (pt : V3d) =
         let px = pt * size - V3d(0.5, 0.5, 0.5)
 
@@ -311,89 +200,86 @@ module Shaders =
     [<ReflectedDefinition>]
     let compose (a : V4d) (b : V4d) =
         a + (1.0 - a.W) * b
-        
     
-
     let march (v : Vertex) =
         fragment {
             let origin = v.cam
             let delta = v.objPos - origin
             let dir = max1 delta
             let l = Vec.length dir
-            //let texit = Vec.length delta / Vec.length dir1
-            
-            
-            //let a = hsv2rgb (texit / 30.0) 1.0 1.0
-
-            //return V4d(a, 1.0) //V4d(0.1 * a.X, 0.1 * a.Y, 0.1 * a.Z, 0.1)
-
-            
             let size = float uniform.CellSize
-            //let invSize = 1.0 / size
-            
+            let invSize = 1.0 / size
 
-            let overall = { min = V3d.Zero; max = V3d uniform.GridSize }
-            let box = { min = v.offsetAndScale.XYZ; max = v.offsetAndScale.XYZ + v.offsetAndScale.W * V3d.III }
             let dt = 
                 if size > 256.0 then 1.0 / 256.0
-                else 1.0 / size
+                else invSize
+               
+            let planeColor = 
+                if uniform.ShowPlanes then V4d(0.02,0.0,0.0,0.02)
+                else V4d.Zero            
 
-            match intersection origin dir overall with
-                | Just (tmin, tmax) ->
-                    match intersection origin dir box with
-                        | Just (tenter, texit) ->
-                            let tenter = max tenter tmin
-                            let tenter = prevMultiple dt (tenter - tmin) + tmin + dt
+            // transform ray to tc-space
+            let origin = origin / V3d uniform.GridSize
+            let dir = dir / V3d uniform.GridSize
+            let invDir = 1.0 / dir
+
+            // boxes in tc-space
+            let overall = 
+                { min = V3d.Zero; max = V3d.III }
+
+            let cell = 
+                { 
+                    min = v.offsetAndScale.XYZ / V3d uniform.GridSize
+                    max = (v.offsetAndScale.XYZ + v.offsetAndScale.W * V3d.III) / V3d uniform.GridSize 
+                }
+
+
+            let mutable tminAll = 0.0
+            let mutable tmaxAll = 0.0
+            let mutable tmin = 0.0
+            let mutable tmax = 0.0
+            if intersectsBox origin invDir overall &&tminAll &&tmaxAll && 
+               intersectsBox origin invDir cell &&tmin &&tmax then
+
+                // adjust tmin to be a multiple of dt
+                let tmin = max tmin tminAll
+                let tmin = prevMultiple dt (tmin - tminAll) + tminAll + dt
                    
-                            let planeColor = 
-                                if uniform.ShowPlanes then V4d(0.02,0.0,0.0,0.02)
-                                else V4d.Zero
+                // start with tmin
+                let step = dir * dt
+                let mutable t = tmin
+                let mutable color = planeColor
+                let mutable coord = origin + t * dir
+                            
+                let mutable iter = 0
+                while t <= tmax && iter < 512 do
+                    // sample the data
+                    let v = sampleVolumeOfSize (V3d uniform.GridSize * size) coord
 
-                            let mutable t = tenter
-                            let mutable color = planeColor
-                            let mutable coord = (origin + t * dir) / V3d uniform.GridSize
-                            let step = (dir * dt) / V3d uniform.GridSize
+                    // if alpha is nonzero
+                    if v.W > 0.0 then
+                        // opacity correction
+                        let alpha = 1.0 - (1.0 - v.W) ** (l * dt)
+                        let v = V4d(v.XYZ * (alpha / v.W), alpha)
 
+                        // compose color
+                        color <- compose color v
+                                   
+                    // step
+                    t <- t + dt
+                    coord <- coord + step
+                    iter <- iter + 1
 
-                            let mutable iter = 0
-                            while t <= texit && iter < 512 do
-                                let v = sampleVolumeOfSize (V3d uniform.GridSize * size) coord
-                                
-                                if v.W > 0.0 then
-                                    // opacity correction
-                                    let alpha = 1.0 - (1.0 - v.W) ** (l * dt)
-                                    let v = V4d(v.XYZ * (alpha / v.W), alpha)
-
-                                    // compose color
-                                    color <- compose color v
-                                    
-                                t <- t + dt
-                                coord <- coord + step
-                                iter <- iter + 1
-
-                            if iter = 512 then
-                                color <- compose color V4d.IOOI
+                if iter = 512 && t <= tmax then
+                    color <- compose color V4d.IOOI
                         
-                            color <- compose color planeColor
+                color <- compose color planeColor
+                            
+                return color
 
-
-
-
-
-
-
-
-                            return color //V4d(hsv2rgb ((texit - tenter) / 10.0) 1.0 1.0, 1.0)
-
-
-
-                            //return color
-
-                        | Nothing ->
-                            return V4d.OOII
-
-                | Nothing ->
-                    return V4d.OOOO
+            else
+                return V4d.OOII
+               
                     
         }
 
