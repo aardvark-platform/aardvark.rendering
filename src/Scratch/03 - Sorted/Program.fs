@@ -119,7 +119,7 @@ module Shaders =
     type UniformScope with
         member x.GridSize : V3i = uniform?GridSize
         member x.ShowPlanes : bool = uniform?ShowPlanes
-
+        member x.DebugPlane : V4d = uniform?DebugPlane
 
 
     let sampleVolume (pt : V3d) =
@@ -201,6 +201,17 @@ module Shaders =
     let compose (a : V4d) (b : V4d) =
         a + (1.0 - a.W) * b
     
+    let normalizeRelative (dir : V3d) (v : V3d) =
+        //let ld = Vec.length dir
+        //let lv = Vec.length v
+        //let c = Vec.dot (dir / ld) (v / lv)
+        //(v / lv) * c * ld
+        
+        let ld = dir.Length
+        let lv = v.Length
+        let c = V3d.Dot(dir / ld, v / lv)
+        (v / lv) * (ld / c) 
+
     let march (v : Vertex) =
         fragment {
             let origin = v.cam
@@ -209,8 +220,11 @@ module Shaders =
             let l = Vec.length dir
             let size = float uniform.CellSize
             let invSize = 1.0 / size
-
-            let dt = 
+            
+            let dx = normalizeRelative dir (v.objPos + ddx v.objPos - origin)
+            let dy = normalizeRelative dir (v.objPos + ddy v.objPos - origin)
+            
+            let baseDt = 
                 if size > 256.0 then 1.0 / 256.0
                 else invSize
                
@@ -221,6 +235,9 @@ module Shaders =
             // transform ray to tc-space
             let origin = origin / V3d uniform.GridSize
             let dir = dir / V3d uniform.GridSize
+            let dx = dx / V3d uniform.GridSize
+            let dy = dy / V3d uniform.GridSize
+
             let invDir = 1.0 / dir
 
             // boxes in tc-space
@@ -242,32 +259,83 @@ module Shaders =
                intersectsBox origin invDir cell &&tmin &&tmax then
 
                 // adjust tmin to be a multiple of dt
+                let textureSize = V3d uniform.GridSize * size
+                let dr = textureSize * (dx - dir) |> Vec.length
+                let du = textureSize * (dy - dir) |> Vec.length
+                let d = max dr du
+
+                // t(0) = tminAll
+                // t(n+1) = t(n) + max 1.0 (d * t(n)) * baseDt
+                // => t(n) = tminAll + (baseDt * d + 1) ^ n
+
+                // log(tx - tminAll + a) = n * log(baseDt * d + 1)
+                // n = log(tx - tminAll + a) / log(baseDt * d + 1)
+
+                let s = d * tmin
+                let tLast =
+                    if s < 1.0 then tmin
+
+
+
+                // tmin = tl + max 1.0 (d * tl) * baseDt
+                // tl = tmin - max 1.0 (d * tl) * baseDt
+
+                // baseDt is positive:
+                //   tl = tmin - max baseDt (d * tl * baseDt)
+
+                // case 1: baseDt <= d * tl * baseDt:
+                //   tl = tmin - d * tl * baseDt
+                //   tl + d * tl * baseDt = tmin
+                //   tl * (1 + d * baseDt) = tmin
+                //   tl = tmin / (1 + d * baseDt)
+
+                let tLast = tmin / (1.0 + d * baseDt)
+                let dLast = max 1.0 (d * tLast) * baseDt
+
+
                 let tmin = max tmin tminAll
-                let tmin = prevMultiple dt (tmin - tminAll) + tminAll + dt
-                   
+                let tmin = prevMultiple baseDt (tmin - tminAll) + tminAll + baseDt
+
                 // start with tmin
-                let step = dir * dt
+                //let step = dir * dt
                 let mutable t = tmin
                 let mutable color = planeColor
                 let mutable coord = origin + t * dir
-                            
+                let mutable dt = floor (max 1.0 (d * tmin)) * baseDt
+                //let mutable lastCoord = coord - step
+                
+
+                let delta (t : float) =
+                    max 1.0 (d * t) * baseDt
+                    
+
+
+                // textureSize * (origin + t * dx - origin - t * dir)
+                // t * textureSize * (dx - dir)
+
                 let mutable iter = 0
                 while t <= tmax && iter < 512 do
                     // sample the data
-                    let v = sampleVolumeOfSize (V3d uniform.GridSize * size) coord
+                    let v = sampleVolume coord //sampleVolumeOfSize textureSize coord
+
+                    let s = max 1.0 (d * t)
+                    let level = Fun.Log2 s
+                    
+                    let v = V4d(hsv2rgb (level / 3.0) 1.0 1.0, 1.0) * v.W
 
                     // if alpha is nonzero
                     if v.W > 0.0 then
                         // opacity correction
                         let alpha = 1.0 - (1.0 - v.W) ** (l * dt)
                         let v = V4d(v.XYZ * (alpha / v.W), alpha)
-
+                        
                         // compose color
                         color <- compose color v
                                    
                     // step
+                    dt <- floor s * baseDt
                     t <- t + dt
-                    coord <- coord + step
+                    coord <- coord + dir * dt
                     iter <- iter + 1
 
                 if iter = 512 && t <= tmax then
@@ -380,6 +448,41 @@ let main argv =
 
     let fillMode = Mod.init FillMode.Fill
     let cellSize = Mod.init 64
+    let debugPlane = Mod.init V4d.Zero
+    
+    
+    win.Keyboard.KeyDown(Keys.Up).Values.Add(fun _ ->
+        let view = win.View |> Mod.force |> Array.item 0
+        let view = Trafo3d.Scale(V3d cells) * trafo * view
+
+        let fw = view.Backward.TransformDir(-V3d.OOI) |> Vec.normalize
+        let plane = 
+            if debugPlane.Value <> V4d.Zero then
+                V4d(fw, debugPlane.Value.W + 0.01)
+            else
+                V4d(fw, 0.5)
+                
+
+        transact (fun () -> debugPlane.Value <- plane)
+    )
+    
+    win.Keyboard.KeyDown(Keys.Down).Values.Add(fun _ ->
+        let view = win.View |> Mod.force |> Array.item 0
+        let view = Trafo3d.Scale(V3d cells) * trafo * view
+        let fw = view.Backward.TransformDir(-V3d.OOI) |> Vec.normalize
+        let plane = 
+            if debugPlane.Value <> V4d.Zero then
+                V4d(fw, debugPlane.Value.W - 0.01)
+            else
+                V4d(fw, 0.5)
+                
+
+        transact (fun () -> debugPlane.Value <- plane)
+    )
+    
+    win.Keyboard.KeyDown(Keys.Return).Values.Add(fun _ ->
+        transact (fun () -> debugPlane.Value <- V4d.Zero)
+    )
 
     win.Keyboard.KeyDown(Keys.Add).Values.Add(fun _ ->
         transact (fun () -> cellSize.Value <- 2 * cellSize.Value)
@@ -451,6 +554,7 @@ let main argv =
             |> Sg.uniform "GridSize" (Mod.constant cells)
             |> Sg.uniform "ShowPlanes" planes
             |> Sg.uniform "CellSize" cellSize
+            |> Sg.uniform "DebugPlane" debugPlane
             |> Sg.andAlso clear
             
     // show the window
