@@ -624,17 +624,22 @@ module ``Pool Semantics`` =
 
                     buffer.GetValue()
                 )
+            
+            let mutable ro = Unchecked.defaultof<RenderObject>
 
             aset {
                 let! c = calls;
                 if c.Count > 0 then
-                    let ro = Aardvark.SceneGraph.Semantics.RenderObject.create()
-                    ro.Mode <- p.Mode
-                    ro.Indices <- Some pool.IndexBuffer
-                    ro.VertexAttributes <- pool.VertexAttributes
-                    ro.InstanceAttributes <- pool.InstanceAttributes
-                    ro.IndirectBuffer <- calls
+                    if ((ro :> obj) = null) then
+                        ro <- Aardvark.SceneGraph.Semantics.RenderObject.create()
+                        ro.Mode <- p.Mode
+                        ro.Indices <- Some pool.IndexBuffer
+                        ro.VertexAttributes <- pool.VertexAttributes
+                        ro.InstanceAttributes <- pool.InstanceAttributes
+                        ro.IndirectBuffer <- calls
                     yield (ro :> IRenderObject)
+                else
+                    ro <- Unchecked.defaultof<RenderObject>
             }
 
    
