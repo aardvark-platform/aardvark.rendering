@@ -388,6 +388,7 @@ type ResourceManagerExtensions private() =
             | GLSLType.Mat(3,3,Floaty) -> typeof<M33f>
             | GLSLType.Mat(4,4,Floaty) -> typeof<M44f>
             | GLSLType.Mat(3,4,Floaty) -> typeof<M34f>
+            | GLSLType.Mat(4,3,Floaty) -> typeof<M34f>
             | GLSLType.Mat(2,3,Floaty) -> typeof<M23f>
 
             | _ -> failwithf "[GL] unexpected vertex type: %A" t
