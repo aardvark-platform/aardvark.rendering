@@ -563,23 +563,25 @@ module Loader =
                         let sw = System.Diagnostics.Stopwatch()
                         while true do
                             changed.Take(cancel.Token)
+                            if config.frozen.GetValue() then
+                                input.GetValue() |> ignore
+                            else
+                                sw.Restart()
+                                let res = input.GetValue()
+                                let set = mapping res
+                                let add = set |> Seq.filter (last.Contains >> not) |> Seq.map Add
+                                let rem = last |> Seq.filter (set.Contains >> not) |> Seq.map Rem
+                                let ops = HDeltaSet.combine (HDeltaSet.ofSeq add) (HDeltaSet.ofSeq rem)
+                                last <- set
+                                sw.Stop()
 
-                            sw.Restart()
-                            let res = input.GetValue()
-                            let set = mapping res
-                            let add = set |> Seq.filter (last.Contains >> not) |> Seq.map Add
-                            let rem = last |> Seq.filter (set.Contains >> not) |> Seq.map Rem
-                            let ops = HDeltaSet.combine (HDeltaSet.ofSeq add) (HDeltaSet.ofSeq rem)
-                            last <- set
-                            sw.Stop()
+                                getDeltaTime <- getDeltaTime + sw.MicroTime
+                                getDeltaCount <- getDeltaCount + 1
 
-                            getDeltaTime <- getDeltaTime + sw.MicroTime
-                            getDeltaCount <- getDeltaCount + 1
-
-                            queue.EnqueueMany(ops)
-                            targetCount <- set.Count
-                            queueAdds <- queue.AddCount
-                            queueRemoves <- queue.RemoveCount
+                                queue.EnqueueMany(ops)
+                                targetCount <- set.Count
+                                queueAdds <- queue.AddCount
+                                queueRemoves <- queue.RemoveCount
                     with
                         | CancelExn -> ()
                         | e -> Log.error "getDelta faulted: %A" e
