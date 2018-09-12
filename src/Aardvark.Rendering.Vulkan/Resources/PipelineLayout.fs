@@ -118,8 +118,6 @@ module GLSLType =
             
         ]
     
-    let ofType t = FShade.Imperative.CType.ofType b t |> GLSLType.ofCType
-
     let rec sizeof (t : GLSLType) =
         match t with
             | Bool -> 4
