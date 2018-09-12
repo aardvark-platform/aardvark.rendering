@@ -571,6 +571,7 @@ module ProgramExtensions =
                     | Some c ->
                         
                         let prog = GL.CreateProgram()
+                        addProgram x
                         GL.ProgramBinary(prog, c.format, c.binary, c.binary.Length)
                         GL.Check "could not create program from binary"
 
