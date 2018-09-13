@@ -1501,6 +1501,8 @@ module RenderTasks =
             for (_,t) in Map.toSeq subtasks do
                 t.Dispose()
 
+            x.ResourceManager.Release()
+
             subtasks <- Map.empty
 
         override x.Use (f : unit -> 'a) =
