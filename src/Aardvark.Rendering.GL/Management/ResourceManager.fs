@@ -27,6 +27,8 @@ type UniformBufferManager(ctx : Context, block : FShade.GLSL.GLSLUniformBuffer) 
             use __ = ctx.ResourceLock
             let handle = GL.GenBuffer()
 
+            BufferMemoryUsage.addUniformBuffer ctx (int64 size)
+
             GL.NamedBufferStorage(handle, size, 0n, BufferStorageFlags.DynamicStorageBit)
             GL.Check "could not allocate uniform buffer"
 
@@ -34,6 +36,7 @@ type UniformBufferManager(ctx : Context, block : FShade.GLSL.GLSLUniformBuffer) 
 
         let free (buffer : Buffer) (size : nativeint) =
             GL.DeleteBuffer(buffer.Handle)
+            BufferMemoryUsage.removeUniformBuffer ctx (int64 size)
             GL.Check "could not free uniform buffer"
 
         {

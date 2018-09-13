@@ -106,9 +106,14 @@ module ResourceCounts =
     let updateTexture (ctx:Context) oldSize newSize =
         Interlocked.Add(&ctx.MemoryUsage.TextureMemory,newSize-oldSize) |> ignore
 
-    let texSizeInBytes (size : V3i, t : TextureFormat, samples : int) =
+    let texSizeInBytes (size : V3i, t : TextureFormat, samples : int, levels : int) =
         let pixelCount = (int64 size.X) * (int64 size.Y) * (int64 size.Z) * (int64 samples)
-        pixelCount * (int64 (InternalFormat.getSizeInBits (unbox (int t)))) / 8L
+        let mutable size = pixelCount * (int64 (InternalFormat.getSizeInBits (unbox (int t)))) / 8L
+        let mutable temp = size
+        for i in 1..levels-1 do
+            temp <- temp >>> 2
+            size <- size + temp
+        size
 
 module TextureTarget =
     let ofParameters (dim : TextureDimension) (isArray : bool) (isMS : bool) =
@@ -237,7 +242,7 @@ module TextureCreationExtensions =
                         failwithf "[GL] unexpected texture layout: { dim = %A; arr = %A; ms = %A }" dim isArr isMS
                 
                 
-                let sizeInBytes = texSizeInBytes(size, format, samples)
+                let sizeInBytes = texSizeInBytes(size, format, samples, levels)
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
 
                 tex.SizeInBytes <- sizeInBytes
@@ -334,7 +339,7 @@ module TextureCreationExtensions =
                 GL.BindTexture(TextureTarget.Texture1D, tex.Handle)
                 GL.Check "could not bind texture"
 
-                let sizeInBytes = texSizeInBytes(V3i(size, 1, 1), t, 1)
+                let sizeInBytes = texSizeInBytes(V3i(size, 1, 1), t, 1, mipMapLevels)
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
   
@@ -363,7 +368,7 @@ module TextureCreationExtensions =
                 GL.BindTexture(target, tex.Handle)
                 GL.Check "could not bind texture"
 
-                let sizeInBytes = texSizeInBytes(size.XYI, t, samples)
+                let sizeInBytes = texSizeInBytes(size.XYI, t, samples, mipMapLevels)
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
 
@@ -405,7 +410,7 @@ module TextureCreationExtensions =
 
                 let ifmt = unbox (int t) 
 
-                let sizeInBytes = texSizeInBytes(size, t, 1)
+                let sizeInBytes = texSizeInBytes(size, t, 1, mipMapLevels)
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
 
@@ -445,8 +450,7 @@ module TextureCreationExtensions =
                 GL.BindTexture(TextureTarget.TextureCubeMap, 0)
                 GL.Check "could not unbind texture"
 
-                let sizeInBytes = texSizeInBytes(size.XYI, t, samples)
-                let sizeInBytes = sizeInBytes * 6L
+                let sizeInBytes = texSizeInBytes(size.XYI, t, samples, mipMapLevels) * 6L
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
 
@@ -471,10 +475,9 @@ module TextureCreationExtensions =
                 GL.BindTexture(target, tex.Handle)
                 GL.Check "could not bind texture"
 
-
-                let sizeInBytes = texSizeInBytes(size.XYI, t, samples) * (int64 count)
+                let sizeInBytes = texSizeInBytes(size.XYI, t, samples, mipMapLevels) * (int64 count)
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
-                tex.SizeInBytes <- sizeInBytes // TODO check multisampling
+                tex.SizeInBytes <- sizeInBytes
 
                 if samples = 1 then
                     GL.TexStorage3D(TextureTarget3d.Texture2DArray, mipMapLevels, unbox (int t), size.X, size.Y, count)
@@ -509,7 +512,7 @@ module TextureCreationExtensions =
                 GL.BindTexture(TextureTarget.Texture1DArray, tex.Handle)
                 GL.Check "could not bind texture"
 
-                let sizeInBytes = texSizeInBytes(V3i(size, 1, 1), t, 1) * (int64 count)
+                let sizeInBytes = texSizeInBytes(V3i(size, 1, 1), t, 1, mipMapLevels) * (int64 count)
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
   
@@ -2109,7 +2112,8 @@ module TextureExtensions =
             let sizeChanged = size <> t.Size2D
             let compressionChanged = oldIsCompressed <> isCompressed
             if sizeChanged || compressionChanged then
-                let sizeInBytes = (int64 (InternalFormat.getSizeInBits internalFormat) * int64 (size.X) * int64 (size.Y)) >>> 3
+                let texFormatUncompressed = TextureFormat.ofPixFormat data.[0].PixFormat TextureParams.empty
+                let sizeInBytes = texSizeInBytes(size.XYI, texFormatUncompressed, 1, 1)
                 let sizeInBytes = if textureParams.wantMipMaps then (sizeInBytes <<< 2) / 3L else sizeInBytes
                 let sizeInBytes = if isCompressed then 
                                     let ratio = compressionRatio newFormat
@@ -2366,9 +2370,9 @@ module TextureExtensions =
             let target = cubeSides.[int side] |> snd
             downloadTexture2DInternal target false t level image
 
-    let texSizeInBytes (size : V3i, t : TextureFormat, samples : int) =
-        let pixelCount = (int64 size.X) * (int64 size.Y) * (int64 size.Z) * (int64 samples)
-        pixelCount * (int64 (InternalFormat.getSizeInBits (unbox (int t)))) / 8L
+    //let texSizeInBytes (size : V3i, t : TextureFormat, samples : int) =
+    //    let pixelCount = (int64 size.X) * (int64 size.Y) * (int64 size.Z) * (int64 samples)
+    //    pixelCount * (int64 (InternalFormat.getSizeInBits (unbox (int t)))) / 8L
 
     type Context with
 //        member x.CreateTexture1D(size : int, mipMapLevels : int, t : TextureFormat) =
