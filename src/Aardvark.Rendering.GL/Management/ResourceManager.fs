@@ -16,10 +16,7 @@ open Aardvark.Rendering.GL
 
 
         
-type UniformBufferManager(ctx : Context, block : FShade.GLSL.GLSLUniformBuffer) =
-    let size = block.ubSize
-    let alignedSize = (size + 255) &&& ~~~255
-
+type UniformBufferManager(ctx : Context) =
 
     let bufferMemory : Management.Memory<Buffer> =
 
@@ -61,7 +58,7 @@ type UniformBufferManager(ctx : Context, block : FShade.GLSL.GLSLUniformBuffer) 
     let viewCache = ResourceCache<UniformBufferView, int>(None, None)
     let rw = new ReaderWriterLockSlim()
 
-    member x.CreateUniformBuffer(scope : Ag.Scope, u : IUniformProvider, additional : SymbolDict<IMod>) : IResource<UniformBufferView, int> =
+    member x.CreateUniformBuffer(block : FShade.GLSL.GLSLUniformBuffer, scope : Ag.Scope, u : IUniformProvider, additional : SymbolDict<IMod>) : IResource<UniformBufferView, int> =
         let values =
             block.ubFields 
             |> List.map (fun f ->
@@ -80,6 +77,8 @@ type UniformBufferManager(ctx : Context, block : FShade.GLSL.GLSLUniformBuffer) 
             )
 
         let key = values |> List.map (fun (_,v) -> v :> obj)
+
+        let alignedSize = (block.ubSize + 255) &&& ~~~255
 
         viewCache.GetOrCreate(
             key,
@@ -258,8 +257,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     
     let textureBindingCache     = derivedCache (fun m -> m.TextureBindingCache)
 
-
-    let uniformBufferManagers = ConcurrentDictionary<FShade.GLSL.GLSLUniformBuffer, UniformBufferManager>() // ISSUE: leak? the buffer of the UniformBufferManager is never disposed
+    let uniformBufferManager = UniformBufferManager ctx
 
     let hasTessDrawModeCache = 
         ConcurrentDictionary<IndexedGeometryMode, UnaryCache<IMod<bool>, IMod<GLBeginMode>>>()
@@ -280,7 +278,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     member private x.SamplerCache           : ResourceCache<Sampler, int>                   = samplerCache
     member private x.VertexInputCache       : ResourceCache<VertexInputBindingHandle, int>  = vertexInputCache
     member private x.UniformLocationCache   : ResourceCache<UniformLocation, nativeint>     = uniformLocationCache
-    member private x.UniformBufferManagers                                                  = uniformBufferManagers
                                                                                     
     member private x.IsActiveCache          : ResourceCache<bool, int>                      = isActiveCache
     member private x.BeginModeCache         : ResourceCache<GLBeginMode, GLBeginMode>       = beginModeCache
@@ -584,17 +581,9 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 failwithf "[GL] could not get uniform: %A" uniform
      
     member x.CreateUniformBuffer(scope : Ag.Scope, layout : FShade.GLSL.GLSLUniformBuffer, u : IUniformProvider) =
-        let manager = 
-            uniformBufferManagers.GetOrAdd(
-                (layout), 
-                fun block -> 
-                    new UniformBufferManager(ctx,block)
-                    //new PersistentlyMappedUniformManager(ctx, s, uniformFields)
-            )
-
-        manager.CreateUniformBuffer(scope, u, SymDict.empty)
+   
+        uniformBufferManager.CreateUniformBuffer(layout, scope, u, SymDict.empty)
  
-
  
       
     member x.CreateIsActive(value : IMod<bool>) =
@@ -687,3 +676,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             view =   fun v -> if v then 1 else 0
             kind = ResourceKind.Unknown
         })
+
+
+    member x.Release() = 
+        
+        uniformBufferManager.Dispose()
