@@ -44,7 +44,7 @@ type UniformBufferManager(ctx : Context) =
         }
 
 
-    let manager = new Management.ChunkedMemoryManager<_>(bufferMemory, 8n <<< 20)
+    let manager = new Management.ChunkedMemoryManager<_>(bufferMemory, 1n <<< 20)
 
     //let buffer = 
     //    // TODO: better implementation for uniform buffers (see https://github.com/aardvark-platform/aardvark.rendering/issues/32)
@@ -103,6 +103,10 @@ type UniformBufferManager(ctx : Context) =
                                     block <- manager.Alloc(nativeint alignedSize)
                                     store <- System.Runtime.InteropServices.Marshal.AllocHGlobal alignedSize
                                     //buffer.Commitment(block.Offset, block.Size, true)
+
+                                    // record BufferView statistic: use block.Size instead of alignedSize -> allows to see overhead due to chunked buffers and alignment
+                                    BufferMemoryUsage.addUniformBufferView ctx (int64 block.Size) 
+
                                     UniformBufferView(block.Memory.Value, block.Offset, nativeint block.Size)
 
                         for (offset,w) in writers do w.Write(token, store + offset)
@@ -115,6 +119,8 @@ type UniformBufferManager(ctx : Context) =
                     member x.Destroy h =
                         if not block.IsFree then
                             System.Runtime.InteropServices.Marshal.FreeHGlobal store
+                            store <- 0n
+                            BufferMemoryUsage.removeUniformBufferView ctx (int64 block.Size)
                             use __ = ctx.ResourceLock
                             manager.Free block
 
