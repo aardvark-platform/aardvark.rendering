@@ -78,7 +78,7 @@ type UniformBufferManager(ctx : Context) =
 
         let key = values |> List.map (fun (_,v) -> v :> obj)
 
-        let alignedSize = (block.ubSize + 255) &&& ~~~255
+        let alignedSize = (block.ubSize + 255) &&& ~~~255 // needs to be multiple of GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT (currently 256)
 
         viewCache.GetOrCreate(
             key,
