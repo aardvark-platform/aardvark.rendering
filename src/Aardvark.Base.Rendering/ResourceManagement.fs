@@ -651,7 +651,8 @@ type ResourceInputSet() =
     member x.Dispose () =
         lock all (fun () ->
             for r in all do
-                lock r (fun () -> r.Outputs.Remove x |> ignore)
+                lock r (fun () -> 
+                    r.Outputs.Remove x |> ignore)
 
             all.Clear()
             x.Dirty.Clear()

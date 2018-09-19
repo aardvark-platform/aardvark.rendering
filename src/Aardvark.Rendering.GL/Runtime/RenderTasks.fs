@@ -1496,10 +1496,18 @@ module RenderTasks =
 
 
         override x.Release2() =
+            for item in preparedObjectReader.State do
+                match item with
+                | Object ro -> ro.Dispose()
+                | _ -> ()
+
             preparedObjectReader.Dispose()
-            resources.Dispose()
+            resources.Dispose() // should be 0 after disposing all RenderObjects
             for (_,t) in Map.toSeq subtasks do
                 t.Dispose()
+
+            // UniformBufferManager should have 0 allocated blocks
+            x.ResourceManager.Release()
 
             subtasks <- Map.empty
 

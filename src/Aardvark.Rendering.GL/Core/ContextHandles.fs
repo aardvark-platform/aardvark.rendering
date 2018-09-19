@@ -205,7 +205,7 @@ module ContextHandle =
 
     let createContexts enableDebug resourceContextCount  =
         // if there is a current context release it before creating
-        // the GameWindow since the GameWindow makes itself curret
+        // the GameWindow since the GameWindow makes itself current
         GraphicsContext.ShareContexts <- true;
 
         let current = ContextHandle.Current

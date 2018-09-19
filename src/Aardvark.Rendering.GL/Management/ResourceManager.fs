@@ -16,16 +16,15 @@ open Aardvark.Rendering.GL
 
 
         
-type UniformBufferManager(ctx : Context, block : FShade.GLSL.GLSLUniformBuffer) =
-    let size = block.ubSize
-    let alignedSize = (size + 255) &&& ~~~255
-
+type UniformBufferManager(ctx : Context) =
 
     let bufferMemory : Management.Memory<Buffer> =
 
         let alloc (size : nativeint) =
             use __ = ctx.ResourceLock
             let handle = GL.GenBuffer()
+
+            BufferMemoryUsage.addUniformBuffer ctx (int64 size)
 
             GL.NamedBufferStorage(handle, size, 0n, BufferStorageFlags.DynamicStorageBit)
             GL.Check "could not allocate uniform buffer"
@@ -34,6 +33,7 @@ type UniformBufferManager(ctx : Context, block : FShade.GLSL.GLSLUniformBuffer) 
 
         let free (buffer : Buffer) (size : nativeint) =
             GL.DeleteBuffer(buffer.Handle)
+            BufferMemoryUsage.removeUniformBuffer ctx (int64 size)
             GL.Check "could not free uniform buffer"
 
         {
@@ -44,7 +44,7 @@ type UniformBufferManager(ctx : Context, block : FShade.GLSL.GLSLUniformBuffer) 
         }
 
 
-    let manager = new Management.ChunkedMemoryManager<_>(bufferMemory, 8n <<< 20)
+    let manager = new Management.ChunkedMemoryManager<_>(bufferMemory, 1n <<< 20)
 
     //let buffer = 
     //    // TODO: better implementation for uniform buffers (see https://github.com/aardvark-platform/aardvark.rendering/issues/32)
@@ -58,7 +58,7 @@ type UniformBufferManager(ctx : Context, block : FShade.GLSL.GLSLUniformBuffer) 
     let viewCache = ResourceCache<UniformBufferView, int>(None, None)
     let rw = new ReaderWriterLockSlim()
 
-    member x.CreateUniformBuffer(scope : Ag.Scope, u : IUniformProvider, additional : SymbolDict<IMod>) : IResource<UniformBufferView, int> =
+    member x.CreateUniformBuffer(block : FShade.GLSL.GLSLUniformBuffer, scope : Ag.Scope, u : IUniformProvider, additional : SymbolDict<IMod>) : IResource<UniformBufferView, int> =
         let values =
             block.ubFields 
             |> List.map (fun f ->
@@ -77,6 +77,8 @@ type UniformBufferManager(ctx : Context, block : FShade.GLSL.GLSLUniformBuffer) 
             )
 
         let key = values |> List.map (fun (_,v) -> v :> obj)
+
+        let alignedSize = (block.ubSize + 255) &&& ~~~255 // needs to be multiple of GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT (currently 256)
 
         viewCache.GetOrCreate(
             key,
@@ -101,6 +103,10 @@ type UniformBufferManager(ctx : Context, block : FShade.GLSL.GLSLUniformBuffer) 
                                     block <- manager.Alloc(nativeint alignedSize)
                                     store <- System.Runtime.InteropServices.Marshal.AllocHGlobal alignedSize
                                     //buffer.Commitment(block.Offset, block.Size, true)
+
+                                    // record BufferView statistic: use block.Size instead of alignedSize -> allows to see overhead due to chunked buffers and alignment
+                                    BufferMemoryUsage.addUniformBufferView ctx (int64 block.Size) 
+
                                     UniformBufferView(block.Memory.Value, block.Offset, nativeint block.Size)
 
                         for (offset,w) in writers do w.Write(token, store + offset)
@@ -113,6 +119,8 @@ type UniformBufferManager(ctx : Context, block : FShade.GLSL.GLSLUniformBuffer) 
                     member x.Destroy h =
                         if not block.IsFree then
                             System.Runtime.InteropServices.Marshal.FreeHGlobal store
+                            store <- 0n
+                            BufferMemoryUsage.removeUniformBufferView ctx (int64 block.Size)
                             use __ = ctx.ResourceLock
                             manager.Free block
 
@@ -255,8 +263,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     
     let textureBindingCache     = derivedCache (fun m -> m.TextureBindingCache)
 
-
-    let uniformBufferManagers = ConcurrentDictionary<FShade.GLSL.GLSLUniformBuffer, UniformBufferManager>() // ISSUE: leak? the buffer of the UniformBufferManager is never disposed
+    let uniformBufferManager = UniformBufferManager ctx
 
     let hasTessDrawModeCache = 
         ConcurrentDictionary<IndexedGeometryMode, UnaryCache<IMod<bool>, IMod<GLBeginMode>>>()
@@ -277,7 +284,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     member private x.SamplerCache           : ResourceCache<Sampler, int>                   = samplerCache
     member private x.VertexInputCache       : ResourceCache<VertexInputBindingHandle, int>  = vertexInputCache
     member private x.UniformLocationCache   : ResourceCache<UniformLocation, nativeint>     = uniformLocationCache
-    member private x.UniformBufferManagers                                                  = uniformBufferManagers
                                                                                     
     member private x.IsActiveCache          : ResourceCache<bool, int>                      = isActiveCache
     member private x.BeginModeCache         : ResourceCache<GLBeginMode, GLBeginMode>       = beginModeCache
@@ -581,17 +587,9 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 failwithf "[GL] could not get uniform: %A" uniform
      
     member x.CreateUniformBuffer(scope : Ag.Scope, layout : FShade.GLSL.GLSLUniformBuffer, u : IUniformProvider) =
-        let manager = 
-            uniformBufferManagers.GetOrAdd(
-                (layout), 
-                fun block -> 
-                    new UniformBufferManager(ctx,block)
-                    //new PersistentlyMappedUniformManager(ctx, s, uniformFields)
-            )
-
-        manager.CreateUniformBuffer(scope, u, SymDict.empty)
+   
+        uniformBufferManager.CreateUniformBuffer(layout, scope, u, SymDict.empty)
  
-
  
       
     member x.CreateIsActive(value : IMod<bool>) =
@@ -684,3 +682,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             view =   fun v -> if v then 1 else 0
             kind = ResourceKind.Unknown
         })
+
+
+    member x.Release() = 
+        
+        uniformBufferManager.Dispose()

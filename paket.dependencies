@@ -4,15 +4,15 @@ source https://vrvis.myget.org/F/aardvark_public/api/v3/index.json
 
 nuget FSharp.Core                        ~> 4.3.0
 
-nuget Aardvark.Base.FSharp               ~> 4.0.16
-nuget Aardvark.Base.IO                   ~> 4.0.16
-nuget Aardvark.Base.Incremental          ~> 4.0.16
-nuget Aardvark.Base.Runtime              ~> 4.0.16
-nuget Aardvark.Base.Essentials           ~> 4.0.16
+nuget Aardvark.Base.FSharp               ~> 4.2.0
+nuget Aardvark.Base.IO                   ~> 4.2.0
+nuget Aardvark.Base.Incremental          ~> 4.2.0
+nuget Aardvark.Base.Runtime              ~> 4.2.0
+nuget Aardvark.Base.Essentials           ~> 4.2.0
                                   
-nuget FShade.Core                        ~> 4.1.19
-nuget FShade                             ~> 4.1.19
-nuget FShade.Debug                       ~> 4.1.19
+nuget FShade.Core                        ~> 4.2.21
+nuget FShade                             ~> 4.2.21
+nuget FShade.Debug                       ~> 4.2.21
 
 nuget Unofficial.OpenVR					 ~> 1.1.0 
 nuget Unofficial.Typography              ~> 0.0.2
