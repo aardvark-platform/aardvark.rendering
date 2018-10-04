@@ -3,11 +3,11 @@ source https://api.nuget.org/v3/index.json
 
 nuget FSharp.Core                        ~> 4.3.0
 
-nuget Aardvark.Base.FSharp               ~> 4.2.0
-nuget Aardvark.Base.IO                   ~> 4.2.0
-nuget Aardvark.Base.Incremental          ~> 4.2.0
-nuget Aardvark.Base.Runtime              ~> 4.2.0
-nuget Aardvark.Base.Essentials           ~> 4.2.0
+nuget Aardvark.Base.FSharp               ~> 4.2.2
+nuget Aardvark.Base.IO                   ~> 4.2.2
+nuget Aardvark.Base.Incremental          ~> 4.2.2
+nuget Aardvark.Base.Runtime              ~> 4.2.2
+nuget Aardvark.Base.Essentials           ~> 4.2.2
                                   
 nuget FShade.Core                        ~> 4.2.21
 nuget FShade                             ~> 4.2.21
