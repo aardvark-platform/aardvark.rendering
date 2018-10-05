@@ -13,6 +13,8 @@
     <TargetFSharpCoreVersion>4.4.0.0</TargetFSharpCoreVersion>
     <Name>Aardvark.Application.WPF.GL</Name>
     <NuGetPackageImportStamp>716d4491</NuGetPackageImportStamp>
+	    <OperatingSystem Condition="Exists('C:\Windows\')">WINDOWS</OperatingSystem>
+    <OperatingSystem Condition="Exists('/usr') AND !Exists('C:\Windows')">UNIX</OperatingSystem>
     <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
