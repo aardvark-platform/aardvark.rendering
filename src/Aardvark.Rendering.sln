@@ -4,41 +4,39 @@ VisualStudioVersion = 15.0.26730.10
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "02 - WPF", "Scratch (net471)\02 - WPF\02 - WPF.fsproj", "{664AC4B5-BF01-46BE-82A8-3AA19FCDD54C}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "22 - LoD", "Examples\22 - LoD\22 - LoD.fsproj", "{626FCA6B-DEE2-417C-87C5-C9A71E70C5E2}"
-EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "03 - Sorted", "Scratch\03 - Sorted\03 - Sorted.fsproj", "{B53765D0-623D-4BDA-BFC8-D8DB5A3A114A}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "22 - LoD", "Examples (netcore)\22 - LoD\22 - LoD.fsproj", "{626FCA6B-DEE2-417C-87C5-C9A71E70C5E2}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "01 - HardwareFeatures", "Scratch (net471)\01 - HardwareFeatures\01 - HardwareFeatures.fsproj", "{C132A4EC-FC02-4629-A906-1684369BBB6B}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "20 - VolumeRendering", "Examples\20 - VolumeRendering\20 - VolumeRendering.fsproj", "{015672E1-0260-4374-83D1-97210F52FB4C}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "20 - VolumeRendering", "Examples (netcore)\20 - VolumeRendering\20 - VolumeRendering.fsproj", "{015672E1-0260-4374-83D1-97210F52FB4C}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "19 - NativeTensors", "Examples\19 - NativeTensors\19 - NativeTensors.fsproj", "{86B49AE2-55FA-42E4-9DE7-B4AD3D3A79AB}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "19 - NativeTensors", "Examples (netcore)\19 - NativeTensors\19 - NativeTensors.fsproj", "{86B49AE2-55FA-42E4-9DE7-B4AD3D3A79AB}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "18 - RenderCommands", "Examples\18 - RenderCommands\18 - RenderCommands.fsproj", "{227587AA-4E5F-4AB6-887A-471DC887131E}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "18 - RenderCommands", "Examples (netcore)\18 - RenderCommands\18 - RenderCommands.fsproj", "{227587AA-4E5F-4AB6-887A-471DC887131E}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "16 - ShaderSwitches", "Examples\16 - ShaderSwitches\16 - ShaderSwitches.fsproj", "{61C4E66D-887B-4AD5-831D-AEDCE7F67CB7}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "16 - ShaderSwitches", "Examples (netcore)\16 - ShaderSwitches\16 - ShaderSwitches.fsproj", "{61C4E66D-887B-4AD5-831D-AEDCE7F67CB7}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "15 - GeometryPooling", "Examples\15 - GeometryPooling\15 - GeometryPooling.fsproj", "{023D65B5-26C5-4887-82DC-0F622966DABB}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "15 - GeometryPooling", "Examples (netcore)\15 - GeometryPooling\15 - GeometryPooling.fsproj", "{023D65B5-26C5-4887-82DC-0F622966DABB}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "13 - Mandelbrot", "Examples\13 - Mandelbrot\13 - Mandelbrot.fsproj", "{9A3BD9B8-9942-40B5-BC90-F4D14FE766CB}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "13 - Mandelbrot", "Examples (netcore)\13 - Mandelbrot\13 - Mandelbrot.fsproj", "{9A3BD9B8-9942-40B5-BC90-F4D14FE766CB}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "12 - GlslIntrinsics", "Examples\12 - GlslIntrinsics\12 - GlslIntrinsics.fsproj", "{3E7A4330-FB2B-4899-9B44-6FECF67A629F}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "12 - GlslIntrinsics", "Examples (netcore)\12 - GlslIntrinsics\12 - GlslIntrinsics.fsproj", "{3E7A4330-FB2B-4899-9B44-6FECF67A629F}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "11 - ParallelPrimitives", "Examples\11 - ParallelPrimitives\11 - ParallelPrimitives.fsproj", "{02ED0B81-E99A-45DE-923A-862D66D318C0}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "11 - ParallelPrimitives", "Examples (netcore)\11 - ParallelPrimitives\11 - ParallelPrimitives.fsproj", "{02ED0B81-E99A-45DE-923A-862D66D318C0}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "10 - NBodyCompute", "Examples\10 - NBodyCompute\10 - NBodyCompute.fsproj", "{6EFF89F1-0DFE-4346-9473-31A0A233F943}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "10 - NBodyCompute", "Examples (netcore)\10 - NBodyCompute\10 - NBodyCompute.fsproj", "{6EFF89F1-0DFE-4346-9473-31A0A233F943}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "09 - TesselatedSphere", "Examples\09 - TesselatedSphere\09 - TesselatedSphere.fsproj", "{B24882D0-E4FC-45A3-A5F0-DF6D2B0E01BA}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "09 - TesselatedSphere", "Examples (netcore)\09 - TesselatedSphere\09 - TesselatedSphere.fsproj", "{B24882D0-E4FC-45A3-A5F0-DF6D2B0E01BA}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "08 - NaiveViewFrustumCulling", "Examples\08 - NaiveViewFrustumCulling\08 - NaiveViewFrustumCulling.fsproj", "{2DE51C61-A2DE-43F6-B047-F428E2608089}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "08 - NaiveViewFrustumCulling", "Examples (netcore)\08 - NaiveViewFrustumCulling\08 - NaiveViewFrustumCulling.fsproj", "{2DE51C61-A2DE-43F6-B047-F428E2608089}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "07 - RenderToTexture", "Examples\07 - RenderToTexture\07 - RenderToTexture.fsproj", "{0C75D556-1B56-42B7-B399-9E4C7BE0D83F}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "07 - RenderToTexture", "Examples (netcore)\07 - RenderToTexture\07 - RenderToTexture.fsproj", "{0C75D556-1B56-42B7-B399-9E4C7BE0D83F}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "06 - GeometryPrimitives", "Examples\06 - GeometryPrimitives\06 - GeometryPrimitives.fsproj", "{CFFF9E2D-5C66-494F-AB20-DD5047DAD8B9}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "06 - GeometryPrimitives", "Examples (netcore)\06 - GeometryPrimitives\06 - GeometryPrimitives.fsproj", "{CFFF9E2D-5C66-494F-AB20-DD5047DAD8B9}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "04 - ModelLoading", "Examples\04 - ModelLoading\04 - ModelLoading.fsproj", "{AE1BA94B-B2F3-4A74-9748-4576440E0337}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "04 - ModelLoading", "Examples (netcore)\04 - ModelLoading\04 - ModelLoading.fsproj", "{AE1BA94B-B2F3-4A74-9748-4576440E0337}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "03 - Animation", "Examples\03 - Animation\03 - Animation.fsproj", "{21A147AA-3100-439F-8E7A-5591F4995D17}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "03 - Animation", "Examples (netcore)\03 - Animation\03 - Animation.fsproj", "{21A147AA-3100-439F-8E7A-5591F4995D17}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Base.Rendering", "Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj", "{F8233648-55CE-4795-9151-E512390D86E7}"
 EndProject
@@ -95,45 +93,41 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.OpenVR
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.GPGPU", "Aardvark.GPGPU\Aardvark.GPGPU.fsproj", "{68E3B876-EB23-4D61-A71F-EF35A146F276}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Examples", "Examples", "{5E3312C4-1B3C-4D41-964C-C3A3E01DA966}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Examples (netcore)", "Examples (netcore)", "{5E3312C4-1B3C-4D41-964C-C3A3E01DA966}"
 	ProjectSection(SolutionItems) = preProject
 		Examples\new.fsx = Examples\new.fsx
 	EndProjectSection
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "01 - Triangle", "Examples\01 - Triangle\01 - Triangle.fsproj", "{586B6699-E349-4173-BB3F-6DA125EFFFDA}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "01 - Triangle", "Examples (netcore)\01 - Triangle\01 - Triangle.fsproj", "{586B6699-E349-4173-BB3F-6DA125EFFFDA}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.Utilities", "Application\Aardvark.Application.Utilities\Aardvark.Application.Utilities.fsproj", "{3322678A-22DA-4C84-B2BF-33B0D2F8C80C}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "02 - TexturedCube", "Examples\02 - TexturedCube\02 - TexturedCube.fsproj", "{BDFCAB13-3D52-4373-94ED-9E2F493EB89E}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "02 - TexturedCube", "Examples (netcore)\02 - TexturedCube\02 - TexturedCube.fsproj", "{BDFCAB13-3D52-4373-94ED-9E2F493EB89E}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "00 - HelloWorld", "Examples\00 - HelloWorld\00 - HelloWorld.fsproj", "{CDDB9BC3-C264-4C51-BD40-4B98E50F0297}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "00 - HelloWorld", "Examples (netcore)\00 - HelloWorld\00 - HelloWorld.fsproj", "{CDDB9BC3-C264-4C51-BD40-4B98E50F0297}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "14 - GeometryShaders", "Examples\14 - GeometryShaders\14 - GeometryShaders.fsproj", "{57D366A4-399B-4FEB-B061-AC92A1089DE5}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "14 - GeometryShaders", "Examples (netcore)\14 - GeometryShaders\14 - GeometryShaders.fsproj", "{57D366A4-399B-4FEB-B061-AC92A1089DE5}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.OpenVR.GL", "Application\Aardvark.Application.OpenVR.GL\Aardvark.Application.OpenVR.GL.fsproj", "{77F11E0A-4BB2-4402-B339-B4772D2A4EF6}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.Slim.GL", "Application\Aardvark.Application.Slim.GL\Aardvark.Application.Slim.GL.fsproj", "{F8E2E201-39EC-4000-B3E7-E317016FA807}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "SlimJim", "Demo\SlimJim\SlimJim.fsproj", "{20E2DE44-A06D-4BEA-9AA8-0D60733E18EF}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "SlimJim", "Demo\SlimJim\SlimJim.fsproj", "{6EE5993C-4404-40E3-B3E9-3D0A37FBC699}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.Slim", "Application\Aardvark.Application.Slim\Aardvark.Application.Slim.fsproj", "{72A7471E-7BF7-41BD-A654-0DC904B49D1F}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.Slim.Vulkan", "Application\Aardvark.Application.Slim.Vulkan\Aardvark.Application.Slim.Vulkan.fsproj", "{77AF53B0-FE23-4DE2-B218-5726B295F6BD}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "17 - TextureArrays", "Examples\17 - TextureArrays\17 - TextureArrays.fsproj", "{2C25EACD-8E56-4BE5-8BB7-0CB9ED004096}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "17 - TextureArrays", "Examples (netcore)\17 - TextureArrays\17 - TextureArrays.fsproj", "{2C25EACD-8E56-4BE5-8BB7-0CB9ED004096}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{21DE79CD-4706-473E-9655-ACD9A7A3D5D3}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.SceneGraph.Opc", "Aardvark.SceneGraph.Opc\Aardvark.SceneGraph.Opc.fsproj", "{97CF1A7D-9858-4552-8EBF-ADBD6FF68FFA}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Scratch", "Scratch", "{29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Scratch (netcore)", "Scratch (netcore)", "{29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}"
 	ProjectSection(SolutionItems) = preProject
 		Scratch\new.fsx = Scratch\new.fsx
 	EndProjectSection
-EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "01 - Triangle", "Scratch\01 - Triangle\01 - Triangle.fsproj", "{3D31F226-6712-42B7-A7B7-84C46A4E7D14}"
-EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "02 - OpcDemo", "Scratch\02 - OpcDemo\02 - OpcDemo.fsproj", "{58F57989-D8C7-4FA8-82F8-35DDC6BCC38A}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Scratch (net471)", "Scratch (net471)", "{ACAD9454-10F3-4673-BC50-BD1B50A04D3B}"
 	ProjectSection(SolutionItems) = preProject
@@ -141,6 +135,16 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Scratch (net471)", "Scratch
 	EndProjectSection
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "00 - HelloWorld (net471)", "Scratch (net471)\00 - HelloWorld (net471)\00 - HelloWorld (net471).fsproj", "{0D5B9ADB-7EFE-44ED-BB73-FB232B74F17C}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Examples (net471)", "Examples (net471)", "{0C4B4E0F-315B-4F93-BFCE-CAE5003FB82B}"
+EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "01 - Triangle", "Scratch (netcore)\01 - Triangle\01 - Triangle.fsproj", "{73D82892-93D0-402C-B561-F25B5D1804B0}"
+EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "02 - OpcDemo", "Scratch (netcore)\02 - OpcDemo\02 - OpcDemo.fsproj", "{11C99149-C563-4EA9-8B43-985554E2ABE7}"
+EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "03 - Sorted", "Scratch (netcore)\03 - Sorted\03 - Sorted.fsproj", "{09AC089B-878F-44F1-83C3-7889654C666E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WpfDemo", "Scratch (net471)\03 - WpfDemo\WpfDemo.csproj", "{29DF1FA7-458D-4E25-8547-EA3E61137EBF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -156,10 +160,6 @@ Global
 		{626FCA6B-DEE2-417C-87C5-C9A71E70C5E2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{626FCA6B-DEE2-417C-87C5-C9A71E70C5E2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{626FCA6B-DEE2-417C-87C5-C9A71E70C5E2}.Release|Any CPU.Build.0 = Release|Any CPU
-		{B53765D0-623D-4BDA-BFC8-D8DB5A3A114A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{B53765D0-623D-4BDA-BFC8-D8DB5A3A114A}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{B53765D0-623D-4BDA-BFC8-D8DB5A3A114A}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{B53765D0-623D-4BDA-BFC8-D8DB5A3A114A}.Release|Any CPU.Build.0 = Release|Any CPU
 		{C132A4EC-FC02-4629-A906-1684369BBB6B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{C132A4EC-FC02-4629-A906-1684369BBB6B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C132A4EC-FC02-4629-A906-1684369BBB6B}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -340,10 +340,10 @@ Global
 		{F8E2E201-39EC-4000-B3E7-E317016FA807}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F8E2E201-39EC-4000-B3E7-E317016FA807}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F8E2E201-39EC-4000-B3E7-E317016FA807}.Release|Any CPU.Build.0 = Release|Any CPU
-		{20E2DE44-A06D-4BEA-9AA8-0D60733E18EF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{20E2DE44-A06D-4BEA-9AA8-0D60733E18EF}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{20E2DE44-A06D-4BEA-9AA8-0D60733E18EF}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{20E2DE44-A06D-4BEA-9AA8-0D60733E18EF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6EE5993C-4404-40E3-B3E9-3D0A37FBC699}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6EE5993C-4404-40E3-B3E9-3D0A37FBC699}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6EE5993C-4404-40E3-B3E9-3D0A37FBC699}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6EE5993C-4404-40E3-B3E9-3D0A37FBC699}.Release|Any CPU.Build.0 = Release|Any CPU
 		{72A7471E-7BF7-41BD-A654-0DC904B49D1F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{72A7471E-7BF7-41BD-A654-0DC904B49D1F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{72A7471E-7BF7-41BD-A654-0DC904B49D1F}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -360,18 +360,26 @@ Global
 		{97CF1A7D-9858-4552-8EBF-ADBD6FF68FFA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{97CF1A7D-9858-4552-8EBF-ADBD6FF68FFA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{97CF1A7D-9858-4552-8EBF-ADBD6FF68FFA}.Release|Any CPU.Build.0 = Release|Any CPU
-		{3D31F226-6712-42B7-A7B7-84C46A4E7D14}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{3D31F226-6712-42B7-A7B7-84C46A4E7D14}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{3D31F226-6712-42B7-A7B7-84C46A4E7D14}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{3D31F226-6712-42B7-A7B7-84C46A4E7D14}.Release|Any CPU.Build.0 = Release|Any CPU
-		{58F57989-D8C7-4FA8-82F8-35DDC6BCC38A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{58F57989-D8C7-4FA8-82F8-35DDC6BCC38A}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{58F57989-D8C7-4FA8-82F8-35DDC6BCC38A}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{58F57989-D8C7-4FA8-82F8-35DDC6BCC38A}.Release|Any CPU.Build.0 = Release|Any CPU
 		{0D5B9ADB-7EFE-44ED-BB73-FB232B74F17C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{0D5B9ADB-7EFE-44ED-BB73-FB232B74F17C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0D5B9ADB-7EFE-44ED-BB73-FB232B74F17C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0D5B9ADB-7EFE-44ED-BB73-FB232B74F17C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{73D82892-93D0-402C-B561-F25B5D1804B0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{73D82892-93D0-402C-B561-F25B5D1804B0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{73D82892-93D0-402C-B561-F25B5D1804B0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{73D82892-93D0-402C-B561-F25B5D1804B0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{11C99149-C563-4EA9-8B43-985554E2ABE7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{11C99149-C563-4EA9-8B43-985554E2ABE7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{11C99149-C563-4EA9-8B43-985554E2ABE7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{11C99149-C563-4EA9-8B43-985554E2ABE7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{09AC089B-878F-44F1-83C3-7889654C666E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{09AC089B-878F-44F1-83C3-7889654C666E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{09AC089B-878F-44F1-83C3-7889654C666E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{09AC089B-878F-44F1-83C3-7889654C666E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{29DF1FA7-458D-4E25-8547-EA3E61137EBF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{29DF1FA7-458D-4E25-8547-EA3E61137EBF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{29DF1FA7-458D-4E25-8547-EA3E61137EBF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{29DF1FA7-458D-4E25-8547-EA3E61137EBF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -379,7 +387,6 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{664AC4B5-BF01-46BE-82A8-3AA19FCDD54C} = {ACAD9454-10F3-4673-BC50-BD1B50A04D3B}
 		{626FCA6B-DEE2-417C-87C5-C9A71E70C5E2} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
-		{B53765D0-623D-4BDA-BFC8-D8DB5A3A114A} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{C132A4EC-FC02-4629-A906-1684369BBB6B} = {ACAD9454-10F3-4673-BC50-BD1B50A04D3B}
 		{015672E1-0260-4374-83D1-97210F52FB4C} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{86B49AE2-55FA-42E4-9DE7-B4AD3D3A79AB} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
@@ -418,13 +425,14 @@ Global
 		{57D366A4-399B-4FEB-B061-AC92A1089DE5} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{77F11E0A-4BB2-4402-B339-B4772D2A4EF6} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{F8E2E201-39EC-4000-B3E7-E317016FA807} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
-		{20E2DE44-A06D-4BEA-9AA8-0D60733E18EF} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 		{72A7471E-7BF7-41BD-A654-0DC904B49D1F} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{77AF53B0-FE23-4DE2-B218-5726B295F6BD} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{2C25EACD-8E56-4BE5-8BB7-0CB9ED004096} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
-		{3D31F226-6712-42B7-A7B7-84C46A4E7D14} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
-		{58F57989-D8C7-4FA8-82F8-35DDC6BCC38A} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{0D5B9ADB-7EFE-44ED-BB73-FB232B74F17C} = {ACAD9454-10F3-4673-BC50-BD1B50A04D3B}
+		{73D82892-93D0-402C-B561-F25B5D1804B0} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
+		{11C99149-C563-4EA9-8B43-985554E2ABE7} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
+		{09AC089B-878F-44F1-83C3-7889654C666E} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
+		{29DF1FA7-458D-4E25-8547-EA3E61137EBF} = {ACAD9454-10F3-4673-BC50-BD1B50A04D3B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C41172B9-09C3-4327-8CE2-CB47CBAA29AC}

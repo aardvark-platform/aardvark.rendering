@@ -7,14 +7,6 @@ open Aardvark.Application
 open Aardvark.Application.WPF
 open System.Windows
 
-// This example illustrates how to create a simple render window. 
-// In contrast to the rest of the examples (beginning from 01-Triangle), we use
-// the low level application API for creating a window and attaching 
-// mouse and keyboard inputs.
-// In your application you most likely want to use this API instead of the more abstract
-// show/window computation expression builders (which reduces code duplication
-// in this case) to setup applications.
-
 [<EntryPoint; STAThread>]
 let main argv = 
     
@@ -33,7 +25,6 @@ let main argv =
     
     //win.Title <- "Hello Aardvark"
 
-    Config.useSharingControl <- true
     let application = Application()
     let win = Window()
     let ctrl = RenderControl()
@@ -96,5 +87,5 @@ let main argv =
 
     // assign the render task to our window...
     ctrl.RenderTask <- renderTask
-    application.Run(win)
+    application.Run(win) |> ignore
     0
