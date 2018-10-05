@@ -1,6 +1,6 @@
 ﻿namespace Aardvark.Application.WPF
 
-#if WINDOWS
+//#if Windows_NT
 
 open System
 open System.Runtime.InteropServices
@@ -36,6 +36,9 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) a
     do this.Child <- ctrl
        this.Loaded.Add(fun e -> this.Focusable <- false)
 
+    //override x.OnDpiChanged(oldDpi : DpiScale, newDpi : DpiScale) =
+    //    base.OnDpiChanged(oldDpi, newDpi)
+
     member x.Inner = ctrl
 
     member x.RenderTask
@@ -65,4 +68,4 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) a
         member x.AfterRender = ctrl.AfterRender
     new(context, enableDebug) = new OpenGlRenderControl(context, enableDebug, 1)
 
-#endif
+//#endif

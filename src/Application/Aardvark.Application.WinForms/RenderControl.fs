@@ -138,8 +138,10 @@ type RenderControl() as this =
     override x.OnResize(e) =
         base.OnResize(e)
         transact (fun () -> Mod.change sizes (V2i(x.ClientSize.Width, x.ClientSize.Height)))
-
-
+    
+    //override x.OnDpiChangedBeforeParent(e) =
+    //    Log.warn "asdasdasdasd"
+    //    base.OnDpiChangedBeforeParent(e)
 
     member x.Sizes = sizes :> IMod<V2i>
     member x.Samples = impl.Value.Samples

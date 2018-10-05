@@ -1,6 +1,6 @@
 ﻿namespace Aardvark.Application.WPF
 
-#if WINDOWS
+#if Windows_NT
 
 open System.Runtime.CompilerServices
 open System.Windows

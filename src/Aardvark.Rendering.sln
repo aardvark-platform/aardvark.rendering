@@ -2,6 +2,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.26730.10
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "02 - WPF", "Scratch (net471)\02 - WPF\02 - WPF.fsproj", "{664AC4B5-BF01-46BE-82A8-3AA19FCDD54C}"
+EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "22 - LoD", "Examples\22 - LoD\22 - LoD.fsproj", "{626FCA6B-DEE2-417C-87C5-C9A71E70C5E2}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "03 - Sorted", "Scratch\03 - Sorted\03 - Sorted.fsproj", "{B53765D0-623D-4BDA-BFC8-D8DB5A3A114A}"
@@ -146,6 +148,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{664AC4B5-BF01-46BE-82A8-3AA19FCDD54C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{664AC4B5-BF01-46BE-82A8-3AA19FCDD54C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{664AC4B5-BF01-46BE-82A8-3AA19FCDD54C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{664AC4B5-BF01-46BE-82A8-3AA19FCDD54C}.Release|Any CPU.Build.0 = Release|Any CPU
 		{626FCA6B-DEE2-417C-87C5-C9A71E70C5E2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{626FCA6B-DEE2-417C-87C5-C9A71E70C5E2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{626FCA6B-DEE2-417C-87C5-C9A71E70C5E2}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -371,6 +377,7 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{664AC4B5-BF01-46BE-82A8-3AA19FCDD54C} = {ACAD9454-10F3-4673-BC50-BD1B50A04D3B}
 		{626FCA6B-DEE2-417C-87C5-C9A71E70C5E2} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{B53765D0-623D-4BDA-BFC8-D8DB5A3A114A} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{C132A4EC-FC02-4629-A906-1684369BBB6B} = {ACAD9454-10F3-4673-BC50-BD1B50A04D3B}
