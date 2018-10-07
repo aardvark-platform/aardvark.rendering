@@ -1,4 +1,5 @@
-﻿open System
+﻿#if WINDOWS
+open System
 open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
@@ -89,3 +90,8 @@ let main argv =
     ctrl.RenderTask <- renderTask
     application.Run(win) |> ignore
     0
+#else
+open System
+[<EntryPoint; STAThread>]
+let main argv = 0
+#endif

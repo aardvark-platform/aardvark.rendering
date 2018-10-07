@@ -1,5 +1,4 @@
-﻿#if __MonoCS__
-#else
+﻿#if WINDOWS
 
 using System;
 using System.Collections.Generic;
