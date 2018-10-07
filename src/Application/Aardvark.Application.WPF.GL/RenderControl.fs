@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.Application.WPF
 
 #if WINDOWS
-ajsdfasdf
+
 
 open System
 open System.Runtime.InteropServices
