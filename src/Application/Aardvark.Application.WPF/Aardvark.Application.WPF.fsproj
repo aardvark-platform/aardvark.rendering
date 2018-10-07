@@ -13,8 +13,8 @@
     <TargetFSharpCoreVersion>4.4.0.0</TargetFSharpCoreVersion>
     <Name>Aardvark.Application.WPF</Name>
 	
+	    <OperatingSystem Condition="Exists('/usr')">UNIX</OperatingSystem>
     <OperatingSystem Condition="Exists('C:\Windows\')">WINDOWS</OperatingSystem>
-    <OperatingSystem Condition="Exists('/usr') AND !Exists('C:\Windows')">UNIX</OperatingSystem>
 	
     <TargetFrameworkProfile />
   </PropertyGroup>
@@ -24,7 +24,7 @@
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
     <OutputPath>..\..\..\bin\Debug\</OutputPath>
-    <DefineConstants>TRACE;DEBUG</DefineConstants>
+    <DefineConstants>TRACE;DEBUG;$(OperatingSystem)</DefineConstants>
     <WarningLevel>3</WarningLevel>
     <DocumentationFile>
     </DocumentationFile>
@@ -34,7 +34,7 @@
     <Optimize>true</Optimize>
     <Tailcalls>true</Tailcalls>
     <OutputPath>..\..\..\bin\Release\</OutputPath>
-    <DefineConstants>TRACE;$(OS)</DefineConstants>
+    <DefineConstants>TRACE;$(OperatingSystem)</DefineConstants>
     <WarningLevel>3</WarningLevel>
     <DocumentationFile>
     </DocumentationFile>
