@@ -12,11 +12,13 @@ open Aardvark.Base.Rendering
 [<ReferenceEquality; NoComparison>]
 type ShapeList =
     {
-        bounds      : Box2d
-        offsets     : list<V2d>
-        scales      : list<V2d>
-        colors      : list<C4b>
-        shapes      : list<Shape>
+        bounds              : Box2d
+        offsets             : list<V2d>
+        scales              : list<V2d>
+        colors              : list<C4b>
+        shapes              : list<Shape>
+        renderTrafo         : Trafo3d
+        flipViewDependent   : bool
     }
 
 type TextAlignment =
@@ -47,31 +49,38 @@ type Text private() =
             let mutable last = '\n'
             chars.Clear()
 
+            let mutable minX = 0.0
+            let mutable i = 0
             for c in l do
                 let kerning = font.GetKerning(last, c)
-               
                 match c with
                     | ' ' -> cx <- cx + font.Spacing
                     | '\t' -> cx <- cx + 4.0 + font.Spacing
                     | c ->
                         let g = font |> Font.glyph c
                         chars.Add(cx + g.Before + kerning, g)
-                        cx <- cx + g.Advance + kerning
-
+                        cx <- cx + kerning + g.Advance
+                        if i = 0 then minX <- g.Before + kerning
+                        elif i = l.Length - 1 then cx <- cx + g.Before
+                i <- i + 1
                 last <- c
+                
+            let size = cx - minX
 
+            
             let shift = 
                 match align with
                     | TextAlignment.Left -> 0.0
-                    | TextAlignment.Right -> bounds.SizeX - cx
-                    | TextAlignment.Center -> (bounds.SizeX - cx) / 2.0
+                    | TextAlignment.Right -> bounds.Max.X - cx
+                    | TextAlignment.Center -> bounds.Center.X - (cx + minX) / 2.0
                     | _ -> failwithf "[Text] bad align: %A" align
 
             let y = cy
 
+            realBounds.ExtendBy(Box2d(V2d(minX + shift, y - font.Descent - font.InternalLeading), V2d(cx + shift, y + font.Ascent + font.InternalLeading)))
             for (x,g) in chars do
-                let pos = bounds.Min + V2d(shift + x,y)
-                realBounds.ExtendBy(g.Bounds.Translated(pos))
+                let pos = V2d(shift + x,y)
+                //realBounds.ExtendBy (Box2d()) //(g.Bounds.Translated(pos))
                 offsets.Add(pos)
                 scales.Add(V2d(1.0, 1.0))
                 colors.Add(color)
@@ -79,13 +88,17 @@ type Text private() =
 
             cy <- cy - font.LineHeight
 
+        let realCenter = realBounds.Center.X
+        
 
         {
-            bounds      = realBounds
-            offsets     = offsets |> CSharpList.toList
-            scales      = scales |> CSharpList.toList
-            colors      = colors |> CSharpList.toList
-            shapes      = glyphs |> CSharpList.toList
+            bounds              = realBounds
+            offsets             = offsets |> CSharpList.toList |> List.map (fun o -> V2d(o.X - realCenter, o.Y))
+            scales              = scales |> CSharpList.toList
+            colors              = colors |> CSharpList.toList
+            shapes              = glyphs |> CSharpList.toList
+            renderTrafo         = Trafo3d.Translation(realCenter, 0.0, 0.0)
+            flipViewDependent   = true
         }
 
     [<Extension>]

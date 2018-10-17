@@ -14,6 +14,21 @@ module RenderPass =
 type Border2d = { left : float; right: float; top: float; bottom : float } with
     static member None = { left = 0.0; right = 0.0; top = 0.0; bottom = 0.0 }
 
+type TextConfig =
+    {
+        font                : Font
+        color               : C4b
+        align               : TextAlignment
+        flipViewDependent   : bool
+    }
+    static member Default =
+        {
+            font = Font "Consolas"
+            color = C4b.White
+            align = TextAlignment.Center
+            flipViewDependent = true
+        }
+
 module Sg =
     open Aardvark.SceneGraph.Semantics
     open Aardvark.Base.Ag
@@ -90,12 +105,27 @@ module Sg =
                             
                             Seq.zip shapes.offsets shapes.scales
                                 |> Seq.map (fun (off, scale) ->
-                                    trafo.Forward *
-                                    M44d.Translation(off.X, off.Y, 0.0) *
-                                    M44d.Scale(scale.X, scale.Y, 1.0)
+                                    M34d.op_Explicit (
+                                        trafo.Forward *
+                                        shapes.renderTrafo.Forward
+                                    )
                                 ) 
                         )
-                        |> Seq.map M44f.op_Explicit
+                        |> Seq.map M34f.op_Explicit
+                        |> Seq.toArray
+                        |> ArrayBuffer
+                        :> IBuffer
+                        
+                    let offsetAndScale = 
+                        reader.State |> Seq.collect (fun (trafo,shapes) ->
+                            let shapes = shapes.GetValue token
+                            Seq.zip shapes.offsets shapes.scales
+                                |> Seq.map (fun (o, s) -> 
+                                    let sx = if shapes.flipViewDependent then -s.X else s.X
+                                    let sy = s.Y
+                                    V4f(o.X, o.Y, sx, sy)
+                                )
+                        )
                         |> Seq.toArray
                         |> ArrayBuffer
                         :> IBuffer
@@ -126,19 +156,21 @@ module Sg =
                         |> ArrayBuffer
                         :> IBuffer
 
-                    indirect, trafos, colors
+                    indirect, trafos, offsetAndScale, colors
                 )
     
-            let indirect = indirectTrafosAndColors |> Mod.map (fun (i,_,_) -> i)
-            let trafos = BufferView(Mod.map (fun (_,o,_) -> o) indirectTrafosAndColors, typeof<M44f>)
-            let colors = BufferView(Mod.map (fun (_,_,c) -> c) indirectTrafosAndColors, typeof<C4b>)
+            let indirect = indirectTrafosAndColors |> Mod.map (fun (i,_,_,_) -> i)
+            let trafos = BufferView(Mod.map (fun (_,o,_,_) -> o) indirectTrafosAndColors, typeof<M34f>)
+            let offsetAndScale = BufferView(Mod.map (fun (_,_,os,_) -> os) indirectTrafosAndColors, typeof<V4f>)
+            let colors = BufferView(Mod.map (fun (_,_,_,c) -> c) indirectTrafosAndColors, typeof<C4b>)
 
             let instanceAttributes =
                 let old = shapes.InstanceAttributes
                 { new IAttributeProvider with
                     member x.TryGetAttribute sem =
-                        if sem = DefaultSemantic.InstanceTrafo then trafos |> Some
+                        if sem = Path.Attributes.TrafoOffsetAndScale then trafos |> Some
                         elif sem = Path.Attributes.PathColor then colors |> Some
+                        elif sem = Path.Attributes.PathOffsetAndScale then offsetAndScale |> Some
                         else old.TryGetAttribute sem
                     member x.All = old.All
                     member x.Dispose() = old.Dispose()
@@ -191,7 +223,11 @@ module Sg =
                     let offsets = 
                         List.zip renderText.offsets renderText.scales
                             |> List.toArray
-                            |> Array.map (fun (o,s) -> V4f.op_Explicit (V4d(o.X, o.Y, s.X, s.Y)))
+                            |> Array.map (fun (o,s) -> 
+                                let sx = if renderText.flipViewDependent then -s.X else s.X
+                                let sy = s.Y
+                                V4f(o.X, o.Y, sx, sy)
+                            )
                             |> ArrayBuffer
                             :> IBuffer
 
@@ -229,6 +265,25 @@ module Sg =
                     | Some (:? IMod<bool> as aa) -> aa
                     | _ -> Mod.constant true
 
+            shapes.Uniforms <-
+                let old = shapes.Uniforms
+                let ownTrafo = content |> Mod.map (fun c -> c.renderTrafo)
+                { new IUniformProvider with
+                    member x.TryGetUniform(scope, sem) =
+                        match string sem with
+                            | "ModelTrafo" -> 
+                                match old.TryGetUniform(scope, sem) with
+                                    | Some (:? IMod<Trafo3d> as m) ->
+                                        Mod.map2 (*) ownTrafo m :> IMod |> Some
+                                    | _ ->
+                                        ownTrafo :> IMod |> Some
+
+                            | _ -> 
+                                old.TryGetUniform(scope, sem)
+
+                    member x.Dispose() =
+                        old.Dispose()
+                }
 
             shapes.Multisample <- Mod.map2 (fun a f -> not f || a) aa fill
             shapes.RenderPass <- RenderPass.shapes
@@ -259,6 +314,15 @@ module Sg =
 
             boundary.DrawCallInfos <- [drawCall] |> Mod.constant
             boundary.Mode <- IndexedGeometryMode.TriangleList
+
+            let bounds = 
+                let e = t.BoundaryExtent
+                content |> Mod.map (fun s -> 
+                    let b = s.bounds
+                    let bounds = Box2d(b.Min.X - e.left, b.Min.Y - e.bottom, b.Max.X + e.right, b.Max.Y + e.top)
+                    bounds
+                )
+
             boundary.Uniforms <-
                 let old = boundary.Uniforms
                 { new IUniformProvider with
@@ -267,11 +331,7 @@ module Sg =
                             | "BoundaryColor" -> t.BoundaryColor |> Mod.constant :> IMod |> Some
                             | "ModelTrafo" -> 
                                 let scaleTrafo = 
-                                    let e = t.BoundaryExtent
-
-                                    content |> Mod.map (fun s -> 
-                                        let b = s.bounds
-                                        let bounds = Box2d(b.Min.X - e.left, b.Min.Y - e.bottom, b.Max.X + e.right, b.Max.Y + e.top)
+                                    bounds |> Mod.map (fun bounds -> 
                                         if bounds.IsValid then
                                             Trafo3d.Scale(bounds.SizeX, bounds.SizeY, 1.0) *
                                             Trafo3d.Translation(bounds.Min.X, bounds.Min.Y, 0.0)
@@ -348,6 +408,16 @@ module Sg =
         ShapeSet(content) :> ISg
         
 
+    let textWithConfig (cfg : TextConfig) (content : IMod<string>) =
+        let bounds =
+            match cfg.align with
+                | TextAlignment.Center -> Box2d(V2d(-1.0, 0.0), V2d(1.0, 0.0))
+                | TextAlignment.Left -> Box2d(V2d(0.0, 0.0), V2d(1.0, 0.0))
+                | _ -> Box2d(V2d(-1.0, 0.0), V2d(0.0, 0.0))
+
+        content |> Mod.map (fun c -> { Text.Layout(cfg.font, cfg.color, cfg.align, bounds, c) with flipViewDependent = cfg.flipViewDependent })
+                |> shape
+
     let text (f : Font) (color : C4b) (content : IMod<string>) =
         content 
             |> Mod.map (fun c -> Text.Layout(f, color, c)) 
@@ -358,6 +428,19 @@ module Sg =
             |> Mod.map (fun c -> Text.Layout(f, color, c)) 
             |> shapeWithBackground backgroundColor border
 
+    let textsWithConfig (cfg : TextConfig) (content : aset<IMod<Trafo3d> * IMod<string>>) =
+        let bounds =
+            match cfg.align with
+                | TextAlignment.Center -> Box2d(V2d(-1.0, 0.0), V2d(1.0, 0.0))
+                | TextAlignment.Left -> Box2d(V2d(0.0, 0.0), V2d(1.0, 0.0))
+                | _ -> Box2d(V2d(-1.0, 0.0), V2d(0.0, 0.0))
+
+        content |> ASet.map (fun (trafo, content) ->
+            let b = Box2d()
+            let shapeList = content |> Mod.map (fun c -> { Text.Layout(cfg.font, cfg.color, cfg.align, bounds, c) with flipViewDependent = cfg.flipViewDependent })
+            trafo, shapeList
+        )
+        |> shapes
 
     let texts (f : Font) (color : C4b) (content : aset<IMod<Trafo3d> * IMod<string>>) =
         content |> ASet.map (fun (trafo, content) ->

@@ -237,13 +237,13 @@ module Markdown =
             let moveX (v : float) =
                 modifyState (fun s -> 
                     let nx = s.x + v * s.textState.scale.X * s.config.characterSpacing
-                    { s with x = nx; max = V2d(max nx s.max.X, s.max.Y); }
+                    { s with x = nx; max = V2d(max nx s.max.X, s.max.Y); min = V2d(min nx s.min.X, s.min.Y) }
                 )
 
             let moveY (v : float) =
                 modifyState (fun s -> 
                     let ny = s.y - v * s.textState.scale.Y * s.config.lineSpacing
-                    { s with y = ny; min = V2d(s.min.X, min ny s.min.Y) })
+                    { s with y = ny; min = V2d(s.min.X, min ny s.min.Y); max = V2d(s.max.X, max ny s.max.Y) })
 
             let indent (v : float) =
                 modifyState (fun s -> 
@@ -351,10 +351,11 @@ module Markdown =
                                                 let! s = getState
                                                 let g = font.GetGlyph c
                                                 let kerning = font.GetKerning(last, c)
-                                                let before = g.Before + kerning
-                                                let after = g.Advance - before
+                                                //let before = g.Before + kerning
+                                                let after = g.Advance - g.Before - kerning
 
-                                                do! moveX before
+                                                do! moveX g.Before
+                                                do! moveX kerning
                                                 do! emit g
                                                 do! moveX after
                                         last <- c
@@ -450,13 +451,16 @@ module Markdown =
                 }
 
             let bounds = Box2d.FromPoints(s.min, s.max)
-
+            let center = bounds.Center.X
+            
             {
                 ShapeList.bounds   = bounds
                 ShapeList.shapes   = s.shapes
-                ShapeList.offsets  = s.offsets
+                ShapeList.offsets  = s.offsets |> List.map ( fun o -> V2d(o.X - center, o.Y) )
                 ShapeList.scales   = s.scales |> List.map (fun f -> f bounds.SizeX)
                 ShapeList.colors   = s.colors
+                ShapeList.renderTrafo = Trafo3d.Translation(center,0.0,0.0)
+                ShapeList.flipViewDependent = true
             }
 
 

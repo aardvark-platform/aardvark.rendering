@@ -20,14 +20,14 @@ let main argv =
     let win =
         window {
             backend Backend.GL
-            display Display.Stereo
+            display Display.Mono
             debug false
             samples 8
         }
 
 
     let baseTrafo =
-        Mod.init (Trafo3d.FromOrthoNormalBasis(V3d.IOO, V3d.OOI, V3d.OIO) * Trafo3d.Scale(0.6))
+        Mod.init (Trafo3d.FromOrthoNormalBasis(V3d.IOO, V3d.OOI, -V3d.OIO) * Trafo3d.Scale(0.6))
 
     let suffix =
         Mod.init ""
@@ -72,8 +72,26 @@ let main argv =
     )
 
     let font = Font "Consolas"
-    let sg = Sg.texts font C4b.White texts
+
+    let shapes =
+        Text.Layout(font, C4b.White, TextAlignment.Center, Box2d(V2d(0.0, -0.25), V2d(1.0, 0.5)), "HUGO g | µ\nWAWAWA ||| )(){}\nWAWAW")
+           
+    let shapes = { shapes with flipViewDependent = false }
+
+    let cfg = 
+        {
+            font = Font "Times New Roman"
+            color = C4b.DarkMagenta
+            align = TextAlignment.Right
+            flipViewDependent = false
+        }
+    let sg = Sg.textsWithConfig cfg texts
+        //Sg.shapeWithBackground C4b.Red Border2d.None ~~shapes
+        //    |> Sg.transform (Trafo3d.FromOrthoNormalBasis(V3d.IOO, V3d.OOI, -V3d.OIO))//Sg.texts font C4b.White texts
     
+    //let sg = Sg.markdown MarkdownConfig.light ~~"# bla\n## bla2\n* asd\n* agdgsdfh\n* dfhsdf\n\n\n-------\nai oaisnfasof asf ijasf ijasofi jasofi jasöoijf aosjf aosif aosifj aosuf "
+
+
     // show the window
     win.Scene <- sg
     win.Run()
