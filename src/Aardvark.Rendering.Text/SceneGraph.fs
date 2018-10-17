@@ -18,6 +18,12 @@ module Sg =
     open Aardvark.SceneGraph.Semantics
     open Aardvark.Base.Ag
 
+    
+    type ShapeSet (content : aset<IMod<Trafo3d> * IMod<ShapeList>>) =
+        interface ISg
+        member x.Content = content
+
+
     type Shape (renderBoundary : bool, boundaryColor : C4b, boundaryExtent : Border2d, content : IMod<ShapeList>) =
         interface ISg
 
@@ -47,8 +53,7 @@ module Sg =
 
 
             b.Child?ModelTrafoStack <- trafo::b.ModelTrafoStack
-
-
+            
         member x.LocalBoundingBox(t : Shape) : IMod<Box3d> =
             t.Content |> Mod.map (fun c ->
                 Box3d(V3d(c.bounds.Min, 0.0), V3d(c.bounds.Max, 0.0))
@@ -60,6 +65,106 @@ module Sg =
                 box.Transformed(t.Forward)
 
             ) t.Content t.ModelTrafo
+            
+        member x.LocalBoundingBox(t : ShapeSet) : IMod<Box3d> =
+            Mod.constant Box3d.Invalid
+
+        member x.GlobalBoundingBox(t : ShapeSet) : IMod<Box3d> =
+            Mod.constant Box3d.Invalid
+
+        member x.RenderObjects(t : ShapeSet) : aset<IRenderObject> =
+            let content = t.Content
+            let cache = ShapeCache.GetOrCreateCache(t.Runtime)
+            let shapes = RenderObject.create()
+                
+            let reader = content.GetReader()
+
+            let indirectTrafosAndColors =
+                Mod.custom (fun token ->
+                    reader.GetOperations token |> ignore
+
+                    let trafos = 
+                        reader.State |> Seq.collect (fun (trafo,shapes) ->
+                            let trafo = trafo.GetValue token
+                            let shapes = shapes.GetValue token
+                            
+                            Seq.zip shapes.offsets shapes.scales
+                                |> Seq.map (fun (off, scale) ->
+                                    trafo.Forward *
+                                    M44d.Translation(off.X, off.Y, 0.0) *
+                                    M44d.Scale(scale.X, scale.Y, 1.0)
+                                ) 
+                        )
+                        |> Seq.map M44f.op_Explicit
+                        |> Seq.toArray
+                        |> ArrayBuffer
+                        :> IBuffer
+
+                    let indirect = 
+                        reader.State |> Seq.collect (fun (trafo,shapes) ->
+                            let shapes = shapes.GetValue token
+                            shapes.shapes |> Seq.map cache.GetBufferRange
+                        )
+                        |> Seq.mapi (fun i r ->
+                            DrawCallInfo(
+                                FirstIndex = r.Min,
+                                FaceVertexCount = r.Size + 1,
+                                FirstInstance = i,
+                                InstanceCount = 1,
+                                BaseVertex = 0
+                            )
+                        )
+                        |> Seq.toArray
+                        |> IndirectBuffer.ofArray
+
+                    let colors = 
+                        reader.State |> Seq.collect (fun (trafo,shapes) ->
+                            let shapes = shapes.GetValue token
+                            shapes.colors
+                        )
+                        |> Seq.toArray
+                        |> ArrayBuffer
+                        :> IBuffer
+
+                    indirect, trafos, colors
+                )
+    
+            let indirect = indirectTrafosAndColors |> Mod.map (fun (i,_,_) -> i)
+            let trafos = BufferView(Mod.map (fun (_,o,_) -> o) indirectTrafosAndColors, typeof<M44f>)
+            let colors = BufferView(Mod.map (fun (_,_,c) -> c) indirectTrafosAndColors, typeof<C4b>)
+
+            let instanceAttributes =
+                let old = shapes.InstanceAttributes
+                { new IAttributeProvider with
+                    member x.TryGetAttribute sem =
+                        if sem = DefaultSemantic.InstanceTrafo then trafos |> Some
+                        elif sem = Path.Attributes.PathColor then colors |> Some
+                        else old.TryGetAttribute sem
+                    member x.All = old.All
+                    member x.Dispose() = old.Dispose()
+                }
+
+
+            let aa =
+                match shapes.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "Antialias") with
+                    | Some (:? IMod<bool> as aa) -> aa
+                    | _ -> Mod.constant false
+
+            let fill =
+                match shapes.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "FillGlyphs") with
+                    | Some (:? IMod<bool> as aa) -> aa
+                    | _ -> Mod.constant true
+                    
+            shapes.Multisample <- Mod.map2 (fun a f -> not f || a) aa fill
+            shapes.RenderPass <- RenderPass.shapes
+            shapes.BlendMode <- Mod.constant BlendMode.Blend
+            shapes.VertexAttributes <- cache.VertexBuffers
+            shapes.IndirectBuffer <- indirect
+            shapes.InstanceAttributes <- instanceAttributes
+            shapes.Mode <- IndexedGeometryMode.TriangleList
+            shapes.Surface <- Surface.FShadeSimple cache.InstancedEffect
+
+            ASet.single (shapes :> IRenderObject)
 
         member x.RenderObjects(t : Shape) : aset<IRenderObject> =
             let content = t.Content
@@ -238,6 +343,11 @@ module Sg =
     let shapeWithBackground (color : C4b) (border : Border2d) (content : IMod<ShapeList>) =
         Shape(true, color, border, content) :> ISg
 
+
+    let shapes (content : aset<IMod<Trafo3d> * IMod<ShapeList>>) =
+        ShapeSet(content) :> ISg
+        
+
     let text (f : Font) (color : C4b) (content : IMod<string>) =
         content 
             |> Mod.map (fun c -> Text.Layout(f, color, c)) 
@@ -249,5 +359,13 @@ module Sg =
             |> shapeWithBackground backgroundColor border
 
 
+    let texts (f : Font) (color : C4b) (content : aset<IMod<Trafo3d> * IMod<string>>) =
+        content |> ASet.map (fun (trafo, content) ->
+            let shapeList = content |> Mod.map (fun c -> Text.Layout(f, color, c))
+            trafo, shapeList
+        )
+        |> shapes
+        
+            
 
 
