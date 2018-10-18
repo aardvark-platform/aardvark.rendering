@@ -14,21 +14,6 @@ module RenderPass =
 type Border2d = { left : float; right: float; top: float; bottom : float } with
     static member None = { left = 0.0; right = 0.0; top = 0.0; bottom = 0.0 }
 
-type TextConfig =
-    {
-        font                : Font
-        color               : C4b
-        align               : TextAlignment
-        flipViewDependent   : bool
-    }
-    static member Default =
-        {
-            font = Font "Consolas"
-            color = C4b.White
-            align = TextAlignment.Center
-            flipViewDependent = true
-        }
-
 module Sg =
     open Aardvark.SceneGraph.Semantics
     open Aardvark.Base.Ag
@@ -99,28 +84,29 @@ module Sg =
                     reader.GetOperations token |> ignore
 
                     let trafos = 
-                        reader.State |> Seq.collect (fun (trafo,shapes) ->
+                        reader.State |> HRefSet.toArray |> Array.collect (fun (trafo,shapes) ->
                             let trafo = trafo.GetValue token
                             let shapes = shapes.GetValue token
                             
-                            Seq.zip shapes.offsets shapes.scales
-                                |> Seq.map (fun (off, scale) ->
-                                    M34d.op_Explicit (
-                                        trafo.Forward *
-                                        shapes.renderTrafo.Forward
-                                    )
-                                ) 
+                            let trafo = 
+                                M34d.op_Explicit (
+                                    trafo.Forward *
+                                    shapes.renderTrafo.Forward
+                                )
+
+                            let len = List.length shapes.concreteShapes 
+                            Array.create len (M34f.op_Explicit trafo)
                         )
-                        |> Seq.map M34f.op_Explicit
-                        |> Seq.toArray
                         |> ArrayBuffer
                         :> IBuffer
                         
                     let offsetAndScale = 
                         reader.State |> Seq.collect (fun (trafo,shapes) ->
                             let shapes = shapes.GetValue token
-                            Seq.zip shapes.offsets shapes.scales
-                                |> Seq.map (fun (o, s) -> 
+                            shapes.concreteShapes
+                                |> Seq.map (fun shape -> 
+                                    let s = shape.scale
+                                    let o = shape.offset
                                     let sx = if shapes.flipViewDependent then -s.X else s.X
                                     let sy = s.Y
                                     V4f(o.X, o.Y, sx, sy)
@@ -133,7 +119,7 @@ module Sg =
                     let indirect = 
                         reader.State |> Seq.collect (fun (trafo,shapes) ->
                             let shapes = shapes.GetValue token
-                            shapes.shapes |> Seq.map cache.GetBufferRange
+                            shapes.concreteShapes |> Seq.map (ConcreteShape.shape >> cache.GetBufferRange)
                         )
                         |> Seq.mapi (fun i r ->
                             DrawCallInfo(
@@ -150,7 +136,7 @@ module Sg =
                     let colors = 
                         reader.State |> Seq.collect (fun (trafo,shapes) ->
                             let shapes = shapes.GetValue token
-                            shapes.colors
+                            shapes.concreteShapes |> Seq.map ConcreteShape.color
                         )
                         |> Seq.toArray
                         |> ArrayBuffer
@@ -206,9 +192,9 @@ module Sg =
             let indirectAndOffsets =
                 content |> Mod.map (fun renderText ->
                     let indirectBuffer = 
-                        renderText.shapes 
+                        renderText.concreteShapes 
                             |> List.toArray
-                            |> Array.map cache.GetBufferRange
+                            |> Array.map (ConcreteShape.shape >> cache.GetBufferRange)
                             |> Array.mapi (fun i r ->
                                 DrawCallInfo(
                                     FirstIndex = r.Min,
@@ -221,9 +207,11 @@ module Sg =
                             |> IndirectBuffer.ofArray
 
                     let offsets = 
-                        List.zip renderText.offsets renderText.scales
+                        renderText.concreteShapes 
                             |> List.toArray
-                            |> Array.map (fun (o,s) -> 
+                            |> Array.map (fun shape ->
+                                let o = shape.offset
+                                let s = shape.scale
                                 let sx = if renderText.flipViewDependent then -s.X else s.X
                                 let sy = s.Y
                                 V4f(o.X, o.Y, sx, sy)
@@ -232,8 +220,9 @@ module Sg =
                             :> IBuffer
 
                     let colors = 
-                        renderText.colors
+                        renderText.concreteShapes 
                             |> List.toArray
+                            |> Array.map (fun s -> s.color)
                             |> ArrayBuffer
                             :> IBuffer
 
@@ -409,14 +398,9 @@ module Sg =
         
 
     let textWithConfig (cfg : TextConfig) (content : IMod<string>) =
-        let bounds =
-            match cfg.align with
-                | TextAlignment.Center -> Box2d(V2d(-1.0, 0.0), V2d(1.0, 0.0))
-                | TextAlignment.Left -> Box2d(V2d(0.0, 0.0), V2d(1.0, 0.0))
-                | _ -> Box2d(V2d(-1.0, 0.0), V2d(0.0, 0.0))
-
-        content |> Mod.map (fun c -> { Text.Layout(cfg.font, cfg.color, cfg.align, bounds, c) with flipViewDependent = cfg.flipViewDependent })
-                |> shape
+        content 
+        |> Mod.map cfg.Layout
+        |> shape
 
     let text (f : Font) (color : C4b) (content : IMod<string>) =
         content 
@@ -429,16 +413,8 @@ module Sg =
             |> shapeWithBackground backgroundColor border
 
     let textsWithConfig (cfg : TextConfig) (content : aset<IMod<Trafo3d> * IMod<string>>) =
-        let bounds =
-            match cfg.align with
-                | TextAlignment.Center -> Box2d(V2d(-1.0, 0.0), V2d(1.0, 0.0))
-                | TextAlignment.Left -> Box2d(V2d(0.0, 0.0), V2d(1.0, 0.0))
-                | _ -> Box2d(V2d(-1.0, 0.0), V2d(0.0, 0.0))
-
         content |> ASet.map (fun (trafo, content) ->
-            let b = Box2d()
-            let shapeList = content |> Mod.map (fun c -> { Text.Layout(cfg.font, cfg.color, cfg.align, bounds, c) with flipViewDependent = cfg.flipViewDependent })
-            trafo, shapeList
+            trafo, Mod.map cfg.Layout content
         )
         |> shapes
 
