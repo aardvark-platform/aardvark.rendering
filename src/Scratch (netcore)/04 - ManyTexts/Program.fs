@@ -86,66 +86,86 @@ let main argv =
             flipViewDependent = true
         }
 
-    let shapes = cfg.Layout "HUGO g | µ\nWAWAWA ||| )(){}\nWAWAW"
-    let path = 
-        let bounds = shapes.bounds.EnlargedBy(1.0, 3.0, 1.0, 1.0)
+    //let shapes = cfg.Layout "HUGO g | µ\nWAWAWA ||| )(){}\nWAWAW"
+    //let path = 
+    //    let bounds = shapes.bounds.EnlargedBy(1.0, 3.0, 1.0, 1.0)
 
-        let p00 = V2d(bounds.Min.X, bounds.Min.Y)
-        let p01 = V2d(bounds.Min.X, bounds.Max.Y)
-        let p10 = V2d(bounds.Max.X, bounds.Min.Y)
-        let p11 = V2d(bounds.Max.X, bounds.Max.Y)
+    //    let p00 = V2d(bounds.Min.X, bounds.Min.Y)
+    //    let p01 = V2d(bounds.Min.X, bounds.Max.Y)
+    //    let p10 = V2d(bounds.Max.X, bounds.Min.Y)
+    //    let p11 = V2d(bounds.Max.X, bounds.Max.Y)
                                     
-        let smaller = bounds.ShrunkBy(0.1)
-        let q00 = V2d(smaller.Min.X, smaller.Min.Y)
-        let q01 = V2d(smaller.Min.X, smaller.Max.Y)
-        let q10 = V2d(smaller.Max.X, smaller.Min.Y)
-        let q11 = V2d(smaller.Max.X, smaller.Max.Y)
+    //    let smaller = bounds.ShrunkBy(0.1)
+    //    let q00 = V2d(smaller.Min.X, smaller.Min.Y)
+    //    let q01 = V2d(smaller.Min.X, smaller.Max.Y)
+    //    let q10 = V2d(smaller.Max.X, smaller.Min.Y)
+    //    let q11 = V2d(smaller.Max.X, smaller.Max.Y)
         
-        Path.ofList [
-            PathSegment.line p00 p10
-            PathSegment.line p10 p11
-            PathSegment.line p11 p01
-            PathSegment.line p01 p00
+    //    Path.ofList [
+    //        PathSegment.line p00 p10
+    //        PathSegment.line p10 p11
+    //        PathSegment.line p11 p01
+    //        PathSegment.line p01 p00
                                             
-            PathSegment.line q00 q01
-            PathSegment.line q01 q11
-            PathSegment.line q11 q10
-            PathSegment.line q10 q00
+    //        PathSegment.line q00 q01
+    //        PathSegment.line q01 q11
+    //        PathSegment.line q11 q10
+    //        PathSegment.line q10 q00
 
-        ]
+    //    ]
 
-    let path = 
-        Path.ofList [
-            PathSegment.arc V2d.OI V2d.II V2d.IO
-            PathSegment.line V2d.IO V2d.OO 
-            PathSegment.line V2d.OO V2d.OI 
-        ]
-    let path2 = 
-        Path.ofList [
-            PathSegment.line V2d.OI V2d.II
-            PathSegment.line V2d.II (V2d(1.0,0.5))
-            PathSegment.arc (V2d(1.0,0.5)) (V2d(0.5, 0.5)) (V2d(0.5,0.0))
-            PathSegment.line (V2d(0.5,0.0)) V2d.OO
-            PathSegment.line V2d.OO V2d.OI
-        ]
+    //let path = 
+    //    Path.ofList [
+    //        PathSegment.arc V2d.OI V2d.II V2d.IO
+    //        PathSegment.line V2d.IO V2d.OO 
+    //        PathSegment.line V2d.OO V2d.OI 
+    //    ]
+    //let path2 = 
+    //    Path.ofList [
+    //        PathSegment.line V2d.OI V2d.II
+    //        PathSegment.line V2d.II (V2d(1.0,0.5))
+    //        PathSegment.arc (V2d(1.0,0.5)) (V2d(0.5, 0.5)) (V2d(0.5,0.0))
+    //        PathSegment.line (V2d(0.5,0.0)) V2d.OO
+    //        PathSegment.line V2d.OO V2d.OI
+    //    ]
   
+    let arc (p0 : V2d) (p1 : V2d) (e : Ellipse2d) = 
+        let a0 = e.GetAlpha p0
+        let a1 = e.GetAlpha p1
+        PathSegment.arc a0 a1 e
+
+
     let path = 
+        let inner = Ellipse2d(V2d.Zero, 0.9 * V2d.IO, 0.9 * V2d.OI)
+        let a0 = inner.GetAlpha (V2d(0.9, 0.1))
+        let a1 = inner.GetAlpha (V2d(0.1, 0.9))
+
+
         Path.ofList [
-            PathSegment.arc (V2d(0.0, 2.0)) (V2d(1.0, 6.0)) V2d.IO
+            PathSegment.arcSegment V2d.OI V2d.II V2d.IO
+            //arc V2d.OI V2d.IO (Ellipse2d(V2d.Zero, V2d.IO, V2d.OI))
             PathSegment.line V2d.IO V2d.OO 
             PathSegment.line V2d.OO V2d.OI 
+            
+            PathSegment.arc a0 a1 inner
+            PathSegment.line (inner.GetPoint a1) (V2d(0.1, 0.1))
+            PathSegment.line (V2d(0.1, 0.1)) (inner.GetPoint a0)
+
         ]
+
+    let e = Ellipse2d(V2d.Zero, V2d(2,0), V2d(0,1))
 
     let shapes =
         ShapeList.ofList [
-            ConcreteShape.fillEllipse C4b.Green (Ellipse2d(V2d(0.0, 0.0), V2d(1.1,0.0), V2d(0.0, 1.1)))
-            ConcreteShape.ellipse C4b.Red 0.05 (Ellipse2d(V2d.Zero, V2d(1.0,0.0), V2d(0.0, 1.0)))
+            ConcreteShape.ofPath V2d.Zero V2d.II C4b.Red path
+            //ConcreteShape.fillEllipse C4b.Green e
+            //ConcreteShape.ellipse C4b.Red 0.05 (Ellipse2d(V2d.Zero, V2d(1.0,0.0), V2d(0.0, 1.0)))
 
             
 
 
             //ConcreteShape.roundedRectangle C4b.Red 0.02 0.05 (Box2d(V2d.Zero, V2d(2.0, 1.0)))
-            //ConcreteShape.ofPath V2d.Zero V2d.II C4b.Red path2
+            //ConcreteShape.ofPath V2d.Zero V2d.II C4b.Red path
             //ConcreteShape.ofPath (V2d(2,0)) V2d.II C4b.Red path2
         ]
         //ShapeList.add shape shapes
@@ -158,7 +178,8 @@ let main argv =
             }
 
     let sg = 
-        Sg.shape ~~shapes //Sg.textsWithConfig cfg texts
+        Sg.shapes (ASet.ofList [~~Trafo3d.Identity, ~~shapes])
+        //Sg.shape ~~shapes //Sg.textsWithConfig cfg texts
             |> Sg.transform (Trafo3d.FromOrthoNormalBasis(V3d.IOO, V3d.OOI, -V3d.OIO))//Sg.texts font C4b.White texts
             |> Sg.andAlso coord
             

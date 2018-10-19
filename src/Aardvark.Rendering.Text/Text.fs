@@ -72,95 +72,104 @@ module ConcreteShape =
             }
         ofPath V2d.Zero V2d.II color path
 
-    let fillRoundedRectangle (color : C4b)  (radius : float) (bounds : Box2d) =
-        let pc00 = V2d(bounds.Min.X, bounds.Min.Y)
-        let pc01 = V2d(bounds.Min.X, bounds.Max.Y)
-        let pc10 = V2d(bounds.Max.X, bounds.Min.Y)
-        let pc11 = V2d(bounds.Max.X, bounds.Max.Y)
+    //let fillRoundedRectangle (color : C4b)  (radius : float) (bounds : Box2d) =
+    //    let pc00 = V2d(bounds.Min.X, bounds.Min.Y)
+    //    let pc01 = V2d(bounds.Min.X, bounds.Max.Y)
+    //    let pc10 = V2d(bounds.Max.X, bounds.Min.Y)
+    //    let pc11 = V2d(bounds.Max.X, bounds.Max.Y)
         
-        let rx = V2d(radius, 0.0)
-        let ry = V2d(0.0, radius)
+    //    let rx = V2d(radius, 0.0)
+    //    let ry = V2d(0.0, radius)
 
-        let path =
-            Path.build {
-                start       (pc00 + rx)
-                lineTo      (pc10 - rx)
-                arcTo       pc10    (pc10 + ry)
-                lineTo      (pc11 - ry)
-                arcTo       pc11    (pc11 - rx)
-                lineTo      (pc01 + rx)
-                arcTo       pc01    (pc01 - ry)
-                lineTo      (pc00 + ry)
-                arcTo       pc00    (pc00 + rx)
-            }
-        let path = Path.reverse path
-        ofPath V2d.Zero V2d.II color path
+    //    let path =
+    //        Path.build {
+    //            start       (pc00 + rx)
+    //            lineTo      (pc10 - rx)
+    //            arc         (pc10 + ry) (pc10 - rx + ry)
+    //            lineTo      (pc11 - ry)
+    //            arc         (pc11 - rx) (pc11 - rx - ry)
+    //            lineTo      (pc01 + rx)
+    //            arc         (pc01 - ry) (pc01 + rx - ry)
+    //            lineTo      (pc00 + ry)
+    //            arc         (pc00 + rx) (pc00 + rx + ry)
+    //        }
+    //    let path = Path.reverse path
+    //    ofPath V2d.Zero V2d.II color path
 
 
     let fillEllipse (color : C4b) (e : Ellipse2d) =
+        let a0 = e.Axis0
+        let a1 = e.Axis1
+        let z = a0.X * a1.Y - a0.Y * a1.X |> sign
+
+        let e = 
+            if z < 0 then Ellipse2d(e.Center, e.Axis0, -e.Axis1)
+            else e
+            
+
         let c = e.Center
         let x = e.Axis0
         let y = e.Axis1
         let path =
             Path.build {
-                start       (c + x)
-                arcTo       (c + x - y) (c - y)
-                arcTo       (c - x - y) (c - x)
-                arcTo       (c - x + y) (c + y)
-                arcTo       (c + x + y) (c + x)
+                start   (c + x)
+                arc     (c - y) e
+                arc     (c - x) e
+                arc     (c + y) e
+                arc     (c + x) e
             }
         ofPath V2d.Zero V2d.II color path
 
-    let ellipse (color : C4b) (lineWidth : float) (e : Ellipse2d) =
-        let c = e.Center
-        let xo = e.Axis0 + (e.Axis0.Normalized * lineWidth / 2.0)
-        let yo = e.Axis1 + (e.Axis1.Normalized * lineWidth / 2.0)
-        let xi = e.Axis0 - (e.Axis0.Normalized * lineWidth / 2.0)
-        let yi = e.Axis1 - (e.Axis1.Normalized * lineWidth / 2.0)
-        let path =
-            Path.build {
-                start       (c + xo)
-                arcTo       (c + xo - yo) (c - yo)
-                arcTo       (c - xo - yo) (c - xo)
-                arcTo       (c - xo + yo) (c + yo)
-                arcTo       (c + xo + yo) (c + xo)
+    //let ellipse (color : C4b) (lineWidth : float) (e : Ellipse2d) =
+    //    let c = e.Center
+    //    let xo = e.Axis0 + (e.Axis0.Normalized * lineWidth / 2.0)
+    //    let yo = e.Axis1 + (e.Axis1.Normalized * lineWidth / 2.0)
+    //    let xi = e.Axis0 - (e.Axis0.Normalized * lineWidth / 2.0)
+    //    let yi = e.Axis1 - (e.Axis1.Normalized * lineWidth / 2.0)
+    //    let path =
+    //        Path.build {
+    //            start       (c + xo)
+    //            arcTo       (c + xo - yo) (c - yo)
+    //            arcTo       (c - xo - yo) (c - xo)
+    //            arcTo       (c - xo + yo) (c + yo)
+    //            arcTo       (c + xo + yo) (c + xo)
    
-                start       (c + xi)
-                arcTo       (c + xi + yi) (c + yi)
-                arcTo       (c - xi + yi) (c - xi)
-                arcTo       (c - xi - yi) (c - yi)
-                arcTo       (c + xi - yi) (c + xi)
-            }
-        ofPath V2d.Zero V2d.II color path
+    //            start       (c + xi)
+    //            arcTo       (c + xi + yi) (c + yi)
+    //            arcTo       (c - xi + yi) (c - xi)
+    //            arcTo       (c - xi - yi) (c - yi)
+    //            arcTo       (c + xi - yi) (c + xi)
+    //        }
+    //    ofPath V2d.Zero V2d.II color path
 
 
-    let roundedRectangle (color : C4b) (lineWidth : float)  (radius : float) (bounds : Box2d) =
-        let path (radius : float) (bounds : Box2d) =
-            let pc00 = V2d(bounds.Min.X, bounds.Min.Y)
-            let pc01 = V2d(bounds.Min.X, bounds.Max.Y)
-            let pc10 = V2d(bounds.Max.X, bounds.Min.Y)
-            let pc11 = V2d(bounds.Max.X, bounds.Max.Y)
-            let rx = V2d(radius, 0.0)
-            let ry = V2d(0.0, radius)
-            Path.build {
-                start       (pc00 + rx)
-                lineTo      (pc10 - rx)
-                arcTo       pc10    (pc10 + ry)
-                lineTo      (pc11 - ry)
-                arcTo       pc11    (pc11 - rx)
-                lineTo      (pc01 + rx)
-                arcTo       pc01    (pc01 - ry)
-                lineTo      (pc00 + ry)
-                arcTo       pc00    (pc00 + rx)
-            }
+    //let roundedRectangle (color : C4b) (lineWidth : float)  (radius : float) (bounds : Box2d) =
+    //    let path (radius : float) (bounds : Box2d) =
+    //        let pc00 = V2d(bounds.Min.X, bounds.Min.Y)
+    //        let pc01 = V2d(bounds.Min.X, bounds.Max.Y)
+    //        let pc10 = V2d(bounds.Max.X, bounds.Min.Y)
+    //        let pc11 = V2d(bounds.Max.X, bounds.Max.Y)
+    //        let rx = V2d(radius, 0.0)
+    //        let ry = V2d(0.0, radius)
+    //        Path.build {
+    //            start       (pc00 + rx)
+    //            lineTo      (pc10 - rx)
+    //            arcTo       pc10    (pc10 + ry)
+    //            lineTo      (pc11 - ry)
+    //            arcTo       pc11    (pc11 - rx)
+    //            lineTo      (pc01 + rx)
+    //            arcTo       pc01    (pc01 - ry)
+    //            lineTo      (pc00 + ry)
+    //            arcTo       pc00    (pc00 + rx)
+    //        }
 
-        let half = lineWidth / 2.0
+    //    let half = lineWidth / 2.0
         
-        let outer = path (radius + half) (bounds.EnlargedBy(half))
-        let inner = path (radius - half) (bounds.ShrunkBy(half))
+    //    let outer = path (radius + half) (bounds.EnlargedBy(half))
+    //    let inner = path (radius - half) (bounds.ShrunkBy(half))
 
-        let path = Path.append (Path.reverse outer) inner
-        ofPath V2d.Zero V2d.II color path
+    //    let path = Path.append (Path.reverse outer) inner
+    //    ofPath V2d.Zero V2d.II color path
 
 [<ReferenceEquality; NoComparison>]
 type ShapeList =
