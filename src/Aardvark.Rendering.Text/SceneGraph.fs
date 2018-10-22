@@ -40,6 +40,7 @@ module Sg =
 
     [<Ag.Semantic>]
     type ShapeSem() =
+        static let defaultDepthBias = 1.0 / float (1 <<< 17)
 
         member x.ModelTrafoStack(b : BillboardApplicator) =
             let view = b.ViewTrafo
@@ -153,8 +154,8 @@ module Sg =
                                 let a = 
                                     let size = shapes.zRange.Size
                                     if size > 0 then
-                                        let layer = float (s.z - shapes.zRange.Min) / float size
-                                        byte (layer * 255.0)
+                                        let layer = s.z - shapes.zRange.Min |> min 255
+                                        byte layer
                                     else
                                         0uy
                                 C4b(c.R, c.G, c.B, a)
@@ -195,6 +196,25 @@ module Sg =
                     | Some (:? IMod<bool> as aa) -> aa
                     | _ -> Mod.constant true
                     
+            let bias =
+                match shapes.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "DepthBias") with
+                    | Some (:? IMod<float> as bias) -> bias
+                    | _ -> Mod.constant defaultDepthBias
+                    
+            shapes.Uniforms <-
+                let old = shapes.Uniforms
+                { new IUniformProvider with
+                    member x.TryGetUniform(scope : Ag.Scope, sem : Symbol) =
+                        match string sem with
+                            | "Antialias" -> aa :> IMod |> Some
+                            | "FillGlyphs" -> fill :> IMod |> Some
+                            | "DepthBias" -> bias :> IMod |> Some
+                            | _ -> old.TryGetUniform(scope, sem)
+
+                    member x.Dispose() =
+                        old.Dispose()
+                }
+
             shapes.Multisample <- Mod.map2 (fun a f -> not f || a) aa fill
             shapes.RenderPass <- RenderPass.shapes
             shapes.BlendMode <- Mod.constant BlendMode.Blend
@@ -275,13 +295,21 @@ module Sg =
                 match shapes.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "FillGlyphs") with
                     | Some (:? IMod<bool> as aa) -> aa
                     | _ -> Mod.constant true
-
+                    
+            let bias =
+                match shapes.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "DepthBias") with
+                    | Some (:? IMod<float> as bias) -> bias
+                    | _ -> Mod.constant defaultDepthBias
+                    
             shapes.Uniforms <-
                 let old = shapes.Uniforms
                 let ownTrafo = content |> Mod.map (fun c -> c.renderTrafo)
                 { new IUniformProvider with
                     member x.TryGetUniform(scope, sem) =
                         match string sem with
+                            | "Antialias" -> aa :> IMod |> Some
+                            | "FillGlyphs" -> fill :> IMod |> Some
+                            | "DepthBias" -> bias :> IMod |> Some
                             | "ModelTrafo" -> 
                                 match old.TryGetUniform(scope, sem) with
                                     | Some (:? IMod<Trafo3d> as m) ->
