@@ -19,7 +19,7 @@ let main argv =
     // and may show it later.
     let win =
         window {
-            backend Backend.GL
+            backend Backend.Vulkan
             display Display.Mono
             debug false
             samples 8
@@ -62,113 +62,62 @@ let main argv =
 
     
     let box = Box3d(-5.0 * V3d.III, 5.0 * V3d.III)
-    win.Keyboard.KeyDown(Keys.X).Values.Add (fun _ ->
-        transact (fun () ->
-            let pos = rand.UniformV3d(box)
-            let text = sprintf "%s" (pos.ToString("0.000"))
-            texts.Add(withTrafo (Trafo3d.Translation(pos)), withSuffix text) |> ignore
+    win.Keyboard.DownWithRepeats.Values.Add (fun k ->
+        match k with
+            | Keys.X -> 
+                transact (fun () ->
+                    let pos = rand.UniformV3d(box)
+                    let text = sprintf "%s" (pos.ToString("0.000"))
+                    texts.Add(withTrafo (Trafo3d.Translation(pos)), withSuffix text) |> ignore
             
-        )
+                )
+            | _ ->
+                ()
     )
 
     let font = Font "Consolas"
 
     let shapes =
-        Text.Layout(font, C4b.White, TextAlignment.Center, Box2d(V2d(0.0, -0.25), V2d(1.0, 0.5)), "HUGO g | µ\nWAWAWA ||| )(){}\nWAWAW")
+        Text.Layout(font, C4b.Blue, TextAlignment.Center, Box2d(V2d(0.0, -0.25), V2d(1.0, 0.5)), "HUGO g | µ\nWAWAWA ||| )(){}\nWAWAW")
            
-    let shapes = { shapes with flipViewDependent = false }
+    //let shapes = { shapes with flipViewDependent = false }
 
     let cfg = 
         {
-            font = Font "Times New Roman"
+            font = Font "Consolas"
             color = C4b.White
             align = TextAlignment.Center
             flipViewDependent = true
         }
-
-    //let shapes = cfg.Layout "HUGO g | µ\nWAWAWA ||| )(){}\nWAWAW"
-    //let path = 
-    //    let bounds = shapes.bounds.EnlargedBy(1.0, 3.0, 1.0, 1.0)
-
-    //    let p00 = V2d(bounds.Min.X, bounds.Min.Y)
-    //    let p01 = V2d(bounds.Min.X, bounds.Max.Y)
-    //    let p10 = V2d(bounds.Max.X, bounds.Min.Y)
-    //    let p11 = V2d(bounds.Max.X, bounds.Max.Y)
-                                    
-    //    let smaller = bounds.ShrunkBy(0.1)
-    //    let q00 = V2d(smaller.Min.X, smaller.Min.Y)
-    //    let q01 = V2d(smaller.Min.X, smaller.Max.Y)
-    //    let q10 = V2d(smaller.Max.X, smaller.Min.Y)
-    //    let q11 = V2d(smaller.Max.X, smaller.Max.Y)
         
-    //    Path.ofList [
-    //        PathSegment.line p00 p10
-    //        PathSegment.line p10 p11
-    //        PathSegment.line p11 p01
-    //        PathSegment.line p01 p00
-                                            
-    //        PathSegment.line q00 q01
-    //        PathSegment.line q01 q11
-    //        PathSegment.line q11 q10
-    //        PathSegment.line q10 q00
-
-    //    ]
 
     //let path = 
+    //    let inner = Ellipse2d(V2d.Zero, 0.9 * V2d.IO, 0.9 * V2d.OI)
+    //    let a0 = inner.GetAlpha (V2d(0.9, 0.1))
+    //    let a1 = inner.GetAlpha (V2d(0.1, 0.9))
+
+
     //    Path.ofList [
-    //        PathSegment.arc V2d.OI V2d.II V2d.IO
+    //        PathSegment.arc Constant.PiHalf 0.0 (Ellipse2d(V2d.Zero, V2d.IO, V2d.OI))
     //        PathSegment.line V2d.IO V2d.OO 
     //        PathSegment.line V2d.OO V2d.OI 
-    //    ]
-    //let path2 = 
-    //    Path.ofList [
-    //        PathSegment.line V2d.OI V2d.II
-    //        PathSegment.line V2d.II (V2d(1.0,0.5))
-    //        PathSegment.arc (V2d(1.0,0.5)) (V2d(0.5, 0.5)) (V2d(0.5,0.0))
-    //        PathSegment.line (V2d(0.5,0.0)) V2d.OO
-    //        PathSegment.line V2d.OO V2d.OI
-    //    ]
-  
-    let arc (p0 : V2d) (p1 : V2d) (e : Ellipse2d) = 
-        let a0 = e.GetAlpha p0
-        let a1 = e.GetAlpha p1
-        PathSegment.arc a0 a1 e
-
-
-    let path = 
-        let inner = Ellipse2d(V2d.Zero, 0.9 * V2d.IO, 0.9 * V2d.OI)
-        let a0 = inner.GetAlpha (V2d(0.9, 0.1))
-        let a1 = inner.GetAlpha (V2d(0.1, 0.9))
-
-
-        Path.ofList [
-            PathSegment.arcSegment V2d.OI V2d.II V2d.IO
-            //arc V2d.OI V2d.IO (Ellipse2d(V2d.Zero, V2d.IO, V2d.OI))
-            PathSegment.line V2d.IO V2d.OO 
-            PathSegment.line V2d.OO V2d.OI 
             
-            PathSegment.arc a0 a1 inner
-            PathSegment.line (inner.GetPoint a1) (V2d(0.1, 0.1))
-            PathSegment.line (V2d(0.1, 0.1)) (inner.GetPoint a0)
+    //        PathSegment.arc a0 a1 inner
+    //        PathSegment.line (inner.GetPoint a1) (V2d(0.1, 0.1))
+    //        PathSegment.line (V2d(0.1, 0.1)) (inner.GetPoint a0)
 
-        ]
+    //    ]
 
-    let e = Ellipse2d(V2d.Zero, V2d(2,0), V2d(0,1))
+    //let e = Ellipse2d(V2d.Zero, V2d(2,0), V2d(0,1))
 
-    let shapes =
-        ShapeList.ofList [
-            ConcreteShape.ofPath V2d.Zero V2d.II C4b.Red path
-            //ConcreteShape.fillEllipse C4b.Green e
-            //ConcreteShape.ellipse C4b.Red 0.05 (Ellipse2d(V2d.Zero, V2d(1.0,0.0), V2d(0.0, 1.0)))
-
-            
-
-
-            //ConcreteShape.roundedRectangle C4b.Red 0.02 0.05 (Box2d(V2d.Zero, V2d(2.0, 1.0)))
-            //ConcreteShape.ofPath V2d.Zero V2d.II C4b.Red path
-            //ConcreteShape.ofPath (V2d(2,0)) V2d.II C4b.Red path2
-        ]
-        //ShapeList.add shape shapes
+    //let shapes =
+    //    ShapeList.ofList [
+    //        ConcreteShape.bezierPath C4b.White 0.05 [
+    //            V2d( Constant.Sqrt2Half, Constant.Sqrt2Half)
+    //            V2d(-Constant.Sqrt2Half, Constant.Sqrt2Half)
+    //            V2d( 0.0, 1.0 + Constant.Sqrt2Half)
+    //        ]
+    //    ]
 
     let coord =
         Sg.coordinateCross' 4.0
@@ -177,11 +126,38 @@ let main argv =
                 do! DefaultSurfaces.vertexColor
             }
 
-    let sg = 
-        Sg.shapes (ASet.ofList [~~Trafo3d.Identity, ~~shapes])
-        //Sg.shape ~~shapes //Sg.textsWithConfig cfg texts
-            |> Sg.transform (Trafo3d.FromOrthoNormalBasis(V3d.IOO, V3d.OOI, -V3d.OIO))//Sg.texts font C4b.White texts
-            |> Sg.andAlso coord
+    let shapes =
+        let dark = C4b(30uy, 30uy, 30uy, 255uy)
+        let blue = C4b(0uy, 122uy, 204uy, 255uy)
+
+        texts |> ASet.map (fun (trafo, text) ->
+            let shape = 
+                text |> Mod.map cfg.Layout |> Mod.map (fun shapes ->
+                    let bounds = shapes.bounds.EnlargedBy(V2d(0.05, 0.0))
+                    let rect = ConcreteShape.fillRoundedRectangle dark 0.05 bounds
+                    let rectb = ConcreteShape.roundedRectangle blue 0.05 0.075 (bounds.EnlargedBy 0.025)
+                    let shapes = ShapeList.prepend rect shapes
+                    ShapeList.prepend rectb shapes
+                )
+            trafo, shape
+        )
+
+    let sg =
+        Sg.shapes shapes
+        //let bounds = shapes.bounds.EnlargedBy(V2d(0.05, 0.0))
+        //let rect = ConcreteShape.fillRoundedRectangle C4b.White 0.1 bounds
+        ////let rectb = ConcreteShape.roundedRectangle C4b.Gray 0.05 0.125 (bounds.EnlargedBy 0.025)
+        ////let shapes = ShapeList.prepend rect shapes
+        //ShapeList.prepend rect shapes
+        //|> Mod.constant
+        //|> Sg.shape
+        //|> Sg.transform (Trafo3d.FromOrthoNormalBasis(V3d.IOO, V3d.OOI, -V3d.OIO))
+
+        //Sg.shapes shapes
+        //Sg.shapes (ASet.ofList [~~Trafo3d.Identity, ~~shapes])
+        ////Sg.shape ~~shapes //Sg.textsWithConfig cfg texts
+        //    |> Sg.transform (Trafo3d.FromOrthoNormalBasis(V3d.IOO, V3d.OOI, -V3d.OIO))//Sg.texts font C4b.White texts
+        //    |> Sg.andAlso coord
             
 
     //let sg = Sg.markdown MarkdownConfig.light ~~"# bla\n## bla2\n* asd\n* agdgsdfh\n* dfhsdf\n\n\n-------\nai oaisnfasof asf ijasf ijasofi jasofi jasöoijf aosjf aosif aosifj aosuf "

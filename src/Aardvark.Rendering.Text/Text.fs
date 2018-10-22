@@ -15,6 +15,7 @@ type ConcreteShape =
         offset  : V2d
         scale   : V2d
         color   : C4b
+        z       : int
         shape   : Shape
     }
 
@@ -30,6 +31,7 @@ module ConcreteShape =
             offset = offset
             scale = scale
             color = color
+            z = 0
             shape = Shape path
         }
 
@@ -50,7 +52,6 @@ module ConcreteShape =
             }
         ofPath V2d.Zero V2d.II color path
 
-        
     let rectangle (color : C4b) (lineWidth : float) (bounds : Box2d) =
         let small   = bounds.ShrunkBy     (lineWidth / 2.0)
         let bounds  = bounds.EnlargedBy   (lineWidth / 2.0)
@@ -72,29 +73,89 @@ module ConcreteShape =
             }
         ofPath V2d.Zero V2d.II color path
 
-    //let fillRoundedRectangle (color : C4b)  (radius : float) (bounds : Box2d) =
-    //    let pc00 = V2d(bounds.Min.X, bounds.Min.Y)
-    //    let pc01 = V2d(bounds.Min.X, bounds.Max.Y)
-    //    let pc10 = V2d(bounds.Max.X, bounds.Min.Y)
-    //    let pc11 = V2d(bounds.Max.X, bounds.Max.Y)
-        
-    //    let rx = V2d(radius, 0.0)
-    //    let ry = V2d(0.0, radius)
 
-    //    let path =
-    //        Path.build {
-    //            start       (pc00 + rx)
-    //            lineTo      (pc10 - rx)
-    //            arc         (pc10 + ry) (pc10 - rx + ry)
-    //            lineTo      (pc11 - ry)
-    //            arc         (pc11 - rx) (pc11 - rx - ry)
-    //            lineTo      (pc01 + rx)
-    //            arc         (pc01 - ry) (pc01 + rx - ry)
-    //            lineTo      (pc00 + ry)
-    //            arc         (pc00 + rx) (pc00 + rx + ry)
-    //        }
-    //    let path = Path.reverse path
-    //    ofPath V2d.Zero V2d.II color path
+    let fillRoundedRectangle (color : C4b)  (radius : float) (bounds : Box2d) =
+        if radius <= Constant.PositiveTinyValue then
+            fillRectangle color bounds
+        else
+            let radius = min radius (0.5 * min bounds.SizeX bounds.SizeY)
+            let pc00 = V2d(bounds.Min.X, bounds.Min.Y)
+            let pc01 = V2d(bounds.Min.X, bounds.Max.Y)
+            let pc10 = V2d(bounds.Max.X, bounds.Min.Y)
+            let pc11 = V2d(bounds.Max.X, bounds.Max.Y)
+        
+            let rx = V2d(radius, 0.0)
+            let ry = V2d(0.0, radius)
+
+            let inline e c = Ellipse2d(c, rx, ry)
+
+            let path = 
+                Path.build {
+                    start   (pc11 - ry)
+                    lineTo  (pc10 + ry)
+                    arc     (pc10 - rx) (e (pc10 + ry - rx))
+                    lineTo  (pc00 + rx)
+                    arc     (pc00 + ry) (e (pc00 + ry + rx))
+                    lineTo  (pc01 - ry)
+                    arc     (pc01 + rx) (e (pc01 - ry + rx))
+                    lineTo  (pc11 - rx)
+                    arc     (pc11 - ry) (e (pc11 - ry - rx))
+                }
+
+            ofPath V2d.Zero V2d.II color path
+
+    let roundedRectangle (color : C4b) (lineWidth : float) (radius : float) (bounds : Box2d) =
+        if radius <= Constant.PositiveTinyValue then
+            rectangle color lineWidth bounds
+        else
+            let outer = bounds.EnlargedBy(lineWidth / 2.0)
+            let inner = bounds.ShrunkBy(lineWidth / 2.0)
+            let ro = radius + 0.5 * lineWidth |> clamp 0.0 (0.5 * min outer.SizeX outer.SizeY)
+            let ri = radius - 0.5 * lineWidth |> clamp 0.0 (0.5 * min inner.SizeX inner.SizeY)
+
+            let po00 = V2d(outer.Min.X, outer.Min.Y)
+            let po01 = V2d(outer.Min.X, outer.Max.Y)
+            let po10 = V2d(outer.Max.X, outer.Min.Y)
+            let po11 = V2d(outer.Max.X, outer.Max.Y)
+            let rox = V2d(ro, 0.0)
+            let roy = V2d(0.0, ro)
+
+        
+            let pi00 = V2d(inner.Min.X, inner.Min.Y)
+            let pi01 = V2d(inner.Min.X, inner.Max.Y)
+            let pi10 = V2d(inner.Max.X, inner.Min.Y)
+            let pi11 = V2d(inner.Max.X, inner.Max.Y)
+            let rix = V2d(ri, 0.0)
+            let riy = V2d(0.0, ri)
+
+
+            let inline e r c = Ellipse2d(c, V2d(r, 0.0), V2d(0.0, r))
+
+            let path = 
+                Path.build {
+                    start   (po11 - roy)
+                    lineTo  (po10 + roy)
+                    arc     (po10 - rox) (e ro (po10 + roy - rox))
+                    lineTo  (po00 + rox)
+                    arc     (po00 + roy) (e ro (po00 + roy + rox))
+                    lineTo  (po01 - roy)
+                    arc     (po01 + rox) (e ro (po01 - roy + rox))
+                    lineTo  (po11 - rox)
+                    arc     (po11 - roy) (e ro (po11 - roy - rox))
+
+                    start   (pi11 - riy)
+                    arc     (pi11 - rix) (e ri (pi11 - rix - riy))
+                    lineTo  (pi01 + rix)
+                    arc     (pi01 - riy) (e ri (pi01 + rix - riy))
+                    lineTo  (pi00 + riy) 
+                    arc     (pi00 + rix) (e ri (pi00 + rix + riy))
+                    lineTo  (pi10 - rix) 
+                    arc     (pi10 + riy) (e ri (pi10 - rix + riy))
+                    lineTo  (pi11 - riy)
+
+                }
+
+            ofPath V2d.Zero V2d.II color path
 
 
     let fillEllipse (color : C4b) (e : Ellipse2d) =
@@ -106,7 +167,6 @@ module ConcreteShape =
             if z < 0 then Ellipse2d(e.Center, e.Axis0, -e.Axis1)
             else e
             
-
         let c = e.Center
         let x = e.Axis0
         let y = e.Axis1
@@ -120,62 +180,188 @@ module ConcreteShape =
             }
         ofPath V2d.Zero V2d.II color path
 
-    //let ellipse (color : C4b) (lineWidth : float) (e : Ellipse2d) =
-    //    let c = e.Center
-    //    let xo = e.Axis0 + (e.Axis0.Normalized * lineWidth / 2.0)
-    //    let yo = e.Axis1 + (e.Axis1.Normalized * lineWidth / 2.0)
-    //    let xi = e.Axis0 - (e.Axis0.Normalized * lineWidth / 2.0)
-    //    let yi = e.Axis1 - (e.Axis1.Normalized * lineWidth / 2.0)
-    //    let path =
-    //        Path.build {
-    //            start       (c + xo)
-    //            arcTo       (c + xo - yo) (c - yo)
-    //            arcTo       (c - xo - yo) (c - xo)
-    //            arcTo       (c - xo + yo) (c + yo)
-    //            arcTo       (c + xo + yo) (c + xo)
-   
-    //            start       (c + xi)
-    //            arcTo       (c + xi + yi) (c + yi)
-    //            arcTo       (c - xi + yi) (c - xi)
-    //            arcTo       (c - xi - yi) (c - yi)
-    //            arcTo       (c + xi - yi) (c + xi)
-    //        }
-    //    ofPath V2d.Zero V2d.II color path
+    let ellipse (color : C4b) (lineWidth : float) (e : Ellipse2d) =
+        let a0 = e.Axis0
+        let a1 = e.Axis1
+        let z = a0.X * a1.Y - a0.Y * a1.X |> sign
+        let e = 
+            if z < 0 then Ellipse2d(e.Center, e.Axis0, -e.Axis1)
+            else e
+            
+        let l0 = e.Axis0.Length
+        let l1 = e.Axis1.Length
+
+        let outer = Ellipse2d(e.Center, e.Axis0 * (1.0 + lineWidth / (2.0 * l0)), e.Axis1 * (1.0 + lineWidth / (2.0 * l1)))
+        let inner = Ellipse2d(e.Center, e.Axis0 * (1.0 - lineWidth / (2.0 * l0)), e.Axis1 * (1.0 - lineWidth / (2.0 * l1)))
+
+        let c = outer.Center
+        let ox = outer.Axis0
+        let oy = outer.Axis1
+        let ix = inner.Axis0
+        let iy = inner.Axis1
+        let path =
+            Path.build {
+                start   (c + ox)
+                arc     (c - oy) outer
+                arc     (c - ox) outer
+                arc     (c + oy) outer
+                arc     (c + ox) outer
+
+                
+                start   (c + ix)
+                arc     (c + iy) inner
+                arc     (c - ix) inner
+                arc     (c - iy) inner
+                arc     (c + ix) inner
+
+            }
+        ofPath V2d.Zero V2d.II color path
 
 
-    //let roundedRectangle (color : C4b) (lineWidth : float)  (radius : float) (bounds : Box2d) =
-    //    let path (radius : float) (bounds : Box2d) =
-    //        let pc00 = V2d(bounds.Min.X, bounds.Min.Y)
-    //        let pc01 = V2d(bounds.Min.X, bounds.Max.Y)
-    //        let pc10 = V2d(bounds.Max.X, bounds.Min.Y)
-    //        let pc11 = V2d(bounds.Max.X, bounds.Max.Y)
-    //        let rx = V2d(radius, 0.0)
-    //        let ry = V2d(0.0, radius)
-    //        Path.build {
-    //            start       (pc00 + rx)
-    //            lineTo      (pc10 - rx)
-    //            arcTo       pc10    (pc10 + ry)
-    //            lineTo      (pc11 - ry)
-    //            arcTo       pc11    (pc11 - rx)
-    //            lineTo      (pc01 + rx)
-    //            arcTo       pc01    (pc01 - ry)
-    //            lineTo      (pc00 + ry)
-    //            arcTo       pc00    (pc00 + rx)
-    //        }
-
-    //    let half = lineWidth / 2.0
+    let fillCircle (color : C4b) (c : Circle2d) =
+        fillEllipse color (Ellipse2d(c.Center, V2d(c.Radius, 0.0), V2d(0.0, c.Radius)))
         
-    //    let outer = path (radius + half) (bounds.EnlargedBy(half))
-    //    let inner = path (radius - half) (bounds.ShrunkBy(half))
+    let circle (color : C4b) (lineWidth : float) (c : Circle2d) =
+        ellipse color lineWidth (Ellipse2d(c.Center, V2d(c.Radius, 0.0), V2d(0.0, c.Radius)))
 
-    //    let path = Path.append (Path.reverse outer) inner
-    //    ofPath V2d.Zero V2d.II color path
+
+    let fillBezierPath (color : C4b) (points : list<V2d>) =
+        let points = List.toArray points
+
+        let poly = Polygon2d points
+        let points = poly.WithoutMultiplePoints(1E-8).GetPointArray()
+
+
+        if points.Length >= 3 then
+            let getNormal (i : int) =
+                let pl = points.[(i + points.Length - 1) % points.Length]
+                let pc = points.[i]
+                let pn = points.[(i+1) % points.Length]
+                let e01 = pc - pl |> Vec.normalize
+                let e12 = pn - pc |> Vec.normalize
+                let d = e01 + e12 |> Vec.normalize
+                V2d(-d.Y, d.X)
+
+            let normals = Array.init points.Length getNormal
+            
+            let controlPoints =
+                Array.init points.Length (fun i ->
+                    let i1 = (i + 1) % normals.Length
+                    let p0 = points.[i]
+                    let n0 = normals.[i]
+                    let p1 = points.[i1]
+                    let n1 = normals.[i1]
+
+                    let p0 = Plane2d(n0, p0)
+                    let p1 = Plane2d(n1, p1)
+
+                    let mutable pc = V2d.Zero
+                    p0.Intersects(p1, &pc) |> ignore
+                    
+                    pc
+                )
+
+            Array.init points.Length (fun i ->
+                let p0 = points.[i]
+                let p1 = controlPoints.[i]
+                let p2 = points.[(i + 1) % points.Length]
+
+                PathSegment.bezier2 p0 p1 p2
+            )
+            |> Path.ofArray
+            |> ofPath V2d.Zero V2d.II color
+
+        else
+            Path.empty
+            |> ofPath V2d.Zero V2d.II color
+
+    let bezierPath (color : C4b) (lineWidth : float) (points : list<V2d>) =
+        let points = List.toArray points
+
+        let poly = Polygon2d points
+        let points = poly.WithoutMultiplePoints(1E-8).GetPointArray()
+
+
+        if points.Length >= 3 then
+            let normals = 
+                Array.init points.Length (fun (i : int) ->
+                    let pl = points.[(i + points.Length - 1) % points.Length]
+                    let pc = points.[i]
+                    let pn = points.[(i+1) % points.Length]
+                    let e01 = pc - pl |> Vec.normalize
+                    let e12 = pn - pc |> Vec.normalize
+                    let d = e01 + e12 |> Vec.normalize
+                    V2d(-d.Y, d.X)
+                )
+                
+            let count = points.Length
+            let pointsOuter = points |> Array.mapi (fun i p -> p + normals.[i] * lineWidth * 0.5)
+            let pointsInner = points |> Array.mapi (fun i p -> p - normals.[i] * lineWidth * 0.5)
+            let points = ()
+
+            let controlPointsOuter =
+                Array.init count (fun i ->
+                    let i1 = (i + 1) % normals.Length
+                    let p0 = pointsOuter.[i]
+                    let n0 = normals.[i]
+                    let p1 = pointsOuter.[i1]
+                    let n1 = normals.[i1]
+                    let p0 = Plane2d(n0, p0)
+                    let p1 = Plane2d(n1, p1)
+                    let mutable pc = V2d.Zero
+                    p0.Intersects(p1, &pc) |> ignore
+                    pc
+                )
+
+            let controlPointsInner =
+                Array.init count (fun i ->
+                    let i1 = (i + 1) % normals.Length
+                    let p0 = pointsInner.[i]
+                    let n0 = normals.[i]
+                    let p1 = pointsInner.[i1]
+                    let n1 = normals.[i1]
+                    let p0 = Plane2d(n0, p0)
+                    let p1 = Plane2d(n1, p1)
+                    let mutable pc = V2d.Zero
+                    p0.Intersects(p1, &pc) |> ignore
+                    pc
+                )
+
+            let outer = 
+                Array.init count (fun i ->
+                    let p0 = pointsOuter.[i]
+                    let p1 = controlPointsOuter.[i]
+                    let p2 = pointsOuter.[(i + 1) % count]
+
+                    PathSegment.bezier2 p0 p1 p2
+                )
+
+            let inner = 
+                Array.init count (fun i ->
+                    let i = count - 1 - i
+
+                    let p0 = pointsInner.[i]
+                    let p1 = controlPointsInner.[i]
+                    let p2 = pointsInner.[(i + 1) % count]
+                    PathSegment.bezier2 p2 p1 p0
+                )
+
+
+            Array.append outer inner
+            |> Path.ofArray
+            |> ofPath V2d.Zero V2d.II color
+
+        else
+            Path.empty
+            |> ofPath V2d.Zero V2d.II color
+
 
 [<ReferenceEquality; NoComparison>]
 type ShapeList =
     {
         bounds              : Box2d
         concreteShapes      : list<ConcreteShape>
+        zRange              : Range1i
         renderTrafo         : Trafo3d
         flipViewDependent   : bool
     }
@@ -196,14 +382,20 @@ module ShapeList =
 
         let shapes = shapes |> List.map (fun s -> { s with offset = V2d(s.offset.X - cx, s.offset.Y)})
         
+        let range = shapes |> List.map (fun s -> s.z) |> Range1i
+
         {
             bounds = bounds
             concreteShapes = shapes
             renderTrafo = Trafo3d.Translation(cx, 0.0, 0.0)
+            zRange = range
             flipViewDependent = false
         }
 
-    let add (shape : ConcreteShape) (r : ShapeList) =
+    let prepend (shape : ConcreteShape) (r : ShapeList) =
+
+        let shape = { shape with z = r.zRange.Min - 1 }
+
         let newBounds = Box2d.Union(shape.bounds, r.bounds)
 
         let oldCenter = r.bounds.Center
@@ -215,9 +407,31 @@ module ShapeList =
 
         {
             bounds = newBounds
-            concreteShapes = concreteShapes @ [shape]
+            concreteShapes = shape :: concreteShapes
             renderTrafo = Trafo3d.Translation(newCenter.X, 0.0, 0.0)
             flipViewDependent = r.flipViewDependent
+            zRange = Range1i(r.zRange.Min - 1, r.zRange.Max)
+        }
+        
+    let add (shape : ConcreteShape) (r : ShapeList) =
+        
+        let shape = { shape with z = r.zRange.Max + 1 }
+
+        let newBounds = Box2d.Union(shape.bounds, r.bounds)
+
+        let oldCenter = r.bounds.Center
+        let newCenter = newBounds.Center
+        let shift = V2d(oldCenter.X - newCenter.X, 0.0)
+
+        let shape = { shape with offset = shape.offset - V2d(newCenter.X, 0.0) }
+        let concreteShapes = r.concreteShapes |> List.map (fun s -> { s with offset = s.offset + shift })
+
+        {
+            bounds = newBounds
+            concreteShapes = shape :: concreteShapes
+            renderTrafo = Trafo3d.Translation(newCenter.X, 0.0, 0.0)
+            flipViewDependent = r.flipViewDependent
+            zRange = Range1i(r.zRange.Min, r.zRange.Max + 1)
         }
         
 
@@ -307,6 +521,7 @@ type Text private() =
                     offset = pos
                     scale = V2d.II
                     color = color
+                    z = 0
                     shape = g
                 }
 
@@ -329,6 +544,7 @@ type Text private() =
             //shapes              = glyphs |> CSharpList.toList
             renderTrafo         = Trafo3d.Translation(realCenter, 0.0, 0.0)
             flipViewDependent   = true
+            zRange = Range1i(0,0)
         }
 
     [<Extension>]

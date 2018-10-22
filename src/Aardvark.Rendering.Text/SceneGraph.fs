@@ -82,27 +82,40 @@ module Sg =
             let indirectTrafosAndColors =
                 Mod.custom (fun token ->
                     reader.GetOperations token |> ignore
+                    //let cam = t.ViewTrafo.GetValue token
 
-                    let trafos = 
-                        reader.State |> HRefSet.toArray |> Array.collect (fun (trafo,shapes) ->
+                    let state =
+                        reader.State |> HRefSet.toArray |> Array.map (fun (trafo,shapes) ->
                             let trafo = trafo.GetValue token
                             let shapes = shapes.GetValue token
-                            
+                            trafo, shapes
+                        )
+                        //|> Array.sortByDescending (fun (t,_) -> Vec.length (t.Forward.TransformPos(V3d.Zero) - cam.Backward.C3.XYZ))
+
+                    let trafos = 
+                        state |> Array.mapi (fun i (trafo,shapes) ->
+
+                            let depthOffset =
+                                M44d.Translation(0.0, 0.0, float i / 100.0)
+
                             let trafo = 
                                 M34d.op_Explicit (
                                     trafo.Forward *
-                                    shapes.renderTrafo.Forward
+                                    shapes.renderTrafo.Forward *
+                                    depthOffset
                                 )
+
+
 
                             let len = List.length shapes.concreteShapes 
                             Array.create len (M34f.op_Explicit trafo)
                         )
+                        |> Array.concat
                         |> ArrayBuffer
                         :> IBuffer
                         
                     let offsetAndScale = 
-                        reader.State |> Seq.collect (fun (trafo,shapes) ->
-                            let shapes = shapes.GetValue token
+                        state |> Seq.collect (fun (trafo,shapes) ->
                             shapes.concreteShapes
                                 |> Seq.map (fun shape -> 
                                     let s = shape.scale
@@ -117,8 +130,7 @@ module Sg =
                         :> IBuffer
 
                     let indirect = 
-                        reader.State |> Seq.collect (fun (trafo,shapes) ->
-                            let shapes = shapes.GetValue token
+                        state |> Seq.collect (fun (trafo,shapes) ->
                             shapes.concreteShapes |> Seq.map (ConcreteShape.shape >> cache.GetBufferRange)
                         )
                         |> Seq.mapi (fun i r ->
@@ -134,9 +146,19 @@ module Sg =
                         |> IndirectBuffer.ofArray
 
                     let colors = 
-                        reader.State |> Seq.collect (fun (trafo,shapes) ->
-                            let shapes = shapes.GetValue token
-                            shapes.concreteShapes |> Seq.map ConcreteShape.color
+                        state |> Seq.collect (fun (trafo,shapes) ->
+                            shapes.concreteShapes |> Seq.map (fun s ->
+                                let c = s.color
+
+                                let a = 
+                                    let size = shapes.zRange.Size
+                                    if size > 0 then
+                                        let layer = float (s.z - shapes.zRange.Min) / float size
+                                        byte (layer * 255.0)
+                                    else
+                                        0uy
+                                C4b(c.R, c.G, c.B, a)
+                            )
                         )
                         |> Seq.toArray
                         |> ArrayBuffer

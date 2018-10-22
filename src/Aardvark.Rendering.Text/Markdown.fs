@@ -296,7 +296,7 @@ module Markdown =
 
             let emit (g : Shape) =
                 modifyState (fun (s : LayoutState) ->
-                    let c (w : float) = { offset = V2d(s.x, s.y); scale = s.textState.scale; color = s.color; shape = g }
+                    let c (w : float) = { offset = V2d(s.x, s.y); z = 0; scale = s.textState.scale; color = s.color; shape = g }
                     { s with
                         max = V2d(s.max.X, max (s.y + s.textState.scale.Y) s.max.Y)
 
@@ -310,7 +310,7 @@ module Markdown =
 
             let emitFullWidth (g : Shape) =
                 modifyState (fun (s : LayoutState) ->
-                    let c (w : float) = { offset = V2d(s.x, s.y); scale = V2d(w, s.textState.scale.Y); color = s.color; shape = g }
+                    let c (w : float) = { offset = V2d(s.x, s.y); z = 0; scale = V2d(w, s.textState.scale.Y); color = s.color; shape = g }
                     { s with
                         max = V2d(s.max.X, max (s.y + s.textState.scale.Y) s.max.Y)
                         concrete = c :: s.concrete
@@ -476,6 +476,7 @@ module Markdown =
                 //ShapeList.colors   = s.colors
                 ShapeList.renderTrafo = Trafo3d.Translation(center,0.0,0.0)
                 ShapeList.flipViewDependent = true
+                ShapeList.zRange = Range1i(0,0)
             }
 
 
