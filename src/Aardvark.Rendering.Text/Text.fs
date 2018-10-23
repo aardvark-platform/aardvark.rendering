@@ -225,7 +225,7 @@ module ConcreteShape =
         ellipse color lineWidth (Ellipse2d(c.Center, V2d(c.Radius, 0.0), V2d(0.0, c.Radius)))
 
 
-    let fillBezierPath (color : C4b) (points : list<V2d>) =
+    let private fillPathAux (f : V2d -> V2d -> V2d -> PathSegment) (color : C4b) (points : list<V2d>) =
         let points = List.toArray points
 
         let poly = Polygon2d points
@@ -266,7 +266,7 @@ module ConcreteShape =
                 let p1 = controlPoints.[i]
                 let p2 = points.[(i + 1) % points.Length]
 
-                PathSegment.bezier2 p0 p1 p2
+                f p0 p1 p2
             )
             |> Path.ofArray
             |> ofPath V2d.Zero V2d.II color
@@ -275,7 +275,7 @@ module ConcreteShape =
             Path.empty
             |> ofPath V2d.Zero V2d.II color
 
-    let bezierPath (color : C4b) (lineWidth : float) (points : list<V2d>) =
+    let private pathAux (f : V2d -> V2d -> V2d -> PathSegment) (color : C4b) (lineWidth : float) (points : list<V2d>) =
         let points = List.toArray points
 
         let poly = Polygon2d points
@@ -333,7 +333,7 @@ module ConcreteShape =
                     let p1 = controlPointsOuter.[i]
                     let p2 = pointsOuter.[(i + 1) % count]
 
-                    PathSegment.bezier2 p0 p1 p2
+                    f p0 p1 p2
                 )
 
             let inner = 
@@ -343,7 +343,7 @@ module ConcreteShape =
                     let p0 = pointsInner.[i]
                     let p1 = controlPointsInner.[i]
                     let p2 = pointsInner.[(i + 1) % count]
-                    PathSegment.bezier2 p2 p1 p0
+                    f p2 p1 p0
                 )
 
 
@@ -354,6 +354,12 @@ module ConcreteShape =
         else
             Path.empty
             |> ofPath V2d.Zero V2d.II color
+             
+    let fillBezierPath (color : C4b) (lineWidth : float) (points : list<V2d>) = fillPathAux PathSegment.bezier2 color points
+    let bezierPath (color : C4b) (lineWidth : float) (points : list<V2d>) = pathAux PathSegment.bezier2 color lineWidth points
+    
+    let fillArcPath (color : C4b) (lineWidth : float) (points : list<V2d>) = fillPathAux PathSegment.arcSegment color points
+    let arcPath (color : C4b) (lineWidth : float) (points : list<V2d>) = pathAux PathSegment.arcSegment color lineWidth points
 
 
 [<ReferenceEquality; NoComparison>]

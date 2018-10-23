@@ -40,7 +40,7 @@ module Sg =
 
     [<Ag.Semantic>]
     type ShapeSem() =
-        static let defaultDepthBias = 1.0 / float (1 <<< 17)
+        static let defaultDepthBias = 1.0 / float (1 <<< 21)
 
         member x.ModelTrafoStack(b : BillboardApplicator) =
             let view = b.ViewTrafo
@@ -80,98 +80,105 @@ module Sg =
                 
             let reader = content.GetReader()
 
-            let indirectTrafosAndColors =
+            let trafosAndShapes =
                 Mod.custom (fun token ->
                     reader.GetOperations token |> ignore
-                    //let cam = t.ViewTrafo.GetValue token
-
-                    let state =
-                        reader.State |> HRefSet.toArray |> Array.map (fun (trafo,shapes) ->
-                            let trafo = trafo.GetValue token
-                            let shapes = shapes.GetValue token
-                            trafo, shapes
-                        )
-                        //|> Array.sortByDescending (fun (t,_) -> Vec.length (t.Forward.TransformPos(V3d.Zero) - cam.Backward.C3.XYZ))
-
-                    let trafos = 
-                        state |> Array.mapi (fun i (trafo,shapes) ->
-
-                            let depthOffset =
-                                M44d.Translation(0.0, 0.0, float i / 100.0)
-
-                            let trafo = 
-                                M34d.op_Explicit (
-                                    trafo.Forward *
-                                    shapes.renderTrafo.Forward *
-                                    depthOffset
-                                )
-
-
-
-                            let len = List.length shapes.concreteShapes 
-                            Array.create len (M34f.op_Explicit trafo)
-                        )
-                        |> Array.concat
-                        |> ArrayBuffer
-                        :> IBuffer
-                        
-                    let offsetAndScale = 
-                        state |> Seq.collect (fun (trafo,shapes) ->
-                            shapes.concreteShapes
-                                |> Seq.map (fun shape -> 
-                                    let s = shape.scale
-                                    let o = shape.offset
-                                    let sx = if shapes.flipViewDependent then -s.X else s.X
-                                    let sy = s.Y
-                                    V4f(o.X, o.Y, sx, sy)
-                                )
-                        )
-                        |> Seq.toArray
-                        |> ArrayBuffer
-                        :> IBuffer
-
-                    let indirect = 
-                        state |> Seq.collect (fun (trafo,shapes) ->
-                            shapes.concreteShapes |> Seq.map (ConcreteShape.shape >> cache.GetBufferRange)
-                        )
-                        |> Seq.mapi (fun i r ->
-                            DrawCallInfo(
-                                FirstIndex = r.Min,
-                                FaceVertexCount = r.Size + 1,
-                                FirstInstance = i,
-                                InstanceCount = 1,
-                                BaseVertex = 0
-                            )
-                        )
-                        |> Seq.toArray
-                        |> IndirectBuffer.ofArray
-
-                    let colors = 
-                        state |> Seq.collect (fun (trafo,shapes) ->
-                            shapes.concreteShapes |> Seq.map (fun s ->
-                                let c = s.color
-
-                                let a = 
-                                    let size = shapes.zRange.Size
-                                    if size > 0 then
-                                        let layer = s.z - shapes.zRange.Min |> min 255
-                                        byte layer
-                                    else
-                                        0uy
-                                C4b(c.R, c.G, c.B, a)
-                            )
-                        )
-                        |> Seq.toArray
-                        |> ArrayBuffer
-                        :> IBuffer
-
-                    indirect, trafos, offsetAndScale, colors
+                    reader.State |> HRefSet.toArray |> Array.map (fun (trafo,shapes) ->
+                        let trafo = trafo.GetValue token
+                        let shapes = shapes.GetValue token
+                        trafo, shapes
+                    )
                 )
-    
-            let indirect = indirectTrafosAndColors |> Mod.map (fun (i,_,_,_) -> i)
-            let trafos = BufferView(Mod.map (fun (_,o,_,_) -> o) indirectTrafosAndColors, typeof<M34f>)
-            let offsetAndScale = BufferView(Mod.map (fun (_,_,os,_) -> os) indirectTrafosAndColors, typeof<V4f>)
-            let colors = BufferView(Mod.map (fun (_,_,_,c) -> c) indirectTrafosAndColors, typeof<C4b>)
+
+            let shapesOnly = 
+                Mod.custom (fun token ->
+                    reader.GetOperations token |> ignore
+                    reader.State |> HRefSet.toArray |> Array.map (fun (trafo,shapes) ->
+                        shapes.GetValue token
+                    )
+                )
+                
+
+            let trafoBuffer =
+                trafosAndShapes |> Mod.map (fun state ->
+                    state |> Array.mapi (fun i (trafo,shapes) ->
+                        let depthOffset =
+                            M44d.Translation(0.0, 0.0, float i / 100.0)
+
+                        let trafo = 
+                            M34d.op_Explicit (
+                                trafo.Forward *
+                                shapes.renderTrafo.Forward *
+                                depthOffset
+                            )
+                                
+                        let len = List.length shapes.concreteShapes 
+                        Array.create len (M34f.op_Explicit trafo)
+                    )
+                    |> Array.concat
+                    |> ArrayBuffer
+                    :> IBuffer
+                )
+
+            let offsetAndScaleBuffer =
+                shapesOnly |> Mod.map (fun state ->
+                    state |> Seq.collect (fun shapes ->
+                        shapes.concreteShapes
+                            |> Seq.map (fun shape -> 
+                                let s = shape.scale
+                                let o = shape.offset
+                                let sx = if shapes.flipViewDependent then -s.X else s.X
+                                let sy = s.Y
+                                V4f(o.X, o.Y, sx, sy)
+                            )
+                    )
+                    |> Seq.toArray
+                    |> ArrayBuffer
+                    :> IBuffer
+                )
+
+            let colorBuffer =
+                shapesOnly |> Mod.map (fun state ->
+                    state |> Seq.collect (fun shapes ->
+                        shapes.concreteShapes |> Seq.map (fun s ->
+                            let c = s.color
+
+                            let a = 
+                                let size = shapes.zRange.Size
+                                if size > 0 then
+                                    let layer = s.z - shapes.zRange.Min |> min 255
+                                    byte layer
+                                else
+                                    0uy
+                            C4b(c.R, c.G, c.B, a)
+                        )
+                    )
+                    |> Seq.toArray
+                    |> ArrayBuffer
+                    :> IBuffer
+                )
+                
+            let indirect =
+                shapesOnly |> Mod.map (fun state ->
+                    state |> Seq.collect (fun shapes ->
+                        shapes.concreteShapes |> Seq.map (ConcreteShape.shape >> cache.GetBufferRange)
+                    )
+                    |> Seq.mapi (fun i r ->
+                        DrawCallInfo(
+                            FirstIndex = r.Min,
+                            FaceVertexCount = r.Size + 1,
+                            FirstInstance = i,
+                            InstanceCount = 1,
+                            BaseVertex = 0
+                        )
+                    )
+                    |> Seq.toArray
+                    |> IndirectBuffer.ofArray
+                )
+
+            let trafos = BufferView(trafoBuffer, typeof<M34f>)
+            let offsetAndScale = BufferView(offsetAndScaleBuffer, typeof<V4f>)
+            let colors = BufferView(colorBuffer, typeof<C4b>)
 
             let instanceAttributes =
                 let old = shapes.InstanceAttributes
@@ -424,7 +431,6 @@ module Sg =
 
             //shapes :> IRenderObject |> ASet.single
             MultiRenderObject [boundary; shapes] :> IRenderObject |> ASet.single
-                //ASet.ofList [boundary :> IRenderObject; shapes :> IRenderObject]
 
         member x.FillGlyphs(s : ISg) =
             let mode = s.FillMode

@@ -91,31 +91,27 @@ let main argv =
         }
         
 
-    //let path = 
-    //    let inner = Ellipse2d(V2d.Zero, 0.9 * V2d.IO, 0.9 * V2d.OI)
-    //    let a0 = inner.GetAlpha (V2d(0.9, 0.1))
-    //    let a1 = inner.GetAlpha (V2d(0.1, 0.9))
+    let path = 
+        let off = V2d(2,0)
+        Path.ofList [
+            PathSegment.arcSegment V2d.OI V2d.II V2d.IO
+            PathSegment.line V2d.IO V2d.OO 
+            PathSegment.line V2d.OO V2d.OI 
 
 
-    //    Path.ofList [
-    //        PathSegment.arc Constant.PiHalf 0.0 (Ellipse2d(V2d.Zero, V2d.IO, V2d.OI))
-    //        PathSegment.line V2d.IO V2d.OO 
-    //        PathSegment.line V2d.OO V2d.OI 
             
-    //        PathSegment.arc a0 a1 inner
-    //        PathSegment.line (inner.GetPoint a1) (V2d(0.1, 0.1))
-    //        PathSegment.line (V2d(0.1, 0.1)) (inner.GetPoint a0)
+            PathSegment.line (off + V2d.OI) (off + V2d.IO)
+            PathSegment.line (off + V2d.IO) (off + V2d.OO)
+            PathSegment.line (off + V2d.OO) (off + V2d.OI)
 
-    //    ]
-
-    //let e = Ellipse2d(V2d.Zero, V2d(2,0), V2d(0,1))
-
+        ]
     //let shapes =
     //    ShapeList.ofList [
-    //        ConcreteShape.bezierPath C4b.White 0.05 [
+    //        //ConcreteShape.ofPath V2d.Zero V2d.II C4b.Red path
+    //        ConcreteShape.fillArcPath C4b.White 0.05 [
     //            V2d( Constant.Sqrt2Half, Constant.Sqrt2Half)
     //            V2d(-Constant.Sqrt2Half, Constant.Sqrt2Half)
-    //            V2d( 0.0, 1.0 + Constant.Sqrt2Half)
+    //            V2d( 0.0, 2.0 + Constant.Sqrt2Half)
     //        ]
     //    ]
 
@@ -125,6 +121,8 @@ let main argv =
                 do! DefaultSurfaces.trafo
                 do! DefaultSurfaces.vertexColor
             }
+
+    let bias = Mod.init (1.0 / float (1 <<< 22))
 
     let shapes =
         let dark = C4b(30uy, 30uy, 30uy, 255uy)
@@ -142,8 +140,21 @@ let main argv =
             trafo, shape
         )
 
+    win.Keyboard.KeyDown(Keys.Add).Values.Add(fun () ->
+        transact (fun () -> bias.Value <- bias.Value * 2.0)
+        printfn "bias: %.10f" bias.Value
+    )
+    win.Keyboard.KeyDown(Keys.Subtract).Values.Add(fun () ->
+        transact (fun () -> bias.Value <- bias.Value / 2.0)
+        printfn "bias: %.10f" bias.Value
+    )
+
+
     let sg =
         Sg.shapes shapes
+            //|> Sg.transform (Trafo3d.FromOrthoNormalBasis(V3d.IOO, V3d.OOI, -V3d.OIO))
+            |> Sg.andAlso coord
+            |> Sg.uniform "DepthBias" bias
         //let bounds = shapes.bounds.EnlargedBy(V2d(0.05, 0.0))
         //let rect = ConcreteShape.fillRoundedRectangle C4b.White 0.1 bounds
         ////let rectb = ConcreteShape.roundedRectangle C4b.Gray 0.05 0.125 (bounds.EnlargedBy 0.025)
