@@ -353,17 +353,17 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
 
     member x.UploadMode = uploadMode
 
-    member x.GetCache(name : Symbol, create : 'a -> 'b) =
+    member x.GetCache(name : Symbol) =
         let res =
             caches.GetOrAdd(name, fun name ->
-                DeviceCache<'a, 'b>(x, create) :> obj
+                DeviceCache<'a, 'b>(x) :> obj
             )
 
         res |> unbox<DeviceCache<'a, 'b>>
 
     member x.GetCached(cacheName : Symbol, value : 'a, create : 'a -> 'b) : 'b =
-        let cache : DeviceCache<'a, 'b> = x.GetCache(cacheName, create)
-        cache.Invoke(value)
+        let cache : DeviceCache<'a, 'b> = x.GetCache(cacheName)
+        cache.Invoke(value, create)
 
     member x.RemoveCached(cacheName : Symbol, value : 'b) : unit =
         match caches.TryGetValue cacheName with
@@ -487,14 +487,9 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
 and IDeviceCache<'b> =
     abstract member Revoke : 'b -> unit
 
-and DeviceCache<'a, 'b when 'b :> RefCountedResource>(device : Device, create : 'a -> 'b) =
+and DeviceCache<'a, 'b when 'b :> RefCountedResource>(device : Device) =
     let store = Dict<'a, 'b>()
     let back = Dict<'b, 'a>()
-
-    let create (value : 'a) =
-        let res = create value
-        back.[res] <- value
-        res
 
     do  device.OnDispose.Add(fun _ ->
             for k in back.Keys do
@@ -503,8 +498,12 @@ and DeviceCache<'a, 'b when 'b :> RefCountedResource>(device : Device, create : 
             back.Clear()
         )
 
-    member x.Invoke(value : 'a) : 'b =
+    member x.Invoke(value : 'a, create : 'a -> 'b) : 'b =
         lock store (fun () -> 
+            let create (value : 'a) =
+                let res = create value
+                back.[res] <- value
+                res
             let res = store.GetOrCreate(value, Func<'a, 'b>(create))
             Interlocked.Increment(&res.RefCount) |> ignore
             res

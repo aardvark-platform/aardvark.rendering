@@ -722,7 +722,7 @@ module ShaderProgram =
         )
     
     let ofEffect (effect : FShade.Effect) (mode : IndexedGeometryMode) (pass : RenderPass) (device : Device) =
-        device.GetCached(effectCache, (effect, mode, pass), fun (effect, mode, cfg) ->
+        device.GetCached(effectCache, (effect, mode, pass), fun (effect, mode, pass) ->
             match device.ShaderCachePath with
                 | Some shaderCachePath ->
                     let fileName = 
