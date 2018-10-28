@@ -294,13 +294,13 @@ module TextureCreationExtensions =
                 tex
             )
 
-        member x.CreateTextureCube(size : V2i, mipMapLevels : int, t : TextureFormat, samples : int) =
+        member x.CreateTextureCube(size : int, mipMapLevels : int, t : TextureFormat, samples : int) =
             using x.ResourceLock (fun _ ->
                 let h = GL.GenTexture()
                 GL.Check "could not create texture"
 
                 addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.TextureCube, mipMapLevels, 1, V3i(size.X, size.Y, 0), None, t, 0L, false)
+                let tex = Texture(x, h, TextureDimension.TextureCube, mipMapLevels, 1, V3i(size, size, 0), None, t, 0L, false)
                 x.UpdateTextureCube(tex, size, mipMapLevels, t, samples)
 
                 tex
@@ -429,7 +429,7 @@ module TextureCreationExtensions =
                 tex.ImmutableFormat <- true
             )
 
-        member x.UpdateTextureCube(tex : Texture, size : V2i, mipMapLevels : int, t : TextureFormat, samples : int) =
+        member x.UpdateTextureCube(tex : Texture, size : int, mipMapLevels : int, t : TextureFormat, samples : int) =
             using x.ResourceLock (fun _ ->
                 if tex.ImmutableFormat then
                     failwith "cannot update format/size for immutable texture"
@@ -438,25 +438,25 @@ module TextureCreationExtensions =
                 GL.Check "could not bind texture"
 
                 if samples = 1 then
-                    GL.TexStorage2D(TextureTarget2d.TextureCubeMap, mipMapLevels, unbox (int t), size.X, size.Y)
+                    GL.TexStorage2D(TextureTarget2d.TextureCubeMap, mipMapLevels, unbox (int t), size, size)
                 else
                     if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
                     Log.warn "[GL] cubemap MS not working atm."
                     // TODO: verify that this works!!
                     for f in 0..5 do
                         let target = int TextureTarget.TextureCubeMapPositiveX + f
-                        GL.TexImage2DMultisample(unbox target, samples, unbox (int t), size.X, size.Y, true)
+                        GL.TexImage2DMultisample(unbox target, samples, unbox (int t), size, size, true)
 
                 GL.BindTexture(TextureTarget.TextureCubeMap, 0)
                 GL.Check "could not unbind texture"
 
-                let sizeInBytes = texSizeInBytes(size.XYI, t, samples, mipMapLevels) * 6L
+                let sizeInBytes = texSizeInBytes(V3i(size, size, 1), t, samples, mipMapLevels) * 6L
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
 
                 tex.MipMapLevels <- mipMapLevels
                 tex.Dimension <- TextureDimension.TextureCube
-                tex.Size <- V3i(size.X, size.Y, 0)
+                tex.Size <- V3i(size, size, 0)
                 tex.Count <- 1
                 tex.Multisamples <- samples
                 tex.Format <- t
@@ -3053,7 +3053,7 @@ module Texture =
     let create2D (c : Context) (size : V2i) (mipLevels : int) (format : TextureFormat) (samples : int) =
         c.CreateTexture2D(size, mipLevels, format, samples)
 
-    let createCube (c : Context) (size : V2i) (mipLevels : int) (format : TextureFormat) (samples : int) =
+    let createCube (c : Context) (size : int) (mipLevels : int) (format : TextureFormat) (samples : int) =
         c.CreateTextureCube(size, mipLevels, format, samples)
 
     let create3D (c : Context) (size : V3i) (mipLevels : int) (format : TextureFormat)  =

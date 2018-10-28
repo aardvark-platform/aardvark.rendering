@@ -205,7 +205,7 @@ module private RefCountedResources =
                     handle <- Some tex
                     tex :> ITexture
          
-    type AdaptiveCubeTexture(runtime : IRuntime, format : TextureFormat, samples : int, size : IMod<V2i>) =
+    type AdaptiveCubeTexture(runtime : IRuntime, format : TextureFormat, samples : int, size : IMod<int>) =
         inherit AbstractOutputMod<ITexture>()
 
         let mutable handle : Option<IBackendTexture> = None
@@ -223,7 +223,7 @@ module private RefCountedResources =
             let size = size.GetValue(token)
 
             match handle with
-                | Some h when h.Size.XY = size -> 
+                | Some h when h.Size.X = size -> 
                     h :> ITexture
 
                 | Some h -> 
@@ -296,7 +296,7 @@ module private RefCountedResources =
         member x.CreateTexture(format : TextureFormat, samples : int, size : IMod<V2i>) =
             AdaptiveTexture(x, format, samples, size) :> IOutputMod<ITexture>
 
-        member x.CreateTextureCube(format : TextureFormat, samples : int, size : IMod<V2i>) =
+        member x.CreateTextureCube(format : TextureFormat, samples : int, size : IMod<int>) =
             AdaptiveCubeTexture(x, format, samples, size) :> IOutputMod<ITexture>
 
         member x.CreateRenderbuffer(format : RenderbufferFormat, samples : int, size : IMod<V2i>) =
@@ -363,7 +363,7 @@ module private RefCountedResources =
             handle <- Some fbo
             fbo
 
-    type AdaptiveFramebufferCube(runtime : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : IMod<V2i>) =
+    type AdaptiveFramebufferCube(runtime : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : IMod<int>) =
         inherit AbstractOutputMod<IFramebuffer[]>()
 
         let store = SymDict.empty
@@ -381,7 +381,7 @@ module private RefCountedResources =
             else
                 let rb = 
                     store.GetOrCreate(sem, fun sem ->
-                        runtime.CreateRenderbuffer(att.format, att.samples, size) :> IOutputMod
+                        runtime.CreateRenderbuffer(att.format, att.samples, size |> Mod.map(fun x -> V2i(x))) :> IOutputMod
                     ) |> unbox<IOutputMod<IRenderbuffer>>
 
                 runtime.CreateRenderbufferAttachment(rb)
@@ -496,7 +496,7 @@ type RuntimeFramebufferExtensions private() =
         AdaptiveFramebuffer(this, signature, textures, size) :> IOutputMod<IFramebuffer>
     
     [<Extension>]
-    static member CreateFramebufferCube (this : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : IMod<V2i>) : IOutputMod<IFramebuffer[]> =
+    static member CreateFramebufferCube (this : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : IMod<int>) : IOutputMod<IFramebuffer[]> =
         AdaptiveFramebufferCube(this, signature, textures, size) :> IOutputMod<IFramebuffer[]>
 
     [<Extension>]
