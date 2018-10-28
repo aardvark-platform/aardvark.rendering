@@ -19,7 +19,7 @@ let main argv =
     // and may show it later.
     let win =
         window {
-            backend Backend.GL
+            backend Backend.Vulkan
             display Display.Mono
             debug false
             samples 8
@@ -62,33 +62,115 @@ let main argv =
 
     
     let box = Box3d(-5.0 * V3d.III, 5.0 * V3d.III)
-    win.Keyboard.KeyDown(Keys.X).Values.Add (fun _ ->
-        transact (fun () ->
-            let pos = rand.UniformV3d(box)
-            let text = sprintf "%s" (pos.ToString("0.000"))
-            texts.Add(withTrafo (Trafo3d.Translation(pos)), withSuffix text) |> ignore
+    win.Keyboard.DownWithRepeats.Values.Add (fun k ->
+        match k with
+            | Keys.X -> 
+                transact (fun () ->
+                    let pos = rand.UniformV3d(box)
+                    let text = sprintf "%s" (pos.ToString("0.000"))
+                    texts.Add(withTrafo (Trafo3d.Translation(pos)), withSuffix text) |> ignore
             
-        )
+                )
+            | _ ->
+                ()
     )
 
     let font = Font "Consolas"
 
     let shapes =
-        Text.Layout(font, C4b.White, TextAlignment.Center, Box2d(V2d(0.0, -0.25), V2d(1.0, 0.5)), "HUGO g | µ\nWAWAWA ||| )(){}\nWAWAW")
+        Text.Layout(font, C4b.Blue, TextAlignment.Center, Box2d(V2d(0.0, -0.25), V2d(1.0, 0.5)), "HUGO g | µ\nWAWAWA ||| )(){}\nWAWAW")
            
-    let shapes = { shapes with flipViewDependent = false }
+    //let shapes = { shapes with flipViewDependent = false }
 
     let cfg = 
         {
-            font = Font "Times New Roman"
-            color = C4b.DarkMagenta
-            align = TextAlignment.Right
-            flipViewDependent = false
+            font = Font "Consolas"
+            color = C4b.White
+            align = TextAlignment.Center
+            flipViewDependent = true
         }
-    let sg = Sg.textsWithConfig cfg texts
-        //Sg.shapeWithBackground C4b.Red Border2d.None ~~shapes
+        
+
+    let path = 
+        let off = V2d(2,0)
+        Path.ofList [
+            PathSegment.arcSegment V2d.OI V2d.II V2d.IO
+            PathSegment.line V2d.IO V2d.OO 
+            PathSegment.line V2d.OO V2d.OI 
+
+
+            
+            PathSegment.line (off + V2d.OI) (off + V2d.IO)
+            PathSegment.line (off + V2d.IO) (off + V2d.OO)
+            PathSegment.line (off + V2d.OO) (off + V2d.OI)
+
+        ]
+    //let shapes =
+    //    ShapeList.ofList [
+    //        //ConcreteShape.ofPath V2d.Zero V2d.II C4b.Red path
+    //        ConcreteShape.fillArcPath C4b.White 0.05 [
+    //            V2d( Constant.Sqrt2Half, Constant.Sqrt2Half)
+    //            V2d(-Constant.Sqrt2Half, Constant.Sqrt2Half)
+    //            V2d( 0.0, 2.0 + Constant.Sqrt2Half)
+    //        ]
+    //    ]
+
+    let coord =
+        Sg.coordinateCross' 4.0
+            |> Sg.shader {
+                do! DefaultSurfaces.trafo
+                do! DefaultSurfaces.vertexColor
+            }
+
+    let bias = Mod.init (1.0 / float (1 <<< 22))
+
+    let shapes =
+        let dark = C4b(30uy, 30uy, 30uy, 255uy)
+        let blue = C4b(0uy, 122uy, 204uy, 255uy)
+
+        texts |> ASet.map (fun (trafo, text) ->
+            let shape = 
+                text |> Mod.map cfg.Layout |> Mod.map (fun shapes ->
+                    let bounds = shapes.bounds.EnlargedBy(V2d(0.05, 0.0))
+                    let rect = ConcreteShape.fillRoundedRectangle dark 0.05 bounds
+                    let rectb = ConcreteShape.roundedRectangle blue 0.05 0.075 (bounds.EnlargedBy 0.025)
+                    let shapes = ShapeList.prepend rect shapes
+                    ShapeList.prepend rectb shapes
+                )
+            trafo, shape
+        )
+
+    win.Keyboard.KeyDown(Keys.Add).Values.Add(fun () ->
+        transact (fun () -> bias.Value <- bias.Value * 2.0)
+        printfn "bias: %.10f" bias.Value
+    )
+    win.Keyboard.KeyDown(Keys.Subtract).Values.Add(fun () ->
+        transact (fun () -> bias.Value <- bias.Value / 2.0)
+        printfn "bias: %.10f" bias.Value
+    )
+
+
+    let sg =
+        Sg.shapes shapes
+            //|> Sg.transform (Trafo3d.FromOrthoNormalBasis(V3d.IOO, V3d.OOI, -V3d.OIO))
+            |> Sg.andAlso coord
+            |> Sg.uniform "DepthBias" bias
+        //let bounds = shapes.bounds.EnlargedBy(V2d(0.05, 0.0))
+        //let rect = ConcreteShape.fillRoundedRectangle C4b.White 0.1 bounds
+        ////let rectb = ConcreteShape.roundedRectangle C4b.Gray 0.05 0.125 (bounds.EnlargedBy 0.025)
+        ////let shapes = ShapeList.prepend rect shapes
+        //ShapeList.prepend rect shapes
+        //|> Mod.constant
+        //|> Sg.shape
+        //|> Sg.transform (Trafo3d.FromOrthoNormalBasis(V3d.IOO, V3d.OOI, -V3d.OIO))
+
+        //Sg.shapes shapes
+        //Sg.shapes (ASet.ofList [~~Trafo3d.Identity, ~~shapes])
+        ////Sg.shape ~~shapes //Sg.textsWithConfig cfg texts
         //    |> Sg.transform (Trafo3d.FromOrthoNormalBasis(V3d.IOO, V3d.OOI, -V3d.OIO))//Sg.texts font C4b.White texts
-    
+        //    |> Sg.andAlso coord
+            
+
     //let sg = Sg.markdown MarkdownConfig.light ~~"# bla\n## bla2\n* asd\n* agdgsdfh\n* dfhsdf\n\n\n-------\nai oaisnfasof asf ijasf ijasofi jasofi jasöoijf aosjf aosif aosifj aosuf "
 
 

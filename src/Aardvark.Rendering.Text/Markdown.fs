@@ -101,10 +101,11 @@ module Markdown =
             max         : V2d
             min         : V2d
 
-            shapes      : list<Shape>
-            offsets     : list<V2d>
-            scales      : list<float -> V2d>
-            colors      : list<C4b>
+            concrete    : list<float -> ConcreteShape>
+            //shapes      : list<Shape>
+            //offsets     : list<V2d>
+            //scales      : list<float -> V2d>
+            //colors      : list<C4b>
 
         }
 
@@ -122,10 +123,11 @@ module Markdown =
                 min = V2d(0.0, 0.0)
                 max = V2d(0.0, 0.0)
 
-                shapes = []
-                offsets = []
-                scales = []
-                colors = [] 
+                concrete = []
+                //shapes = []
+                //offsets = []
+                //scales = []
+                //colors = [] 
             }
 
     module Patterns = 
@@ -294,23 +296,28 @@ module Markdown =
 
             let emit (g : Shape) =
                 modifyState (fun (s : LayoutState) ->
+                    let c (w : float) = { offset = V2d(s.x, s.y); z = 0; scale = s.textState.scale; color = s.color; shape = g }
                     { s with
                         max = V2d(s.max.X, max (s.y + s.textState.scale.Y) s.max.Y)
-                        shapes = g::s.shapes
-                        offsets = V2d(s.x, s.y)::s.offsets
-                        scales = (fun _ -> s.textState.scale)::s.scales
-                        colors = s.color::s.colors
+
+                        concrete = c :: s.concrete
+                        //shapes = g::s.shapes
+                        //offsets = V2d(s.x, s.y)::s.offsets
+                        //scales = (fun _ -> s.textState.scale)::s.scales
+                        //colors = s.color::s.colors
                     }
                 )
 
             let emitFullWidth (g : Shape) =
                 modifyState (fun (s : LayoutState) ->
+                    let c (w : float) = { offset = V2d(s.x, s.y); z = 0; scale = V2d(w, s.textState.scale.Y); color = s.color; shape = g }
                     { s with
                         max = V2d(s.max.X, max (s.y + s.textState.scale.Y) s.max.Y)
-                        shapes = g::s.shapes
-                        offsets = V2d(s.x, s.y)::s.offsets
-                        scales = (fun w -> V2d(w, s.textState.scale.Y))::s.scales
-                        colors = s.color::s.colors
+                        concrete = c :: s.concrete
+                        //shapes = g::s.shapes
+                        //offsets = V2d(s.x, s.y)::s.offsets
+                        //scales = (fun w -> V2d(w, s.textState.scale.Y))::s.scales
+                        //colors = s.color::s.colors
                     }
                 )
 
@@ -453,14 +460,23 @@ module Markdown =
             let bounds = Box2d.FromPoints(s.min, s.max)
             let center = bounds.Center.X
             
+            let concrete =
+                s.concrete 
+                    |> List.map (fun f -> f bounds.SizeX) 
+                    |> List.map (fun shape ->
+                        { shape with offset = V2d(shape.offset.X - center, shape.offset.Y) }
+                    )
+
             {
                 ShapeList.bounds   = bounds
-                ShapeList.shapes   = s.shapes
-                ShapeList.offsets  = s.offsets |> List.map ( fun o -> V2d(o.X - center, o.Y) )
-                ShapeList.scales   = s.scales |> List.map (fun f -> f bounds.SizeX)
-                ShapeList.colors   = s.colors
+                ShapeList.concreteShapes = concrete
+                //ShapeList.shapes   = s.shapes
+                //ShapeList.offsets  = s.offsets |> List.map ( fun o -> V2d(o.X - center, o.Y) )
+                //ShapeList.scales   = s.scales |> List.map (fun f -> f bounds.SizeX)
+                //ShapeList.colors   = s.colors
                 ShapeList.renderTrafo = Trafo3d.Translation(center,0.0,0.0)
                 ShapeList.flipViewDependent = true
+                ShapeList.zRange = Range1i(0,0)
             }
 
 
