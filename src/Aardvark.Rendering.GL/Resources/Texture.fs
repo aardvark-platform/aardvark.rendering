@@ -541,18 +541,24 @@ module TextureCreationExtensions =
                 GL.Check "could not create texture"
 
                 let dim =
-                    match orig.Dimension, orig.Count with
-                        | TextureDimension.TextureCube, 1 -> 
-                            if slices.Min <> slices.Max then failwithf "cannot take multiple slices from CubeMap"
-                            TextureDimension.Texture2D
-                        | d,_ -> d
+                    match orig.Dimension with
+                        | TextureDimension.TextureCube -> 
+                            if isArray || slices.Min = slices.Max then 
+                                // address TextureCube as array or a single slice
+                                TextureDimension.Texture2D
+                            else
+                                if slices.Min <> 0 && slices.Max <> 5 then failwithf "cannot take multiple slices from CubeMap"
+                                // allow to address certain levels
+                                TextureDimension.TextureCube
+                        | d -> d
 
                 let levelCount = 1 + levels.Max - levels.Min
                 let sliceCount =
-                    if orig.IsArray && isArray then Some (1 + slices.Max - slices.Min)
+                    // create array if requested -> allows to create single views of array texture and an array view of a single texture
+                    if isArray then Some (1 + slices.Max - slices.Min) 
+                    else if orig.Dimension <> TextureDimension.TextureCube && slices.Min <> slices.Max then failwithf "cannot create multi-slice view as not array"
                     else None
-
-
+                    
                 let tex = Texture(x, handle, dim, levelCount, orig.Multisamples, orig.Size, sliceCount, orig.Format, 0L, true)
                 let target = TextureTarget.ofTexture tex
                   
@@ -562,7 +568,7 @@ module TextureCreationExtensions =
                     orig.Handle,
                     unbox (int orig.Format),
                     levels.Min, 1 + levels.Max - levels.Min,
-                    slices.Min, 1
+                    slices.Min, match sliceCount with | Some x -> x; | _ -> 1
                 )
                 GL.Check "could not create texture view"
 
@@ -570,7 +576,7 @@ module TextureCreationExtensions =
             )
 
         member x.CreateTextureView(orig : Texture, levels : Range1i, slices : Range1i) =
-            x.CreateTextureView(orig, levels, slices, true)
+            x.CreateTextureView(orig, levels, slices, orig.IsArray)
 
         member x.Delete(t : Texture) =
             using x.ResourceLock (fun _ ->
@@ -3086,6 +3092,12 @@ module private ImplicitConversionHate =
     let inline blit(ctx : Context, src : Texture, srcLevel : int, srcSlice : int, srcRegion : Box2i, dst : Texture, dstLevel : int, dstSlice : int, dstRegion : Box2i, linear : bool) =
         ctx.Blit(src, srcLevel, srcSlice, srcRegion, dst, dstLevel, dstSlice, dstRegion, linear)
 
+    let inline createTextureView(ctx : Context, texture : Texture, levels : Range1i, slices : Range1i, isArray : bool) =
+        ctx.CreateTextureView(texture, levels, slices, isArray)
+
+    let inline deleteTexture(ctx : Context, texture : Texture) =
+        ctx.Delete(texture)
+
 [<Extension; AbstractClass; Sealed>]
 type TextureExtensionsCSharp =
     [<Extension>]
@@ -3103,3 +3115,11 @@ type TextureExtensionsCSharp =
     [<Extension>]
     static member Blit(ctx : Context, src : Texture, srcLevel : int, srcSlice : int, srcRegion : Box2i, dst : Texture, dstLevel : int, dstSlice : int, dstRegion : Box2i, linear : bool) =
         ImplicitConversionHate.blit(ctx, src, srcLevel, srcSlice, srcRegion, dst, dstLevel, dstSlice, dstRegion, linear)
+
+    [<Extension>]
+    static member CreateTextureView(ctx : Context, texture : Texture, levels : Range1i, slices : Range1i, isArray : bool) =
+        ImplicitConversionHate.createTextureView(ctx, texture, levels, slices, isArray)
+
+    [<Extension>]
+    static member DeleteTextureView(ctx : Context, texture : Texture) =
+        ImplicitConversionHate.deleteTexture(ctx, texture)
