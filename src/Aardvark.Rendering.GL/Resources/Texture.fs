@@ -3095,8 +3095,6 @@ module private ImplicitConversionHate =
     let inline createTextureView(ctx : Context, texture : Texture, levels : Range1i, slices : Range1i, isArray : bool) =
         ctx.CreateTextureView(texture, levels, slices, isArray)
 
-    let inline deleteTexture(ctx : Context, texture : Texture) =
-        ctx.Delete(texture)
 
 [<Extension; AbstractClass; Sealed>]
 type TextureExtensionsCSharp =
@@ -3119,7 +3117,3 @@ type TextureExtensionsCSharp =
     [<Extension>]
     static member CreateTextureView(ctx : Context, texture : Texture, levels : Range1i, slices : Range1i, isArray : bool) =
         ImplicitConversionHate.createTextureView(ctx, texture, levels, slices, isArray)
-
-    [<Extension>]
-    static member DeleteTextureView(ctx : Context, texture : Texture) =
-        ImplicitConversionHate.deleteTexture(ctx, texture)
