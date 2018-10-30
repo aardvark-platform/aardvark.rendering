@@ -185,6 +185,7 @@ let main argv =
     // create an OpenGL/Vulkan application. Use the use keyword (using in C#) in order to
     // properly dipose resources on shutdown...
     use app = new OpenGlApplication()
+    //use app = new VulkanApplication()
     let win = app.CreateGameWindow(samples = 1)
 
     let initialView = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
@@ -320,26 +321,67 @@ let main argv =
 
         ]
 
+    let cnt = 100000000
+    let points =
+        let rand = System.Random()
+        Array.init cnt (fun _ -> V3f(rand.NextDouble(),rand.NextDouble(),rand.NextDouble()))
+    
+    let buffer = app.Runtime.PrepareBuffer(ArrayBuffer(points)) :> IBuffer
+
+    let drawCallsCnt = Mod.init 1
+
+    win.Keyboard.KeyDown(Keys.G).Values.Add ( fun _ ->
+        transact ( fun _ -> drawCallsCnt.Value <- drawCallsCnt.Value + 10000 )
+        Log.line "draw calls: %A" drawCallsCnt.Value
+    )
+
+    let final = 
+        drawCallsCnt 
+        |> Mod.map (fun drawCallsCnt ->
+            let pointsPerCall = cnt / drawCallsCnt
+            [| 
+                for c in 0 .. drawCallsCnt - 1 do
+                    let start = c * pointsPerCall
+                    printfn "start: %d, count: %d" start pointsPerCall
+                    let dci = 
+                        DrawCallInfo(BaseVertex = start, FirstIndex = start,
+                                        FaceVertexCount = pointsPerCall, FirstInstance = 0, InstanceCount = 1)
+                    yield Sg.render IndexedGeometryMode.PointList dci
+            |] |> Sg.ofArray
+        ) 
+        |> Sg.dynamic 
+        |> Sg.vertexBuffer DefaultSemantic.Positions (BufferView(Mod.constant buffer, typeof<V3f>))
+        |> Sg.shader {
+            do! DefaultSurfaces.trafo
+            do! DefaultSurfaces.constantColor C4f.Red
+            }
+        |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
+        |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
+ 
+    let rt = (app.Runtime :> IRuntime).CompileRender(win.FramebufferSignature,BackendConfiguration.Interpreted,final)
+
+
     let ssg =
         sg //Sg.ofList (List.init 10 ( fun i -> sg |> (Sg.translate (float i * 0.01) 0.0 0.0) ) )
 
-    let final =
-        ssg |> Sg.effect [
-                DefaultSurfaces.trafo |> toEffect                
-                DefaultSurfaces.vertexColor  |> toEffect 
-                ]
-            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo ) 
-            |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo )
-            |> Sg.uniform "PointSize" (Mod.constant 4.0)
-            |> Sg.uniform "ViewportSize" win.Sizes
-            |> Sg.compile app.Runtime win.FramebufferSignature
+    //let final =
+    //    ssg |> Sg.effect [
+    //            DefaultSurfaces.trafo |> toEffect                
+    //            DefaultSurfaces.vertexColor  |> toEffect 
+    //            ]
+    //        |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo ) 
+    //        |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo )
+    //        |> Sg.uniform "PointSize" (Mod.constant 4.0)
+    //        |> Sg.uniform "ViewportSize" win.Sizes
+    //        |> Sg.compile app.Runtime win.FramebufferSignature
 
-    win.RenderTask <- 
-        RenderTask.ofList [
-            RenderTask.custom (fun (rt,token,desc) -> 
-                System.Threading.Thread.Sleep(sleepTime)            
-            )
-            final
-        ]
+    win.RenderTask <- rt
+    //win.RenderTask <- 
+    //    RenderTask.ofList [
+    //        //RenderTask.custom (fun (rt,token,desc) -> 
+    //        //    System.Threading.Thread.Sleep(sleepTime)            
+    //        //)
+    //        final
+    //    ]
     win.Run()
     0
