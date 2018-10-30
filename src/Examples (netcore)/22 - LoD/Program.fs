@@ -184,11 +184,11 @@ let main argv =
 
     // create an OpenGL/Vulkan application. Use the use keyword (using in C#) in order to
     // properly dipose resources on shutdown...
-    use app = new OpenGlApplication()
-    //use app = new VulkanApplication()
+    //use app = new OpenGlApplication()
+    use app = new VulkanApplication()
     let win = app.CreateGameWindow(samples = 1)
 
-    let initialView = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
+    let initialView = CameraView.LookAt(V3d(2.0,2.0,-2.0), V3d.Zero, V3d.OOI)
     let frustum = 
         win.Sizes 
             |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
@@ -324,7 +324,7 @@ let main argv =
     let cnt = 100000000
     let points =
         let rand = System.Random()
-        Array.init cnt (fun _ -> V3f(rand.NextDouble(),rand.NextDouble(),rand.NextDouble()))
+        Array.init cnt (fun _ -> V3f(rand.NextDouble(),rand.NextDouble(),rand.NextDouble())*1000.0f)
     
     let buffer = app.Runtime.PrepareBuffer(ArrayBuffer(points)) :> IBuffer
 
@@ -358,7 +358,7 @@ let main argv =
         |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
         |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
  
-    let rt = (app.Runtime :> IRuntime).CompileRender(win.FramebufferSignature,BackendConfiguration.Interpreted,final)
+    let rt = (app.Runtime :> IRuntime).CompileRender(win.FramebufferSignature,BackendConfiguration.NativeOptimized,final)
 
 
     let ssg =
