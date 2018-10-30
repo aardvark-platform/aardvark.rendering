@@ -478,7 +478,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateTextureArray(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) : IBackendTexture =
             ctx.CreateTexture2DArray(size, count, levels, format, samples) :> _
 
-        member x.CreateTextureCube(size : V2i, format : TextureFormat, levels : int, samples : int) : IBackendTexture =
+        member x.CreateTextureCube(size : int, format : TextureFormat, levels : int, samples : int) : IBackendTexture =
             x.CreateTextureCube(size, format, levels, samples) :> _
 
         member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : IRenderbuffer =
@@ -833,7 +833,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         ctx.CreateTexture(size, dim, format, slices, levels, samples)
 
 
-    member x.CreateTextureCube(size : V2i, format : TextureFormat, levels : int, samples : int) : Texture =
+    member x.CreateTextureCube(size : int, format : TextureFormat, levels : int, samples : int) : Texture =
         ctx.CreateTextureCube(size, levels, format, samples)
 
     member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : Renderbuffer =

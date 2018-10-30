@@ -112,7 +112,7 @@ and ITextureRuntime =
 
     abstract member CreateTexture : size : V2i * format : TextureFormat * levels : int * samples : int -> IBackendTexture
     abstract member CreateTextureArray : size : V2i * format : TextureFormat * levels : int * samples : int * count : int -> IBackendTexture
-    abstract member CreateTextureCube : size : V2i * format : TextureFormat * levels : int * samples : int -> IBackendTexture
+    abstract member CreateTextureCube : size : int * format : TextureFormat * levels : int * samples : int -> IBackendTexture
 
 
 [<AutoOpen>]

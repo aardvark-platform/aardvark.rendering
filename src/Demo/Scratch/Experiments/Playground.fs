@@ -492,7 +492,7 @@ module Playground =
         let ctx = app.Runtime.Context
 
         let cube = ctx.CreateTexture(envCubePix)
-        let newCube = ctx.CreateTextureCube(cube.Size2D, 1, cube.Format, 1)
+        let newCube = ctx.CreateTextureCube(cube.Size2D.X, 1, cube.Format, 1)
 
         for f in 0..5 do
             ctx.Copy(cube, 0, f, V2i.Zero, newCube, 0, f, V2i.Zero, cube.Size2D)

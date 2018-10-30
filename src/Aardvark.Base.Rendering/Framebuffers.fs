@@ -15,7 +15,10 @@ type BackendTextureOutputView = { texture : IBackendTexture; level : int; slice 
         member x.texture = x.texture
         member x.level = x.level
         member x.slices = 
-            if x.slice < 0 then Range1i(0, x.texture.Count - 1)
+            if x.slice < 0 then
+                match x.texture.Dimension with
+                | TextureDimension.TextureCube -> Range1i(0, 5)
+                | _ -> Range1i(0, x.texture.Count - 1)
             else Range1i(x.slice, x.slice)
 
     interface IFramebufferOutput with
@@ -31,7 +34,10 @@ type BackendTextureOutputView = { texture : IBackendTexture; level : int; slice 
         member x.Levels = Range1i(x.level, x.level)
         member x.Level = x.level
         member x.Slices = 
-            if x.slice < 0 then Range1i(0, x.texture.Count - 1)
+            if x.slice < 0 then
+                match x.texture.Dimension with
+                    | TextureDimension.TextureCube -> Range1i(0, 5)
+                    | _ -> Range1i(0, x.texture.Count - 1)
             else Range1i(x.slice, x.slice)
         member x.Size =
             let s = x.texture.Size

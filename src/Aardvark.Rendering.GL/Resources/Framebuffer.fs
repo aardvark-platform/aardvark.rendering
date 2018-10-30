@@ -113,7 +113,7 @@ module FramebufferExtensions =
                     let level = r.level
 
                     if slices > 1 then
-                        if baseSlice <> 0 || slices <> o.Count then
+                        if baseSlice <> 0 || slices <> (if o.Dimension = TextureDimension.TextureCube then 6 * o.Count else o.Count) then // TODO: Is it possible to bind a cubemap array as texture layers?
                             failwith "sub-layers not supported atm."
   
                         GL.FramebufferTexture(FramebufferTarget.Framebuffer, attachment, o.Handle, level)
@@ -144,7 +144,7 @@ module FramebufferExtensions =
                     let level = r.Level
 
                     if slices > 1 then
-                        if baseSlice <> 0 || slices <> o.Count then
+                        if baseSlice <> 0 || slices <> (if o.Dimension = TextureDimension.TextureCube then 6 * o.Count else o.Count) then // TODO: Is it possible to bind a cubemap array as texture layers?
                             failwith "sub-layers not supported atm."
   
                         GL.FramebufferTexture(FramebufferTarget.Framebuffer, attachment, o.Handle, level)

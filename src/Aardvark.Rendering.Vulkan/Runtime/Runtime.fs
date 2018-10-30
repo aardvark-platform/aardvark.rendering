@@ -366,7 +366,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         }
         img :> IBackendTexture
 
-    member x.CreateTextureCube(size : V2i, format : TextureFormat, levels : int, samples : int) : IBackendTexture =
+    member x.CreateTextureCube(size : int, format : TextureFormat, levels : int, samples : int) : IBackendTexture =
         let isDepth =
             match format with
                 | TextureFormat.Depth24Stencil8 -> true
@@ -387,7 +387,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             if isDepth then VkImageUsageFlags.DepthStencilAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.SampledBit
             else VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.SampledBit
 
-        let img = device.CreateImage(V3i(size.X, size.Y, 1), levels, 6, samples, TextureDimension.TextureCube, format, usage) 
+        let img = device.CreateImage(V3i(size, size, 1), levels, 6, samples, TextureDimension.TextureCube, format, usage) 
         device.GraphicsFamily.run {
             do! Command.TransformLayout(img, layout)
         }
