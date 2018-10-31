@@ -6,14 +6,6 @@ open Aardvark.Application
 open Aardvark.SceneGraph.Semantics
 open Aardvark.Application.Slim
 
-let trafos (r : Box3d) =
-    [|
-        for x in -r.Min.X .. r.Max.X - 1.0 do
-            for y in -r.Min.Y .. r.Max.Y - 1.0 do
-                for z in -r.Min.Z .. r.Max.Z - 1.0 do
-                    yield M44f.Translation(float32 x,float32 y,float32 z) * M44f.Scale(0.3f)
-    |]
-
 module Shader =
     open FShade
 
@@ -172,7 +164,7 @@ let main argv =
             createInstanced app.Runtime win.FramebufferSignature config viewTrafo projTrafo geometry trafos
             createIndirect app.Runtime win.FramebufferSignature config viewTrafo projTrafo geometry trafos
             renderObjectBased app.Runtime win.FramebufferSignature config viewTrafo projTrafo geometry trafos
-            //renderObjectBased app.Runtime win.FramebufferSignature BackendConfiguration.UnmanagedOptimized viewTrafo projTrafo geometry trafos
+            renderObjectBased app.Runtime win.FramebufferSignature BackendConfiguration.UnmanagedOptimized viewTrafo projTrafo geometry trafos
         |]
 
     let mutable variant = 0
