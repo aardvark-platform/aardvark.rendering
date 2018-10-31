@@ -573,7 +573,7 @@ let newExample (name : string) (dir : string) =
 
     let slnPath = Path.Combine(dir, "..\\Aardvark.Rendering.sln")
     let sln = slnPath |> Solution.load
-    let examples = Solution.tryFindFolder "Examples" sln
+    let examples = Solution.tryFindFolder "Examples (netcore)" sln
 
     match Solution.tryFind sourceProjectName sln with
         | Some p -> 

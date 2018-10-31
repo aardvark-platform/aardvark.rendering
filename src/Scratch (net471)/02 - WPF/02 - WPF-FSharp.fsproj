@@ -13,8 +13,8 @@
     <TargetFrameworkVersion>v4.7.1</TargetFrameworkVersion>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <UseStandardResourceNames>true</UseStandardResourceNames>
-    <Name>00 - HelloWorld (net471)</Name>
-<OperatingSystem Condition="Exists('C:\Windows\')">WINDOWS</OperatingSystem>
+    <Name>02 - WPF-FSharp</Name>
+    <OperatingSystem Condition="Exists('C:\Windows\')">WINDOWS</OperatingSystem>
     <OperatingSystem Condition="Exists('/usr') AND !Exists('C:\Windows')">UNIX</OperatingSystem>
     <TargetFrameworkProfile />
   </PropertyGroup>
