@@ -2,9 +2,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.26730.10
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "22 - HardwareFeatures", "Examples (netCore)\22 - HardwareFeatures\22 - HardwareFeatures.fsproj", "{C4C8EEEB-0592-45C6-8CAA-D31AFAE556F8}"
-EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "23 - HardwareFeatures", "Examples (netcore)\23 - HardwareFeatures\23 - HardwareFeatures.fsproj", "{A34DAED5-22E7-430F-9E0C-A9ED1C914DC8}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "22 - HardwareFeatures", "Examples (netcore)\22 - HardwareFeatures\22 - HardwareFeatures.fsproj", "{C4C8EEEB-0592-45C6-8CAA-D31AFAE556F8}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "04 - ManyTexts", "Scratch (netcore)\04 - ManyTexts\04 - ManyTexts.fsproj", "{D74EC8E0-0901-4B4A-8CE5-4F8DCC542C56}"
 EndProject
