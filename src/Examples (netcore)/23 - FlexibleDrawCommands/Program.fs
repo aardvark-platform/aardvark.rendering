@@ -84,17 +84,15 @@ module Packing =
         { vertices = packedVertices.ToArray(); normals = packedNormals.ToArray(); 
           indices = packedIndices.ToArray(); ranges = ranges }
             
-
 [<EntryPoint>]
 let main argv = 
     
-    // first we need to initialize Aardvark's core components
     Ag.initialize()
     Aardvark.Init()
 
     let win =
         window {
-            backend Backend.Vulkan
+            backend Backend.GL
             display Display.Mono
             debug true
             samples 8
@@ -122,8 +120,8 @@ let main argv =
         [| 
             for r in packedGeometry.ranges do 
                 yield DrawCallInfo(FaceVertexCount = r.faceVertexCount,
-                                    BaseVertex = r.baseVertex, FirstIndex = r.firstIndex,
-                                    FirstInstance = 0, InstanceCount = trafos.Length)
+                                   BaseVertex = r.baseVertex, FirstIndex = r.firstIndex,
+                                   FirstInstance = 0, InstanceCount = trafos.Length)
         |]
 
 
@@ -131,8 +129,8 @@ let main argv =
 
     let objectColors = Mod.init [| C4f.Red; C4f.DarkGreen |]
 
-    let sw = System.Diagnostics.Stopwatch.StartNew()
     let perKindAnimation = 
+        let sw = System.Diagnostics.Stopwatch.StartNew()
         win.Time |> Mod.map (fun t -> 
             let t = sw.Elapsed.TotalMilliseconds
             [| M44f.RotationX(float32 (t * 0.001)); M44f.Identity |]
@@ -141,9 +139,9 @@ let main argv =
     let sg = 
         Sg.indirectDraw IndexedGeometryMode.TriangleList (Mod.constant indirectBuffer)
         |> Sg.vertexBuffer DefaultSemantic.Positions vertices
-        |> Sg.vertexBuffer DefaultSemantic.Normals normals
+        |> Sg.vertexBuffer DefaultSemantic.Normals   normals
         |> Sg.uniform "ObjectColors" objectColors
-        |> Sg.uniform "MeshTrafo" perKindAnimation
+        |> Sg.uniform "MeshTrafo"    perKindAnimation
         |> Sg.index' packedGeometry.indices
         |> Sg.instanceArray DefaultSemantic.InstanceTrafo (trafos |> Array.map (fun t -> t.Forward |> M44f.op_Explicit))
         |> Sg.shader {
