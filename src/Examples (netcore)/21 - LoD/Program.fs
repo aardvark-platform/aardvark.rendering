@@ -312,6 +312,43 @@ let main argv =
             |> Sg.uniform "PointSize" (Mod.constant 4.0)
             |> Sg.uniform "ViewportSize" win.Sizes
 
+    let cnt = 100000000
+    let points =
+        let rand = System.Random()
+        Array.init cnt (fun _ -> V3f(rand.NextDouble(),rand.NextDouble(),rand.NextDouble())*1000.0f)
+    
+    let buffer = win.Runtime.PrepareBuffer(ArrayBuffer(points)) :> IBuffer
+
+    let drawCallsCnt = Mod.init 1
+
+    win.Keyboard.KeyDown(Keys.G).Values.Add ( fun _ ->
+        transact ( fun _ -> drawCallsCnt.Value <- drawCallsCnt.Value + 10000 )
+        Log.line "draw calls: %A" drawCallsCnt.Value
+    )
+
+    let final = 
+        drawCallsCnt 
+        |> Mod.map (fun drawCallsCnt ->
+            let pointsPerCall = cnt / drawCallsCnt
+            [| 
+                for c in 0 .. drawCallsCnt - 1 do
+                    let start = c * pointsPerCall
+                    printfn "start: %d, count: %d" start pointsPerCall
+                    let dci = 
+                        DrawCallInfo(BaseVertex = start, FirstIndex = start,
+                                        FaceVertexCount = pointsPerCall, FirstInstance = 0, InstanceCount = 1)
+                    yield Sg.render IndexedGeometryMode.PointList dci
+            |] |> Sg.ofArray
+        ) 
+        |> Sg.dynamic 
+        |> Sg.vertexBuffer DefaultSemantic.Positions (BufferView(Mod.constant buffer, typeof<V3f>))
+        |> Sg.shader {
+            do! DefaultSurfaces.trafo
+            do! DefaultSurfaces.constantColor C4f.Red
+            }
+        |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
+        |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
+ 
 
     win.Scene <- final
     win.Run()
