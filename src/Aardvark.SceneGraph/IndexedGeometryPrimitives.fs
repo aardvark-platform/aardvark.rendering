@@ -238,8 +238,8 @@ module IndexedGeometryPrimitives =
                 Line3d(V3d.Zero, V3d.YAxis * size), C4b.Green
                 Line3d(V3d.Zero, V3d.ZAxis * size), C4b.Blue
             ] |> lines
-
-        let coordinateBox (size : float) =
+            
+        let solidCoordinateBox (size : float) =
             let s = size
 
             let ppp = V3d( s, s, s)
@@ -253,15 +253,87 @@ module IndexedGeometryPrimitives =
 
             let hi = 70
             let lo = 30
+            
+            let pos = 
+                [|
+                    pmp;ppp;ppm;pmm
+                    mmp;mmm;mpm;mpp
+                    pmp;pmm;mmm;mmp
+                    ppp;mpp;mpm;ppm
+                    pmp;ppp;mpp;mmp
+                    pmm;mmm;mpm;ppm
+                |]
 
-            let qf = quad' pmp ppp ppm pmm (C4b(hi,lo,lo,255))
-            let qb = quad' mmp mmm mpm mpp (C4b(lo,hi,hi,255))
-            let ql = quad' pmp pmm mmm mmp (C4b(lo,hi,lo,255))
-            let qr = quad' ppp mpp mpm ppm (C4b(hi,lo,hi,255))
-            let qu = quad' pmp ppp mpp mmp (C4b(lo,lo,hi,255))
-            let qd = quad' pmm mmm mpm ppm (C4b(hi,hi,lo,255))
+            let col =
+                [|
+                    (C4b(hi,lo,lo,255)); (C4b(hi,lo,lo,255)); (C4b(hi,lo,lo,255)); (C4b(hi,lo,lo,255))
+                    (C4b(lo,hi,hi,255)); (C4b(lo,hi,hi,255)); (C4b(lo,hi,hi,255)); (C4b(lo,hi,hi,255))
+                    (C4b(lo,hi,lo,255)); (C4b(lo,hi,lo,255)); (C4b(lo,hi,lo,255)); (C4b(lo,hi,lo,255))
+                    (C4b(hi,lo,hi,255)); (C4b(hi,lo,hi,255)); (C4b(hi,lo,hi,255)); (C4b(hi,lo,hi,255))
+                    (C4b(lo,lo,hi,255)); (C4b(lo,lo,hi,255)); (C4b(lo,lo,hi,255)); (C4b(lo,lo,hi,255))
+                    (C4b(hi,hi,lo,255)); (C4b(hi,hi,lo,255)); (C4b(hi,hi,lo,255)); (C4b(hi,hi,lo,255))
+                |]
 
-            [qf; qb; ql; qr; qu; qd]
+            let idx =
+                [|0; 1; 2; 0; 2; 3; 4; 5; 6; 4; 6; 7; 8; 9; 10; 8; 10; 11; 12; 13; 14; 12; 14; 15; 16; 17; 18; 16; 18; 19; 20; 21; 22; 20; 22; 23|]
+                
+            IndexedGeometry ( 
+                IndexedGeometryMode.TriangleList,
+                idx :> System.Array,
+                SymDict.ofList [
+                    DefaultSemantic.Positions, (pos |> Array.map V3f :> Array)
+                    DefaultSemantic.Colors, (col :> Array)
+                ],
+                SymDict.empty
+            )
+
+        let wireCoordinateBox (size : float) =
+            let s = size
+
+            let ppp = V3d( s, s, s)
+            let ppm = V3d( s, s,-s)
+            let pmp = V3d( s,-s, s)
+            let pmm = V3d( s,-s,-s)
+            let mpp = V3d(-s, s, s)
+            let mpm = V3d(-s, s,-s)
+            let mmp = V3d(-s,-s, s)
+            let mmm = V3d(-s,-s,-s)
+
+            let hi = 70
+            let lo = 30
+            
+            let pos = 
+                [|
+                    pmp;ppp;ppm;pmm
+                    mmp;mmm;mpm;mpp
+                    pmp;pmm;mmm;mmp
+                    ppp;mpp;mpm;ppm
+                    pmp;ppp;mpp;mmp
+                    pmm;mmm;mpm;ppm
+                |]
+
+            let col =
+                [|
+                    (C4b(hi,lo,lo,255)); (C4b(hi,lo,lo,255)); (C4b(hi,lo,lo,255)); (C4b(hi,lo,lo,255))
+                    (C4b(lo,hi,hi,255)); (C4b(lo,hi,hi,255)); (C4b(lo,hi,hi,255)); (C4b(lo,hi,hi,255))
+                    (C4b(lo,hi,lo,255)); (C4b(lo,hi,lo,255)); (C4b(lo,hi,lo,255)); (C4b(lo,hi,lo,255))
+                    (C4b(hi,lo,hi,255)); (C4b(hi,lo,hi,255)); (C4b(hi,lo,hi,255)); (C4b(hi,lo,hi,255))
+                    (C4b(lo,lo,hi,255)); (C4b(lo,lo,hi,255)); (C4b(lo,lo,hi,255)); (C4b(lo,lo,hi,255))
+                    (C4b(hi,hi,lo,255)); (C4b(hi,hi,lo,255)); (C4b(hi,hi,lo,255)); (C4b(hi,hi,lo,255))
+                |]
+
+            let idx =
+                [|0; 1; 1; 2; 2; 3; 3; 0; 4; 5; 5; 6; 6; 7; 7; 4; 8; 9; 9; 10; 10; 11; 11; 8; 12; 13; 13; 14; 14; 15; 15; 12; 16; 17; 17; 18; 18; 19; 19; 16; 20; 21; 21; 22; 22; 23; 23; 20|]
+                
+            IndexedGeometry ( 
+                IndexedGeometryMode.LineList,
+                idx :> System.Array,
+                SymDict.ofList [
+                    DefaultSemantic.Positions, (pos |> Array.map V3f :> Array)
+                    DefaultSemantic.Colors, (col :> Array)
+                ],
+                SymDict.empty
+            )
 
         let cameraFrustum (v : IMod<CameraView>) (p : IMod<Frustum>) (c : IMod<C4b>) =
             adaptive {
@@ -277,7 +349,9 @@ module IndexedGeometryPrimitives =
     open Stuff
 
     let coordinateCross = coordinateCross
-    let coordinateBox = coordinateBox
+    let solidCoordinateBox = solidCoordinateBox
+    let wireCoordinateBox = wireCoordinateBox
+    let coordinateBox f = [wireCoordinateBox f]
     let cameraFrustum = cameraFrustum
     let cameraFrustum' = cameraFrustum'
 
