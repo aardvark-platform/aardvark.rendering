@@ -214,43 +214,19 @@ let main argv =
             ]
         )
 
-    let scatterScene =
-        Sg.render IndexedGeometryMode.PointList drawCall
-        |> Sg.texture (Sym.ofString "VolumeTexture") texture
-        |> Sg.blendMode (Mod.constant blendMode)
-        |> Sg.depthTest (Mod.constant DepthTestMode.None)
-        |> Sg.uniform "Factor" (Mod.constant (int factor))
-        |> Sg.shader { 
-            do! Scatter.scatter
-            do! Scatter.fragment
-          }
-        |> Sg.compile win.Runtime signature
-    
-    Log.startTimed "computing scatter"
-    scatterScene.Run(RenderToken.Empty, OutputDescription.ofFramebuffer fbo )
-    Log.stop()
 
+    let size = V3d volume.Size / float volume.Size.NormMax
 
-    //let size = V3d volume.Size / float volume.Size.NormMax
+    let sg = 
+        Sg.box' C4b.Red (Box3d(-size, size))
+        |> Sg.uniform "VolumeTexture" texture
+        |> Sg.shader {
+            do! Shader.vertex
+            do! Shader.fragment
+            }
+        |> Sg.cullMode (Mod.constant CullMode.CounterClockwise)
 
-    //let sg = 
-    //    Sg.box' C4b.Red (Box3d(-size, size))
-    //    |> Sg.uniform "VolumeTexture" texture
-    //    |> Sg.shader {
-    //        do! Shader.vertex
-    //        do! Shader.fragment
-    //        }
-    //    |> Sg.cullMode (Mod.constant CullMode.CounterClockwise)
-
-
-    win.Scene <- 
-        Sg.fullScreenQuad |> Sg.diffuseTexture (Mod.constant (scatterTexture :> ITexture))
-        |> Sg.shader { 
-            do! DefaultSurfaces.diffuseTexture; 
-            do! Scatter.vis 
-         }
+    win.Scene <- sg
     win.Run()
-
-    
 
     0
