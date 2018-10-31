@@ -1,4 +1,13 @@
-﻿open Aardvark.Base
+﻿(*
+This example shows how to pack geometries into monolothic buffers and render them instanced using full flexiblity of
+DrawCallInfo. In OpenGL for example, the resulting programm will use glMultiDrawElementsIndirect.
+seealso: https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glMultiDrawElementsIndirect.xhtml
+
+This way we can objects packed into large vertex buffers at once while providing per object data (e.g. material infos)
+and efficient instancing.
+*)
+
+open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
@@ -16,6 +25,7 @@ module Shader =
         [<InstanceTrafo>]       trafo : M44d
     }
 
+    // same as DefaultSurfaces.trafo but assumes ortho model trafos and uses model trafo instead of proper normal matrix.
     let orthoInstanceTrafo (v : InstanceVertex) =
         vertex {
             return 
@@ -33,13 +43,16 @@ module Shader =
         [<Normal>]          n   : V3d
     }
 
+    // since we need special extension feature not provided by fshade we simply import the functionality (standard approach)
     [<GLSLIntrinsic("gl_DrawIDARB",requiredExtensions=[|"GL_ARB_shader_draw_parameters"|])>]
     let drawId () : int = raise <| FShade.Imperative.FShadeOnlyInShaderCodeException "drawId"
 
+    // define some typed accessors for uniforms/storage buffers.
     type UniformScope with
         member x.ObjectColors : V4d[] = x?StorageBuffer?ObjectColors
         member x.MeshTrafo : M44d[] = x?StorageBuffer?MeshTrafo
     
+    // fetches data from perMesh info
     let objectColor (v : Vertex) =
         vertex {
             let id = drawId()
@@ -51,6 +64,8 @@ module Shader =
                 }
         }
 
+// simple naive packing for IndexedGeometries 
+// (not complete, nor production quality, e.g. it ignores all attributes other than vertices and normals)
 module Packing = 
 
     open System.Collections.Generic
@@ -64,6 +79,7 @@ module Packing =
             ranges   : array<GeometryRange>
         }
 
+    // pack together data into larger arrays
     let pack (geometries : seq<IndexedGeometry>) =
         let packedVertices = List<V3f>()
         let packedNormals = List<V3f>()
@@ -98,16 +114,20 @@ let main argv =
             samples 8
         }
 
+    // create simple geometries
     let torus  = IndexedGeometryPrimitives.solidTorus (Torus3d(V3d.Zero,V3d.OOI,1.0,0.2)) C4b.Green 20 20
     let sphere = IndexedGeometryPrimitives.solidPhiThetaSphere (Sphere3d.FromRadius(0.1)) 20 C4b.White
 
+    // and pack them together
     let packedGeometry = 
         [ torus; sphere ] |> Packing.pack
 
-    
+
+    // manually create buffers for packed vertex data
     let vertices = BufferView(ArrayBuffer(packedGeometry.vertices) :> IBuffer |> Mod.constant,typeof<V3f>)
     let normals = BufferView(ArrayBuffer(packedGeometry.normals) :> IBuffer |> Mod.constant,typeof<V3f>)
 
+    // adjust this size for testing different problem sizes.
     let size = 7
     let trafos =
         [|
@@ -116,6 +136,8 @@ let main argv =
                     for z in -size .. size do
                         yield Trafo3d.Scale(0.3) * Trafo3d.Translation(float x, float y, float z)
         |]
+
+    // for each geometry range, we create an instanced draw call
     let drawCallInfos = 
         [| 
             for r in packedGeometry.ranges do 
@@ -124,11 +146,14 @@ let main argv =
                                    FirstInstance = 0, InstanceCount = trafos.Length)
         |]
 
-
+    // put draw call infos into buffer
     let indirectBuffer = IndirectBuffer(ArrayBuffer drawCallInfos, drawCallInfos.Length) :> IIndirectBuffer
 
+    // we use per mesh data here. each geometry range gets specific mesh info here.
     let objectColors = Mod.init [| C4f.Red; C4f.DarkGreen |]
 
+    // additionally to per mesh colors, we use special model trafo for each mesh type.
+    // this way we automatcially adjust trafo for all instances of the range.
     let perKindAnimation = 
         let sw = System.Diagnostics.Stopwatch.StartNew()
         win.Time |> Mod.map (fun t -> 
@@ -137,18 +162,22 @@ let main argv =
         )
 
     let sg = 
+        // standard scene graph construction for indirect buffer based rendering
         Sg.indirectDraw IndexedGeometryMode.TriangleList (Mod.constant indirectBuffer)
         |> Sg.vertexBuffer DefaultSemantic.Positions vertices
         |> Sg.vertexBuffer DefaultSemantic.Normals   normals
+        // attach storage buffers to uniform slots
         |> Sg.uniform "ObjectColors" objectColors
         |> Sg.uniform "MeshTrafo"    perKindAnimation
+        // not to forget the index buffer
         |> Sg.index' packedGeometry.indices
+        // and the instance array
         |> Sg.instanceArray DefaultSemantic.InstanceTrafo (trafos |> Array.map (fun t -> t.Forward |> M44f.op_Explicit))
         |> Sg.shader {
-            do! Shader.objectColor
-            do! Shader.orthoInstanceTrafo
-            do! DefaultSurfaces.trafo
-            do! DefaultSurfaces.simpleLighting
+            do! Shader.objectColor // adjusts per mesh data
+            do! Shader.orthoInstanceTrafo // apply instance trafo, take care of normals (since we did not provide normal matrices for the instances [which would be totally possible of course])
+            do! DefaultSurfaces.trafo     // proceed with standard trafo shaders (transform into projective space)
+            do! DefaultSurfaces.simpleLighting // apply simple lighting
         }
 
     win.Scene <- sg

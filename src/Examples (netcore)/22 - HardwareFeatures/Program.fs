@@ -1,4 +1,16 @@
-﻿open Aardvark.Base
+﻿(*
+
+This example shows various variants of rendering lots of objects ranging including:
+ * simple huge scene graph
+ * custom render objects generated in a flat manner
+ * instanced geometries
+ * indirect buffer based rendering
+
+The purpose is to show performance and startup cost tradeoffs. For real usage see <FlexibleDrawCommands>.
+ 
+*)
+
+open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
@@ -28,10 +40,38 @@ module Shader =
                 }
         }
 
+let createNaive (runtime : IRuntime) (signature : IFramebufferSignature) (backendConfiguration : BackendConfiguration) 
+                (viewTrafo : IMod<Trafo3d>) (projTrafo : IMod<Trafo3d>) 
+                (geometry : IndexedGeometry) (trafos : Trafo3d[]) =
+
+    let object = 
+        geometry |> Sg.ofIndexedGeometry
+
+    let objects = 
+        [| for t in trafos do 
+            yield Sg.trafo (Mod.constant t) object 
+        |] |> Sg.ofSeq
+  
+    let sg = 
+        objects
+            |> Sg.shader {
+                do! DefaultSurfaces.trafo
+                do! DefaultSurfaces.constantColor C4f.Magenta
+                do! DefaultSurfaces.simpleLighting
+            }
+            |> Sg.viewTrafo viewTrafo
+            |> Sg.projTrafo projTrafo
+
+    Log.startTimed "[naive] compile scene"
+    let r = runtime.CompileRender(signature, backendConfiguration, sg)
+    Log.stop()
+    r
+
 let createInstanced (runtime : IRuntime) (signature : IFramebufferSignature) (backendConfiguration : BackendConfiguration) 
                     (viewTrafo : IMod<Trafo3d>) (projTrafo : IMod<Trafo3d>) 
                     (geometry : IndexedGeometry) (trafos : Trafo3d[]) =
 
+    // here we use low level draw call construction. Sg.instanced would work as well of course.
     let call = 
         DrawCallInfo(
             FaceVertexCount = geometry.IndexedAttributes.[DefaultSemantic.Positions].Length, 
@@ -40,24 +80,34 @@ let createInstanced (runtime : IRuntime) (signature : IFramebufferSignature) (ba
             BaseVertex = 0
         )
   
-    Sg.render IndexedGeometryMode.TriangleList call
-        |> Sg.vertexArray DefaultSemantic.Positions geometry.IndexedAttributes.[DefaultSemantic.Positions]
-        |> Sg.vertexArray DefaultSemantic.Normals   geometry.IndexedAttributes.[DefaultSemantic.Normals]
-        |> Sg.instanceArray DefaultSemantic.InstanceTrafo (trafos |> Array.map (fun t -> t.Forward |> M44f.op_Explicit))
-        |> Sg.shader {
-            do! Shader.orthoInstanceTrafo
-            do! DefaultSurfaces.trafo
-            do! DefaultSurfaces.constantColor C4f.Green
-            do! DefaultSurfaces.simpleLighting
-        }
-        |> Sg.viewTrafo viewTrafo
-        |> Sg.projTrafo projTrafo
-        |> Sg.compile' runtime signature backendConfiguration
+    let sg = 
+        Sg.render IndexedGeometryMode.TriangleList call
+            // apply vertex attributes as usual
+            |> Sg.vertexArray DefaultSemantic.Positions geometry.IndexedAttributes.[DefaultSemantic.Positions]
+            |> Sg.vertexArray DefaultSemantic.Normals   geometry.IndexedAttributes.[DefaultSemantic.Normals]
+            // remember to use M44f's for your matrices
+            |> Sg.instanceArray DefaultSemantic.InstanceTrafo (trafos |> Array.map (fun t -> t.Forward |> M44f.op_Explicit))
+            |> Sg.shader {
+                do! Shader.orthoInstanceTrafo
+                do! DefaultSurfaces.trafo
+                do! DefaultSurfaces.constantColor C4f.Green
+                do! DefaultSurfaces.simpleLighting
+            }
+            |> Sg.viewTrafo viewTrafo
+            |> Sg.projTrafo projTrafo
+
+    Log.startTimed "[instanced] compile scene"
+    let r = runtime.CompileRender(signature, backendConfiguration, sg)
+    Log.stop()
+    r
+
 
 let createIndirect (runtime : IRuntime) (signature : IFramebufferSignature) (backendConfiguration : BackendConfiguration)  
                    (viewTrafo : IMod<Trafo3d>) (projTrafo : IMod<Trafo3d>) 
                    (geometry : IndexedGeometry) (trafos : Trafo3d[]) =
 
+    // for the sake of demonstration, we create an array of draw call infos which use firstInstance 
+    // variable to offset the instance buffer.
     let drawCallInfos =
         trafos 
         |> Array.mapi (fun i _ -> 
@@ -69,27 +119,35 @@ let createIndirect (runtime : IRuntime) (signature : IFramebufferSignature) (bac
                 )
            )
                   
-
+    // simply wrap the drawcall infos array into buffers
     let indirect = IndirectBuffer(ArrayBuffer drawCallInfos, drawCallInfos.Length) :> IIndirectBuffer
   
-    Sg.indirectDraw IndexedGeometryMode.TriangleList (Mod.constant indirect)
-        |> Sg.vertexArray DefaultSemantic.Positions geometry.IndexedAttributes.[DefaultSemantic.Positions]
-        |> Sg.vertexArray DefaultSemantic.Normals geometry.IndexedAttributes.[DefaultSemantic.Normals]
-        |> Sg.instanceArray DefaultSemantic.InstanceTrafo (trafos |> Array.map (fun t -> t.Forward |> M44f.op_Explicit))
-        |> Sg.shader {
-            do! Shader.orthoInstanceTrafo
-            do! DefaultSurfaces.trafo
-            do! DefaultSurfaces.constantColor C4f.Yellow
-            do! DefaultSurfaces.simpleLighting
-        }
-        |> Sg.viewTrafo viewTrafo
-        |> Sg.projTrafo projTrafo
-        |> Sg.compile' runtime signature backendConfiguration
+    let sg = 
+        Sg.indirectDraw IndexedGeometryMode.TriangleList (Mod.constant indirect)
+            |> Sg.vertexArray DefaultSemantic.Positions geometry.IndexedAttributes.[DefaultSemantic.Positions]
+            |> Sg.vertexArray DefaultSemantic.Normals geometry.IndexedAttributes.[DefaultSemantic.Normals]
+            // apply instance array as usual
+            |> Sg.instanceArray DefaultSemantic.InstanceTrafo (trafos |> Array.map (fun t -> t.Forward |> M44f.op_Explicit))
+            |> Sg.shader {
+                do! Shader.orthoInstanceTrafo
+                do! DefaultSurfaces.trafo
+                do! DefaultSurfaces.constantColor C4f.Yellow
+                do! DefaultSurfaces.simpleLighting
+            }
+            |> Sg.viewTrafo viewTrafo
+            |> Sg.projTrafo projTrafo
+        
+    Log.startTimed "[custom indirect buffer] compile scene"
+    let r = runtime.CompileRender(signature, backendConfiguration, sg)
+    Log.stop()
+    r
 
 let renderObjectBased (runtime : IRuntime) (signature : IFramebufferSignature) (backendConfiguration : BackendConfiguration) 
                       (viewTrafo : IMod<Trafo3d>) (projTrafo : IMod<Trafo3d>) 
                       (geometry : IndexedGeometry) (trafos : Trafo3d[])  =
 
+    // since it is painful to construct render objects from scratch we create a template render object which
+    // we later use to create instances
     let template =
         geometry
             |> Sg.ofIndexedGeometry
@@ -100,9 +158,12 @@ let renderObjectBased (runtime : IRuntime) (signature : IFramebufferSignature) (
 
             }
 
+    // extract the render object using the scene graph semantics
     let template =
         template.RenderObjects() |> ASet.toList |> List.head |> unbox<RenderObject>
 
+    // since we left the world of composable scene graphs we need to apply all typically automatically constructed
+    // uniform values by hand. 
     let cam = viewTrafo |> Mod.map (fun v -> v.Backward.TransformPosProj V3d.Zero)
 
     let uniforms (t : Trafo3d) =
@@ -114,6 +175,7 @@ let renderObjectBased (runtime : IRuntime) (signature : IFramebufferSignature) (
             "ProjTrafo", projTrafo :> IMod
         ]
 
+    // next instantiate the objects (using copy)
     let renderObjects =
         trafos |> Array.map (fun trafo -> 
             { template with
@@ -122,7 +184,10 @@ let renderObjectBased (runtime : IRuntime) (signature : IFramebufferSignature) (
             } :> IRenderObject
         )
 
-    runtime.CompileRender(signature, backendConfiguration, ASet.ofArray renderObjects)
+    Log.startTimed "[custom render objects] compile scene"
+    let r = runtime.CompileRender(signature, backendConfiguration, ASet.ofArray renderObjects)
+    Log.stop()
+    r
 
 
 
@@ -133,9 +198,15 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
-    use app = new VulkanApplication()
-    //use app = new OpenGlApplication()
+    let useVulkan = true
+    // uncomment/comment to switch between the backends
+    //use app = new VulkanApplication() 
+    use app = new OpenGlApplication()
+
+    // create a game window (better for measuring fps)
     let win = app.CreateGameWindow(samples = 1)
+
+    // disable incremental rendering
     win.RenderAsFastAsPossible <- true
 
     let initialView = CameraView.LookAt(V3d(10.0,10.0,10.0), V3d.Zero, V3d.OOI)
@@ -144,7 +215,8 @@ let main argv =
 
     let cameraView = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
 
-    let size = 22
+    // adjust this value for different test sizes
+    let size = 13
     let trafos =
         [|
             for x in -size .. size do
@@ -153,9 +225,9 @@ let main argv =
                         yield Trafo3d.Scale(0.3) * Trafo3d.Translation(float x, float y, float z)
         |]
 
-
+    // create render tasks for all previously mentioned variants
     let config = BackendConfiguration.Default
-    let geometry = Primitives.unitBox //IndexedGeometryPrimitives.solidPhiThetaSphere (Sphere3d.FromRadius(1.0)) 10 C4b.Green
+    let geometry = Primitives.unitBox 
     let viewTrafo = cameraView |> Mod.map CameraView.viewTrafo
     let projTrafo = frustum |> Mod.map Frustum.projTrafo
 
@@ -165,8 +237,11 @@ let main argv =
             createIndirect app.Runtime win.FramebufferSignature config viewTrafo projTrafo geometry trafos
             renderObjectBased app.Runtime win.FramebufferSignature config viewTrafo projTrafo geometry trafos
             renderObjectBased app.Runtime win.FramebufferSignature BackendConfiguration.UnmanagedOptimized viewTrafo projTrafo geometry trafos
+            // naive sg is slow for such big scenes:
+            //createNaive app.Runtime win.FramebufferSignature BackendConfiguration.NativeOptimized viewTrafo projTrafo geometry trafos
         |]
 
+    // use this mutable to switch between render task variants.
     let mutable variant = 0
 
     win.Keyboard.KeyDown(Keys.V).Values.Add(fun _ -> 
