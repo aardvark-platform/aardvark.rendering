@@ -2,6 +2,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.26730.10
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "05 - ConjugateGradient", "Scratch (netcore)\05 - ConjugateGradient\05 - ConjugateGradient.fsproj", "{08B6A305-2871-4C31-928B-DEC830A960DD}"
+EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "23 - FlexibleDrawCommands", "Examples (netcore)\23 - FlexibleDrawCommands\23 - FlexibleDrawCommands.fsproj", "{4EADF9F3-B0D1-48D4-84CC-08DD3BCFC75B}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "22 - HardwareFeatures", "Examples (netcore)\22 - HardwareFeatures\22 - HardwareFeatures.fsproj", "{C4C8EEEB-0592-45C6-8CAA-D31AFAE556F8}"
@@ -156,6 +158,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{08B6A305-2871-4C31-928B-DEC830A960DD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{08B6A305-2871-4C31-928B-DEC830A960DD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{08B6A305-2871-4C31-928B-DEC830A960DD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{08B6A305-2871-4C31-928B-DEC830A960DD}.Release|Any CPU.Build.0 = Release|Any CPU
 		{4EADF9F3-B0D1-48D4-84CC-08DD3BCFC75B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{4EADF9F3-B0D1-48D4-84CC-08DD3BCFC75B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4EADF9F3-B0D1-48D4-84CC-08DD3BCFC75B}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -397,6 +403,7 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{08B6A305-2871-4C31-928B-DEC830A960DD} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{4EADF9F3-B0D1-48D4-84CC-08DD3BCFC75B} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{C4C8EEEB-0592-45C6-8CAA-D31AFAE556F8} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{D74EC8E0-0901-4B4A-8CE5-4F8DCC542C56} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}

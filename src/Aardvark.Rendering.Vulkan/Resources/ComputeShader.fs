@@ -1253,7 +1253,18 @@ module ComputeShader =
                                     let old = references.GetOrCreate(texName, fun _ -> [])
                                     references.[texName] <- reference :: old
                                 | _ ->
-                                    ()
+                                    let sampler =
+                                        let state = SamplerStateDescription()
+                                        state.AddressU <- WrapMode.Clamp
+                                        state.AddressV <- WrapMode.Clamp
+                                        state.Filter <- TextureFilter.MinMagLinear
+                                        device.CreateSampler state
+
+
+                                    let reference = SampledImageRef(si, bi, i, img.samplerType, sampler)
+                                    let old = references.GetOrCreate(name, fun _ -> [])
+                                    references.[name] <- reference :: old
+
                         imageArrays <- MapExt.add (si, bi) images imageArrays
                         //descriptors.[bi] <- Descriptor.CombinedImageSampler(bi, images)
 
