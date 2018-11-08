@@ -228,23 +228,61 @@ type Polynomial<'p, 'c> (coeff : hmap<hmap<string * 'p, int>, 'c>) =
 
         Polynomial(coeff)
 
-    member x.RenameMonotonic(action : 'p -> 'p) =
+    member x.Substitute(substitution : string -> 'p -> Option<Polynomial<'p, 'c>>) =
+        coeff |> HMap.toSeq |> Seq.fold (fun p (k,v) ->
+            let coeff =
+                k |> HMap.toSeq |> Seq.fold (fun p ((n,i),e) ->
+                    let s = 
+                        match substitution n i with
+                            | Some pp -> pp ** e
+                            | None -> Polynomial.Parameter(n,i) ** e
+                    p * s
+                ) Polynomial<'p, 'c>.One
+
+            p + Polynomial.Constant v * coeff
+        ) Polynomial<'p, 'c>.Zero
+
+    member x.Rename(action : 'p -> 'p) =
         let mutable res = HMap.empty
 
         for (m,f) in coeff do
             let mutable m1 = HMap.empty
             for ((name,idx),e) in HMap.toSeq m do
                 let k = (name, action idx)
-                m1 <- HMap.add k e m1
-
-            res <- HMap.add m1 f res
+                let update v =
+                    match v with
+                        | None -> Some e
+                        | Some o -> Some (o + e)
+                        
+                m1 <- HMap.alter k update m1
+                
+            let update v =
+                match v with
+                    | None -> Some f
+                    | Some o -> Some (num.add o f)
+                        
+            res <- HMap.alter m1 update res
         Polynomial res
-    member x.WithoutConstant(name : string) =
+
+    member x.ConstantPart(variables : Set<string>) =
         let res = 
             coeff |> HMap.filter (fun m f ->
-                m |> Seq.exists (fun ((n,_),_) -> n = name)
+                m |> Seq.forall (fun ((n,_),_) -> not (Set.contains n variables))
             )
         Polynomial res
+        
+    member x.ConstantPart(name : string) =
+        x.ConstantPart(Set.singleton name)
+
+    member x.WithoutConstant(variables : Set<string>) =
+        let res = 
+            coeff |> HMap.filter (fun m f ->
+                m |> Seq.exists (fun ((n,_),_) -> Set.contains n variables)
+            )
+        Polynomial res
+
+    member x.WithoutConstant(name : string) =
+        x.WithoutConstant(Set.singleton name)
 
     member x.FreeParameters =
         let mutable res = HMap.empty
