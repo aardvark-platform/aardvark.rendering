@@ -344,7 +344,7 @@ type private GLCompute(ctx : Context) =
                 GL.MemoryBarrier(MemoryBarrierFlags.ShaderImageAccessBarrierBit ||| MemoryBarrierFlags.ShaderStorageBarrierBit ||| MemoryBarrierFlags.TextureFetchBarrierBit ||| MemoryBarrierFlags.TextureUpdateBarrierBit ||| MemoryBarrierFlags.AllBarrierBits)
                 GL.Sync()
                 GL.Check()
-            | ComputeCommand.TransformLayoutCmd _ ->
+            | ComputeCommand.TransformLayoutCmd _ | ComputeCommand.TransformSubLayoutCmd _ ->
                 GL.MemoryBarrier(MemoryBarrierFlags.ShaderImageAccessBarrierBit ||| MemoryBarrierFlags.ShaderStorageBarrierBit ||| MemoryBarrierFlags.TextureFetchBarrierBit ||| MemoryBarrierFlags.TextureUpdateBarrierBit ||| MemoryBarrierFlags.BufferUpdateBarrierBit ||| MemoryBarrierFlags.ClientMappedBufferBarrierBit ||| MemoryBarrierFlags.ShaderStorageBarrierBit ||| MemoryBarrierFlags.AllBarrierBits)
                 GL.Sync()
                 GL.Check()

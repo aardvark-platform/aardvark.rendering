@@ -85,6 +85,7 @@ and [<RequireQualifiedAccess>]
     | SyncBufferCmd of buffer : IBackendBuffer * src : ResourceAccess * dst : ResourceAccess
     | SyncImageCmd of image : IBackendTexture * src : ResourceAccess * dst : ResourceAccess
     | TransformLayoutCmd of tex : IBackendTexture * layout : TextureLayout
+    | TransformSubLayoutCmd of tex : ITextureRange * srcLayout : TextureLayout * dstLayout : TextureLayout
     | ExecuteCmd of ComputeProgram<unit>
 
     | CopyImageCmd of src : IFramebufferOutput * srcOffset : V3i * dst : IFramebufferOutput * dstOffset : V3i * size : V3i
@@ -111,6 +112,9 @@ and [<RequireQualifiedAccess>]
 
     static member TransformLayout(tex : IBackendTexture, layout : TextureLayout) =
         ComputeCommand.TransformLayoutCmd(tex, layout)
+            
+    static member TransformLayout(tex : ITextureRange, srcLayout : TextureLayout, dstLayout : TextureLayout) =
+        ComputeCommand.TransformSubLayoutCmd(tex, srcLayout, dstLayout)
             
     static member Dispatch(groups : V3i) =
         ComputeCommand.DispatchCmd groups

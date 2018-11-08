@@ -806,7 +806,7 @@ module Resources =
                                     arr |> Array.map (fun o ->
                                         match o with
                                             | Some(s,i) ->
-                                                Some(s.Update(token).handle, i.Update(token).handle)
+                                                Some(VkImageLayout.ShaderReadOnlyOptimal, s.Update(token).handle, i.Update(token).handle)
                                             | None ->
                                                 None
                                     )

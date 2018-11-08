@@ -61,7 +61,7 @@ type BindingReference =
     | StorageImageRef of set : int * binding : int * info : FShade.GLSL.GLSLImageType
 
 [<StructuredFormatDisplay("{AsString}")>]
-type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : Map<string, list<BindingReference>>, imageArrays : MapExt<int * int, Option<ImageView * Sampler>[]>, buffers : List<UniformBuffer>) =
+type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : Map<string, list<BindingReference>>, imageArrays : MapExt<int * int, Option<VkImageLayout * ImageView * Sampler>[]>, buffers : List<UniformBuffer>) =
     
     
     static let rec prettyName (t : FShade.GLSL.GLSLType) =
@@ -173,14 +173,14 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
                             | :? ITexture as tex ->
                                 let image = device.CreateImage tex
                                 let view = device.CreateInputImageView(image, info, VkComponentMapping.Identity)
-                                content.[index] <- Some (view, sampler)
+                                content.[index] <- Some (VkImageLayout.General, view, sampler)
                                 Some { new IDisposable with member x.Dispose() = device.Delete image; device.Delete view }
 
                             | :? ITextureRange as r ->
-                                let image = r.Texture |> unbox<Image>
-                                let view = device.CreateInputImageView(image, info, VkComponentMapping.Identity)
-                                content.[index] <- Some (view, sampler)
-                                Some { new IDisposable with member x.Dispose() = device.Delete image; device.Delete view }
+                                let image = unbox<Image> r.Texture
+                                let view = device.CreateInputImageView(image, info, r.Levels, r.Slices, VkComponentMapping.Identity)
+                                content.[index] <- Some (VkImageLayout.General, view, sampler)
+                                Some { new IDisposable with member x.Dispose() = device.Delete view }
 
                             | _ -> 
                                 failf "invalid storage image argument: %A" value
@@ -571,6 +571,71 @@ module ``Compute Commands`` =
                         [||],
                         [| barrier |]    
                     )
+                    
+                member x.TransformLayout(range : ImageSubresourceRange, source : VkImageLayout, target : VkImageLayout) =
+
+                    let src =
+                        if source = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
+                        elif source = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
+                        elif source = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
+                        elif source = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
+                        elif source = VkImageLayout.Preinitialized then VkAccessFlags.HostWriteBit
+                        elif source = VkImageLayout.TransferSrcOptimal then VkAccessFlags.TransferReadBit
+                        elif source = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit // ||| VkAccessFlags.InputAttachmentReadBit
+                        else VkAccessFlags.None
+
+                    let dst =
+                        if target = VkImageLayout.TransferSrcOptimal then VkAccessFlags.TransferReadBit
+                        elif target = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
+                        elif target = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
+                        elif target = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
+                        elif target = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit // ||| VkAccessFlags.InputAttachmentReadBit
+                        elif target = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
+                        elif target = VkImageLayout.General then VkAccessFlags.None
+                        else VkAccessFlags.None
+
+                    let srcMask =
+                        if source = VkImageLayout.ColorAttachmentOptimal then VkPipelineStageFlags.ColorAttachmentOutputBit
+                        elif source = VkImageLayout.DepthStencilAttachmentOptimal then VkPipelineStageFlags.LateFragmentTestsBit
+                        elif source = VkImageLayout.TransferDstOptimal then VkPipelineStageFlags.TransferBit
+                        elif source = VkImageLayout.PresentSrcKhr then VkPipelineStageFlags.TransferBit
+                        elif source = VkImageLayout.Preinitialized then VkPipelineStageFlags.HostBit
+                        elif source = VkImageLayout.TransferSrcOptimal then VkPipelineStageFlags.TransferBit
+                        elif source = VkImageLayout.ShaderReadOnlyOptimal then VkPipelineStageFlags.ComputeShaderBit
+                        elif source = VkImageLayout.Undefined then VkPipelineStageFlags.HostBit // VK_PIPELINE_STAGE_FLAGS_HOST_BIT
+                        elif source = VkImageLayout.General then VkPipelineStageFlags.HostBit
+                        else VkPipelineStageFlags.None
+
+                    let dstMask =
+                        if target = VkImageLayout.TransferSrcOptimal then VkPipelineStageFlags.TransferBit
+                        elif target = VkImageLayout.TransferDstOptimal then VkPipelineStageFlags.TransferBit
+                        elif target = VkImageLayout.ColorAttachmentOptimal then VkPipelineStageFlags.ColorAttachmentOutputBit
+                        elif target = VkImageLayout.DepthStencilAttachmentOptimal then VkPipelineStageFlags.EarlyFragmentTestsBit
+                        elif target = VkImageLayout.ShaderReadOnlyOptimal then VkPipelineStageFlags.ComputeShaderBit
+                        elif target = VkImageLayout.PresentSrcKhr then VkPipelineStageFlags.TransferBit
+                        elif target = VkImageLayout.General then VkPipelineStageFlags.HostBit
+                        else VkPipelineStageFlags.None
+
+                        
+                    let barrier =
+                        VkImageMemoryBarrier(
+                            VkStructureType.ImageMemoryBarrier, 0n, 
+                            src,
+                            dst,
+                            source,
+                            target,
+                            VK_QUEUE_FAMILY_IGNORED,
+                            VK_QUEUE_FAMILY_IGNORED,
+                            range.Image.Handle,
+                            range.VkImageSubresourceRange
+                        )
+                    x.PipelineBarrier(
+                        srcMask,
+                        dstMask,
+                        [||],
+                        [||],
+                        [| barrier |]    
+                    )
 
                 member x.Sync(b : Buffer, src : VkAccessFlags, dst : VkAccessFlags) =
 
@@ -835,6 +900,14 @@ module ``Compute Commands`` =
                     let layout = TextureLayout.toImageLayout layout
                     Command.TransformLayout(tex, layout)
 
+                | ComputeCommand.TransformSubLayoutCmd(range, srcLayout, dstLayout) ->
+                    let tex = unbox<Image> range.Texture
+                    let srcLayout = TextureLayout.toImageLayout srcLayout
+                    let dstLayout = TextureLayout.toImageLayout dstLayout
+                    let res = tex.[ImageAspect.ofTextureAspect range.Aspect, range.Levels.Min .. range.Levels.Max, range.Slices.Min .. range.Slices.Max]
+                    Command.TransformLayout(res, srcLayout, dstLayout)
+
+
                 | ComputeCommand.SyncBufferCmd(b, src, dst) ->
                     Command.Sync(unbox b, accessFlags src, accessFlags dst)
 
@@ -923,6 +996,13 @@ module ``Compute Commands`` =
                         if oldLayout <> newLayout then
                             stream.TransformLayout(tex, oldLayout, newLayout) |> ignore
             
+                    | ComputeCommand.TransformSubLayoutCmd(range, srcLayout, dstLayout) ->
+                        let tex = unbox<Image> range.Texture
+                        let srcLayout = TextureLayout.toImageLayout srcLayout
+                        let dstLayout = TextureLayout.toImageLayout dstLayout
+                        let res = tex.[ImageAspect.ofTextureAspect range.Aspect, range.Levels.Min .. range.Levels.Max, range.Slices.Min .. range.Slices.Max]
+                        stream.TransformLayout(res, srcLayout, dstLayout) |> ignore
+
                     | ComputeCommand.SyncBufferCmd(b, src, dst) ->
                         stream.Sync(unbox b, accessFlags src, accessFlags dst) |> ignore
                         
@@ -1213,7 +1293,7 @@ module ComputeShader =
         let sets = Array.zeroCreate setLayouts.Length
 
         let buffers = List<UniformBuffer>()
-        let mutable imageArrays : MapExt<int * int, Option<ImageView * Sampler>[]> = MapExt.empty
+        let mutable imageArrays : MapExt<int * int, Option<VkImageLayout * ImageView * Sampler>[]> = MapExt.empty
 
         for si in 0 .. setLayouts.Length - 1 do
             let setLayout = setLayouts.[si]
@@ -1245,7 +1325,7 @@ module ComputeShader =
 
                     | SampledImageBinding img ->
                         let name = img.samplerName
-                        let images : Option<ImageView * Sampler>[] = Array.zeroCreate img.samplerCount 
+                        let images : Option<VkImageLayout * ImageView * Sampler>[] = Array.zeroCreate img.samplerCount 
                         for i in 0 .. img.samplerCount - 1 do
                             match Map.tryFind (name, i) shader.Samplers, Map.tryFind (name, i) shader.TextureNames with
                                 | Some sampler, Some texName ->
@@ -1257,7 +1337,7 @@ module ComputeShader =
                                         let state = SamplerStateDescription()
                                         state.AddressU <- WrapMode.Clamp
                                         state.AddressV <- WrapMode.Clamp
-                                        state.Filter <- TextureFilter.MinMagLinear
+                                        state.Filter <- TextureFilter.MinMagLinearMipPoint
                                         device.CreateSampler state
 
 
@@ -1280,7 +1360,6 @@ module ComputeShader =
                     | Other -> ()
 
             set.Update(CSharpList.toArray descriptors)
-
             sets.[si] <- set
 
         new InputBinding(shader, sets, Dict.toMap references, imageArrays, buffers)
