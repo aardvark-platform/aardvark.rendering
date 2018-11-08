@@ -7,6 +7,7 @@ open Microsoft.FSharp.Quotations
 open ConjugateGradient
 open Aardvark.Rendering.Vulkan
 open Aardvark.Application.Slim
+open System
 
 
 module ConjugateGradientShaders =
@@ -69,22 +70,23 @@ type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Forma
     let rreal = ReflectedReal.instance<'v>
     
     let tools = new TensorTools<'v>(runtime)
-
+    
     let epoly = Polynomial.toReflectedCall Polynomial.Read.image residual
     let upoly = Polynomial.parameters residual |> HMap.toList |> List.map fst
 
     let poly' = 
-        let coords = residual.FreeParameters.["x"]
-        let polys' = 
-            coords |> Seq.map (fun c -> 
-                let newPoly = residual.RenameMonotonic(fun i -> i - c).Derivative("x", V2i.Zero)
+        residual.Derivative("x", V2i.Zero)
+        //let coords = residual.FreeParameters.["x"]
+        //let polys' = 
+        //    coords |> Seq.map (fun c -> 
+        //        let newPoly = residual.Rename(fun i -> i - c).Derivative("x", V2i.Zero)
             
-                if c = V2i.Zero then newPoly
-                else newPoly.WithoutConstant("x")
-            ) |> Seq.sum
+        //        if c = V2i.Zero then newPoly
+        //        else newPoly.WithoutConstant("x")
+        //    ) |> Seq.sum
 
-        printfn "%A" polys'
-        polys'
+        //printfn "%A" polys'
+        //polys'
 
     let epoly' = Polynomial.toReflectedCall Polynomial.Read.image poly'
     let upoly' = Polynomial.parameters poly' |> HMap.toList |> List.map fst
@@ -375,7 +377,29 @@ let inline printMat (name : string) (m : IMatrix< ^a >) =
 
 [<EntryPoint>]
 let main argv = 
+    //let test = 0.25 * ((-x<float>.[-1] + 2.0 * x<float>.[0] - x<float>.[1] - 20.0) ** 2)
     
+
+
+
+    //let a = test.WithoutConstant("x")
+    //let b = -test.ConstantPart("x")
+    
+    //printfn "%A = 0" test
+    //printfn "%A = %A" a b
+    //printfn "%A = %A" (a.Derivative("x", 0)) (b.Derivative("x", 0))
+    //printfn "%A = %A" (a.Derivative("x", 1)) (b.Derivative("x", 1))
+
+    //let final = 
+    //    //let test = test.Derivative("x", 0)
+    //    let coords = test.FreeParameters.["x"]
+    //    let s = coords |> Seq.sumBy (fun c -> test.Rename(fun i -> i - c))
+    //    s.Derivative("x", 0)
+    //printfn "%A" final
+    
+    //Environment.Exit 0
+
+
     use app = new HeadlessVulkanApplication()
     //app.Runtime.ShaderCachePath <- None
     let runtime = app.Runtime :> IRuntime
@@ -388,17 +412,31 @@ let main argv =
     let poly = 0.125f * (4.0f * x<float32>.[0,0] - x.[-1,0] - x.[1,0] - x.[0,-1] - x.[0,1] - div.[0,0]) ** 2 + weight.[0,0] * (x<float32>.[0,0] - value.[0,0]) ** 2
     let solver = ConjugateGradientSolver2d<FShade.Formats.r32f, float32>(runtime, poly)
 
-    let x = PixImage<float32>(Col.Format.Gray, V2i.II * 16)
-    x.GetChannel(Col.Channel.Gray).SetByCoord (fun (c : V2l) -> if c = V2l(8,8) then 10.0f else 0.0f) |> ignore
+    let size = V2i(7,7)
+    let edgeSize = 1L
+    let isXEdge (v : V2l) = v.X < edgeSize || v.X >= int64 size.X - edgeSize
+    let isYEdge (v : V2l) = v.Y < edgeSize  || v.Y >= int64 size.Y - edgeSize
+    let isCorner (v : V2l) = isXEdge v && isYEdge v
+    let isEdge (v : V2l) = isXEdge v || isYEdge v
+
+    let x = PixImage<float32>(Col.Format.Gray, size)
+    x.GetChannel(Col.Channel.Gray).SetByCoord (fun (c : V2l) -> 0.0f) |> ignore
     
-    let div = PixImage<float32>(Col.Format.Gray, V2i.II * 16)
-    div.GetChannel(Col.Channel.Gray).SetByCoord (fun (c : V2l) -> if c = V2l(8,8) then 10.0f else 0.0f) |> ignore
+    let value = PixImage<float32>(Col.Format.Gray, size)
+    value.GetChannel(Col.Channel.Gray).SetByCoord (fun (c : V2l) -> 0.0f) |> ignore
     
-    let value = PixImage<float32>(Col.Format.Gray, V2i.II * 16)
-    value.GetChannel(Col.Channel.Gray).SetByCoord (fun (c : V2l) -> if c = V2l(8,8) then 10.0f else 0.0f) |> ignore
+    let div = PixImage<float32>(Col.Format.Gray, size)
+    div.GetChannel(Col.Channel.Gray).SetByCoord (fun (c : V2l) -> 
+        if isEdge c then 0.0f 
+        else 4.0f
+    ) |> ignore
     
-    let weight = PixImage<float32>(Col.Format.Gray, V2i.II * 16)
-    weight.GetChannel(Col.Channel.Gray).SetByCoord (fun (c : V2l) -> if c = V2l(8,8) || c.X = 0L || c.Y = 0L || c.X = 15L || c.Y = 15L then 1000.0f else 0.0f) |> ignore
+    let weight = PixImage<float32>(Col.Format.Gray, size)
+    weight.GetChannel(0L).SetByCoord (fun (c : V2l) -> 
+        if isCorner c then 1000.0f 
+        elif isEdge c then 50.0f 
+        else 0.0f
+    ) |> ignore
 
     let inputs =
         Map.ofList [
@@ -409,13 +447,20 @@ let main argv =
         ]
 
     let mutable x = x :> PixImage
-    for i in 0 .. 5 do
-        x <- solver.Solve(inputs, x, 1E-3, 20, 20, 10000000)
+    for i in 0 .. 10 do
+        x <- solver.Solve(inputs, x, 1E-3, 5, 1, 10000000)
         
         let c = x.ToPixImage<float32>().GetChannel(Col.Channel.Gray)
         printMat "x" c
         
-
+    x <- solver.Solve(inputs, x, 1E-3, 20, 1, 10000000)
+    let c = x.ToPixImage<float32>().GetChannel(Col.Channel.Gray)
+    printMat "x" c
+        
+        
+    x <- solver.Solve(inputs, x, 1E-3, 20, 1, 10000000)
+    let c = x.ToPixImage<float32>().GetChannel(Col.Channel.Gray)
+    printMat "x" c
 
     //let poly : Polynomial<_, float> =
     //    0.125 * (4.0 * x<float>.[0,0] - x.[-1,0] - x.[1,0] - x.[0,-1] - x.[0,1] - w<float>.[0,0]) ** 2
