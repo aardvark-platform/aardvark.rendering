@@ -13,6 +13,7 @@
     <OutputPath>..\..\..\bin\Release</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="DistanceField.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
