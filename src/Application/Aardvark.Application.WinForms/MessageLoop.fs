@@ -130,12 +130,12 @@ type private MessageLoopImpl() =
     let mean = RunningMean(10)
 
     [<VolatileField>]
-    let mutable dirty : hset<Control> = HSet.empty
+    let mutable dirty : ref<hset<Control>> = ref HSet.empty
 
     let run() =
         while running do
             trigger.Wait()
-            let set = Interlocked.Exchange(&dirty, HSet.empty)
+            let set = !Interlocked.Exchange(&dirty, ref HSet.empty)
             if not (HSet.isEmpty set) then
                 let controls = set |> Seq.filter (fun c -> not c.IsDisposed && c.IsHandleCreated) |> Seq.toList
                 match controls with
@@ -162,10 +162,10 @@ type private MessageLoopImpl() =
     member x.Invalidate(ctrl : Control) =
         let mutable contained = false
         let mutable o = dirty
-        let mutable n = HSet.alter ctrl (fun c -> contained <- c; true) o
+        let mutable n = ref <| HSet.alter ctrl (fun c -> contained <- c; true) !o
         while Interlocked.CompareExchange(&dirty, n, o) != o do
             o <- dirty
-            n <- HSet.alter ctrl (fun c -> contained <- c; true) o
+            n <- ref <| HSet.alter ctrl (fun c -> contained <- c; true) !o
 
         not contained
 

@@ -90,7 +90,7 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
     let device = shader.Device
     let lockObj = obj()
     let mutable disposables : MapExt<int * int * int, IDisposable> = MapExt.empty
-    let mutable dirtyBuffers = HSet.empty
+    let mutable dirtyBuffers = ref HSet.empty
     let mutable pendingWrites = MapExt.empty
 
     let changed = Event<unit>()
@@ -128,13 +128,13 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
                     d
                 )
 
-    let write (ref : BindingReference) (value : obj) =
+    let write (r : BindingReference) (value : obj) =
         lock lockObj (fun () ->
-            match ref with
+            match r with
                 | UniformRef(buffer, offset, targetType) ->
                     let w = UniformWriters.getWriter offset targetType (value.GetType())
                     w.WriteUnsafeValue(value, buffer.Storage.Pointer)
-                    dirtyBuffers <- HSet.add buffer dirtyBuffers
+                    dirtyBuffers <- ref <| HSet.add buffer !dirtyBuffers
 
                 | StorageImageRef(set, binding, info) ->
                     let view, res = 
@@ -211,7 +211,7 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
 
     let flush() =
         lock lockObj (fun () ->
-            let buffers = Interlocked.Exchange(&dirtyBuffers, HSet.empty)
+            let buffers = !Interlocked.Exchange(&dirtyBuffers, ref HSet.empty)
             let writes = Interlocked.Exchange(&pendingWrites, MapExt.empty)
 
             if not (HSet.isEmpty buffers) then
@@ -226,7 +226,7 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
 
     let release() =
         lock lockObj (fun () ->
-            dirtyBuffers <- HSet.empty
+            dirtyBuffers <- ref HSet.empty
             pendingWrites <- MapExt.empty
             for (_,d) in MapExt.toSeq disposables do d.Dispose()
             for b in buffers do device.Delete b
