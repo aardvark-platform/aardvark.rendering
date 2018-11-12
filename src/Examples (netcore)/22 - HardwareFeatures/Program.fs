@@ -266,7 +266,7 @@ let main argv =
             "instanced"
             "multidraw"
             "renderobj (fragments)"
-            "renderobj (interpreter)"
+            "renderobj (switch)"
         |]
 
 
