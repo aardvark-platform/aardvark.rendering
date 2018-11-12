@@ -426,7 +426,7 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
 
     member x.Time = time :> IMod<_>
 
-    member x.AverageFrameTime = MicroTime(TimeSpan.FromSeconds avgFrameTime.Average)
+    member x.AverageFrameTime = MicroTime(int64 (avgFrameTime.Average * 1E9))
 
     member x.BeforeRender = beforeRender.Publish
     member x.AfterRender = afterRender.Publish

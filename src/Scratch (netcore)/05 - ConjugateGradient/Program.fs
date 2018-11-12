@@ -741,9 +741,9 @@ let main argv =
     let runtime = app.Runtime :> IRuntime
 
 
-    let div = PolynomialParam<float32>("div")
-    let v = PolynomialParam<float32>("v")
-    let w_v = PolynomialParam<float32>("w_v")
+    let div = PolynomialParam<V4f>("div")
+    let v = PolynomialParam<V4f>("v")
+    let w_v = PolynomialParam<V4f>("w_v")
 
 
     // 1*x^2 + 0*y^2
@@ -762,15 +762,15 @@ let main argv =
 
 
     
-    let polya (h : float32) = 
-        50.0f * ((4.0f * x<float32>.[0,0] - x.[-1,0] - x.[1,0] - x.[0,-1] - x.[0,1]) * (1.0f / (h*h))) ** 2 + 
-        w_v.[0,0] * (x<float32>.[0,0] - v.[0,0]) ** 2
+    let polya (h : V4f) = 
+        V4f(50.0f) * (((V4f.IIII * 4.0f) * x<V4f>.[0,0] - x.[-1,0] - x.[1,0] - x.[0,-1] - x.[0,1]) * (1.0f / (h*h))) ** 2 + 
+        w_v.[0,0] * (x<V4f>.[0,0] - v.[0,0]) ** 2
 
-    let poly = 0.125f * (4.0f * x<float32>.[0,0] - x.[-1,0] - x.[1,0] - x.[0,-1] - x.[0,1]) ** 2 + w_v.[0,0] * (x<float32>.[0,0] - v.[0,0]) ** 2
+    //let poly = 0.125f * (4.0f * x<float32>.[0,0] - x.[-1,0] - x.[1,0] - x.[0,-1] - x.[0,1]) ** 2 + w_v.[0,0] * (x<float32>.[0,0] - v.[0,0]) ** 2
 
-    let test = poly.Rename(fun v -> 2 * v)
+    //let test = poly.Rename(fun v -> 2 * v)
 
-    let solver = MultigridSolver2d<FShade.Formats.r32f, float32>(runtime, polya)
+    let solver = MultigridSolver2d<FShade.Formats.rgba32f, V4f>(runtime, polya)
 
     let size = V2i(4096,4096)
     let edgeSize = 1L
@@ -785,31 +785,31 @@ let main argv =
         v = c || v = c - V2l.IO || v = c - V2l.OI || v = c - V2l.II
 
 
-    let x = PixImage<float32>(Col.Format.Gray, size)
-    x.GetChannel(Col.Channel.Gray).SetByCoord (fun (c : V2l) -> 0.0f) |> ignore
+    let x = PixImage<float32>(Col.Format.RGBA, size)
+    x.GetMatrix<C4f>().SetByCoord (fun (c : V2l) -> C4f(0.0f)) |> ignore
     
     //let div = PixImage<float32>(Col.Format.Gray, size)
     //div.GetChannel(Col.Channel.Gray).SetByCoord (fun (c : V2l) -> 
     //    0.0f
     //) |> ignore
     
-    let cache = Dict<V2l, float32>()
+    let cache = Dict<int64, C4f>()
     let rand = RandomSystem()
     let getColor (c : V2l) =
-        cache.GetOrCreate(c, fun _ -> rand.UniformFloat())
+        cache.GetOrCreate(c.X, fun _ -> rand.UniformC3f().ToC4f())
 
-    let v = PixImage<float32>(Col.Format.Gray, size)
-    v.GetChannel(Col.Channel.Gray).SetByCoord (fun (c : V2l) -> 
+    let v = PixImage<float32>(Col.Format.RGBA, size)
+    v.GetMatrix<C4f>().SetByCoord (fun (c : V2l) -> 
         let c = c / 128L
-        if (c.X + c.Y) % 2L = 0L then getColor c
-        else 0.0f
+        if (c.X) % 4L = 0L then getColor c
+        else C4f(0.0f)
     ) |> ignore
     
-    let w_v = PixImage<float32>(Col.Format.Gray, size)
-    w_v.GetChannel(0L).SetByCoord (fun (c : V2l) -> 
+    let w_v = PixImage<float32>(Col.Format.RGBA, size)
+    w_v.GetMatrix<C4f>().SetByCoord (fun (c : V2l) -> 
         let c = c / 128L
-        if (c.X + c.Y) % 2L = 0L then 1.0f
-        else 0.0f
+        if (c.X) % 4L = 0L then C4f(1.0f)
+        else C4f(0.0f,0.0f,0.0f,0.0f)
     ) |> ignore
 
     let inputs =
@@ -822,7 +822,7 @@ let main argv =
 
     let mutable x = x :> PixImage
     x <- solver.Solve(inputs, x, 1, 1E-3)
-    let c = x.ToPixImage<float32>().GetChannel(Col.Channel.Gray)
+    //let c = x.ToPixImage<float32>().GetChannel(Col.Channel.Gray)
     //printMat "x" c
 
     x.SaveAsImage @"C:\temp\a\z_result.jpg"

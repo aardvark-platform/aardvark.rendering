@@ -57,7 +57,7 @@ let main argv =
         window {
             backend Backend.Vulkan
             display Display.Stereo
-            verbosity DebugVerbosity.Warning
+            debug false
             samples 8
         }
 
