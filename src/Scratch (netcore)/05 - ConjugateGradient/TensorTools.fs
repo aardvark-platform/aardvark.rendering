@@ -5,6 +5,7 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
+open System.Collections.Concurrent
 
 module TensorToolShaders =
     open FShade
@@ -98,11 +99,11 @@ module TensorToolShaders =
         }
 
     [<LocalSize(X = 8, Y = 8)>]
-    let fold2d (zero : Expr<'b>) (addV4 : Expr<V4d -> V4d -> 'b>) (add : Expr<'b -> 'b -> 'b>) (lLevel : int) (result : 'b[]) =
+    let fold2d (zero : Expr<'b>) (addV4 : Expr<V4d -> V4d -> 'b>) (add : Expr<'b -> 'b -> 'b>) (result : 'b[]) =
         compute {
             let mem = allocateShared<'b> 128
 
-            let size = lSampler.GetSize(lLevel)
+            let size = lSampler.Size
             let rcpSize = 1.0 / V2d size
 
             let lid = getLocalId().XY
@@ -119,10 +120,10 @@ module TensorToolShaders =
 
             // load existing values into local memory
             let v0 =
-                (%addV4) (lSampler.SampleLevel(tc00, float lLevel)) (lSampler.SampleLevel(tc01, float lLevel))
+                (%addV4) (lSampler.SampleLevel(tc00, 0.0)) (lSampler.SampleLevel(tc01, 0.0))
                 
             let v1 =
-                (%addV4) (lSampler.SampleLevel(tc10, float lLevel)) (lSampler.SampleLevel(tc11, float lLevel)) 
+                (%addV4) (lSampler.SampleLevel(tc10, 0.0)) (lSampler.SampleLevel(tc11, 0.0)) 
 
             mem.[tid * 2 + 0] <- v0
             mem.[tid * 2 + 1] <- v1
@@ -144,11 +145,11 @@ module TensorToolShaders =
         }
        
     [<LocalSize(X = 8, Y = 8)>]
-    let dot2d (zero : Expr<'b>) (mul : Expr<V4d -> V4d -> 'b>) (add : Expr<'b -> 'b -> 'b>) (lLevel : int) (rLevel : int) (result : 'b[]) =
+    let dot2d (zero : Expr<'b>) (mul : Expr<V4d -> V4d -> 'b>) (add : Expr<'b -> 'b -> 'b>) (result : 'b[]) =
         compute {
             let mem = allocateShared<'b> 128
 
-            let size = lSampler.GetSize(lLevel)
+            let size = lSampler.Size
             let rcpSize = 1.0 / V2d size
 
             let lid = getLocalId().XY
@@ -166,13 +167,13 @@ module TensorToolShaders =
             // load existing values into local memory
             let v0 =
                 (%add) 
-                    ((%mul) (lSampler.SampleLevel(tc00, float lLevel)) (rSampler.SampleLevel(tc00, float rLevel)))
-                    ((%mul) (lSampler.SampleLevel(tc01, float lLevel)) (rSampler.SampleLevel(tc01, float rLevel)))
+                    ((%mul) (lSampler.SampleLevel(tc00, float 0.0)) (rSampler.SampleLevel(tc00, float 0.0)))
+                    ((%mul) (lSampler.SampleLevel(tc01, float 0.0)) (rSampler.SampleLevel(tc01, float 0.0)))
                 
             let v1 =
                 (%add) 
-                    ((%mul) (lSampler.SampleLevel(tc10, float lLevel)) (rSampler.SampleLevel(tc10, float rLevel)))
-                    ((%mul) (lSampler.SampleLevel(tc11, float lLevel)) (rSampler.SampleLevel(tc11, float rLevel)))
+                    ((%mul) (lSampler.SampleLevel(tc10, float 0.0)) (rSampler.SampleLevel(tc10, float 0.0)))
+                    ((%mul) (lSampler.SampleLevel(tc11, float 0.0)) (rSampler.SampleLevel(tc11, float 0.0)))
 
             mem.[tid * 2 + 0] <- v0
             mem.[tid * 2 + 1] <- v1
@@ -205,10 +206,12 @@ module TensorToolShaders =
 
 
 
-type TensorTools<'a when 'a : unmanaged>(runtime : IRuntime) =
+type TensorTools<'a when 'a : unmanaged> private(runtime : IRuntime) =
     static let num = RealInstances.instance<'a>
     static let rnum = ReflectedReal.instance<'a>
     
+    static let cache = ConcurrentDictionary<IRuntime, TensorTools<'a>>()
+
 
     let conv = rnum.fromV4
     let v4Mul = <@ fun a b -> (%rnum.mul) ((%conv) a) ((%conv) b) @>
@@ -297,8 +300,7 @@ type TensorTools<'a when 'a : unmanaged>(runtime : IRuntime) =
             
             use res = runtime.CreateBuffer<'a>(resCnt.X * resCnt.Y)
             use input = runtime.NewInputBinding shader
-            input.["l"] <- v.Texture
-            input.["lLevel"] <- v.Level
+            input.["l"] <- v
             input.["result"] <- res
             input.Flush()
 
@@ -310,7 +312,14 @@ type TensorTools<'a when 'a : unmanaged>(runtime : IRuntime) =
             ]
             
             fold1d zero shader1d res
-            
+          
+    static member Get(r : IRuntime) =
+        cache.GetOrAdd(r, fun r ->
+            let t = new TensorTools<'a>(r)
+            r.OnDispose.Add (fun () -> () (* t.Dispose() *))
+            t
+        )
+
     member x.Sum(v : IBuffer<'a>) = fold1d num.zero sum1d v
     member x.Product(v : IBuffer<'a>) = fold1d num.one mul1d.Value v
     member x.Min(v : IBuffer<'a>) = fold1d (num.div num.one num.zero) min1d.Value v
@@ -398,10 +407,8 @@ type TensorTools<'a when 'a : unmanaged>(runtime : IRuntime) =
             
             use res = runtime.CreateBuffer<'a>(resCnt.X * resCnt.Y)
             use input = runtime.NewInputBinding dot2d
-            input.["l"] <- l.Texture
-            input.["r"] <- r.Texture
-            input.["lLevel"] <- l.Level
-            input.["rLevel"] <- r.Level
+            input.["l"] <- l
+            input.["r"] <- r
             input.["result"] <- res
             input.Flush()
 

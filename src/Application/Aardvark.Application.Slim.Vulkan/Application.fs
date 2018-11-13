@@ -200,6 +200,8 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
         this.Load()
         swapchainDesc.samples
     member this.Time = time
+    
+    member x.AverageFrameTime = totalTime / float frameCount
 
 
     interface IRenderTarget with

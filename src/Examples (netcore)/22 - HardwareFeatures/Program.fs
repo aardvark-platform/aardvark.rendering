@@ -17,6 +17,20 @@ open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.SceneGraph.Semantics
 open Aardvark.Application.Slim
+open Aardvark.Rendering.Text
+
+type IRenderTask with
+    member x.PrepareForRender() =
+        match x.FramebufferSignature with
+            | Some signature ->
+                let runtime = signature.Runtime
+                let tempFbo = runtime.CreateFramebuffer(signature, Mod.constant(V2i(16,16)))
+                tempFbo.Acquire()
+                x.Run(RenderToken.Empty, tempFbo.GetValue())
+                tempFbo.Release()
+            | None ->
+                ()
+
 
 module Shader =
     open FShade
@@ -64,6 +78,7 @@ let createNaive (runtime : IRuntime) (signature : IFramebufferSignature) (backen
 
     Log.startTimed "[naive] compile scene"
     let r = runtime.CompileRender(signature, backendConfiguration, sg)
+    r.PrepareForRender()
     Log.stop()
     r
 
@@ -98,6 +113,7 @@ let createInstanced (runtime : IRuntime) (signature : IFramebufferSignature) (ba
 
     Log.startTimed "[instanced] compile scene"
     let r = runtime.CompileRender(signature, backendConfiguration, sg)
+    r.PrepareForRender()
     Log.stop()
     r
 
@@ -139,6 +155,7 @@ let createIndirect (runtime : IRuntime) (signature : IFramebufferSignature) (bac
         
     Log.startTimed "[custom indirect buffer] compile scene"
     let r = runtime.CompileRender(signature, backendConfiguration, sg)
+    r.PrepareForRender()
     Log.stop()
     r
 
@@ -186,6 +203,7 @@ let renderObjectBased (runtime : IRuntime) (signature : IFramebufferSignature) (
 
     Log.startTimed "[custom render objects] compile scene"
     let r = runtime.CompileRender(signature, backendConfiguration, ASet.ofArray renderObjects)
+    r.PrepareForRender()
     Log.stop()
     r
 
@@ -202,6 +220,7 @@ let main argv =
     // uncomment/comment to switch between the backends
     //use app = new VulkanApplication() 
     use app = new OpenGlApplication()
+    let runtime = app.Runtime :> IRuntime
 
     // create a game window (better for measuring fps)
     let win = app.CreateGameWindow(samples = 1)
@@ -209,9 +228,10 @@ let main argv =
     // disable incremental rendering
     win.RenderAsFastAsPossible <- true
 
+
     let initialView = CameraView.LookAt(V3d(10.0,10.0,10.0), V3d.Zero, V3d.OOI)
     let frustum = 
-        win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
+        win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 150.0 (float s.X / float s.Y))
 
     let cameraView = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
 
@@ -233,28 +253,89 @@ let main argv =
 
     let variants = 
         [|
-            createInstanced app.Runtime win.FramebufferSignature config viewTrafo projTrafo geometry trafos
-            createIndirect app.Runtime win.FramebufferSignature config viewTrafo projTrafo geometry trafos
-            renderObjectBased app.Runtime win.FramebufferSignature config viewTrafo projTrafo geometry trafos
-            renderObjectBased app.Runtime win.FramebufferSignature BackendConfiguration.UnmanagedOptimized viewTrafo projTrafo geometry trafos
+            createInstanced runtime win.FramebufferSignature config viewTrafo projTrafo geometry trafos
+            createIndirect runtime win.FramebufferSignature config viewTrafo projTrafo geometry trafos
+            renderObjectBased runtime win.FramebufferSignature config viewTrafo projTrafo geometry trafos
+            renderObjectBased runtime win.FramebufferSignature BackendConfiguration.UnmanagedOptimized viewTrafo projTrafo geometry trafos
             // naive sg is slow for such big scenes:
             //createNaive app.Runtime win.FramebufferSignature BackendConfiguration.NativeOptimized viewTrafo projTrafo geometry trafos
         |]
 
+    let variantNames =
+        [|
+            "instanced"
+            "multidraw"
+            "renderobj (fragments)"
+            "renderobj (switch)"
+        |]
+
+
+
     // use this mutable to switch between render task variants.
-    let mutable variant = 0
+    let variant = Mod.init 0
+    let fps = Mod.init 0.0
 
     win.Keyboard.KeyDown(Keys.V).Values.Add(fun _ -> 
-        variant <- (variant + 1) % variants.Length
-        printfn "using variant: %d" variant
+        transact (fun () -> 
+            variant.Value <- (variant.Value + 1) % variants.Length
+            fps.Value <- 0.0
+        )
+        Log.line "using: %s" variantNames.[variant.Value]
     )
 
+    win.Keyboard.KeyDown(Keys.OemPlus).Values.Add(fun _ -> 
+        transact (fun () -> 
+            variant.Value <- (variant.Value + 1) % variants.Length
+            fps.Value <- 0.0
+        )
+        Log.line "using: %s" variantNames.[variant.Value]
+    )
+    
+    win.Keyboard.KeyDown(Keys.OemMinus).Values.Add(fun _ -> 
+        transact (fun () -> 
+            variant.Value <- (variant.Value + variants.Length - 1) % variants.Length
+            fps.Value <- 0.0
+        )
+        Log.line "using: %s" variantNames.[variant.Value]
+    )
     let task = 
         RenderTask.custom (fun (task,token,desc) -> 
-            variants.[variant].Run(token,desc)
+            variants.[variant.Value].Run(token,desc)
         )
 
-    win.RenderTask <- task
+    let puller =
+        async {
+            while true do
+                if not (Fun.IsTiny win.AverageFrameTime.TotalSeconds) then
+                    transact (fun () -> fps.Value <- 1.0 / win.AverageFrameTime.TotalSeconds)
+                do! Async.Sleep 200
+        }
+    Async.Start puller
+    let overlayTask =
+        let str =
+            Mod.custom (fun t ->
+                let variant = variant.GetValue t 
+                let fps = fps.GetValue t
+                let fps = if fps <= 0.0 then "" else sprintf "%.0ffps" fps
+                let variant = variantNames.[variant]
+                String.concat " " [variant; fps]
+            )
+
+        let trafo =
+            win.Sizes |> Mod.map (fun size ->
+                let px = 2.0 / V2d size
+                Trafo3d.Scale(0.1) *
+                Trafo3d.Scale(1.0, float size.X / float size.Y, 1.0) *
+                Trafo3d.Translation(-1.0 + 20.0 * px.X, -1.0 + 25.0 * px.Y, 0.0)
+            )
+
+        Sg.text (Font("Consolas")) C4b.White str
+            |> Sg.trafo trafo
+            |> Sg.compile runtime win.FramebufferSignature
+            
+
+
+    win.RenderTask <- RenderTask.ofList [ task; overlayTask]
     win.Run()
 
     0
