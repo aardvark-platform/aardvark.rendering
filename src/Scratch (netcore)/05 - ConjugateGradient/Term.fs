@@ -652,10 +652,40 @@ module Term =
             | Power(l,Value -1.0) -> sprintf "1.0 / %s" (toString l)
             | Power(l,r) -> sprintf "%s**%s" (toString l) (toString r)
             | Logarithm a -> sprintf "log(%s)" (toString a)
-           
+       
+       
+    type TermParameter(name : string) =
+        
+        member x.Item
+            with get(i : int) = Term<int>.Parameter(name, i)
+            
+        member x.Item
+            with get(i : V2i) = Term<V2i>.Parameter(name, i)
+
+        member x.Item
+            with get(i : V3i) = Term<V3i>.Parameter(name, i)
+
+        member x.Item
+            with get(i : int, j : int) = Term<V2i>.Parameter(name, V2i(i,j))
+            
+        member x.Item
+            with get(i : int, j : int, k : int) = Term<V3i>.Parameter(name, V3i(i,j,k))
+      
+    let x = TermParameter("x")
+    let y = TermParameter("y")
+    let z = TermParameter("z")
+    let w = TermParameter("w")
+    
+       
+    type TermParameter2d(name : string) =
+        member x.Item
+            with get(i : V2i) = Term<V2i>.Parameter(name, i)
+            
+        member x.Item
+            with get(i : int, j : int) = Term<V2i>.Parameter(name, V2i(i,j))
+            
     open Microsoft.FSharp.Quotations
-
-
+    
     module Read =
         open FShade
         open FShade.Imperative
@@ -707,9 +737,6 @@ module Term =
                         <@
                             (%fromV4) ((%sam).SampleLevel((V2d (%id) + V2d(ox, oy)) / V2d (%size), float (%level)))
                         @>
-
-
-
 
     let private varNames =
         LookupTable.lookupTable [
@@ -795,58 +822,83 @@ module Term =
                                 bindings.[(name,Some i,e)] <- (v, ex :> Expr)
                                 Expr.Var(v) |> Expr.Cast
 
+        let mul (l : Expr) (r : Expr) =
+            let lf = l.Type = typeof<float>
+            let rf = r.Type = typeof<float>
+            match lf, rf with
+                | true, true -> <@@ (%%l : float) * (%%r : float) @@>
+                | false, true -> <@@ (%rreal.muls) (%%l) (%%r) @@>
+                | true, false -> <@@ (%rreal.muls) (%%r) (%%l) @@>
+                | false, false -> <@@ (%rreal.mul) (%%l) (%%r) @@>
 
+        let div (l : Expr) (r : Expr) =
+            let lf = l.Type = typeof<float>
+            let rf = r.Type = typeof<float>
+            match lf, rf with
+                | true, true -> <@@ (%%l : float) / (%%r : float) @@>
+                | false, true -> <@@ (%rreal.divs) (%%l) (%%r) @@>
+                | true, false -> <@@ (%rreal.div) ((%rreal.fromFloat) %%l) (%%r) @@>
+                | false, false -> <@@ (%rreal.div) (%%l) (%%r) @@>
 
-        let rec toExpr (term : Term<'c>) : Expr<'v> =
+        let pow (l : Expr) (r : Expr) =
+            let lf = l.Type = typeof<float>
+            let rf = r.Type = typeof<float>
+            match lf, rf with
+                | true, true -> <@@ (%%l : float) ** (%%r : float) @@>
+                | false, true -> <@@ (%rreal.pows) (%%l) (%%r) @@>
+                | true, false -> <@@ (%rreal.pow) ((%rreal.fromFloat) (%%l)) (%%r) @@>
+                | false, false -> <@@ (%rreal.pow) (%%l) (%%r) @@>
+
+        let rec toExpr (term : Term<'c>) : Expr =
             match term with
                 | Value v ->
-                    Expr.Value(real.fromFloat v) |> Expr.Cast
+                    Expr.Value(v)
 
                 | Uniform name ->
-                    get name None 1
+                    get name None 1 :> Expr
 
                 | Parameter(name, i) -> 
-                    get name (Some i) 1
+                    get name (Some i) 1 :> Expr
 
                 | Power(Uniform name, Value e) when float (int e) = e ->
-                    get name None (int e)
+                    get name None (int e) :> Expr
                 
                 | Power(Parameter(name, i), Value e) when float (int e) = e ->
-                    get name (Some i) (int e)
+                    get name (Some i) (int e) :> Expr
 
                 | Power(E, value) ->
                     let v = toExpr value
-                    <@ (%rreal.exp) (%v) @>
+                    <@@ (%rreal.exp) (%%v) @@>
 
                 | Sine t ->
                     let e = toExpr t
-                    <@ (%rreal.sin) (%e) @> 
+                    <@@ (%rreal.sin) (%%e) @@>
         
                 | Cosine t ->
                     let e = toExpr t
-                    <@ (%rreal.cos) (%e) @> 
+                    <@@ (%rreal.cos) (%%e) @@>
                     
                 | Tangent t ->
                     let e = toExpr t
-                    <@ (%rreal.tan) (%e) @> 
+                    <@@ (%rreal.tan) (%%e) @@>
         
                 | Logarithm t ->
                     let e = toExpr t
-                    <@ (%rreal.log) (%e) @> 
+                    <@@ (%rreal.log) (%%e) @@>
 
                 | Negate(a) ->
                     let e = toExpr a
-                    <@ (%rreal.neg) (%e) @>
+                    <@@ (%rreal.neg) (%%e) @@>
                 
                 | Power(a, MinusOne) ->
                     let a = toExpr a
                     let one = real.one
-                    <@ (%rreal.div) one (%a) @> 
+                    <@@ (%rreal.div) one (%%a) @@>
                     
                 | Power(a, b) ->
                     let a = toExpr a
                     let b = toExpr b
-                    <@ (%rreal.pow) (%a) (%b) @> 
+                    pow a b
 
                 | Sum vs ->
                     let neg, pos = vs |> List.partition (function Negate a -> true | _ -> false)
@@ -855,17 +907,17 @@ module Term =
                     
                     match pos, neg with
                         | [], [] -> 
-                            Expr.Value(real.zero) |> Expr.Cast
+                            Expr.Value(real.zero)
 
                         | (p :: pos), [] ->
-                            pos |> List.fold (fun s e -> <@ (%rreal.add) (%s) (%e) @>) p
+                            pos |> List.fold (fun s e -> <@@ (%rreal.add) (%%s) (%%e) @@>) p
 
                         | [], (n :: neg) -> 
-                            neg |> List.fold (fun s e -> <@ (%rreal.sub) (%s) (%e) @>) (<@ (%rreal.neg) (%n) @>)
+                            neg |> List.fold (fun s e -> <@@ (%rreal.sub) (%%s) (%%e) @@>) (<@@ (%rreal.neg) (%%n) @@>)
 
                         | (p :: pos), neg ->
-                            let pos = pos |> List.fold (fun s e -> <@ (%rreal.add) (%s) (%e) @>) p
-                            neg |> List.fold (fun s e -> <@ (%rreal.sub) (%s) (%e) @>) pos
+                            let pos = pos |> List.fold (fun s e -> <@@ (%rreal.add) (%%s) (%%e) @@>) p
+                            neg |> List.fold (fun s e -> <@@ (%rreal.sub) (%%s) (%%e) @@>) pos
                                 
 
                
@@ -876,20 +928,20 @@ module Term =
 
                     match pos, neg with
                     | [], [] -> 
-                        Expr.Value(real.one) |> Expr.Cast
+                        Expr.Value(real.one)
 
                     | (p :: pos), [] ->
-                        pos |> List.fold (fun s e -> <@ (%rreal.mul) (%s) (%e) @>) p
+                        pos |> List.fold mul p
 
                     | [], (n :: neg) -> 
-                        let neg = neg |> List.fold (fun s e -> <@ (%rreal.mul) (%s) (%e) @>) n
+                        let neg = neg |> List.fold mul n
                         let one = real.one
-                        <@ (%rreal.div) one (%neg) @>
+                        div <@@ one @@> neg
 
                     | (p :: pos), (n :: neg) ->
-                        let pos = pos |> List.fold (fun s e -> <@ (%rreal.mul) (%s) (%e) @>) p
-                        let neg = neg |> List.fold (fun s e -> <@ (%rreal.mul) (%s) (%e) @>) n
-                        <@ (%rreal.div) (%pos) (%neg) @>
+                        let pos = pos |> List.fold mul p
+                        let neg = neg |> List.fold mul n
+                        div pos neg
 
                     //let es = vs |> List.map toExpr
                     //match es with
