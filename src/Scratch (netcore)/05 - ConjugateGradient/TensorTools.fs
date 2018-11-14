@@ -196,28 +196,106 @@ module TensorToolShaders =
               
 
     [<LocalSize(X = 64)>]
-    let mad1d (mul : Expr<'a -> 'b -> 'c>) (add : Expr<'d -> 'c -> 'd>) (cnt : int) (src : 'a[]) (factor : 'b) (dst : 'd[]) =
+    let mad1d (mul : Expr<'a -> 'b -> 'c>) (add : Expr<'c -> 'c -> 'a>) (cnt : int) (src : 'a[]) (srcFactor : 'b) (dst : 'a[]) (dstFactor : 'b) =
         compute {
             let id = getGlobalId().X
             if id < cnt then
-                dst.[id] <- (%add) dst.[id] ((%mul) src.[id] factor)
+                dst.[id] <- (%add) ((%mul) dst.[id] dstFactor) ((%mul) src.[id] srcFactor)
+        }
+        
+    [<LocalSize(X = 8, Y = 8)>]
+    let mad2d<'c, 'f, 'fmt when 'fmt :> Formats.IFloatingFormat> (mul : Expr<V4d -> 'f -> 'c>) (add : Expr<'c -> 'c -> V4d>) (srcFactor : 'f) (dstFactor : 'f) (src : Image2d<'fmt>) (dst : Image2d<'fmt>) =
+        compute {
+            let id = getGlobalId().XY
+            let s = dst.Size
+
+            if id.X < s.X && id.Y < s.Y then
+                dst.[id] <- (%add) ((%mul) dst.[id] dstFactor) ((%mul) src.[id] srcFactor)
         }
 
+    
 
+[<AutoOpen>]
+module private FormatHacks = 
+    open System
+    open System.Reflection
+
+    type FormatVisitor<'r> =
+        abstract member Visit<'f when 'f :> FShade.Formats.IFloatingFormat> : unit -> 'r
+
+    type FormatVisitor private() =
+        static let table =
+            Dictionary.ofList [
+                TextureFormat.R11fG11fB10f, typeof<FShade.Formats.r11g11b10f>
+                TextureFormat.R16, typeof<FShade.Formats.r16>
+                TextureFormat.R16f, typeof<FShade.Formats.r16f>
+                TextureFormat.R16Snorm, typeof<FShade.Formats.r16_snorm>
+                TextureFormat.R32f, typeof<FShade.Formats.r32f>
+                TextureFormat.R8, typeof<FShade.Formats.r8>
+                TextureFormat.R8Snorm, typeof<FShade.Formats.r8_snorm>
+                TextureFormat.Rg16, typeof<FShade.Formats.rg16>
+                TextureFormat.Rg16f, typeof<FShade.Formats.rg16f>
+                TextureFormat.Rg16Snorm, typeof<FShade.Formats.rg16_snorm>
+                TextureFormat.Rg32f, typeof<FShade.Formats.rg32f>
+                TextureFormat.Rg8, typeof<FShade.Formats.rg8>
+                TextureFormat.Rg8Snorm, typeof<FShade.Formats.rg8_snorm>
+                TextureFormat.Rgb10A2, typeof<FShade.Formats.rgb10a2>
+                TextureFormat.Rgba16, typeof<FShade.Formats.rgba16>
+                TextureFormat.Rgba16f, typeof<FShade.Formats.rgba16f>
+                TextureFormat.Rgba16Snorm, typeof<FShade.Formats.rgba16_snorm>
+                TextureFormat.Rgba32f, typeof<FShade.Formats.rgba32f>
+                TextureFormat.Rgba8, typeof<FShade.Formats.rgba8>
+                TextureFormat.Rgba8Snorm, typeof<FShade.Formats.rgba8_snorm>
+            ]
+
+        static let compile (formatType : Type) (resultType : Type) =
+            let tv = typedefof<FormatVisitor<_>>.MakeGenericType [| resultType |]
+            let m = tv.GetMethod("Visit", BindingFlags.NonPublic ||| BindingFlags.Public ||| BindingFlags.Instance)
+            let m = m.MakeGenericMethod [| formatType |]
+            
+            IL.Assembler.assembleDelegate {
+                IL.ArgumentTypes = [| tv |]
+                IL.ReturnType = resultType
+                IL.Body = 
+                    [
+                        IL.Ldarg 0
+                        IL.Call m
+                        IL.Ret
+                    ]
+            }
+
+        static let cache = System.Collections.Concurrent.ConcurrentDictionary<Type * Type, Delegate>()
+
+        static let get (formatType : Type) (resultType : Type) =
+            cache.GetOrAdd((formatType, resultType), fun (formatType, resultType) ->
+                compile formatType resultType
+            )
+            
+        static member Visit<'r>(fmt : TextureFormat, v : FormatVisitor<'r>) =
+            let func = get table.[fmt] typeof<'r> |> unbox<Func<FormatVisitor<'r>, 'r>>
+            func.Invoke(v)
+
+
+    let formatCache (v : FormatVisitor<'r>) =
+        let dict = System.Collections.Concurrent.ConcurrentDictionary<TextureFormat, 'r>()
+
+        fun (fmt : TextureFormat) ->
+            dict.GetOrAdd(fmt, fun fmt ->
+                FormatVisitor.Visit(fmt, v)
+            )
 
 
 type TensorTools<'a when 'a : unmanaged> private(runtime : IRuntime) =
     static let num = RealInstances.instance<'a>
     static let rnum = ReflectedReal.instance<'a>
-    
     static let cache = ConcurrentDictionary<IRuntime, TensorTools<'a>>()
-
 
     let conv = rnum.fromV4
     let v4Mul = <@ fun a b -> (%rnum.mul) ((%conv) a) ((%conv) b) @>
     let v4Add = <@ fun a b -> (%rnum.add) ((%conv) a) ((%conv) b) @>
     let v4Max = <@ fun a b -> (%rnum.max) ((%conv) a) ((%conv) b) @>
     let v4Min = <@ fun a b -> (%rnum.min) ((%conv) a) ((%conv) b) @>
+    
 
     static let ceilDiv (a : int) (b : int) =
         if a % b = 0 then a / b
@@ -261,7 +339,15 @@ type TensorTools<'a when 'a : unmanaged> private(runtime : IRuntime) =
     let min2d = lazy ( runtime.CreateComputeShader (TensorToolShaders.fold2d rnum.pinf v4Min rnum.min) )
     
     let mad1d = runtime.CreateComputeShader (TensorToolShaders.mad1d rnum.mul rnum.add)
-
+    let mad2d = 
+        let v4Mul = <@ fun a b -> (%rnum.mul) ((%conv) a) b @>
+        let v4Add = <@ fun a b -> (%rnum.toV4) ((%rnum.add) a b) @>
+        formatCache { 
+            new FormatVisitor<_> with
+                member x.Visit<'f when 'f :> FShade.Formats.IFloatingFormat>() =
+                    runtime.CreateComputeShader (TensorToolShaders.mad2d<'a, 'a, 'f> v4Mul v4Add)
+        }
+        
     let rec fold1d (zero : 'a) (shader : IComputeShader) (v : IBuffer<'a>) =
         if v.Count <= 0 then
             zero
@@ -373,14 +459,15 @@ type TensorTools<'a when 'a : unmanaged> private(runtime : IRuntime) =
         let e1 = num.pow (x.Average v) 2
         num.sub e0 e1
 
-    member x.MultiplyAdd(src : IBuffer<'a>, f : 'a, dst : IBuffer<'a>) =
+    member x.MultiplyAdd(src : IBuffer<'a>, srcFactor : 'a, dst : IBuffer<'a>, dstFactor : 'a) =
         let cnt = min src.Count dst.Count
         if cnt > 0 then
             use input = runtime.NewInputBinding mad1d
             input.["src"] <- src
             input.["cnt"] <- cnt
             input.["dst"] <- dst
-            input.["factor"] <- f
+            input.["srcFactor"] <- srcFactor
+            input.["dstFactor"] <- dstFactor
             input.Flush()
 
             runtime.Run [
@@ -389,6 +476,22 @@ type TensorTools<'a when 'a : unmanaged> private(runtime : IRuntime) =
                 ComputeCommand.Dispatch (ceilDiv cnt mad1d.LocalSize.X)
             ]
 
+    member x.MultiplyAdd(src : ITextureSubResource, srcFactor : 'a, dst : ITextureSubResource, dstFactor : 'a) =
+        let size = V2i(min src.Size.X dst.Size.X, min src.Size.Y dst.Size.Y)
+        if size.AllGreaterOrEqual 1 then
+            let mad2d = mad2d dst.Texture.Format
+            use input = runtime.NewInputBinding mad2d
+            input.["src"] <- src
+            input.["srcFactor"] <- srcFactor
+            input.["dst"] <- dst
+            input.["dstFactor"] <- dstFactor
+            input.Flush()
+
+            runtime.Run [
+                ComputeCommand.Bind mad2d
+                ComputeCommand.SetInput input
+                ComputeCommand.Dispatch (ceilDiv2 size mad2d.LocalSize.XY)
+            ]
 
     member x.Sum(v : ITextureSubResource) = fold2d num.zero sum2d sum1d v
     member x.Product(v : ITextureSubResource) = fold2d num.one mul2d.Value mul1d.Value v
@@ -446,7 +549,7 @@ type TensorTools<'a when 'a : unmanaged> private(runtime : IRuntime) =
     member x.LengthSquared(v : 'a[]) = withBuffer v x.LengthSquared
     member x.Average(v : 'a[]) = withBuffer v x.Average
     member x.Variance(v : 'a[]) = withBuffer v x.Variance
-    member x.MultiplyAdd(src : 'a[], f : 'a, dst : 'a[]) = withBuffer src (fun src -> withBuffer dst (fun dst -> x.MultiplyAdd(src, f, dst); dst.Download()))
+    member x.MultiplyAdd(src : 'a[], srcFactor : 'a, dst : 'a[], dstFactor : 'a) = withBuffer src (fun src -> withBuffer dst (fun dst -> x.MultiplyAdd(src, srcFactor, dst, dstFactor); dst.Download()))
 
 
     member x.Sum(v : 'a[,]) = withBuffer2d v x.Sum
@@ -458,10 +561,10 @@ type TensorTools<'a when 'a : unmanaged> private(runtime : IRuntime) =
     member x.LengthSquared(v : 'a[,]) = withBuffer2d v x.LengthSquared
     member x.Average(v : 'a[,]) = withBuffer2d v x.Average
     member x.Variance(v : 'a[,]) = withBuffer2d v x.Variance
-    member x.MultiplyAdd(src : 'a[,], f : 'a, dst : 'a[,]) = 
+    member x.MultiplyAdd(src : 'a[,], srcFactor : 'a, dst : 'a[,], dstFactor : 'a) = 
         withBuffer2d src (fun bsrc -> 
             withBuffer2d dst (fun bdst -> 
-                x.MultiplyAdd(bsrc, f, bdst)
+                x.MultiplyAdd(bsrc, srcFactor, bdst, dstFactor)
                 let cnt = (src.GetLength 0) * (src.GetLength 1)
                 let res : 'a[,] = Array2D.zeroCreate (src.GetLength 0) (src.GetLength 1)
                 let gc = GCHandle.Alloc(res, GCHandleType.Pinned)

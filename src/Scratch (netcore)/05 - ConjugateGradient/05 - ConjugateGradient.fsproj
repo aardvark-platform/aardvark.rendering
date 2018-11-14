@@ -14,6 +14,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Real.fs" />
+    <Compile Include="Term.fs" />
     <Compile Include="Polynomial.fs" />
     <Compile Include="TensorTools.fs" />
     <Compile Include="Program.fs" />
