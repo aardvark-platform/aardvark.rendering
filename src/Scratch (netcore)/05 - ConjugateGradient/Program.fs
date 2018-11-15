@@ -30,7 +30,7 @@ module ConjugateGradientShaders =
             texture uniform?src
             addressU WrapMode.Clamp
             addressV WrapMode.Clamp
-            filter Filter.MinMagPoint
+            filter Filter.MinMagLinear
         }
     let weightSampler =
         sampler2d {
@@ -38,7 +38,7 @@ module ConjugateGradientShaders =
             addressU WrapMode.Border
             addressV WrapMode.Border
             borderColor (C4f(0.0f, 0.0f, 0.0f, 0.0f))
-            filter Filter.MinMagPoint
+            filter Filter.MinMagLinear
         }
 
     let weightTimesSrcSampler =
@@ -54,21 +54,24 @@ module ConjugateGradientShaders =
     let restrict<'fmt when 'fmt :> Formats.IFloatingFormat> (dst : Image2d<'fmt>) =
         compute {
             let id = getGlobalId().XY
-            let s = dst.Size
+            let dstSize = dst.Size
             let srcSize = srcSampler.Size
 
-            if id.X < s.X && id.Y < s.Y then
-                let tc = (V2d(id) + V2d.Half) / V2d(s)
-                let d = V2d.Half / V2d srcSize
+            if id.X < dstSize.X && id.Y < dstSize.Y then
+                let tc = (V2d(id) + V2d.Half) / V2d(dstSize)
+                let d = 0.5 / V2d srcSize
 
-                let v = 
-                    srcSampler.SampleLevel(tc + V2d( d.X, 0.0 ), 0.0) +
-                    srcSampler.SampleLevel(tc + V2d(-d.X, 0.0 ), 0.0) +
-                    srcSampler.SampleLevel(tc + V2d( 0.0, d.Y), 0.0) +
-                    srcSampler.SampleLevel(tc + V2d( 0.0,-d.Y), 0.0)
+                let vp0 = srcSampler.SampleLevel(tc + V2d( d.X,  0.0), 0.0)
+                let vn0 = srcSampler.SampleLevel(tc + V2d(-d.X,  0.0), 0.0)
+                let v0p = srcSampler.SampleLevel(tc + V2d( 0.0,  d.Y), 0.0)
+                let v0n = srcSampler.SampleLevel(tc + V2d( 0.0, -d.Y), 0.0)
+                let value = (vp0 + vn0 + v0n + v0p) / 4.0
+                
+                //let value = srcSampler.SampleLevel(tc, 0.0)
 
-                dst.[id] <- V4d.Zero
+                dst.[id] <- value
         }
+
 
     [<LocalSize(X = 8, Y = 8)>]
     let mul2d<'fmt when 'fmt :> Formats.IFloatingFormat> (l : Image2d<'fmt>) (r : Image2d<'fmt>) (dst : Image2d<'fmt>) (dstWeight : Image2d<'fmt>) =
@@ -79,6 +82,19 @@ module ConjugateGradientShaders =
                 dst.[id] <- l.[id] * r.[id]
         }
 
+    [<ReflectedDefinition>]
+    let inline interpolate4 (v : V2d) (p00 : V4d) (p01 : V4d) (p10 : V4d) (p11 : V4d) =
+        let px0 = p00 + v.X * (p10 - p00)
+        let px1 = p01 + v.X * (p11 - p01)
+        px0 + v.Y * (px1 - px0)
+
+    [<ReflectedDefinition>]
+    let inline interpolate1 (v : V2d) (p00 : float) (p01 : float) (p10 : float) (p11 : float) =
+        let px0 = p00 + v.X * (p10 - p00)
+        let px1 = p01 + v.X * (p11 - p01)
+        px0 + v.Y * (px1 - px0)
+
+
     [<LocalSize(X = 8, Y = 8)>]
     let restrictWeight<'fmt when 'fmt :> Formats.IFloatingFormat> (dst : Image2d<'fmt>) (dstWeight : Image2d<'fmt>) =
         compute {
@@ -88,71 +104,35 @@ module ConjugateGradientShaders =
 
             if id.X < dstSize.X && id.Y < dstSize.Y then
                 let tc = (V2d(id) + V2d.Half) / V2d(dstSize)
-                let d = V2d.II / V2d srcSize
+                let d = 0.5 / V2d srcSize
+
+                let wp0 = weightSampler.SampleLevel(tc + V2d( d.X,  0.0), 0.0).X
+                let wn0 = weightSampler.SampleLevel(tc + V2d(-d.X,  0.0), 0.0).X
+                let w0p = weightSampler.SampleLevel(tc + V2d( 0.0,  d.Y), 0.0).X
+                let w0n = weightSampler.SampleLevel(tc + V2d( 0.0, -d.Y), 0.0).X
+                let weightAvg = (wp0 + wn0 + w0n + w0p) / 4.0
                 
+                let vp0 = weightTimesSrcSampler.SampleLevel(tc + V2d( d.X,  0.0), 0.0)
+                let vn0 = weightTimesSrcSampler.SampleLevel(tc + V2d(-d.X,  0.0), 0.0)
+                let v0p = weightTimesSrcSampler.SampleLevel(tc + V2d( 0.0,  d.Y), 0.0)
+                let v0n = weightTimesSrcSampler.SampleLevel(tc + V2d( 0.0, -d.Y), 0.0)
+                let v = (vp0 + vn0 + v0n + v0p) / 4.0
 
-                let fid = tc * V2d srcSize - V2d.Half
-                let srcId = V2i(floor fid.X, floor fid.Y)
-                let frac = fid - V2d srcId
 
-                let w00 = weightSampler.SampleLevel((V2d srcId + V2d(0.5, 0.5)) / V2d srcSize, 0.0).X
-                let w01 = weightSampler.SampleLevel((V2d srcId + V2d(0.5, 1.5)) / V2d srcSize, 0.0).X
-                let w10 = weightSampler.SampleLevel((V2d srcId + V2d(1.5, 0.5)) / V2d srcSize, 0.0).X
-                let w11 = weightSampler.SampleLevel((V2d srcId + V2d(1.5, 1.5)) / V2d srcSize, 0.0).X
-                
-                let v00 = srcSampler.SampleLevel((V2d srcId + V2d(0.5, 0.5)) / V2d srcSize, 0.0)
-                let v01 = srcSampler.SampleLevel((V2d srcId + V2d(0.5, 1.5)) / V2d srcSize, 0.0)
-                let v10 = srcSampler.SampleLevel((V2d srcId + V2d(1.5, 0.5)) / V2d srcSize, 0.0)
-                let v11 = srcSampler.SampleLevel((V2d srcId + V2d(1.5, 1.5)) / V2d srcSize, 0.0)
-             
 
-                let weightSum = w00 + w01 + w10 + w11
+
+                //let weightAvg = weightSampler.SampleLevel(tc, 0.0).X
+                //let v = weightTimesSrcSampler.SampleLevel(tc, 0.0)
 
                 let value = 
-                    if weightSum < 0.00001 then V4d.Zero
-                    else (v00 * w00 + v01 * w01 + v10 * w10 + v11 * w11) / weightSum
+                    if weightAvg < 0.00001 then 
+                        V4d.Zero
+                    else 
+                        //let v = interpolate4 frac (v00 * w00) (v01 * w01) (v10 * w10) (v11 * w11)
+                        v / weightAvg
 
-                let avgWeight = weightSum / 4.0
-
-                //let wnn = weightSampler.SampleLevel(tc + V2d(-d.X, -d.Y), 0.0).X
-                //let w0n = weightSampler.SampleLevel(tc + V2d( 0.0, -d.Y), 0.0).X
-                //let wpn = weightSampler.SampleLevel(tc + V2d( d.X, -d.Y), 0.0).X
-                //let wn0 = weightSampler.SampleLevel(tc + V2d(-d.X,  0.0), 0.0).X
-                //let w00 = weightSampler.SampleLevel(tc, 0.0).X
-                //let wp0 = weightSampler.SampleLevel(tc + V2d( d.X,  0.0), 0.0).X
-                //let wnp = weightSampler.SampleLevel(tc + V2d(-d.X,  d.Y), 0.0).X
-                //let w0p = weightSampler.SampleLevel(tc + V2d( 0.0,  d.Y), 0.0).X
-                //let wpp = weightSampler.SampleLevel(tc + V2d( d.X,  d.Y), 0.0).X
-                
-                //let vnn = weightTimesSrcSampler.SampleLevel(tc + V2d(-d.X, -d.Y), 0.0)
-                //let v0n = weightTimesSrcSampler.SampleLevel(tc + V2d( 0.0, -d.Y), 0.0)
-                //let vpn = weightTimesSrcSampler.SampleLevel(tc + V2d( d.X, -d.Y), 0.0)
-                //let vn0 = weightTimesSrcSampler.SampleLevel(tc + V2d(-d.X,  0.0), 0.0)
-                //let v00 = weightTimesSrcSampler.SampleLevel(tc, 0.0)
-                //let vp0 = weightTimesSrcSampler.SampleLevel(tc + V2d( d.X,  0.0), 0.0)
-                //let vnp = weightTimesSrcSampler.SampleLevel(tc + V2d(-d.X,  d.Y), 0.0)
-                //let v0p = weightTimesSrcSampler.SampleLevel(tc + V2d( 0.0,  d.Y), 0.0)
-                //let vpp = weightTimesSrcSampler.SampleLevel(tc + V2d( d.X,  d.Y), 0.0)
-
-                //let weight = 
-                //    0.25 * wnn + 0.50 * w0n + 0.25 * wpn + 
-                //    0.50 * wn0 + 1.00 * w00 + 0.50 * wp0 + 
-                //    0.25 * wnp + 0.50 * w0p + 0.25 * wpp
-
-                //let value =
-                //    0.25 * vnn + 0.50 * v0n + 0.25 * vpn + 
-                //    0.50 * vn0 + 1.00 * v00 + 0.50 * vp0 + 
-                //    0.25 * vnp + 0.50 * v0p + 0.25 * vpp
-
-                //let weight = weightSampler.SampleLevel(tc, 0.0).X
-                //let value = weightTimesSrcSampler.SampleLevel(tc, 0.0)
-
-                //let value = 
-                //    if weight < 0.001 then V4d.Zero
-                //    else value / weight
-                    
                 dst.[id] <- value
-                dstWeight.[id] <- V4d.IIII * avgWeight
+                dstWeight.[id] <- V4d.IIII * weightAvg
         }
 
     [<LocalSize(X = 8, Y = 8)>]
@@ -167,8 +147,31 @@ module ConjugateGradientShaders =
                 let v = srcSampler.SampleLevel(tc, 0.0)
                 dst.[id] <- v 
         }
+    [<LocalSize(X = 8, Y = 8)>]
 
-type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloatingFormat> (runtime : IRuntime, residual : Term.TermParameter2d -> Term<V2i> -> Term<V2i>) =
+    let divergence<'fmt when 'fmt :> Formats.IFloatingFormat> (dst : Image2d<'fmt>) =
+        compute {
+            let id = getGlobalId().XY
+            let dstSize = dst.Size
+            let srcSize = srcSampler.Size
+
+            if id.X < dstSize.X && id.Y < dstSize.Y then
+                let tc = (V2d(id) + V2d.Half) / V2d(dstSize)
+
+                let d = 1.0 / V2d srcSize
+
+                let v00  = srcSampler.SampleLevel(tc,0.0)
+                let vp0  = srcSampler.SampleLevel(tc + V2d( d.X, 0.0 ),0.0)
+                let vn0  = srcSampler.SampleLevel(tc + V2d(-d.X, 0.0 ),0.0)
+                let v0p  = srcSampler.SampleLevel(tc + V2d( 0.0, d.Y ),0.0)
+                let v0n  = srcSampler.SampleLevel(tc + V2d( 0.0,-d.Y ),0.0)
+
+                let div = 4.0 * v00 - vp0 - vn0 - v0p - v0n
+                
+                dst.[id] <- div 
+        }
+
+type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloatingFormat> (runtime : IRuntime, residual' : Term.TermParameter2d -> Term<V2i> -> Term<V2i>) =
     static let ceilDiv (a : int) (b : int) =
         if a % b = 0 then a / b
         else 1 + a / b
@@ -197,12 +200,11 @@ type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Forma
     
     let tools = TensorTools<'v>.Get(runtime)
     
-    let residual = residual (Term.TermParameter2d "x") (Term.Uniform "h")
+    let poly'  = residual' (Term.TermParameter2d "x") (Term.Uniform "h")
 
-    let epoly = Term.toReflectedCall Term.Read.image residual
-    let upoly = Term.parameters residual |> HMap.toList |> List.map fst
-
-    let poly' = Term.derivative "x" V2i.Zero residual
+    //let epoly = Term.toReflectedCall Term.Read.image residual
+    //let upoly = Term.parameters residual |> HMap.toList |> List.map fst
+    
     let epoly' = Term.toReflectedCall Term.Read.image poly'
     let upoly' = Term.parameters poly' |> HMap.toList |> List.map fst
 
@@ -224,7 +226,6 @@ type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Forma
         let neg = rreal.neg
         <@ fun v -> (%toV4) ((%neg) v) @>
         
-    let residual = runtime.CreateComputeShader (ConjugateGradientShaders.polynomial2d<'f, 'v> epoly rreal.toV4)
     let negativeDerivative = runtime.CreateComputeShader (ConjugateGradientShaders.polynomial2d<'f, 'v> epoly' negativeV4)
     let derivative = runtime.CreateComputeShader (ConjugateGradientShaders.polynomial2d<'f, 'v> epoly' rreal.toV4)
     let secondMulD = runtime.CreateComputeShader (ConjugateGradientShaders.polynomial2d<'f, 'v> epoly'' rreal.toV4)
@@ -234,24 +235,7 @@ type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Forma
         runtime.Upload(t, 0, 0, img)
         t
 
-   
-    member x.Residual(inputs : Map<string, ITextureSubResource>, dst : ITextureSubResource) =
-        use input = runtime.NewInputBinding residual
-        input.["res"] <- dst
-
-        for used in upoly do
-            let r = inputs.[used]
-            input.[used] <- r
-            input.[sprintf "%sLevel" used] <- 0
-            input.[sprintf "%sSize" used] <- r.Size.XY
-            
-        input.Flush()
-
-        runtime.Run [
-            ComputeCommand.Bind residual
-            ComputeCommand.SetInput input
-            ComputeCommand.Dispatch(ceilDiv2 dst.Size.XY residual.LocalSize.XY)
-        ]
+    member x.Tools = tools
 
     member x.NegativeDerivative(h : float, inputs : Map<string, ITextureSubResource>, dst : ITextureSubResource) =
         use input = runtime.NewInputBinding negativeDerivative
@@ -319,7 +303,7 @@ type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Forma
         let size = x.Size.XY
         let n = size.X * size.Y
         
-        use __ = runtime.NewInputBinding residual
+        use __ = runtime.NewInputBinding secondMulD
 
         let mutable i = 0
         let mutable j = 0
@@ -352,7 +336,7 @@ type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Forma
         let eps2Delta0 = real.mul (real.fromFloat (eps * eps)) delta0
         let eps2 = real.fromFloat (eps * eps)
 
-        while i < imax && real.isPositive (real.sub deltaNew eps2Delta0) do
+        while i < imax && real.isGreater deltaNew eps2Delta0 do
             j <- 0
 
             // deltaD <- <d|d>
@@ -365,11 +349,9 @@ type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Forma
 
             let alphaTest() =
                 let alpha2DeltaD = real.mul (real.pow alpha 2) deltaD
-                real.sub alpha2DeltaD eps2 |> real.isPositive
+                real.isGreater alpha2DeltaD eps2
 
             doWhile (fun () -> j < jmax && alphaTest())  (fun () -> 
-                
-
                 // a <- <f'(x) | d >
                 this.Derivative(h, inputs, temp)
                 let a = tools.Dot(temp, d)
@@ -379,7 +361,7 @@ type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Forma
                 let b = tools.Dot(temp, d)
 
                 // alpha <- -a / b
-                let alpha = real.neg (real.div a b) //(dot d (f'' x d))
+                alpha <- real.neg (real.div a b) //(dot d (f'' x d))
 
                 // x <- x + alpha*d
                 tools.MultiplyAdd(d, alpha, x, real.one)
@@ -395,10 +377,9 @@ type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Forma
 
             // d <- r + beta * d
             tools.MultiplyAdd(r, real.one, d, beta)
-
-            let rd = tools.Dot(r, d)
+            
             k <- k + 1
-            if k = n || real.neg rd |> real.isPositive then
+            if k = n then //|| real.isNegative (tools.Dot(r, d)) then
                 runtime.Copy(r, d)
                 k <- 0
 
@@ -466,15 +447,53 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
     let restrictWeight = runtime.CreateComputeShader (ConjugateGradientShaders.restrictWeight<'f>)
     let restrict = runtime.CreateComputeShader (ConjugateGradientShaders.restrict<'f>)
     let interpolate = runtime.CreateComputeShader (ConjugateGradientShaders.interpolate<'f>)
-    let cg = ConjugateGradientSolver2d<'f, 'v>(runtime, residual)
-        //Array.init 20 (fun l ->
-        //    let s = 2.0 ** float l
-        //    lazy (ConjugateGradientSolver2d<'f, 'v>(runtime, residual (real.fromFloat s)))
-        //)
+    let divergence = runtime.CreateComputeShader (ConjugateGradientShaders.divergence<'f>)
+    
+    let constantPart, cg = 
+        let mutable constantPart = Term<V2i>.Zero
+        let bb = Term.TermParameter2d("b")
+        let res (x : Term.TermParameter2d) (h : Term<V2i>) =
+            let r = residual x h
+            let r = Term.derivative "x" V2i.Zero r
+            let (a, b) = Term.factorize "x" r
+            constantPart <- b //bb.[0,0] * (h - 1.0) //Term<V2i>.Zero
+            a + bb.[0,0]
+
+        
+        let cg = ConjugateGradientSolver2d<'f, 'v>(runtime, res)
+        constantPart, cg
+
+    let uconstantPart = Term.parameters constantPart |> HMap.toSeq |> Seq.map fst |> Set.ofSeq
+
+    let computeB = 
+        let rreal = ReflectedReal.instance<'v>
+        runtime.CreateComputeShader(ConjugateGradientShaders.polynomial2d<'f, 'v> (Term.toReflectedCall Term.Read.image constantPart) rreal.toV4)
+
     let createTexture (img : PixImage) =
         let t = runtime.CreateTexture(img.Size, TextureFormat.ofPixFormat img.PixFormat TextureParams.empty, 1, 1)
         runtime.Upload(t, 0, 0, img)
         t
+
+   
+    member x.ComputeB(h : float, inputs : Map<string, ITextureSubResource>, dst : ITextureSubResource) =
+        use input = runtime.NewInputBinding computeB
+        input.["res"] <- dst
+        input.["h"] <- real.fromFloat h
+
+        for used in uconstantPart do
+            let r = inputs.[used]
+            input.[used] <- r
+            input.[sprintf "%sLevel" used] <- 0
+            input.[sprintf "%sSize" used] <- r.Size.XY
+            
+        input.Flush()
+
+        runtime.Run [
+            ComputeCommand.Bind computeB
+            ComputeCommand.SetInput input
+            ComputeCommand.Dispatch(ceilDiv2 dst.Size.XY computeB.LocalSize.XY)
+        ]
+
 
     member x.Restrict(src : ITextureSubResource, srcWeight : ITextureSubResource, dst : ITextureSubResource, dstWeight : ITextureSubResource, temp : ITextureSubResource) =
         use input = runtime.NewInputBinding mul
@@ -526,6 +545,18 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
             ComputeCommand.Dispatch (ceilDiv2 dst.Size.XY interpolate.LocalSize.XY)
         ]
 
+    member x.Divergence(src : ITextureSubResource, dst : ITextureSubResource) =
+        use input = runtime.NewInputBinding divergence
+        input.["src"] <- src
+        input.["dst"] <- dst
+        input.Flush()
+
+        runtime.Run [
+            ComputeCommand.Bind divergence
+            ComputeCommand.SetInput input
+            ComputeCommand.Dispatch (ceilDiv2 dst.Size.XY divergence.LocalSize.XY)
+        ]
+
     member x.Restrict (m : Map<string, ITextureSubResource>) =
         m |> Map.map (fun name img ->
             let next = img.Texture.[img.Aspect, img.Level + 1, img.Slice]
@@ -548,24 +579,64 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
 
     member private x.Cycle(inputs : Map<string, ITextureSubResource>, level : int, size : V2i, ibefore : int, iafter : int, ileaf : int, eps : float) =
         let h = 1 <<< level |> float
-        if size.AnyGreater 4 then
+
+        let debug = false
+        //cg.Tools.MultiplyAdd(inputs.["__r"], real.zero, inputs.["x"], real.zero)
+        
+        if debug then
+            let r = inputs.["b"]
+            runtime.Download(r.Texture, r.Level, r.Slice).SaveAsImage (sprintf @"C:\temp\a\b%dx%d.jpg" r.Size.X r.Size.Y)
+            let r = inputs.["v"]
+            runtime.Download(r.Texture, r.Level, r.Slice).SaveAsImage (sprintf @"C:\temp\a\v%dx%d.jpg" r.Size.X r.Size.Y)
+            let r = inputs.["w_v"]
+            runtime.Download(r.Texture, r.Level, r.Slice).SaveAsImage (sprintf @"C:\temp\a\w%dx%d.jpg" r.Size.X r.Size.Y)
+
+        if size.AllGreater 8 then
             if ibefore > 0 then
                 cg.SolveInternal(h, inputs, inputs.["x"], eps, ibefore, 1)
 
-            let down = x.Restrict inputs
-            let r = down.["v"]
-            runtime.Download(r.Texture, r.Level, r.Slice).SaveAsImage (sprintf @"C:\temp\a\v%dx%d.jpg" r.Size.X r.Size.Y)
-            let r = down.["w_v"]
-            runtime.Download(r.Texture, r.Level, r.Slice).SaveAsImage (sprintf @"C:\temp\a\w%dx%d.jpg" r.Size.X r.Size.Y)
+            if debug then
+                let r = inputs.["x"]
+                runtime.Download(r.Texture, r.Level, r.Slice).SaveAsImage (sprintf @"C:\temp\a\x%dx%d.jpg" r.Size.X r.Size.Y)
+
+            //let res = inputs.["__r"]
+            //let temp = inputs.["__temp"]
             
+            //cg.Derivative(h, inputs, res) // res = Ax + b // res = b
+
+
+            // Ax = -b
+            
+            // Ax0 + b = res
+            
+
+
+            // Ax + b = res
+
+
+            // Ax1 - b + res = 0
+            // Ax1 = -(res - b)
+
+            //cg.Tools.MultiplyAdd(inputs.["b"], real.neg real.one, res, real.one)
+
+            //runtime.Copy(inputs.["x"], V3i.Zero, temp, V3i.Zero, temp.Size)
+            
+            let down = x.Restrict inputs
+            //cg.Tools.MultiplyAdd(inputs.["b"], real.zero, res, real.neg real.one)
+            //x.Restrict(res, down.["b"])
+            cg.Tools.MultiplyAdd(down.["x"], real.zero, down.["b"], real.fromFloat (1.0 / 4.0))
+
+
             let half = V2i(max 1 (size.X / 2), max 1 (size.Y / 2))
             
             x.Cycle(down, level + 1, half, ibefore, iafter, ileaf, eps)
 
             x.Interpolate(down.["x"], inputs.["x"])
+            //cg.Tools.MultiplyAdd(temp, real.one, inputs.["x"], real.fromFloat (1.0 / 4.0))
             
-            let r = inputs.["x"]
-            runtime.Download(r.Texture, r.Level, r.Slice).SaveAsImage (sprintf @"C:\temp\a\u%dx%d.jpg" r.Size.X r.Size.Y)
+            if debug then
+                let r = inputs.["x"]
+                runtime.Download(r.Texture, r.Level, r.Slice).SaveAsImage (sprintf @"C:\temp\a\u%dx%d.jpg" r.Size.X r.Size.Y)
 
             if iafter > 0 then
                 cg.SolveInternal(h, inputs, inputs.["x"], eps, iafter, 1)
@@ -575,9 +646,23 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
             if ileaf > 0 then
                 cg.SolveInternal(h, inputs, inputs.["x"], eps, ileaf, 1)
 
-        let r = inputs.["x"]
-        runtime.Download(r.Texture, r.Level, r.Slice).SaveAsImage (sprintf @"C:\temp\a\f%dx%d.jpg" r.Size.X r.Size.Y)
+        if debug then
+            let r = inputs.["x"]
+            runtime.Download(r.Texture, r.Level, r.Slice).SaveAsImage (sprintf @"C:\temp\a\f%dx%d.jpg" r.Size.X r.Size.Y)
  
+    member this.CreateTexture(img : PixImage) =
+        let res = runtime.CreateTexture(img.Size, TextureFormat.ofPixFormat img.PixFormat TextureParams.empty, 1, 1)
+        runtime.Upload(res, 0, 0, img)
+        res
+        
+
+    member this.CreateTempTexture(img : PixImage) =
+        let levels = 1 + int(Fun.Floor(Fun.Log2 (max img.Size.X img.Size.Y)))
+        let res = runtime.CreateTexture(img.Size, TextureFormat.ofPixFormat img.PixFormat TextureParams.empty, levels, 1)
+        runtime.Upload(res, 0, 0, img)
+        res
+    member x.Tools = cg.Tools
+
     member this.Solve(inputs : Map<string, ITextureSubResource>, x : ITextureSubResource, n : int, eps : float) =
         use __ = runtime.NewInputBinding restrict
 
@@ -586,38 +671,96 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
         
         let v = runtime.CreateTexture(size.XY, format, levels, 1)
         runtime.Copy(x, V3i.Zero, v.[TextureAspect.Color, 0, 0], V3i.Zero, size)
+  
 
-        let inputs =
+        let ip =
             inputs |> Map.map (fun name i ->
-                let res = runtime.CreateTexture(size.XY, format, levels, 1)
-                runtime.Copy(i, V3i.Zero, res.[TextureAspect.Color, 0, 0], V3i.Zero, size)
-                res.[TextureAspect.Color, 0, 0]
+                if i.Texture.MipMapLevels >= levels then
+                    i
+                else
+                    let res = runtime.CreateTexture(size.XY, format, levels, 1)
+                    runtime.Copy(i, V3i.Zero, res.[TextureAspect.Color, 0, 0], V3i.Zero, size)
+                    res.[TextureAspect.Color, 0, 0]
             )
             
-        let r = runtime.CreateTexture(size.XY, format, levels, 1)
-        let d = runtime.CreateTexture(size.XY, format, levels, 1)
-        let temp = runtime.CreateTexture(size.XY, format, levels, 1)
-        
+        let b = runtime.CreateTexture(size.XY, format, levels, 1)
+        let b0 = runtime.CreateTexture(size.XY, format, 1, 1)
+        let r0 = runtime.CreateTexture(size.XY, format, levels, 1)
 
-        let inputs =
-            inputs
+        let r,deleteR = 
+            match Map.tryFind "__r" inputs with
+                | Some r -> r.Texture, false
+                | None ->
+                    let r = runtime.CreateTexture(size.XY, format, levels, 1)
+                    r, true
+
+        let d,deleteD = 
+            match Map.tryFind "__d" inputs with
+                | Some d -> d.Texture, false
+                | None ->
+                    let d = runtime.CreateTexture(size.XY, format, levels, 1)
+                    d, true
+
+        let temp,deleteTemp = 
+            match Map.tryFind "__temp" inputs with
+                | Some temp -> temp.Texture, false
+                | None ->
+                    let temp = runtime.CreateTexture(size.XY, format, levels, 1)
+                    temp, true
+
+        let ip =
+            ip
             |> Map.add "x" v.[TextureAspect.Color, 0, 0]
             |> Map.add "__r" r.[TextureAspect.Color, 0, 0]
             |> Map.add "__d" d.[TextureAspect.Color, 0, 0]
             |> Map.add "__temp" temp.[TextureAspect.Color, 0, 0]
+            |> Map.add "b" b.[TextureAspect.Color, 0, 0]
 
-        for i in 1 .. n do
-            this.Cycle(inputs, 0, size.XY, 8, 8, 30, eps)
 
-        runtime.Copy(v.[TextureAspect.Color, 0, 0], V3i.Zero, x, V3i.Zero, size)
-
-        inputs |> Map.iter (fun _ t -> runtime.DeleteTexture t.Texture)
+        this.ComputeB(1.0, ip, b0.[TextureAspect.Color, 0, 0])
         
+        for i in 1 .. 4 do
+            if i = 1 then runtime.Copy(b0.[TextureAspect.Color, 0, 0], V3i.Zero, b.[TextureAspect.Color, 0, 0], V3i.Zero, size)
+            else cg.Derivative(1.0, Map.add "x" x (Map.add "b" b0.[TextureAspect.Color, 0, 0] ip), b.[TextureAspect.Color, 0, 0])
+            // Ax = -b
+
+            // Ax + b = r
+            
+            
+            // Ax + b = r
+
+            // Ax1 = +b - r
+            // Ax1 = -(r - b)
+
+
+            this.Cycle(ip, 0, size.XY, 0, 20, 20, eps)
+
+            cg.Tools.MultiplyAdd(v.[TextureAspect.Color, 0, 0], real.one, x, real.one)
+
+            
+        let avg = cg.Tools.Average(x)
+
+        //runtime.Copy(sum.[TextureAspect.Color, 0, 0], V3i.Zero, x, V3i.Zero, size)
+
+        runtime.DeleteTexture b
+        runtime.DeleteTexture v
+        if deleteR then runtime.DeleteTexture r
+        if deleteD then runtime.DeleteTexture d
+        if deleteTemp then runtime.DeleteTexture temp
+        
+        for (k,t) in Map.toSeq ip do
+            match Map.tryFind k inputs with
+                | Some it -> if t.Texture <> it.Texture then runtime.DeleteTexture t.Texture
+                | _ -> ()
+
+        avg
+    
+
     member this.Solve(inputs : Map<string, PixImage>, x : PixImage, n : int, eps : float) =
         let inputs = inputs |> Map.map (fun _ img -> (createTexture img).[TextureAspect.Color, 0, 0])
         let x = createTexture x
 
-        this.Solve(inputs, x.[TextureAspect.Color, 0, 0], n, eps)
+        let avg = this.Solve(inputs, x.[TextureAspect.Color, 0, 0], n, eps)
 
         let res = runtime.Download(x, 0, 0)
         runtime.DeleteTexture x
@@ -663,6 +806,7 @@ let inline printMat (name : string) (m : IMatrix< ^a >) =
     printfn "%s (%dx%d)" name m.Dim.Y m.Dim.X
     for r in rows do
         printfn "   %s" r
+
 
 
 
@@ -732,28 +876,42 @@ let main argv =
 
     
     let polya (x : Term.TermParameter2d) (h : Term<V2i>) = 
-        25.0        * ((4.0 * x.[0,0] - x.[-1,0] - x.[1,0] - x.[0,-1] - x.[0,1]) / h) ** 2 + 
-        w_v.[0,0]   * (x.[0,0] - v.[0,0]) ** 2
+        let term = 
+            let cdiv = (4.0 * x.[0,0] - x.[-1,0] - x.[1,0] - x.[0,-1] - x.[0,1]) / (h ** 2)
+            0.25 * (cdiv - div.[0,0]) ** 2 //+ 
+            //1.0   * w_v.[0,0] * (x.[0,0] - v.[0,0]) ** 2
+
+        //let f' = Term.derivative "x" V2i.Zero term
+        //let (d,c) = Term.factorize "x" f'
+        //Log.warn "f  = %s" (Term.toString f')
+        //Log.warn "Ax = %s" (Term.toString d)
+        //Log.warn "b  = %s" (Term.toString c)
+
+        //let test = d + c |> Term.simplify
+        //Log.warn "t  = %s" (Term.toString test)
+        
+        //let f'' = Term.allDerivatives "x" f'
+        //let d' = Term.allDerivatives "x" d 
+
+        //for (c,a) in HMap.toList f'' do
+        //    Log.warn "df'/d%A = %s" c (Term.toString a)
+            
+        //for (c,a) in HMap.toList d' do
+        //    Log.warn "dd/d%A  = %s" c (Term.toString a)
+
+        term
 
     //let poly = 0.125f * (4.0f * x<float32>.[0,0] - x.[-1,0] - x.[1,0] - x.[0,-1] - x.[0,1]) ** 2 + w_v.[0,0] * (x<float32>.[0,0] - v.[0,0]) ** 2
 
     //let test = poly.Rename(fun v -> 2 * v)
+
+    let fmt = Col.Format.Gray
+    let solver = MultigridSolver2d<FShade.Formats.r32f, float32>(runtime, polya)
     
-    let fmt = Col.Format.RGBA
-    let solver = MultigridSolver2d<FShade.Formats.rgba32f, V3f>(runtime, polya)
-
-    let size = V2i(4096,4096)
-    let edgeSize = 1L
-    let isXEdge (v : V2l) = v.X < edgeSize || v.X >= int64 size.X - edgeSize
-    let isYEdge (v : V2l) = v.Y < edgeSize  || v.Y >= int64 size.Y - edgeSize
-    let isCorner (v : V2l) = isXEdge v && isYEdge v
-    let isEdge (v : V2l) = isXEdge v || isYEdge v
-
-
-    let c = V2l(size) / 2L
-    let isCenter (v : V2l) =
-        v = c || v = c - V2l.IO || v = c - V2l.OI || v = c - V2l.II
-        
+    let clooneyPix =
+        @"C:\temp\a\bla.png"
+            |> PixImage.Create
+            
     let acc =
         TensorAccessors(
             Getter = System.Func<float32[], int64, C4f>(fun arr i -> C4f(arr.[int i], arr.[int i], arr.[int i], 1.0f)),
@@ -768,6 +926,39 @@ let main argv =
             mat.Accessors <- acc
             mat
 
+    let clooneyPix = clooneyPix.ToPixImage<byte>(Col.Format.RGBA)
+    let res = PixImage<float32>(fmt, clooneyPix.Size)
+    getMat(res).SetMap(clooneyPix.GetMatrix<C4b>(), fun c -> c.ToC4f()) |> ignore
+    res.ToPixImage<byte>().SaveAsImage @"C:\temp\a\input.png"
+
+    let clooneyPix = res
+    //clooneyPix.ToPixImage<byte>(Col.Format.Gray).SaveAsImage @"C:\temp\a\input.png"
+    
+    let clooney = solver.CreateTempTexture(clooneyPix)
+
+    let div = 
+        let tex = runtime.CreateTexture(clooney.Size.XY,TextureFormat.R32f, 1, 1)
+        solver.Divergence(clooney.[TextureAspect.Color,0,0],tex.[TextureAspect.Color,0,0])
+        tex
+
+    
+
+    let size = clooney.Size.XY
+
+    let edgeSize = 1L
+    let isXEdge (v : V2l) = v.X < edgeSize || v.X >= int64 size.X - edgeSize
+    let isYEdge (v : V2l) = v.Y < edgeSize  || v.Y >= int64 size.Y - edgeSize
+    let isCorner (v : V2l) = isXEdge v && isYEdge v
+    let isEdge (v : V2l) = isXEdge v || isYEdge v
+
+
+    let c = V2l(size) / 2L
+    let isCenter (v : V2l) =
+        v = c || v = c - V2l.IO || v = c - V2l.OI || v = c - V2l.II
+        
+
+    
+
     let x = PixImage<float32>(fmt, size)
     getMat(x).SetByCoord (fun (c : V2l) -> C4f(0.0f)) |> ignore
     
@@ -779,34 +970,71 @@ let main argv =
     let cache = Dict<V2l, C4f>()
     let rand = RandomSystem()
     let getColor (c : V2l) =
+        //let c = c / 2L
+        //if (c.X + c.Y) % 2L = 0L then C4f.White
+        //else C4f.Black
         cache.GetOrCreate(c, fun _ -> rand.UniformC3f().ToC4f())
 
 
-
-    let v = PixImage<float32>(fmt, size)
-    getMat(v).SetByCoord (fun (c : V2l) -> 
-        let c = c / 64L
-        if (c.X + c.Y) % 2L = 0L then getColor c
-        else C4f(0.0f)
-    ) |> ignore
+    //let clooneyMat = clooneyPix.GetMatrix<C4b>()
+    //let v = PixImage<float32>(fmt, size)
+    //getMat(v).SetByCoord (fun (c : V2l) -> 
+    //    if isEdge c then clooneyMat.[c].ToC4f()
+    //    else C4f(0.0f, 0.0f, 0.0f, 0.0f)
+    //    //let c = c / 64L
+    //    //if (c.X + c.Y) % 2L = 0L then getColor c
+    //    //else C4f(0.0f)
+    //) |> ignore
     
-    let w_v = PixImage<float32>(fmt, size)
-    getMat(w_v).SetByCoord (fun (c : V2l) -> 
-        let c = c / 64L
-        if (c.X + c.Y) % 2L = 0L then C4f(1.0f, 1.0f, 1.0f, 1.0f)
-        else C4f(0.0f,0.0f,0.0f,0.0f)
-    ) |> ignore
+    //let w_v = PixImage<float32>(fmt, size)
+    //getMat(w_v).SetByCoord (fun (c : V2l) -> 
+    //    if isEdge c then C4f(100.0f, 100.0f, 100.0f, 100.0f)
+    //    else C4f(0.0f, 0.0f, 0.0f, 0.0f)
+    //) |> ignore
+
+    let divPix = PixImage<float32>(Col.Format.RGBA, size)
+    runtime.Download(div, 0, 0, divPix)
 
     let inputs =
         Map.ofList [
             //"div", div :> PixImage
-            "v", v :> PixImage
-            "w_v", w_v :> PixImage
-            
+            //"v", v :> PixImage
+            //"w_v", w_v :> PixImage
+            "div", divPix :> PixImage
         ]
 
-    let mutable x = x :> PixImage
-    x <- solver.Solve(inputs, x, 1, 1E-3)
+    let textures =
+        inputs |> Map.map (fun name img ->
+            solver.CreateTempTexture img
+        )
+    let textures =
+        textures
+        |> Map.add "__r" (solver.CreateTempTexture x)
+        |> Map.add "__d" (solver.CreateTempTexture x)
+        |> Map.add "__temp" (solver.CreateTempTexture x)
+
+    let views = textures |> Map.map (fun _ t -> t.[TextureAspect.Color, 0, 0])
+    let res = solver.CreateTempTexture x
+    
+
+
+    Log.startTimed "solve"
+    let avg = solver.Solve(views, res.[TextureAspect.Color, 0, 0], 1, 1E-10)
+    Log.stop()
+    
+    //runtime.DeleteTexture(res)
+    //let res = solver.CreateTexture x
+    //Log.startTimed "solve again"
+    //solver.Solve(views, res.[TextureAspect.Color, 0, 0], 1, 1E-8)
+    //Log.stop()
+
+    runtime.Download(res, 0, 0, x)
+    runtime.DeleteTexture res
+    textures |> Map.iter (fun _ t -> runtime.DeleteTexture t)
+
+    let tavg = solver.Tools.Average(clooney.[TextureAspect.Color, 0, 0])
+    x.GetChannel(0L).SetMap(x.GetChannel(0L), fun v -> v + (tavg - avg)) |> ignore
+
     //let c = x.ToPixImage<float32>().GetChannel(Col.Channel.Gray)
     //printMat "x" c
 

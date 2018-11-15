@@ -358,7 +358,7 @@ module TermPatterns =
 
 module Term = 
 
-    let private rules<'c when 'c : equality> : list<Term<'c> -> Option<Term<'c>>> =
+    let private simplifyRules<'c when 'c : equality> : list<Term<'c> -> Option<Term<'c>>> =
         let eqa a b = 
             if a = b then 
                 Some(Value 2.0, a) 
@@ -481,14 +481,14 @@ module Term =
             function (Factorize(e)) -> Some e | _ -> None
         ]
     
-    let rec private applyRules (e : Term<'c>) =
+    let rec private applyRules (rules : list<Term<'c> -> Option<Term<'c>>>) (e : Term<'c>) =
         match rules |> List.tryPick (fun r -> r e) with
             | Some n ->
                 n
             | None ->
                 match e with
                     | Combination(rebuild, args) ->
-                        let args = args |> List.map applyRules
+                        let args = args |> List.map (applyRules rules)
                         rebuild args
                     | _ ->
                         e
@@ -527,13 +527,16 @@ module Term =
                     acc
         usedParameters HMap.empty e
 
-    let simplify (e : Term<'c>) =
+    let private applyFix (rules) (e : Term<'c>) =
         let mutable o = e
-        let mutable n = applyRules o
+        let mutable n = applyRules rules o
         while o <> n do
             o <- n
-            n <- applyRules o
+            n <- applyRules rules o
         n
+
+    let simplify (e : Term<'c>) =
+        applyFix simplifyRules e
 
     let derivative (name : string) (i : 'c) (e : Term<'c>) =
         let rec derivative (name : string) (i : 'c) (e : Term<'c>) =
@@ -596,7 +599,44 @@ module Term =
                 |> Seq.map (fun i -> i, derivative name i e)
                 |> HMap.ofSeq
 
+    let rec private cmp (l : Term<'a>) (r : Term<'a>) =
+        match l, r with
+            | Value l, Value r -> compare l r
+            | Value _, _ -> -1
+            | _, Value _ -> 1
+
+            | Uniform l, Uniform r -> compare l r
+            | Uniform _, _ -> -1
+            | _, Uniform _ -> 1
+
+            | Parameter(l,_), Parameter(r,_) -> compare l r
+            | Parameter _, _ -> -1
+            | _, Parameter _ -> 1
+
+            | Negate l, Negate r 
+            | Power(l,_), Power(r,_)
+            | Sine l, Sine r
+            | Cosine l, Cosine r
+            | Tangent l, Tangent r
+            | Logarithm l, Logarithm r ->
+                cmp l r
+
+            | Product(ls), Product(rs)
+            | Sum (ls), Sum(rs) ->
+                let ls = List.sortWith cmp ls
+                let rs = List.sortWith cmp rs
+
+                match ls, rs with
+                    | [], [] -> 0
+                    | [], _ -> -1
+                    | _, [] -> 1
+                    | (l::_), (r::_) -> cmp l r
+
+
+            | _ -> 0
+
     let rec toString (e : Term<'a>) =
+
         match e with
             | Value v -> sprintf "%A" v
             | Parameter(name, i) -> sprintf "%s%A" name i
@@ -609,8 +649,8 @@ module Term =
             | Sum(vs) -> 
                 let neg, pos = vs |> List.partition (function Negate a -> true | _ -> false)
 
-                let pos = pos |> List.map toString
-                let neg = neg |> List.map (function (Negate a) -> toString a | _ -> failwith "")
+                let pos = pos |> List.sortWith cmp |> List.map toString
+                let neg = neg |> List.sortWith cmp |> List.map (function (Negate a) -> toString a | _ -> failwith "") 
 
                 let s = 
                     match pos, neg with
@@ -626,8 +666,8 @@ module Term =
         
                 let neg, pos = vs |> List.partition (function Power(a, Value e) when e < 0.0 -> true | _ -> false)
 
-                let pos = pos |> List.map toString
-                let neg = neg |> List.map (function (Power(a,Value e)) -> toString (Power(a, Value -e)) | _ -> failwith "")
+                let pos = pos |> List.sortWith cmp |> List.map toString
+                let neg = neg |> List.sortWith cmp |> List.map (function (Power(a,Value e)) -> toString (Power(a, Value -e)) | _ -> failwith "")
 
                 let conc (sep : string) (ls : list<string>) =
                     match ls with
@@ -654,6 +694,34 @@ module Term =
             | Logarithm a -> sprintf "log(%s)" (toString a)
        
        
+    let private factorizeRules<'c when 'c : equality> : list<Term<'c> -> Option<Term<'c>>> =
+        [
+            function Product(Any isSum (s, rest)) -> s |> List.map (fun s -> Product (s :: rest)) |> Sum |> Some | _ -> None
+            function Power(s, Value e) when float (int e) = e && e > 0.0 -> Some (Product [s; Power(s, Value (e - 1.0))]) | _ -> None
+        ]
+
+    let factorize (name : string) (t : Term<'a>) =
+        let rec run (t : Term<'a>) =
+            match t with
+                | Negate a -> 
+                    let (d,c) = run t
+                    (Negate d, Negate c)
+
+                | Sum es ->
+                    let (ds, cs) = es |> List.map run |> List.unzip
+                    (Sum ds, Sum cs)
+
+                | t -> 
+                    let ps = parameters t
+                    if HMap.containsKey name ps then
+                        (t, Value 0.0)
+                    else
+                        (Value 0.0, t)
+                  
+
+        let (d,c) = t |> applyFix factorizeRules |> run
+        simplify d, simplify c
+
     type TermParameter(name : string) =
         
         member x.Item
@@ -775,6 +843,94 @@ module Term =
             )
         ]
 
+    [<AutoOpen>]
+    module ExprExtensions =
+        open Aardvark.Base.ReflectionHelpers
+        open FShade.ReflectionPatterns
+        open Aardvark.Base.TypeInfo.Patterns
+
+        let private vecNames = [| "X"; "Y"; "Z"; "W" |]
+        let private neg = getMethodInfo <@ (~-) : int -> int @>
+        let private add = getMethodInfo <@ (+) : int -> int -> int @>
+        let private sub = getMethodInfo <@ (-) : int -> int -> int @>
+        let private mul = getMethodInfo <@ (*) : int -> int -> int @>
+        let private div = getMethodInfo <@ (/) : int -> int -> int @>
+        let private pow = getMethodInfo <@ ( ** ) : float -> float -> float @>
+        
+        type Expr with
+            static member Negate(l : Expr) =
+                let neg = neg.MakeGenericMethod [| l.Type |]
+                Expr.Call(neg, [l])
+
+            static member Add(l : Expr, r : Expr) =
+                let add = 
+                    match l.Type, r.Type with
+                        | (VectorOf(d0,t0) as vt), _ 
+                        | _, (VectorOf(d0,t0) as vt) ->
+                            add.MakeGenericMethod [| l.Type; r.Type; vt |]
+                        | _ -> 
+                            add.MakeGenericMethod [| l.Type; r.Type; r.Type |]
+
+                Expr.Call(add, [l; r])
+                
+            static member Sub(l : Expr, r : Expr) =
+                let sub = 
+                    match l.Type, r.Type with
+                        | (VectorOf(d0,t0) as vt), _ 
+                        | _, (VectorOf(d0,t0) as vt) ->
+                            sub.MakeGenericMethod [| l.Type; r.Type; vt |]
+                        | _ -> 
+                            sub.MakeGenericMethod [| l.Type; r.Type; r.Type |]
+
+                Expr.Call(sub, [l; r])
+
+            static member Mul(l : Expr, r : Expr) =
+                let mul = 
+                    match l.Type, r.Type with
+                        | (VectorOf(d0,t0) as vt), _ 
+                        | _, (VectorOf(d0,t0) as vt) ->
+                            mul.MakeGenericMethod [| l.Type; r.Type; vt |]
+                        | _ -> 
+                            mul.MakeGenericMethod [| l.Type; r.Type; r.Type |]
+
+                Expr.Call(mul, [l; r])
+                
+            static member Div(l : Expr, r : Expr) =
+                let div = 
+                    match l.Type, r.Type with
+                        | (VectorOf(d0,t0) as vt), _ 
+                        | _, (VectorOf(d0,t0) as vt) ->
+                            div.MakeGenericMethod [| l.Type; r.Type; vt |]
+                        | _ -> 
+                            div.MakeGenericMethod [| l.Type; r.Type; r.Type |]
+
+                Expr.Call(div, [l; r])
+
+            static member Pow(l : Expr, r : Expr) =
+                match l.Type, r.Type with
+                    | VectorOf(d0,t0), VectorOf(d1, t1) ->
+                        let lFields = List.init d0 (fun i -> Expr.FieldGet(l, l.Type.GetField(vecNames.[i])))
+                        let rFields = List.init d1 (fun i -> Expr.FieldGet(r, r.Type.GetField(vecNames.[i])))
+
+                        let ctor = l.Type.GetConstructor(Array.create d0 t0)
+                        let args = List.map2 (fun l r -> Expr.Pow(l,r)) lFields rFields
+                        Expr.NewObject(ctor, args)
+
+                    | VectorOf(d0,t0), rt ->
+                        let lFields = List.init d0 (fun i -> Expr.FieldGet(l, l.Type.GetField(vecNames.[i])))
+                        let ctor = l.Type.GetConstructor(Array.create d0 t0)
+                        let args = List.map (fun l-> Expr.Pow(l,r)) lFields
+                        Expr.NewObject(ctor, args)
+
+                    | lt, VectorOf(d0,t0) ->
+                        let rFields = List.init d0 (fun i -> Expr.FieldGet(r, r.Type.GetField(vecNames.[i])))
+
+                        let ctor = l.Type.GetConstructor(Array.create d0 t0)
+                        let args = List.map (fun r -> Expr.Pow(l,r)) rFields
+                        Expr.NewObject(ctor, args)
+                    | _ -> 
+                        let m = pow.MakeGenericMethod [| l.Type; r.Type |]
+                        Expr.Call(pow, [l; r])
 
     let toExpr (fetch : string -> Option<'c> -> Expr<'v>) (p : Term<'c>) =
         let real = RealInstances.instance<'v>
@@ -849,6 +1005,35 @@ module Term =
                 | true, false -> <@@ (%rreal.pow) ((%rreal.fromFloat) (%%l)) (%%r) @@>
                 | false, false -> <@@ (%rreal.pow) (%%l) (%%r) @@>
 
+        let negate (l : Expr) =
+            if l.Type = typeof<float> then 
+                <@@ -(%%l : float) @@>
+            else
+                <@@ (%rreal.neg) (%%l) @@>
+
+
+        let add (l : Expr) (r : Expr) =
+            let l =
+                if l.Type = typeof<float> then <@@ (%rreal.fromFloat) (%%l : float) @@>
+                else l
+
+            let r =
+                if r.Type = typeof<float> then <@@ (%rreal.fromFloat) (%%r : float) @@>
+                else r
+
+            <@@ (%rreal.add) (%%l) (%%r) @@>
+
+        let sub (l : Expr) (r : Expr) =
+            let l =
+                if l.Type = typeof<float> then <@@ (%rreal.fromFloat) (%%l : float) @@>
+                else l
+
+            let r =
+                if r.Type = typeof<float> then <@@ (%rreal.fromFloat) (%%r : float) @@>
+                else r
+
+            <@@ (%rreal.sub) (%%l) (%%r) @@>
+
         let rec toExpr (term : Term<'c>) : Expr =
             match term with
                 | Value v ->
@@ -888,12 +1073,12 @@ module Term =
 
                 | Negate(a) ->
                     let e = toExpr a
-                    <@@ (%rreal.neg) (%%e) @@>
+                    negate e
                 
                 | Power(a, MinusOne) ->
                     let a = toExpr a
                     let one = real.one
-                    <@@ (%rreal.div) one (%%a) @@>
+                    div <@@ one @@> a
                     
                 | Power(a, b) ->
                     let a = toExpr a
@@ -910,14 +1095,14 @@ module Term =
                             Expr.Value(real.zero)
 
                         | (p :: pos), [] ->
-                            pos |> List.fold (fun s e -> <@@ (%rreal.add) (%%s) (%%e) @@>) p
+                            pos |> List.fold add p
 
                         | [], (n :: neg) -> 
-                            neg |> List.fold (fun s e -> <@@ (%rreal.sub) (%%s) (%%e) @@>) (<@@ (%rreal.neg) (%%n) @@>)
+                            neg |> List.fold sub (negate n)
 
                         | (p :: pos), neg ->
-                            let pos = pos |> List.fold (fun s e -> <@@ (%rreal.add) (%%s) (%%e) @@>) p
-                            neg |> List.fold (fun s e -> <@@ (%rreal.sub) (%%s) (%%e) @@>) pos
+                            let pos = pos |> List.fold add p
+                            neg |> List.fold sub pos
                                 
 
                

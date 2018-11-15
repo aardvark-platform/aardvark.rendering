@@ -20,6 +20,11 @@ type Real<'a> =
         isTiny : 'a -> bool
         isTinyEps : float -> 'a -> bool
         isPositive : 'a -> bool
+        isNegative : 'a -> bool
+        isGreater : 'a -> 'a -> bool
+        isSmaller : 'a -> 'a -> bool
+        isGreaterOrEqual : 'a -> 'a -> bool
+        isSmallerOrEqual : 'a -> 'a -> bool
     }
 
 module RealInstances =
@@ -39,7 +44,12 @@ module RealInstances =
             fromFloat = float32
             isTiny = Fun.IsTiny 
             isTinyEps = fun e v -> Fun.IsTiny(v, float32 e)
-            isPositive = fun v -> v > 0.0f
+            isPositive = fun v -> v >= 0.0f
+            isNegative = fun v -> v < 0.0f
+            isGreater = (>)
+            isSmaller = (<)
+            isGreaterOrEqual = (>=)
+            isSmallerOrEqual = (<=)
         }
 
     let Cfloat64 =
@@ -57,7 +67,12 @@ module RealInstances =
             fromFloat = float
             isTiny = Fun.IsTiny 
             isTinyEps = fun e v -> Fun.IsTiny(v, e)
-            isPositive = fun v -> v > 0.0
+            isPositive = fun v -> v >= 0.0
+            isNegative = fun v -> v < 0.0
+            isGreater = (>)
+            isSmaller = (<)
+            isGreaterOrEqual = (>=)
+            isSmallerOrEqual = (<=)
         }
 
     let CV2f =
@@ -75,7 +90,13 @@ module RealInstances =
             fromFloat = fun v -> V2f(float32 v, float32 v)
             isTiny = fun v -> Fun.IsTiny(v.X) && Fun.IsTiny(v.Y)
             isTinyEps = fun e v -> Fun.IsTiny(v.X, float32 e) && Fun.IsTiny(v.Y, float32 e)
-            isPositive = fun v -> v.AllGreater 0.0f
+            isPositive = fun v -> v.AnyGreaterOrEqual 0.0f
+            isNegative = fun v -> v.AnySmaller 0.0f
+
+            isGreater = fun l r -> l.AnyGreater r
+            isSmaller = fun l r -> l.AnySmaller r
+            isGreaterOrEqual = fun l r -> l.AnyGreaterOrEqual r
+            isSmallerOrEqual = fun l r -> l.AnySmallerOrEqual r
         }
 
     let CV2d =
@@ -93,7 +114,13 @@ module RealInstances =
             fromFloat = fun v -> V2d(v, v)
             isTiny = fun v -> Fun.IsTiny(v.X) && Fun.IsTiny(v.Y)
             isTinyEps = fun e v -> Fun.IsTiny(v.X, e) && Fun.IsTiny(v.Y, e)
-            isPositive = fun v -> v.AllGreater 0.0
+            isPositive = fun v -> v.AnyGreaterOrEqual 0.0
+            isNegative = fun v -> v.AnySmaller 0.0
+
+            isGreater = fun l r -> l.AnyGreater r
+            isSmaller = fun l r -> l.AnySmaller r
+            isGreaterOrEqual = fun l r -> l.AnyGreaterOrEqual r
+            isSmallerOrEqual = fun l r -> l.AnySmallerOrEqual r
         }
 
     let CV3f =
@@ -111,7 +138,13 @@ module RealInstances =
             fromFloat = fun v -> V3f(float32 v, float32 v, float32 v)
             isTiny = fun v -> Fun.IsTiny(v.X) && Fun.IsTiny(v.Y) && Fun.IsTiny(v.Z)
             isTinyEps = fun e v -> Fun.IsTiny(v.X, float32 e) && Fun.IsTiny(v.Y, float32 e) && Fun.IsTiny(v.Z, float32 e)
-            isPositive = fun v -> v.AllGreater 0.0f
+            isPositive = fun v -> v.AnyGreaterOrEqual 0.0f
+            isNegative = fun v -> v.AnySmaller 0.0f
+
+            isGreater = fun l r -> l.AnyGreater r
+            isSmaller = fun l r -> l.AnySmaller r
+            isGreaterOrEqual = fun l r -> l.AnyGreaterOrEqual r
+            isSmallerOrEqual = fun l r -> l.AnySmallerOrEqual r
         }
      
     let CV3d =
@@ -129,7 +162,13 @@ module RealInstances =
             fromFloat = fun v -> V3d(v, v, v)
             isTiny = fun v -> Fun.IsTiny(v.X) && Fun.IsTiny(v.Y) && Fun.IsTiny(v.Z)
             isTinyEps = fun e v -> Fun.IsTiny(v.X, e) && Fun.IsTiny(v.Y, e) && Fun.IsTiny(v.Z, e)
-            isPositive = fun v -> v.AllGreater 0.0
+            isPositive = fun v -> v.AnyGreaterOrEqual 0.0
+            isNegative = fun v -> v.AnySmaller 0.0
+
+            isGreater = fun l r -> l.AnyGreater r
+            isSmaller = fun l r -> l.AnySmaller r
+            isGreaterOrEqual = fun l r -> l.AnyGreaterOrEqual r
+            isSmallerOrEqual = fun l r -> l.AnySmallerOrEqual r
         }
 
     let CV4f =
@@ -147,7 +186,13 @@ module RealInstances =
             fromFloat = fun v -> V4f(float32 v, float32 v, float32 v, float32 v)
             isTiny = fun v -> Fun.IsTiny v.X && Fun.IsTiny v.Y && Fun.IsTiny v.Z && Fun.IsTiny v.W
             isTinyEps = fun e v -> Fun.IsTiny(v.X, float32 e) && Fun.IsTiny(v.Y, float32 e) && Fun.IsTiny(v.Z, float32 e) && Fun.IsTiny(v.W, float32 e)
-            isPositive = fun v -> v.AllGreater 0.0f
+            isPositive = fun v -> v.AnyGreaterOrEqual 0.0f
+            isNegative = fun v -> v.AnySmaller 0.0f
+
+            isGreater = fun l r -> l.AnyGreater r
+            isSmaller = fun l r -> l.AnySmaller r
+            isGreaterOrEqual = fun l r -> l.AnyGreaterOrEqual r
+            isSmallerOrEqual = fun l r -> l.AnySmallerOrEqual r
         }
 
     let CV4d =
@@ -165,7 +210,13 @@ module RealInstances =
             fromFloat = fun v -> V4d(v, v, v, v)
             isTiny = fun v -> Fun.IsTiny v.X && Fun.IsTiny v.Y && Fun.IsTiny v.Z && Fun.IsTiny v.W
             isTinyEps = fun e v -> Fun.IsTiny(v.X, e) && Fun.IsTiny(v.Y, e) && Fun.IsTiny(v.Z, e) && Fun.IsTiny(v.W, e)
-            isPositive = fun v -> v.AllGreater 0.0
+            isPositive = fun v -> v.AnyGreaterOrEqual 0.0
+            isNegative = fun v -> v.AnySmaller 0.0
+
+            isGreater = fun l r -> l.AnyGreater r
+            isSmaller = fun l r -> l.AnySmaller r
+            isGreaterOrEqual = fun l r -> l.AnyGreaterOrEqual r
+            isSmallerOrEqual = fun l r -> l.AnySmallerOrEqual r
         }
 
     let internal table =
