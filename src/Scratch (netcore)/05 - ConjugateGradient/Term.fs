@@ -716,11 +716,41 @@ module Term =
                     if HMap.containsKey name ps then
                         (t, Value 0.0)
                     else
-                        (Value 0.0, t)
+                        if HSet.contains name (uniforms t) then
+                            (t, Value 0.0)
+                        else
+                            (Value 0.0, t)
                   
 
         let (d,c) = t |> applyFix factorizeRules |> run
         simplify d, simplify c
+        
+    let isolate (name : string) (t : Term<'a>) =
+        let rec isolate (name : string) (t : Term<'a>) =
+            match t with
+                | Uniform n ->
+                    if n = name then t, Value 1.0
+                    else Value 1.0, t
+
+                | Negate(t) ->
+                    let f, t = isolate name t
+                    f, Negate t
+                | Product es ->
+                    let fs, ts = es |> List.map (isolate name) |> List.unzip
+                    Product fs, Product ts
+
+                | Factorize (Product es) ->
+                    isolate name (Product es)
+
+                | Power(a, e) ->
+                    let (f,a) = isolate name a
+                    Power(f,e), Power(a, e)
+
+                | Parameter _ | Value _
+                | Sine _ | Cosine _ | Tangent _ | Sum _ | Logarithm _ ->
+                    Value 1.0, t
+        let f, t = isolate name t
+        simplify f, simplify t
 
     type TermParameter(name : string) =
         
