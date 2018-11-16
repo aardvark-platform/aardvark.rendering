@@ -213,7 +213,15 @@ module TensorToolShaders =
                 dst.[id] <- (%add) ((%mul) dst.[id] dstFactor) ((%mul) src.[id] srcFactor)
         }
 
-    
+    [<LocalSize(X = 8, Y = 8)>]
+    let set2d<'fmt when 'fmt :> Formats.IFloatingFormat>  (value : V4d) (dst : Image2d<'fmt>) =
+        compute {
+            let id = getGlobalId().XY
+            let s = dst.Size
+
+            if id.X < s.X && id.Y < s.Y then
+                dst.[id] <- value
+        }
 
 [<AutoOpen>]
 module private FormatHacks = 
@@ -347,7 +355,13 @@ type TensorTools<'a when 'a : unmanaged> private(runtime : IRuntime) =
                 member x.Visit<'f when 'f :> FShade.Formats.IFloatingFormat>() =
                     runtime.CreateComputeShader (TensorToolShaders.mad2d<'a, 'a, 'f> v4Mul v4Add)
         }
-        
+    let set2d = 
+        formatCache { 
+            new FormatVisitor<_> with
+                member x.Visit<'f when 'f :> FShade.Formats.IFloatingFormat>() =
+                    runtime.CreateComputeShader (TensorToolShaders.set2d<'f>)
+        }      
+
     let rec fold1d (zero : 'a) (shader : IComputeShader) (v : IBuffer<'a>) =
         if v.Count <= 0 then
             zero
@@ -491,6 +505,21 @@ type TensorTools<'a when 'a : unmanaged> private(runtime : IRuntime) =
                 ComputeCommand.Bind mad2d
                 ComputeCommand.SetInput input
                 ComputeCommand.Dispatch (ceilDiv2 size mad2d.LocalSize.XY)
+            ]
+
+    member x.Set(dst : ITextureSubResource, value : V4d) =
+        let size = dst.Size.XY
+        if size.AllGreaterOrEqual 1 then
+            let set2d = set2d dst.Texture.Format
+            use input = runtime.NewInputBinding set2d
+            input.["dst"] <- dst
+            input.["value"] <- value
+            input.Flush()
+
+            runtime.Run [
+                ComputeCommand.Bind set2d
+                ComputeCommand.SetInput input
+                ComputeCommand.Dispatch (ceilDiv2 size set2d.LocalSize.XY)
             ]
 
     member x.Sum(v : ITextureSubResource) = fold2d num.zero sum2d sum1d v

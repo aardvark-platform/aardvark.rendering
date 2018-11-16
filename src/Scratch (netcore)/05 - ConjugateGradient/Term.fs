@@ -2,6 +2,7 @@
 
 open Aardvark.Base
 
+[<StructuredFormatDisplay("{AsString}")>]
 type Term<'c when 'c : equality> =
     | Parameter of name : string * coord : 'c
     | Uniform of name : string
@@ -62,6 +63,104 @@ type Term<'c when 'c : equality> =
     static member One : Term<'c> = Value 1.0
     static member E : Term<'c> = Value Constant.E
     static member Pi : Term<'c> = Value Constant.Pi
+
+    member private x.AsString = x.ToString()
+
+    override e.ToString() =
+
+        let rec cmp (l : Term<'a>) (r : Term<'a>) =
+            match l, r with
+                | Value l, Value r -> compare l r
+                | Value _, _ -> -1
+                | _, Value _ -> 1
+
+                | Uniform l, Uniform r -> compare l r
+                | Uniform _, _ -> -1
+                | _, Uniform _ -> 1
+
+                | Parameter(l,_), Parameter(r,_) -> compare l r
+                | Parameter _, _ -> -1
+                | _, Parameter _ -> 1
+
+                | Negate l, Negate r 
+                | Power(l,_), Power(r,_)
+                | Sine l, Sine r
+                | Cosine l, Cosine r
+                | Tangent l, Tangent r
+                | Logarithm l, Logarithm r ->
+                    cmp l r
+
+                | Product(ls), Product(rs)
+                | Sum (ls), Sum(rs) ->
+                    let ls = List.sortWith cmp ls
+                    let rs = List.sortWith cmp rs
+
+                    match ls, rs with
+                        | [], [] -> 0
+                        | [], _ -> -1
+                        | _, [] -> 1
+                        | (l::_), (r::_) -> cmp l r
+
+
+                | _ -> 0
+
+        let inline toString (e : Term<'c>) = e.ToString()
+        match e with
+            | Value v -> sprintf "%A" v
+            | Parameter(name, i) -> sprintf "%s%A" name i
+            | Uniform name -> name
+
+            | Sine a -> sprintf "sin(%s)" (toString a)
+            | Cosine a -> sprintf "cos(%s)" (toString a)
+            | Tangent a -> sprintf "tan(%s)" (toString a)
+
+            | Sum(vs) -> 
+                let neg, pos = vs |> List.partition (function Negate a -> true | _ -> false)
+
+                let pos = pos |> List.sortWith cmp |> List.map toString
+                let neg = neg |> List.sortWith cmp |> List.map (function (Negate a) -> toString a | _ -> failwith "") 
+
+                let s = 
+                    match pos, neg with
+                        | [], [] -> "0.0"
+                        | pos, [] -> String.concat " + " pos
+                        | [], neg -> String.concat " - " neg |> sprintf "-%s"
+                        | pos, neg ->
+                            String.concat " + " pos + " - " + String.concat " - " neg
+
+                sprintf "(%s)" s
+
+            | Product(vs) ->
+        
+                let neg, pos = vs |> List.partition (function Power(a, Value e) when e < 0.0 -> true | _ -> false)
+
+                let pos = pos |> List.sortWith cmp |> List.map toString
+                let neg = neg |> List.sortWith cmp |> List.map (function (Power(a,Value e)) -> toString (Power(a, Value -e)) | _ -> failwith "")
+
+                let conc (sep : string) (ls : list<string>) =
+                    match ls with
+                        | [] -> ""
+                        | [a] -> a
+                        | ls -> String.concat sep ls |> sprintf "(%s)"
+                    
+
+                match pos, neg with
+                    | [], [] -> "1.0"
+                    | pos, [] -> conc " * " pos 
+                    | [], neg -> conc " * " neg |> sprintf "1.0 / %s"
+                    | pos, neg ->
+                        let pos = conc " * " pos 
+                        let neg = conc " * " neg
+                        sprintf "%s / %s" pos neg
+                        
+
+            | Negate(l) -> sprintf "-%s" (toString l)
+            | Power(l,Value 0.5) -> sprintf "sqrt(%s)" (toString l)
+            | Power(l,Value 1.0) -> (toString l)
+            | Power(l,Value -1.0) -> sprintf "1.0 / %s" (toString l)
+            | Power(l,r) -> sprintf "%s**%s" (toString l) (toString r)
+            | Logarithm a -> sprintf "log(%s)" (toString a)
+       
 
 [<AutoOpen>]
 module TermPatterns = 
@@ -221,6 +320,7 @@ module TermPatterns =
     let (|Zero|_|) (e : Term<'c>) =
         match e with
             | Value v when Fun.IsTiny v -> Some ()
+            | Sum [] -> Some ()
             | _ -> None
 
     let (|Half|_|) (e : Term<'c>) =
@@ -231,6 +331,7 @@ module TermPatterns =
     let (|One|_|) (e : Term<'c>) =
         match e with
             | Value v when Fun.IsTiny(v - 1.0) -> Some ()
+            | Product [] -> Some ()
             | _ -> None
 
     let (|MinusOne|_|) (e : Term<'c>) =
@@ -255,7 +356,10 @@ module TermPatterns =
                         Some r
                     else
                         match h, e with
-                            | Power(a,Value ae), Power(b,Value be) when a = b && ae >= be ->
+                            | Power(a,Value ae), Power(b,Value be) when be > 0.0 && a = b && ae >= be ->
+                                Some(Power(a, Value (ae - be)) :: r)
+                            
+                            | Power(a,Value ae), Power(b,Value be) when be < 0.0 && a = b && ae <= be ->
                                 Some(Power(a, Value (ae - be)) :: r)
                             
                             | Power(a,Value ae), b when a = b && ae >= 1.0 ->
@@ -356,7 +460,199 @@ module TermPatterns =
             | Logarithm a -> Some a
             | _ -> None
 
+[<AutoOpen>]
+module FunExtensions =
+
+    [<AutoOpen>]
+    module private Impl = 
+        let inline mul (l : 'a) (r : 'a) =
+            try Checked.(*) l r |> Some
+            with _ -> None
+
+        let binom64 (n : int64) (k : int64) =
+            if k <= 0L || n <= k then
+                Some 1L
+            else
+                let nk = n - k
+                let k, nk = 
+                    if k > nk then nk, k
+                    else k, nk
+                
+                // n! / ((n-k)! * k!)
+            
+                // (n*(n-1)*(n-2)*...*(n-k+1)) / k!
+
+                // n/k * ((n-1)/(k-1))
+                // ((n/k)/(k-1)) * (n-1)
+                // (n/k * (n-1))/(k-1)
+
+                let mutable res = Some 1L
+                let mutable n = n
+                //printf "1"
+                for j in 1L .. k do
+                    match res with
+                        | Some r ->
+                            if j = 1L then
+                                //printf " * %d" n
+                                res <- mul r n
+                            elif n % j = 0L then
+                                //printf " * (%d / %d)" n j
+                                res <- mul r (n / j)
+                            elif r % j = 0L then
+                                //printf " / %d * %d" j n
+                                res <- mul (r / j) n
+                            else
+                                //printf " * %d * %d" n j
+                                match mul r n with
+                                    | Some r ->
+                                        res <- Some (r / j)
+                                    | _ ->
+                                        res <- None
+                            n <- n - 1L
+                        | None ->
+                            ()
+                        
+                res
+                   
+        let binom32 (n : int) (k : int) =
+            if k <= 0 || n <= k then
+                Some 1
+            else
+                let nk = n - k
+                let k, nk = 
+                    if k > nk then nk, k
+                    else k, nk
+                
+                // n! / ((n-k)! * k!)
+            
+                // (n*(n-1)*(n-2)*...*(n-k+1)) / k!
+
+                // n/k * ((n-1)/(k-1))
+                // ((n/k)/(k-1)) * (n-1)
+                // (n/k * (n-1))/(k-1)
+
+                let mutable res = Some 1
+                let mutable n = n
+                //printf "1"
+                for j in 1 .. k do
+                    match res with
+                        | Some r ->
+                            if j = 1 then
+                                //printf " * %d" n
+                                res <- mul r n
+                            elif n % j = 0 then
+                                //printf " * (%d / %d)" n j
+                                res <- mul r (n / j)
+                            elif r % j = 0 then
+                                //printf " / %d * %d" j n
+                                res <- mul (r / j) n
+                            else
+                                //printf " * %d * %d" n j
+                                match mul r n with
+                                    | Some r ->
+                                        res <- Some (r / j)
+                                    | _ ->
+                                        res <- None
+                            n <- n - 1
+                        | None ->
+                            ()
+                        
+                res 
+
+    type Fun with
+        static member TryBinom(n : int64, k : int64) = binom64 n k
+        static member TryBinom(n : int, k : int) = binom32 n k
+        
+        static member Binom(n : int64, k : int64) = binom64 n k |> Option.get
+        static member Binom(n : int, k : int) = binom32 n k |> Option.get
+
+    module List =
+        let rec allChoices (is : list<'x>) =
+            match is with
+            | [] -> 
+                [[]]
+            | h::t ->
+                let rest = allChoices t
+                List.concat [
+                    rest |> List.map (fun r -> h::r)
+                    rest
+                ]
+        let rec allCombinations (is : list<list<'x>>) =
+            match is with
+            | [] -> 
+                [[]]
+            | h::t ->
+                let rest = allCombinations t
+                h |> List.collect ( fun h ->
+                    rest |> List.map (fun r ->
+                        h::r
+                    )
+                )
+
 module Term = 
+
+    let private baseSimplifyRules<'c when 'c : equality> : list<Term<'c> -> Option<Term<'c>>> =
+
+        let sinDivCos a b =
+            match a, b with
+                | Sine(a), Power(Cosine(b), Value -1.0) 
+                | Power(Cosine(b), Value -1.0), Sine(a) when a = b ->
+                    Some (Tangent(a))
+                    
+                | Cosine(a), Power(Sine(b), Value -1.0) 
+                | Power(Sine(b), Value -1.0), Cosine(a) when a = b ->
+                    Some (1.0 / Tangent(a))
+                | _ ->
+                    None
+
+        let sinAddCosSquared a b =
+            match a, b with
+                | Power(Sine(a), Value 2.0), Power(Cosine(b), Value 2.0) 
+                | Power(Cosine(b), Value 2.0), Power(Sine(a), Value 2.0) when a = b ->
+                    Some (Value 1.0)
+
+                | _ ->
+                    None
+
+        let neg = fun a b -> if a = Negate b || b = Negate a then Some () else None
+
+        [
+            
+            function Sum [] -> Some (Value 0.0) | _ -> None
+            function Product [] -> Some (Value 1.0) | _ -> None
+            function Sum [a] -> Some a | _ -> None
+            function Product [a] -> Some a | _ -> None
+        
+            function Sum(Any isSum (s, rest)) -> Some (Sum (s @ rest)) | _ -> None
+            function Product(Any isProduct (s, rest)) -> Some (Product (s @ rest)) | _ -> None
+            function Negate(Sum ls) -> Some (Sum (List.map Negate ls)) | _ -> None
+            function Power(Power(a,e0), e1) -> Some (Power(a, e0 * e1)) | _ -> None
+            function Sine(Negate a) -> Some (Negate (Sine a)) | _ -> None
+            function Tangent(Negate a) -> Some (Negate (Tangent a)) | _ -> None
+            function Cosine(Negate a) -> Some (Cosine a) | _ -> None
+            function Logarithm(Value v) -> Some (Value (log v)) | _ -> None
+            function Logarithm(Power(a,e)) -> Some (log a * e) | _ -> None
+            function Negate(Value a) -> Some (Value -a) | _ -> None
+            function Power(Value a, Value e) -> Some (Value (a ** e)) | _ -> None
+            function Power(Product ps, e) -> Some (Product (List.map (fun p -> Power(p,e)) ps)) | _ -> None
+            function Negate(Product (Any isValue (v,rest))) -> Some (Product (Value -v :: rest)) | _ -> None
+            function Power(a, One) -> Some a | _ -> None
+            function Power(a, Zero) -> Some (Value 1.0) | _ -> None
+            function Sine(Value a) -> Some (Value (sin a)) | _ -> None
+            function Cosine(Value a) -> Some (Value (cos a)) | _ -> None
+            function Tangent(Value a) -> Some (Value (tan a)) | _ -> None
+            function Product(AnyPair sinDivCos (t,rest)) -> Some (Product(t :: rest)) | _ -> None
+            function Sum(AnyPair sinAddCosSquared (t,rest)) -> Some (Sum(t :: rest)) | _ -> None
+            function Sum(Any (|Zero|_|) (_, rest)) -> Some (Sum rest) | _ -> None
+            function Product(Any (|Zero|_|) _) -> Some (Value 0.0) | _ -> None
+            function Product(Any (|One|_|) (_, rest)) -> Some (Product rest) | _ -> None
+            function Product(Any (|MinusOne|_|) (_, rest)) -> Some (Negate (Product rest)) | _ -> None
+            function Negate(Negate a) -> Some a | _ -> None
+            function ConstantSum e -> Some e | _ -> None
+            function ConstantProduct e -> Some e | _ -> None
+            function Sum(AnyPair neg (_, rest)) -> Some (Sum rest) | _ -> None
+            
+        ]
 
     let private simplifyRules<'c when 'c : equality> : list<Term<'c> -> Option<Term<'c>>> =
         let eqa a b = 
@@ -390,109 +686,34 @@ module Term =
                     | _ -> None
 
     
-        let sinDivCos a b =
-            match a, b with
-                | Sine(a), Power(Cosine(b), Value -1.0) 
-                | Power(Cosine(b), Value -1.0), Sine(a) when a = b ->
-                    Some (Tangent(a))
-                    
-                | Cosine(a), Power(Sine(b), Value -1.0) 
-                | Power(Sine(b), Value -1.0), Cosine(a) when a = b ->
-                    Some (1.0 / Tangent(a))
-                | _ ->
-                    None
-
-        let sinAddCosSquared a b =
-            match a, b with
-                | Power(Sine(a), Value 2.0), Power(Cosine(b), Value 2.0) 
-                | Power(Cosine(b), Value 2.0), Power(Sine(a), Value 2.0) when a = b ->
-                    Some (Value 1.0)
-
-                | _ ->
-                    None
-
-        let neg = fun a b -> if a = Negate b || b = Negate a then Some () else None
-
-        [
-            
-            function Sum [] -> Some (Value 0.0) | _ -> None
-            function Product [] -> Some (Value 1.0) | _ -> None
-            function Sum [a] -> Some a | _ -> None
-            function Product [a] -> Some a | _ -> None
         
-            function Sum(Any isSum (s, rest)) -> Some (Sum (s @ rest)) | _ -> None
-            function Product(Any isProduct (s, rest)) -> Some (Product (s @ rest)) | _ -> None
-
-            // -(a+b) -> -a + -b
-            function Negate(Sum ls) -> Some (Sum (List.map Negate ls)) | _ -> None
-            function Power(Power(a,e0), e1) -> Some (Power(a, e0 * e1)) | _ -> None
-        
-            function Sine(Negate a) -> Some (Negate (Sine a)) | _ -> None
-            function Tangent(Negate a) -> Some (Negate (Tangent a)) | _ -> None
-            function Cosine(Negate a) -> Some (Cosine a) | _ -> None
-
+        baseSimplifyRules @ [
             function Sum(AnyTwo isLog (a,b,rest)) -> Some (Sum (log (a * b) :: rest)) | _ -> None
-            function Logarithm(Power(a,e)) -> Some (log a * e) | _ -> None
-
-            function Logarithm(Value v) -> Some (Value (log v)) | _ -> None
-
-
-
-            function Negate(Value a) -> Some (Value -a) | _ -> None
-            function Power(Value a, Value e) -> Some (Value (a ** e)) | _ -> None
-
-            function Power(Product ps, e) -> Some (Product (List.map (fun p -> Power(p,e)) ps)) | _ -> None
-
-            function Negate(Product (Any isValue (v,rest))) -> Some (Product (Value -v :: rest)) | _ -> None
-
-            function Power(a, One) -> Some a | _ -> None
-            function Power(a, Zero) -> Some (Value 1.0) | _ -> None
-        
-            function Sine(Value a) -> Some (Value (sin a)) | _ -> None
-            function Cosine(Value a) -> Some (Value (cos a)) | _ -> None
-            function Tangent(Value a) -> Some (Value (tan a)) | _ -> None
-
-            function Product(AnyPair sinDivCos (t,rest)) -> Some (Product(t :: rest)) | _ -> None
-            function Sum(AnyPair sinAddCosSquared (t,rest)) -> Some (Sum(t :: rest)) | _ -> None
-
-
-            function Sum(Any (|Zero|_|) (_, rest)) -> Some (Sum rest) | _ -> None
-        
-            //function Rcp(Ninf | Pinf) -> Some (Value 0.0) | _ -> None
-
-            //function Product(Any (|Pinf|_|) (_,rest)) -> Some (Value System.Double.PositiveInfinity) | _ -> None
-
-            function Product(Any (|Zero|_|) _) -> Some (Value 0.0) | _ -> None
-            function Product(Any (|One|_|) (_, rest)) -> Some (Product rest) | _ -> None
-            function Product(Any (|MinusOne|_|) (_, rest)) -> Some (Negate (Product rest)) | _ -> None
-            function Negate(Negate a) -> Some a | _ -> None
-            //function Rcp(Rcp a) -> Some a | _ -> None
-            //function Negate(Rcp a) -> Some (Rcp (Negate a)) | _ -> None
-
-            function ConstantSum e -> Some e | _ -> None
-            function ConstantProduct e -> Some e | _ -> None
-
             function Product(AnyPair eqm ((a,e), rest)) -> Some (Product (Power(a,e) :: rest)) | _ -> None
-            //function Product(AnyPair eqd (_, rest)) -> Some (Product rest) | _ -> None
-
             function Sum(AnyPair eqa ((f,a), rest)) -> Some (Sum (Product [f; a] :: rest)) | _ -> None
-            function Sum(AnyPair neg (_, rest)) -> Some (Sum rest) | _ -> None
-            
             function (Factorize(e)) -> Some e | _ -> None
         ]
     
-    let rec private applyRules (rules : list<Term<'c> -> Option<Term<'c>>>) (e : Term<'c>) =
+    let rec private applyRules (depth : int) (rules : list<Term<'c> -> Option<Term<'c>>>) (e : Term<'c>) =
         match rules |> List.tryPick (fun r -> r e) with
             | Some n ->
+                if depth > 100 then Log.warn "deep"
                 n
             | None ->
                 match e with
                     | Combination(rebuild, args) ->
-                        let args = args |> List.map (applyRules rules)
+                        let args = args |> List.map (applyRules (depth + 1) rules)
                         rebuild args
                     | _ ->
                         e
 
+    let applyFix (rules : list<Term<'c> -> Option<Term<'c>>>) (e : Term<'c>) =
+        let mutable o = e
+        let mutable n = applyRules 0 rules o
+        while o <> n do
+            o <- n
+            n <- applyRules 0 rules o
+        n
 
     [<GeneralizableValue>]
     let zero<'c when 'c : equality> = Term<'c>.Zero
@@ -505,16 +726,16 @@ module Term =
     let inline uniform (name : string) = Uniform(name)
 
     let uniforms (e : Term<'c>) =
-        let rec usedUniforms (acc : hset<string>) (e : Term<'c>) =
+        let rec usedUniforms (acc : Set<string>) (e : Term<'c>) =
             match e with
                 | Uniform(name) ->
-                    acc |> HSet.add name
+                    acc |> Set.add name
                 | Combination(_, args) ->
                     args |> List.fold usedUniforms acc
                 | _ ->
                     acc
 
-        usedUniforms HSet.empty e
+        usedUniforms Set.empty e
 
     let parameters (e : Term<'c>) =
         let rec usedParameters (acc : hmap<string, hset<'c>>) (e : Term<'c>) =
@@ -527,14 +748,19 @@ module Term =
                     acc
         usedParameters HMap.empty e
 
-    let private applyFix (rules) (e : Term<'c>) =
-        let mutable o = e
-        let mutable n = applyRules rules o
-        while o <> n do
-            o <- n
-            n <- applyRules rules o
-        n
+    let names (e : Term<'c>) =
+        let rec names (acc : Set<string>) (e : Term<'c>) =
+            match e with
+                | Parameter(name, _)
+                | Uniform(name) ->
+                    acc |> Set.add name
 
+                | Combination(_, args) ->
+                    args |> List.fold names acc
+                | _ ->
+                    acc
+        names Set.empty e
+        
     let simplify (e : Term<'c>) =
         applyFix simplifyRules e
 
@@ -598,131 +824,60 @@ module Term =
                 cs 
                 |> Seq.map (fun i -> i, derivative name i e)
                 |> HMap.ofSeq
-
-    let rec private cmp (l : Term<'a>) (r : Term<'a>) =
-        match l, r with
-            | Value l, Value r -> compare l r
-            | Value _, _ -> -1
-            | _, Value _ -> 1
-
-            | Uniform l, Uniform r -> compare l r
-            | Uniform _, _ -> -1
-            | _, Uniform _ -> 1
-
-            | Parameter(l,_), Parameter(r,_) -> compare l r
-            | Parameter _, _ -> -1
-            | _, Parameter _ -> 1
-
-            | Negate l, Negate r 
-            | Power(l,_), Power(r,_)
-            | Sine l, Sine r
-            | Cosine l, Cosine r
-            | Tangent l, Tangent r
-            | Logarithm l, Logarithm r ->
-                cmp l r
-
-            | Product(ls), Product(rs)
-            | Sum (ls), Sum(rs) ->
-                let ls = List.sortWith cmp ls
-                let rs = List.sortWith cmp rs
-
-                match ls, rs with
-                    | [], [] -> 0
-                    | [], _ -> -1
-                    | _, [] -> 1
-                    | (l::_), (r::_) -> cmp l r
-
-
-            | _ -> 0
-
-    let rec toString (e : Term<'a>) =
-
-        match e with
-            | Value v -> sprintf "%A" v
-            | Parameter(name, i) -> sprintf "%s%A" name i
-            | Uniform name -> name
-
-            | Sine a -> sprintf "sin(%s)" (toString a)
-            | Cosine a -> sprintf "cos(%s)" (toString a)
-            | Tangent a -> sprintf "tan(%s)" (toString a)
-
-            | Sum(vs) -> 
-                let neg, pos = vs |> List.partition (function Negate a -> true | _ -> false)
-
-                let pos = pos |> List.sortWith cmp |> List.map toString
-                let neg = neg |> List.sortWith cmp |> List.map (function (Negate a) -> toString a | _ -> failwith "") 
-
-                let s = 
-                    match pos, neg with
-                        | [], [] -> "0.0"
-                        | pos, [] -> String.concat " + " pos
-                        | [], neg -> String.concat " - " neg |> sprintf "-%s"
-                        | pos, neg ->
-                            String.concat " + " pos + " - " + String.concat " - " neg
-
-                sprintf "(%s)" s
-
-            | Product(vs) ->
-        
-                let neg, pos = vs |> List.partition (function Power(a, Value e) when e < 0.0 -> true | _ -> false)
-
-                let pos = pos |> List.sortWith cmp |> List.map toString
-                let neg = neg |> List.sortWith cmp |> List.map (function (Power(a,Value e)) -> toString (Power(a, Value -e)) | _ -> failwith "")
-
-                let conc (sep : string) (ls : list<string>) =
-                    match ls with
-                        | [] -> ""
-                        | [a] -> a
-                        | ls -> String.concat sep ls |> sprintf "(%s)"
-                    
-
-                match pos, neg with
-                    | [], [] -> "1.0"
-                    | pos, [] -> conc " * " pos 
-                    | [], neg -> conc " * " neg |> sprintf "1.0 / %s"
-                    | pos, neg ->
-                        let pos = conc " * " pos 
-                        let neg = conc " * " neg
-                        sprintf "%s / %s" pos neg
-                        
-
-            | Negate(l) -> sprintf "-%s" (toString l)
-            | Power(l,Half) -> sprintf "sqrt(%s)" (toString l)
-            | Power(l,Value 1.0) -> (toString l)
-            | Power(l,Value -1.0) -> sprintf "1.0 / %s" (toString l)
-            | Power(l,r) -> sprintf "%s**%s" (toString l) (toString r)
-            | Logarithm a -> sprintf "log(%s)" (toString a)
+                
+    let toString (e : Term<'a>) = e.ToString()
        
        
     let private factorizeRules<'c when 'c : equality> : list<Term<'c> -> Option<Term<'c>>> =
-        [
+
+        let rec power (l : list<Term<'c>>) (e : int) =
+            if e <= 0 then Value 1.0
+            elif e = 1 then Sum l
+            else
+                let l2 = List.allPairs l l |> List.map (fun (a, b) -> a * b) |> List.sum
+                l2 * power l (e - 2)
+
+                
+        baseSimplifyRules @ [
+
             function Product(Any isSum (s, rest)) -> s |> List.map (fun s -> Product (s :: rest)) |> Sum |> Some | _ -> None
+            function Power(Product xs, e) -> Some (Product (xs |> List.map (fun x -> Power(x, e)))) | _ -> None
+            function Power(Sum xs, Value e) when Fun.IsTiny(Fun.Frac e) && e > 0.0 -> Some (power xs (int e)) | _ -> None
+            function Power(Negate a, Value e) when Fun.IsTiny(Fun.Frac e) && int (abs e) % 2 = 0 -> Some (Power(a, Value e)) | _ -> None
+            function Power(Negate a, Value e) when Fun.IsTiny(Fun.Frac e) && int (abs e) % 2 = 1 -> Some (Negate (Power(a, Value e))) | _ -> None
+            
+
+            function Logarithm(Power(a,e)) -> Some (e * log a) | _ -> None
+            function Logarithm(Product a) -> Some (List.sumBy log a) | _ -> None
+            function Logarithm(One) -> Some Term.Zero | _ -> None
+            
+            function Sine(Sum (a :: b)) -> Some (sin a * cos (Sum b) + cos a * sin (Sum b)) | _ -> None
+            function Cosine(Sum (a :: b)) -> Some (cos a * cos (Sum b) - sin a * sin (Sum b)) | _ -> None
+            
             function Power(s, Value e) when float (int e) = e && e > 0.0 -> Some (Product [s; Power(s, Value (e - 1.0))]) | _ -> None
         ]
 
     let factorize (name : string) (t : Term<'a>) =
-        let rec run (t : Term<'a>) =
+        let rec run (depth : int) (t : Term<'a>) =
+            if depth > 100 then Log.warn "deep"
             match t with
                 | Negate a -> 
-                    let (d,c) = run t
+                    let (d,c) = run (depth + 1) a
                     (Negate d, Negate c)
 
                 | Sum es ->
-                    let (ds, cs) = es |> List.map run |> List.unzip
+                    let (ds, cs) = es |> List.map (run (depth + 1)) |> List.unzip
                     (Sum ds, Sum cs)
 
                 | t -> 
-                    let ps = parameters t
-                    if HMap.containsKey name ps then
+                    let ns = names t
+                    if Set.contains name ns then
                         (t, Value 0.0)
                     else
-                        if HSet.contains name (uniforms t) then
-                            (t, Value 0.0)
-                        else
-                            (Value 0.0, t)
+                        (Value 0.0, t)
                   
 
-        let (d,c) = t |> applyFix factorizeRules |> run
+        let (d,c) = t |> applyFix factorizeRules |> run 0
         simplify d, simplify c
         
     let isolate (name : string) (t : Term<'a>) =
@@ -751,6 +906,21 @@ module Term =
                     Value 1.0, t
         let f, t = isolate name t
         simplify f, simplify t
+
+        
+    let substituteUniform (name : string) (s : Term<'a>) (t : Term<'a>) =
+        let rec substituteUniform (name : string) (s : Term<'a>) (t : Term<'a>) =
+            match t with
+                | Uniform n ->
+                    if name = n then s
+                    else t
+                | Combination(rebuild, args) ->
+                    args |> List.map (substituteUniform name s) |> rebuild
+                | _ ->
+                    t
+
+        substituteUniform name s t |> simplify
+
 
     type TermParameter(name : string) =
         
@@ -971,42 +1141,45 @@ module Term =
 
         let mul = rreal.mul
         let rec get (name : string) (i : Option<'c>) (e : int) : Expr<'v> =
-            match bindings.TryGetValue((name,i,e)) with
-                | (true, (v,_)) -> 
-                    Expr.Var(v) |> Expr.Cast
-                | _ ->
-                    match i with
-                        | None ->
-                            if e = 1 then
-                                fetch name None
-                            else
-                                let l = e / 2
-                                let r = e - l
-                                let l = get name None l
-                                let r = get name None r
-                                let ex = <@ (%mul) (%l) (%r) @>
-                                let vname = sprintf "%s_%d" name e
-                                let v = Var(vname, typeof<'v>)
-                                bindings.[(name,None,e)] <- (v, ex :> Expr)
-                                Expr.Var(v) |> Expr.Cast
+            if e = 0 then
+                rreal.one
+            else
+                match bindings.TryGetValue((name,i,e)) with
+                    | (true, (v,_)) -> 
+                        Expr.Var(v) |> Expr.Cast
+                    | _ ->
+                        match i with
+                            | None ->
+                                if e = 1 then
+                                    fetch name None
+                                else
+                                    let l = e / 2
+                                    let r = e - l
+                                    let l = get name None l
+                                    let r = get name None r
+                                    let ex = <@ (%mul) (%l) (%r) @>
+                                    let vname = sprintf "%s_%d" name e
+                                    let v = Var(vname, typeof<'v>)
+                                    bindings.[(name,None,e)] <- (v, ex :> Expr)
+                                    Expr.Var(v) |> Expr.Cast
 
-                        | Some i -> 
-                            let vname = varNames typeof<'c> name i
-                            if e = 1 then
-                                let ex = fetch name (Some i)
-                                let v = Var(vname, typeof<'v>)
-                                bindings.[(name,Some i,e)] <- (v, ex :> Expr)
-                                Expr.Var(v) |> Expr.Cast
-                            else
-                                let l = e / 2
-                                let r = e - l
-                                let l = get name (Some i) l
-                                let r = get name (Some i) r
-                                let ex = <@ (%mul) (%l) (%r) @>
-                                let vname = sprintf "%s_%d" vname e
-                                let v = Var(vname, typeof<'v>)
-                                bindings.[(name,Some i,e)] <- (v, ex :> Expr)
-                                Expr.Var(v) |> Expr.Cast
+                            | Some i -> 
+                                let vname = varNames typeof<'c> name i
+                                if e = 1 then
+                                    let ex = fetch name (Some i)
+                                    let v = Var(vname, typeof<'v>)
+                                    bindings.[(name,Some i,e)] <- (v, ex :> Expr)
+                                    Expr.Var(v) |> Expr.Cast
+                                else
+                                    let l = e / 2
+                                    let r = e - l
+                                    let l = get name (Some i) l
+                                    let r = get name (Some i) r
+                                    let ex = <@ (%mul) (%l) (%r) @>
+                                    let vname = sprintf "%s_%d" vname e
+                                    let v = Var(vname, typeof<'v>)
+                                    bindings.[(name,Some i,e)] <- (v, ex :> Expr)
+                                    Expr.Var(v) |> Expr.Cast
 
         let mul (l : Expr) (r : Expr) =
             let lf = l.Type = typeof<float>
@@ -1076,7 +1249,12 @@ module Term =
                     get name (Some i) 1 :> Expr
 
                 | Power(Uniform name, Value e) when float (int e) = e ->
-                    get name None (int e) :> Expr
+                    if e > 0.0 then
+                        get name None (int e) :> Expr
+                    else
+                        let v = get name None (int -e)
+                        div <@@ 1.0 @@> v 
+                        
                 
                 | Power(Parameter(name, i), Value e) when float (int e) = e ->
                     get name (Some i) (int e) :> Expr

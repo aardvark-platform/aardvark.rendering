@@ -59,7 +59,7 @@ module ConjugateGradientShaders =
 
             if id.X < dstSize.X && id.Y < dstSize.Y then
                 let tc = (V2d(id) + V2d.Half) / V2d(dstSize)
-                let d = 0.5 / V2d srcSize
+                let d = 0.25 / V2d dstSize
 
                 let vp0 = srcSampler.SampleLevel(tc + V2d( d.X,  0.0), 0.0)
                 let vn0 = srcSampler.SampleLevel(tc + V2d(-d.X,  0.0), 0.0)
@@ -104,7 +104,7 @@ module ConjugateGradientShaders =
 
             if id.X < dstSize.X && id.Y < dstSize.Y then
                 let tc = (V2d(id) + V2d.Half) / V2d(dstSize)
-                let d = 0.5 / V2d srcSize
+                let d = 0.25 / V2d dstSize
 
                 let wp0 = weightSampler.SampleLevel(tc + V2d( d.X,  0.0), 0.0).X
                 let wn0 = weightSampler.SampleLevel(tc + V2d(-d.X,  0.0), 0.0).X
@@ -136,7 +136,7 @@ module ConjugateGradientShaders =
         }
 
     [<LocalSize(X = 8, Y = 8)>]
-    let interpolate<'fmt when 'fmt :> Formats.IFloatingFormat> (dst : Image2d<'fmt>) =
+    let interpolate<'fmt when 'fmt :> Formats.IFloatingFormat> (factor : V4d) (dst : Image2d<'fmt>) =
         compute {
             let id = getGlobalId().XY
             let dstSize = dst.Size
@@ -144,7 +144,7 @@ module ConjugateGradientShaders =
 
             if id.X < dstSize.X && id.Y < dstSize.Y then
                 let tc = (V2d(id) + V2d.Half) / V2d(dstSize)
-                let v = srcSampler.SampleLevel(tc, 0.0)
+                let v = factor * srcSampler.SampleLevel(tc, 0.0)
                 dst.[id] <- v 
         }
     [<LocalSize(X = 8, Y = 8)>]
@@ -449,75 +449,103 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
     let interpolate = runtime.CreateComputeShader (ConjugateGradientShaders.interpolate<'f>)
     let divergence = runtime.CreateComputeShader (ConjugateGradientShaders.divergence<'f>)
     
-    let constantParts, dependentPart, cg = 
-        let mutable constantParts = Map.empty
-        let mutable dependentPart = Term<V2i>.Zero
-        let bb = Term.TermParameter2d("b")
+    let parts, cg = 
+        let mutable parts = Map.empty
+        
         let res (x : Term.TermParameter2d) (h : Term<V2i>) =
-            let r = residual x h
-            let r = Term.derivative "x" V2i.Zero r
-            let (a, b) = Term.factorize "x" r
-            //constantPart <- b //bb.[0,0] * (h - 1.0) //Term<V2i>.Zero
-            dependentPart <- a
-
-
+            let res = residual x h
+            let r = Term.derivative "x" V2i.Zero res
+            
             let rec allIsolations (b : Term<_>) =
                 match b with
                     | Zero ->
                         []
                     | _ -> 
                         let (f, bf) = Term.isolate "h" b
-
+                        
                         match f with
                             | One -> 
                                 let (d, c) = Term.factorize "h" b
-                                //Log.warn "h**0 * %s" (Term.toString c)
-                                (Power(Uniform "h", Value 0.0), c) :: allIsolations d
-                                
+                                let hasX = Set.contains "x" (Term.names d) && Set.contains "x" (Term.names c)
+                                if hasX then
+                                    match c, d with
+                                        | Zero, _ | _, Zero -> 
+                                            [(Power(Uniform "h", Value 0.0), b)]
+                                        | _ -> 
+                                            (Power(Uniform "h", Value 0.0), c) :: allIsolations d
+                                else
+                                    [(Power(Uniform "h", Value 0.0), b)]
                             | f -> 
                                 allIsolations bf |> List.map (fun (fi,b) ->
                                     Term.simplify (f * fi), b
                                 )
-                                //Log.warn "%s * %s" (Term.toString f) (Term.toString bf)
-                                //allIsolations bf
 
             let residuals = 
-                allIsolations b |> List.map (fun (f, ex) ->
+                allIsolations r |> List.map (fun (f, ex) ->
                     match f with
                         | Power(Uniform "h", Value e) when Fun.IsTiny (Fun.Frac e) ->
-                            Log.warn "h^%d * %s" (int e) (Term.toString ex)
-
-                            let name = sprintf "b_%d" (-int e)
-                            let parameter = Term.TermParameter2d(name)
-
-                            parameter.[0,0], -int e, ex, name
+                            -int e, ex
 
                         | _ ->
                             failwith "sadasda"
                 )
 
-            let correction =
-                residuals |> List.sumBy (fun (b,e,ex, name) ->
-                    constantParts <- Map.add e (name, ex) constantParts
-                    if e = 0 then
-                        b
-                    else
-                        b * (Uniform "h") ** -e
+            let overall =
+                residuals |> List.sumBy (fun (e, ex) ->
+                    let (d, c) = Term.factorize "x" ex
+
+                    parts <- Map.add e (d, c) parts
+
+                    let name = sprintf "b_%d" (int e)
+                    let parameter = Term.TermParameter2d(name)
+                    
+                    (d + parameter.[0,0]) * (Uniform "h") ** -e
                 )
 
-            Term.simplify (a + correction)
+            let f = Term.simplify overall
+            Log.warn "0 = %s" (Term.toString f)
 
-        
+            f
+
         let cg = ConjugateGradientSolver2d<'f, 'v>(runtime, res)
-        constantParts, dependentPart, cg
 
-    let uconstantPart = constantParts |> Map.toSeq |> Seq.collect (snd >> snd >> Term.parameters >> HMap.toSeq) |> Seq.map fst |> Set.ofSeq
-    let udependentPart = Term.parameters dependentPart |> HMap.toSeq |> Seq.map fst |> Set.ofSeq
+
+        let parts = 
+            parts |> Map.map (fun e (d,c) -> 
+                let d = Term.substituteUniform "h" (Value 1.0) d
+                let c = Term.substituteUniform "h" (Value 1.0) c
+
+                Log.warn "b_%d[0,0]  = %s // h = 1" e (Term.toString c)
+                Log.warn "Ax_%d[0,0] = %s // h = 1" e (Term.toString d)
+
+                (d,c)
+            )
+            
+        parts, cg
+        
+    let uconstantPart = parts |> Map.toSeq |> Seq.collect (snd >> snd >> Term.parameters >> HMap.toSeq) |> Seq.map fst |> Set.ofSeq
+    let udependentPart =
+        let mutable needed = parts |> Map.toSeq |> Seq.collect (fun (_,(l, r)) -> (Term.parameters l) |> HMap.toSeq |> Seq.map fst) |> Set.ofSeq
+
+        for (e,_) in Map.toSeq parts do
+            let name = sprintf "b_%d" e
+            needed <- Set.add name needed
+        needed
 
     let computeBs = 
         let rreal = ReflectedReal.instance<'v>
-        constantParts |> Map.map (fun e (name, ex) ->
-            runtime.CreateComputeShader(ConjugateGradientShaders.polynomial2d<'f, 'v> (Term.toReflectedCall Term.Read.image ex) rreal.toV4)
+        parts |> Map.map (fun e (d, c) ->
+            Log.warn "b_%d = %s" e (Term.toString c)
+            runtime.CreateComputeShader(ConjugateGradientShaders.polynomial2d<'f, 'v> (Term.toReflectedCall Term.Read.image c) rreal.toV4)
+        )
+        
+    let computeAxs = 
+        let rreal = ReflectedReal.instance<'v>
+        parts |> Map.map (fun e (d, c) ->
+            //let c = Term.TermParameter2d(sprintf "b_%d" e)
+            let t = d + c |> Term.simplify
+            Log.warn "Ax_%d = %s" e (Term.toString t)
+            runtime.CreateComputeShader(ConjugateGradientShaders.polynomial2d<'f, 'v> (Term.toReflectedCall Term.Read.image t) rreal.toV4)
         )
 
     let createTexture (img : PixImage) =
@@ -546,6 +574,31 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
                         ComputeCommand.Bind computeB
                         ComputeCommand.SetInput input
                         ComputeCommand.Dispatch(ceilDiv2 dst.Size.XY computeB.LocalSize.XY)
+                    ]
+                | None ->
+                    ()
+        )
+
+    member x.ComputeAxs(h : float, inputs : Map<string, ITextureSubResource>, dst : Map<int, ITextureSubResource>) =
+        dst |> Map.iter (fun e dst ->
+            match Map.tryFind e computeAxs with
+                | Some computeAx ->
+                    use input = runtime.NewInputBinding computeAx
+                    input.["res"] <- dst
+                    input.["h"] <- real.fromFloat h
+
+                    for used in Set.union uconstantPart udependentPart do
+                        let r = inputs.[used]
+                        input.[used] <- r
+                        input.[sprintf "%sLevel" used] <- 0
+                        input.[sprintf "%sSize" used] <- r.Size.XY
+            
+                    input.Flush()
+
+                    runtime.Run [
+                        ComputeCommand.Bind computeAx
+                        ComputeCommand.SetInput input
+                        ComputeCommand.Dispatch(ceilDiv2 dst.Size.XY computeAx.LocalSize.XY)
                     ]
                 | None ->
                     ()
@@ -591,10 +644,11 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
             ComputeCommand.Dispatch (ceilDiv2 dst.Size.XY restrict.LocalSize.XY)
         ]
 
-    member x.Interpolate(src : ITextureSubResource, dst : ITextureSubResource) =
+    member x.Interpolate(src : ITextureSubResource, dst : ITextureSubResource, factor : float) =
         use input = runtime.NewInputBinding interpolate
         input.["src"] <- src
         input.["dst"] <- dst
+        input.["factor"] <- V4d.IIII * factor
         input.Flush()
 
         runtime.Run [
@@ -619,6 +673,10 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
         m |> Map.map (fun name img ->
             let next = img.Texture.[img.Aspect, img.Level + 1, img.Slice]
             if not (name.StartsWith "__") then
+                //if name.StartsWith "b_" then
+                //    let e = name.Substring(2) |> int
+                //    x.Restrict(img, next, 1.0 / float (1 <<< e))
+
                 if name.StartsWith "w_" then
                     if not (Map.containsKey (name.Substring(2)) m) then
                         x.Restrict(img, next, 1.0)
@@ -635,43 +693,36 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
             next
         )
 
-    member x.RestrictNeeded (needed : Set<string>, m : Map<string, ITextureSubResource>) =
-        m |> Map.map (fun name img ->
-            let next = img.Texture.[img.Aspect, img.Level + 1, img.Slice]
-            if not (name.StartsWith "__") then
-                if Set.contains name needed then
-                    if name.StartsWith "w_" then
-                        if not (Map.containsKey (name.Substring(2)) m) then
-                            x.Restrict(img, next, 1.0)
-                        
-                    else
-                        let wname = "w_" + name
-                        match Map.tryFind wname m with
-                            | None ->
-                                x.Restrict(img, next, 1.0)
-                            | Some wimg ->
-                                let wnext = wimg.Texture.[wimg.Aspect, wimg.Level + 1, wimg.Slice]
-                                let temp = m.["__temp"]
-                                x.Restrict(img, wimg, next, wnext, temp)
-            next
-        )
+    member private x.Cycle(inputs : Map<string, ITextureSubResource>, iter : int, level : int, size : V2i, inputSize : V2i, ibefore : int, iafter : int, ileaf : int, eps : float) =
+        let hv = V2d inputSize / V2d size
+        let h = 0.5 * (hv.X + hv.Y)
 
-    member private x.Cycle(inputs : Map<string, ITextureSubResource>, level : int, size : V2i, ibefore : int, iafter : int, ileaf : int, eps : float) =
-        let h = 1 <<< level |> float
-        
-        if size.AllGreater 8 then
+        let needed = Set.remove "x" udependentPart
+
+        let debug = false
+        if debug then
+            inputs |> Map.iter (fun name t ->
+                if not (name.StartsWith "__") && Set.contains name needed then
+                    let dst = PixImage<float32>(Col.Format.RGBA, t.Size.XY)
+                    runtime.Download(t.Texture, t.Level, t.Slice, dst)
+                    if name.StartsWith "b_" then
+                        dst.GetMatrix<C4f>().SetMap(dst.GetMatrix<C4f>(), fun v -> ((v.ToV4f() + V4f.IIII) * 0.5f).ToC4f()) |> ignore
+                    dst.SaveAsImage (sprintf @"C:\temp\a\debug\%d_%s_input_%dx%d.jpg" iter name size.X size.Y)
+            )
+
+        cg.Tools.Set(inputs.["x"], V4d.Zero)
+
+        if size.AnyGreater 4 then
             if ibefore > 0 then
                 cg.SolveInternal(h, inputs, inputs.["x"], eps, ibefore, 1)
+                
 
-          
             let down = x.Restrict(inputs)
-            //x.Restrict(inputs.["b"], down.["b"], 0.25)
-
             
             let half = V2i(max 1 (size.X / 2), max 1 (size.Y / 2))
-            x.Cycle(down, level + 1, half, ibefore, iafter, ileaf, eps)
+            x.Cycle(down, iter, level + 1, half, inputSize, ibefore, iafter, ileaf, eps)
 
-            x.Interpolate(down.["x"], inputs.["x"])
+            x.Interpolate(down.["x"], inputs.["x"], 1.0)
            
             if iafter > 0 then
                 cg.SolveInternal(h, inputs, inputs.["x"], eps, iafter, 1)
@@ -680,6 +731,26 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
         else
             if ileaf > 0 then
                 cg.SolveInternal(h, inputs, inputs.["x"], eps, ileaf, 1)
+
+        if debug then
+            let name = "x"
+            let t = inputs.[name]
+            let dst = PixImage<float32>(Col.Format.RGBA, t.Size.XY)
+            runtime.Download(t.Texture, t.Level, t.Slice, dst)
+
+            dst.GetMatrix<C4f>().SetMap(dst.GetMatrix<C4f>(), fun v -> ((v.ToV4f() + V4f.IIII) * 0.5f).ToC4f()) |> ignore
+
+            dst.SaveAsImage (sprintf @"C:\temp\a\debug\%d_%s_output_%dx%d.jpg" iter name size.X size.Y)
+
+            
+    member this.CreateTexture(size : V2i) =
+        let res = runtime.CreateTexture(size, format, 1, 1)
+        res
+          
+    member this.CreateTempTexture(size : V2i) =
+        let levels = 1 + int(Fun.Floor(Fun.Log2 (max size.X size.Y)))
+        let res = runtime.CreateTexture(size, format, levels, 1)
+        res
 
     member this.CreateTexture(img : PixImage) =
         let res = runtime.CreateTexture(img.Size, TextureFormat.ofPixFormat img.PixFormat TextureParams.empty, 1, 1)
@@ -695,16 +766,14 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
 
     member x.Tools = cg.Tools
 
-    member this.Solve(inputs : Map<string, ITextureSubResource>, x : ITextureSubResource, n : int, eps : float) =
+    member this.Solve(inputs : Map<string, ITextureSubResource>, sum : ITextureSubResource, sumZero : bool, n : int, eps : float) =
         use __ = runtime.NewInputBinding restrict
 
-        let size = x.Size
-        let levels = 1 + int(Fun.Floor(Fun.Log2 (max x.Size.X x.Size.Y)))
+        let size = sum.Size
+        let levels = 1 + int(Fun.Floor(Fun.Log2 (max sum.Size.X sum.Size.Y)))
         
-        let v = runtime.CreateTexture(size.XY, format, levels, 1)
-        runtime.Copy(x, V3i.Zero, v.[TextureAspect.Color, 0, 0], V3i.Zero, size)
+        
   
-
         let ip =
             inputs |> Map.map (fun name i ->
                 if i.Texture.MipMapLevels >= levels then
@@ -714,28 +783,17 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
                     runtime.Copy(i, V3i.Zero, res.[TextureAspect.Color, 0, 0], V3i.Zero, size)
                     res.[TextureAspect.Color, 0, 0]
             )
-            
-        let b0l = 
-            constantParts |> Map.toList |> List.map (fun (e, (name, ex)) ->
-                let t = runtime.CreateTexture(size.XY, format, 1, 1)
+
+        let bList = 
+            parts |> Map.toList |> List.map (fun (e, _) ->
+                let name = sprintf "b_%d" e
+                let t = runtime.CreateTexture(size.XY, format, levels, 1)
                 e, name, t.[TextureAspect.Color, 0, 0]
             )
-
-        let b0s =
-            b0l |> List.map (fun (e,_,t) -> e,t) |> Map.ofList
             
-        let b0m =
-            b0l |> List.map (fun (e,n,t) -> n,t) |> Map.ofList
-
-        let bs = 
-            constantParts |> Map.toList |> List.map (fun (e, (name, ex)) ->
-                let t = runtime.CreateTexture(size.XY, format, levels, 1)
-                name, t.[TextureAspect.Color, 0, 0]
-            )
-            |> Map.ofList
-
-        let r0 = runtime.CreateTexture(size.XY, format, levels, 1)
-
+        let bExp = bList |> List.map (fun (e,_,t) -> e,t) |> Map.ofList
+        let bName = bList |> List.map (fun (_,n,t) -> n,t) |> Map.ofList
+        
         let r,deleteR = 
             match Map.tryFind "__r" inputs with
                 | Some r -> r.Texture, false
@@ -757,62 +815,50 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
                     let temp = runtime.CreateTexture(size.XY, format, levels, 1)
                     temp, true
 
+        let x = runtime.CreateTexture(size.XY, format, levels, 1)
+
         let ip =
             ip
-            |> Map.add "x" v.[TextureAspect.Color, 0, 0]
+            |> Map.add "x" x.[TextureAspect.Color, 0, 0]
             |> Map.add "__r" r.[TextureAspect.Color, 0, 0]
             |> Map.add "__d" d.[TextureAspect.Color, 0, 0]
             |> Map.add "__temp" temp.[TextureAspect.Color, 0, 0]
-            |> Map.union bs
+            |> Map.union bName
 
+        if sumZero then cg.Tools.Set(sum, V4d.Zero)
 
-        this.ComputeBs(1.0, ip, b0s)
-        
-        for i in 1 .. 10 do
-            if i = 1 then 
-                b0l |> List.iter (fun (e,n,t) ->
-                    match Map.tryFind n bs with
-                        | Some b -> runtime.Copy(t, V3i.Zero, b, V3i.Zero, size)
-                        | _ -> ()
-                )
+        for i in 0 .. 5 do
+            if i = 0 && sumZero then 
+                this.ComputeBs(1.0, ip, bExp)
             else 
-                b0l |> List.iter (fun (e,n,t) ->
-                    match Map.tryFind n bs with
-                        | Some b ->
-                            let ip = b0l |> List.fold (fun m (_,n,e) -> Map.add n e m) ip
-                            cg.Derivative(1.0, Map.add "x" x ip, b)
-                        | _ -> 
-                            ()
-                )
+                this.ComputeAxs(1.0, Map.add "x" sum ip, bExp)
+                
+            cg.Tools.Set(x.[TextureAspect.Color, 0, 0], V4d.Zero)
 
-            this.Cycle(ip, 0, size.XY, 0, 20, 20, eps)
+            this.Cycle(ip, i, 0, size.XY, size.XY, 0, 8, 16, eps)
 
-            cg.Tools.MultiplyAdd(v.[TextureAspect.Color, 0, 0], real.one, x, real.one)
+            cg.Tools.MultiplyAdd(x.[TextureAspect.Color, 0, 0], real.one, sum, real.one)
 
             
-        let avg = cg.Tools.Average(x)
-
-        //runtime.Copy(sum.[TextureAspect.Color, 0, 0], V3i.Zero, x, V3i.Zero, size)
-
-        //runtime.DeleteTexture b
-        runtime.DeleteTexture v
+        runtime.DeleteTexture x
         if deleteR then runtime.DeleteTexture r
         if deleteD then runtime.DeleteTexture d
         if deleteTemp then runtime.DeleteTexture temp
-        
+        bList |> List.iter (fun (_,_,t) -> runtime.DeleteTexture t.Texture)
+
         for (k,t) in Map.toSeq ip do
             match Map.tryFind k inputs with
                 | Some it -> if t.Texture <> it.Texture then runtime.DeleteTexture t.Texture
                 | _ -> ()
 
-        avg
+        cg.Tools.Average(sum)
     
 
-    member this.Solve(inputs : Map<string, PixImage>, x : PixImage, n : int, eps : float) =
+    member this.Solve(inputs : Map<string, PixImage>, x : PixImage, sumZero : bool, n : int, eps : float) =
         let inputs = inputs |> Map.map (fun _ img -> (createTexture img).[TextureAspect.Color, 0, 0])
         let x = createTexture x
 
-        let avg = this.Solve(inputs, x.[TextureAspect.Color, 0, 0], n, eps)
+        let avg = this.Solve(inputs, x.[TextureAspect.Color, 0, 0], sumZero, n, eps)
 
         let res = runtime.Download(x, 0, 0)
         runtime.DeleteTexture x
@@ -928,150 +974,72 @@ let main argv =
 
     
     let polya (x : Term.TermParameter2d) (h : Term<V2i>) = 
-        let term = 
-            let cdiv = (4.0 * x.[0,0] - x.[-1,0] - x.[1,0] - x.[0,-1] - x.[0,1]) / (h ** 2)
-            0.1 * (cdiv - div.[0,0]) ** 2 //+ 
-            //1.0   * w_v.[0,0] * (x.[0,0] - v.[0,0]) ** 2
-
-        //let f' = Term.derivative "x" V2i.Zero term
-        //let (d,c) = Term.factorize "x" f'
-        //Log.warn "f  = %s" (Term.toString f')
-        //Log.warn "Ax = %s" (Term.toString d)
-        //Log.warn "b  = %s" (Term.toString c)
-
-        //let test = d + c |> Term.simplify
-        //Log.warn "t  = %s" (Term.toString test)
+        let cdiv = (4.0 * x.[0,0] - x.[-1,0] - x.[1,0] - x.[0,-1] - x.[0,1]) / h**2
+        0.125 * (cdiv - div.[0,0]) ** 2 + 
+        0.5 * w_v.[0,0] * (x.[0,0] - v.[0,0]) ** 2
         
-        //let f'' = Term.allDerivatives "x" f'
-        //let d' = Term.allDerivatives "x" d 
-
-        //for (c,a) in HMap.toList f'' do
-        //    Log.warn "df'/d%A = %s" c (Term.toString a)
-            
-        //for (c,a) in HMap.toList d' do
-        //    Log.warn "dd/d%A  = %s" c (Term.toString a)
-
-        term
-
-    //let poly = 0.125f * (4.0f * x<float32>.[0,0] - x.[-1,0] - x.[1,0] - x.[0,-1] - x.[0,1]) ** 2 + w_v.[0,0] * (x<float32>.[0,0] - v.[0,0]) ** 2
-
-    //let test = poly.Rename(fun v -> 2 * v)
-
-    let fmt = Col.Format.Gray
-    let solver = MultigridSolver2d<FShade.Formats.r32f, float32>(runtime, polya)
+    let fmt = Col.Format.RGBA
+    let solver = MultigridSolver2d<FShade.Formats.rgba32f, V3f>(runtime, polya)
     
-    let clooneyPix =
-        @"C:\temp\a\bla.png"
-            |> PixImage.Create
-            
-    let acc =
-        TensorAccessors(
-            Getter = System.Func<float32[], int64, C4f>(fun arr i -> C4f(arr.[int i], arr.[int i], arr.[int i], 1.0f)),
-            Setter = System.Action<float32[], int64, C4f>(fun arr i v -> arr.[int i ] <- v.ToGrayFloat())
-        )
+    let inputPix = PixImage.Create @"C:\Users\Schorsch\Desktop\matcher\hagrid\0.jpg"
+    let inputPix = inputPix.ToPixImage<byte>(Col.Format.RGBA)
+    let size = inputPix.Size
 
-    let getMat(img : PixImage<float32>) =
-        if fmt = Col.Format.RGBA then
-            img.GetMatrix<C4f>()
-        else 
-            let mutable mat = img.Volume.SubXYMatrixWindow<C4f>(0L)
-            mat.Accessors <- acc
-            mat
 
-    let clooneyPix = clooneyPix.ToPixImage<byte>(Col.Format.RGBA)
-    let res = PixImage<float32>(fmt, clooneyPix.Size)
-    getMat(res).SetMap(clooneyPix.GetMatrix<C4b>(), fun c -> c.ToC4f()) |> ignore
-    res.ToPixImage<byte>().SaveAsImage @"C:\temp\a\input.png"
-
-    let clooneyPix = res
-    //clooneyPix.ToPixImage<byte>(Col.Format.Gray).SaveAsImage @"C:\temp\a\input.png"
+    inputPix.SaveAsImage @"C:\temp\a\input.png"
     
-    let clooney = solver.CreateTempTexture(clooneyPix)
+    let input = solver.CreateTempTexture(inputPix)
 
     let div = 
-        let tex = runtime.CreateTexture(clooney.Size.XY,TextureFormat.R32f, 1, 1)
-        solver.Divergence(clooney.[TextureAspect.Color,0,0],tex.[TextureAspect.Color,0,0])
+        let tex = runtime.CreateTexture(size,TextureFormat.Rgba32f, 1, 1)
+        solver.Divergence(input.[TextureAspect.Color,0,0],tex.[TextureAspect.Color,0,0])
         tex
 
     
-
-    let size = clooney.Size.XY
-
-    let edgeSize = 1L
+    let edgeSize = 3L
     let isXEdge (v : V2l) = v.X < edgeSize || v.X >= int64 size.X - edgeSize
     let isYEdge (v : V2l) = v.Y < edgeSize  || v.Y >= int64 size.Y - edgeSize
     let isCorner (v : V2l) = isXEdge v && isYEdge v
     let isEdge (v : V2l) = isXEdge v || isYEdge v
-
-
+    
     let c = V2l(size) / 2L
     let isCenter (v : V2l) =
         v = c || v = c - V2l.IO || v = c - V2l.OI || v = c - V2l.II
-        
 
+    let inputMat = inputPix.GetMatrix<C4b>()
+    let v = PixImage<float32>(fmt, size)
+    v.GetMatrix<C4f>().SetByCoord (fun (c : V2l) -> 
+        if isEdge c then inputMat.[c].ToC4f()
+        else C4f(0.0f, 0.0f, 0.0f, 0.0f)
+    ) |> ignore
     
-
-    let x = PixImage<float32>(fmt, size)
-    getMat(x).SetByCoord (fun (c : V2l) -> C4f(0.0f)) |> ignore
-    
-    //let div = PixImage<float32>(Col.Format.Gray, size)
-    //div.GetChannel(Col.Channel.Gray).SetByCoord (fun (c : V2l) -> 
-    //    0.0f
-    //) |> ignore
-    
-    let cache = Dict<V2l, C4f>()
-    let rand = RandomSystem()
-    let getColor (c : V2l) =
-        //let c = c / 2L
-        //if (c.X + c.Y) % 2L = 0L then C4f.White
-        //else C4f.Black
-        cache.GetOrCreate(c, fun _ -> rand.UniformC3f().ToC4f())
-
-
-    //let clooneyMat = clooneyPix.GetMatrix<C4b>()
-    //let v = PixImage<float32>(fmt, size)
-    //getMat(v).SetByCoord (fun (c : V2l) -> 
-    //    if isEdge c then clooneyMat.[c].ToC4f()
-    //    else C4f(0.0f, 0.0f, 0.0f, 0.0f)
-    //    //let c = c / 64L
-    //    //if (c.X + c.Y) % 2L = 0L then getColor c
-    //    //else C4f(0.0f)
-    //) |> ignore
-    
-    //let w_v = PixImage<float32>(fmt, size)
-    //getMat(w_v).SetByCoord (fun (c : V2l) -> 
-    //    if isEdge c then C4f(100.0f, 100.0f, 100.0f, 100.0f)
-    //    else C4f(0.0f, 0.0f, 0.0f, 0.0f)
-    //) |> ignore
+    let w_v = PixImage<float32>(fmt, size)
+    w_v.GetMatrix<C4f>().SetByCoord (fun (c : V2l) -> 
+        if isEdge c then C4f(1.0f, 1.0f, 1.0f, 1.0f)
+        else C4f(0.0f, 0.0f, 0.0f, 0.0f)
+    ) |> ignore
 
     let divPix = PixImage<float32>(Col.Format.RGBA, size)
     runtime.Download(div, 0, 0, divPix)
 
-    let inputs =
-        Map.ofList [
-            //"div", div :> PixImage
-            //"v", v :> PixImage
-            //"w_v", w_v :> PixImage
-            "div", divPix :> PixImage
-        ]
-
     let textures =
-        inputs |> Map.map (fun name img ->
-            solver.CreateTempTexture img
-        )
+        Map.ofList [
+            "v", solver.CreateTempTexture v
+            "w_v", solver.CreateTempTexture w_v
+            "div", div
+        ]
+        
     let textures =
         textures
-        |> Map.add "__r" (solver.CreateTempTexture x)
-        |> Map.add "__d" (solver.CreateTempTexture x)
-        |> Map.add "__temp" (solver.CreateTempTexture x)
+        |> Map.add "__r" (solver.CreateTempTexture size)
+        |> Map.add "__d" (solver.CreateTempTexture size)
+        |> Map.add "__temp" (solver.CreateTempTexture size)
 
     let views = textures |> Map.map (fun _ t -> t.[TextureAspect.Color, 0, 0])
-    let res = solver.CreateTempTexture x
+    let res = solver.CreateTexture size
     
-
-
     Log.startTimed "solve"
-    let avg = solver.Solve(views, res.[TextureAspect.Color, 0, 0], 1, 1E-10)
+    let avg = solver.Solve(views, res.[TextureAspect.Color, 0, 0], true, 1, 1E-10)
     Log.stop()
     
     //runtime.DeleteTexture(res)
@@ -1079,18 +1047,20 @@ let main argv =
     //Log.startTimed "solve again"
     //solver.Solve(views, res.[TextureAspect.Color, 0, 0], 1, 1E-8)
     //Log.stop()
-
+    let x = PixImage<float32>(fmt, size)
     runtime.Download(res, 0, 0, x)
     runtime.DeleteTexture res
     textures |> Map.iter (fun _ t -> runtime.DeleteTexture t)
 
-    let tavg = solver.Tools.Average(clooney.[TextureAspect.Color, 0, 0])
-    x.GetChannel(0L).SetMap(x.GetChannel(0L), fun v -> v + (tavg - avg)) |> ignore
+    //let tavg = solver.Tools.Average(input.[TextureAspect.Color, 0, 0])
+    //x.GetMatrix<C4f>().SetMap(x.GetMatrix<C4f>(), fun v -> (v.ToV3f() + (tavg - avg)).ToC4f()) |> ignore
 
     //let c = x.ToPixImage<float32>().GetChannel(Col.Channel.Gray)
     //printMat "x" c
-
-    x.SaveAsImage @"C:\temp\a\z_result.jpg"
+    
+    let f = PixImage<byte>(fmt, size)
+    f.GetMatrix<C4b>().SetMap(x.GetMatrix<C4f>(), fun v -> C4b(byte (clamp 0.0f 1.0f v.R * 255.0f), byte (clamp 0.0f 1.0f v.G * 255.0f), byte (clamp 0.0f 1.0f v.B * 255.0f))) |> ignore
+    f.SaveAsImage @"C:\temp\a\z_result.png"
 
     //for i in 0 .. 10 do
     //    x <- solver.Solve(inputs, x, 1E-3, 5, 1)
