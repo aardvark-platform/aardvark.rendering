@@ -167,15 +167,15 @@ module TermPatterns =
 
     let (|Combination|_|) (e : Term<'a>) =
         match e with
-            | Sum es -> Some(Sum, es)
-            | Product es -> Some(Product, es)
-            | Negate e -> Some(List.head >> Negate, [e])
-            | Power(a,e) -> Some((function [a;e] -> Power(a,e) | _ -> failwith "invalid argument count"), [a;e])
-            | Sine e -> Some(List.head >> Sine, [e])
-            | Cosine e -> Some(List.head >> Cosine, [e])
-            | Tangent e -> Some(List.head >> Tangent, [e])
-            | Logarithm e -> Some(List.head >> Logarithm, [e])
-            | _ -> None
+            | Sum es        -> Some(Sum, es)
+            | Product es    -> Some(Product, es)
+            | Negate e      -> Some(List.head >> Negate, [e])
+            | Power(a,e)    -> Some((function [a;e] -> Power(a,e) | _ -> failwith "invalid argument count"), [a;e])
+            | Sine e        -> Some(List.head >> Sine, [e])
+            | Cosine e      -> Some(List.head >> Cosine, [e])
+            | Tangent e     -> Some(List.head >> Tangent, [e])
+            | Logarithm e   -> Some(List.head >> Logarithm, [e])
+            | _             -> None
 
 
     let private tryFoldConstants (seed : float) (combine : float -> float -> float) (l : list<Term<'c>>) =
@@ -460,135 +460,6 @@ module TermPatterns =
             | Logarithm a -> Some a
             | _ -> None
 
-[<AutoOpen>]
-module FunExtensions =
-
-    [<AutoOpen>]
-    module private Impl = 
-        let inline mul (l : 'a) (r : 'a) =
-            try Checked.(*) l r |> Some
-            with _ -> None
-
-        let binom64 (n : int64) (k : int64) =
-            if k <= 0L || n <= k then
-                Some 1L
-            else
-                let nk = n - k
-                let k, nk = 
-                    if k > nk then nk, k
-                    else k, nk
-                
-                // n! / ((n-k)! * k!)
-            
-                // (n*(n-1)*(n-2)*...*(n-k+1)) / k!
-
-                // n/k * ((n-1)/(k-1))
-                // ((n/k)/(k-1)) * (n-1)
-                // (n/k * (n-1))/(k-1)
-
-                let mutable res = Some 1L
-                let mutable n = n
-                //printf "1"
-                for j in 1L .. k do
-                    match res with
-                        | Some r ->
-                            if j = 1L then
-                                //printf " * %d" n
-                                res <- mul r n
-                            elif n % j = 0L then
-                                //printf " * (%d / %d)" n j
-                                res <- mul r (n / j)
-                            elif r % j = 0L then
-                                //printf " / %d * %d" j n
-                                res <- mul (r / j) n
-                            else
-                                //printf " * %d * %d" n j
-                                match mul r n with
-                                    | Some r ->
-                                        res <- Some (r / j)
-                                    | _ ->
-                                        res <- None
-                            n <- n - 1L
-                        | None ->
-                            ()
-                        
-                res
-                   
-        let binom32 (n : int) (k : int) =
-            if k <= 0 || n <= k then
-                Some 1
-            else
-                let nk = n - k
-                let k, nk = 
-                    if k > nk then nk, k
-                    else k, nk
-                
-                // n! / ((n-k)! * k!)
-            
-                // (n*(n-1)*(n-2)*...*(n-k+1)) / k!
-
-                // n/k * ((n-1)/(k-1))
-                // ((n/k)/(k-1)) * (n-1)
-                // (n/k * (n-1))/(k-1)
-
-                let mutable res = Some 1
-                let mutable n = n
-                //printf "1"
-                for j in 1 .. k do
-                    match res with
-                        | Some r ->
-                            if j = 1 then
-                                //printf " * %d" n
-                                res <- mul r n
-                            elif n % j = 0 then
-                                //printf " * (%d / %d)" n j
-                                res <- mul r (n / j)
-                            elif r % j = 0 then
-                                //printf " / %d * %d" j n
-                                res <- mul (r / j) n
-                            else
-                                //printf " * %d * %d" n j
-                                match mul r n with
-                                    | Some r ->
-                                        res <- Some (r / j)
-                                    | _ ->
-                                        res <- None
-                            n <- n - 1
-                        | None ->
-                            ()
-                        
-                res 
-
-    type Fun with
-        static member TryBinom(n : int64, k : int64) = binom64 n k
-        static member TryBinom(n : int, k : int) = binom32 n k
-        
-        static member Binom(n : int64, k : int64) = binom64 n k |> Option.get
-        static member Binom(n : int, k : int) = binom32 n k |> Option.get
-
-    module List =
-        let rec allChoices (is : list<'x>) =
-            match is with
-            | [] -> 
-                [[]]
-            | h::t ->
-                let rest = allChoices t
-                List.concat [
-                    rest |> List.map (fun r -> h::r)
-                    rest
-                ]
-        let rec allCombinations (is : list<list<'x>>) =
-            match is with
-            | [] -> 
-                [[]]
-            | h::t ->
-                let rest = allCombinations t
-                h |> List.collect ( fun h ->
-                    rest |> List.map (fun r ->
-                        h::r
-                    )
-                )
-
 module Term = 
 
     let private baseSimplifyRules<'c when 'c : equality> : list<Term<'c> -> Option<Term<'c>>> =
@@ -747,6 +618,17 @@ module Term =
                 | _ ->
                     acc
         usedParameters HMap.empty e
+        
+    let parameterNames (e : Term<'c>) =
+        let rec usedParameterNames (acc : Set<string>) (e : Term<'c>) =
+            match e with
+                | Parameter(name, i) ->
+                    acc |> Set.add name
+                | Combination(_, args) ->
+                    args |> List.fold usedParameterNames acc
+                | _ ->
+                    acc
+        usedParameterNames Set.empty e
 
     let names (e : Term<'c>) =
         let rec names (acc : Set<string>) (e : Term<'c>) =
@@ -907,7 +789,6 @@ module Term =
         let f, t = isolate name t
         simplify f, simplify t
 
-        
     let substituteUniform (name : string) (s : Term<'a>) (t : Term<'a>) =
         let rec substituteUniform (name : string) (s : Term<'a>) (t : Term<'a>) =
             match t with
@@ -924,6 +805,8 @@ module Term =
 
     type TermParameter(name : string) =
         
+        member x.Name = name
+
         member x.Item
             with get(i : int) = Term<int>.Parameter(name, i)
             
@@ -938,14 +821,10 @@ module Term =
             
         member x.Item
             with get(i : int, j : int, k : int) = Term<V3i>.Parameter(name, V3i(i,j,k))
-      
-    let x = TermParameter("x")
-    let y = TermParameter("y")
-    let z = TermParameter("z")
-    let w = TermParameter("w")
-    
-       
+             
     type TermParameter2d(name : string) =
+        member x.Name = name
+
         member x.Item
             with get(i : V2i) = Term<V2i>.Parameter(name, i)
             
@@ -1044,7 +923,7 @@ module Term =
         ]
 
     [<AutoOpen>]
-    module ExprExtensions =
+    module private ExprExtensions =
         open Aardvark.Base.ReflectionHelpers
         open FShade.ReflectionPatterns
         open Aardvark.Base.TypeInfo.Patterns
