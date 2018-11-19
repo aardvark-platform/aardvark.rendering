@@ -10,7 +10,7 @@ open Aardvark.Application.Slim
 open System
 open System.Collections.Concurrent
 
-
+[<ReflectedDefinition>]
 module ConjugateGradientShaders =
     open Microsoft.FSharp.Quotations
     open FShade
@@ -30,7 +30,7 @@ module ConjugateGradientShaders =
             texture uniform?src
             addressU WrapMode.Clamp
             addressV WrapMode.Clamp
-            filter Filter.MinMagLinear
+            filter Filter.MinMagMipLinear
         }
     let weightSampler =
         sampler2d {
@@ -38,7 +38,7 @@ module ConjugateGradientShaders =
             addressU WrapMode.Border
             addressV WrapMode.Border
             borderColor (C4f(0.0f, 0.0f, 0.0f, 0.0f))
-            filter Filter.MinMagLinear
+            filter Filter.MinMagMipLinear
         }
 
     let weightTimesSrcSampler =
@@ -47,8 +47,62 @@ module ConjugateGradientShaders =
             addressU WrapMode.Border
             addressV WrapMode.Border
             borderColor (C4f(0.0f, 0.0f, 0.0f, 0.0f))
-            filter Filter.MinMagLinear
+            filter Filter.MinMagMipLinear
         }
+
+
+    let cubic (v : float) =
+        let n = V4d(1.0, 2.0, 3.0, 4.0) - V4d(v,v,v,v)
+        let s = n * n * n
+        let x = s.X
+        let y = s.Y - 4.0 * s.X
+        let z = s.Z - 4.0 * s.Y + 6.0 * s.X
+        let w = 6.0 - x - y - z
+        V4d(x, y, z, w) * (1.0/6.0)
+
+    [<Inline>]
+    let mix (t : float) (a : V4d) (b : V4d) =
+        a + t * (b-a)
+        //(1.0 - t) * a + t * b
+
+    let sampleCubic (sam : Sampler2d) (tc : V2d) =
+        let size = sam.Size
+        let invSize = 1.0 / V2d size
+
+        let pix = tc * V2d size - V2d.Half
+        let ipix = V2i(floor pix.X, floor pix.Y)
+
+        let fxy = pix - V2d ipix
+
+        let xc = cubic fxy.X
+        let yc = cubic fxy.Y
+        
+        //let ca = V2d ipix + V2d(-0.5, 1.5)
+        //let cb = V2d ipix + V2d(-0.5, 1.5)
+
+        let c = V4d(float ipix.X - 0.5, float ipix.X + 1.5, float ipix.Y - 0.5, float ipix.Y + 1.5)
+        let xs = xc.XZ + xc.YW
+        let ys = yc.XZ + yc.YW
+        let s = V4d(xs.X, xs.Y, ys.X, ys.Y)
+        let offset = c + V4d(xc.Y, xc.W, yc.Y, yc.W) / s
+        let offset = offset * V4d(invSize.X, invSize.X, invSize.Y, invSize.Y)
+        
+        let sx = s.X / (s.X + s.Y)
+        let sy = s.Z / (s.Z + s.W)
+
+
+        let s0 = sam.SampleLevel(offset.XZ, 0.0)
+        let s1 = sam.SampleLevel(offset.YZ, 0.0)
+        let s2 = sam.SampleLevel(offset.XW, 0.0)
+        let s3 = sam.SampleLevel(offset.YW, 0.0)
+
+        mix sy (mix sx s3 s2) (mix sx s1 s0)
+        
+
+
+
+
+
 
     [<LocalSize(X = 8, Y = 8)>]
     let restrict<'fmt when 'fmt :> Formats.IFloatingFormat> (dst : Image2d<'fmt>) (factor : float) =
@@ -61,12 +115,12 @@ module ConjugateGradientShaders =
                 let tc = (V2d(id) + V2d.Half) / V2d(dstSize)
                 let d = 0.25 / V2d dstSize
 
-                let vp0 = srcSampler.SampleLevel(tc + V2d( d.X,  0.0), 0.0)
-                let vn0 = srcSampler.SampleLevel(tc + V2d(-d.X,  0.0), 0.0)
-                let v0p = srcSampler.SampleLevel(tc + V2d( 0.0,  d.Y), 0.0)
-                let v0n = srcSampler.SampleLevel(tc + V2d( 0.0, -d.Y), 0.0)
-                let value = (vp0 + vn0 + v0n + v0p) / 4.0
-                
+                //let vp0 = srcSampler.SampleLevel(tc + V2d( d.X,  0.0), 0.0)
+                //let vn0 = srcSampler.SampleLevel(tc + V2d(-d.X,  0.0), 0.0)
+                //let v0p = srcSampler.SampleLevel(tc + V2d( 0.0,  d.Y), 0.0)
+                //let v0n = srcSampler.SampleLevel(tc + V2d( 0.0, -d.Y), 0.0)
+                //let value = (vp0 + vn0 + v0n + v0p) / 4.0
+                let value = sampleCubic srcSampler tc 
                 //let value = srcSampler.SampleLevel(tc, 0.0)
 
                 dst.[id] <- factor * value
@@ -106,19 +160,21 @@ module ConjugateGradientShaders =
                 let tc = (V2d(id) + V2d.Half) / V2d(dstSize)
                 let d = 0.25 / V2d dstSize
 
-                let wp0 = weightSampler.SampleLevel(tc + V2d( d.X,  0.0), 0.0).X
-                let wn0 = weightSampler.SampleLevel(tc + V2d(-d.X,  0.0), 0.0).X
-                let w0p = weightSampler.SampleLevel(tc + V2d( 0.0,  d.Y), 0.0).X
-                let w0n = weightSampler.SampleLevel(tc + V2d( 0.0, -d.Y), 0.0).X
-                let weightAvg = (wp0 + wn0 + w0n + w0p) / 4.0
+                //let wp0 = weightSampler.SampleLevel(tc + V2d( d.X,  0.0), 0.0).X
+                //let wn0 = weightSampler.SampleLevel(tc + V2d(-d.X,  0.0), 0.0).X
+                //let w0p = weightSampler.SampleLevel(tc + V2d( 0.0,  d.Y), 0.0).X
+                //let w0n = weightSampler.SampleLevel(tc + V2d( 0.0, -d.Y), 0.0).X
+                //let weightAvg = (wp0 + wn0 + w0n + w0p) / 4.0
                 
-                let vp0 = weightTimesSrcSampler.SampleLevel(tc + V2d( d.X,  0.0), 0.0)
-                let vn0 = weightTimesSrcSampler.SampleLevel(tc + V2d(-d.X,  0.0), 0.0)
-                let v0p = weightTimesSrcSampler.SampleLevel(tc + V2d( 0.0,  d.Y), 0.0)
-                let v0n = weightTimesSrcSampler.SampleLevel(tc + V2d( 0.0, -d.Y), 0.0)
-                let v = (vp0 + vn0 + v0n + v0p) / 4.0
+                //let vp0 = weightTimesSrcSampler.SampleLevel(tc + V2d( d.X,  0.0), 0.0)
+                //let vn0 = weightTimesSrcSampler.SampleLevel(tc + V2d(-d.X,  0.0), 0.0)
+                //let v0p = weightTimesSrcSampler.SampleLevel(tc + V2d( 0.0,  d.Y), 0.0)
+                //let v0n = weightTimesSrcSampler.SampleLevel(tc + V2d( 0.0, -d.Y), 0.0)
+                //let v = (vp0 + vn0 + v0n + v0p) / 4.0
 
-
+                
+                let weightAvg = (sampleCubic weightSampler tc).X 
+                let v = sampleCubic weightTimesSrcSampler tc 
 
 
                 //let weightAvg = weightSampler.SampleLevel(tc, 0.0).X
@@ -1141,15 +1197,15 @@ let main argv =
 
     let config =
         {
-            cycles = 8
+            cycles = 5
             maxSolveSize = V2i(4, 4)
             stepTolerance = 1E-5
             gradientTolerance = 1E-10
             smoothIterations = 0
             solveIterations = 8
-            correctIterations = 8
+            correctIterations = 3
             useGuess = false
-            debugPath = None //Some @"C:\temp\a\debug"
+            debugPath = Some @"C:\temp\a\debug"
         }
 
     Log.startTimed "solve"
