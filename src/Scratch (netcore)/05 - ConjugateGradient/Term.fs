@@ -17,6 +17,7 @@ type Term<'c when 'c : equality> =
     | Cosine of Term<'c>
     | Tangent of Term<'c>
     | Logarithm of Term<'c>
+    | Absolute of Term<'c>
 
     static member Log(a : Term<'c>) = Logarithm a
 
@@ -24,6 +25,7 @@ type Term<'c when 'c : equality> =
     static member Cos(a : Term<'c>) = Cosine a
     static member Tan(a : Term<'c>) = Tangent a
     static member Exp(a : Term<'c>) = Power(Value System.Math.E, a)
+    static member Abs(a : Term<'c>) = Absolute(a)
 
     static member (~-) (v : Term<'c>) = Negate v
     static member (+) (l : Term<'c>, r : Term<'c>) = Sum [l;r]
@@ -110,6 +112,7 @@ type Term<'c when 'c : equality> =
             | Parameter(name, i) -> sprintf "%s%A" name i
             | Uniform name -> name
 
+            | Absolute a -> sprintf "abs(%s)" (toString a)
             | Sine a -> sprintf "sin(%s)" (toString a)
             | Cosine a -> sprintf "cos(%s)" (toString a)
             | Tangent a -> sprintf "tan(%s)" (toString a)
@@ -175,6 +178,7 @@ module TermPatterns =
             | Cosine e      -> Some(List.head >> Cosine, [e])
             | Tangent e     -> Some(List.head >> Tangent, [e])
             | Logarithm e   -> Some(List.head >> Logarithm, [e])
+            | Absolute e    -> Some(List.head >> Absolute, [e])
             | _             -> None
 
 
@@ -509,6 +513,11 @@ module Term =
             function Negate(Product (Any isValue (v,rest))) -> Some (Product (Value -v :: rest)) | _ -> None
             function Power(a, One) -> Some a | _ -> None
             function Power(a, Zero) -> Some (Value 1.0) | _ -> None
+            function Absolute(Value a) -> Some (Value (abs a)) | _ -> None
+            function Absolute(Negate a) -> Some (Absolute a) | _ -> None
+            function Absolute(Power(a, Value e)) when e % 2.0 = 0.0 -> Some (Power(a, Value e)) | _ -> None
+            function Power(Absolute a, Value e) when e % 2.0 = 0.0 -> Some (Power(a, Value e)) | _ -> None
+
             function Sine(Value a) -> Some (Value (sin a)) | _ -> None
             function Cosine(Value a) -> Some (Value (cos a)) | _ -> None
             function Tangent(Value a) -> Some (Value (tan a)) | _ -> None
@@ -649,6 +658,8 @@ module Term =
     let derivative (name : string) (i : 'c) (e : Term<'c>) =
         let rec derivative (name : string) (i : 'c) (e : Term<'c>) =
             match e with
+                | Absolute _ -> 
+                    failwith "no derivative for abs"
                 | Value _ | Uniform _ -> 
                     Value 0.0
                 
@@ -784,7 +795,7 @@ module Term =
                     Power(f,e), Power(a, e)
 
                 | Parameter _ | Value _
-                | Sine _ | Cosine _ | Tangent _ | Sum _ | Logarithm _ ->
+                | Sine _ | Cosine _ | Tangent _ | Sum _ | Logarithm _ | Absolute _ ->
                     Value 1.0, t
         let f, t = isolate name t
         simplify f, simplify t
@@ -1118,6 +1129,7 @@ module Term =
 
         let rec toExpr (term : Term<'c>) : Expr =
             match term with
+
                 | Value v ->
                     Expr.Value(v)
 
@@ -1157,7 +1169,11 @@ module Term =
                 | Logarithm t ->
                     let e = toExpr t
                     <@@ (%rreal.log) (%%e) @@>
-
+                    
+                | Absolute t ->
+                    let e = toExpr t
+                    <@@ (%rreal.abs) (%%e) @@>
+                    
                 | Negate(a) ->
                     let e = toExpr a
                     negate e
@@ -1223,7 +1239,9 @@ module Term =
                     //        t |> List.fold (fun s e -> <@ (%rreal.mul) (%s) (%e) @>) h
 
         let sum = toExpr (simplify p)
-
+        let sum = 
+            if sum.Type = typeof<float> then <@@ (%rreal.fromFloat) (%%sum) @@>
+            else sum
         let bindings = bindings.Values |> Seq.toList |> List.sortBy (fun (v,_) -> v.Name)
 
         let rec wrap (bindings : list<Var * Expr>) (b : Expr) =

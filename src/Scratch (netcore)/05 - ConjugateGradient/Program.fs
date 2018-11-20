@@ -295,6 +295,30 @@ module ConjugateGradientShaders =
                 dst.[id] <- div 
         }
 
+    //let curvatures<'fmt when 'fmt :> Formats.IFloatingFormat> (dstx : Image2d<'fmt>) (dsty : Image2d<'fmt>) =
+    //    compute {
+    //        let id = getGlobalId().XY
+    //        let dstSize = dstx.Size
+    //        let srcSize = srcSampler.Size
+
+    //        if id.X < dstSize.X && id.Y < dstSize.Y then
+    //            let tc = (V2d(id) + V2d.Half) / V2d(dstSize)
+
+    //            let d = 1.0 / V2d srcSize
+
+    //            let v00  = srcSampler.SampleLevel(tc,0.0)
+    //            let vp0  = srcSampler.SampleLevel(tc + V2d( d.X, 0.0 ),0.0)
+    //            let vn0  = srcSampler.SampleLevel(tc + V2d(-d.X, 0.0 ),0.0)
+    //            let v0p  = srcSampler.SampleLevel(tc + V2d( 0.0, d.Y ),0.0)
+    //            let v0n  = srcSampler.SampleLevel(tc + V2d( 0.0,-d.Y ),0.0)
+
+    //            let cx = 2.0 * v00 - vp0 - vn0
+    //            let cy = 2.0 * v00 - v0p - v0n
+                
+    //            dstx.[id] <- cx 
+    //            dsty.[id] <- cy 
+    //    }
+
 type ConjugateGradientConfig =
     {
         gradientTolerance       : float
@@ -368,6 +392,33 @@ type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Forma
         t
 
     member x.Tools = tools
+
+    member x.Compile(t : Term<V2i>) =
+        let used = Term.names t
+        let call = Term.toReflectedCall Term.Read.image t
+        let shader = runtime.CreateComputeShader (ConjugateGradientShaders.polynomial2d<'f, 'v> call rreal.toV4)
+
+        fun (inputs : Map<string, ITextureSubResource>) (dst : ITextureSubResource) ->
+            use input = runtime.NewInputBinding shader
+
+            input.["res"] <- dst
+
+            for u in used do
+                let r = inputs.[u]
+                input.[u] <- r
+                input.[sprintf "%sLevel" u] <- 0
+                input.[sprintf "%sSize" u] <- r.Size.XY
+
+
+            input.Flush()
+
+            runtime.Run [
+                ComputeCommand.Bind shader
+                ComputeCommand.SetInput input
+                ComputeCommand.Dispatch(ceilDiv2 dst.Size.XY shader.LocalSize.XY)
+            ]
+
+
 
     member x.NegativeDerivative(h : float, inputs : Map<string, ITextureSubResource>, dst : ITextureSubResource) =
         use input = runtime.NewInputBinding negativeDerivative
@@ -706,7 +757,9 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
         runtime.Upload(t, 0, 0, img)
         t
 
-   
+    member x.Compile(term : Term<V2i>) =
+        cg.Compile(term)
+
     member x.ComputeResidualsZero(h : float, inputs : Map<string, ITextureSubResource>, dst : Map<string, ITextureSubResource>) =
         computeResiduals0 |> Map.iter (fun e computeResidual0 ->
             match Map.tryFind e dst with
@@ -994,10 +1047,12 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
             | None ->
                 ()
             
+
     member this.CreateTexture(size : V2i) =
         let res = runtime.CreateTexture(size, format, 1, 1)
         res
           
+
     member this.CreateTempTexture(size : V2i) =
         let levels = 1 + int(Fun.Floor(Fun.Log2 (max size.X size.Y)))
         let res = runtime.CreateTexture(size, format, levels, 1)
@@ -1079,9 +1134,9 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
             |> Map.add "__d" d.[TextureAspect.Color, 0, 0]
             |> Map.add "__temp" temp.[TextureAspect.Color, 0, 0]
 
-        if not cfg.useGuess then 
-            cg.Tools.Set(sum, V4d.Zero)
-            this.ComputeResidualsZero(1.0, Map.union ip bPing, bPing)
+        //if not cfg.useGuess then 
+        //    cg.Tools.Set(sum, V4d.Zero)
+        //    this.ComputeResidualsZero(1.0, Map.union ip bPing, bPing)
 
         do // restrict all inputs
             let mutable v = ip
@@ -1091,24 +1146,22 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
 
             
         let solveLevels = 
-            let lx = Fun.Log2 (sum.Size.X / cfg.maxSolveSize.X)
-            let ly = Fun.Log2 (sum.Size.Y / cfg.maxSolveSize.Y)
+            let lx = Fun.Log2 (float sum.Size.X / float cfg.maxSolveSize.X)
+            let ly = Fun.Log2 (float sum.Size.Y / float cfg.maxSolveSize.Y)
             1 + int(Fun.Floor(max lx ly))
             
         let mutable iter = 0
         for height in 0 .. solveLevels - 1 do
             let startLevel = solveLevels - 1 - height
             let xsl = xs.[TextureAspect.Color, startLevel, 0]
-
-
+            
             let i = this.GetLevel(ip, startLevel)
             let b0 = this.GetLevel(bPing, startLevel)
             let b1 = this.GetLevel(bPong, startLevel)
             let s = size / (1 <<< startLevel)
             let hv = V2d size / V2d s
             let h = 0.5 * (hv.X + hv.Y)
-        
-            
+
             match cfg.debugPath with
                 | Some path -> 
                     let name = sprintf "%d_xsl.jpg" iter
@@ -1130,7 +1183,12 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
                 this.Interpolate(xsl, xsl.Texture.[TextureAspect.Color, startLevel - 1, 0], 1.0)
             iter <- iter + 1
 
-        runtime.Copy(xs.[TextureAspect.Color, 0, 0], V3i.Zero, sum, V3i.Zero, sum.Size)
+        let xsl = xs.[TextureAspect.Color, 0, 0]
+        this.ComputeResiduals(1.0, Map.add "x" xsl ip, bPing)
+        this.VCycle(ip, bPing, bPong, iter, 0, size.XY, size.XY, cfg)
+        cg.Tools.MultiplyAdd(ip.["x"], real.one, xsl, real.one)
+
+        runtime.Copy(xsl, V3i.Zero, sum, V3i.Zero, sum.Size)
         //for i in 0 .. cfg.cycles - 1 do
         //    if i <> 0 || cfg.useGuess then 
         //        this.ComputeResiduals(1.0, Map.add "x" sum ip, bPing)
@@ -1141,6 +1199,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
 
             
         runtime.DeleteTexture x
+        runtime.DeleteTexture xs
         if deleteR then runtime.DeleteTexture r
         if deleteD then runtime.DeleteTexture d
         if deleteTemp then runtime.DeleteTexture temp
@@ -1273,27 +1332,91 @@ let main argv =
 
 
     
-    let polya (x : Term.TermParameter2d) (h : Term<V2i>) = 
-        let cdiv = (4.0 * x.[0,0] - x.[-1,0] - x.[1,0] - x.[0,-1] - x.[0,1]) / h**2
-        0.125 * (cdiv - div.[0,0]) ** 2 + 
-        0.5 * w_v.[0,0] * (x.[0,0] - v.[0,0]) ** 2
+    //let polya (x : Term.TermParameter2d) (h : Term<V2i>) = 
+    //    let cdiv = (4.0 * x.[0,0] - x.[-1,0] - x.[1,0] - x.[0,-1] - x.[0,1]) / h**2
+    //    0.125 * (cdiv - div.[0,0]) ** 2 + 
+    //    0.5 * w_v.[0,0] * (x.[0,0] - v.[0,0]) ** 2
         
-    let fmt = Col.Format.RGBA
-    let solver = MultigridSolver2d<FShade.Formats.rgba32f, V3f>(runtime, polya)
+    let w_cx = Term.TermParameter2d("w_cx")
+    let w_cy = Term.TermParameter2d("w_cy")
+
+    let polya (x : Term.TermParameter2d) (h : Term<V2i>) = 
+        let cx = (2.0 * x.[0,0] - x.[-1,0] - x.[1,0]) / h**2
+        let cy = (2.0 * x.[0,0] - x.[0,-1] - x.[0,1]) / h**2
+        
+        50.0 * (w_cx.[0,0] * cx ** 2 + w_cy.[0,0] * cy ** 2) +
+        w_v.[0,0] * (x.[0,0] - v.[0,0]) ** 2
+        
+
+    //let fmt = Col.Format.RGBA
+    let solver = MultigridSolver2d<FShade.Formats.r32f, float32>(runtime, polya)
     
-    let inputPix = PixImage.Create @"C:\temp\a\bla.png"
-    let inputPix = inputPix.ToPixImage<byte>(Col.Format.RGBA)
+
+
+
+
+
+    //let inputPix = PixImage.Create @"C:\temp\a\hund.jpg" //@"C:\temp\a\bla.png"
+    //let inputPix = inputPix.ToPixImage<byte>(Col.Format.RGBA)
+    //let size = inputPix.Size
+    
+    let inputPix = PixImage.Create @"C:\temp\b\DSC02289.png"
+    let inputPix = inputPix.ToPixImage<byte>(Col.Format.Gray)
     let size = inputPix.Size
 
-
-    inputPix.SaveAsImage @"C:\temp\a\input.png"
+    inputPix.SaveAsImage @"C:\temp\b\input.png"
     
     let input = solver.CreateTempTexture(inputPix)
 
+
+    let v = Term.TermParameter2d("v")
+    let sigma = 0.1
+    let computeWCX = 
+        solver.Compile (
+            let cx = 2.0 * v.[0,0] - v.[-1,0] - v.[1,0]
+            exp (-abs cx / sigma)
+        )
+    let computeWCY = 
+        solver.Compile (
+            let cy = 2.0 * v.[0,0] - v.[0,-1] - v.[0,-1]
+            exp (-abs cy / sigma)
+        )
+
+    let w_cx = solver.CreateTempTexture size
+    let w_cy = solver.CreateTempTexture size
+    computeWCX (Map.ofList ["v", input.[TextureAspect.Color, 0, 0]]) w_cx.[TextureAspect.Color, 0, 0]
+    computeWCY (Map.ofList ["v", input.[TextureAspect.Color, 0, 0]]) w_cy.[TextureAspect.Color, 0, 0]
+
+    let download (map : Range1d -> float -> float) (tex : ITextureSubResource) =
+        let dst = PixImage<float32>(Col.Format.Gray, tex.Size.XY)
+        runtime.Download(tex.Texture, tex.Level, tex.Slice, dst)
+        
+        let x0 = dst.GetChannel(0L)
+        let range = x0.InnerProduct(x0, (fun l _ -> Range1f(l,l)), Range1f.Invalid, (fun l r -> Range1f(l,r))) |> Range1d
+
+        let fin = PixImage<byte>(Col.Format.Gray, tex.Size.XY)
+        fin.GetChannel(0L).SetMap(x0, float >> map range >> clamp 0.0 1.0 >> ((*) 255.0) >> byte) |> ignore
+
+
+        fin
+
+    let remap (range : Range1d) (v : float) = (v - range.Min) / range.Size
+    (download remap w_cx.[TextureAspect.Color, 0, 0]).SaveAsImage @"C:\temp\b\cx.png"
+    (download remap w_cy.[TextureAspect.Color, 0, 0]).SaveAsImage @"C:\temp\b\cy.png"
+    
+
+
+
+
     let div = 
-        let tex = runtime.CreateTexture(size,TextureFormat.Rgba32f, 1, 1)
+        let tex = runtime.CreateTexture(size,TextureFormat.R32f, 1, 1)
         solver.Divergence(input.[TextureAspect.Color,0,0],tex.[TextureAspect.Color,0,0])
         tex
+
+    let hhh = (PixImage.Create @"C:\temp\b\DSC02289.exr").ToPixImage<float32>()
+    let depthPix = PixImage<float32>(Col.Format.Gray, hhh.Size)
+    depthPix.GetChannel(0L).SetMap(hhh.GetMatrix<C4f>(), Func<_,_>(fun (c : C4f)-> c.R)) |> ignore
+    //let depthPix = depthPix.ToPixImage<float32>(Col.Format.Gray)
 
     
     let edgeSize = 3L
@@ -1306,27 +1429,36 @@ let main argv =
     let isCenter (v : V2l) =
         v = c || v = c - V2l.IO || v = c - V2l.OI || v = c - V2l.II
 
-    let inputMat = inputPix.GetMatrix<C4b>()
-    let v = PixImage<float32>(fmt, size)
-    v.GetMatrix<C4f>().SetByCoord (fun (c : V2l) -> 
-        if isEdge c then inputMat.[c].ToC4f()
-        else C4f(0.0f, 0.0f, 0.0f, 0.0f)
-    ) |> ignore
+    //let inputMat = inputPix.GetMatrix<C4b>()
+    //let v = PixImage<float32>(fmt, size)
+    //v.GetMatrix<C4f>().SetByCoord (fun (c : V2l) -> 
+    //    if isEdge c then inputMat.[c].ToC4f()
+    //    else C4f(0.0f, 0.0f, 0.0f, 0.0f)
+    //) |> ignore
     
-    let w_v = PixImage<float32>(fmt, size)
-    w_v.GetMatrix<C4f>().SetByCoord (fun (c : V2l) -> 
-        if isEdge c then C4f(1.0f, 1.0f, 1.0f, 1.0f)
-        else C4f(0.0f, 0.0f, 0.0f, 0.0f)
+    //let w_v = PixImage<float32>(fmt, size)
+    //w_v.GetMatrix<C4f>().SetByCoord (fun (c : V2l) -> 
+    //    if isEdge c then C4f(1.0f, 1.0f, 1.0f, 1.0f)
+    //    else C4f(0.0f, 0.0f, 0.0f, 0.0f)
+    //) |> ignore
+    
+    let v = depthPix
+    
+    let w_v = PixImage<float32>(Col.Format.Gray,size)
+    w_v.GetChannel(0L).SetByCoord (fun (c : V2l) ->
+        if depthPix.GetChannel(0L).[c] > 0.0f then 1.0f else 0.0f
     ) |> ignore
 
-    let divPix = PixImage<float32>(Col.Format.RGBA, size)
+    let divPix = PixImage<float32>(Col.Format.Gray, size)
     runtime.Download(div, 0, 0, divPix)
 
     let textures =
         Map.ofList [
             "v", solver.CreateTempTexture v
             "w_v", solver.CreateTempTexture w_v
-            "div", div
+            "w_cx", w_cx
+            "w_cy", w_cy
+
         ]
         
     let textures =
@@ -1336,7 +1468,9 @@ let main argv =
         |> Map.add "__temp" (solver.CreateTempTexture size)
 
     let views = textures |> Map.map (fun _ t -> t.[TextureAspect.Color, 0, 0])
-    let res = solver.CreateTexture(inputPix.ToPixImage<float32>(Col.Format.RGBA))
+    
+    //let res = solver.CreateTexture(inputPix.ToPixImage<float32>(Col.Format.RGBA))
+    let res = solver.CreateTexture(depthPix.ToPixImage<float32>(Col.Format.Gray))
     
 
     let config =
@@ -1345,11 +1479,11 @@ let main argv =
             maxSolveSize = V2i(4, 4)
             stepTolerance = 1E-5
             gradientTolerance = 1E-10
-            smoothIterations = 8
+            smoothIterations = 6
             solveIterations = 32
-            correctIterations = 8
+            correctIterations = 6
             useGuess = false
-            debugPath = Some @"C:\temp\a\debug"
+            debugPath = Some @"C:\temp\b\debug"
         }
 
     Log.startTimed "solve"
@@ -1361,7 +1495,7 @@ let main argv =
     //Log.startTimed "solve again"
     //solver.Solve(views, res.[TextureAspect.Color, 0, 0], 1, 1E-8)
     //Log.stop()
-    let x = PixImage<float32>(fmt, size)
+    let x = PixImage<float32>(Col.Format.Gray, size)
     runtime.Download(res, 0, 0, x)
     runtime.DeleteTexture res
     textures |> Map.iter (fun _ t -> runtime.DeleteTexture t)
@@ -1372,9 +1506,14 @@ let main argv =
     //let c = x.ToPixImage<float32>().GetChannel(Col.Channel.Gray)
     //printMat "x" c
     
-    let f = PixImage<byte>(fmt, size)
-    f.GetMatrix<C4b>().SetMap(x.GetMatrix<C4f>(), fun v -> C4b(byte (clamp 0.0f 1.0f v.R * 255.0f), byte (clamp 0.0f 1.0f v.G * 255.0f), byte (clamp 0.0f 1.0f v.B * 255.0f))) |> ignore
-    f.SaveAsImage @"C:\temp\a\z_result.png"
+    x.SaveAsImage @"C:\temp\b\z_result.exr"
+    let x0 = x.GetChannel(0L)
+
+    let range = x0.InnerProduct(x0, (fun l _ -> Range1f(l,l)), Range1f.Invalid, (fun l r -> Range1f(l,r)))
+
+    let f = PixImage<byte>(Col.Format.Gray, size)
+    f.GetChannel(0L).SetMap(x.GetChannel(0L), fun v -> byte <| 255.0f * (v - range.Min) / (range.Max - range.Min)) |> ignore
+    f.SaveAsImage @"C:\temp\b\z_result.png"
 
     //for i in 0 .. 10 do
     //    x <- solver.Solve(inputs, x, 1E-3, 5, 1)

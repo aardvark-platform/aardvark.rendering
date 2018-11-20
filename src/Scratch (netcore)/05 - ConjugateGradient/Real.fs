@@ -261,6 +261,7 @@ type ReflectedReal<'a> =
         max     : Expr<'a -> 'a -> 'a>
         pinf    : Expr<'a>
         ninf    : Expr<'a>
+        abs     : Expr<'a -> 'a>
 
         fromV4  : Expr<V4d -> 'a>
         fromFloat  : Expr<float -> 'a>
@@ -308,6 +309,7 @@ module ReflectedReal =
             cos     = <@ cos @>
             tan     = <@ tan @>
             log     = <@ log @>
+            abs     = <@ abs @>
 
             fromV4  = <@ fun v -> v.X @>
             fromFloat = <@ float @>
@@ -341,6 +343,7 @@ module ReflectedReal =
             cos     = <@ cos @>
             tan     = <@ tan @>
             log     = <@ log @>
+            abs     = <@ abs @>
 
             fromV4  = <@ fun v -> float32 v.X @>
             fromFloat = <@ float32 @>
@@ -372,6 +375,7 @@ module ReflectedReal =
             cos     = <@ fun v -> V2f(cos v.X, cos v.Y) @>
             tan     = <@ fun v -> V2f(tan v.X, tan v.Y) @>
             log     = <@ fun v -> V2f(log v.X, log v.Y) @>
+            abs     = <@ fun v -> v.Abs @>
 
             fromV4  = <@ fun v -> V2f v.XY @>
             fromFloat = <@ V2f @>
@@ -403,6 +407,7 @@ module ReflectedReal =
             cos     = <@ fun v -> V2d(cos v.X, cos v.Y) @>
             tan     = <@ fun v -> V2d(tan v.X, tan v.Y) @>
             log     = <@ fun v -> V2d(log v.X, log v.Y) @>
+            abs     = <@ fun v -> v.Abs @>
 
             fromV4  = <@ fun v -> v.XY @>
             fromFloat = <@ V2d @>
@@ -434,6 +439,7 @@ module ReflectedReal =
             cos     = <@ fun v -> V3f(cos v.X, cos v.Y, cos v.Z) @>
             tan     = <@ fun v -> V3f(tan v.X, tan v.Y, tan v.Z) @>
             log     = <@ fun v -> V3f(log v.X, log v.Y, log v.Z) @>
+            abs     = <@ fun v -> v.Abs @>
 
             fromV4  = <@ fun v -> V3f v.XYZ @>
             fromFloat = <@ V3f @>
@@ -461,6 +467,7 @@ module ReflectedReal =
             cos     = <@ fun v -> V3d(cos v.X, cos v.Y, cos v.Z) @>
             tan     = <@ fun v -> V3d(tan v.X, tan v.Y, tan v.Z) @>
             log     = <@ fun v -> V3d(log v.X, log v.Y, log v.Z) @>
+            abs     = <@ fun v -> v.Abs @>
             
             muls     = <@ fun l r -> l * r @>
             divs     = <@ fun l r -> l / r @>
@@ -497,6 +504,7 @@ module ReflectedReal =
             cos     = <@ fun v -> V4f(cos v.X, cos v.Y, cos v.Z, cos v.W) @>
             tan     = <@ fun v -> V4f(tan v.X, tan v.Y, tan v.Z, tan v.W) @>
             log     = <@ fun v -> V4f(log v.X, log v.Y, log v.Z, log v.W) @>
+            abs     = <@ fun v -> v.Abs @>
 
             fromV4  = <@ fun v -> V4f v @>
             fromFloat = <@ V4f @>
@@ -529,6 +537,8 @@ module ReflectedReal =
             cos     = <@ fun v -> V4d(cos v.X, cos v.Y, cos v.Z, cos v.W) @>
             tan     = <@ fun v -> V4d(tan v.X, tan v.Y, tan v.Z, tan v.W) @>
             log     = <@ fun v -> V4d(log v.X, log v.Y, log v.Z, log v.W) @>
+            abs     = <@ fun v -> v.Abs @>
+
             fromV4  = <@ fun v -> v @>
             fromFloat = <@ V4d @>
             toV4  = <@ fun v -> v @>
