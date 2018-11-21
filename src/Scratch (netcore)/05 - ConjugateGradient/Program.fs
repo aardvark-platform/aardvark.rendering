@@ -138,34 +138,6 @@ module ConjugateGradientShaders =
         sam.SampleLevel(positions.XW, 0.0) * weights.Z +
         sam.SampleLevel(positions.ZW, 0.0) * weights.W
         
-        //let xc = cubic fxy.X
-        //let yc = cubic fxy.Y
-        
-        ////let ca = V2d ipix + V2d(-0.5, 1.5)
-        ////let cb = V2d ipix + V2d(-0.5, 1.5)
-
-        //let c = V4d(float ipix.X - 0.5, float ipix.X + 1.5, float ipix.Y - 0.5, float ipix.Y + 1.5)
-        //let xs = xc.XZ + xc.YW
-        //let ys = yc.XZ + yc.YW
-        //let s = V4d(xs.X, xs.Y, ys.X, ys.Y)
-        //let offset = c + V4d(xc.Y, xc.W, yc.Y, yc.W) / s
-        //let offset = offset * V4d(invSize.X, invSize.X, invSize.Y, invSize.Y)
-        
-        //let sx = s.X / (s.X + s.Y)
-        //let sy = s.Z / (s.Z + s.W)
-
-
-        //let s0 = sam.SampleLevel(offset.XZ, 0.0)
-        //let s1 = sam.SampleLevel(offset.YZ, 0.0)
-        //let s2 = sam.SampleLevel(offset.XW, 0.0)
-        //let s3 = sam.SampleLevel(offset.YW, 0.0)
-
-        //mix sy (mix sx s3 s2) (mix sx s1 s0)
-        
-
-
-
-
 
 
     [<LocalSize(X = 8, Y = 8)>]
@@ -295,29 +267,6 @@ module ConjugateGradientShaders =
                 dst.[id] <- div 
         }
 
-    //let curvatures<'fmt when 'fmt :> Formats.IFloatingFormat> (dstx : Image2d<'fmt>) (dsty : Image2d<'fmt>) =
-    //    compute {
-    //        let id = getGlobalId().XY
-    //        let dstSize = dstx.Size
-    //        let srcSize = srcSampler.Size
-
-    //        if id.X < dstSize.X && id.Y < dstSize.Y then
-    //            let tc = (V2d(id) + V2d.Half) / V2d(dstSize)
-
-    //            let d = 1.0 / V2d srcSize
-
-    //            let v00  = srcSampler.SampleLevel(tc,0.0)
-    //            let vp0  = srcSampler.SampleLevel(tc + V2d( d.X, 0.0 ),0.0)
-    //            let vn0  = srcSampler.SampleLevel(tc + V2d(-d.X, 0.0 ),0.0)
-    //            let v0p  = srcSampler.SampleLevel(tc + V2d( 0.0, d.Y ),0.0)
-    //            let v0n  = srcSampler.SampleLevel(tc + V2d( 0.0,-d.Y ),0.0)
-
-    //            let cx = 2.0 * v00 - vp0 - vn0
-    //            let cy = 2.0 * v00 - v0p - v0n
-                
-    //            dstx.[id] <- cx 
-    //            dsty.[id] <- cy 
-    //    }
 
 type ConjugateGradientConfig =
     {
@@ -943,6 +892,11 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
             next
         )
 
+    member x.Download(t : ITextureSubResource) =
+        let dst = PixImage.Create(TextureFormat.toDownloadFormat t.Texture.Format, int64 t.Size.X, int64 t.Size.Y)
+        runtime.Download(t.Texture, t.Level, t.Slice, dst)
+        dst
+
     member private x.VCycle(inputs : Map<string, ITextureSubResource>, bPing : Map<string, ITextureSubResource>, bPong : Map<string, ITextureSubResource> , iter : int, level : int, size : V2i, inputSize : V2i, cfg : MultigridConfig) =
         let hv = V2d inputSize / V2d size
         let h = 0.5 * (hv.X + hv.Y)
@@ -1184,9 +1138,11 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
             iter <- iter + 1
 
         let xsl = xs.[TextureAspect.Color, 0, 0]
-        this.ComputeResiduals(1.0, Map.add "x" xsl ip, bPing)
-        this.VCycle(ip, bPing, bPong, iter, 0, size.XY, size.XY, cfg)
-        cg.Tools.MultiplyAdd(ip.["x"], real.one, xsl, real.one)
+        for i in 0 .. cfg.cycles - 2 do
+            this.ComputeResiduals(1.0, Map.add "x" xsl ip, bPing)
+            this.VCycle(ip, bPing, bPong, iter, 0, size.XY, size.XY, cfg)
+            cg.Tools.MultiplyAdd(ip.["x"], real.one, xsl, real.one)
+            iter <- iter + 1
 
         runtime.Copy(xsl, V3i.Zero, sum, V3i.Zero, sum.Size)
         //for i in 0 .. cfg.cycles - 1 do
@@ -1209,15 +1165,14 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
             match Map.tryFind k inputs with
                 | Some it -> if t.Texture <> it.Texture then runtime.DeleteTexture t.Texture
                 | _ -> ()
-
-        cg.Tools.Average(sum)
+                
     
 
     member this.Solve(inputs : Map<string, PixImage>, x : PixImage, cfg : MultigridConfig) =
         let inputs = inputs |> Map.map (fun _ img -> (createTexture img).[TextureAspect.Color, 0, 0])
         let x = createTexture x
 
-        let avg = this.Solve(inputs, x.[TextureAspect.Color, 0, 0], cfg)
+        this.Solve(inputs, x.[TextureAspect.Color, 0, 0], cfg)
 
         let res = runtime.Download(x, 0, 0)
         runtime.DeleteTexture x
@@ -1231,146 +1186,197 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
 
 
 
+[<AutoOpen>]
+module PixImageExtensionsNew =
+    
+    let acc : PixFormat -> int64 -> obj =
+        let div255 (b : byte) = float b / 255.0
+        let v255 (r : byte) (g : byte) (b : byte) (a : byte) = V4d(div255 r, div255 g, div255 b, div255 a)
+        let vf (r : float32) (g : float32) (b : float32) (a : float32) = V4d(r, g, b, a)
 
-// This example illustrates how to render a simple triangle using aardvark.
-let inline printMat (name : string) (m : IMatrix< ^a >) =
-    let table = 
-        [
-            for y in 0L .. m.Dim.Y - 1L do
-                yield [
-                    for x in 0L .. m.Dim.X - 1L do
-                        let str = sprintf "%.3f" m.[V2l(x,y)]
-                        if str.StartsWith "-" then yield str
-                        else yield " " + str
-                ]
+        let b255 (v : float) = clamp 0.0 1.0 v * 255.0 |> byte
+
+        LookupTable.lookupTable [
+            PixFormat.ByteBGR, fun dz -> 
+                TensorAccessors<byte, V4d>(
+                    Getter = (fun a i -> v255 (a.[int (i + 2L * dz)]) (a.[int (i + 1L * dz)]) (a.[int (i + 0L * dz)]) 255uy),
+                    Setter = (fun a i v -> a.[int (i + 2L * dz)] <- b255 v.Z; a.[int (i + 1L * dz)] <- b255 v.Y; a.[int (i + 0L * dz)] <- b255 v.X)
+                ) :> obj
+
+            PixFormat.ByteBGRA, fun dz -> 
+                TensorAccessors<byte, V4d>(
+                    Getter = (fun a i -> v255 (a.[int (i + 2L * dz)]) (a.[int (i + 1L * dz)]) (a.[int (i + 0L * dz)]) (a.[int (i + 3L * dz)])),
+                    Setter = (fun a i v -> a.[int (i + 2L * dz)] <- b255 v.Z; a.[int (i + 1L * dz)] <- b255 v.Y; a.[int (i + 0L * dz)] <- b255 v.X; a.[int (i + 3L * dz)] <- b255 v.W)
+                ) :> obj
+
+            PixFormat.ByteGray, fun dz -> 
+                TensorAccessors<byte, V4d>(
+                    Getter = (fun a i -> v255 (a.[int i]) (a.[int i]) (a.[int i]) 255uy),
+                    Setter = (fun a i v -> a.[int i] <- v.ToC4f().ToC4b().ToGrayByte())
+                ) :> obj
+                
+            PixFormat.ByteRGB, fun dz -> 
+                TensorAccessors<byte, V4d>(
+                    Getter = (fun a i -> v255 (a.[int (i + 0L * dz)]) (a.[int (i + 1L * dz)]) (a.[int (i + 2L * dz)]) 255uy),
+                    Setter = (fun a i v -> a.[int (i + 0L * dz)] <- b255 v.Z; a.[int (i + 1L * dz)] <- b255 v.Y; a.[int (i + 2L * dz)] <- b255 v.X)
+                ) :> obj
+
+            PixFormat.ByteRGBA, fun dz -> 
+                TensorAccessors<byte, V4d>(
+                    Getter = (fun a i -> v255 (a.[int (i + 0L * dz)]) (a.[int (i + 1L * dz)]) (a.[int (i + 2L * dz)]) (a.[int (i + 3L * dz)])),
+                    Setter = (fun a i v -> a.[int (i + 0L * dz)] <- b255 v.Z; a.[int (i + 1L * dz)] <- b255 v.Y; a.[int (i + 2L * dz)] <- b255 v.X; a.[int (i + 3L * dz)] <- b255 v.W)
+                ) :> obj
+
+                
+            PixFormat.FloatBGR, fun dz -> 
+                TensorAccessors<float32, V4d>(
+                    Getter = (fun a i -> vf (a.[int (i + 2L * dz)]) (a.[int (i + 1L * dz)]) (a.[int (i + 0L * dz)]) 1.0f),
+                    Setter = (fun a i v -> a.[int (i + 2L * dz)] <- float32 v.Z; a.[int (i + 1L * dz)] <- float32 v.Y; a.[int (i + 0L * dz)] <- float32 v.X)
+                ) :> obj
+
+            PixFormat.FloatBGRA, fun dz -> 
+                TensorAccessors<float32, V4d>(
+                    Getter = (fun a i -> vf (a.[int (i + 2L * dz)]) (a.[int (i + 1L * dz)]) (a.[int (i + 0L * dz)]) (a.[int (i + 3L * dz)])),
+                    Setter = (fun a i v -> a.[int (i + 2L * dz)] <- float32 v.Z; a.[int (i + 1L * dz)] <- float32 v.Y; a.[int (i + 0L * dz)] <- float32 v.X; a.[int (i + 3L * dz)] <- float32 v.W)
+                ) :> obj
+
+            PixFormat.FloatGray, fun dz -> 
+                TensorAccessors<float32, V4d>(
+                    Getter = (fun a i -> vf (a.[int i]) (a.[int i]) (a.[int i]) 1.0f),
+                    Setter = (fun a i v -> a.[int i] <- v.ToC4f().ToGrayFloat())
+                ) :> obj
+                
+            PixFormat.FloatRGB, fun dz -> 
+                TensorAccessors<float32, V4d>(
+                    Getter = (fun a i -> vf (a.[int (i + 0L * dz)]) (a.[int (i + 1L * dz)]) (a.[int (i + 2L * dz)]) 1.0f),
+                    Setter = (fun a i v -> a.[int (i + 0L * dz)] <- float32 v.Z; a.[int (i + 1L * dz)] <- float32 v.Y; a.[int (i + 2L * dz)] <- float32 v.X)
+                ) :> obj
+
+            PixFormat.FloatRGBA, fun dz -> 
+                TensorAccessors<float32, V4d>(
+                    Getter = (fun a i -> vf (a.[int (i + 0L * dz)]) (a.[int (i + 1L * dz)]) (a.[int (i + 2L * dz)]) (a.[int (i + 3L * dz)])),
+                    Setter = (fun a i v -> a.[int (i + 0L * dz)] <- float32 v.Z; a.[int (i + 1L * dz)] <- float32 v.Y; a.[int (i + 2L * dz)] <- float32 v.X; a.[int (i + 3L * dz)] <- float32 v.W)
+                ) :> obj
         ]
 
-    let maxLength = table |> Seq.collect (fun row -> row |> Seq.map (fun s -> s.Length)) |> Seq.max
-    let pad (str : string) =
-        if str.Length < maxLength then 
-            let m = maxLength - str.Length
-            let b = m // m / 2
-            let a = 0 // m - b
+    module PixImage =
+        let toMatrix (img : PixImage<'a>) =
+            let acc = acc img.PixFormat img.Volume.DZ |> unbox<TensorAccessors<'a, V4d>>
+            let mutable mat = img.Volume.SubXYMatrixWindow<V4d>(0L)
+            mat.Accessors <- acc
+            mat
 
-            System.String(' ', b) + str + System.String(' ', a)
-        else    
-            str
+        let map (mapping : V4d -> V4d) (img : PixImage) =
+            img.Visit {
+                new IPixImageVisitor<PixImage> with
+                    member x.Visit(img : PixImage<'a>) =
+                        let res = PixImage<'a>(img.Format, img.Size)
+                        let sm = toMatrix img
+                        let dm = toMatrix res
+                        dm.SetMap(sm, mapping) |> ignore
+                        res :> PixImage
+            }
 
-    let rows = 
-        table |> List.map (fun row ->
-            row |> List.map pad |> String.concat "  "
-        )
-    printfn "%s (%dx%d)" name m.Dim.Y m.Dim.X
-    for r in rows do
-        printfn "   %s" r
+        let range (img : PixImage) =
+            let merge (ll : V4d, lh : V4d) (rl : V4d, rh : V4d) =
+                let low = 
+                    V4d(
+                        min ll.X rl.X,
+                        min ll.Y rl.Y,
+                        min ll.Z rl.Z,
+                        min ll.W rl.W
+                    )
+                let high = 
+                    V4d(
+                        max lh.X rh.X,
+                        max lh.Y rh.Y,
+                        max lh.Z rh.Z,
+                        max lh.W rh.W
+                    )
+                low, high
 
-
-
-
-
-[<EntryPoint>]
-let main argv = 
-    ////let test = 0.25 * ((-x<float>.[-1] + 2.0 * x<float>.[0] - x<float>.[1] - 50.0) ** 2)
+            img.Visit {
+                new IPixImageVisitor<V4d * V4d> with
+                    member x.Visit(img : PixImage<'a>) =
+                        let sm = toMatrix img
+                        sm.InnerProduct(sm, (fun l _ -> (l,l)), (V4d.PositiveInfinity, V4d.NegativeInfinity), merge)
+            }
     
-    ////let a = test.WithoutConstant("x")
-    ////let b = -test.ConstantPart("x")
-    
-    ////printfn "%A = 0" test
-    ////printfn ""
-    ////printfn "%A = %A" a b
-    ////printfn "%A = %A" (a.Derivative("x", 0)) (b.Derivative("x", 0))
-    ////printfn "%A = %A" (a.Derivative("x", 1)) (b.Derivative("x", 1))
+        let toRGBAByteImage (img : PixImage) =
+            img.Visit {
+                new IPixImageVisitor<PixImage<byte>> with
+                    member x.Visit(img : PixImage<'a>) =
+                        if typeof<'a> = typeof<byte> && img.Format = Col.Format.RGBA then 
+                            unbox<PixImage<byte>> img
+                        else
+                            let res = PixImage<byte>(Col.Format.RGBA, img.Size)
+                            let sm = toMatrix img
+                            let dm = toMatrix res
+                            dm.SetMap(sm, id) |> ignore
+                            res
 
+            }
+            
+        let toGrayImage<'a> (img : PixImage) =
+            img.Visit {
+                new IPixImageVisitor<PixImage<'a>> with
+                    member x.Visit(img : PixImage<'b>) =
+                        if typeof<'a> = typeof<'b> && img.Format = Col.Format.Gray then 
+                            unbox<PixImage<'a>> img
+                        else
+                            let res = PixImage<'a>(Col.Format.Gray, img.Size)
+                            let sm = toMatrix img
+                            let dm = toMatrix res
+                            dm.SetMap(sm, id) |> ignore
+                            res
 
+            }
+            
+        let toRGBAImage<'a> (img : PixImage) =
+            img.Visit {
+                new IPixImageVisitor<PixImage<'a>> with
+                    member x.Visit(img : PixImage<'b>) =
+                        if typeof<'a> = typeof<'b> && img.Format = Col.Format.RGBA then 
+                            unbox<PixImage<'a>> img
+                        else
+                            let res = PixImage<'a>(Col.Format.RGBA, img.Size)
+                            let sm = toMatrix img
+                            let dm = toMatrix res
+                            dm.SetMap(sm, id) |> ignore
+                            res
 
+            }
+            
+        let normalize (img : PixImage) =
+            let min, max = range img
+            let mutable size = max - min
+            if size.X < 1.0 then size.X <- 1.0
+            if size.Y < 1.0 then size.Y <- 1.0
+            if size.Z < 1.0 then size.Z <- 1.0
+            if size.W < 1.0 then size.W <- 1.0
 
-    //// f(x) = (A(x) - b)^2
+            let mapping (v : V4d) = (v - min) / size
+            map mapping img
 
+        let save (path : string) (img : PixImage) =
+            img.SaveAsImage path
 
-    //// A(x) - b 
+type DepthMapSolver(runtime : IRuntime, lambda : float, sigma : float) =
 
+    static let w_cx = Term.TermParameter2d("w_cx")
+    static let w_cy = Term.TermParameter2d("w_cy")
+    static let w_v = Term.TermParameter2d("w_v")
+    static let v = Term.TermParameter2d("v")
 
-
-    ////let A = test.WithoutConstant("x")
-    ////let b = test.ConstantPart("x")
-
-    ////let final = 
-    ////    //let test = test.Derivative("x", 0)
-    ////    let coords = A.FreeParameters.["x"]
-    ////    let s = coords |> Seq.sumBy (fun c -> A.Rename(fun i -> i - c))
-    ////    let s = s + b
-    ////    s.Derivative("x", 0)
-
-    ////printfn "%A" final
-    
-    ////Environment.Exit 0
-
-
-    use app = new HeadlessVulkanApplication()
-    //app.Runtime.ShaderCachePath <- None
-    let runtime = app.Runtime :> IRuntime
-
-
-    let div = Term.TermParameter2d("div")
-    let v = Term.TermParameter2d("v")
-    let w_v = Term.TermParameter2d("w_v")
-
-
-    // 1*x^2 + 0*y^2
-
-
-    // (x - a)^2 + (x - b)^2 + 2(x-a)(x-b)
-    // ((x-a) + (x-b))^2
-
-    // f(x) = (A1x - b1)^2 + (A2x - b2)^2 + ....
-
-
-    // df/dx = 2A1T(A1x - b1) + 2A2T(A2x - b2) + ....
-
-    // A1T*A1x + A2T*A2x - (A1T*b1 + A2T*b2) = 0
-    // (A1T*A1 + A2T*A2)x - (A1T*b1 + A2T*b2) = f'(x) = 0
-
-
-    
-    //let polya (x : Term.TermParameter2d) (h : Term<V2i>) = 
-    //    let cdiv = (4.0 * x.[0,0] - x.[-1,0] - x.[1,0] - x.[0,-1] - x.[0,1]) / h**2
-    //    0.125 * (cdiv - div.[0,0]) ** 2 + 
-    //    0.5 * w_v.[0,0] * (x.[0,0] - v.[0,0]) ** 2
-        
-    let w_cx = Term.TermParameter2d("w_cx")
-    let w_cy = Term.TermParameter2d("w_cy")
-
-    let polya (x : Term.TermParameter2d) (h : Term<V2i>) = 
+    let residual (x : Term.TermParameter2d) (h : Term<V2i>) =
         let cx = (2.0 * x.[0,0] - x.[-1,0] - x.[1,0]) / h**2
         let cy = (2.0 * x.[0,0] - x.[0,-1] - x.[0,1]) / h**2
         
-        50.0 * (w_cx.[0,0] * cx ** 2 + w_cy.[0,0] * cy ** 2) +
+        lambda * (w_cx.[0,0] * cx ** 2 + w_cy.[0,0] * cy ** 2) +
         w_v.[0,0] * (x.[0,0] - v.[0,0]) ** 2
         
-
-    //let fmt = Col.Format.RGBA
-    let solver = MultigridSolver2d<FShade.Formats.r32f, float32>(runtime, polya)
+    let solver = new MultigridSolver2d<FShade.Formats.r32f, float32>(runtime, residual)
     
-
-
-
-
-
-    //let inputPix = PixImage.Create @"C:\temp\a\hund.jpg" //@"C:\temp\a\bla.png"
-    //let inputPix = inputPix.ToPixImage<byte>(Col.Format.RGBA)
-    //let size = inputPix.Size
-    
-    let inputPix = PixImage.Create @"C:\temp\b\DSC02289.png"
-    let inputPix = inputPix.ToPixImage<byte>(Col.Format.Gray)
-    let size = inputPix.Size
-
-    inputPix.SaveAsImage @"C:\temp\b\input.png"
-    
-    let input = solver.CreateTempTexture(inputPix)
-
-
-    let v = Term.TermParameter2d("v")
-    let sigma = 0.1
     let computeWCX = 
         solver.Compile (
             let cx = 2.0 * v.[0,0] - v.[-1,0] - v.[1,0]
@@ -1382,96 +1388,125 @@ let main argv =
             exp (-abs cy / sigma)
         )
 
-    let w_cx = solver.CreateTempTexture size
-    let w_cy = solver.CreateTempTexture size
-    computeWCX (Map.ofList ["v", input.[TextureAspect.Color, 0, 0]]) w_cx.[TextureAspect.Color, 0, 0]
-    computeWCY (Map.ofList ["v", input.[TextureAspect.Color, 0, 0]]) w_cy.[TextureAspect.Color, 0, 0]
+    member x.Solve(v : ITextureSubResource, w_v : ITextureSubResource, gray : ITextureSubResource, res : ITextureSubResource, cfg : MultigridConfig) =
+        let size = v.Size.XY
+        let w_cx = solver.CreateTempTexture size
+        let w_cy = solver.CreateTempTexture size
 
-    let download (map : Range1d -> float -> float) (tex : ITextureSubResource) =
-        let dst = PixImage<float32>(Col.Format.Gray, tex.Size.XY)
-        runtime.Download(tex.Texture, tex.Level, tex.Slice, dst)
+        try
+            let inputs = Map.ofList ["v", gray]
+            computeWCX inputs w_cx.[TextureAspect.Color, 0, 0]
+            computeWCY inputs w_cy.[TextureAspect.Color, 0, 0]
+            
+            match cfg.debugPath with
+                | Some path ->
+                    let wcx = Path.combine [path; "w_cx.png"]
+                    let wcy = Path.combine [path; "w_cy.png"]
+                    
+                    solver.Download(w_cx.[TextureAspect.Color, 0, 0]) |> PixImage.normalize |> PixImage.toRGBAByteImage |> PixImage.save wcx
+                    solver.Download(w_cy.[TextureAspect.Color, 0, 0]) |> PixImage.normalize |> PixImage.toRGBAByteImage |> PixImage.save wcy
+
+                | None ->
+                    ()
+
+
+            let textures =
+                Map.ofList [
+                    "v", v
+                    "w_v", w_v
+                    "w_cx", w_cx.[TextureAspect.Color, 0, 0]
+                    "w_cy", w_cy.[TextureAspect.Color, 0, 0]
+                ]
+
+            solver.Solve(textures, res, cfg)
+        finally
+            runtime.DeleteTexture w_cx
+            runtime.DeleteTexture w_cy
+
+    member x.Solve(v : PixImage, w_v : PixImage, image : PixImage, cfg : MultigridConfig) =
+        let v = PixImage.toGrayImage<float32> v
+        let w_v = PixImage.toGrayImage<float32> w_v
+        let image = PixImage.toGrayImage<float32> image
+
+        let tv = solver.CreateTempTexture v
+        let tw_v = solver.CreateTempTexture w_v
+        let timage = solver.CreateTempTexture image
+        let res = solver.CreateTexture v.Size
+
+        try
+            x.Solve(tv.[TextureAspect.Color, 0, 0], tw_v.[TextureAspect.Color, 0, 0], timage.[TextureAspect.Color, 0, 0], res.[TextureAspect.Color, 0, 0], cfg)
+            let img = PixImage<float32>(Col.Format.Gray, v.Size)
+            runtime.Download(res, 0, 0, img)
+            img
+        finally
+            runtime.DeleteTexture tv
+            runtime.DeleteTexture tw_v
+            runtime.DeleteTexture timage
+            runtime.DeleteTexture res
+
+type ImageResonstructionSolver(runtime : IRuntime) =
+
+    static let div = Term.TermParameter2d("div")
+    static let w_v = Term.TermParameter2d("w_v")
+    static let v = Term.TermParameter2d("v")
+
+    let residual (x : Term.TermParameter2d) (h : Term<V2i>) =
+        let cx = (2.0 * x.[0,0] - x.[-1,0] - x.[1,0]) / h**2
+        let cy = (2.0 * x.[0,0] - x.[0,-1] - x.[0,1]) / h**2
         
-        let x0 = dst.GetChannel(0L)
-        let range = x0.InnerProduct(x0, (fun l _ -> Range1f(l,l)), Range1f.Invalid, (fun l r -> Range1f(l,r))) |> Range1d
-
-        let fin = PixImage<byte>(Col.Format.Gray, tex.Size.XY)
-        fin.GetChannel(0L).SetMap(x0, float >> map range >> clamp 0.0 1.0 >> ((*) 255.0) >> byte) |> ignore
-
-
-        fin
-
-    let remap (range : Range1d) (v : float) = (v - range.Min) / range.Size
-    (download remap w_cx.[TextureAspect.Color, 0, 0]).SaveAsImage @"C:\temp\b\cx.png"
-    (download remap w_cy.[TextureAspect.Color, 0, 0]).SaveAsImage @"C:\temp\b\cy.png"
-    
-
-
-
-
-    let div = 
-        let tex = runtime.CreateTexture(size,TextureFormat.R32f, 1, 1)
-        solver.Divergence(input.[TextureAspect.Color,0,0],tex.[TextureAspect.Color,0,0])
-        tex
-
-    let hhh = (PixImage.Create @"C:\temp\b\DSC02289.exr").ToPixImage<float32>()
-    let depthPix = PixImage<float32>(Col.Format.Gray, hhh.Size)
-    depthPix.GetChannel(0L).SetMap(hhh.GetMatrix<C4f>(), Func<_,_>(fun (c : C4f)-> c.R)) |> ignore
-    //let depthPix = depthPix.ToPixImage<float32>(Col.Format.Gray)
-
-    
-    let edgeSize = 3L
-    let isXEdge (v : V2l) = v.X < edgeSize || v.X >= int64 size.X - edgeSize
-    let isYEdge (v : V2l) = v.Y < edgeSize  || v.Y >= int64 size.Y - edgeSize
-    let isCorner (v : V2l) = isXEdge v && isYEdge v
-    let isEdge (v : V2l) = isXEdge v || isYEdge v
-    
-    let c = V2l(size) / 2L
-    let isCenter (v : V2l) =
-        v = c || v = c - V2l.IO || v = c - V2l.OI || v = c - V2l.II
-
-    //let inputMat = inputPix.GetMatrix<C4b>()
-    //let v = PixImage<float32>(fmt, size)
-    //v.GetMatrix<C4f>().SetByCoord (fun (c : V2l) -> 
-    //    if isEdge c then inputMat.[c].ToC4f()
-    //    else C4f(0.0f, 0.0f, 0.0f, 0.0f)
-    //) |> ignore
-    
-    //let w_v = PixImage<float32>(fmt, size)
-    //w_v.GetMatrix<C4f>().SetByCoord (fun (c : V2l) -> 
-    //    if isEdge c then C4f(1.0f, 1.0f, 1.0f, 1.0f)
-    //    else C4f(0.0f, 0.0f, 0.0f, 0.0f)
-    //) |> ignore
-    
-    let v = depthPix
-    
-    let w_v = PixImage<float32>(Col.Format.Gray,size)
-    w_v.GetChannel(0L).SetByCoord (fun (c : V2l) ->
-        if depthPix.GetChannel(0L).[c] > 0.0f then 1.0f else 0.0f
-    ) |> ignore
-
-    let divPix = PixImage<float32>(Col.Format.Gray, size)
-    runtime.Download(div, 0, 0, divPix)
-
-    let textures =
-        Map.ofList [
-            "v", solver.CreateTempTexture v
-            "w_v", solver.CreateTempTexture w_v
-            "w_cx", w_cx
-            "w_cy", w_cy
-
-        ]
+        (cx + cy - div.[0,0]) ** 2 +
+        w_v.[0,0] * (x.[0,0] - v.[0,0]) ** 2
         
-    let textures =
-        textures
-        |> Map.add "__r" (solver.CreateTempTexture size)
-        |> Map.add "__d" (solver.CreateTempTexture size)
-        |> Map.add "__temp" (solver.CreateTempTexture size)
+    let solver = new MultigridSolver2d<FShade.Formats.rgba32f, V4f>(runtime, residual)
+    
+    let computeDiv = 
+        solver.Compile (
+            4.0 * v.[0,0] - v.[-1,0] - v.[1,0] - v.[0,-1] - v.[0,1]
+        )
 
-    let views = textures |> Map.map (fun _ t -> t.[TextureAspect.Color, 0, 0])
-    
-    //let res = solver.CreateTexture(inputPix.ToPixImage<float32>(Col.Format.RGBA))
-    let res = solver.CreateTexture(depthPix.ToPixImage<float32>(Col.Format.Gray))
-    
+    member x.Solve(input : ITextureSubResource, weights : ITextureSubResource, res : ITextureSubResource, cfg : MultigridConfig) =
+        let size = input.Size.XY
+        let div = solver.CreateTempTexture size
+        try
+            computeDiv (Map.ofList ["v", input]) div.[TextureAspect.Color, 0, 0]
+            
+            let textures =
+                Map.ofList [
+                    "v", input
+                    "w_v", weights
+                    "div", div.[TextureAspect.Color, 0, 0]
+                ]
+
+            solver.Solve(textures, res, cfg)
+
+        finally
+            runtime.DeleteTexture div
+
+    member x.Solve(input : PixImage, weights : PixImage, cfg : MultigridConfig) =
+        let input = PixImage.toRGBAImage<float32> input
+        let weights = PixImage.toRGBAImage<float32> weights
+
+        let tinput = solver.CreateTempTexture input
+        let tweight = solver.CreateTempTexture weights
+        let res = solver.CreateTexture input.Size
+
+        try
+            x.Solve(tinput.[TextureAspect.Color, 0, 0], tweight.[TextureAspect.Color, 0, 0], res.[TextureAspect.Color, 0, 0], cfg)
+            let dst = PixImage<float32>(Col.Format.RGBA, input.Size)
+            runtime.Download(res, 0, 0, dst)
+            PixImage.toRGBAByteImage dst
+        finally
+            runtime.DeleteTexture tinput
+            runtime.DeleteTexture tweight
+            runtime.DeleteTexture res
+
+
+let depth (runtime : IRuntime) =
+    let color = PixImage.Create @"C:\temp\b\P9094511.png"
+    let depthValues = PixImage.Create @"C:\temp\b\P9094511.exr"
+    let depthWeight = depthValues |> PixImage.map (fun v -> if v.X > 0.0 then V4d.IIII else V4d.Zero)
+    let solver = DepthMapSolver(runtime, 10.0, 0.1)
+
 
     let config =
         {
@@ -1486,61 +1521,54 @@ let main argv =
             debugPath = Some @"C:\temp\b\debug"
         }
 
-    Log.startTimed "solve"
-    let avg = solver.Solve(views, res.[TextureAspect.Color, 0, 0], config)
-    Log.stop()
+        
+
+    let res = solver.Solve(depthValues, depthWeight, color, config)
+    res.SaveAsImage @"C:\temp\b\depth.exr"
+
+    let n = PixImage.normalize res |> PixImage.toRGBAByteImage
+    n.SaveAsImage @"C:\temp\b\depth.png"
+
+let reconstruct (runtime : IRuntime) =
+
+    let color = PixImage.Create @"C:\temp\a\bla.png"
+    let size = color.Size
+    let edgeSize = 2L
+    let isXEdge (v : V2l) = v.X < edgeSize || v.X >= int64 size.X - edgeSize
+    let isYEdge (v : V2l) = v.Y < edgeSize  || v.Y >= int64 size.Y - edgeSize
+    let isCorner (v : V2l) = isXEdge v && isYEdge v
+    let isEdge (v : V2l) = isXEdge v || isYEdge v
+
+    let weight = PixImage<float32>(Col.Format.RGBA, size)
+    weight.GetMatrix<C4f>().SetByCoord(fun c -> if isEdge c then C4f(1.0,1.0,1.0,1.0) else C4f(0.0,0.0,0.0,0.0)) |> ignore
+
+    let solver = ImageResonstructionSolver(runtime)
+
+
+    let config =
+        {
+            cycles = 1
+            maxSolveSize = V2i(4, 4)
+            stepTolerance = 1E-5
+            gradientTolerance = 1E-10
+            smoothIterations = 6
+            solveIterations = 32
+            correctIterations = 6
+            useGuess = false
+            debugPath = Some @"C:\temp\a\debug"
+        }
+
+        
+
+    let res = solver.Solve(color, weight, config)
+    res.SaveAsImage @"C:\temp\a\result.png"
+
+[<EntryPoint>]
+let main argv = 
+    use app = new HeadlessVulkanApplication()
+    //app.Runtime.ShaderCachePath <- None
+    let runtime = app.Runtime :> IRuntime
     
-    //runtime.DeleteTexture(res)
-    //let res = solver.CreateTexture x
-    //Log.startTimed "solve again"
-    //solver.Solve(views, res.[TextureAspect.Color, 0, 0], 1, 1E-8)
-    //Log.stop()
-    let x = PixImage<float32>(Col.Format.Gray, size)
-    runtime.Download(res, 0, 0, x)
-    runtime.DeleteTexture res
-    textures |> Map.iter (fun _ t -> runtime.DeleteTexture t)
-
-    //let tavg = solver.Tools.Average(input.[TextureAspect.Color, 0, 0])
-    //x.GetMatrix<C4f>().SetMap(x.GetMatrix<C4f>(), fun v -> (v.ToV3f() + (tavg - avg)).ToC4f()) |> ignore
-
-    //let c = x.ToPixImage<float32>().GetChannel(Col.Channel.Gray)
-    //printMat "x" c
-    
-    x.SaveAsImage @"C:\temp\b\z_result.exr"
-    let x0 = x.GetChannel(0L)
-
-    let range = x0.InnerProduct(x0, (fun l _ -> Range1f(l,l)), Range1f.Invalid, (fun l r -> Range1f(l,r)))
-
-    let f = PixImage<byte>(Col.Format.Gray, size)
-    f.GetChannel(0L).SetMap(x.GetChannel(0L), fun v -> byte <| 255.0f * (v - range.Min) / (range.Max - range.Min)) |> ignore
-    f.SaveAsImage @"C:\temp\b\z_result.png"
-
-    //for i in 0 .. 10 do
-    //    x <- solver.Solve(inputs, x, 1E-3, 5, 1)
-        
-    //    let c = x.ToPixImage<float32>().GetChannel(Col.Channel.Gray)
-    //    printMat "x" c
-        
-    //x <- solver.Solve(inputs, x, 1E-3, 20, 1)
-    //let c = x.ToPixImage<float32>().GetChannel(Col.Channel.Gray)
-    //printMat "x" c
-        
-        
-    //x <- solver.Solve(inputs, x, 1E-3, 20, 1)
-    //let c = x.ToPixImage<float32>().GetChannel(Col.Channel.Gray)
-    //printMat "x" c
-
-    //let term : Term<V2i> =
-    //    let a (x : int) (y : int) = Term.parameter "x" (V2i(x,y))
-    //    let h = Term.uniform "h"
-
-    //    0.125 * ((4.0 * a 0 0 - a -1 0 - a 1 0 - a 0 -1 - a 0 1) / (h ** 2)) ** 2
-    //    |> Term.derivative "x" V2i.Zero
-    //    //|> Term.derivative "x" V2i.Zero
-
-    //let code = Term.toCCode Term.Read.image term
-    //printfn "%s" code
-
-
+    reconstruct runtime
 
     0
