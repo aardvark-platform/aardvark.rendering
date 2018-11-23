@@ -176,8 +176,10 @@ module ``Pool Tests`` =
                         rnd.NextDouble() * 10.0 - 5.0,
                         rnd.NextDouble() * 10.0 - 5.0 )
             let trafo = Trafo3d.Scale 0.1 * Trafo3d.Translation pos
-            let ig = Primitives.unitCone (rnd.Next(1000, 50000))
-            geometries.Add (ig, trafo) |> ignore
+            let ig = Primitives.unitBox
+            //let ig = Primitives.unitCone (rnd.Next(100, 1000))
+            //let ig = ig.Clone()
+            geometries.Add (ig, (Mod.init trafo)) |> ignore // NOTE: not using ModRef<Trafo3d> does not result in GC Handle leak
 
         for i in 0 .. 10 do
             addRandom()
@@ -200,21 +202,30 @@ module ``Pool Tests`` =
                         addRandom()
                 )
 
-                Report.Line("new geometry count: {0}", geometries.Count)
+            if k = Keys.T then
+                transact(fun () -> 
+
+                    if geometries.Count < 10 then
+                        addRandom()
+                    else if geometries.Count > 0 then
+                        let rem = geometries |> Seq.skip (rnd.Next(geometries.Count - 1)) |> Seq.head
+                        geometries.Remove(rem) |> ignore
+                    )
+
+            Report.Line("new geometry count: {0}", geometries.Count)
                 
         )
 
         let addToPool(ag : AdaptiveGeometry) = 
             
             Report.BeginTimed("add to pool: vc={0}", ag.vertexCount)
-            Report.Line("ManagedBuffer.Set takes super long to fill up missing DiffuseColorCoordinates with 0")
             let mdc = pool.Add ag
             Report.End() |> ignore
             mdc
 
         let geometriesLazy = 
             geometries |> ASet.map (fun (ig, trafo) -> ig
-                                                        |> AdaptiveGeometry.ofIndexedGeometry [ (Sem.Hugo, (Mod.constant trafo :> IMod)); (Sem.HugoN, Mod.constant (trafo.Backward.Transposed) :> IMod) ]
+                                                        |> AdaptiveGeometry.ofIndexedGeometry [ (Sem.Hugo, (trafo :> IMod)) ]
                                                         |> addToPool)
 
         // initial evaluation

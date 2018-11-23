@@ -848,7 +848,7 @@ let main argv =
     
     //App.run(Aardvark.SceneGraph.Pool.``Shader Switch``.sg())
 
-    App.run(Aardvark.SceneGraph.Pool.``Pool Tests``.sg())
+    App.run(Aardvark.SceneGraph.Pool.``Pool Tests``.sg2())
     
     //OpcDemo.OpcDemo.startLoading()
 
