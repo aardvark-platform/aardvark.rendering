@@ -161,7 +161,9 @@ type RenderControl() as this =
     member x.Time = time
     member x.Focus = focus :> IMod<_>
     
+    [<CLIEvent>]
     member x.BeforeRender = beforeRender.Publish
+    [<CLIEvent>]
     member x.AfterRender = afterRender.Publish
 
     interface IRenderControl with
