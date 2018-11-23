@@ -82,6 +82,7 @@
     <Compile Include="Staging\Geometry.fs" />
     <Compile Include="Staging\ShaderSwitch.fs" />
     <Compile Include="Staging\ComputeShader.fs" />
+    <Compile Include="Staging\GeometryPool.fs" />
     <Compile Include="Experiments\Fonts.fs" />
     <Compile Include="Experiments\NullBufferTest.fs" />
     <Compile Include="Experiments\Playground.fs" />
@@ -314,12 +315,6 @@
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.7.1'">
       <ItemGroup>
         <Reference Include="ISymWrapper, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
-          <Paket>True</Paket>
-        </Reference>
-        <Reference Include="System.IO, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
-          <Paket>True</Paket>
-        </Reference>
-        <Reference Include="System.Runtime, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
           <Paket>True</Paket>
         </Reference>
         <Reference Include="FSharp.Compiler.Service">
