@@ -110,7 +110,8 @@ let main argv =
         window {
             backend Backend.GL
             display Display.Mono
-            debug true
+            device DeviceKind.Dedicated
+            debug false
             samples 8
         }
 

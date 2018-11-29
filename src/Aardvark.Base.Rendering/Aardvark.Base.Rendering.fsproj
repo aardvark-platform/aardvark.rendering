@@ -4,6 +4,7 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <AssemblyName>Aardvark.Base.Rendering</AssemblyName>
     <OutputType>Library</OutputType>
+	<DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <OutputPath>..\..\bin\Debug\</OutputPath>
@@ -20,6 +21,7 @@
     <Compile Include="Utilities\GPUVendor.fs" />
     <Compile Include="Utilities\ArrayVisitor.fs" />
     <Compile Include="Utilities\LockedResource.fs" />
+    <Compile Include="Utilities\UniformWriters.fs" />
     <Compile Include="Types\RenderPass.fs" />
     <Compile Include="Types\IndexedGeometry.fs" />
     <Compile Include="Types\FrameStatistics.fs" />

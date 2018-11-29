@@ -164,9 +164,16 @@ type DrawBufferConfig =
 
     end
 
-and DrawBufferManager (signature : IFramebufferSignature) =
+and DrawBufferManager private (signature : IFramebufferSignature) =
+    static let cache = System.Collections.Concurrent.ConcurrentDictionary<IFramebufferSignature, DrawBufferManager>()
+
     let count = signature.ColorAttachments.Count
     let ptrs = ConcurrentDictionary<list<bool>, DrawBufferConfig>()
+
+    static member Get(signature : IFramebufferSignature) =
+        cache.GetOrAdd(signature, fun signature ->
+            DrawBufferManager(signature)
+        )
 
     member x.Write(fbo : Framebuffer) =
         for (KeyValue(_,dbc)) in ptrs do
@@ -229,10 +236,10 @@ type TextureBinding =
 [<AllowNullLiteral>]
 type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, renderTaskInfo : Option<IFramebufferSignature * RenderTaskLock>, shareTextures : bool, shareBuffers : bool) =
     
-    let drawBufferManager = // ISSUE: leak? nobody frees those DrawBufferConfigs
-        match renderTaskInfo with
-            | Some (signature, _) -> DrawBufferManager(signature) |> Some
-            | _ -> None
+    //let drawBufferManager = // ISSUE: leak? nobody frees those DrawBufferConfigs
+    //    match renderTaskInfo with
+    //        | Some (signature, _) -> DrawBufferManager.Get(signature) |> Some
+    //        | _ -> None
 
     let derivedCache (f : ResourceManager -> ResourceCache<'a, 'b>) =
         ResourceCache<'a, 'b>(Option.map f parent, Option.map snd renderTaskInfo)
@@ -317,7 +324,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
 
 
-    member x.DrawBufferManager = drawBufferManager.Value
+    //member x.DrawBufferManager = drawBufferManager.Value
     member x.Context = ctx
         
     member x.CreateBuffer(data : IMod<IBuffer>) =

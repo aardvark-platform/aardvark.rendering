@@ -235,6 +235,7 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
 
             yield "VK_EXT_shader_subgroup_ballot"
             yield "VK_EXT_shader_subgroup_vote"
+            yield Instance.Extensions.GetPhysicalDeviceProperties2
 
             if debug then
                 yield Instance.Extensions.DebugReport

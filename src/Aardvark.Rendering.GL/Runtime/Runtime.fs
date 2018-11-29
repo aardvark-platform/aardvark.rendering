@@ -637,22 +637,24 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 failwith "[GL] static sorting not implemented"
 
     member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) : IPreparedRenderObject =
-        match rj with
-             | :? RenderTaskObject as t -> t :> IPreparedRenderObject
-             | :? RenderObject as rj -> manager.Prepare(fboSignature, rj) :> IPreparedRenderObject
-             | :? MultiRenderObject as rj -> 
-                let all = 
-                    rj.Children 
-                        |> List.map (fun ro -> x.PrepareRenderObject(fboSignature, ro))
-                        |> List.collect (fun o ->
-                            match o with
-                                | :? PreparedMultiRenderObject as s -> s.Children
-                                | _ -> [unbox<PreparedRenderObject> o]
-                        )
-                new PreparedMultiRenderObject(all) :> IPreparedRenderObject
+        PreparedCommand.ofRenderObject fboSignature manager rj :> IPreparedRenderObject
+        //failwith "[GL] currently broken"
+        //match rj with
+        //     | :? RenderTaskObject as t -> t :> IPreparedRenderObject
+        //     | :? RenderObject as rj -> manager.Prepare(fboSignature, rj) :> IPreparedRenderObject
+        //     | :? MultiRenderObject as rj -> 
+        //        let all = 
+        //            rj.Children 
+        //                |> List.map (fun ro -> x.PrepareRenderObject(fboSignature, ro))
+        //                |> List.collect (fun o ->
+        //                    match o with
+        //                        | :? PreparedMultiRenderObject as s -> s.Children
+        //                        | _ -> [unbox<PreparedRenderObject> o]
+        //                )
+        //        new PreparedMultiRenderObject(all) :> IPreparedRenderObject
 
-             | :? PreparedRenderObject | :? PreparedMultiRenderObject -> failwith "tried to prepare prepared render object"
-             | _ -> failwith "unknown render object type"
+        //     | :? PreparedRenderObject | :? PreparedMultiRenderObject -> failwith "tried to prepare prepared render object"
+        //     | _ -> failwith "unknown render object type"
 
     member x.CompileRender(fboSignature : IFramebufferSignature, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) : IRenderTask =
         x.CompileRenderInternal(fboSignature, engine, set)
@@ -661,7 +663,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         x.CompileRenderInternal(fboSignature, Mod.constant engine, set)
         
     member x.Compile (signature : IFramebufferSignature, commands : alist<RenderCommand>) =
-        new CommandRenderTask(manager, signature, commands, Mod.constant BackendConfiguration.Default, true, true) :> ICommandRenderTask
+        failwith "[GL] no commands"
+        //new CommandRenderTask(manager, signature, commands, Mod.constant BackendConfiguration.Default, true, true) :> ICommandRenderTask
 
     member x.CompileClear(fboSignature : IFramebufferSignature, color : IMod<Map<Symbol, C4f>>, depth : IMod<Option<float>>) : IRenderTask =
         let clearValues =

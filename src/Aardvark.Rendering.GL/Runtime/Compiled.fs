@@ -11,22 +11,6 @@ open Microsoft.FSharp.NativeInterop
 type MetaInstruction = IMod<list<Instruction>>
 
 
-type CompilerInfo =
-    {
-        //stats : ref<FrameStatistics>
-        contextHandle : nativeptr<nativeint>
-        runtimeStats : nativeptr<V2i>
-        currentContext : IMod<ContextHandle>
-        drawBuffers : nativeint
-        drawBufferCount : int
-        
-        structuralChange        : IMod<unit>
-        usedTextureSlots        : ref<RefSet<int>>
-        usedUniformBufferSlots  : ref<RefSet<int>>
-
-    }
-
-
 type CompilerState =
     {
         runtimeStats        : nativeptr<V2i>

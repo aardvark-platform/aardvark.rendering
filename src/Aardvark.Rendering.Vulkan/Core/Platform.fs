@@ -295,8 +295,9 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
 
         )
 
-and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enabledInstanceExtensions : list<string>, apiVersion : Version) =
+and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enabledInstanceExtensions : list<string>, instanceVersion : Version) =
     static let allFormats = Enum.GetValues(typeof<VkFormat>) |> unbox<VkFormat[]>
+    
 
     let availableLayers = 
         let mutable count = 0u
@@ -325,17 +326,26 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
 
     let mutable properties = VkPhysicalDeviceProperties()
     do VkRaw.vkGetPhysicalDeviceProperties(handle, &&properties)
+    
+    let name = properties.deviceName.Value
+    let driverVersion = Version.FromVulkan properties.driverVersion
+    let apiVersion = Version.FromVulkan properties.apiVersion
 
+    let hasInstanceExtension (name : string) =
+        enabledInstanceExtensions |> List.exists (fun e -> e = name)
+
+    let hasExtension (name : string) =
+        globalExtensions |> Array.exists (fun e -> e.name = name)
 
     let maxAllocationSize, maxPerSetDescriptors =
-        if apiVersion >= Version(1,1,0) then
+        if apiVersion >= Version(1,1,0) || hasExtension KHRMaintenance3.Name then
             let mutable main3 = 
                 VkPhysicalDeviceMaintenance3Properties(
                     VkStructureType.PhysicalDeviceMaintenance3Properties, 0n, 10u, 10UL
                 )
 
             let mutable props = 
-                VkPhysicalDeviceProperties2KHR(
+                VkPhysicalDeviceProperties2(
                     VkStructureType.PhysicalDeviceProperties2,
                     NativePtr.toNativeInt &&main3,
                     VkPhysicalDeviceProperties()
@@ -352,7 +362,7 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
             Int64.MaxValue, Int32.MaxValue
   
     let uniqueId, deviceMask =
-        if apiVersion >= Version(1,1,0) then
+        if apiVersion >= Version(1,1,0) || hasInstanceExtension "VK_KHR_get_physical_device_properties2" then
             let mutable id =
                 KHRExternalMemoryCapabilities.VkPhysicalDeviceIDPropertiesKHR(
                     VkStructureType.PhysicalDeviceIdProperties,
@@ -383,10 +393,7 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
     let vendor = PCI.vendorName (int properties.vendorID)
 
 
-
-    let name = properties.deviceName.Value
-    let driverVersion = Version.FromVulkan properties.driverVersion
-    let apiVersion = Version.FromVulkan properties.apiVersion
+    
 
     let queueFamilyInfos =
         let mutable count = 0u
@@ -507,6 +514,8 @@ module Instance =
         let Win32Surface        = "VK_KHR_win32_surface"
         let XcbSurface          = "VK_KHR_xcb_surface"
         let XlibSurface         = "VK_KHR_xlib_surface"
+        let GetPhysicalDeviceProperties2 = "VK_KHR_get_physical_device_properties2"
+
     module Layers =
         let ApiDump             = "VK_LAYER_LUNARG_api_dump"
         let DeviceLimits        = "VK_LAYER_LUNARG_device_limits"
@@ -582,7 +591,7 @@ module ConsoleDeviceChooser =
         let fileName = appHash.Replace('/', '_')
         Path.Combine(configDir, sprintf "%s.vkconfig" fileName)
 
-    let run(devices : seq<PhysicalDevice>) =
+    let run' (preferred : Option<PhysicalDevice>) (devices : seq<PhysicalDevice>) =
         let devices = Seq.toList devices
         match devices with
             | [single] -> single
@@ -622,17 +631,27 @@ module ConsoleDeviceChooser =
                         | Windows -> Win32.isDown KeyCode.LeftAlt || Win32.isDown KeyCode.RightAlt
                         | _ -> true
 
-                if File.Exists configFile && not altDown then
-                    let cache = File.ReadAllLines configFile
-                    match cache with
-                        | [| fAll; fcache |] when fAll = allIds ->
-
-                            match devices |> List.tryFind (fun d -> d.Id = fcache) with
-                                | Some d -> d
-                                | _ -> choose()
-
-                        | _ ->
-                            choose()
-                else
+                if altDown then
                     choose()
+                else
 
+                    match preferred with
+                        | Some pref -> 
+                            pref
+                        | _ ->
+                            if File.Exists configFile && not altDown then
+                                let cache = File.ReadAllLines configFile
+                                match cache with
+                                    | [| fAll; fcache |] when fAll = allIds ->
+
+                                        match devices |> List.tryFind (fun d -> d.Id = fcache) with
+                                            | Some d -> d
+                                            | _ -> choose()
+
+                                    | _ ->
+                                        choose()
+                            else
+                                choose()
+                    
+    let run (devices : seq<PhysicalDevice>) =
+        run' None devices

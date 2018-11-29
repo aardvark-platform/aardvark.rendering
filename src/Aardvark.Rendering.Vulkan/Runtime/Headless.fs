@@ -9,7 +9,7 @@ type HeadlessVulkanApplication(debug : bool, instanceExtensions : list<string>, 
 
             yield "VK_EXT_shader_subgroup_ballot"
             yield "VK_EXT_shader_subgroup_vote"
-
+            yield Instance.Extensions.GetPhysicalDeviceProperties2
             if debug then
                 yield Instance.Extensions.DebugReport
                 yield Instance.Extensions.DebugUtils

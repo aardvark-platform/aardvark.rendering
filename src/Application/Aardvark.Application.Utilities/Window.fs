@@ -35,14 +35,22 @@ type DebugVerbosity =
     | Information = 3
     | Debug = 4
 
+type DeviceKind =
+    | None          = 0x0
+    | Unknown       = 0x1
+    | Dedicated     = 0x2
+    | Integrated    = 0x4
+    | Any           = 0x7
+
 type RenderConfig =
     {
-        backend     : Backend
-        debug       : DebugVerbosity
-        samples     : int
-        display     : Display
-        scene       : ISg
-        initialCamera  : Option<CameraView>
+        backend         : Backend
+        debug           : DebugVerbosity
+        samples         : int
+        display         : Display
+        scene           : ISg
+        deviceKind      : DeviceKind
+        initialCamera   : Option<CameraView>
     }
 
 [<AutoOpen>]
@@ -382,17 +390,39 @@ module Utilities =
             DebugVerbosity.Error, MessageSeverity.Error
         ]
 
-    let createApp (debug : bool) (backend : Backend)  =
+    let c (debug : bool) (backend : Backend)  =
         match backend with
             | Backend.GL -> new OpenGlApplication(debug) :> IApplication
             | Backend.Vulkan -> new VulkanApplication(debug) :> IApplication
 
+    let private chooseDevice (cfg : RenderConfig) (devices : list<PhysicalDevice>) =
+        let filtered =
+            devices |> List.filter (fun d ->
+                let kind = 
+                    match d.Type with
+                        | VkPhysicalDeviceType.DiscreteGpu -> 
+                            DeviceKind.Dedicated
+                        | VkPhysicalDeviceType.IntegratedGpu
+                        | VkPhysicalDeviceType.Cpu ->
+                            DeviceKind.Integrated
+                        | _ ->
+                            DeviceKind.Unknown
+                            
+                kind &&& cfg.deviceKind <> DeviceKind.None
+            )
+
+        match filtered with
+            | [f] -> ConsoleDeviceChooser.run' (Some f) devices
+            | _ -> ConsoleDeviceChooser.run devices
+                
+
     let createApplication (cfg : RenderConfig) =
         let enableDebug = cfg.debug <> DebugVerbosity.None
         match cfg.backend with
-            | Backend.GL -> new OpenGlApplication(enableDebug) :> IApplication
+            | Backend.GL -> 
+                new OpenGlApplication(cfg.deviceKind = DeviceKind.Dedicated, enableDebug) :> IApplication
             | Backend.Vulkan -> 
-                let app = new VulkanApplication(enableDebug) 
+                let app = new VulkanApplication(enableDebug, chooseDevice cfg) 
                 if enableDebug then
                     app.Runtime.DebugVerbosity <- toMessageSeverity cfg.debug
                 app :> IApplication
@@ -726,6 +756,7 @@ module Utilities =
             backend = backend
             debug = DebugVerbosity.Warning
             samples = 8
+            deviceKind = DeviceKind.Dedicated
             initialCamera = None
         }
 
@@ -733,14 +764,14 @@ module Utilities =
 module ``Render Utilities`` =
     open System.Text.RegularExpressions
 
-    let private backendRX = Regex @"(--backend|-b)[ \t]*(?<name>[a-zA-Z_]+)"
-    let private displayRX = Regex @"(--display|-d)[ \t]*(?<name>[a-zA-Z_]+)"
+    let private backendRX = Regex @"(--backend|-b)[ \t]*(?<name>(?i)(vulkan|gl|opengl|vk))"
+    let private displayRX = Regex @"(--display|-d)[ \t]*(?<name>(?i)(stereo|mono|vr|openvr))"
     let private samplesRX = Regex @"(--samples|-s)[ \t]*(?<value>[0-9]+)"
-    let private debugRX = Regex @"(--debug|-g)[ \t]*(?<state>(on|off)?)"
+    let private debugRX = Regex @"(--debug|-g)[ \t]*(?<state>(?i)(on|off)?)"
+    let private dedicatedRX = Regex @"(--dedicated|--integrated)"
 
     let private cliOverrides (cfg : RenderConfig) =
         let args = System.Environment.GetCommandLineArgs() |> Array.skip 1 |> String.concat " "
-
         let mutable cfg = cfg
         let m = backendRX.Match args
         if m.Success then 
@@ -788,6 +819,15 @@ module ``Render Utilities`` =
             Log.line "[Application] debug: %A" state
             cfg <- { cfg with debug = if state then DebugVerbosity.Information else DebugVerbosity.None }
 
+        let m = dedicatedRX.Match args
+        if m.Success then
+            let deviceKind =
+                match m.Value with
+                    | "--dedicated" -> DeviceKind.Dedicated
+                    | "--integrated" -> DeviceKind.Integrated
+                    | _ -> DeviceKind.Dedicated
+            Log.line "[Application] device: %A" deviceKind
+            cfg <- { cfg with deviceKind = deviceKind }
 
         cfg
 
@@ -799,6 +839,7 @@ module ``Render Utilities`` =
                 samples = 8
                 display = Display.Mono
                 scene = Sg.empty
+                deviceKind = DeviceKind.Dedicated
                 initialCamera = None
             }
 
@@ -808,7 +849,11 @@ module ``Render Utilities`` =
 
         [<CustomOperation("debug")>]
         member x.Debug(s : RenderConfig, d : bool) =
-            { s with debug = if d then DebugVerbosity.Information else DebugVerbosity.None }
+            { s with debug = if d then DebugVerbosity.Warning else DebugVerbosity.None }
+            
+        [<CustomOperation("device")>]
+        member x.DeviceKind(s : RenderConfig, k : DeviceKind) =
+            { s with deviceKind = k }
             
         [<CustomOperation("verbosity")>]
         member x.Verbosity(s : RenderConfig, d : DebugVerbosity) =
@@ -841,6 +886,7 @@ module ``Render Utilities`` =
                 backend = Backend.Vulkan
                 debug = DebugVerbosity.Warning
                 samples = 8
+                deviceKind = DeviceKind.Dedicated
                 display = Display.Mono
                 scene = Sg.empty
                 initialCamera = None
@@ -852,8 +898,12 @@ module ``Render Utilities`` =
             
         [<CustomOperation("debug")>]
         member x.Debug(s : RenderConfig, d : bool) =
-            { s with debug = if d then DebugVerbosity.Information else DebugVerbosity.None }
+            { s with debug = if d then DebugVerbosity.Warning else DebugVerbosity.None }
             
+        [<CustomOperation("device")>]
+        member x.DeviceKind(s : RenderConfig, k : DeviceKind) =
+            { s with deviceKind = k }
+
         [<CustomOperation("verbosity")>]
         member x.Verbosity(s : RenderConfig, d : DebugVerbosity) =
             { s with debug = d }

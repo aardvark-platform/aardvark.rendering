@@ -2,6 +2,7 @@ Aardvark.Base.Essentials
 Aardvark.Base.Incremental
 Aardvark.Base.Runtime
 FShade.Core
+FShade.GLSL
 FSharp.Core
 DockPanelSuite
 DockPanelSuite.ThemeVS2012Light
