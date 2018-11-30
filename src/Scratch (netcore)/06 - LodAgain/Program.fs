@@ -97,7 +97,9 @@ module Bla =
             buffers, totalSize
             
 
+
         member x.TotalSize = totalSize
+        member x.ElementSize = totalSize / int64 count
         member x.Context = ctx
         member x.Data = buffers
         member x.Buffers = buffers |> MapExt.map (fun _ (b,_,_) -> b)
@@ -151,6 +153,7 @@ module Bla =
                 )
             totalSize, buffers
             
+        member x.ElementSize = totalSize / int64 count
         member x.TotalSize = totalSize
         member x.Context = ctx
         member x.Data = buffers
@@ -199,7 +202,9 @@ module Bla =
     //type IndexBuffer(ctx : Context, t : Type, count : int) =
         
 
-    type VertexManager(ctx : Context, semantics : MapExt<string, Type>, chunkSize : int, totalMemory : ref<int64>) =
+    type VertexManager(ctx : Context, semantics : MapExt<string, Type>, chunkSize : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
+        let elementSize =
+            semantics |> MapExt.toSeq |> Seq.sumBy (fun (_,t) -> int64 (Marshal.SizeOf t))
 
         let mem : Memory<VertexBuffer> =
             let malloc (size : nativeint) =
@@ -217,17 +222,36 @@ module Bla =
                 mcopy = fun _ _ _ _ _ -> failwith "cannot copy"
                 mrealloc = fun _ _ _ -> failwith "cannot realloc"
             }
+            
+        let mutable used = 0L
 
+        let addMem (v : int64) =
+            Interlocked.Add(&usedMemory.contents, v) |> ignore
+            Interlocked.Add(&used, v) |> ignore
+            
 
         let manager = new ChunkedMemoryManager<VertexBuffer>(mem, nativeint chunkSize)
         
-        member x.Alloc(count : int) = manager.Alloc(nativeint count)
-        member x.Free(b : Block<VertexBuffer>) = manager.Free b
-        member x.Dispose() = manager.Dispose()
-        interface IDisposable with member x.Dispose() = x.Dispose()
+        member x.Alloc(count : int) = 
+            addMem (elementSize * int64 count) 
+            manager.Alloc(nativeint count)
+
+        member x.Free(b : Block<VertexBuffer>) = 
+            if not b.IsFree then
+                addMem (elementSize * int64 -b.Size) 
+                manager.Free b
+
+        member x.Dispose() = 
+            addMem (-used)
+            manager.Dispose()
+
+        interface IDisposable with 
+            member x.Dispose() = x.Dispose()
         
-    type InstanceManager(ctx : Context, semantics : MapExt<string, GLSLType * Type>, chunkSize : int, totalMemory : ref<int64>) =
-     
+    type InstanceManager(ctx : Context, semantics : MapExt<string, GLSLType * Type>, chunkSize : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
+        let elementSize =
+            semantics |> MapExt.toSeq |> Seq.sumBy (fun (_,(t,_)) -> int64 (GLSLType.sizeof t))
+
         let mem : Memory<InstanceBuffer> =
             let malloc (size : nativeint) =
                 let res = new InstanceBuffer(ctx, semantics, int size)
@@ -246,13 +270,30 @@ module Bla =
             }
 
         let manager = new ChunkedMemoryManager<InstanceBuffer>(mem, nativeint chunkSize)
-        
-        member x.Alloc(count : int) = manager.Alloc(nativeint count)
-        member x.Free(b : Block<InstanceBuffer>) = manager.Free b
-        member x.Dispose() = manager.Dispose()
-        interface IDisposable with member x.Dispose() = x.Dispose()
+        let mutable used = 0L
 
-    type IndexManager(ctx : Context, chunkSize : int, totalMemory : ref<int64>) =
+        let addMem (v : int64) =
+            Interlocked.Add(&usedMemory.contents, v) |> ignore
+            Interlocked.Add(&used, v) |> ignore
+            
+
+        member x.Alloc(count : int) = 
+            addMem (int64 count * elementSize)
+            manager.Alloc(nativeint count)
+
+        member x.Free(b : Block<InstanceBuffer>) = 
+            if not b.IsFree then
+                addMem (int64 -b.Size * elementSize)
+                manager.Free b
+
+        member x.Dispose() = 
+            addMem -used
+            manager.Dispose()
+
+        interface IDisposable with 
+            member x.Dispose() = x.Dispose()
+
+    type IndexManager(ctx : Context, chunkSize : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
 
         let mem : Memory<Buffer> =
             let malloc (size : nativeint) =
@@ -273,12 +314,30 @@ module Bla =
             
         let manager = new ChunkedMemoryManager<Buffer>(mem, nativeint (sizeof<int> * chunkSize))
         
-        member x.Alloc(t : Type, count : int) = manager.Alloc(nativeint (Marshal.SizeOf t) * nativeint count)
-        member x.Free(b : Block<Buffer>) = manager.Free b
-        member x.Dispose() = manager.Dispose()
-        interface IDisposable with member x.Dispose() = x.Dispose()
+        let mutable used = 0L
 
-    type IndirectBuffer(ctx : Context, indexed : bool, initialCapacity : int) =
+        let addMem (v : int64) =
+            Interlocked.Add(&usedMemory.contents, v) |> ignore
+            Interlocked.Add(&used, v) |> ignore
+            
+        member x.Alloc(t : Type, count : int) = 
+            let size = nativeint (Marshal.SizeOf t) * nativeint count
+            addMem (int64 size)
+            manager.Alloc(size)
+
+        member x.Free(b : Block<Buffer>) = 
+            if not b.IsFree then
+                addMem (int64 -b.Size)
+                manager.Free b
+
+        member x.Dispose() = 
+            addMem -used
+            manager.Dispose()
+
+        interface IDisposable with 
+            member x.Dispose() = x.Dispose()
+
+    type IndirectBuffer(ctx : Context, indexed : bool, initialCapacity : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
         static let es = sizeof<DrawCallInfo>
 
         let initialCapacity = Fun.NextPowerOfTwo initialCapacity
@@ -296,14 +355,16 @@ module Bla =
         let mutable buffer = ctx.CreateBuffer (es * capacity)
         let mutable dirty = RangeSet.empty
         let mutable count = 0
+        do Interlocked.Add(&totalMemory.contents, int64 (es * capacity)) |> ignore
 
         let resize (newCount : int) =
             let newCapacity = max initialCapacity (Fun.NextPowerOfTwo newCount)
             if newCapacity <> capacity then
+                Interlocked.Add(&totalMemory.contents, int64 (es * (newCapacity - capacity))) |> ignore
                 let ob = buffer
                 let om = mem
-                let nb = ctx.CreateBuffer (es * capacity)
-                let nm = NativePtr.alloc (es * capacity)
+                let nb = ctx.CreateBuffer (es * newCapacity)
+                let nm = NativePtr.alloc (es * newCapacity)
 
                 Marshal.Copy(NativePtr.toNativeInt om, NativePtr.toNativeInt nm, nativeint count * nativeint es)
                 
@@ -314,6 +375,8 @@ module Bla =
                 
                 NativePtr.free om
                 ctx.Delete ob
+
+        
 
         member x.Count = count
 
@@ -326,6 +389,7 @@ module Bla =
                     drawIndices.[call] <- id
                     NativePtr.set mem id (adjust call)
                     count <- count + 1
+                    Interlocked.Add(&usedMemory.contents, int64 es) |> ignore
                     dirty <- RangeSet.insert (Range1i(id,id)) dirty
                     true
                 else
@@ -337,6 +401,7 @@ module Bla =
                 | (true, oid) ->
                     let last = count - 1
                     count <- count - 1
+                    Interlocked.Add(&usedMemory.contents, int64 -es) |> ignore
 
                     if oid <> last then
                         let lc = NativePtr.get mem last
@@ -370,6 +435,8 @@ module Bla =
             Aardvark.Rendering.GL.IndirectBufferExtensions.IndirectBuffer(buffer, count, sizeof<DrawCallInfo>, false)
 
         member x.Dispose() =
+            Interlocked.Add(&usedMemory.contents, int64 (-es * count)) |> ignore
+            Interlocked.Add(&totalMemory.contents, int64 (-es * capacity)) |> ignore
             NativePtr.free mem
             ctx.Delete buffer
             capacity <- 0
@@ -382,8 +449,6 @@ module Bla =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
-        new(ctx : Context, indexed : bool) = new IndirectBuffer(ctx, indexed, 1024)
-        
     type PoolSlot(ctx : Context, signature : GeometrySignature, ub : Block<InstanceBuffer>, vb : Block<VertexBuffer>, ib : Option<Block<Buffer>>) = 
         let fvc =
             match signature.indexType, ib with
@@ -401,6 +466,13 @@ module Bla =
             ]
 
         let indexType = signature.indexType |> Option.map getIndexType 
+
+        member x.Memory = 
+            Mem (
+                int64 ub.Size * ub.Memory.Value.ElementSize +
+                int64 vb.Size * vb.Memory.Value.ElementSize +
+                (match ib with | Some ib -> int64 ib.Size | _ -> 0L)
+            )
 
         member x.IndexType = indexType
         member x.Signature = signature
@@ -468,21 +540,22 @@ module Bla =
         static let instanceChunkSize = 1024
         static let vertexChunkSize = 1 <<< 20
         static let pools = System.Collections.Concurrent.ConcurrentDictionary<Context, GeometryPool>()
-        
+
+        let usedMemory = ref 0L
         let totalMemory = ref 0L
         let instanceManagers = System.Collections.Concurrent.ConcurrentDictionary<InstanceSignature, InstanceManager>()
         let vertexManagers = System.Collections.Concurrent.ConcurrentDictionary<VertexSignature, VertexManager>()
 
-        let getVertexManager (signature : VertexSignature) = vertexManagers.GetOrAdd(signature, fun signature -> new VertexManager(ctx, signature, vertexChunkSize, totalMemory))
-        let getInstanceManager (signature : InstanceSignature) = instanceManagers.GetOrAdd(signature, fun signature -> new InstanceManager(ctx, signature, instanceChunkSize, totalMemory))
-        
-        let indexManager = new IndexManager(ctx, vertexChunkSize, totalMemory)
+        let getVertexManager (signature : VertexSignature) = vertexManagers.GetOrAdd(signature, fun signature -> new VertexManager(ctx, signature, vertexChunkSize, usedMemory, totalMemory))
+        let getInstanceManager (signature : InstanceSignature) = instanceManagers.GetOrAdd(signature, fun signature -> new InstanceManager(ctx, signature, instanceChunkSize, usedMemory, totalMemory))
+        let indexManager = new IndexManager(ctx, vertexChunkSize, usedMemory, totalMemory)
 
         static member Get(ctx : Context) =
             pools.GetOrAdd(ctx, fun ctx ->
                 new GeometryPool(ctx)
             )      
             
+        member x.UsedMemory = Mem !usedMemory
         member x.TotalMemory = Mem !totalMemory
 
         member x.Alloc(signature : GeometrySignature, instanceCount : int, indexCount : int, vertexCount : int) =
@@ -497,7 +570,9 @@ module Bla =
                     | Some t -> indexManager.Alloc(t, indexCount) |> Some
                     | None -> None
 
-            PoolSlot(ctx, signature, ub, vb, ib)
+            let slot = PoolSlot(ctx, signature, ub, vb, ib)
+            Log.warn "alloc %A" slot.Memory
+            slot
 
         member x.Alloc(signature : GLSLProgramInterface, geometry : IndexedGeometry, uniforms : MapExt<string, Array>) =
             let signature = GeometrySignature.ofGeometry signature uniforms geometry
@@ -522,8 +597,10 @@ module Bla =
             
         member x.Alloc(signature : GLSLProgramInterface, geometry : IndexedGeometry) =
             x.Alloc(signature, geometry, MapExt.empty)
+           
 
         member x.Free(slot : PoolSlot) =
+            Log.warn "free %A" slot.Memory
             let signature = slot.Signature
             let vm = getVertexManager signature.attributeTypes
             let im = getInstanceManager signature.uniformTypes
@@ -539,6 +616,8 @@ module Bla =
 
     type DrawPool(ctx : Context, state : PreparedPipelineState, pass : RenderPass) as this =
         inherit PreparedCommand(ctx, pass)
+
+        static let initialIndirectSize = 256
 
         static let getKey (slot : PoolSlot) =
             slot.Mode,
@@ -560,7 +639,8 @@ module Bla =
         let isActive = NativePtr.allocArray [| 1 |]
         let runtimeStats : nativeptr<V2i> = NativePtr.alloc 1
         let contextHandle : nativeptr<nativeint> = NativePtr.alloc 1
-
+        let usedMemory = ref 0L
+        let totalMemory = ref 0L
         
         let compile (indexType : Option<DrawElementsType>, mode : nativeptr<GLBeginMode>, a : VertexInputBindingHandle, ib : nativeptr<V2i>) (s : IAssemblerStream) =
             s.BindVertexAttributes(contextHandle, a)
@@ -584,7 +664,7 @@ module Bla =
         let getIndirectBuffer(slot : PoolSlot) =
             let key = getKey slot
             indirects.GetOrCreate(key, fun _ ->
-                new IndirectBuffer(ctx, Option.isSome slot.IndexType)
+                new IndirectBuffer(ctx, Option.isSome slot.IndexType, initialIndirectSize, usedMemory, totalMemory)
             )
 
         let tryGetIndirectBuffer(slot : PoolSlot) =
@@ -614,9 +694,15 @@ module Bla =
                         false
                 | None ->
                     false
+                    
+        member x.UsedMemory = Mem !totalMemory
+        member x.TotalMemory = Mem !totalMemory
 
         abstract member Evaluate : AdaptiveToken -> unit
         default x.Evaluate _ = ()
+
+        abstract member AfterUpdate : unit -> unit
+        default x.AfterUpdate () = ()
 
         member x.Update() =
             puller.EvaluateAlways AdaptiveToken.Top (fun token ->
@@ -691,6 +777,8 @@ module Bla =
 
                 for t in tasks do
                     puller.Outputs.Add t |> ignore
+
+                x.AfterUpdate()
             )
 
         override x.Compile(info : CompilerInfo, stream : IAssemblerStream, last : Option<PreparedCommand>) =
@@ -730,15 +818,16 @@ module Bla =
             myFun.Dispose()
             NativePtr.free isActive
             NativePtr.free isOutdated
+            NativePtr.free runtimeStats
+            NativePtr.free contextHandle
             program.Dispose()
-            //compilerInfo <- None
             oldCalls <- []
 
         override x.GetResources() = state.Resources
         override x.EntryState = Some state
         override x.ExitState = Some state
 
-    type ManyGeomtries(ctx : Context, state : PreparedPipelineState, pass : RenderPass, geometries : aset<IndexedGeometry * MapExt<string, Array>>) =
+    type ManyGeomtries(ctx : Context, state : PreparedPipelineState, pass : RenderPass, geometries : aset<IndexedGeometry * MapExt<string, Array>>) as this =
         inherit PreparedCommand(ctx, pass)
 
         let pool = GeometryPool.Get(ctx)
@@ -769,8 +858,8 @@ module Bla =
                         match cache.TryRemove((g,u)) with
                             | (true, slot) ->
                                 draws.Remove(slot) |> ignore
-                                inactive.[(g,u)] <- (sw.MicroTime, slot)
-                                //pool.Free slot
+                                //inactive.[(g,u)] <- (sw.MicroTime, slot)
+                                pool.Free slot
                             | _ ->  
                                 ()
             )
@@ -778,8 +867,18 @@ module Bla =
         let inner =
             { new DrawPool(ctx, state, pass) with
                 override x.Evaluate(token : AdaptiveToken) = evaluate x token
+                override __.AfterUpdate() = 
+                    let used = this.UsedMemory 
+                    let total = this.TotalMemory
+                    if total <> Mem.Zero then
+                        Log.warn "%A %A (%.2f%%)" used total (100.0 * float used.Bytes / float total.Bytes)
+                    else
+                        Log.warn "no memory"
             }
-
+            
+        member x.UsedMemory : Mem = pool.UsedMemory + inner.UsedMemory
+        member x.TotalMemory : Mem = pool.TotalMemory + inner.TotalMemory
+        
         override x.Compile(a,b,c) = inner.Compile(a,b,c)
         override x.GetResources() = inner.GetResources()
         override x.Release() = 
@@ -887,12 +986,14 @@ let main argv =
     wireBoxGeometry.SingleAttributes <- SymDict.ofList [DefaultSemantic.InstanceTrafo, Trafo3d.Translation(V3d(0,-2,0)) :> obj; DefaultSemantic.InstanceTrafoInv, Trafo3d.Translation(V3d(0,2,0)) :> obj] 
     //donutGeometry.SingleAttributes <- SymDict.ofList [DefaultSemantic.InstanceTrafo, Trafo3d.Translation(V3d(0,0,2)) :> obj; DefaultSemantic.InstanceTrafoInv, Trafo3d.Translation(V3d(0,0,-2)) :> obj] 
     
-    let geometries =
-        CSet.ofList [
+    let content =
+        HSet.ofList [
             sphereGeometry, MapExt.empty
             wireBoxGeometry, MapExt.empty
             boxGeometry, boxUniforms
         ]
+
+    let geometries = MSet.ofHSet content
 
 
     let draws = new Bla.ManyGeomtries(ctx, preparedState, RenderPass.main, geometries)
@@ -907,10 +1008,19 @@ let main argv =
     //draws.Add wireBox |> ignore
     
     win.Keyboard.KeyDown(Keys.Enter).Values.Add(fun () ->
-        transact (fun () -> geometries.Add (donutGeometry, donutUniforms) |> ignore)
+        transact (fun () -> 
+            let el = (donutGeometry, donutUniforms)
+            geometries.Update (HSet.alter el not geometries.Value)
+        )
     )
-    win.Keyboard.KeyDown(Keys.Back).Values.Add(fun () ->
-        transact (fun () -> geometries.Remove (donutGeometry, donutUniforms) |> ignore)
+    win.Keyboard.KeyDown(Keys.Space).Values.Add(fun () ->
+        transact (fun () -> 
+            if HSet.isEmpty geometries.Value then
+                geometries.Update content
+            else
+                geometries.Update HSet.empty
+        )
+        
     )
 
     win.RenderTask <- app.Runtime.CompileRender(win.FramebufferSignature, ASet.ofList [draws :> IRenderObject])
