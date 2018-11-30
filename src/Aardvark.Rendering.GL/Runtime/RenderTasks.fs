@@ -53,6 +53,7 @@ module RenderTasks =
                 usedTextureSlots = ref RefSet.empty
                 usedUniformBufferSlots = ref RefSet.empty
                 structuralChange = structureChanged
+                task = RenderTask.empty
             }
 
 //        let drawBuffers = 
@@ -136,7 +137,7 @@ module RenderTasks =
 
         member x.Config = config
         member x.Context = ctx
-        member x.Scope = scope
+        member x.Scope = { scope with task = x }
         member x.RenderTaskLock = renderTaskLock
         member x.ResourceManager = manager
 
@@ -1046,7 +1047,7 @@ module RenderTasks =
             match r with
                 | :? RenderObject as o -> this.HookRenderObject o :> IRenderObject
                 | :? MultiRenderObject as o -> MultiRenderObject(o.Children |> List.map hook) :> IRenderObject
-                | _ -> failwith "bad"
+                | _ -> r
 
         let preparedObjects = objects |> ASet.mapUse (hook >> PreparedCommand.ofRenderObject fboSignature this.ResourceManager >> add)
         let preparedObjectReader = preparedObjects.GetReader()

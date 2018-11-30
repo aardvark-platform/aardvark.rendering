@@ -24,12 +24,14 @@ module Bla =
 
     type GeometrySignature =
         {
+            mode            : IndexedGeometryMode
+            indexType       : Option<Type>
             uniformTypes    : InstanceSignature
             attributeTypes  : VertexSignature
         }
 
     module GeometrySignature =
-        let ofGeometry (iface : GLSLProgramInterface) (g : IndexedGeometry) =
+        let ofGeometry (iface : GLSLProgramInterface) (uniforms : MapExt<string, Array>) (g : IndexedGeometry) =
             let mutable uniformTypes = MapExt.empty
             let mutable attributeTypes = MapExt.empty
 
@@ -41,15 +43,29 @@ module Bla =
                         let t = arr.GetType().GetElementType()
                         attributeTypes <- MapExt.add i.paramSemantic t attributeTypes
                     | _ -> 
-                        match g.SingleAttributes.TryGetValue sym with
-                            | (true, uniform) ->
-                                assert(not (isNull uniform))
-                                let t = uniform.GetType()
+                        match MapExt.tryFind i.paramSemantic uniforms with
+                            | Some arr when not (isNull arr) ->
+                                let t = arr.GetType().GetElementType()
                                 uniformTypes <- MapExt.add i.paramSemantic (i.paramType, t) uniformTypes
                             | _ ->
-                                ()
+                                match g.SingleAttributes.TryGetValue sym with
+                                    | (true, uniform) ->
+                                        assert(not (isNull uniform))
+                                        let t = uniform.GetType()
+                                        uniformTypes <- MapExt.add i.paramSemantic (i.paramType, t) uniformTypes
+                                    | _ ->
+                                        ()
               
+            let indexType =
+                if isNull g.IndexArray then
+                    None
+                else
+                    let t = g.IndexArray.GetType().GetElementType()
+                    Some t
+
             {
+                mode = g.Mode
+                indexType = indexType
                 uniformTypes = uniformTypes
                 attributeTypes = attributeTypes
             }
@@ -86,15 +102,21 @@ module Bla =
         member x.Data = buffers
         member x.Buffers = buffers |> MapExt.map (fun _ (b,_,_) -> b)
         
-        member x.Upload(index : int, data : MapExt<string, obj>) =
+        member x.Upload(index : int, count : int, data : MapExt<string, Array>) =
             lock x (fun () ->
                 use __ = ctx.ResourceLock
                 buffers |> MapExt.iter (fun sem (buffer, elemSize, write) ->
                     let offset = nativeint index * nativeint elemSize
-                    let ptr = ctx.MapBufferRange(buffer, offset, nativeint elemSize, BufferAccessMask.MapWriteBit)
+                    let size = nativeint count * nativeint elemSize
+                    let ptr = ctx.MapBufferRange(buffer, offset, size, BufferAccessMask.MapWriteBit)
                     match MapExt.tryFind sem data with
-                        | Some data ->  write.WriteUnsafeValue(data, ptr)
-                        | _ -> Marshal.Set(ptr, 0, elemSize)
+                        | Some data ->
+                            let mutable ptr = ptr
+                            for i in 0 .. count - 1 do
+                                write.WriteUnsafeValue(data.GetValue i, ptr)
+                                ptr <- ptr + nativeint elemSize
+                        | _ -> 
+                            Marshal.Set(ptr, 0, elemSize)
                     ctx.UnmapBuffer(buffer)
                 )
             )
@@ -174,6 +196,8 @@ module Bla =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
+    //type IndexBuffer(ctx : Context, t : Type, count : int) =
+        
 
     type VertexManager(ctx : Context, semantics : MapExt<string, Type>, chunkSize : int, totalMemory : ref<int64>) =
 
@@ -228,18 +252,53 @@ module Bla =
         member x.Dispose() = manager.Dispose()
         interface IDisposable with member x.Dispose() = x.Dispose()
 
-    type IndirectBuffer(ctx : Context, initialCapacity : int) =
-        static let es = sizeof<DrawCallInfo>
+    type IndexManager(ctx : Context, chunkSize : int, totalMemory : ref<int64>) =
+
+        let mem : Memory<Buffer> =
+            let malloc (size : nativeint) =
+                let res = ctx.CreateBuffer(int size)
+                Interlocked.Add(&totalMemory.contents, int64 res.SizeInBytes) |> ignore
+                res
+
+            let mfree (ptr : Buffer) (size : nativeint) =
+                Interlocked.Add(&totalMemory.contents, -int64 ptr.SizeInBytes) |> ignore
+                ctx.Delete ptr
+
+            {
+                malloc = malloc
+                mfree = mfree
+                mcopy = fun _ _ _ _ _ -> failwith "cannot copy"
+                mrealloc = fun _ _ _ -> failwith "cannot realloc"
+            }
+            
+        let manager = new ChunkedMemoryManager<Buffer>(mem, nativeint (sizeof<int> * chunkSize))
         
+        member x.Alloc(t : Type, count : int) = manager.Alloc(nativeint (Marshal.SizeOf t) * nativeint count)
+        member x.Free(b : Block<Buffer>) = manager.Free b
+        member x.Dispose() = manager.Dispose()
+        interface IDisposable with member x.Dispose() = x.Dispose()
+
+    type IndirectBuffer(ctx : Context, indexed : bool, initialCapacity : int) =
+        static let es = sizeof<DrawCallInfo>
+
+        let initialCapacity = Fun.NextPowerOfTwo initialCapacity
+        let adjust (call : DrawCallInfo) =
+            if indexed then
+                let mutable c = call
+                Fun.Swap(&c.BaseVertex, &c.FirstInstance)
+                c
+            else
+                call
+
         let drawIndices = Dict<DrawCallInfo, int>()
-        let mutable capacity = Fun.NextPowerOfTwo initialCapacity
+        let mutable capacity = initialCapacity
         let mutable mem : nativeptr<DrawCallInfo> = NativePtr.alloc (es * capacity)
         let mutable buffer = ctx.CreateBuffer (es * capacity)
         let mutable dirty = RangeSet.empty
         let mutable count = 0
 
         let resize (newCount : int) =
-            let newCapacity = max 1024 (Fun.NextPowerOfTwo newCount)
+            let newCapacity = max initialCapacity (Fun.NextPowerOfTwo newCount)
             if newCapacity <> capacity then
                 let ob = buffer
                 let om = mem
@@ -265,7 +324,7 @@ module Bla =
                 if count < capacity then
                     let id = count
                     drawIndices.[call] <- id
-                    NativePtr.set mem id call
+                    NativePtr.set mem id (adjust call)
                     count <- count + 1
                     dirty <- RangeSet.insert (Range1i(id,id)) dirty
                     true
@@ -323,23 +382,45 @@ module Bla =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
-        new(ctx : Context) = new IndirectBuffer(ctx, 1024)
-
-
-
-    type PoolSlot(ctx : Context, signature : GeometrySignature, ib : Block<InstanceBuffer>, vb : Block<VertexBuffer>) = 
-        let fvc = int vb.Size
+        new(ctx : Context, indexed : bool) = new IndirectBuffer(ctx, indexed, 1024)
         
+    type PoolSlot(ctx : Context, signature : GeometrySignature, ub : Block<InstanceBuffer>, vb : Block<VertexBuffer>, ib : Option<Block<Buffer>>) = 
+        let fvc =
+            match signature.indexType, ib with
+                | Some it, Some ib -> int ib.Size / Marshal.SizeOf it
+                | _ -> int vb.Size
+        
+        static let getIndexType =
+            LookupTable.lookupTable [
+                typeof<uint8>, DrawElementsType.UnsignedByte
+                typeof<int8>, DrawElementsType.UnsignedByte
+                typeof<uint16>, DrawElementsType.UnsignedShort
+                typeof<int16>, DrawElementsType.UnsignedShort
+                typeof<uint32>, DrawElementsType.UnsignedInt
+                typeof<int32>, DrawElementsType.UnsignedInt
+            ]
+
+        let indexType = signature.indexType |> Option.map getIndexType 
+
+        member x.IndexType = indexType
         member x.Signature = signature
         member x.VertexBuffer = vb
-        member x.InstanceBuffer = ib
+        member x.InstanceBuffer = ub
+        member x.IndexBuffer = ib
 
-        member x.Upload(g : IndexedGeometry) =
+        member x.Upload(g : IndexedGeometry, uniforms : MapExt<string, Array>) =
             let instanceValues =
-                signature.uniformTypes |> MapExt.choose (fun name _ ->
-                    match g.SingleAttributes.TryGetValue(Symbol.Create name) with
-                        | (true, v) -> Some v
-                        | _ -> None
+                signature.uniformTypes |> MapExt.choose (fun name (glslType, typ) ->
+                    match MapExt.tryFind name uniforms with
+                        | Some att -> Some att
+                        | None -> 
+                            match g.SingleAttributes.TryGetValue(Symbol.Create name) with
+                                | (true, v) -> 
+                                    let arr = Array.CreateInstance(typ, 1) //Some ([| v |] :> Array)
+                                    arr.SetValue(v, 0)
+                                    Some arr
+                                | _ -> 
+                                    None
                 )
             let vertexArrays =
                 signature.attributeTypes |> MapExt.choose (fun name _ ->
@@ -348,16 +429,40 @@ module Bla =
                         | _ -> None
                 )
             use __ = ctx.ResourceLock
-            ib.Memory.Value.Upload(int ib.Offset, instanceValues)
+
+            match ib with
+                | Some ib -> 
+                    let gc = GCHandle.Alloc(g.IndexArray, GCHandleType.Pinned)
+                    try ctx.UploadRange(ib.Memory.Value, gc.AddrOfPinnedObject(), int ib.Offset, int ib.Size)
+                    finally gc.Free()
+                | None ->
+                    ()
+
+            ub.Memory.Value.Upload(int ub.Offset, int ub.Size, instanceValues)
             vb.Memory.Value.Write(int vb.Offset, vertexArrays)
 
+        member x.Upload(g : IndexedGeometry) = x.Upload(g, MapExt.empty)
+
+        member x.Mode = signature.mode
+
         member x.DrawCallInfo =
-            DrawCallInfo(
-                FaceVertexCount = fvc,
-                FirstIndex = int vb.Offset,
-                InstanceCount = 1,
-                FirstInstance = int ib.Offset
-            )
+            match ib with
+                | Some ib ->
+                    DrawCallInfo(
+                        FaceVertexCount = fvc,
+                        FirstIndex = int ib.Offset / Marshal.SizeOf(signature.indexType.Value),
+                        InstanceCount = int ub.Size,
+                        FirstInstance = int ub.Offset,
+                        BaseVertex = int vb.Offset
+                    )
+
+                | None -> 
+                    DrawCallInfo(
+                        FaceVertexCount = fvc,
+                        FirstIndex = int vb.Offset,
+                        InstanceCount = int ub.Size,
+                        FirstInstance = int ub.Offset
+                    )
 
     type GeometryPool private(ctx : Context) =
         static let instanceChunkSize = 1024
@@ -369,8 +474,10 @@ module Bla =
         let vertexManagers = System.Collections.Concurrent.ConcurrentDictionary<VertexSignature, VertexManager>()
 
         let getVertexManager (signature : VertexSignature) = vertexManagers.GetOrAdd(signature, fun signature -> new VertexManager(ctx, signature, vertexChunkSize, totalMemory))
-        let getInstanceManager (signature : InstanceSignature) = instanceManagers.GetOrAdd(signature, fun signature -> new InstanceManager(ctx, signature, vertexChunkSize, totalMemory))
+        let getInstanceManager (signature : InstanceSignature) = instanceManagers.GetOrAdd(signature, fun signature -> new InstanceManager(ctx, signature, instanceChunkSize, totalMemory))
         
+        let indexManager = new IndexManager(ctx, vertexChunkSize, totalMemory)
+
         static member Get(ctx : Context) =
             pools.GetOrAdd(ctx, fun ctx ->
                 new GeometryPool(ctx)
@@ -378,13 +485,43 @@ module Bla =
             
         member x.TotalMemory = Mem !totalMemory
 
-        member x.Alloc(signature : GeometrySignature, vertexCount : int) =
+        member x.Alloc(signature : GeometrySignature, instanceCount : int, indexCount : int, vertexCount : int) =
             let vm = getVertexManager signature.attributeTypes
             let im = getInstanceManager signature.uniformTypes
 
-            let ib = im.Alloc(1)
+            let ub = im.Alloc(instanceCount)
             let vb = vm.Alloc(vertexCount)
-            PoolSlot(ctx, signature, ib, vb)
+
+            let ib = 
+                match signature.indexType with
+                    | Some t -> indexManager.Alloc(t, indexCount) |> Some
+                    | None -> None
+
+            PoolSlot(ctx, signature, ub, vb, ib)
+
+        member x.Alloc(signature : GLSLProgramInterface, geometry : IndexedGeometry, uniforms : MapExt<string, Array>) =
+            let signature = GeometrySignature.ofGeometry signature uniforms geometry
+
+            let instanceCount =
+                if MapExt.isEmpty uniforms then
+                    1
+                else
+                    uniforms |> MapExt.toSeq |> Seq.map (fun (_,arr) -> arr.Length) |> Seq.min
+
+            let vertexCount, indexCount = 
+                if isNull geometry.IndexArray then
+                    geometry.FaceVertexCount, 0
+                else
+                    let vc = geometry.IndexedAttributes.Values |> Seq.map (fun v -> v.Length) |> Seq.min
+                    let fvc = geometry.IndexArray.Length
+                    vc, fvc
+
+            let slot = x.Alloc(signature, instanceCount, indexCount, vertexCount)
+            slot.Upload(geometry, uniforms)
+            slot
+            
+        member x.Alloc(signature : GLSLProgramInterface, geometry : IndexedGeometry) =
+            x.Alloc(signature, geometry, MapExt.empty)
 
         member x.Free(slot : PoolSlot) =
             let signature = slot.Signature
@@ -392,60 +529,105 @@ module Bla =
             let im = getInstanceManager signature.uniformTypes
             im.Free slot.InstanceBuffer
             vm.Free slot.VertexBuffer
+            match slot.IndexBuffer with
+                | Some ib -> indexManager.Free ib
+                | None -> ()
+
   
     open Aardvark.Rendering.GL.Compiler
     open Aardvark.Rendering.GL.RenderTasks
 
+    type DrawPool(ctx : Context, state : PreparedPipelineState, pass : RenderPass) as this =
+        inherit PreparedCommand(ctx, pass)
 
+        static let getKey (slot : PoolSlot) =
+            slot.Mode,
+            slot.InstanceBuffer.Memory.Value, 
+            slot.VertexBuffer.Memory.Value,
+            slot.IndexBuffer |> Option.map (fun b -> slot.IndexType.Value, b.Memory.Value)
 
-    type DrawPool(ctx : Context, state : PreparedPipelineState) as this =
-        let indirects = Dict<InstanceBuffer * VertexBuffer, IndirectBuffer>()
+        static let beginMode =
+            LookupTable.lookupTable [
+                IndexedGeometryMode.PointList, BeginMode.Points
+                IndexedGeometryMode.LineList, BeginMode.Lines
+                IndexedGeometryMode.LineStrip, BeginMode.LineStrip
+                IndexedGeometryMode.LineAdjacencyList, BeginMode.LinesAdjacency
+                IndexedGeometryMode.TriangleList, BeginMode.Triangles
+                IndexedGeometryMode.TriangleStrip, BeginMode.TriangleStrip
+                IndexedGeometryMode.TriangleAdjacencyList, BeginMode.TrianglesAdjacency
+            ]
 
         let isActive = NativePtr.allocArray [| 1 |]
-        let beginMode = NativePtr.allocArray [| GLBeginMode(int BeginMode.Points, 1) |]
+        let runtimeStats : nativeptr<V2i> = NativePtr.alloc 1
+        let contextHandle : nativeptr<nativeint> = NativePtr.alloc 1
+
+        
+        let compile (indexType : Option<DrawElementsType>, mode : nativeptr<GLBeginMode>, a : VertexInputBindingHandle, ib : nativeptr<V2i>) (s : IAssemblerStream) =
+            s.BindVertexAttributes(contextHandle, a)
+            match indexType with
+                | Some indexType ->
+                    s.DrawElementsIndirect(runtimeStats, isActive, mode, int indexType, ib)
+                | _ -> 
+                    s.DrawArraysIndirect(runtimeStats, isActive, mode, ib)
+        
+        let indirects = Dict<_, IndirectBuffer>()
         let isOutdated = NativePtr.allocArray [| 1 |]
-
         let myFun = Marshal.PinDelegate(System.Action(this.Update))
+        let mutable oldCalls : list<Option<DrawElementsType> * nativeptr<GLBeginMode> * VertexInputBindingHandle * nativeptr<V2i>> = []
+        let program = new ChangeableNativeProgram<_>(compile)
+        let puller = AdaptiveObject()
+        let sub = puller.AddMarkingCallback (fun () -> NativePtr.write isOutdated 1)
+        let tasks = System.Collections.Generic.HashSet<IRenderTask>()
 
-        // TODO
-        let calls = MList.empty
-        let program = NativeProgram.simple (fun _ _ -> ()) calls
+        let mark() = transact (fun () -> puller.MarkOutdated())
 
         let getIndirectBuffer(slot : PoolSlot) =
-            let key = slot.InstanceBuffer.Memory.Value, slot.VertexBuffer.Memory.Value
+            let key = getKey slot
             indirects.GetOrCreate(key, fun _ ->
-                new IndirectBuffer(ctx)
+                new IndirectBuffer(ctx, Option.isSome slot.IndexType)
             )
 
         let tryGetIndirectBuffer(slot : PoolSlot) =
-            let key = slot.InstanceBuffer.Memory.Value, slot.VertexBuffer.Memory.Value
+            let key = getKey slot
             match indirects.TryGetValue key with
                 | (true, ib) -> Some ib
                 | _ -> None
+                
 
         member x.Add(ref : PoolSlot) =
             let ib = getIndirectBuffer ref
-            ib.Add ref.DrawCallInfo
+            if ib.Add ref.DrawCallInfo then
+                mark()
 
         member x.Remove(ref : PoolSlot) =
             match tryGetIndirectBuffer ref with
                 | Some ib -> 
                     if ib.Remove(ref.DrawCallInfo) then
                         if ib.Count = 0 then
-                            let key = ref.InstanceBuffer.Memory.Value, ref.VertexBuffer.Memory.Value
+                            let key = getKey ref
                             indirects.Remove(key) |> ignore
                             ib.Dispose()
+                            
+                        mark()
                         true
                     else
                         false
                 | None ->
                     false
 
+        abstract member Evaluate : AdaptiveToken -> unit
+        default x.Evaluate _ = ()
+
         member x.Update() =
-            let things = 
-                PList.ofList [
-                    for ((ib, vb), db) in Dict.toSeq indirects do 
-                        //VertexInputBinding()
+            puller.EvaluateAlways AdaptiveToken.Top (fun token ->
+                puller.OutOfDate <- true
+                x.Evaluate token
+
+                let calls = 
+                    Dict.toList indirects |> List.map (fun ((mode, ib, vb, typeAndIndex), db) ->
+                        let indexType = typeAndIndex |> Option.map fst
+                        let index = typeAndIndex |> Option.map snd
+                        db.Flush()
 
                         let attributes = 
                             state.pProgramInterface.inputs |> List.map (fun param ->
@@ -481,56 +663,140 @@ module Bla =
                                                 Stride = GLSLType.sizeof param.paramType
                                                 Offset = 0
                                             }
-                                    
-                    
                             )
 
-                        let vbb = ctx.CreateVertexInputBinding(None, attributes)
+                        let bufferBinding = ctx.CreateVertexInputBinding(index, attributes)
                 
-                        let pdb : nativeptr<V2i> = NativePtr.alloc 1
-                        NativePtr.write pdb (V2i(db.Buffer.Buffer.Handle, db.Count))
-                        yield vbb, pdb
-                ]
+                        let beginMode = 
+                            let bm = beginMode mode
+                            NativePtr.allocArray [| GLBeginMode(int bm, 1) |]
 
-            transact (fun () -> calls.Update things)
+                        let indirect = 
+                            let ptr = NativePtr.alloc 1
+                            NativePtr.write ptr (V2i(db.Buffer.Buffer.Handle, db.Count))
+                            ptr
 
-            NativePtr.write isOutdated 0
-            ()
+                        indexType, beginMode, bufferBinding, indirect
+                    )
 
-        member x.Compile(info : CompilerInfo, stream : IAssemblerStream, last : Option<PreparedCommand>) =
-            let amd = unbox<AMD64.AssemblerStream> stream
+                program.Clear()
+                for a in calls do program.Add a |> ignore
+            
+                oldCalls |> List.iter (fun (_,beginMode,bufferBinding,indirect) -> 
+                    NativePtr.free beginMode; ctx.Delete bufferBinding; NativePtr.free indirect
+                )
+                oldCalls <- calls
+
+                NativePtr.write isOutdated 0
+
+                for t in tasks do
+                    puller.Outputs.Add t |> ignore
+            )
+
+        override x.Compile(info : CompilerInfo, stream : IAssemblerStream, last : Option<PreparedCommand>) =
+            lock puller (fun () ->
+                if tasks.Add info.task then
+                    assert (info.task.OutOfDate)
+                    puller.AddOutput(info.task) |> ignore
+            )
+
             stream.SetPipelineState(info, state)
             
-            let label = amd.NewLabel()
-            amd.Load(AMD64.Register.Rax, isOutdated)
-            amd.Cmp(AMD64.Register.Rax, 0u)
-            amd.Jump(JumpCondition.Equal, label)
+            let label = stream.NewLabel()
+            stream.Cmp(NativePtr.toNativeInt isOutdated, 0)
+            stream.Jump(JumpCondition.Equal, label)
             stream.BeginCall(0)
             stream.Call(myFun.Pointer)
-            amd.Mark(label)
+            stream.Mark(label)
             
+            let taskStats = NativePtr.toNativeInt info.runtimeStats
+            let localStats = NativePtr.toNativeInt runtimeStats
+
+            let taskCtx = NativePtr.toNativeInt info.contextHandle
+            let localCtx = NativePtr.toNativeInt contextHandle
+
+            stream.Copy(taskStats, localStats, true)
+            stream.Copy(taskCtx, localCtx, sizeof<nativeint> = 8)
+
             stream.BeginCall(0)
             stream.CallIndirect(program.EntryPointer)
             
+            stream.Copy(localStats, taskStats, true)
 
-        //member x.Calls : array<nativeptr<V2i> * VertexInputBindingHandle> =
-        //    indirects 
-        //    |> Dict.toArray
-        //    |> Array.map (fun ((ib,vb), db) ->
-        //        let instanceBuffers = ib.Buffers
-        //        let vertexBuffers = vb.Buffers
-        //        let indirect = db.Buffer
-                
-        //        failwith ""
-        //    )
-
-        member x.Dispose() =
+        override x.Release() =
+            state.Dispose()
             for ib in indirects.Values do ib.Dispose()
             indirects.Clear()
+            myFun.Dispose()
+            NativePtr.free isActive
+            NativePtr.free isOutdated
+            program.Dispose()
+            //compilerInfo <- None
+            oldCalls <- []
 
-        interface IDisposable with 
-            member x.Dispose() = x.Dispose()
+        override x.GetResources() = state.Resources
+        override x.EntryState = Some state
+        override x.ExitState = Some state
 
+    type ManyGeomtries(ctx : Context, state : PreparedPipelineState, pass : RenderPass, geometries : aset<IndexedGeometry * MapExt<string, Array>>) =
+        inherit PreparedCommand(ctx, pass)
+
+        let pool = GeometryPool.Get(ctx)
+
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        let reader = geometries.GetReader()
+        let cache = Dict<IndexedGeometry * MapExt<string, Array>, PoolSlot>()
+        let inactive = Dict<IndexedGeometry * MapExt<string, Array>, MicroTime * PoolSlot>()
+
+
+        let evaluate (draws : DrawPool) (token : AdaptiveToken) =
+            let ops = reader.GetOperations token
+
+            ops |> HDeltaSet.iter (fun op ->
+                match op with
+                    | Add(_, (g,u)) ->
+                        match inactive.TryRemove ((g,u)) with
+                            | (true, (t,slot)) ->
+                                Log.warn "revived after %A (%A)" (sw.MicroTime - t) pool.TotalMemory
+                                cache.[(g,u)] <- slot
+                                draws.Add slot
+                            | _ -> 
+                                let slot = pool.Alloc(state.pProgramInterface, g, u)
+                                cache.[(g,u)] <- slot
+                                draws.Add slot
+
+                    | Rem(_, (g,u)) ->
+                        match cache.TryRemove((g,u)) with
+                            | (true, slot) ->
+                                draws.Remove(slot) |> ignore
+                                inactive.[(g,u)] <- (sw.MicroTime, slot)
+                                //pool.Free slot
+                            | _ ->  
+                                ()
+            )
+
+        let inner =
+            { new DrawPool(ctx, state, pass) with
+                override x.Evaluate(token : AdaptiveToken) = evaluate x token
+            }
+
+        override x.Compile(a,b,c) = inner.Compile(a,b,c)
+        override x.GetResources() = inner.GetResources()
+        override x.Release() = 
+            inactive.Values |> Seq.iter (snd >> pool.Free)
+            cache.Values |> Seq.iter pool.Free
+            reader.Dispose()
+            cache.Clear()
+            inactive.Clear()
+            inner.Dispose()
+
+        override x.EntryState = inner.EntryState
+        override x.ExitState = inner.ExitState
+
+    
+
+open Aardvark.Rendering.GL
+open Aardvark.Application.Slim
 
 [<EntryPoint>]
 let main argv = 
@@ -538,27 +804,116 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
-    let win =
-        window {
-            backend Backend.Vulkan
-            display Display.Mono
-            debug false
-            samples 8
-        }
+    use app = new OpenGlApplication(true, true)
+    use win = app.CreateGameWindow(8)
 
     let box = Box3d(-V3d.III, V3d.III)
     let color = C4b.Red
 
-    let sg = 
-        // create a red box with a simple shader
-        Sg.box (Mod.constant color) (Mod.constant box)
-            |> Sg.shader {
-                do! DefaultSurfaces.trafo
-                do! DefaultSurfaces.simpleLighting
-            }
+    let runtime = app.Runtime
+    let ctx = runtime.Context
+
+    let view = 
+        CameraView.lookAt V3d.III V3d.Zero V3d.OOI
+            |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
+            |> Mod.map CameraView.viewTrafo
+    let proj =
+        win.Sizes
+            |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y))
+            |> Mod.map Frustum.projTrafo
+
+    let uniforms =
+        let cam = view |> Mod.map (fun v -> v.Backward.C3.XYZ)
+        [
+            "ModelTrafo", Mod.constant Trafo3d.Identity :> IMod
+            "ViewTrafo", view :> IMod
+            "ProjTrafo", proj :> IMod 
+            "PointSize", Mod.constant 5.0 :> IMod
+            "CameraLocation", cam :> IMod
+            "LightLocation", cam :> IMod
+        ]
+
+    let state =
+        {
+            depthTest           = Mod.constant DepthTestMode.LessOrEqual
+            cullMode            = Mod.constant CullMode.None
+            blendMode           = Mod.constant BlendMode.None
+            fillMode            = Mod.constant FillMode.Fill
+            stencilMode         = Mod.constant StencilMode.Disabled
+            multisample         = Mod.constant true
+            writeBuffers        = None
+            globalUniforms      = UniformProvider.ofList uniforms
+                         
+            geometryMode        = IndexedGeometryMode.PointList
+            vertexInputTypes    = Map.empty
+            perGeometryUniforms = Map.empty
+        }
+         
+    let surface =
+        Surface.FShadeSimple (
+            FShade.Effect.compose [
+                DefaultSurfaces.instanceTrafo |> FShade.Effect.ofFunction
+                DefaultSurfaces.trafo |> FShade.Effect.ofFunction
+                DefaultSurfaces.constantColor C4f.Red |> FShade.Effect.ofFunction
+                DefaultSurfaces.simpleLighting |> FShade.Effect.ofFunction
+            ]
+        )
+
+    let man = runtime.ResourceManager
+    let preparedState =
+        PreparedPipelineState.ofPipelineState win.FramebufferSignature man surface state
+
+    //let pool    = Bla.GeometryPool.Get(ctx)
+    //let draws   = new Bla.DrawPool(ctx, preparedState, RenderPass.main)
+
+    let sphereGeometry      = IndexedGeometryPrimitives.solidPhiThetaSphere Sphere3d.Unit 32 C4b.Red
+    let boxGeometry         = IndexedGeometryPrimitives.Box.solidBox Box3d.Unit C4b.Red |> IndexedGeometry.toNonIndexed
+    let wireBoxGeometry     = IndexedGeometryPrimitives.Box.wireBox Box3d.Unit C4b.Red
+    let donutGeometry       = IndexedGeometryPrimitives.solidTorus (Torus3d(V3d.Zero, V3d.OOI, 1.0, 0.05)) C4b.Red 32 32
+
+    let boxUniforms =
+        MapExt.ofList [
+            "InstanceTrafo",    [| Trafo3d.Translation( 2.0,0.0,0.0); Trafo3d.Translation( 4.0,0.0,0.0); Trafo3d.Translation( 6.0,0.0,0.0) |] :> System.Array
+            "InstanceTrafoInv", [| Trafo3d.Translation(-2.0,0.0,0.0); Trafo3d.Translation(-4.0,0.0,0.0); Trafo3d.Translation(-6.0,0.0,0.0) |] :> System.Array
+        ]
+
+    let donutUniforms =
+        MapExt.ofList [
+            "InstanceTrafo",    [| Trafo3d.Translation(0.0,0.0, 2.0); Trafo3d.Translation( 0.0,0.0,4.0)  |] :> System.Array
+            "InstanceTrafoInv", [| Trafo3d.Translation(0.0,0.0,-2.0); Trafo3d.Translation( 0.0,0.0,-4.0) |] :> System.Array
+        ]
+        
+    sphereGeometry.SingleAttributes <- SymDict.ofList [DefaultSemantic.InstanceTrafo, Trafo3d.Identity :> obj; DefaultSemantic.InstanceTrafoInv, Trafo3d.Identity :> obj] 
+    wireBoxGeometry.SingleAttributes <- SymDict.ofList [DefaultSemantic.InstanceTrafo, Trafo3d.Translation(V3d(0,-2,0)) :> obj; DefaultSemantic.InstanceTrafoInv, Trafo3d.Translation(V3d(0,2,0)) :> obj] 
+    //donutGeometry.SingleAttributes <- SymDict.ofList [DefaultSemantic.InstanceTrafo, Trafo3d.Translation(V3d(0,0,2)) :> obj; DefaultSemantic.InstanceTrafoInv, Trafo3d.Translation(V3d(0,0,-2)) :> obj] 
     
-    // show the window
-    win.Scene <- sg
+    let geometries =
+        CSet.ofList [
+            sphereGeometry, MapExt.empty
+            wireBoxGeometry, MapExt.empty
+            boxGeometry, boxUniforms
+        ]
+
+
+    let draws = new Bla.ManyGeomtries(ctx, preparedState, RenderPass.main, geometries)
+
+    //let box = pool.Alloc(preparedState.pProgramInterface, boxGeometry, boxUniforms)
+    //let sphere = pool.Alloc(preparedState.pProgramInterface, sphereGeometry)
+    //let wireBox = pool.Alloc(preparedState.pProgramInterface, wireBoxGeometry)
+    //let donut = pool.Alloc(preparedState.pProgramInterface, donutGeometry)
+    
+    //draws.Add box |> ignore
+    //draws.Add sphere |> ignore
+    //draws.Add wireBox |> ignore
+    
+    win.Keyboard.KeyDown(Keys.Enter).Values.Add(fun () ->
+        transact (fun () -> geometries.Add (donutGeometry, donutUniforms) |> ignore)
+    )
+    win.Keyboard.KeyDown(Keys.Back).Values.Add(fun () ->
+        transact (fun () -> geometries.Remove (donutGeometry, donutUniforms) |> ignore)
+    )
+
+    win.RenderTask <- app.Runtime.CompileRender(win.FramebufferSignature, ASet.ofList [draws :> IRenderObject])
     win.Run()
 
     0

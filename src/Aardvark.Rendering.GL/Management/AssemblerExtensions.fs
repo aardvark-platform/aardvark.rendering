@@ -323,6 +323,15 @@ module GLAssemblerExtensions =
             x.PushArg(NativePtr.toNativeInt isActive.Pointer)
             x.PushArg(NativePtr.toNativeInt stats)
             x.Call(OpenGl.Pointers.HDrawElementsIndirect)
+            
+        member x.DrawElementsIndirect(stats : nativeptr<V2i>, isActive : nativeptr<int>, beginMode : nativeptr<GLBeginMode>, indexType : int, indirect : nativeptr<V2i>) =
+            x.BeginCall(5)
+            x.PushArg(NativePtr.toNativeInt indirect)
+            x.PushArg(indexType)
+            x.PushArg(NativePtr.toNativeInt beginMode)
+            x.PushArg(NativePtr.toNativeInt isActive)
+            x.PushArg(NativePtr.toNativeInt stats)
+            x.Call(OpenGl.Pointers.HDrawElementsIndirect)
 
         member x.ClearColor(c : IResource<C4f, C4f>) =
             x.BeginCall(4)
@@ -360,5 +369,7 @@ type CompilerInfo =
         structuralChange        : IMod<unit>
         usedTextureSlots        : ref<RefSet<int>>
         usedUniformBufferSlots  : ref<RefSet<int>>
+
+        task                    : IRenderTask
 
     }
