@@ -4,9 +4,9 @@ VisualStudioVersion = 15.0.26730.10
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "06 - LodAgain", "Scratch (netcore)\06 - LodAgain\06 - LodAgain.fsproj", "{93E2C48B-3584-45B2-B736-A301A228AAB9}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "25 - AutomaticInstancing", "Examples (netCore)\25 - AutomaticInstancing\25 - AutomaticInstancing.fsproj", "{A472871F-9474-4C26-A233-82C4E042EFC8}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "25 - AutomaticInstancing", "Examples (netcore)\25 - AutomaticInstancing\25 - AutomaticInstancing.fsproj", "{A472871F-9474-4C26-A233-82C4E042EFC8}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "24 - PostProcessing", "Examples (netCore)\24 - PostProcessing\24 - PostProcessing.fsproj", "{3C6DA164-D7E2-4EA4-BCD6-A582A5E377B0}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "24 - PostProcessing", "Examples (netcore)\24 - PostProcessing\24 - PostProcessing.fsproj", "{3C6DA164-D7E2-4EA4-BCD6-A582A5E377B0}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "05 - ConjugateGradient", "Scratch (netcore)\05 - ConjugateGradient\05 - ConjugateGradient.fsproj", "{08B6A305-2871-4C31-928B-DEC830A960DD}"
 EndProject
@@ -103,7 +103,7 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.GPGPU", "Aardvark.
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Examples (netcore)", "Examples (netcore)", "{5E3312C4-1B3C-4D41-964C-C3A3E01DA966}"
 	ProjectSection(SolutionItems) = preProject
-		Examples (netCore)\new.fsx = Examples (netCore)\new.fsx
+		Examples (netcore)\new.fsx = Examples (netcore)\new.fsx
 	EndProjectSection
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "01 - Triangle", "Examples (netcore)\01 - Triangle\01 - Triangle.fsproj", "{586B6699-E349-4173-BB3F-6DA125EFFFDA}"
