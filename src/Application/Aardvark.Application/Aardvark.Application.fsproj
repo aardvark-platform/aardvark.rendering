@@ -4,7 +4,7 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <AssemblyName>Aardvark.Application</AssemblyName>
     <OutputType>Library</OutputType>
-	<DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+	
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <OutputPath>..\..\..\bin\Debug\</OutputPath>
