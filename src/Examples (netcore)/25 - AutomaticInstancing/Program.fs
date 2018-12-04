@@ -7,10 +7,21 @@ open Aardvark.SceneGraph.IO
 open Aardvark.Rendering.Text
 open Aardvark.Application
 
+module Shader =
+    open FShade
+
+    type UniformScope with
+        member x.Color : V4d = uniform?Color
+
+    let uniformColor (v : Effects.Vertex) =
+        fragment {
+            return uniform.Color
+        }
+
+
+
 [<EntryPoint>]
 let main argv = 
-    
-    // first we need to initialize Aardvark's core components
     Ag.initialize()
     Aardvark.Init()
     
@@ -21,12 +32,8 @@ let main argv =
             debug false
             samples 8
         }
-
-    // lets define the bounds/color for our box
-    // NOTE that the color is going to be ignored since we're using a texture
-    let box = Box3d(-V3d.III, V3d.III)
-    let color = C4b.Red
-
+        
+    // let's compose a coordinate cross from existing primitives
     let coordinateCross =
         Sg.ofList [
             Sg.ofList [
@@ -56,83 +63,49 @@ let main argv =
             do! DefaultSurfaces.simpleLighting
         }
         
-
-    let eigi = 
-        Loader.Assimp.load @"C:\Users\Schorsch\Desktop\raptor\raptor.dae"
-            |> Sg.adapter
-            |> Sg.transform (Trafo3d.RotateInto(V3d.OIO, V3d.OOI))
-            |> Sg.scale 60.0
-            |> Sg.translate 0.6 0.6 0.0
-            |> Sg.shader {
-                do! DefaultSurfaces.trafo
-                do! DefaultSurfaces.diffuseTexture
-                do! DefaultSurfaces.simpleLighting
-            }
-
-    let size = Mod.init 1
-    let showEigi = Mod.init false
-
-    win.Keyboard.DownWithRepeats.Values.Add (fun k ->
-        match k with
-        | Keys.OemPlus -> transact (fun () -> size.Value <- size.Value + 5)
-        | Keys.OemMinus -> transact (fun () -> size.Value <- max 1 (size.Value - 5))
-        | Keys.Space -> transact (fun () -> showEigi.Value <- not showEigi.Value)
-        | _ -> ()
-    )
-
-    let trafos =
-        let step = 2.0
-        size |> Mod.map (fun s ->
-            let size = step * float s
-            let off = -size / 2.0
-
-            [|
-                for x in 0 .. s - 1 do
-                    for y in 0 .. s - 1 do
-                        let pos = V2d(x,y) * step + V2d(off, off)
-                        yield Trafo3d.Translation(V3d(pos.X, pos.Y,0.0))
-
-            |]
-        )
-
-    let set =
-        aset {
-            yield coordinateCross
-            yield eigi |> Sg.onOff showEigi
+    // and a cylinder with uniform-color
+    let cylinder =
+        Sg.cylinder' 32 C4b.Black 0.3 1.0
+        |> Sg.translate 0.4 0.4 0.1
+        |> Sg.shader {
+            do! DefaultSurfaces.trafo
+            do! Shader.uniformColor
+            do! DefaultSurfaces.simpleLighting
         }
 
-    let count =
-        let cfg =
-            {
-                align = TextAlignment.Center
-                font = Font "Consolas"
-                color = C4b.Black
-                flipViewDependent = true
-            }
-
-        size 
-        |> Mod.map (fun s -> s * s |> sprintf "count: %d") 
-        |> Mod.map (fun s ->
-            let shapes = Text.Layout(cfg, s)
-
-            let border = ConcreteShape.fillRoundedRectangle C4b.White 0.1 (shapes.bounds.EnlargedBy 0.1)
-
-            ShapeList.prepend border shapes
-        )
-        |> Sg.shape
-        |> Sg.transform(Trafo3d.RotateInto(V3d.OIO, V3d.OOI))
-        |> Sg.translate 0.0 0.0 4.0
-
-    let sg =
-        Sg.set set
-        |> Sg.instanced trafos
-        |> Sg.andAlso count
+    // compose the coordinate cross and the cylinder to a scene
+    let scene =
+        Sg.ofList [ cylinder; coordinateCross]
 
 
+    // if we want to replicate the scene with random positions/rotations/colors we
+    // need to create arrays holding these values
+    let count = 1024
+    let bounds = Box3d(-10.0 * V3d.III, 10.0 * V3d.III)
 
-    win.Scene <- sg
+    let rand = RandomSystem()
+    let trafos = Array.init count (fun _ -> Trafo3d.Rotation(rand.UniformV3dDirection(), rand.UniformDouble() * Constant.Pi) * Trafo3d.Translation(rand.UniformV3d bounds))
+    let colors = Array.init count (fun _ -> rand.UniformC3f().ToC4b())
+
+
+    // the backend needs to know which types are used for instanced uniforms
+    // NOTE that the name "ModelTrafo" is treated specially by the system (since trafos are implicitly stacked)
+    let instancedUniforms =
+        Map.ofList [
+            "ModelTrafo",   (typeof<Trafo3d>,   Mod.constant (trafos :> System.Array))
+            "Color",        (typeof<C4b>,       Mod.constant (colors :> System.Array))
+        ]
+
+    // the magical combinator instanced adjusts all used shaders in order to use
+    // the applied instance attributes instead of uniforms.
+    // NOTE that the shaders do not need to know about this transformation in advance and the
+    //      system automatically changes the resulting GLSL code.
+    // LIMITATIONS
+    //  Automatic instancing does not work on scenes
+    //      * which already use instancing
+    //      * using IndirectDraw (text, etc.)
+    //      * having precompiled/changeable shaders
+    //      * requesting per-instance uniforms having a non-trivial type (structs, etc.)
+    win.Scene <- Sg.instanced' instancedUniforms scene
     win.Run()
-    
-    
-
     0

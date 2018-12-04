@@ -404,21 +404,24 @@ module Eigi =
 
         let timeOffsets =
             let rand = RandomSystem()
-            let buffer = Array.init trafos.Length (fun i -> rand.UniformFloat() * 3.0f) |> ArrayBuffer :> IBuffer |> Mod.constant
-            BufferView(buffer, typeof<float32>)
-            
+            Array.init trafos.Length (fun i -> rand.UniformFloat() * 3.0f) :> System.Array |> Mod.constant
+
         let frameRanges =
             let rand = RandomSystem()
-            let buffer = 
-                Array.init trafos.Length (fun i -> 
-                    let range = arr.[rand.UniformInt(arr.Length)]
-                    V2f(float32 range.Min, float32 range.Max)
-                ) |> ArrayBuffer :> IBuffer |> Mod.constant
-            BufferView(buffer, typeof<V2f>)
+            Array.init trafos.Length (fun i -> 
+                let range = arr.[rand.UniformInt(arr.Length)]
+                V2f(float32 range.Min, float32 range.Max)
+            ) :> System.Array |> Mod.constant
 
         let instanced (trafos : IMod<Trafo3d[]>) (sg : ISg) =
-            let trafos = trafos |> Mod.map (Array.map (fun t -> M44f.op_Explicit t.Forward))
-            Sg.InstancingNode(trafos, Map.ofList ["TimeOffset", timeOffsets; "FrameRange", frameRanges], Mod.constant sg) :> ISg
+            let trafos = trafos |> Mod.map (fun t -> t :> System.Array)
+            let uniforms =
+                Map.ofList [
+                    "ModelTrafo", (typeof<Trafo3d>, trafos)
+                    "TimeOffset", (typeof<float32>, timeOffsets)
+                    "FrameRange", (typeof<V2f>, frameRanges)
+                ]
+            Sg.instanced' uniforms sg
 
         let sg = 
             scene 

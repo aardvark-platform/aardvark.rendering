@@ -563,8 +563,8 @@ module VrSystemStats =
                 trafos, colors
             )
 
-        let trafos = Mod.map fst trafosAndColors
-        let colors = Mod.map snd trafosAndColors
+        let trafos = Mod.map (fun (t,_) -> t :> System.Array) trafosAndColors
+        let colors = Mod.map (fun (_,c) -> c :> System.Array) trafosAndColors
 
         let baseBox = 
             Sg.box' C4b.White (Box3d(V3d.Zero, V3d.III))
@@ -580,14 +580,13 @@ module VrSystemStats =
                     do! DefaultSurfaces.simpleLighting
                 }
 
-        let m44Trafos = Mod.map (Array.map (Trafo.forward >> M44f.op_Explicit)) trafos
-        Sg.InstancingNode(
-            m44Trafos,
+        let instanced =
             Map.ofList [
-                "Color", BufferView(colors |> Mod.map (fun v -> ArrayBuffer(v) :> IBuffer), typeof<C4b>)
-            ],
-            Mod.constant baseBox
-        ) :> ISg
+                "ModelTrafo", (typeof<Trafo3d>, trafos)
+                "Color",      (typeof<C4b>, colors)
+            ]
+
+        Sg.instanced' instanced baseBox
 
 
 
