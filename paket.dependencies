@@ -33,6 +33,8 @@ nuget DockPanelSuite                     = 2.10.0-beta2
 nuget DockPanelSuite.ThemeVS2012Light    = 2.10.0-beta2
 nuget DockPanelSuite.ThemeVS2013Blue     = 2.10.0-beta2
 nuget Clipper                            ~> 6.4.0
+nuget Aardvark.Geometry.PointSet         ~> 4.6.0-prerelease8
+nuget Aardvark.Data.Points.Ascii         ~> 4.6.0-prerelease8
 
 nuget SharpZipLib.NETStandard            ~> 1.0.7
 

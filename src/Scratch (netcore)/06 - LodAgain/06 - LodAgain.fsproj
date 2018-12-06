@@ -13,6 +13,8 @@
     <OutputPath>..\..\..\bin\Release</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="NewCommandStream.fs" />
+    <Compile Include="CommandStream.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

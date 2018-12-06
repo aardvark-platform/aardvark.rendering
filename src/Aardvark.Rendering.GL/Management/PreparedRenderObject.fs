@@ -31,6 +31,8 @@ type PreparedPipelineState =
     {
         pContext : Context
 
+        pUniformProvider : IUniformProvider
+
         pFramebufferSignature : IFramebufferSignature
         pLastTextureSlot : int
         pProgram : IResource<Program, int>
@@ -301,6 +303,7 @@ module PreparedPipelineState =
         let multisample = x.CreateFlag rj.Multisample
         
         {
+            pUniformProvider = rj.Uniforms
             pContext = x.Context
             pFramebufferSignature = fboSignature
             pLastTextureSlot = !lastTextureSlot
@@ -479,7 +482,9 @@ module PreparedPipelineState =
         let conservativeRaster = x.CreateFlag (Mod.constant false)
         let multisample = x.CreateFlag rj.multisample
         
+        
         {
+            pUniformProvider = rj.globalUniforms
             pContext = x.Context
             pFramebufferSignature = fboSignature
             pLastTextureSlot = !lastTextureSlot
@@ -637,63 +642,65 @@ type PreparedCommand(ctx : Context, renderPass : RenderPass) =
     let mutable refCount = 1
     let id = newId()
 
-    let mutable cleanup : list<unit -> unit> = []
+    let cleanup : Dict<CompilerInfo, ref<list<unit -> unit>>> = Dict()
     
-    let mutable resourceStats = None
-    let mutable resources = None
+    let resourceStats = Dict<CompilerInfo, int * Map<ResourceKind, int>>()
+    let resources = Dict<CompilerInfo, array<IResource>>()
     
-    let getResources (x : PreparedCommand) =
+    let getResources (x : PreparedCommand) (info : CompilerInfo) =
         lock x (fun () ->
-            match resources with
-            | Some res -> res
-            | None -> 
-                let all = x.GetResources() |> Seq.toArray
-                resources <- Some all
+            match resources.TryGetValue info with
+            | (true, res) -> res
+            | _ -> 
+                let all = x.GetResources(info) |> Seq.toArray
+                resources.[info] <- all
                 all
         )
 
-    let getStats (x : PreparedCommand) =
+    let getStats (x : PreparedCommand) (info : CompilerInfo) =
         lock x (fun () ->
-            match resourceStats with
-            | Some s -> s
-            | None ->
-                let res = getResources x
+            match resourceStats.TryGetValue info with
+            | (true, s) -> s
+            | _ ->
+                let res = getResources x info
                 let cnt = res.Length
                 let counts = res |> Seq.countBy (fun r -> r.Kind) |> Map.ofSeq
-                resourceStats <- Some (cnt, counts)
+                resourceStats.[info] <- (cnt, counts)
                 (cnt, counts)
         )
         
-    abstract member GetResources : unit -> seq<IResource>
-    abstract member Release : unit -> unit
+    abstract member GetResources : info : CompilerInfo -> seq<IResource>
+    abstract member Release : info : CompilerInfo -> unit
     abstract member Compile : info : CompilerInfo * stream : Aardvark.Base.Runtime.IAssemblerStream * prev : Option<PreparedCommand> -> unit
-    abstract member EntryState : Option<PreparedPipelineState>
-    abstract member ExitState : Option<PreparedPipelineState>
+    abstract member EntryState : info : CompilerInfo -> Option<PreparedPipelineState>
+    abstract member ExitState : info : CompilerInfo -> Option<PreparedPipelineState>
     
-    member x.AddCleanup(clean : unit -> unit) =
-        cleanup <- clean :: cleanup
+    member x.AddCleanup(info : CompilerInfo, clean : unit -> unit) =
+        let r = cleanup.GetOrCreate(info, fun _ -> ref [])
+        r := clean :: !r
 
     member x.Id = id
     member x.Pass = renderPass
     member x.IsDisposed = refCount = 0
-    
+    member x.Context = ctx
+
     member x.Resources = getResources x
         
-    member x.ResourceCount =
-        let (cnt,_) = getStats x
+    member x.ResourceCount(info : CompilerInfo) =
+        let (cnt,_) = getStats x info
         cnt
 
-    member x.ResourceCounts =
-        let (_,cnts) = getStats x
+    member x.ResourceCounts(info : CompilerInfo) =
+        let (_,cnts) = getStats x info
         cnts
 
     member x.AddReference() =
         Interlocked.Increment(&refCount) |> ignore
 
-    member x.Update(token : AdaptiveToken, rt : RenderToken) =
-        for r in x.Resources do r.Update(token, rt)
+    member x.Update(token : AdaptiveToken, rt : RenderToken, info : CompilerInfo) =
+        for r in x.Resources(info) do r.Update(token, rt)
 
-    member x.Dispose() =
+    member x.Dispose(info : CompilerInfo) =
         if Interlocked.Decrement(&refCount) = 0 then
             lock x (fun () ->
                 let token = try Some ctx.ResourceLock with :? ObjectDisposedException -> None
@@ -701,11 +708,13 @@ type PreparedCommand(ctx : Context, renderPass : RenderPass) =
                 match token with
                 | Some token ->
                     try
-                        cleanup |> List.iter (fun f -> f())
-                        cleanup <- []
+                        match cleanup.TryRemove info with
+                            | (true, r) -> !r |> List.iter (fun f -> f())
+                            | _ -> ()
 
-                        x.Release()
-                        resourceStats <- Some (0, Map.empty)
+                        x.Release(info)
+                        resourceStats.Remove info |> ignore
+                        resources.Remove info |> ignore
                     finally
                         token.Dispose()
                 | None ->
@@ -713,17 +722,31 @@ type PreparedCommand(ctx : Context, renderPass : RenderPass) =
                     ()
             )
 
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
+    //interface IDisposable with
+    //    member x.Dispose() = x.Dispose()
         
     interface IRenderObject with
         member x.AttributeScope = Ag.emptyScope
         member x.Id = x.Id
         member x.RenderPass = renderPass
 
-    interface IPreparedRenderObject with
-        member x.Update(token, rt) = x.Update(token, rt)
-        member x.Original = None
+    //interface IPreparedRenderObject with
+    //    member x.Original = None
+    //    member x.Dispose() = ()
+
+type PreparedCommandInstance(inner : PreparedCommand, info : CompilerInfo) =
+    inherit PreparedCommand(inner.Context, inner.Pass)
+
+    override x.GetResources(s) = inner.GetResources s
+    override x.Release(s) = inner.Release s
+    override x.Compile(a,b,c) = inner.Compile(a,b,c)
+    override x.EntryState s = inner.EntryState s
+    override x.ExitState s = inner.ExitState s
+    
+    member x.Dispose() = inner.Dispose info
+
+    interface IDisposable with
+        member x.Dispose() = inner.Dispose info
 
 type PreparedObjectInfo =
     {   
@@ -964,8 +987,8 @@ module PreparedObjectInfoAssembler =
 type EpilogCommand(ctx : Context) =
     inherit PreparedCommand(ctx, RenderPass.main) 
 
-    override x.GetResources() = Seq.empty
-    override x.Release() = ()
+    override x.GetResources(_) = Seq.empty
+    override x.Release(_) = ()
     override x.Compile(s, stream, prev) = 
         stream.SetDepthMask(true)
         stream.SetStencilMask(true)
@@ -973,28 +996,28 @@ type EpilogCommand(ctx : Context) =
         stream.UseProgram(0)
         stream.BindBuffer(int OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer, 0)
         
-    override x.EntryState = None
-    override x.ExitState = None
+    override x.EntryState _ = None
+    override x.ExitState _ = None
 
 type NopCommand(ctx : Context, pass : RenderPass) =
     inherit PreparedCommand(ctx, pass) 
 
-    override x.GetResources() = Seq.empty
-    override x.Release() = ()
+    override x.GetResources(_) = Seq.empty
+    override x.Release(_) = ()
     override x.Compile(_,_,_) = ()
-    override x.EntryState = None
-    override x.ExitState = None
+    override x.EntryState _ = None
+    override x.ExitState _ = None
 
 type PreparedObjectCommand(state : PreparedPipelineState, info : PreparedObjectInfo, renderPass : RenderPass) =
     inherit PreparedCommand(state.pContext, renderPass)
 
     member x.Info = info
 
-    override x.Release() =
+    override x.Release(_) =
         state.Dispose()
         info.Dispose()
 
-    override x.GetResources() =
+    override x.GetResources(_) =
         seq {
             yield! state.Resources
             yield! info.Resources
@@ -1008,15 +1031,15 @@ type PreparedObjectCommand(state : PreparedPipelineState, info : PreparedObjectI
 
         let prevState =
             match prev with
-            | Some p -> p.ExitState
+            | Some p -> p.ExitState s
             | _ -> None
 
             
         stream.SetPipelineState(s, state, prevState)
         stream.Render(s, info, prevInfo)
 
-    override x.EntryState = Some state
-    override x.ExitState = Some state
+    override x.EntryState _ = Some state
+    override x.ExitState _ = Some state
 
 type MultiCommand(ctx : Context, cmds : list<PreparedCommand>, renderPass : RenderPass) =
     inherit PreparedCommand(ctx, renderPass)
@@ -1024,11 +1047,11 @@ type MultiCommand(ctx : Context, cmds : list<PreparedCommand>, renderPass : Rend
     let first   = List.tryHead cmds
     let last    = List.tryLast cmds
 
-    override x.Release() =
-        cmds |> List.iter (fun c -> c.Dispose())
+    override x.Release(s) =
+        cmds |> List.iter (fun c -> c.Dispose(s))
         
-    override x.GetResources() =
-        cmds |> Seq.collect (fun c -> c.Resources)
+    override x.GetResources(s) =
+        cmds |> Seq.collect (fun c -> c.Resources s)
 
     override x.Compile(info, stream, prev) =
         let mutable prev = prev
@@ -1036,8 +1059,8 @@ type MultiCommand(ctx : Context, cmds : list<PreparedCommand>, renderPass : Rend
             c.Compile(info, stream, prev)
             prev <- Some c
 
-    override x.EntryState = first |> Option.bind (fun first -> first.EntryState)
-    override x.ExitState = last |> Option.bind (fun last -> last.ExitState)
+    override x.EntryState s = first |> Option.bind (fun first -> first.EntryState s)
+    override x.ExitState s = last |> Option.bind (fun last -> last.ExitState s)
 
 
 module PreparedCommand =

@@ -12,11 +12,94 @@ open Aardvark.Rendering.GL
 
 #nowarn "9"
 
+
+
+
 [<AutoOpen>]
 module GLAssemblerExtensions =
 
+    let private queryObjectPointers =
+        lazy (
+            LookupTable.lookupTable [
+                typeof<int>, OpenGl.Pointers.GetQueryObjectInt32
+                typeof<uint32>, OpenGl.Pointers.GetQueryObjectUInt32
+                typeof<int64>, OpenGl.Pointers.GetQueryObjectInt64
+                typeof<uint64>, OpenGl.Pointers.GetQueryObjectUInt64
+            ]
+        )
+
     type IAssemblerStream with
         
+        member x.GenQueries(count : int, queries : nativeptr<int>) =
+            x.BeginCall(2)
+            x.PushArg (NativePtr.toNativeInt queries)
+            x.PushArg count
+            x.Call(OpenGl.Pointers.GenQueries)
+            
+        member x.DeleteQueries(count : int, queries : nativeptr<int>) =
+            x.BeginCall(2)
+            x.PushArg (NativePtr.toNativeInt queries)
+            x.PushArg count
+            x.Call(OpenGl.Pointers.DeleteQueries)
+
+        member x.GenQuery(query : nativeptr<int>) =
+            x.GenQueries(1, query)
+
+        member x.DeleteQuery(query : nativeptr<int>) =
+            x.DeleteQueries(1, query)
+
+
+        member x.BeginQueryIndirect(target : QueryTarget, query : nativeptr<int>) =
+            x.BeginCall(2)
+            x.PushIntArg (NativePtr.toNativeInt query)
+            x.PushArg (int target)
+            x.Call(OpenGl.Pointers.BeginQuery)
+            
+        member x.BeginQuery(target : QueryTarget, query : int) =
+            x.BeginCall(2)
+            x.PushArg query
+            x.PushArg (int target)
+            x.Call(OpenGl.Pointers.BeginQuery)
+            
+        member x.EndQuery(target : QueryTarget) =
+            x.BeginCall(1)
+            x.PushArg (int target)
+            x.Call(OpenGl.Pointers.EndQuery)
+
+        member x.GetQueryObjectIndirect<'a when 'a : unmanaged>(query : nativeptr<int>, param : GetQueryObjectParam, ptr : nativeptr<'a>) =
+            let fptr = queryObjectPointers.Value typeof<'a>
+            x.BeginCall(3)
+            x.PushArg (NativePtr.toNativeInt ptr)
+            x.PushArg (int param)
+            x.PushIntArg (NativePtr.toNativeInt query)
+            x.Call(fptr)
+            
+        member x.GetQueryObject<'a when 'a : unmanaged>(query : int, param : GetQueryObjectParam, ptr : nativeptr<'a>) =
+            let fptr = queryObjectPointers.Value typeof<'a>
+            x.BeginCall(3)
+            x.PushArg (NativePtr.toNativeInt ptr)
+            x.PushArg (int param)
+            x.PushArg query
+            x.Call(fptr)
+            
+        member x.QueryCounter(target : QueryCounterTarget, id : int) =
+            x.BeginCall(2)
+            x.PushArg (int target)
+            x.PushArg id
+            x.Call(OpenGl.Pointers.QueryCounter)
+            
+        member x.QueryCounterIndirect(target : QueryCounterTarget, id : nativeptr<int>) =
+            x.BeginCall(2)
+            x.PushArg (int target)
+            x.PushIntArg (NativePtr.toNativeInt id)
+            x.Call(OpenGl.Pointers.QueryCounter)
+
+        member x.QueryTimestamp(temp : nativeptr<int>, dst : nativeptr<uint64>) =
+            x.GenQuery(temp)
+            x.QueryCounterIndirect(QueryCounterTarget.Timestamp, temp)
+            x.GetQueryObjectIndirect(temp, GetQueryObjectParam.QueryResult, dst)
+            x.DeleteQuery(temp)
+
         member x.SetDepthMask(mask : bool) =
             x.BeginCall(1)
             x.PushArg(if mask then 1 else 0)
@@ -356,20 +439,29 @@ module GLAssemblerExtensions =
             x.PushArg(mask |> int)
             x.Call(OpenGl.Pointers.Clear)
 
+type RefRef<'a> =
+    class
+        val mutable public contents : 'a
+        member x.Value
+            with get() = x.contents
+            and set v = x.contents <- v
+
+        new(value : 'a) = { contents = value }
+    end
+
 
 type CompilerInfo =
     {
-        //stats : ref<FrameStatistics>
-        contextHandle : nativeptr<nativeint>
-        runtimeStats : nativeptr<V2i>
-        currentContext : IMod<ContextHandle>
-        drawBuffers : nativeint
-        drawBufferCount : int
+        contextHandle           : nativeptr<nativeint>
+        runtimeStats            : nativeptr<V2i>
+        currentContext          : IMod<ContextHandle>
+        drawBuffers             : nativeint
+        drawBufferCount         : int
         
         structuralChange        : IMod<unit>
-        usedTextureSlots        : ref<RefSet<int>>
-        usedUniformBufferSlots  : ref<RefSet<int>>
+        usedTextureSlots        : RefRef<RefSet<int>>
+        usedUniformBufferSlots  : RefRef<RefSet<int>>
 
         task                    : IRenderTask
-
+        tags                    : Map<string, obj>
     }

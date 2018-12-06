@@ -50,11 +50,13 @@ module RenderTasks =
                 contextHandle = contextHandle
                 drawBuffers = NativePtr.toNativeInt allBuffers.Buffers
                 drawBufferCount = allBuffers.Count 
-                usedTextureSlots = ref RefSet.empty
-                usedUniformBufferSlots = ref RefSet.empty
+                usedTextureSlots = RefRef RefSet.empty
+                usedUniformBufferSlots = RefRef RefSet.empty
                 structuralChange = structureChanged
                 task = RenderTask.empty
+                tags = Map.empty
             }
+
 
 //        let drawBuffers = 
 //            fboSignature.ColorAttachments 
@@ -64,7 +66,7 @@ module RenderTasks =
         
         let beforeRender = new System.Reactive.Subjects.Subject<unit>()
         let afterRender = new System.Reactive.Subjects.Subject<unit>()
-
+        
         member x.BeforeRender = beforeRender
         member x.AfterRender = afterRender
 
@@ -204,7 +206,7 @@ module RenderTasks =
 
         let programUpdateWatch  = Stopwatch()
         let sortWatch           = Stopwatch()
-        let runWatch            = OpenGlStopwatch()
+        //let runWatch            = OpenGlStopwatch()
 
         let fragments = HashSet<RenderFragment>()
 
@@ -230,9 +232,9 @@ module RenderTasks =
             if RenderToken.isEmpty t then
                 f()
             else
-                runWatch.Restart()
+                //runWatch.Restart()
                 let res = f()
-                runWatch.Stop()
+                //runWatch.Stop()
                 res
 
         //member x.Parent = parent
@@ -263,8 +265,9 @@ module RenderTasks =
                     t.AddSubTask(
                         MicroTime sortWatch.Elapsed,
                         MicroTime programUpdateWatch.Elapsed,
-                        runWatch.ElapsedGPU,
-                        runWatch.ElapsedCPU
+                        MicroTime.Zero, MicroTime.Zero
+                        //runWatch.ElapsedGPU,
+                        //runWatch.ElapsedCPU
                     )
                 )
 
@@ -562,8 +565,8 @@ module RenderTasks =
         let mutable hasProgram = false
         let mutable currentConfig = BackendConfiguration.Default
         let mutable program : IRenderProgram = Unchecked.defaultof<_>
-        let structuralChange = Mod.custom ignore
-        let scope = { scope with structuralChange = structuralChange }
+        //let structuralChange = Mod.custom ignore
+        //let scope = { scope with structuralChange = structuralChange }
 
         let reinit (self : StaticOrderSubTask) (config : BackendConfiguration) =
             // if the config changed or we never compiled a program
@@ -582,7 +585,7 @@ module RenderTasks =
                                 | :? EpilogCommand, _ -> 1
                                 | _, :? EpilogCommand -> -1
                                 | _ -> 
-                                    match l.EntryState, r.EntryState with
+                                    match l.EntryState scope, r.EntryState scope with
                                         | None, None -> compare l.Id r.Id
                                         | None, Some _ -> -1
                                         | Some _, None -> 1
@@ -676,13 +679,13 @@ module RenderTasks =
         
         override x.Add(o) = 
             transact (fun () -> 
-                structuralChange.MarkOutdated()
+                scope.structuralChange.MarkOutdated()
                 objects.Add o |> ignore
             )
 
         override x.Remove(o) = 
             transact (fun () -> 
-                structuralChange.MarkOutdated()
+                scope.structuralChange.MarkOutdated()
                 objects.Remove o |> ignore
             )
 
@@ -1028,20 +1031,20 @@ module RenderTasks =
         let ctx = man.Context
         let resources = new Aardvark.Base.Rendering.ResourceInputSet()
         let inputSet = InputSet(this) 
-        let resourceUpdateWatch = OpenGlStopwatch()
+        //let resourceUpdateWatch = OpenGlStopwatch()
         let structuralChange = Mod.init ()
         
         let primitivesGenerated = OpenGlQuery(QueryTarget.PrimitivesGenerated)
         
         let add (ro : PreparedCommand) = 
-            let all = ro.Resources
+            let all = ro.Resources this.Scope
             for r in all do resources.Add(r)
 
-            ro.AddCleanup(fun () ->
+            ro.AddCleanup(this.Scope, fun () ->
                 for r in all do resources.Remove r
             )
             
-            ro
+            new PreparedCommandInstance(ro, this.Scope)
             
         let rec hook (r : IRenderObject) =
             match r with
@@ -1101,11 +1104,11 @@ module RenderTasks =
             if RenderToken.isEmpty t then
                 resources.Update(x, t)
             else
-                resourceUpdateWatch.Restart()
+                //resourceUpdateWatch.Restart()
                 resources.Update(x, t)
-                resourceUpdateWatch.Stop()
+                //resourceUpdateWatch.Stop()
 
-                t.AddResourceUpdate(resourceUpdateWatch.ElapsedCPU, resourceUpdateWatch.ElapsedGPU)
+                //t.AddResourceUpdate(resourceUpdateWatch.ElapsedCPU, resourceUpdateWatch.ElapsedGPU)
 
 
         override x.ProcessDeltas(token, t) =

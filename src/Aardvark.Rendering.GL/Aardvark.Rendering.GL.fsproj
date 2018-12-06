@@ -15,6 +15,9 @@
     <OutputPath>..\..\bin\Release</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="Wrapper\gl.xml" />
+    <None Include="Wrapper\Generator.fsx" />
+    <Compile Include="Wrapper\GL.fs" />
     <Compile Include="Core\Trie.fs" />
     <Compile Include="Core\Utilities.fs" />
     <Compile Include="Core\Validation.fs" />
