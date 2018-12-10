@@ -1168,11 +1168,12 @@ module Bla =
                                     | None ->   
                                         match MapExt.tryFind param.paramSemantic vb.Buffers with
                                         | Some (vb, typ) ->
+                                            let norm = if typ = typeof<C4b> then true else false
                                             param.paramLocation, {
                                                 Type = typ
                                                 Content = Left vb
                                                 Frequency = AttributeFrequency.PerVertex
-                                                Normalized = false
+                                                Normalized = norm
                                                 Stride = Marshal.SizeOf typ
                                                 Offset = 0
                                             }
@@ -3208,13 +3209,13 @@ module Shader =
     type PointVertex =
         {
             [<Position>] pos : V4d
-            [<Color>] color : V4d
+            [<Color>] col : V4d
             [<Normal>] n : V3d
             [<Semantic("ViewPosition")>] vp : V3d
             [<Semantic("AvgPointDistance")>] dist : float
             [<Semantic("DepthRange")>] depthRange : float
             [<PointSize>] s : float
-            [<PointCoord; Interpolation(InterpolationMode.Sample)>] c : V2d
+            [<PointCoord>] c : V2d
             [<FragCoord>] fc : V4d
         }
 
@@ -3234,11 +3235,11 @@ module Shader =
             let pixelDist = ndcDist * float uniform.ViewportSize.X
             let n = uniform.ModelViewTrafo * V4d(v.n, 0.0) |> Vec.xyz |> Vec.normalize
             
-            let pp = 
-                if pp.Z < -pp.W then V4d(0,0,2,1)
-                else pp
+            //let pp = 
+            //    if pp.Z < -pp.W then V4d(666,666,-666,1)
+            //    else pp
 
-            return { v with s = pixelDist; pos = pp; depthRange = depthRange; n = n; vp = vp.XYZ }
+            return { v with s = pixelDist; pos = pp; depthRange = depthRange; n = n; vp = ovp.XYZ }
         }
 
 
@@ -3261,7 +3262,7 @@ module Shader =
             let outDepth = depth + v.depthRange * t
             
 
-            return { c = v.color; d = outDepth }
+            return { c = v.col; d = outDepth }
         }
 
     let cameraLight (v : PointVertex) =
@@ -3270,7 +3271,7 @@ module Shader =
             let vd = Vec.normalize v.vp 
 
             let diffuse = Vec.dot vn vd |> abs
-            return V4d(v.color.XYZ * diffuse, v.color.W)
+            return V4d(v.col.XYZ * diffuse, v.col.W)
         }
 
 
@@ -3279,9 +3280,7 @@ module Shader =
     let normalColor ( v : Vertex) =
         fragment {
             let mutable n = Vec.normalize v.n
-
-            let vn = uniform.ViewTrafo * V4d(n, 0.0)
-            if vn.Z < 0.0 then n <- -n
+            if n.Z < 0.0 then n <- -n
 
             let n = (n + V3d.III) * 0.5
             return V4d(n, 1.0)
@@ -3294,7 +3293,7 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
-    use app = new OpenGlApplication(false, false)
+    use app = new OpenGlApplication(true, false)
     let win = app.CreateGameWindow(1)
     let runtime = app.Runtime
     let ctx = runtime.Context
@@ -3337,7 +3336,7 @@ let main argv =
             blendMode           = Mod.constant BlendMode.None
             fillMode            = Mod.constant FillMode.Fill
             stencilMode         = Mod.constant StencilMode.Disabled
-            multisample         = Mod.constant true
+            multisample         = Mod.constant false
             writeBuffers        = None
             globalUniforms      = UniformProvider.ofList uniforms
                          
@@ -3354,12 +3353,15 @@ let main argv =
                 //DefaultSurfaces.trafo |> FShade.Effect.ofFunction
                 
                 Shader.lodPointSize  |> FShade.Effect.ofFunction
-                //DefaultSurfaces.pointSprite |> FShade.Effect.ofFunction
                 Shader.cameraLight |> FShade.Effect.ofFunction
                 Shader.lodPointCircular |> FShade.Effect.ofFunction
+                //DefaultSurfaces.pointSprite |> FShade.Effect.ofFunction
+                //Shader.cameraLight |> FShade.Effect.ofFunction
+                //Shader.normalColor |> FShade.Effect.ofFunction
                 //Shader.normalColor |> FShade.Effect.ofFunction
                 //DefaultSurfaces.pointSpriteFragment |> FShade.Effect.ofFunction
                 //DefaultSurfaces.simpleLighting |> FShade.Effect.ofFunction
+                //DefaultSurfaces.vertexColor |> FShade.Effect.ofFunction
             ]
         )
 
@@ -3411,11 +3413,11 @@ let main argv =
             //yield StoreTree.load "local" (Trafo3d.Translation(150.0, 0.0, 0.0)) @"C:\Users\Schorsch\Development\WorkDirectory\KaunertalStore" "kaunertal" :> Bla.ITreeNode
             
             // let import (sourceName : string) (trafo : Trafo3d) (file : string) (store : string) (key : string
-            //yield StoreTree.import 
-            //    "blibb" 
-            //    (Trafo3d.Translation(0.0, 0.0, 0.0)) 
-            //    @"C:\Users\Schorsch\Development\WorkDirectory\Kindergarten.pts" 
-            //    @"C:\Users\Schorsch\Development\WorkDirectory\blubber" 
+            yield StoreTree.import 
+                "blibb" 
+                (Trafo3d.Translation(0.0, 0.0, 0.0)) 
+                @"C:\Users\Schorsch\Development\WorkDirectory\Kindergarten.pts" 
+                @"C:\Users\Schorsch\Development\WorkDirectory\blubber" 
 
             yield StoreTree.importAscii
                 "bla"
@@ -3425,7 +3427,7 @@ let main argv =
                 
             yield StoreTree.import
                 "bla"
-                (Trafo3d.Translation(100.0, 0.0, 0.0)) 
+                (Trafo3d.Translation(0.0, 0.0, 0.0)) 
                 @"C:\Users\Schorsch\Development\WorkDirectory\Technologiezentrum_Teil1.pts"
                 @"C:\Users\Schorsch\Development\WorkDirectory\Technologiezentrum"
 
