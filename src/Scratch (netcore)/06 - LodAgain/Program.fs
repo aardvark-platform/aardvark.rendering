@@ -19,6 +19,96 @@ module Bla =
     open System.Threading
     open Aardvark.Base.Runtime
 
+    [<ReflectedDefinition>]
+    module CullingShader =
+        open FShade
+
+        //typedef  struct {
+        //    uint  count;
+        //    uint  primCount;
+        //    uint  firstIndex;
+        //    uint  baseVertex;
+        //    uint  baseInstance;
+        //} DrawElementsIndirectCommand;
+        type DrawInfo =
+            struct
+                val mutable public FaceVertexCount : int
+                val mutable public InstanceCount : int
+                val mutable public FirstIndex : int
+                val mutable public BaseVertex : int
+                val mutable public FirstInstance : int
+            end
+
+        type CullingInfo =
+            struct
+                val mutable public Min : V4f
+                val mutable public Max : V4f
+            end
+        module CullingInfo =
+            let instanceCount (i : CullingInfo) =
+                int i.Min.W
+                
+            let getMinMaxInDirection (v : V3d) (i : CullingInfo) =
+                let mutable l = V3d.Zero
+                let mutable h = V3d.Zero
+
+                if v.X >= 0.0 then
+                    l.X <- float i.Min.X
+                    h.X <- float i.Max.X
+                else
+                    l.X <- float i.Max.X
+                    h.X <- float i.Min.X
+                    
+                if v.Y >= 0.0 then
+                    l.Y <- float i.Min.Y
+                    h.Y <- float i.Max.Y
+                else
+                    l.Y <- float i.Max.Y
+                    h.Y <- float i.Min.Y
+                    
+                if v.Z >= 0.0 then
+                    l.Z <- float i.Min.Z
+                    h.Z <- float i.Max.Z
+                else
+                    l.Z <- float i.Max.Z
+                    h.Z <- float i.Min.Z
+
+                (l,h)
+
+            let onlyBelow (plane : V4d) (i : CullingInfo) =
+                let l, h = i |> getMinMaxInDirection plane.XYZ
+                Vec.dot l plane.XYZ + plane.W < 0.0 && Vec.dot h plane.XYZ + plane.W < 0.0
+
+            let intersectsViewProj (viewProj : M44d) (i : CullingInfo) =
+                let r0 = viewProj.R0
+                let r1 = viewProj.R1
+                let r2 = viewProj.R2
+                let r3 = viewProj.R3
+
+                if  onlyBelow (r3 + r0) i || onlyBelow (r3 - r0) i ||
+                    onlyBelow (r3 + r1) i || onlyBelow (r3 - r1) i ||
+                    onlyBelow (r3 + r2) i || onlyBelow (r3 - r2) i then
+                    false
+                else
+                    true
+
+        [<LocalSize(X = 64)>]
+        let culling (infos : DrawInfo[]) (bounds : CullingInfo[]) (count : int) (viewProj : M44d) =
+            compute {
+                let id = getGlobalId().X
+                if id < count then
+                    let b = bounds.[id]
+                    //let s = 0.2f * (b.Max.XYZ - b.Min.XYZ)
+                    
+                    //b.Min <- V4f(b.Min.XYZ + s, b.Min.W)
+                    //b.Max <- V4f(b.Max.XYZ - s, b.Max.W)
+
+                    if CullingInfo.intersectsViewProj viewProj b then
+                        infos.[id].InstanceCount <- CullingInfo.instanceCount b
+                    else
+                        infos.[id].InstanceCount <- 0
+            }
+
     type InstanceSignature = MapExt<string, GLSLType * Type>
     type VertexSignature = MapExt<string, Type>
 
@@ -481,8 +571,22 @@ module Bla =
         interface IDisposable with 
             member x.Dispose() = x.Dispose()
 
-    type IndirectBuffer(ctx : Context, indexed : bool, initialCapacity : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
+    [<StructLayout(LayoutKind.Sequential)>]
+    type BoundingBox =
+        struct
+            val mutable public Min : V4f
+            val mutable public Max : V4f
+        end
+
+    type IndirectBuffer(ctx : Context, bounds : bool, indexed : bool, initialCapacity : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
         static let es = sizeof<DrawCallInfo>
+        static let bs = sizeof<BoundingBox>
+
+        static let ceilDiv (a : int) (b : int) =
+            if a % b = 0 then a / b
+            else 1 + a / b
+
+        static let cullingCache = System.Collections.Concurrent.ConcurrentDictionary<Context, ComputeShader>()
 
         let initialCapacity = Fun.NextPowerOfTwo initialCapacity
         let adjust (call : DrawCallInfo) =
@@ -495,36 +599,78 @@ module Bla =
 
         let drawIndices = Dict<DrawCallInfo, int>()
         let mutable capacity = initialCapacity
-        let mutable mem : nativeptr<DrawCallInfo> = NativePtr.alloc (es * capacity)
+        let mutable mem : nativeptr<DrawCallInfo> = NativePtr.alloc capacity
+        let mutable bmem : nativeptr<BoundingBox> = if bounds then NativePtr.alloc capacity else NativePtr.zero
+
+
         let mutable buffer = ctx.CreateBuffer (es * capacity)
+        let mutable bbuffer = if bounds then ctx.CreateBuffer(bs * capacity) else new Buffer(ctx, 0n, 0)
+
+        let ub = ctx.CreateBuffer(128)
+
         let mutable dirty = RangeSet.empty
         let mutable count = 0
-        do Interlocked.Add(&totalMemory.contents, int64 (es * capacity)) |> ignore
+
+        let bufferHandles = NativePtr.allocArray [| V3i(buffer.Handle, bbuffer.Handle, count) |]
+        let indirectHandle = NativePtr.allocArray [| V2i(buffer.Handle, 0) |]
+        let computeSize = NativePtr.allocArray [| V3i.Zero |]
+
+        let updatePointers() =
+            NativePtr.write bufferHandles (V3i(buffer.Handle, bbuffer.Handle, count))
+            NativePtr.write indirectHandle (V2i(buffer.Handle, count))
+            NativePtr.write computeSize (V3i(ceilDiv count 64, 1, 1))
+
+        let oldProgram = NativePtr.allocArray [| 0 |]
+        let oldUB = NativePtr.allocArray [| 0 |]
+        let oldUBOffset = NativePtr.allocArray [| 0n |]
+        let oldUBSize = NativePtr.allocArray [| 0n |]
+
+        do let es = if bounds then es + bs else es
+           Interlocked.Add(&totalMemory.contents, int64 (es * capacity)) |> ignore
+
+        let culling =
+            if bounds then 
+                cullingCache.GetOrAdd(ctx, fun ctx ->
+                    let cs = ComputeShader.ofFunction (V3i(1024, 1024, 1024)) CullingShader.culling
+                    let shader = ctx.CompileKernel cs
+                    shader 
+                )
+            else
+                Unchecked.defaultof<ComputeShader>
 
         let resize (newCount : int) =
             let newCapacity = max initialCapacity (Fun.NextPowerOfTwo newCount)
             if newCapacity <> capacity then
-                Interlocked.Add(&totalMemory.contents, int64 (es * (newCapacity - capacity))) |> ignore
+                let ess = if bounds then es + bs else es
+                Interlocked.Add(&totalMemory.contents, int64 (ess * (newCapacity - capacity))) |> ignore
                 let ob = buffer
+                let obb = bbuffer
                 let om = mem
+                let obm = bmem
                 let nb = ctx.CreateBuffer (es * newCapacity)
-                let nm = NativePtr.alloc (es * newCapacity)
+                let nbb = if bounds then ctx.CreateBuffer (bs * newCapacity) else new Buffer(ctx, 0n, 0)
+                let nm = NativePtr.alloc newCapacity
+                let nbm = if bounds then NativePtr.alloc newCapacity else NativePtr.zero
 
                 Marshal.Copy(NativePtr.toNativeInt om, NativePtr.toNativeInt nm, nativeint count * nativeint es)
-                
+                if bounds then Marshal.Copy(NativePtr.toNativeInt obm, NativePtr.toNativeInt nbm, nativeint count * nativeint bs)
+
                 mem <- nm
+                bmem <- nbm
                 buffer <- nb
+                bbuffer <- nbb
                 capacity <- newCapacity
                 dirty <- RangeSet.ofList [Range1i(0, count - 1)]
                 
                 NativePtr.free om
                 ctx.Delete ob
-
+                if bounds then 
+                    NativePtr.free obm
+                    ctx.Delete obb
         
-
         member x.Count = count
 
-        member x.Add(call : DrawCallInfo) =
+        member x.Add(call : DrawCallInfo, box : Box3d) =
             if drawIndices.ContainsKey call then
                 false
             else
@@ -532,29 +678,47 @@ module Bla =
                     let id = count
                     drawIndices.[call] <- id
                     NativePtr.set mem id (adjust call)
+                    if bounds then
+                        let bounds =
+                            BoundingBox(
+                                Min = V4f(V3f box.Min, float32 call.InstanceCount),
+                                Max = V4f(V3f box.Max, 0.0f)
+                            )
+                        NativePtr.set bmem id bounds
                     count <- count + 1
-                    Interlocked.Add(&usedMemory.contents, int64 es) |> ignore
+                    let ess = if bounds then es + bs else es
+                    Interlocked.Add(&usedMemory.contents, int64 ess) |> ignore
                     dirty <- RangeSet.insert (Range1i(id,id)) dirty
+                    
+                    updatePointers()
                     true
                 else
                     resize (count + 1)
-                    x.Add(call)
+                    x.Add(call, box)
+
+        member x.Add(call : DrawCallInfo) =
+            x.Add(call, Unchecked.defaultof<Box3d>)
 
         member x.Remove(call : DrawCallInfo) =
             match drawIndices.TryRemove call with
                 | (true, oid) ->
                     let last = count - 1
                     count <- count - 1
-                    Interlocked.Add(&usedMemory.contents, int64 -es) |> ignore
+                    let ess = if bounds then es + bs else es
+                    Interlocked.Add(&usedMemory.contents, int64 -ess) |> ignore
 
                     if oid <> last then
                         let lc = NativePtr.get mem last
                         drawIndices.[lc] <- oid
                         NativePtr.set mem oid lc
                         NativePtr.set mem last Unchecked.defaultof<DrawCallInfo>
+                        if bounds then
+                            let lb = NativePtr.get bmem last
+                            NativePtr.set bmem oid lb
                         dirty <- RangeSet.insert (Range1i(oid,oid)) dirty
                         
                     resize last
+                    updatePointers()
 
                     true
                 | _ ->
@@ -566,28 +730,96 @@ module Bla =
             dirty <- RangeSet.empty
 
             if not (Seq.isEmpty toUpload) then
-                let size = count * es
-                let ptr = ctx.MapBufferRange(buffer, 0n, nativeint size, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
-                for r in toUpload do
-                    let o = r.Min * es |> nativeint
-                    let s = (1 + r.Max - r.Min) * es |> nativeint
-                    Marshal.Copy(NativePtr.toNativeInt mem + o, ptr + o, s)
-                    GL.FlushMappedNamedBufferRange(buffer.Handle, o, s)
-                ctx.UnmapBuffer(buffer)
+                if bounds then
+                    let ptr = ctx.MapBufferRange(buffer, 0n, nativeint (count * es), BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
+                    let bptr = ctx.MapBufferRange(bbuffer, 0n, nativeint (count * bs), BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
+                    for r in toUpload do
+                        let o = r.Min * es |> nativeint
+                        let s = (1 + r.Max - r.Min) * es |> nativeint
+                        Marshal.Copy(NativePtr.toNativeInt mem + o, ptr + o, s)
+                        GL.FlushMappedNamedBufferRange(buffer.Handle, o, s)
+                        
+                        let o = r.Min * bs |> nativeint
+                        let s = (1 + r.Max - r.Min) * bs |> nativeint
+                        Marshal.Copy(NativePtr.toNativeInt bmem + o, bptr + o, s)
+                        GL.FlushMappedNamedBufferRange(bbuffer.Handle, o, s)
+
+                    ctx.UnmapBuffer(buffer)
+                    ctx.UnmapBuffer(bbuffer)
+                else 
+                    let size = count * es
+                    let ptr = ctx.MapBufferRange(buffer, 0n, nativeint size, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
+                    for r in toUpload do
+                        let o = r.Min * es |> nativeint
+                        let s = (1 + r.Max - r.Min) * es |> nativeint
+                        Marshal.Copy(NativePtr.toNativeInt mem + o, ptr + o, s)
+                        GL.FlushMappedNamedBufferRange(buffer.Handle, o, s)
+                    ctx.UnmapBuffer(buffer)
+
 
         member x.Buffer =
             Aardvark.Rendering.GL.IndirectBufferExtensions.IndirectBuffer(buffer, count, sizeof<DrawCallInfo>, false)
 
+        member x.BoundsBuffer =
+            bbuffer
+
+       
+
+        member x.CompileRender(s : IAssemblerStream, useCulling : nativeptr<int>, mvp : nativeptr<M44f>, indexType : Option<_>, runtimeStats : nativeptr<_>, isActive : nativeptr<_>, mode : nativeptr<_>) =
+            if bounds then
+                let infoSlot = culling.Buffers |> List.pick (fun (a,b,c) -> if b = "infos" then Some a else None)
+                let boundSlot = culling.Buffers |> List.pick (fun (a,b,c) -> if b = "bounds" then Some a else None)
+                let uniformBlock = culling.UniformBlocks |> List.head
+                let viewProjField = uniformBlock.ubFields |> List.find (fun f -> f.ufName = "cs_viewProj")
+                let countField = uniformBlock.ubFields |> List.find (fun f -> f.ufName = "cs_count")
+                //let activeField = uniformBlock.ubFields |> List.find (fun f -> f.ufName = "cs_active")
+
+                let l = s.NewLabel()
+
+                s.Cmp(NativePtr.toNativeInt useCulling, 0)
+                s.Jump(JumpCondition.Equal, l)
+                s.NamedBufferSubData(ub.Handle, nativeint viewProjField.ufOffset, 64n, NativePtr.toNativeInt mvp)
+                s.NamedBufferSubData(ub.Handle, nativeint countField.ufOffset, 4n, NativePtr.toNativeInt bufferHandles + 8n)
+
+                s.Get(GetPName.CurrentProgram, oldProgram)
+                s.Get(GetIndexedPName.UniformBufferBinding, uniformBlock.ubBinding, oldUB)
+                s.GetPointer(GetIndexedPName.UniformBufferStart, uniformBlock.ubBinding, oldUBOffset)
+                s.GetPointer(GetIndexedPName.UniformBufferSize, uniformBlock.ubBinding, oldUBSize)
+
+                s.UseProgram(culling.Handle)
+                s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, infoSlot, NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 0n))
+                s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, boundSlot, NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 4n))
+                s.BindBufferBase(BufferRangeTarget.UniformBuffer, uniformBlock.ubBinding, ub.Handle)
+                s.DispatchCompute computeSize
+
+                s.UseProgram(oldProgram)
+                s.BindBufferRangeIndirect(BufferRangeTarget.UniformBuffer, uniformBlock.ubBinding, oldUB, oldUBOffset, oldUBSize)
+                s.Mark l
+
+
+            match indexType with
+                | Some indexType ->
+                    s.DrawElementsIndirect(runtimeStats, isActive, mode, int indexType, indirectHandle)
+                | _ -> 
+                    s.DrawArraysIndirect(runtimeStats, isActive, mode, indirectHandle)
+
+
         member x.Dispose() =
-            Interlocked.Add(&usedMemory.contents, int64 (-es * count)) |> ignore
-            Interlocked.Add(&totalMemory.contents, int64 (-es * capacity)) |> ignore
+            let ess = if bounds then es + bs else es
+            Interlocked.Add(&usedMemory.contents, int64 (-ess * count)) |> ignore
+            Interlocked.Add(&totalMemory.contents, int64 (-ess * capacity)) |> ignore
             NativePtr.free mem
             ctx.Delete buffer
+            if bounds then
+                NativePtr.free bmem
+                ctx.Delete bbuffer
             capacity <- 0
             mem <- NativePtr.zero
             buffer <- new Buffer(ctx, 0n, 0)
             dirty <- RangeSet.empty
             count <- 0
+            NativePtr.free indirectHandle
+            NativePtr.free computeSize
             drawIndices.Clear()
 
         interface IDisposable with
@@ -683,7 +915,7 @@ module Bla =
                     )
 
     type GeometryPool private(ctx : Context) =
-        static let instanceChunkSize = 1024
+        static let instanceChunkSize = 1 <<< 20
         static let vertexChunkSize = 1 <<< 20
         static let pools = System.Collections.Concurrent.ConcurrentDictionary<Context, GeometryPool>()
 
@@ -760,7 +992,7 @@ module Bla =
     open Aardvark.Rendering.GL.Compiler
     open Aardvark.Rendering.GL.RenderTasks
 
-    type DrawPool(ctx : Context, state : CompilerInfo -> PreparedPipelineState, pass : RenderPass) as this =
+    type DrawPool(ctx : Context, bounds : bool, useCulling : IMod<bool>, state : CompilerInfo -> PreparedPipelineState, pass : RenderPass) as this =
         inherit PreparedCommand(ctx, pass)
 
         static let initialIndirectSize = 256
@@ -785,49 +1017,63 @@ module Bla =
         let isActive = NativePtr.allocArray [| 1 |]
         let runtimeStats : nativeptr<V2i> = NativePtr.alloc 1
         let contextHandle : nativeptr<nativeint> = NativePtr.alloc 1
-        
+        let mvp : nativeptr<M44f> = NativePtr.alloc 1
+        let cullActive = NativePtr.allocArray [| (if useCulling.GetValue() then 1 else 0) |]
+
+        let mutable pProgramInterface = Unchecked.defaultof<GLSLProgramInterface>
+        let stateCache = Dict<CompilerInfo, PreparedPipelineState>()
+        let mvpCache = Dict<CompilerInfo, Resource<Trafo3d, M44f>>()
+        let getState (info : CompilerInfo) = 
+            stateCache.GetOrCreate(info, fun info ->
+                state info
+            )  
+            
+        let mvpResource (info : CompilerInfo) =
+            mvpCache.GetOrCreate(info, fun info ->
+                let s = getState info
+
+                let viewProj =
+                    match Uniforms.tryGetDerivedUniform "ModelViewProjTrafo" s.pUniformProvider with
+                    | Some (:? IMod<Trafo3d> as mvp) -> mvp
+                    | _ -> 
+                        match s.pUniformProvider.TryGetUniform(Ag.emptyScope, Symbol.Create "ModelViewProjTrafo") with
+                        | Some (:? IMod<Trafo3d> as mvp) -> mvp
+                        | _ -> Mod.constant Trafo3d.Identity
+
+                let res = 
+                    { new Resource<Trafo3d, M44f>(ResourceKind.UniformLocation) with
+                        member x.Create(t, rt, o) = viewProj.GetValue(t)
+                        member x.Destroy _ = ()
+                        member x.View t = t.Forward |> M44f.op_Explicit
+                        member x.GetInfo _ = ResourceInfo.Zero
+                    }
+
+                res.AddRef()
+                res.Update(AdaptiveToken.Top, RenderToken.Empty)
+
+                res
+            )
+
+
         let query : nativeptr<int> = NativePtr.allocArray [| 0 |]
         let startTime : nativeptr<uint64> = NativePtr.allocArray [| 0UL |]
         let endTime : nativeptr<uint64> = NativePtr.allocArray [| 0UL |]
         
-        let mutable pProgramInterface = Unchecked.defaultof<GLSLProgramInterface>
-        let stateCache = Dict<CompilerInfo, PreparedPipelineState>()
-        let getState (info : CompilerInfo) = 
-            stateCache.GetOrCreate(info, fun info ->
-                
-                //Log.start "info"
-                //Log.warn "contextHandle:    %A" (info.contextHandle)
-                //Log.warn "runtimeStats:     %A" (info.runtimeStats)
-                //Log.warn "currentContext:   %A" (info.currentContext.GetHashCode())
-                //Log.warn "drawBuffers:      %A" (info.drawBuffers)
-                //Log.warn "drawBufferCount:  %A" (info.drawBufferCount)
-                //Log.warn "structuralChange: %A" (info.structuralChange.GetHashCode())
-                //Log.warn "usedTextureSlots: %A" (info.usedTextureSlots.GetHashCode())
-                //Log.warn "usedUBSlots:      %A" (info.usedUniformBufferSlots.GetHashCode())
-                //Log.warn "task:             %A" (info.task.GetHashCode())
-                //Log.warn "tags:             %A" (info.tags.GetHashCode())
-                //Log.stop()
 
-                state info
-            )
 
 
         let usedMemory = ref 0L
         let totalMemory = ref 0L
         let avgRenderTime = RunningMean(10)
 
-        let compile (indexType : Option<DrawElementsType>, mode : nativeptr<GLBeginMode>, a : VertexInputBindingHandle, ib : nativeptr<V2i>) (s : IAssemblerStream) =
+        let compile (indexType : Option<DrawElementsType>, mode : nativeptr<GLBeginMode>, a : VertexInputBindingHandle, ib : IndirectBuffer) (s : IAssemblerStream) =
             s.BindVertexAttributes(contextHandle, a)
-            match indexType with
-                | Some indexType ->
-                    s.DrawElementsIndirect(runtimeStats, isActive, mode, int indexType, ib)
-                | _ -> 
-                    s.DrawArraysIndirect(runtimeStats, isActive, mode, ib)
-        
+            ib.CompileRender(s, cullActive, mvp, indexType, runtimeStats, isActive, mode)
+
         let indirects = Dict<_, IndirectBuffer>()
         let isOutdated = NativePtr.allocArray [| 1 |]
         let updateFun = Marshal.PinDelegate(System.Action(this.Update))
-        let mutable oldCalls : list<Option<DrawElementsType> * nativeptr<GLBeginMode> * VertexInputBindingHandle * nativeptr<V2i>> = []
+        let mutable oldCalls : list<Option<DrawElementsType> * nativeptr<GLBeginMode> * VertexInputBindingHandle * IndirectBuffer> = []
         let program = new ChangeableNativeProgram<_>(compile)
         let puller = AdaptiveObject()
         let sub = puller.AddMarkingCallback (fun () -> NativePtr.write isOutdated 1)
@@ -839,7 +1085,7 @@ module Bla =
         let getIndirectBuffer(slot : PoolSlot) =
             let key = getKey slot
             indirects.GetOrCreate(key, fun _ ->
-                new IndirectBuffer(ctx, Option.isSome slot.IndexType, initialIndirectSize, usedMemory, totalMemory)
+                new IndirectBuffer(ctx, bounds, Option.isSome slot.IndexType, initialIndirectSize, usedMemory, totalMemory)
             )
 
         let tryGetIndirectBuffer(slot : PoolSlot) =
@@ -848,6 +1094,11 @@ module Bla =
                 | (true, ib) -> Some ib
                 | _ -> None
                 
+                
+        member x.Add(ref : PoolSlot, bounds : Box3d) =
+            let ib = getIndirectBuffer ref
+            if ib.Add(ref.DrawCallInfo, bounds) then
+                mark()
 
         member x.Add(ref : PoolSlot) =
             let ib = getIndirectBuffer ref
@@ -884,10 +1135,16 @@ module Bla =
         member x.Update() =
             puller.EvaluateAlways AdaptiveToken.Top (fun token ->
                 puller.OutOfDate <- true
+
+                if useCulling.GetValue token then NativePtr.write cullActive 1
+                else NativePtr.write cullActive 0
+
                 x.Evaluate(token, pProgramInterface)
                 let rawResult = NativePtr.read endTime - NativePtr.read startTime
                 let ms = float rawResult / 1000000.0
                 avgRenderTime.Add ms
+
+
 
                 let calls = 
                     Dict.toList indirects |> List.map (fun ((mode, ib, vb, typeAndIndex), db) ->
@@ -936,20 +1193,16 @@ module Bla =
                         let beginMode = 
                             let bm = beginMode mode
                             NativePtr.allocArray [| GLBeginMode(int bm, 1) |]
+                            
 
-                        let indirect = 
-                            let ptr = NativePtr.alloc 1
-                            NativePtr.write ptr (V2i(db.Buffer.Buffer.Handle, db.Count))
-                            ptr
-
-                        indexType, beginMode, bufferBinding, indirect
+                        indexType, beginMode, bufferBinding, db
                     )
 
                 program.Clear()
                 for a in calls do program.Add a |> ignore
             
                 oldCalls |> List.iter (fun (_,beginMode,bufferBinding,indirect) -> 
-                    NativePtr.free beginMode; ctx.Delete bufferBinding; NativePtr.free indirect
+                    NativePtr.free beginMode; ctx.Delete bufferBinding
                 )
                 oldCalls <- calls
 
@@ -969,6 +1222,8 @@ module Bla =
             )
             
             let state = getState info
+            let mvpRes = mvpResource info
+
             pProgramInterface <- state.pProgramInterface
 
             let lastState = last |> Option.bind (fun l -> l.ExitState info)
@@ -990,6 +1245,13 @@ module Bla =
             stream.Copy(taskCtx, localCtx, sizeof<nativeint> = 8)
             
             stream.SetPipelineState(info, state, lastState)
+
+            let mutable src = NativePtr.toNativeInt (mvpRes :> IResource<_,_>).Pointer
+            let mutable dst = NativePtr.toNativeInt mvp
+            for i in 1 .. 16 do
+                stream.Copy(src, dst, false)
+                src <- src + 4n
+                dst <- dst + 4n
 
             stream.QueryTimestamp(query, startTime)
             stream.BeginCall(0)
@@ -1021,7 +1283,12 @@ module Bla =
                 | _ ->
                     ()
 
-        override x.GetResources(s) = getState(s).Resources
+        override x.GetResources(s) = 
+            let res = getState(s).Resources
+            let mvp = mvpResource s
+
+            Seq.append (Seq.singleton (mvp :> IResource)) res
+
         override x.EntryState s = Some (getState s)
         override x.ExitState s = Some (getState s)
 
@@ -1063,7 +1330,7 @@ module Bla =
             )
 
         let inner =
-            { new DrawPool(ctx, state, pass) with
+            { new DrawPool(ctx, false, Mod.constant false, state, pass) with
                 override x.Evaluate(token : AdaptiveToken, iface : GLSLProgramInterface) = evaluate x token iface
                 override __.AfterUpdate() = 
                     let used = this.UsedMemory 
@@ -1107,6 +1374,8 @@ module Bla =
 
         abstract member ShouldSplit : Trafo3d * Trafo3d -> bool
         abstract member ShouldCollapse : Trafo3d * Trafo3d -> bool
+
+        abstract member BoundingBox : Box3d
 
     type IPrediction<'a> =
         abstract member Predict : dt : MicroTime -> Option<'a>
@@ -1634,7 +1903,9 @@ module Bla =
             mutable count : int
         }
 
-    type LodRenderer(ctx : Context, signature : GLSLProgramInterface, state : CompilerInfo -> PreparedPipelineState, pass : RenderPass, roots : aset<ITreeNode>, renderTime : IMod<_>, view : IMod<Trafo3d>, proj : IMod<Trafo3d>)  =
+
+
+    type LodRenderer(ctx : Context, signature : GLSLProgramInterface, state : CompilerInfo -> PreparedPipelineState, pass : RenderPass, useCulling : IMod<bool>, roots : aset<ITreeNode>, renderTime : IMod<_>, view : IMod<Trafo3d>, proj : IMod<Trafo3d>)  =
         inherit PreparedCommand(ctx, pass)
 
         let timeWatch = System.Diagnostics.Stopwatch.StartNew()
@@ -1712,7 +1983,7 @@ module Bla =
             match op with
                 | Alloc(instance, active) ->
                     let slot = alloc state node instance
-                    if active > 0 then state.calls.Add slot |> ignore
+                    if active > 0 then state.calls.Add(slot, node.BoundingBox) |> ignore
                     elif active < 0 then state.calls.Remove slot |> ignore
                     //frees.Remove(node) |> ignore
 
@@ -1730,7 +2001,7 @@ module Bla =
                 | Activate ->
                     match cache.TryGetValue node with
                         | (true, slot) ->
-                            state.calls.Add slot |> ignore
+                            state.calls.Add(slot, node.BoundingBox) |> ignore
                         | _ ->
                             ()
                             //match frees.TryGetValue(node) with
@@ -1815,7 +2086,7 @@ module Bla =
         let inner =
             let mutable lastUsed = Mem.Zero
             let mutable lastTotal = Mem.Zero
-            { new DrawPool(ctx, state, pass) with
+            { new DrawPool(ctx, true, useCulling, state, pass) with
                 override x.Evaluate(token : AdaptiveToken, iface : GLSLProgramInterface) =
                     evaluate x token iface
             }
@@ -2283,6 +2554,11 @@ module StoreTree =
                     if self.HasLodColors then self.LodColors.GetValue(ct)
                     elif self.HasColors then self.Colors.GetValue(ct) 
                     else positions |> Array.map (fun _ -> C4b.White)
+                    
+                let normals = 
+                    if self.HasLodNormals then self.LodNormals.GetValue(ct)
+                    elif self.HasNormals then self.Normals.GetValue(ct) 
+                    else positions |> Array.map (fun _ -> V3f.OOI)
 
                 let geometry =
                     IndexedGeometry(
@@ -2291,13 +2567,14 @@ module StoreTree =
                             SymDict.ofList [
                                 DefaultSemantic.Positions, positions :> System.Array
                                 DefaultSemantic.Colors, colors :> System.Array
+                                DefaultSemantic.Normals, normals :> System.Array
                             ]
                     )
                 
                 let uniforms =
                     MapExt.ofList [
                         "TreeLevel", [| float32 level |] :> System.Array
-                        "AvgPointDistance", [| float32 (bounds.Size.NormMax / 20.0) |] :> System.Array
+                        "AvgPointDistance", [| float32 (bounds.Size.NormMax / 40.0) |] :> System.Array
                     ]
 
 
@@ -2309,7 +2586,7 @@ module StoreTree =
         member x.Id = self.Id
 
         member x.GetData(ct : CancellationToken) = 
-            Async.StartAsTask(loadSphere, cancellationToken = ct)
+            Async.StartAsTask(load, cancellationToken = ct)
             
         member x.ShouldSplit (view : Trafo3d, proj : Trafo3d) =
             let cam = view.Backward.C3.XYZ
@@ -2360,6 +2637,7 @@ module StoreTree =
             member x.ShouldCollapse(v,p) = x.ShouldCollapse(v,p)
             member x.DataSize = int self.LodPointCount
             member x.GetData(ct : CancellationToken) = x.GetData(ct)
+            member x.BoundingBox = bounds
 
         override x.GetHashCode() = 
             HashCode.Combine(x.DataSource.GetHashCode(), self.Id.GetHashCode())
@@ -2539,6 +2817,7 @@ type StupidOctreeNode(parent : Option<StupidOctreeNode>, level : int, bounds : B
         member x.ShouldCollapse (v,p) = shouldCollapse v p
         member x.DataSize = 1024
         member x.GetData(ct : CancellationToken) = Async.StartAsTask (getData ct, cancellationToken = ct)
+        member x.BoundingBox = bounds
 
 
 type StupidQuadTreeNode(parent : Option<StupidQuadTreeNode>, level : int, bounds : Box3d) as this =
@@ -2603,6 +2882,7 @@ type StupidQuadTreeNode(parent : Option<StupidQuadTreeNode>, level : int, bounds
         member x.ShouldCollapse (v,p) = not (shouldSplit v p)
         member x.DataSize = 1024
         member x.GetData(ct : CancellationToken) = Async.StartAsTask (getData ct, cancellationToken = ct)
+        member x.BoundingBox = bounds
 
 module CommandStreamGenerator =
     open System.Reflection
@@ -2924,6 +3204,77 @@ module Shader =
             return  { v with pos = v.pos + V4d(v.offset, 0.0)}
         }
         
+    
+    type PointVertex =
+        {
+            [<Position>] pos : V4d
+            [<Color>] color : V4d
+            [<Normal>] n : V3d
+            [<Semantic("ViewPosition")>] vp : V3d
+            [<Semantic("AvgPointDistance")>] dist : float
+            [<Semantic("DepthRange")>] depthRange : float
+            [<PointSize>] s : float
+            [<PointCoord; Interpolation(InterpolationMode.Sample)>] c : V2d
+            [<FragCoord>] fc : V4d
+        }
+
+    let lodPointSize (v : PointVertex) =
+        vertex { 
+            let ovp = uniform.ModelViewTrafo * v.pos 
+
+            let vp = ovp + V4d(0.0, 0.0, 0.5*v.dist, 0.0)
+            let vp1 = ovp + V4d(0.5 * v.dist, 0.0, 0.0, 0.0)
+
+            let pp = uniform.ProjTrafo * vp
+            let pp1 = uniform.ProjTrafo * vp1
+
+            let ndcDist = abs (pp.X / pp.W - pp1.X / pp1.W)
+            let depthRange = abs (pp.Z / pp.W - pp1.Z / pp1.W)
+
+            let pixelDist = ndcDist * float uniform.ViewportSize.X
+            let n = uniform.ModelViewTrafo * V4d(v.n, 0.0) |> Vec.xyz |> Vec.normalize
+            
+            let pp = 
+                if pp.Z < -pp.W then V4d(0,0,2,1)
+                else pp
+
+            return { v with s = pixelDist; pos = pp; depthRange = depthRange; n = n; vp = vp.XYZ }
+        }
+
+
+
+    type Fragment =
+        {
+            [<Color>] c : V4d
+            [<Depth(DepthWriteMode.OnlyGreater)>] d : float
+        }
+
+    let lodPointCircular (v : PointVertex) =
+        fragment {
+            let c = v.c * 2.0 - V2d.II
+            let f = Vec.dot c c
+            if f > 1.0 then discard()
+
+
+            let t = 1.0 - sqrt (1.0 - f)
+            let depth = v.fc.Z
+            let outDepth = depth + v.depthRange * t
+            
+
+            return { c = v.color; d = outDepth }
+        }
+
+    let cameraLight (v : PointVertex) =
+        fragment {
+            let vn = Vec.normalize v.n
+            let vd = Vec.normalize v.vp 
+
+            let diffuse = Vec.dot vn vd |> abs
+            return V4d(v.color.XYZ * diffuse, v.color.W)
+        }
+
+
+
 
     let normalColor ( v : Vertex) =
         fragment {
@@ -2943,7 +3294,7 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
-    use app = new OpenGlApplication(true, false)
+    use app = new OpenGlApplication(false, false)
     let win = app.CreateGameWindow(1)
     let runtime = app.Runtime
     let ctx = runtime.Context
@@ -2999,15 +3350,16 @@ let main argv =
     let surface =
         Surface.FShadeSimple (
             FShade.Effect.compose [
-                Shader.offset |> FShade.Effect.ofFunction
-                DefaultSurfaces.trafo |> FShade.Effect.ofFunction
+                //Shader.offset |> FShade.Effect.ofFunction
+                //DefaultSurfaces.trafo |> FShade.Effect.ofFunction
                 
-                //Shader.lodPointSize  |> FShade.Effect.ofFunction
+                Shader.lodPointSize  |> FShade.Effect.ofFunction
                 //DefaultSurfaces.pointSprite |> FShade.Effect.ofFunction
-                DefaultSurfaces.vertexColor |> FShade.Effect.ofFunction
+                Shader.cameraLight |> FShade.Effect.ofFunction
+                Shader.lodPointCircular |> FShade.Effect.ofFunction
                 //Shader.normalColor |> FShade.Effect.ofFunction
-                DefaultSurfaces.simpleLighting |> FShade.Effect.ofFunction
                 //DefaultSurfaces.pointSpriteFragment |> FShade.Effect.ofFunction
+                //DefaultSurfaces.simpleLighting |> FShade.Effect.ofFunction
             ]
         )
 
@@ -3059,17 +3411,23 @@ let main argv =
             //yield StoreTree.load "local" (Trafo3d.Translation(150.0, 0.0, 0.0)) @"C:\Users\Schorsch\Development\WorkDirectory\KaunertalStore" "kaunertal" :> Bla.ITreeNode
             
             // let import (sourceName : string) (trafo : Trafo3d) (file : string) (store : string) (key : string
-            yield StoreTree.import 
-                "blibb" 
-                (Trafo3d.Translation(0.0, 0.0, 0.0)) 
-                @"C:\Users\Schorsch\Development\WorkDirectory\Kindergarten.pts" 
-                @"C:\Users\Schorsch\Development\WorkDirectory\blubber" 
+            //yield StoreTree.import 
+            //    "blibb" 
+            //    (Trafo3d.Translation(0.0, 0.0, 0.0)) 
+            //    @"C:\Users\Schorsch\Development\WorkDirectory\Kindergarten.pts" 
+            //    @"C:\Users\Schorsch\Development\WorkDirectory\blubber" 
 
-            //yield StoreTree.importAscii
-            //    "bla"
-            //    (Trafo3d.Translation(40.0, 0.0, 0.0)) 
-            //    @"C:\Users\Schorsch\Development\WorkDirectory\Kaunertal.txt"
-            //    @"C:\Users\Schorsch\Development\WorkDirectory\KaunertalNormals"
+            yield StoreTree.importAscii
+                "bla"
+                (Trafo3d.Translation(0.0, 0.0, 0.0)) 
+                @"C:\Users\Schorsch\Development\WorkDirectory\Kaunertal.txt"
+                @"C:\Users\Schorsch\Development\WorkDirectory\KaunertalNormals"
+                
+            yield StoreTree.import
+                "bla"
+                (Trafo3d.Translation(100.0, 0.0, 0.0)) 
+                @"C:\Users\Schorsch\Development\WorkDirectory\Technologiezentrum_Teil1.pts"
+                @"C:\Users\Schorsch\Development\WorkDirectory\Technologiezentrum"
 
 
             //for x in 0 .. 4 do
@@ -3079,8 +3437,17 @@ let main argv =
             //        yield StupidOctreeNode(None,0,box) :> Bla.ITreeNode
         ]
 
+    let useCulling = Mod.init false
+    win.Keyboard.KeyDown(Keys.C).Values.Add(fun () ->
+        transact (fun () -> useCulling.Value <- not useCulling.Value)
+        Log.warn "culling: %A" useCulling.Value
+    )
 
-    let lod = new Bla.LodRenderer(ctx, defaultState.pProgramInterface, preparedState, RenderPass.main, stupids, win.Time, lodView, proj) 
+    win.Keyboard.KeyDown(Keys.X).Values.Add(fun () ->
+        win.RenderAsFastAsPossible <- not win.RenderAsFastAsPossible
+    )
+
+    let lod = new Bla.LodRenderer(ctx, defaultState.pProgramInterface, preparedState, RenderPass.main, useCulling, stupids, win.Time, lodView, proj) 
   
     
     let lodProj =

@@ -18,6 +18,8 @@ open Aardvark.Rendering.GL
 
 #nowarn "9"
 
+open Aardvark.Base.Runtime
+
 [<SuppressUnmanagedCodeSecurity>]
 type private DispatchComputeGroupSizeARBDelegate = delegate of uint32 * uint32 * uint32 * uint32 * uint32 * uint32 -> unit
 
@@ -87,6 +89,22 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
 
             b.ubBinding, buffer
         )
+
+    member x.CompileBind(stream : IAssemblerStream) =
+        for (l, b) in uniformBuffers do
+            ctx.Upload b
+            stream.BindBufferRange(BufferRangeTarget.UniformBuffer, l, b.Handle, 0n, nativeint b.Size)
+        
+        for (KeyValue(slot, (b, o, s))) in inputBuffers do
+            stream.BindBufferRange(BufferRangeTarget.ShaderStorageBuffer, slot, b.Handle, o, s)
+            
+        for (KeyValue(l, (tex, level, layered, layer))) in inputImages do
+            stream.BindImageTexture(l, tex.Handle, level, layered, layer, TextureAccess.ReadWrite, tex.Format)
+            
+        for (KeyValue(l, (target, tex, sampler))) in inputSamplers do
+            stream.SetActiveTexture(int (TextureUnit.Texture0 + unbox l))
+            stream.BindTexture(target, tex.Handle)
+            stream.BindSampler(l, sampler.Handle)
 
     member internal x.Bind(boundThings : HashSet<Bound>) =
         for (l, b) in uniformBuffers do

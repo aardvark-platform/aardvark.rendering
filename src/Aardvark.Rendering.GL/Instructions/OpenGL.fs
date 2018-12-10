@@ -466,6 +466,14 @@ module OpenGl =
         /// </summary>
         let BindProgram  = getProcAddress "glUseProgram"
 
+        let DispatchCompute = getProcAddress "glDispatchCompute"
+        let GetInteger = getProcAddress "glGetIntegerv"
+        let GetIndexedInteger = getProcAddress "glGetIntegeri_v"
+        let GetIndexedInteger64 = getProcAddress "glGetInteger64i_v"
+
+        let NamedBufferData = getProcAddress "glNamedBufferData"
+        let NamedBufferSubData = getProcAddress "glNamedBufferSubData"
+
         /// <summary>
         /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glActiveTexture.xml
         /// </summary>
@@ -490,6 +498,7 @@ module OpenGl =
         /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindBufferBase.xml
         /// </summary>
         let BindBufferBase  = getProcAddress "glBindBufferBase"
+        
 
         /// <summary>
         /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindBufferRange.xml

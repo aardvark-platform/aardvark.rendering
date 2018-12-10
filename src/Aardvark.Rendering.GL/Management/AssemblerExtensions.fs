@@ -146,10 +146,55 @@ module GLAssemblerExtensions =
              x.PushIntArg(NativePtr.toNativeInt m.Pointer)
              x.Call(OpenGl.Pointers.BindProgram)
              
+        member x.UseProgram(m : nativeptr<int>) =
+             x.BeginCall(1)
+             x.PushIntArg(NativePtr.toNativeInt m)
+             x.Call(OpenGl.Pointers.BindProgram)
+             
         member x.UseProgram(p : int) =
              x.BeginCall(1)
              x.PushArg(p)
              x.Call(OpenGl.Pointers.BindProgram)
+             
+        member x.Get(pname : GetPName, ptr : nativeptr<int>) =
+             x.BeginCall(2)
+             x.PushArg(NativePtr.toNativeInt ptr)
+             x.PushArg(int pname)
+             x.Call(OpenGl.Pointers.GetInteger)
+             
+        member x.Get(pname : GetIndexedPName, index : int, ptr : nativeptr<int>) =
+             x.BeginCall(3)
+             x.PushArg(NativePtr.toNativeInt ptr)
+             x.PushArg(index)
+             x.PushArg(int pname)
+             x.Call(OpenGl.Pointers.GetIndexedInteger)
+
+        member x.GetPointer(pname : GetIndexedPName, index : int, ptr : nativeptr<nativeint>) =
+            x.BeginCall(3)
+            x.PushArg(NativePtr.toNativeInt ptr)
+            x.PushArg(index)
+            x.PushArg(int pname)
+            if sizeof<nativeint> = 8 then
+                x.Call(OpenGl.Pointers.GetIndexedInteger64)
+            else
+                x.Call(OpenGl.Pointers.GetIndexedInteger)
+                
+
+
+
+        member x.DispatchCompute(gx : int, gy : int, gz : int) =
+            x.BeginCall(3)
+            x.PushArg gz
+            x.PushArg gy
+            x.PushArg gx
+            x.Call OpenGl.Pointers.DispatchCompute
+            
+        member x.DispatchCompute(groups : nativeptr<V3i>) =
+            x.BeginCall(3)
+            x.PushIntArg (NativePtr.toNativeInt groups + 8n)
+            x.PushIntArg (NativePtr.toNativeInt groups + 4n)
+            x.PushIntArg (NativePtr.toNativeInt groups + 0n)
+            x.Call OpenGl.Pointers.DispatchCompute
 
         member x.Enable(v : int) =
              x.BeginCall(1)
@@ -160,6 +205,55 @@ module GLAssemblerExtensions =
              x.BeginCall(1)
              x.PushArg(v)
              x.Call(OpenGl.Pointers.Disable)
+
+        member x.BindBufferRange(target : BufferRangeTarget, slot : int, b : int, offset : nativeint, size : nativeint) =
+            x.BeginCall(5)
+            x.PushArg(size)
+            x.PushArg(offset)
+            x.PushArg(b)
+            x.PushArg(slot)
+            x.PushArg(int target)
+            x.Call(OpenGl.Pointers.BindBufferRange)
+            
+        member x.BindBufferRangeIndirect(target : BufferRangeTarget, slot : int, b : nativeptr<int>, offset : nativeptr<nativeint>, size : nativeptr<nativeint>) =
+            x.BeginCall(5)
+            x.PushPtrArg(NativePtr.toNativeInt size)
+            x.PushPtrArg(NativePtr.toNativeInt offset)
+            x.PushIntArg(NativePtr.toNativeInt b)
+            x.PushArg(slot)
+            x.PushArg(int target)
+            x.Call(OpenGl.Pointers.BindBufferRange)
+
+        member x.BindBufferBase(target : BufferRangeTarget, slot : int, b : int) =
+            x.BeginCall(3)
+            x.PushArg(b)
+            x.PushArg(slot)
+            x.PushArg(int target)
+            x.Call(OpenGl.Pointers.BindBufferBase)
+            
+        member x.BindBufferBase(target : BufferRangeTarget, slot : int, b : nativeptr<int>) =
+            x.BeginCall(3)
+            x.PushIntArg(NativePtr.toNativeInt b)
+            x.PushArg(slot)
+            x.PushArg(int target)
+            x.Call(OpenGl.Pointers.BindBufferBase)
+
+        member x.NamedBufferData(buffer : int, size : nativeint, data : nativeint, usage : BufferUsageHint) =
+            x.BeginCall(4)
+            x.PushArg (int usage)
+            x.PushArg data
+            x.PushArg size
+            x.PushArg buffer
+            x.Call(OpenGl.Pointers.NamedBufferData)
+
+            
+        member x.NamedBufferSubData(buffer : int, offset : nativeint, size : nativeint, data : nativeint) =
+            x.BeginCall(4)
+            x.PushArg data
+            x.PushArg size
+            x.PushArg offset
+            x.PushArg buffer
+            x.Call(OpenGl.Pointers.NamedBufferSubData)
 
         member x.BindUniformBufferView(slot : int, view : IResource<UniformBufferView, int>) =
             let v = view.Handle.GetValue()
@@ -189,6 +283,12 @@ module GLAssemblerExtensions =
             x.PushArg(int OpenGl.Enums.TextureUnit.Texture0 + slot)
             x.Call(OpenGl.Pointers.ActiveTexture)
             
+        member x.BindTexture (target : TextureTarget, t : int) =
+            x.BeginCall(2)
+            x.PushArg(t)
+            x.PushArg(int target)
+            x.Call(OpenGl.Pointers.BindTexture)
+
         member x.BindTexture (texture : IResource<Texture, V2i>) =
             x.BeginCall(2)
             x.PushIntArg(texture.Pointer |> NativePtr.toNativeInt)
@@ -208,6 +308,13 @@ module GLAssemblerExtensions =
             x.PushArg(int name)
             x.PushArg(target)
             x.Call(OpenGl.Pointers.TexParameterf)
+
+        member x.BindSampler (slot : int, sampler : int) =
+            x.BeginCall(2)
+            x.PushArg(sampler)
+            x.PushArg(slot)
+            x.Call(OpenGl.Pointers.BindSampler)
+        
 
         member x.BindSampler (slot : int, sampler : IResource<Sampler, int>) =
             if ExecutionContext.samplersSupported then
@@ -242,6 +349,17 @@ module GLAssemblerExtensions =
                 x.PushArg(handle.count)
                 x.PushArg(handle.offset)
                 x.Call(OpenGl.Pointers.HBindSamplers)            
+
+        member x.BindImageTexture(unit : int, texture : int, level : int, layered : bool, layer : int, access : TextureAccess, format : TextureFormat) =
+            x.BeginCall(7)
+            x.PushArg(int format)
+            x.PushArg(int access)
+            x.PushArg(layer)
+            x.PushArg(if layered then 1 else 0)
+            x.PushArg(level)
+            x.PushArg(texture)
+            x.PushArg(unit)
+            x.Call(OpenGl.Pointers.BindImageTexture)
 
         member x.Uniform1fv(location : int, cnt : int, ptr : nativeint) =
             x.BeginCall(3)
