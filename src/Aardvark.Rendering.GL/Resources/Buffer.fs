@@ -29,23 +29,8 @@ type Buffer =
         val mutable public Handle : int
         val mutable public Context : Context
         val mutable public SizeInBytes : nativeint
-            
-        member x.Validate() =
-            using x.Context.ResourceLock (fun _ ->
-                validate {
-                    do! requires (GL.IsBuffer x.Handle) "not a buffer object"
-                    
-                    let mutable r = 0L
-                    GL.GetNamedBufferParameter(x.Handle, BufferParameterName.BufferSize, &r)
-                    do! eq r (int64 x.SizeInBytes) "invalid buffer size"
+        
 
-                }
-            )
-
-        interface IContextChild with
-            member x.Context = x.Context
-            member x.Handle = x.Handle
-            
         interface IBackendBuffer with
             member x.Runtime = x.Context.Runtime :> IBufferRuntime
             member x.Handle = x.Handle :> obj
@@ -473,20 +458,6 @@ module BufferExtensions =
             x.DownloadRange(buffer, arr, 0, 0, arr.Length)
             arr
 
-    /// <summary>
-    /// extends ExecutionContext with functions for binding/unbinding
-    /// buffers. 
-    /// </summary>
-    module ExecutionContext =
-        let bindBuffer (target : BufferTarget) (b : Buffer) =
-            [
-                yield Instruction.BindBuffer (int target) b.Handle
-            ]
-
-        let unbindBuffer (target : BufferTarget) =
-            [
-                yield Instruction.BindBuffer (int target) 0
-            ]
 
 [<AutoOpen>]
 module IndirectBufferExtensions =

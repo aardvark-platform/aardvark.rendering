@@ -12,4 +12,5 @@ Unofficial.OpenVR
 FShade.Debug
 Aardvark.Geometry.PointSet
 Aardvark.Data.Points.Ascii
+Aardvark.Data.E57
 Aardvark.Geometry.Normals

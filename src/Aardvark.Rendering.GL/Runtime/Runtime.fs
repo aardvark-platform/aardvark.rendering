@@ -637,8 +637,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 failwith "[GL] static sorting not implemented"
 
     member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) : IPreparedRenderObject =
-        //PreparedCommand.ofRenderObject fboSignature manager rj :> IPreparedRenderObject
-        failwith "[GL] currently broken"
+        PreparedCommand.ofRenderObject fboSignature manager rj :> IPreparedRenderObject
         //match rj with
         //     | :? RenderTaskObject as t -> t :> IPreparedRenderObject
         //     | :? RenderObject as rj -> manager.Prepare(fboSignature, rj) :> IPreparedRenderObject
@@ -756,7 +755,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         match t with
             | :? Texture as t ->
                 if t.MipMapLevels > 1 then
-                    let target = ExecutionContext.getTextureTarget t
+                    let target = Uploads.getTextureTarget t
                     using ctx.ResourceLock (fun _ ->
                         GL.BindTexture(target, t.Handle)
                         GL.Check "could not bind texture"

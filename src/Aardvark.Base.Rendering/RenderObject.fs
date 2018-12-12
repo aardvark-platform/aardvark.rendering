@@ -465,22 +465,14 @@ module Geometry =
 type RuntimeCommand =
     | EmptyCmd
     | RenderCmd of objects : aset<IRenderObject>
-
-    
-    //| ViewDependentCmd of sort : (Trafo3d -> Trafo3d -> IRenderObject[] -> IRenderObject[]) * objects : aset<IRenderObject>
-
-    | GeometriesCmd of surface : Surface * pipeline : PipelineState * geometries : aset<Geometry>
-    | LodTreeCmd of surface : Surface * pipeline : PipelineState * geometries : LodTreeLoader<Geometry>
-
-    //| RenderMany of PipelineState * aset<Geometry>
-    //| RenderDynamic of PipelineState * Config * IMod<Tree<Geometry>>
-    
-    | DispatchCmd of shader : IComputeShader * groups : IMod<V3i> * arguments : Map<string, obj>
-    | ClearCmd of colors : Map<Symbol, IMod<C4f>> * depth : Option<IMod<float>> * stencil : Option<IMod<uint32>>
-
     | OrderedCmd of commands : alist<RuntimeCommand>
     | IfThenElseCmd of condition : IMod<bool> * ifTrue : RuntimeCommand * ifFalse : RuntimeCommand
+    | ClearCmd of colors : Map<Symbol, IMod<C4f>> * depth : Option<IMod<float>> * stencil : Option<IMod<uint32>>
+    
 
+    | DispatchCmd of shader : IComputeShader * groups : IMod<V3i> * arguments : Map<string, obj>
+    | GeometriesCmd of surface : Surface * pipeline : PipelineState * geometries : aset<Geometry>
+    | LodTreeCmd of surface : Surface * pipeline : PipelineState * geometries : LodTreeLoader<Geometry>
     | GeometriesSimpleCmd of effect : FShade.Effect * pipeline : PipelineState * geometries : aset<IndexedGeometry>
 
     static member Empty = RuntimeCommand.EmptyCmd

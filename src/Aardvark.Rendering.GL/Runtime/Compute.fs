@@ -90,7 +90,7 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
             b.ubBinding, buffer
         )
 
-    member x.CompileBind(stream : IAssemblerStream) =
+    member x.CompileBind(stream : ICommandStream) =
         for (l, b) in uniformBuffers do
             ctx.Upload b
             stream.BindBufferRange(BufferRangeTarget.UniformBuffer, l, b.Handle, 0n, nativeint b.Size)

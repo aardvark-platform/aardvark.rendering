@@ -171,14 +171,3 @@ module SamplerExtensions =
                     GL.DeleteSampler(s.Handle)
                     GL.Check "could not delete sampler"
                 )
-
-
-    module ExecutionContext =
-        let bindSampler (index : int) (s : Sampler) =
-            seq {
-                if ExecutionContext.samplersSupported then
-                    yield Instruction.BindSampler index s.Handle
-                else
-                    yield Instruction.ActiveTexture (int TextureUnit.Texture0 + index)
-                    failwith "not implemented"
-            }

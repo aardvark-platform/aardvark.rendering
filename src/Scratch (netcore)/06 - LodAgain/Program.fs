@@ -765,36 +765,32 @@ module Bla =
 
        
 
-        member x.CompileRender(s : IAssemblerStream, useCulling : nativeptr<int>, mvp : nativeptr<M44f>, indexType : Option<_>, runtimeStats : nativeptr<_>, isActive : nativeptr<_>, mode : nativeptr<_>) =
+        member x.CompileRender(s : ICommandStream, useCulling : nativeptr<int>, mvp : nativeptr<M44f>, indexType : Option<_>, runtimeStats : nativeptr<_>, isActive : nativeptr<_>, mode : nativeptr<_>) =
             if bounds then
                 let infoSlot = culling.Buffers |> List.pick (fun (a,b,c) -> if b = "infos" then Some a else None)
                 let boundSlot = culling.Buffers |> List.pick (fun (a,b,c) -> if b = "bounds" then Some a else None)
                 let uniformBlock = culling.UniformBlocks |> List.head
                 let viewProjField = uniformBlock.ubFields |> List.find (fun f -> f.ufName = "cs_viewProj")
                 let countField = uniformBlock.ubFields |> List.find (fun f -> f.ufName = "cs_count")
-                //let activeField = uniformBlock.ubFields |> List.find (fun f -> f.ufName = "cs_active")
 
-                let l = s.NewLabel()
+                s.Conditional(useCulling, fun s ->
+                    s.NamedBufferSubData(ub.Handle, nativeint viewProjField.ufOffset, 64n, NativePtr.toNativeInt mvp)
+                    s.NamedBufferSubData(ub.Handle, nativeint countField.ufOffset, 4n, NativePtr.toNativeInt bufferHandles + 8n)
 
-                s.Cmp(NativePtr.toNativeInt useCulling, 0)
-                s.Jump(JumpCondition.Equal, l)
-                s.NamedBufferSubData(ub.Handle, nativeint viewProjField.ufOffset, 64n, NativePtr.toNativeInt mvp)
-                s.NamedBufferSubData(ub.Handle, nativeint countField.ufOffset, 4n, NativePtr.toNativeInt bufferHandles + 8n)
+                    s.Get(GetPName.CurrentProgram, oldProgram)
+                    s.Get(GetIndexedPName.UniformBufferBinding, uniformBlock.ubBinding, oldUB)
+                    s.Get(GetIndexedPName.UniformBufferStart, uniformBlock.ubBinding, oldUBOffset)
+                    s.Get(GetIndexedPName.UniformBufferSize, uniformBlock.ubBinding, oldUBSize)
 
-                s.Get(GetPName.CurrentProgram, oldProgram)
-                s.Get(GetIndexedPName.UniformBufferBinding, uniformBlock.ubBinding, oldUB)
-                s.GetPointer(GetIndexedPName.UniformBufferStart, uniformBlock.ubBinding, oldUBOffset)
-                s.GetPointer(GetIndexedPName.UniformBufferSize, uniformBlock.ubBinding, oldUBSize)
+                    s.UseProgram(culling.Handle)
+                    s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, infoSlot, NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 0n))
+                    s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, boundSlot, NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 4n))
+                    s.BindBufferBase(BufferRangeTarget.UniformBuffer, uniformBlock.ubBinding, ub.Handle)
+                    s.DispatchCompute computeSize
 
-                s.UseProgram(culling.Handle)
-                s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, infoSlot, NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 0n))
-                s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, boundSlot, NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 4n))
-                s.BindBufferBase(BufferRangeTarget.UniformBuffer, uniformBlock.ubBinding, ub.Handle)
-                s.DispatchCompute computeSize
-
-                s.UseProgram(oldProgram)
-                s.BindBufferRangeIndirect(BufferRangeTarget.UniformBuffer, uniformBlock.ubBinding, oldUB, oldUBOffset, oldUBSize)
-                s.Mark l
+                    s.UseProgram(oldProgram)
+                    s.BindBufferRange(BufferRangeTarget.UniformBuffer, uniformBlock.ubBinding, oldUB, oldUBOffset, oldUBSize)
+                )
 
 
             match indexType with
@@ -989,10 +985,8 @@ module Bla =
                 | None -> ()
 
   
-    open Aardvark.Rendering.GL.Compiler
-    open Aardvark.Rendering.GL.RenderTasks
 
-    type DrawPool(ctx : Context, bounds : bool, useCulling : IMod<bool>, state : CompilerInfo -> PreparedPipelineState, pass : RenderPass) as this =
+    type DrawPool(ctx : Context, bounds : bool, useCulling : IMod<bool>, state : PreparedPipelineState, pass : RenderPass) as this =
         inherit PreparedCommand(ctx, pass)
 
         static let initialIndirectSize = 256
@@ -1017,42 +1011,33 @@ module Bla =
         let isActive = NativePtr.allocArray [| 1 |]
         let runtimeStats : nativeptr<V2i> = NativePtr.alloc 1
         let contextHandle : nativeptr<nativeint> = NativePtr.alloc 1
-        let mvp : nativeptr<M44f> = NativePtr.alloc 1
         let cullActive = NativePtr.allocArray [| (if useCulling.GetValue() then 1 else 0) |]
 
-        let mutable pProgramInterface = Unchecked.defaultof<GLSLProgramInterface>
-        let stateCache = Dict<CompilerInfo, PreparedPipelineState>()
-        let mvpCache = Dict<CompilerInfo, Resource<Trafo3d, M44f>>()
-        let getState (info : CompilerInfo) = 
-            stateCache.GetOrCreate(info, fun info ->
-                state info
-            )  
-            
-        let mvpResource (info : CompilerInfo) =
-            mvpCache.GetOrCreate(info, fun info ->
-                let s = getState info
+        let pProgramInterface = state.pProgramInterface
 
-                let viewProj =
-                    match Uniforms.tryGetDerivedUniform "ModelViewProjTrafo" s.pUniformProvider with
+        let mvpResource=
+            let s = state
+
+            let viewProj =
+                match Uniforms.tryGetDerivedUniform "ModelViewProjTrafo" s.pUniformProvider with
+                | Some (:? IMod<Trafo3d> as mvp) -> mvp
+                | _ -> 
+                    match s.pUniformProvider.TryGetUniform(Ag.emptyScope, Symbol.Create "ModelViewProjTrafo") with
                     | Some (:? IMod<Trafo3d> as mvp) -> mvp
-                    | _ -> 
-                        match s.pUniformProvider.TryGetUniform(Ag.emptyScope, Symbol.Create "ModelViewProjTrafo") with
-                        | Some (:? IMod<Trafo3d> as mvp) -> mvp
-                        | _ -> Mod.constant Trafo3d.Identity
+                    | _ -> Mod.constant Trafo3d.Identity
 
-                let res = 
-                    { new Resource<Trafo3d, M44f>(ResourceKind.UniformLocation) with
-                        member x.Create(t, rt, o) = viewProj.GetValue(t)
-                        member x.Destroy _ = ()
-                        member x.View t = t.Forward |> M44f.op_Explicit
-                        member x.GetInfo _ = ResourceInfo.Zero
-                    }
+            let res = 
+                { new Resource<Trafo3d, M44f>(ResourceKind.UniformLocation) with
+                    member x.Create(t, rt, o) = viewProj.GetValue(t)
+                    member x.Destroy _ = ()
+                    member x.View t = t.Forward |> M44f.op_Explicit
+                    member x.GetInfo _ = ResourceInfo.Zero
+                }
 
-                res.AddRef()
-                res.Update(AdaptiveToken.Top, RenderToken.Empty)
+            res.AddRef()
+            res.Update(AdaptiveToken.Top, RenderToken.Empty)
 
-                res
-            )
+            res :> IResource<_,_>
 
 
         let query : nativeptr<int> = NativePtr.allocArray [| 0 |]
@@ -1066,15 +1051,15 @@ module Bla =
         let totalMemory = ref 0L
         let avgRenderTime = RunningMean(10)
 
-        let compile (indexType : Option<DrawElementsType>, mode : nativeptr<GLBeginMode>, a : VertexInputBindingHandle, ib : IndirectBuffer) (s : IAssemblerStream) =
+        let compile (indexType : Option<DrawElementsType>, mode : nativeptr<GLBeginMode>, a : VertexInputBindingHandle, ib : IndirectBuffer) (s : ICommandStream) =
             s.BindVertexAttributes(contextHandle, a)
-            ib.CompileRender(s, cullActive, mvp, indexType, runtimeStats, isActive, mode)
+            ib.CompileRender(s, cullActive, mvpResource.Pointer, indexType, runtimeStats, isActive, mode)
 
         let indirects = Dict<_, IndirectBuffer>()
         let isOutdated = NativePtr.allocArray [| 1 |]
         let updateFun = Marshal.PinDelegate(System.Action(this.Update))
         let mutable oldCalls : list<Option<DrawElementsType> * nativeptr<GLBeginMode> * VertexInputBindingHandle * IndirectBuffer> = []
-        let program = new ChangeableNativeProgram<_>(compile)
+        let program = new ChangeableNativeProgram<_>(fun a s -> compile a (AssemblerCommandStream s))
         let puller = AdaptiveObject()
         let sub = puller.AddMarkingCallback (fun () -> NativePtr.write isOutdated 1)
         let tasks = System.Collections.Generic.HashSet<IRenderTask>()
@@ -1215,148 +1200,52 @@ module Bla =
                 x.AfterUpdate()
             )
 
-        override x.Compile(info : CompilerInfo, stream : IAssemblerStream, last : Option<PreparedCommand>) =
+        override x.Compile(info : CompilerInfo, stream : ICommandStream, last : Option<PreparedCommand>) =
             lock puller (fun () ->
                 if tasks.Add info.task then
                     assert (info.task.OutOfDate)
                     puller.AddOutput(info.task) |> ignore
             )
             
-            let state = getState info
-            let mvpRes = mvpResource info
+            let mvpRes = mvpResource
+            let lastState = last |> Option.bind (fun l -> l.ExitState)
 
-            pProgramInterface <- state.pProgramInterface
-
-            let lastState = last |> Option.bind (fun l -> l.ExitState info)
-
-            let label = stream.NewLabel()
-            stream.Cmp(NativePtr.toNativeInt isOutdated, 0)
-            stream.Jump(JumpCondition.Equal, label)
-            stream.BeginCall(0)
-            stream.Call(updateFun.Pointer)
-            stream.Mark(label)
+            stream.ConditionalCall(isOutdated, updateFun.Pointer)
             
-            let taskStats = NativePtr.toNativeInt info.runtimeStats
-            let localStats = NativePtr.toNativeInt runtimeStats
-
-            let taskCtx = NativePtr.toNativeInt info.contextHandle
-            let localCtx = NativePtr.toNativeInt contextHandle
-
-            stream.Copy(taskStats, localStats, true)
-            stream.Copy(taskCtx, localCtx, sizeof<nativeint> = 8)
+            stream.Copy(info.runtimeStats, runtimeStats)
+            stream.Copy(info.contextHandle, contextHandle)
             
             stream.SetPipelineState(info, state, lastState)
-
-            let mutable src = NativePtr.toNativeInt (mvpRes :> IResource<_,_>).Pointer
-            let mutable dst = NativePtr.toNativeInt mvp
-            for i in 1 .. 16 do
-                stream.Copy(src, dst, false)
-                src <- src + 4n
-                dst <- dst + 4n
-
+            
             stream.QueryTimestamp(query, startTime)
-            stream.BeginCall(0)
             stream.CallIndirect(program.EntryPointer)
             stream.QueryTimestamp(query, endTime)
 
-            stream.Copy(localStats, taskStats, true)
+            stream.Copy(runtimeStats, info.runtimeStats)
 
-        override x.Release(s) =
-            match stateCache.TryRemove s with
-                | (true, state) ->
-                    state.Dispose()
-                    
-                    if stateCache.Count = 0 then
-                        for ib in indirects.Values do ib.Dispose()
-                        indirects.Clear()
-                        updateFun.Dispose()
-                        NativePtr.free isActive
-                        NativePtr.free isOutdated
-                        NativePtr.free runtimeStats
-                        NativePtr.free contextHandle
+        override x.Release() =
+            state.Dispose()
+            for ib in indirects.Values do ib.Dispose()
+            indirects.Clear()
+            updateFun.Dispose()
+            NativePtr.free isActive
+            NativePtr.free isOutdated
+            NativePtr.free runtimeStats
+            NativePtr.free contextHandle
 
-                        NativePtr.free startTime
-                        NativePtr.free endTime
-                        NativePtr.free query
+            NativePtr.free startTime
+            NativePtr.free endTime
+            NativePtr.free query
 
-                        program.Dispose()
-                        oldCalls <- []
-                | _ ->
-                    ()
-
-        override x.GetResources(s) = 
-            let res = getState(s).Resources
-            let mvp = mvpResource s
-
-            Seq.append (Seq.singleton (mvp :> IResource)) res
-
-        override x.EntryState s = Some (getState s)
-        override x.ExitState s = Some (getState s)
-
-    type ManyGeomtries(ctx : Context, state : CompilerInfo -> PreparedPipelineState, pass : RenderPass, geometries : aset<IndexedGeometry * MapExt<string, Array>>) as this =
-        inherit PreparedCommand(ctx, pass)
-
-        let pool = GeometryPool.Get(ctx)
-
-        let sw = System.Diagnostics.Stopwatch.StartNew()
-        let reader = geometries.GetReader()
-        let cache = Dict<IndexedGeometry * MapExt<string, Array>, PoolSlot>()
-        let inactive = Dict<IndexedGeometry * MapExt<string, Array>, MicroTime * PoolSlot>()
-
-
-        let evaluate (draws : DrawPool) (token : AdaptiveToken) (iface : GLSLProgramInterface) =
-            let ops = reader.GetOperations token
-
-            ops |> HDeltaSet.iter (fun op ->
-                match op with
-                    | Add(_, (g,u)) ->
-                        match inactive.TryRemove ((g,u)) with
-                            | (true, (t,slot)) ->
-                                Log.warn "revived after %A (%A)" (sw.MicroTime - t) pool.TotalMemory
-                                cache.[(g,u)] <- slot
-                                draws.Add slot
-                            | _ -> 
-                                let slot = pool.Alloc(iface, g, u)
-                                cache.[(g,u)] <- slot
-                                draws.Add slot
-
-                    | Rem(_, (g,u)) ->
-                        match cache.TryRemove((g,u)) with
-                            | (true, slot) ->
-                                draws.Remove(slot) |> ignore
-                                //inactive.[(g,u)] <- (sw.MicroTime, slot)
-                                pool.Free slot
-                            | _ ->  
-                                ()
-            )
-
-        let inner =
-            { new DrawPool(ctx, false, Mod.constant false, state, pass) with
-                override x.Evaluate(token : AdaptiveToken, iface : GLSLProgramInterface) = evaluate x token iface
-                override __.AfterUpdate() = 
-                    let used = this.UsedMemory 
-                    let total = this.TotalMemory
-                    if total <> Mem.Zero then
-                        Log.warn "%A %A (%.2f%%)" used total (100.0 * float used.Bytes / float total.Bytes)
-                    else
-                        Log.warn "no memory"
-            }
+            program.Dispose()
+            oldCalls <- []
             
-        member x.UsedMemory : Mem = pool.UsedMemory + inner.UsedMemory
-        member x.TotalMemory : Mem = pool.TotalMemory + inner.TotalMemory
-        
-        override x.Compile(a,b,c) = inner.Compile(a,b,c)
-        override x.GetResources(s) = inner.GetResources(s)
-        override x.Release(s) = 
-            inactive.Values |> Seq.iter (snd >> pool.Free)
-            cache.Values |> Seq.iter pool.Free
-            reader.Dispose()
-            cache.Clear()
-            inactive.Clear()
-            inner.Dispose(s)
 
-        override x.EntryState s = inner.EntryState s
-        override x.ExitState s = inner.ExitState s
+        override x.GetResources() = 
+            Seq.append (Seq.singleton (mvpResource :> IResource)) state.Resources
+
+        override x.EntryState = Some state
+        override x.ExitState = Some state
 
 
     open System.Threading.Tasks
@@ -1906,8 +1795,10 @@ module Bla =
 
 
 
-    type LodRenderer(ctx : Context, signature : GLSLProgramInterface, state : CompilerInfo -> PreparedPipelineState, pass : RenderPass, useCulling : IMod<bool>, roots : aset<ITreeNode>, renderTime : IMod<_>, view : IMod<Trafo3d>, proj : IMod<Trafo3d>)  =
+    type LodRenderer(ctx : Context, state : PreparedPipelineState, pass : RenderPass, useCulling : IMod<bool>, roots : aset<ITreeNode>, renderTime : IMod<_>, view : IMod<Trafo3d>, proj : IMod<Trafo3d>)  =
         inherit PreparedCommand(ctx, pass)
+
+        let signature = state.pProgramInterface
 
         let timeWatch = System.Diagnostics.Stopwatch.StartNew()
         let time() = timeWatch.MicroTime
@@ -2383,13 +2274,13 @@ module Bla =
         member x.TotalMemory : Mem = pool.TotalMemory + inner.TotalMemory
         
         override x.Compile(a,b,c) = inner.Compile(a,b,c)
-        override x.GetResources(s) = inner.Resources s :> seq<_>
-        override x.Release(s) = 
+        override x.GetResources() = inner.Resources :> seq<_>
+        override x.Release() = 
             reader.Dispose()
-            inner.Dispose(s)
+            inner.Dispose()
 
-        override x.EntryState s = inner.EntryState s
-        override x.ExitState s = inner.ExitState s
+        override x.EntryState = inner.EntryState
+        override x.ExitState = inner.ExitState
 
 
 open Aardvark.Rendering.GL
@@ -2559,7 +2450,15 @@ module StoreTree =
                 let normals = 
                     if self.HasLodNormals then self.LodNormals.GetValue(ct)
                     elif self.HasNormals then self.Normals.GetValue(ct) 
-                    else positions |> Array.map (fun _ -> V3f.OOI)
+                    else 
+                        //if self.HasKdTree then 
+                        //    let tree = self.KdTree.Value
+                        //    Aardvark.Geometry.Points.Normals.EstimateNormals(positions, tree, 17)
+                        //elif self.HasLodKdTree then 
+                        //    let tree = self.KdTree.Value
+                        //    Aardvark.Geometry.Points.Normals.EstimateNormals(positions, tree, 17)
+                        //else 
+                            Aardvark.Geometry.Points.Normals.EstimateNormals(positions, 17)
 
                 let geometry =
                     IndexedGeometry(
@@ -2604,7 +2503,7 @@ module StoreTree =
 
             let angle = Constant.DegreesPerRadian * atan2 avgPointDistance distRange.Min
 
-            angle > 1.5
+            angle > 1.0
 
         member x.ShouldCollapse (view : Trafo3d, proj : Trafo3d) =
             let cam = view.Backward.C3.XYZ
@@ -2621,7 +2520,7 @@ module StoreTree =
 
             let angle = Constant.DegreesPerRadian * atan2 avgPointDistance distRange.Min
 
-            angle < 1.0
+            angle < 0.8
 
         member x.DataSource = source
 
@@ -2701,6 +2600,7 @@ module StoreTree =
 
     let import (sourceName : string) (trafo : Trafo3d) (file : string) (store : string) =
         do Aardvark.Data.Points.Import.Pts.PtsFormat |> ignore
+        do Aardvark.Data.Points.Import.E57.E57Format |> ignore
 
         let store = PointCloud.OpenStore store
         let key = System.IO.Path.GetFileNameWithoutExtension(file).ToLower()
@@ -3235,9 +3135,9 @@ module Shader =
             let pixelDist = ndcDist * float uniform.ViewportSize.X
             let n = uniform.ModelViewTrafo * V4d(v.n, 0.0) |> Vec.xyz |> Vec.normalize
             
-            //let pp = 
-            //    if pp.Z < -pp.W then V4d(666,666,-666,1)
-            //    else pp
+            let pixelDist = 
+                if pp.Z < -pp.W then -1.0
+                else uniform.PointSize * pixelDist
 
             return { v with s = pixelDist; pos = pp; depthRange = depthRange; n = n; vp = ovp.XYZ }
         }
@@ -3293,10 +3193,19 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
-    use app = new OpenGlApplication(true, false)
-    let win = app.CreateGameWindow(1)
-    let runtime = app.Runtime
-    let ctx = runtime.Context
+
+    let win =
+        window {
+            backend Backend.GL
+            device DeviceKind.Dedicated
+            display Display.Mono
+            debug false
+        }
+
+    //use app = new OpenGlApplication(false, false)
+    //let win = app.CreateGameWindow(1) :> ISimpleRenderInwod
+    //let runtime = app.Runtime :> IRuntime
+    //let app = ()
     
     let proj =
         win.Sizes
@@ -3304,17 +3213,10 @@ let main argv =
         |> Mod.map Frustum.projTrafo
 
     let initial = CameraView.lookAt (10.0 * V3d.III) V3d.Zero V3d.OOI
-    let mutable lastLod = initial
-    let mutable lastSpectator = initial
+    let pointSize = Mod.init 1.0
 
-    let pointSize = Mod.init 4.0
-
-
-    let lodCam = initial |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
-    let cam = lodCam
-
+    let cam = initial |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
     let view = cam |> Mod.map (CameraView.viewTrafo)
-    let lodView = lodCam |> Mod.map (CameraView.viewTrafo)
 
     let uniforms =
         let cam = view |> Mod.map (fun v -> v.Backward.C3.XYZ)
@@ -3364,46 +3266,7 @@ let main argv =
                 //DefaultSurfaces.vertexColor |> FShade.Effect.ofFunction
             ]
         )
-
-    let man = runtime.ResourceManager
-
-    let mutable fst = None
-
-    let miniMapView = 
-        view |> Mod.map (fun v ->
-            let mainCam = v.Backward.C3.XYZ
-            CameraView.lookAt (mainCam + V3d(0.0,0.0,200.0 - mainCam.Z)) mainCam V3d.OIO |> CameraView.viewTrafo
-        )
         
-    let miniMapProj = 
-        win.Sizes |> Mod.map (fun s ->
-            Frustum.perspective 90.0 10.0 1000.0 (float s.X / float s.Y)
-                |> Frustum.projTrafo
-        )
-
-    let defaultState =
-        PreparedPipelineState.ofPipelineState win.FramebufferSignature man surface state
-
-    let preparedState (info : CompilerInfo) = 
-        printfn "compile"
-        if fst = None || fst = Some info.task then
-            fst <- Some info.task
-            defaultState
-        else
-            let uniforms =
-                UniformProvider.union
-                    (
-                        UniformProvider.ofList [
-                            "ViewTrafo", miniMapView :> IMod
-                            "ProjTrafo", miniMapProj :> IMod
-                        ]
-                    )
-                    state.globalUniforms
-            PreparedPipelineState.ofPipelineState win.FramebufferSignature man surface { state with globalUniforms = uniforms }
-            
-
-    //let box = Box3d(V3d(-50.0, -50.0, -50.0), V3d(50.0, 50.0, 50.0))
-    //let stupid = StupidOctreeNode(None,0,box) :> Bla.ITreeNode
 
     let stupids =
         ASet.ofList [
@@ -3413,23 +3276,29 @@ let main argv =
             //yield StoreTree.load "local" (Trafo3d.Translation(150.0, 0.0, 0.0)) @"C:\Users\Schorsch\Development\WorkDirectory\KaunertalStore" "kaunertal" :> Bla.ITreeNode
             
             // let import (sourceName : string) (trafo : Trafo3d) (file : string) (store : string) (key : string
-            yield StoreTree.import 
-                "blibb" 
-                (Trafo3d.Translation(0.0, 0.0, 0.0)) 
-                @"C:\Users\Schorsch\Development\WorkDirectory\Kindergarten.pts" 
-                @"C:\Users\Schorsch\Development\WorkDirectory\blubber" 
+            //yield StoreTree.import 
+            //    "blibb" 
+            //    (Trafo3d.Translation(0.0, 0.0, 0.0)) 
+            //    @"C:\Users\Schorsch\Development\WorkDirectory\Kindergarten.pts" 
+            //    @"C:\Users\Schorsch\Development\WorkDirectory\blubber" 
 
+            //yield StoreTree.importAscii
+            //    "bla"
+            //    (Trafo3d.Translation(0.0, 0.0, 0.0)) 
+            //    @"C:\Users\Schorsch\Development\WorkDirectory\3277_5514_0_10.txt"
+            //    @"D:\cells\3277_5514_0_10\pointcloud"
+                
+            yield StoreTree.import
+                "bla"
+                (Trafo3d.Translation(0.0, 0.0, 0.0)) 
+                @"\\euclid\rmDATA\Data\Schottenring_2018_02_23\Laserscans\2018-02-27_BankAustria\export\oktogon\Punktwolke\BLKgesamt.e57"
+                @"C:\Users\Schorsch\Development\WorkDirectory\BLK"
+                
             yield StoreTree.importAscii
                 "bla"
                 (Trafo3d.Translation(0.0, 0.0, 0.0)) 
                 @"C:\Users\Schorsch\Development\WorkDirectory\Kaunertal.txt"
                 @"C:\Users\Schorsch\Development\WorkDirectory\KaunertalNormals"
-                
-            yield StoreTree.import
-                "bla"
-                (Trafo3d.Translation(0.0, 0.0, 0.0)) 
-                @"C:\Users\Schorsch\Development\WorkDirectory\Technologiezentrum_Teil1.pts"
-                @"C:\Users\Schorsch\Development\WorkDirectory\Technologiezentrum"
 
 
             //for x in 0 .. 4 do
@@ -3445,62 +3314,32 @@ let main argv =
         Log.warn "culling: %A" useCulling.Value
     )
 
-    win.Keyboard.KeyDown(Keys.X).Values.Add(fun () ->
-        win.RenderAsFastAsPossible <- not win.RenderAsFastAsPossible
+    //win.Keyboard.KeyDown(Keys.X).Values.Add(fun () ->
+    //    win.RenderAsFastAsPossible <- not win.RenderAsFastAsPossible
+    //)
+
+    win.Keyboard.DownWithRepeats.Values.Add(fun k ->
+        match k with
+        | Keys.O -> transact (fun () -> pointSize.Value <- pointSize.Value / 1.3)
+        | Keys.P -> transact (fun () -> pointSize.Value <- pointSize.Value * 1.3)
+        | _ -> ()
     )
 
-    let lod = new Bla.LodRenderer(ctx, defaultState.pProgramInterface, preparedState, RenderPass.main, useCulling, stupids, win.Time, lodView, proj) 
-  
-    
-    let lodProj =
-        win.Sizes
-        |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 20.0 (float s.X / float s.Y))
-        |> Mod.map Frustum.projTrafo
 
-
-    let lodViewProj = Mod.map2 (*) lodView lodProj
-    let camera =
-        Sg.wireBox' C4b.Red (Box3d(V3d(-1.0, -1.0, -1.0), V3d(1.0, 1.0, 1.0)))
-            |> Sg.shader {
-                do! DefaultSurfaces.trafo
-                do! DefaultSurfaces.thickLine
-                do! DefaultSurfaces.constantColor C4f.Red
-            }
-            |> Sg.uniform "LineWidth" (Mod.constant 3.0)
-            |> Sg.trafo (lodViewProj |> Mod.map (fun t -> t.Inverse))
-            |> Sg.viewTrafo miniMapView
-            |> Sg.projTrafo miniMapProj
-            |> Sg.depthTest (Mod.constant DepthTestMode.None)
-            |> Sg.compile app.Runtime win.FramebufferSignature
-            
-    let main() = 
-        app.Runtime.CompileRender(win.FramebufferSignature, ASet.ofList [lod :> IRenderObject])
-
-
-    let overlayTexture =
-        let size = win.Sizes |> Mod.map (fun s -> V2i(max 1 (s.X / 4), max 1 (s.Y / 4)))
-        let clear = runtime.CompileClear(win.FramebufferSignature, Mod.constant (C4f(0.0, 0.0, 0.0, 0.0)))
-        RenderTask.ofList [clear; main(); camera]
-        |> RenderTask.renderToColor size
-
-
-    let overlay =
-        Sg.fullScreenQuad
-        |> Sg.scale 0.25
-        |> Sg.translate 0.75 0.75 0.0
-        |> Sg.diffuseTexture overlayTexture
-        |> Sg.shader {
-            do! DefaultSurfaces.trafo
-            do! DefaultSurfaces.diffuseTexture
+    let cleanLod =
+        let id = newId()
+        { new ICustomRenderObject with
+            member x.Id = id
+            member x.AttributeScope = Ag.emptyScope
+            member x.RenderPass = RenderPass.main
+            member x.Create(r, fbo) = 
+                let r = unbox<Aardvark.Rendering.GL.Runtime> r
+                let preparedState = PreparedPipelineState.ofPipelineState fbo r.ResourceManager surface state
+                new Bla.LodRenderer(r.Context, preparedState, RenderPass.main, useCulling, stupids, win.Time, view, proj) :> IPreparedRenderObject
         }
-        |> Sg.depthTest (Mod.constant DepthTestMode.None)
-        |> Sg.blendMode (Mod.constant BlendMode.Blend)
-        |> Sg.viewTrafo (Mod.constant Trafo3d.Identity)
-        |> Sg.projTrafo (Mod.constant Trafo3d.Identity)
-        |> Sg.compile app.Runtime win.FramebufferSignature
-        
 
-    win.RenderTask <- main() //RenderTask.ofList [main(); overlay]
+    win.Scene <- Sg.RenderObjectNode(ASet.ofList [cleanLod :> IRenderObject])
+    //win.RenderTask <- runtime.CompileRender (win.FramebufferSignature, ASet.ofList [cleanLod :> IRenderObject])
     win.Run()
 
     0

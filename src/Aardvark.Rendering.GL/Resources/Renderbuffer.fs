@@ -20,11 +20,7 @@ type Renderbuffer =
         val mutable public Format : RenderbufferFormat
         val mutable public Samples : int
         val mutable public SizeInBytes : int64
-
-        interface IContextChild with
-            member x.Context = x.Context
-            member x.Handle = x.Handle
-
+        
         interface IFramebufferOutput with
             member x.Runtime = x.Context.Runtime :> ITextureRuntime
             member x.Format = x.Format

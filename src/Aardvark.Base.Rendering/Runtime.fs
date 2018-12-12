@@ -671,6 +671,7 @@ type IPreparedRenderObject =
     abstract member Update : AdaptiveToken * RenderToken -> unit
     abstract member Original : Option<RenderObject>
 
+
 type ShaderStage =
     | Vertex = 1
     | TessControl = 2
@@ -816,6 +817,11 @@ and IRuntime =
     abstract member CompileClear : fboSignature : IFramebufferSignature * clearColors : IMod<Map<Symbol, C4f>> * clearDepth : IMod<Option<double>> -> IRenderTask
     abstract member CompileRender : fboSignature : IFramebufferSignature * BackendConfiguration * aset<IRenderObject> -> IRenderTask
     
+
+and ICustomRenderObject =
+    inherit IRenderObject
+    
+    abstract member Create : IRuntime * IFramebufferSignature -> IPreparedRenderObject
 
 
 and IRenderTask =

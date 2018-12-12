@@ -104,7 +104,3 @@ type UnsharedObject(context : Context, createHandle : ContextHandle -> int, dest
     member x.Context = context
     member x.Handle = handle()
 
-
-    interface IContextChild with
-        member x.Context = context
-        member x.Handle = handle()

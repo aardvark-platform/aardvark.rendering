@@ -48,21 +48,3 @@ module UniformLocationExtensions =
 
         member x.Delete(loc : UniformLocation) =
             loc.Free()
-
-    module ExecutionContext =
-        let bindUniformLocation (l : int) (loc : UniformLocation) =
-            [
-                match loc.Type with
-                    | Vector(Float, 1) | Float  -> yield Instruction.Uniform1fv l 1 loc.Data
-                    | Vector(Int, 1) | Int      -> yield Instruction.Uniform1iv l 1 loc.Data
-                    | Vector(Float, 2)          -> yield Instruction.Uniform2fv l 1 loc.Data
-                    | Vector(Int, 2)            -> yield Instruction.Uniform2iv l 1 loc.Data
-                    | Vector(Float, 3)          -> yield Instruction.Uniform3fv l 1 loc.Data
-                    | Vector(Int, 3)            -> yield Instruction.Uniform3iv l 1 loc.Data
-                    | Vector(Float, 4)          -> yield Instruction.Uniform4fv l 1 loc.Data
-                    | Vector(Int, 4)            -> yield Instruction.Uniform4iv l 1 loc.Data
-                    | Matrix(Float, 2, 2, true) -> yield Instruction.UniformMatrix2fv l 1 1 loc.Data
-                    | Matrix(Float, 3, 3, true) -> yield Instruction.UniformMatrix3fv l 1 1 loc.Data
-                    | Matrix(Float, 4, 4, true) -> yield Instruction.UniformMatrix4fv l 1 1 loc.Data
-                    | _                         -> failwithf "no uniform-setter for: %A" loc
-            ]

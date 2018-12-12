@@ -468,6 +468,10 @@ module OpenGl =
 
         let DispatchCompute = getProcAddress "glDispatchCompute"
         let GetInteger = getProcAddress "glGetIntegerv"
+        let GetFloat = getProcAddress "glGetFloatv"
+        let GetDouble = getProcAddress "glGetDoublev"
+        let GetBoolean = getProcAddress "glGetBooleanv"
+
         let GetIndexedInteger = getProcAddress "glGetIntegeri_v"
         let GetIndexedInteger64 = getProcAddress "glGetInteger64i_v"
 
