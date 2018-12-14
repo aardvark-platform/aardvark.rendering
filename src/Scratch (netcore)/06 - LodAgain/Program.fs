@@ -1150,7 +1150,7 @@ module Bla =
 
         let indirects = Dict<_, IndirectBuffer>()
         let isOutdated = NativePtr.allocArray [| 1 |]
-        let updateFun = Marshal.PinDelegate(System.Action(this.Update))
+        let updateFun = Marshal.PinDelegate(new System.Action(this.Update))
         let mutable oldCalls : list<Option<DrawElementsType> * nativeptr<GLBeginMode> * VertexInputBindingHandle * IndirectBuffer> = []
         let program = new ChangeableNativeProgram<_>(fun a s -> compile a (AssemblerCommandStream s))
         let puller = AdaptiveObject()
@@ -2434,7 +2434,7 @@ module Bla =
                                     
                                             let myTask = 
                                                 Task.WhenAll(loadChildren).ContinueWith (fun (a : Task<array<_>>) ->
-                                                    if a.IsCompletedSuccessfully then
+                                                    if a.IsCompleted && not a.IsCanceled && not a.IsFaulted then
                                                         lock renderingStateLock (fun () ->
                                                             if not c.IsCancellationRequested then
                                                                 let op = split v (HMap.ofArray a.Result)
@@ -3164,15 +3164,15 @@ let main argv =
                 "Overlay", c0WithAlpha :> IMod
             ]
 
-    let koeln2 =
-        StoreTree.import
-            "disk"
-            (Trafo3d.Translation(0.0, 0.0, 0.0)) 
-            @"C:\Users\Schorsch\Development\WorkDirectory\3278_5514_0_10\3277_5514_0_10"
-            @"D:\cells\3277_5514_0_10\pointcloud\"
-            [
-                "Overlay", c1WithAlpha :> IMod
-            ]
+    //let koeln2 =
+    //    StoreTree.import
+    //        "disk"
+    //        (Trafo3d.Translation(0.0, 0.0, 0.0)) 
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\3278_5514_0_10\3277_5514_0_10"
+    //        @"D:\cells\3277_5514_0_10\pointcloud\"
+    //        [
+    //            "Overlay", c1WithAlpha :> IMod
+    //        ]
         
 
     let pcs =
