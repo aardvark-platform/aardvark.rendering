@@ -42,6 +42,8 @@ type ICommandStream =
     abstract member DispatchCompute : gx : int * gy : int * gz : int -> unit 
     abstract member DispatchCompute : groups : nativeptr<V3i> -> unit 
 
+    abstract member MemoryBarrier : MemoryBarrierFlags -> unit
+
     abstract member Enable : v : int -> unit 
     abstract member Disable : v : int -> unit 
     abstract member Enable : v : nativeptr<int> -> unit 
@@ -680,7 +682,10 @@ module GLAssemblerExtensions =
             s.BeginCall(0)
             s.CallIndirect(ptr)
 
-
+        member x.MemoryBarrier(flags : MemoryBarrierFlags) =
+            s.BeginCall(1)
+            s.PushArg(int flags)
+            s.Call(OpenGl.Pointers.MemoryBarrier)
 
 
         interface ICommandStream with
@@ -756,7 +761,7 @@ module GLAssemblerExtensions =
             member this.Call(ptr) = this.Call ptr
             member this.CallIndirect(ptr) = this.CallIndirect(ptr)
             member this.Call(ptr : nativeint, arg : int) = this.Call(ptr, arg)
-
+            member this.MemoryBarrier(flags : MemoryBarrierFlags) = this.MemoryBarrier(flags)
     type private DebugCallbackDelegate = delegate of int -> unit
     type DebugCommandStream(inner : ICommandStream) =
         let commands = System.Collections.Generic.List<string * obj[]>()
@@ -852,6 +857,7 @@ module GLAssemblerExtensions =
             member x.Call(ptr) = inner.Call(ptr); x.Append("Call", ptr)
             member x.CallIndirect(ptr) = inner.CallIndirect(ptr); x.Append("CallIndirect", ptr)
             member x.Call(ptr : nativeint, arg : int) = inner.Call(ptr, arg); x.Append("Call", ptr, arg)
+            member x.MemoryBarrier(flags : MemoryBarrierFlags) = inner.MemoryBarrier(flags); x.Append("MemoryBarrier", flags)
 
     type ICommandStream with
 

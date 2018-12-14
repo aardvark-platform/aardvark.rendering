@@ -477,6 +477,7 @@ module OpenGl =
 
         let NamedBufferData = getProcAddress "glNamedBufferData"
         let NamedBufferSubData = getProcAddress "glNamedBufferSubData"
+        let MemoryBarrier = getProcAddress "glMemoryBarrier"
 
         /// <summary>
         /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glActiveTexture.xml

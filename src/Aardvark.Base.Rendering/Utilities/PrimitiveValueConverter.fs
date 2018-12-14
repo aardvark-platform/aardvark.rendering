@@ -1090,6 +1090,40 @@ module PrimitiveValueConverter =
             | Some c -> c
             | None -> failwithf "unknown conversion from %A to %A" inType.FullName outType.FullName
 
+    open Aardvark.Base.IL
+    type private Invoker private() =
+        static let cache = System.Collections.Concurrent.ConcurrentDictionary<Type * Type, obj -> obj -> obj>()
+
+        static let get (inType : Type) (outType : Type) =
+            cache.GetOrAdd((inType, outType), fun (inType, outType) ->
+                let tfun = FSharpType.MakeFunctionType(inType, outType)
+                let invoke = tfun.GetMethod("Invoke")
+                cil {
+                    do! IL.ldarg 0
+                    do! IL.ldarg 1
+                    if inType.IsValueType then 
+                        do! IL.unbox inType
+                    do! IL.call invoke
+                    if outType.IsValueType then
+                        do! IL.box outType
+                    do! IL.ret
+                }
+            )
+
+        static member Invoke(inType : Type, outType : Type, f : obj, value : obj) =
+            let invoke = get inType outType
+            invoke f value
+
+
+    let convert (outType : Type) (value : obj) =
+        if isNull value then
+            if outType.IsValueType then failwithf "cannot convert null to %A" outType
+            null
+        else
+            let inType = value.GetType()
+            let conv = getConverter inType outType
+            Invoker.Invoke(inType, outType, conv, value)
+
 
     type private ArrayConverterCache<'a>() =
         static let conv = Dict<Type, Array -> 'a[]>()

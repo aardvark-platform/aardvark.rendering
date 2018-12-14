@@ -350,19 +350,23 @@ module PreparedPipelineState =
         let storageBuffers = 
             iface.storageBuffers
                 |> MapExt.toList
-                |> List.map (fun (_,buf) ->
+                |> List.choose (fun (_,buf) ->
                     
                     let buffer = 
                         match rj.globalUniforms.TryGetUniform(Ag.emptyScope, Symbol.Create buf.ssbName) with
                             | Some (:? IMod<IBuffer> as b) ->
-                                x.CreateBuffer(b)
+                                x.CreateBuffer(b) |> Some
                             | Some m ->
                                 let o = toBufferCache.Invoke(m)
-                                x.CreateBuffer(o)
+                                x.CreateBuffer(o) |> Some
                             | _ ->
-                                failwithf "[GL] could not find storage buffer %A" buf.ssbName
+                                None //failwithf "[GL] could not find storage buffer %A" buf.ssbName
 
-                    buf.ssbBinding, buffer
+                    match buffer with
+                    | Some buffer -> 
+                        Some (buf.ssbBinding, buffer)
+                    | None ->
+                        None
                 )
                 |> Map.ofList
 

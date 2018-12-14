@@ -60,6 +60,39 @@ module RenderObject =
         Ag.getContext() |> ofScope
 
 
+module PipelineState =
+    let ofScope (scope : Ag.Scope) =
+        let vertexAttributes = new Providers.AttributeProvider(scope, "VertexAttributes") :> IAttributeProvider
+        let instanceAttributes =  new Providers.AttributeProvider(scope, "InstanceAttributes") :> IAttributeProvider
+        
+        let attributes =
+            { new IAttributeProvider with
+                member x.TryGetAttribute(sem) =
+                    match vertexAttributes.TryGetAttribute sem with
+                        | Some att -> Some att
+                        | None -> instanceAttributes.TryGetAttribute sem
+
+                member x.All = Seq.append vertexAttributes.All instanceAttributes.All
+
+                member x.Dispose() = ()
+            }
+        {
+            depthTest           = scope?DepthTestMode
+            cullMode            = scope?CullMode
+            blendMode           = scope?BlendMode
+            fillMode            = scope?FillMode
+            stencilMode         = scope?StencilMode
+            multisample         = scope?Multisample
+            writeBuffers        = scope?WriteBuffers
+            globalUniforms      = new Providers.UniformProvider(scope, scope?Uniforms, [attributes])
+                         
+            geometryMode        = IndexedGeometryMode.PointList
+            vertexInputTypes    = Map.empty
+            perGeometryUniforms = Map.empty
+        }
+
+    let inline create() =
+        Ag.getContext() |> ofScope
 
 
 [<AutoOpen>]
