@@ -50,92 +50,6 @@
       </PropertyGroup>
     </When>
   </Choose>
-  <ItemGroup>
-    <Reference Include="mscorlib" />
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Numerics" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="..\06 - LodAgain\CommandStream.fs">
-      <Link>CommandStream.fs</Link>
-    </Compile>
-    <Compile Include="..\06 - LodAgain\Program.fs">
-      <Link>Program.fs</Link>
-    </Compile>
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj">
-      <Name>Aardvark.Base.Rendering</Name>
-      <Project>{f8233648-55ce-4795-9151-e512390d86e7}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Aardvark.GPGPU\Aardvark.GPGPU.fsproj">
-      <Name>Aardvark.GPGPU</Name>
-      <Project>{68e3b876-eb23-4d61-a71f-ef35a146f276}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj">
-      <Name>Aardvark.Rendering.GL</Name>
-      <Project>{88b586f5-a5e2-4321-bd5d-27d296da0fdd}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Aardvark.Rendering.Text\Aardvark.Rendering.Text.fsproj">
-      <Name>Aardvark.Rendering.Text</Name>
-      <Project>{fb0c63a7-519a-4fcc-9a4b-841aee5b8c97}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj">
-      <Name>Aardvark.Rendering.Vulkan</Name>
-      <Project>{8bbc1ef6-9c85-4baf-a732-fc46dca64ec3}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj">
-      <Name>Aardvark.SceneGraph</Name>
-      <Project>{b9ef48e4-7e73-4ddf-805a-d7324d907cb8}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Application\Aardvark.Application.OpenVR.GL\Aardvark.Application.OpenVR.GL.fsproj">
-      <Name>Aardvark.Application.OpenVR.GL</Name>
-      <Project>{77f11e0a-4bb2-4402-b339-b4772d2a4ef6}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Application\Aardvark.Application.OpenVR.Vulkan\Aardvark.Application.OpenVR.Vulkan.fsproj">
-      <Name>Aardvark.Application.OpenVR.Vulkan</Name>
-      <Project>{fb047d5e-d49a-462e-baa0-b058ce06cfc9}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Application\Aardvark.Application.OpenVR\Aardvark.Application.OpenVR.fsproj">
-      <Name>Aardvark.Application.OpenVR</Name>
-      <Project>{7aaac578-443f-4120-ba74-3732cce920e8}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Application\Aardvark.Application.Slim.GL\Aardvark.Application.Slim.GL.fsproj">
-      <Name>Aardvark.Application.Slim.GL</Name>
-      <Project>{f8e2e201-39ec-4000-b3e7-e317016fa807}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Application\Aardvark.Application.Slim.Vulkan\Aardvark.Application.Slim.Vulkan.fsproj">
-      <Name>Aardvark.Application.Slim.Vulkan</Name>
-      <Project>{77af53b0-fe23-4de2-b218-5726b295f6bd}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Application\Aardvark.Application.Slim\Aardvark.Application.Slim.fsproj">
-      <Name>Aardvark.Application.Slim</Name>
-      <Project>{72a7471e-7bf7-41bd-a654-0dc904b49d1f}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Application\Aardvark.Application.Utilities\Aardvark.Application.Utilities.fsproj">
-      <Name>Aardvark.Application.Utilities</Name>
-      <Project>{3322678a-22da-4c84-b2bf-33b0d2f8c80c}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Application\Aardvark.Application\Aardvark.Application.fsproj">
-      <Name>Aardvark.Application</Name>
-      <Project>{e3508b1c-592c-4e8e-98f3-71dbec6083da}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-  </ItemGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">
@@ -1376,4 +1290,88 @@
     </When>
   </Choose>
   <Import Project="..\..\..\packages\NETStandard.Library\build\$(__paket__NETStandard_Library_targets).targets" Condition="Exists('..\..\..\packages\NETStandard.Library\build\$(__paket__NETStandard_Library_targets).targets')" Label="Paket" />
+  <ItemGroup>
+    <Compile Include="..\06 - LodAgain\CommandStream.fs">
+      <Link>CommandStream.fs</Link>
+    </Compile>
+    <Compile Include="..\06 - LodAgain\Program.fs">
+      <Link>Program.fs</Link>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="mscorlib" />
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Numerics" />
+    <ProjectReference Include="..\..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj">
+      <Name>Aardvark.Base.Rendering</Name>
+      <Project>{f8233648-55ce-4795-9151-e512390d86e7}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Aardvark.GPGPU\Aardvark.GPGPU.fsproj">
+      <Name>Aardvark.GPGPU</Name>
+      <Project>{68e3b876-eb23-4d61-a71f-ef35a146f276}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj">
+      <Name>Aardvark.Rendering.GL</Name>
+      <Project>{88b586f5-a5e2-4321-bd5d-27d296da0fdd}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Aardvark.Rendering.Text\Aardvark.Rendering.Text.fsproj">
+      <Name>Aardvark.Rendering.Text</Name>
+      <Project>{fb0c63a7-519a-4fcc-9a4b-841aee5b8c97}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj">
+      <Name>Aardvark.Rendering.Vulkan</Name>
+      <Project>{8bbc1ef6-9c85-4baf-a732-fc46dca64ec3}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj">
+      <Name>Aardvark.SceneGraph</Name>
+      <Project>{b9ef48e4-7e73-4ddf-805a-d7324d907cb8}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Application\Aardvark.Application.OpenVR.GL\Aardvark.Application.OpenVR.GL.fsproj">
+      <Name>Aardvark.Application.OpenVR.GL</Name>
+      <Project>{77f11e0a-4bb2-4402-b339-b4772d2a4ef6}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Application\Aardvark.Application.OpenVR.Vulkan\Aardvark.Application.OpenVR.Vulkan.fsproj">
+      <Name>Aardvark.Application.OpenVR.Vulkan</Name>
+      <Project>{fb047d5e-d49a-462e-baa0-b058ce06cfc9}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Application\Aardvark.Application.OpenVR\Aardvark.Application.OpenVR.fsproj">
+      <Name>Aardvark.Application.OpenVR</Name>
+      <Project>{7aaac578-443f-4120-ba74-3732cce920e8}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Application\Aardvark.Application.Slim.GL\Aardvark.Application.Slim.GL.fsproj">
+      <Name>Aardvark.Application.Slim.GL</Name>
+      <Project>{f8e2e201-39ec-4000-b3e7-e317016fa807}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Application\Aardvark.Application.Slim.Vulkan\Aardvark.Application.Slim.Vulkan.fsproj">
+      <Name>Aardvark.Application.Slim.Vulkan</Name>
+      <Project>{77af53b0-fe23-4de2-b218-5726b295f6bd}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Application\Aardvark.Application.Slim\Aardvark.Application.Slim.fsproj">
+      <Name>Aardvark.Application.Slim</Name>
+      <Project>{72a7471e-7bf7-41bd-a654-0dc904b49d1f}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Application\Aardvark.Application.Utilities\Aardvark.Application.Utilities.fsproj">
+      <Name>Aardvark.Application.Utilities</Name>
+      <Project>{3322678a-22da-4c84-b2bf-33b0d2f8c80c}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Application\Aardvark.Application\Aardvark.Application.fsproj">
+      <Name>Aardvark.Application</Name>
+      <Project>{e3508b1c-592c-4e8e-98f3-71dbec6083da}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+  </ItemGroup>
 </Project>

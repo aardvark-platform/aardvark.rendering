@@ -1,6 +1,7 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
+open Aardvark.Base.Incremental.Operators
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -175,18 +176,19 @@ module Bla =
                     true
 
         [<LocalSize(X = 64)>]
-        let culling (infos : DrawInfo[]) (bounds : CullingInfo[]) (isActive : int[]) (count : int) (viewProj : M44d) =
+        let culling (infos : DrawInfo[]) (bounds : CullingInfo[]) (isActive : int[]) (count : int) (viewProjs : M44d[]) =
             compute {
                 let id = getGlobalId().X
                 if id < count then
                     let b = bounds.[id]
                     let rootId = int (b.Max.W + 0.5f)
-                    //let s = 0.2f * (b.Max.XYZ - b.Min.XYZ)
-                    
+
+                    //let mutable b = b
+                    //let s = 0.4f * (b.Max.XYZ - b.Min.XYZ)
                     //b.Min <- V4f(b.Min.XYZ + s, b.Min.W)
                     //b.Max <- V4f(b.Max.XYZ - s, b.Max.W)
 
-                    if isActive.[rootId] <> 0 && CullingInfo.intersectsViewProj viewProj b then
+                    if isActive.[rootId] <> 0 && CullingInfo.intersectsViewProj viewProjs.[rootId] b then
                         infos.[id].InstanceCount <- CullingInfo.instanceCount b
                     else
                         infos.[id].InstanceCount <- 0
@@ -316,80 +318,6 @@ module Bla =
                 Polynomial.Evaluate(model, float size) |> MicroTime.FromSeconds
             else 
                 MicroTime.Zero
-
-    type Regression2d(maxSamples : int) =
-        let samples : array<V2i * MicroTime> = Array.zeroCreate maxSamples
-        let mutable count = 0
-        let mutable index = 0
-        let mutable model : float[] = null
-        
-            
-        let getModel() =
-            if count <= 0  then
-                [| |]
-            elif count = 1 then
-                let (x,y) = samples.[0]
-                [| 0.0; y.TotalSeconds / float x.X; y.TotalSeconds / float x.Y |]
-            else
-
-                let points = samples |> Array.take count |> Array.map (fun (c,t) -> V3d(float c.X, float c.Y, t.TotalSeconds))
-                
-
-                let degree = min (count - 1) 1
-                let arr = 
-                    Array2D.init count 3 (fun r c ->
-                        let (s,_) = samples.[r]
-                        if c = 0 then 1.0
-                        elif c = 1 then float s.X
-                        else float s.Y
-                    )
-
-                let r = samples |> Array.take count |> Array.map (fun (_,t) -> t.TotalSeconds)
-
-                let diag = arr.QrFactorize()
-                let res = arr.QrSolve(diag, r)
-                res
-
-        member private x.GetModel() = 
-            lock x (fun () ->
-                if isNull model then model <- getModel()
-                model
-            )
-            
-        member x.Add(size : V2i, value : MicroTime) =
-            lock x (fun () ->
-                let mutable found = false
-                let mutable i = (maxSamples + index - count) % maxSamples
-                while not found && i <> index do
-                    let (x,y) = samples.[i]
-                    if x = size then
-                        if y <> value then model <- null
-                        samples.[i] <- (size, value)
-                        found <- true
-                    i <- (i + 1) % maxSamples
-
-                if not found then
-                    samples.[index] <- (size,value)
-                    index <- (index + 1) % maxSamples
-                    if count < maxSamples then count <- count + 1
-                    model <- null
-            )
-            
-        member x.Add(a : int, b : int, value : MicroTime) =
-            x.Add(V2i(a,b), value)
-            
-        member x.Evaluate(size : V2i) =
-            let model = x.GetModel()
-            if model.Length = 3 then
-                model.[0] + model.[1] * float size.X + model.[2] * float size.Y |> MicroTime.FromSeconds
-            else 
-                MicroTime.Zero
-                
-        member x.Evaluate(a : int, b : int) =
-            x.Evaluate(V2i(a,b))
-
-
-
 
     type Context with
         member x.MapBufferRange(b : Buffer, offset : nativeint, size : nativeint, access : BufferAccessMask) =
@@ -659,13 +587,13 @@ module Bla =
             member x.Dispose() = x.Dispose()
 
     [<StructLayout(LayoutKind.Sequential)>]
-    type BoundingBox =
+    type private BoundingBox =
         struct
             val mutable public Min : V4f
             val mutable public Max : V4f
         end
 
-    type IndirectBuffer(ctx : Context, bounds : bool, active : nativeptr<int>, indexed : bool, initialCapacity : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
+    type IndirectBuffer(ctx : Context, bounds : bool, active : nativeptr<int>, modelViewProjs : nativeptr<int>, indexed : bool, initialCapacity : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
         static let es = sizeof<DrawCallInfo>
         static let bs = sizeof<BoundingBox>
 
@@ -857,12 +785,12 @@ module Bla =
                 let infoSlot = culling.Buffers |> List.pick (fun (a,b,c) -> if b = "infos" then Some a else None)
                 let boundSlot = culling.Buffers |> List.pick (fun (a,b,c) -> if b = "bounds" then Some a else None)
                 let activeSlot = culling.Buffers |> List.pick (fun (a,b,c) -> if b = "isActive" then Some a else None)
+                let viewProjSlot = culling.Buffers |> List.pick (fun (a,b,c) -> if b = "viewProjs" then Some a else None)
                 let uniformBlock = culling.UniformBlocks |> List.head
-                let viewProjField = uniformBlock.ubFields |> List.find (fun f -> f.ufName = "cs_viewProj")
                 let countField = uniformBlock.ubFields |> List.find (fun f -> f.ufName = "cs_count")
                 
                 
-                s.NamedBufferSubData(ub.Handle, nativeint viewProjField.ufOffset, 64n, NativePtr.toNativeInt mvp)
+                //s.NamedBufferSubData(ub.Handle, nativeint viewProjField.ufOffset, 64n, NativePtr.toNativeInt mvp)
                 s.NamedBufferSubData(ub.Handle, nativeint countField.ufOffset, 4n, NativePtr.toNativeInt bufferHandles + 8n)
 
                 s.Get(GetPName.CurrentProgram, oldProgram)
@@ -874,23 +802,27 @@ module Bla =
                 s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, infoSlot, NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 0n))
                 s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, boundSlot, NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 4n))
                 s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, activeSlot, active)
+                s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, viewProjSlot, modelViewProjs)
                 s.BindBufferBase(BufferRangeTarget.UniformBuffer, uniformBlock.ubBinding, ub.Handle)
                 s.DispatchCompute computeSize
 
 
                 s.UseProgram(oldProgram)
                 s.BindBufferRange(BufferRangeTarget.UniformBuffer, uniformBlock.ubBinding, oldUB, oldUBOffset, oldUBSize)
-                before(s)
+                
                 
                 s.MemoryBarrier(MemoryBarrierFlags.CommandBarrierBit)
 
-
-            match indexType with
-                | Some indexType ->
-                    s.DrawElementsIndirect(runtimeStats, isActive, mode, int indexType, indirectHandle)
-                | _ -> 
-                    s.DrawArraysIndirect(runtimeStats, isActive, mode, indirectHandle)
-
+            let h = NativePtr.read indirectHandle
+            if h.Y > 0 then
+                before(s)
+                match indexType with
+                    | Some indexType ->
+                        s.DrawElementsIndirect(runtimeStats, isActive, mode, int indexType, indirectHandle)
+                    | _ -> 
+                        s.DrawArraysIndirect(runtimeStats, isActive, mode, indirectHandle)
+            else
+                Log.warn "empty indirect call"
 
         member x.Dispose() =
             let ess = if bounds then es + bs else es
@@ -1078,9 +1010,7 @@ module Bla =
                 | Some ib -> indexManager.Free ib
                 | None -> ()
 
-  
-
-    type DrawPool(ctx : Context, bounds : bool, activeBuffer : nativeptr<int>, state : PreparedPipelineState, pass : RenderPass) as this =
+    type DrawPool(ctx : Context, bounds : bool, activeBuffer : nativeptr<int>, modelViewProjs : nativeptr<int>, state : PreparedPipelineState, pass : RenderPass) as this =
         inherit PreparedCommand(ctx, pass)
 
         static let initialIndirectSize = 256
@@ -1163,7 +1093,7 @@ module Bla =
         let getIndirectBuffer(slot : PoolSlot) =
             let key = getKey slot
             indirects.GetOrCreate(key, fun _ ->
-                new IndirectBuffer(ctx, bounds, activeBuffer, Option.isSome slot.IndexType, initialIndirectSize, usedMemory, totalMemory)
+                new IndirectBuffer(ctx, bounds, activeBuffer, modelViewProjs, Option.isSome slot.IndexType, initialIndirectSize, usedMemory, totalMemory)
             )
 
         let tryGetIndirectBuffer(slot : PoolSlot) =
@@ -1214,10 +1144,16 @@ module Bla =
         member x.AverageRenderTime = MicroTime(int64 (1000000.0 * avgRenderTime.Average))
 
         member x.Update() =
-            puller.EvaluateAlways AdaptiveToken.Top (fun token ->
+            puller.EvaluateAlways AdaptiveToken.Top (fun token ->   
+                //let worked =
+                //    try System.GC.TryStartNoGCRegion(12000000L)
+                //    with _ -> false
                 puller.OutOfDate <- true
                 
                 x.Evaluate(token, pProgramInterface)
+
+                let sw = System.Diagnostics.Stopwatch.StartNew()
+
                 let rawResult = NativePtr.read endTime - NativePtr.read startTime
                 let ms = float rawResult / 1000000.0
                 avgRenderTime.Add ms
@@ -1291,6 +1227,15 @@ module Bla =
                     puller.Outputs.Add t |> ignore
 
                 x.AfterUpdate()
+
+                sw.Stop()
+                if sw.MicroTime.TotalMilliseconds > 15.0 then
+                    Log.warn "hugo: %A" sw.MicroTime
+
+                //if worked then
+                //    try System.GC.EndNoGCRegion()
+                //    with _ -> ()
+
             )
 
         override x.Compile(info : CompilerInfo, stream : ICommandStream, last : Option<PreparedCommand>) =
@@ -1578,8 +1523,6 @@ module Bla =
         let ofList (l : list<'a * Operation<'b>>) = ofSeq l
         let ofArray (a : array<'a * Operation<'b>>) = ofSeq a
 
-
-    open System.Collections.Generic
     type AtomicQueue<'a, 'b> private(classId : uint64, classes : hmap<'a, uint64>, values : MapExt<uint64, AtomicOperation<'a, 'b>>) =
         let classId = if HMap.isEmpty classes then 0UL else classId
 
@@ -1869,7 +1812,7 @@ module Bla =
             mutable count : int
         }
 
-    type LodRenderer(ctx : Context, state : PreparedPipelineState, pass : RenderPass, useCulling : bool, roots : aset<ITreeNode * MapExt<string, IMod>>, renderTime : IMod<_>, view : IMod<Trafo3d>, proj : IMod<Trafo3d>)  =
+    type LodRenderer(ctx : Context, state : PreparedPipelineState, pass : RenderPass, useCulling : bool, roots : aset<ITreeNode * MapExt<string, IMod>>, renderTime : IMod<_>, model : IMod<Trafo3d>, view : IMod<Trafo3d>, proj : IMod<Trafo3d>)  =
         inherit PreparedCommand(ctx, pass)
 
         let manager = (unbox<Runtime> ctx.Runtime).ResourceManager
@@ -1913,11 +1856,36 @@ module Bla =
         let rootIds : ModRef<hmap<ITreeNode, int>> = Mod.init HMap.empty
 
         let mutable rootUniforms : hmap<ITreeNode, MapExt<string, IMod>> = HMap.empty
+        
+        let rootUniformCache = System.Collections.Concurrent.ConcurrentDictionary<ITreeNode, System.Collections.Concurrent.ConcurrentDictionary<string, Option<IMod>>>()
+        let rootTrafoCache = System.Collections.Concurrent.ConcurrentDictionary<ITreeNode, IMod<Trafo3d>>()
 
+        let getRootTrafo (root : ITreeNode) =
+            rootTrafoCache.GetOrAdd(root, fun root ->
+                match HMap.tryFind root rootUniforms with
+                | Some table -> 
+                    match MapExt.tryFind "ModelTrafo" table with
+                    | Some (:? IMod<Trafo3d> as m) -> model %* m
+                    | _ -> model
+                | None ->
+                    model
+            )
+                
         let getRootUniform (name : string) (root : ITreeNode) : Option<IMod> =
-            match HMap.tryFind root rootUniforms with
-            | Some table -> MapExt.tryFind name table
-            | None -> None
+            let rootCache = rootUniformCache.GetOrAdd(root, fun root -> System.Collections.Concurrent.ConcurrentDictionary())
+            rootCache.GetOrAdd(name, fun name ->
+                match name with
+                | "ModelTrafos"              -> getRootTrafo root :> IMod |> Some
+                | "ModelViewTrafos"          -> Mod.map2 (fun a b -> a * b) (getRootTrafo root) view :> IMod |> Some
+                | "ModelViewProjTrafos"      -> getRootTrafo root %* view %* proj :> IMod |> Some
+                | "ModelTrafoInvs"           -> getRootTrafo root |> Mod.map (fun t -> t.Inverse) :> IMod |> Some
+                | "ModelViewTrafoInvs"       -> getRootTrafo root %* view |> Mod.map (fun t -> t.Inverse) :> IMod |> Some
+                | "ModelViewTrafoProjInvs"   -> getRootTrafo root %* view %* proj |> Mod.map (fun t -> t.Inverse) :> IMod |> Some
+                | _ -> 
+                    match HMap.tryFind root rootUniforms with
+                    | Some table -> MapExt.tryFind name table
+                    | None -> None
+            )
 
         let getRootId (root : ITreeNode) =
             match HMap.tryFind root rootIds.Value with
@@ -1935,21 +1903,26 @@ module Bla =
                 )
 
         let freeRootId (root : ITreeNode) =
+            rootUniformCache.TryRemove root |> ignore
+            rootTrafoCache.TryRemove root |> ignore
             transact (fun () ->
                 lock rootIdsLock (fun () ->
                     rootIds.Value <- HMap.remove root rootIds.Value
                 )
             )
 
-        let storageBuffers =
+
+        let contents =
             state.pProgramInterface.storageBuffers |> MapExt.toSeq |> Seq.choose (fun (name, buffer) ->
                 if Map.containsKey buffer.ssbBinding state.pStorageBuffers then
                     None
                 else
                     let typ = GLSLType.toType buffer.ssbType
                     let conv = PrimitiveValueConverter.convert typ
+                    
                     let content =
                         Mod.custom (fun t ->
+                            let st = time()
                             let ids = rootIds.GetValue t
                             if HMap.isEmpty ids then
                                 ArrayBuffer (System.Array.CreateInstance(typ, 0)) :> IBuffer
@@ -1964,15 +1937,21 @@ module Bla =
                                     | None ->
                                         ()
                                 )
+                                let dt = time() - st
+                                if dt.TotalMilliseconds > 5.0 then Log.warn "long upload"
                                 ArrayBuffer data :> IBuffer
                         )
-                    let b = manager.CreateBuffer(content)
-                    b.AddRef()
-                    b.Update(AdaptiveToken.Top, RenderToken.Empty)
-
-                    Some (buffer.ssbBinding, b)
+                    Some (buffer.ssbBinding, content)
             )
             |> Map.ofSeq
+            
+        let storageBuffers =
+            contents |> Map.map (fun _ content ->
+                let b = manager.CreateBuffer(content)
+                b.AddRef()
+                b.Update(AdaptiveToken.Top, RenderToken.Empty)
+                b
+            )
 
         let activeBuffer =
             let data = 
@@ -1994,6 +1973,33 @@ module Bla =
                             | None ->
                                 data.[id] <- 1
                         )
+                        ArrayBuffer data :> IBuffer
+                )
+            manager.CreateBuffer data
+
+        let modelViewProjBuffer =
+            let data = 
+                Mod.custom (fun t ->
+                    let st = time()
+                    let ids = rootIds.GetValue t
+                    if HMap.isEmpty ids then
+                        ArrayBuffer (Array.empty<M44f>) :> IBuffer
+                    else
+                        let maxId = ids |> HMap.toSeq |> Seq.map snd |> Seq.max
+                        let data : M44f[] = Array.zeroCreate (1 + maxId)
+                        ids |> HMap.iter (fun root id ->
+                            match getRootUniform "ModelViewProjTrafos" root with
+                            | Some v ->
+                                match v.GetValue(t) with
+                                | :? Trafo3d as b ->
+                                    data.[id] <- M44f.op_Explicit b.Forward
+                                | _ ->
+                                    failwith "bad anarchy"
+                            | None ->
+                                    failwith "bad anarchy"
+                        )
+                        let dt = time() - st
+                        if dt.TotalMilliseconds > 5.0 then Log.warn "long upload"
                         ArrayBuffer data :> IBuffer
                 )
             manager.CreateBuffer data
@@ -2071,15 +2077,30 @@ module Bla =
             
         let perform (state : RenderState) (op : AtomicOperation<ITreeNode, GeometryInstance>) =
             op.ops |> HMap.iter (performOp state op)
+            
 
         //let glWait() =
         //    let fence = GL.FenceSync(SyncCondition.SyncGpuCommandsComplete, WaitSyncFlags.None)
         //    let mutable status = GL.ClientWaitSync(fence, ClientWaitSyncFlags.SyncFlushCommandsBit, 0L)
         //    while status <> WaitSyncStatus.AlreadySignaled && status <> WaitSyncStatus.ConditionSatisfied do
         //        status <- GL.ClientWaitSync(fence, ClientWaitSyncFlags.SyncFlushCommandsBit, 0L)
+        let rec enter (l : obj) =
+            let gotLock = Monitor.TryEnter(l, 5)
+            if gotLock then ()
+            else 
+                Log.warn "timeout"
+                enter l
+
+        let sync() =
+            let t = time()
+            GL.Flush()
+            GL.Finish()
+            let n = time()
+            let dt = n - t
+            if dt.TotalMilliseconds > 5.0 then Log.warn "long sync %A" dt
 
         let run (token : AdaptiveToken) (maxMem : Mem) (maxTime : MicroTime) (calls : DrawPool) (iface : GLSLProgramInterface) =
-            GL.Sync()
+            sync()
 
             let sw = System.Diagnostics.Stopwatch.StartNew()
       
@@ -2099,61 +2120,72 @@ module Bla =
             freeWatch.Reset()
             deactivateWatch.Reset()
 
+
             let rec run (cnt : int)  =
                 let mem = state.uploadSize > maxMem
-                let time = sw.MicroTime > maxTime
-                //let time = cnt > 10
-                //let sinceSync = 
-                //    if sinceSync.Bytes > 262144L then
-                //        GL.Sync()
-                //        Mem.Zero
-                //    else
-                //        sinceSync
+                let time = sw.MicroTime > maxTime 
 
                 if mem || time then
                     if state.nodeSize > 0 && state.count > 0 then
                         updateTime.Add(sw.MicroTime.TotalMilliseconds)
                         let took = sw.MicroTime
-                        if took > 3.0 * maxTime then
+                        if took > MicroTime.FromMilliseconds 10.0 then
                             Log.warn "long update: %A (%d, %A, %A, %A, %A, %A, %A)" took state.allocs state.uploadSize allocWatch.MicroTime uploadWatch.MicroTime freeWatch.MicroTime activateWatch.MicroTime deactivateWatch.MicroTime
+                        else 
+                            Log.line "long update: %A (%d, %A, %A, %A, %A, %A, %A)" took state.allocs state.uploadSize allocWatch.MicroTime uploadWatch.MicroTime freeWatch.MicroTime activateWatch.MicroTime deactivateWatch.MicroTime
+
                     renderTime.GetValue token |> ignore
                 else
                     let dequeued = 
-                        lock renderingStateLock (fun () ->
-                            match AtomicQueue.tryDequeue renderDelta with
-                            | Some (ops, rest) ->
-                                renderDelta <- rest
-                                deltaEmpty <- AtomicQueue.isEmpty rest
-                                Some ops
-                            | None ->
-                                None
-                        )
+                    //    enter renderingStateLock
+                    //    try
+                        match AtomicQueue.tryDequeue renderDelta with
+                        | Some (ops, rest) ->
+                            renderDelta <- rest
+                            deltaEmpty <- AtomicQueue.isEmpty rest
+                            Some ops
+                        | None ->
+                            None
+                        //finally
+                        //    Monitor.Exit renderingStateLock
+
                     match dequeued with
                     | None -> 
                         if state.nodeSize > 0 && state.count > 0 then
                             updateTime.Add(sw.MicroTime.TotalMilliseconds)
                             let took = sw.MicroTime
-                            if took > 3.0 * maxTime then
+                            if took > MicroTime.FromMilliseconds 10.0 then
                                 Log.warn "long update: %A (%d, %A, %A, %A, %A, %A, %A)" took state.allocs state.uploadSize allocWatch.MicroTime uploadWatch.MicroTime freeWatch.MicroTime activateWatch.MicroTime deactivateWatch.MicroTime
+                            else 
+                                Log.line "long update: %A (%d, %A, %A, %A, %A, %A, %A)" took state.allocs state.uploadSize allocWatch.MicroTime uploadWatch.MicroTime freeWatch.MicroTime activateWatch.MicroTime deactivateWatch.MicroTime
 
                         renderingConverged <- 1
 
                     | Some ops ->
                         perform state ops
-                        GL.Sync()
+                        sync()
                         run (cnt + 1)
 
-            run 0
-
+            enter renderingStateLock
+            try run 0
+            finally Monitor.Exit renderingStateLock
 
         let evaluate (calls : DrawPool) (token : AdaptiveToken) (iface : GLSLProgramInterface) =
+            let t = time()
             needUpdate.GetValue(token)
+            let dt = time() - t
+            if dt.TotalMilliseconds > 5.0 then Log.warn "long pull: %A" dt
+
             let maxTime = max (1 * ms) calls.AverageRenderTime
             let maxMem = Mem (3L <<< 30)
             run token maxMem maxTime calls iface
+            sync()
+            let dt = time() - t
+            if dt.TotalMilliseconds > 10.0 then
+                Log.warn "update: %A" dt
             
         let inner =
-            { new DrawPool(ctx, useCulling, activeBuffer.Pointer, state, pass) with
+            { new DrawPool(ctx, useCulling, activeBuffer.Pointer, modelViewProjBuffer.Pointer, state, pass) with
                 override x.Evaluate(token : AdaptiveToken, iface : GLSLProgramInterface) =
                     evaluate x token iface
 
@@ -2266,7 +2298,8 @@ module Bla =
                     let stop (node : ITreeNode) =
                         match cancel.TryRemove node with
                             | (true, c) -> 
-                                c.Cancel()
+                                try c.Cancel()
+                                with :? ObjectDisposedException -> ()
                             | _ -> 
                                 ()
          
@@ -2293,12 +2326,6 @@ module Bla =
                                 raise <| OperationCanceledException()
                         )
 
-                    let subs =
-                        [
-                            view.AddMarkingCallback (fun () -> notConverged.Set())
-                            proj.AddMarkingCallback (fun () -> notConverged.Set())
-                            reader.AddMarkingCallback (fun () -> notConverged.Set())
-                        ]
 
                     let remove (node : ITreeNode) (children : list<ITreeNode>) =
                         node :: children
@@ -2324,151 +2351,170 @@ module Bla =
                     let mutable lastView = Trafo3d.Identity
                     let mutable quality = 1.0 //0.1
 
+                    let caller = AdaptiveObject()
+                    let sub = caller.AddMarkingCallback (fun () -> notConverged.Set())
+
                     try 
                         while not shutdown.IsCancellationRequested do
                             timer.Wait()
                             notConverged.Wait(shutdown.Token)
-
-                            let view = view.GetValue()
-                            let proj = proj.GetValue()
-                            let ops = reader.GetOperations AdaptiveToken.Top
+                            caller.EvaluateAlways AdaptiveToken.Top (fun token ->
+                                let view = view.GetValue token
+                                let proj = proj.GetValue token
+                                let ops = reader.GetOperations token
                             
-                            let deltas = 
-                                if HDeltaSet.isEmpty ops then
-                                    let viewChanged = V3d.ApproxEqual(lastView.Backward.C3.XYZ, view.Backward.C3.XYZ, 1E-7) |> not
-                                    lastView <- view
-                                    //if viewChanged then quality <- 0.1
+                                let deltas = 
+                                    if HDeltaSet.isEmpty ops then
+                                        let viewChanged = V3d.ApproxEqual(lastView.Backward.C3.XYZ, view.Backward.C3.XYZ, 1E-7) |> not
+                                        lastView <- view
+                                        //if viewChanged then quality <- 0.1
                                     
-                                    let startTime = time()
+                                        let startTime = time()
 
-                                    let predictedView = view
+                                        let predictedView = view
 
-                                    let predictView (node : ITreeNode) =
-                                        let tLoad = getLoadTime node.DataSource node.DataSize
-                                        let tActivate = max (20*ms) inner.AverageRenderTime
-                                        let tUpload = updateTime.Average |> MicroTime.FromMilliseconds
-                                        let tRender = inner.AverageRenderTime
-                                        let loadTime = tLoad + tActivate + tUpload + tRender
-                                        predictedTrafo.Predict loadTime |> Option.defaultValue predictedView
+                                        let predictView (node : ITreeNode) =
+                                            let tLoad = getLoadTime node.DataSource node.DataSize
+                                            let tActivate = max (20*ms) inner.AverageRenderTime
+                                            let tUpload = updateTime.Average |> MicroTime.FromMilliseconds
+                                            let tRender = inner.AverageRenderTime
+                                            let loadTime = tLoad + tActivate + tUpload + tRender
+                                            predictedTrafo.Predict loadTime |> Option.defaultValue predictedView
                             
+                                        let newState = 
+                                            baseState |> HMap.map (fun o t -> 
+                                                let m = getRootTrafo(o.Root).GetValue token
+                                                let predictedView = m * predictedView
+                                                let predictView n = m * predictView n
+                                                
+                                                MaterializedTree.expand quality predictView predictedView proj t
+                                            )
 
-                                    let newState = 
-                                        baseState |> HMap.map (fun _ -> MaterializedTree.expand quality predictView predictedView proj)
+                                        let deltas = computeDeltas loadingState newState
+                                        loadingState <- newState
 
-                                    let deltas = computeDeltas loadingState newState
-                                    loadingState <- newState
+                                        let dt = time() - startTime
+                                        expandTime.Add(dt.TotalMilliseconds)
 
-                                    let dt = time() - startTime
-                                    expandTime.Add(dt.TotalMilliseconds)
+                                        deltas
 
-                                    deltas
+                                    else 
+                                        let mutable newState = loadingState
+                                        for o in ops do
+                                            match o with
+                                            | Add(_,(root, u)) -> 
+                                                rootUniforms <- HMap.add root u rootUniforms
+                                                let id = getRootId root
+                                                let r = MaterializedTree.ofNode id root
+                                            
+                                                baseState <- HMap.add root r baseState
+                                                newState <- HMap.add root r newState
 
-                                else 
-                                    let mutable newState = loadingState
-                                    for o in ops do
-                                        match o with
-                                        | Add(_,(root, u)) -> 
-                                            rootUniforms <- HMap.add root u rootUniforms
-                                            let id = getRootId root
-                                            let r = MaterializedTree.ofNode id root
-                                            baseState <- HMap.add root r baseState
-                                            newState <- HMap.add root r newState
+                                            | Rem(_,(root,_)) -> 
+                                                rootUniforms <- HMap.remove root rootUniforms
+                                                freeRootId root
+                                                baseState <- HMap.remove root baseState
+                                                newState <- HMap.remove root newState
 
-                                        | Rem(_,(root,_)) -> 
-                                            rootUniforms <- HMap.remove root rootUniforms
-                                            freeRootId root
-                                            baseState <- HMap.remove root baseState
-                                            newState <- HMap.remove root newState
+                                        let deltas = computeDeltas loadingState newState
+                                        loadingState <- newState
 
-                                    let deltas = computeDeltas loadingState newState
-                                    loadingState <- newState
-
-                                    baseVersion <- newVersion()
-                                    deltas
+                                        baseVersion <- newVersion()
+                                        deltas
                               
                      
-                            if HMap.isEmpty deltas then
-                                if renderingConverged = 1 && runningTasks = 0 then
-                                    if baseVersion = loadingVersion && quality >= 1.0 then
-                                        notConverged.Reset()
-                                    else
-                                        baseState <- loadingState
-                                        baseVersion <- loadingVersion
-                                        quality <- min 1.0 (quality + 0.01)
-                            else
-                                renderingConverged <- 0
-                                loadingVersion <- newVersion()
+                                if HMap.isEmpty deltas then
+                                    if renderingConverged = 1 && runningTasks = 0 then
+                                        if baseVersion = loadingVersion && quality >= 1.0 then
+                                            notConverged.Reset()
+                                        else
+                                            baseState <- loadingState
+                                            baseVersion <- loadingVersion
+                                            quality <- min 1.0 (quality + 0.01)
+                                else
+                                    renderingConverged <- 0
+                                    loadingVersion <- newVersion()
 
-                                for (v, (rootId, delta)) in deltas do
-                                    stop v
+                                    for (v, (rootId, delta)) in deltas do
+                                        stop v
                                     
 
-                                    match delta with
-                                        | NodeOperation.Remove children ->
-                                            lock renderingStateLock (fun () ->
-                                                submit (remove v children)
-                                            )
-
-                                        | NodeOperation.Split ->
-                                            let c = new CancellationTokenSource()
-                                        
-                                            let loadChildren = 
-                                                v.Children |> Seq.toList |> List.map (fun v -> 
-                                                    let t = load c.Token rootId v (fun _ n l -> (n,l))
-                                                    t
-                                                )
-                                        
-
-
-                                            Interlocked.Increment(&runningTasks) |> ignore
-                                        
-                                            v.Children |> Seq.iter (fun ci -> cancel.[ci] <- c)
-                                            cancel.[v] <- c
-
-                                            let s = 
-                                                c.Token.Register (fun () -> 
-                                                    Interlocked.Decrement(&runningTasks) |> ignore
-                                                    v.Children |> Seq.iter (fun ci -> cancel.TryRemove ci |> ignore)
-                                                    cancel.TryRemove v |> ignore
-                                                )
-                                    
-                                            let myTask = 
-                                                Task.WhenAll(loadChildren).ContinueWith (fun (a : Task<array<_>>) ->
-                                                    if a.IsCompleted && not a.IsCanceled && not a.IsFaulted then
-                                                        lock renderingStateLock (fun () ->
-                                                            if not c.IsCancellationRequested then
-                                                                let op = split v (HMap.ofArray a.Result)
-                                                                submit op
-                                                                c.Cancel()
-                                                        )
-
-                                                    c.Dispose()
-                                                )
-                                        
-                                            ()
-                                        
-
-
-                                        | NodeOperation.Collapse(children) ->
-                                            children |> List.iter stop
-                                            lock renderingStateLock (fun () ->
-                                                let myOp = collapse v children
-                                                submit myOp
-                                            )
-
-
-                                        | NodeOperation.Add ->
-                                            let ct = CancellationToken.None
-                                            Interlocked.Increment(&runningTasks) |> ignore
-     
-                                            load ct rootId v (fun _ v l ->
+                                        match delta with
+                                            | NodeOperation.Remove children ->
+                                                let op = remove v children
                                                 lock renderingStateLock (fun () ->
-                                                    submit (add v l)
-                                                    Interlocked.Decrement(&runningTasks) |> ignore
+                                                    submit op
                                                 )
-                                            ) |> ignore
+
+                                            | NodeOperation.Split ->
+                                                let c = new CancellationTokenSource()
+                                        
+                                                let loadChildren = 
+                                                    v.Children |> Seq.toList |> List.map (fun v -> 
+                                                        let t = load c.Token rootId v (fun _ n l -> (n,l))
+                                                        t
+                                                    )
+                                        
+
+
+                                                Interlocked.Increment(&runningTasks) |> ignore
+                                        
+                                                v.Children |> Seq.iter (fun ci -> cancel.[ci] <- c)
+                                                cancel.[v] <- c
+
+                                                let s = 
+                                                    c.Token.Register (fun () -> 
+                                                        Interlocked.Decrement(&runningTasks) |> ignore
+                                                        v.Children |> Seq.iter (fun ci -> cancel.TryRemove ci |> ignore)
+                                                        cancel.TryRemove v |> ignore
+                                                    )
+                                    
+                                                let myTask = 
+                                                    Task.WhenAll(loadChildren).ContinueWith (fun (a : Task<array<_>>) ->
+                                                        if a.IsCompleted && not a.IsCanceled && not a.IsFaulted then
+                                                            let op = split v (HMap.ofArray a.Result)
+                                                            
+                                                            let cancel = 
+                                                                lock renderingStateLock (fun () ->
+                                                                    if not c.IsCancellationRequested then
+                                                                        submit op
+                                                                        true
+                                                                    else
+                                                                        false
+                                                                )
+                                                            if cancel then
+                                                                try c.Cancel()
+                                                                with _ -> ()
+
+                                                        c.Dispose()
+                                                    )
+                                        
+                                                ()
+                                        
+
+
+                                            | NodeOperation.Collapse(children) ->
+                                                children |> List.iter stop
+                                                let myOp = collapse v children
+                                                lock renderingStateLock (fun () ->
+                                                    submit myOp
+                                                )
+
+
+                                            | NodeOperation.Add ->
+                                                let ct = CancellationToken.None
+                                                Interlocked.Increment(&runningTasks) |> ignore
+     
+                                                load ct rootId v (fun _ v l ->
+                                                    let op = add v l
+                                                    lock renderingStateLock (fun () ->
+                                                        submit op
+                                                    )
+                                                    Interlocked.Decrement(&runningTasks) |> ignore
+                                                ) |> ignore
+                            )
                     finally 
-                        for s in subs do s.Dispose()
+                        sub.Dispose()
                 )
 
             
@@ -2483,6 +2529,7 @@ module Bla =
         override x.GetResources() = 
             Seq.concat [ 
                 Seq.singleton (activeBuffer :> IResource)
+                Seq.singleton (modelViewProjBuffer :> IResource)
                 (storageBuffers |> Map.toSeq |> Seq.map snd |> Seq.cast) 
                 (inner.Resources :> seq<_>)
             ]
@@ -2545,7 +2592,6 @@ module StoreTree =
                                 Some node
 
                             | Some (Some _) ->
-                                Log.warn "cache died"
                                 let n = PointTreeNode(source, globalTrafo, Some this.Root, Some this, level+1, node.Value)
                                 cache := Some (Some (WeakReference<_> n))
                                 Some n
@@ -2793,7 +2839,7 @@ module StoreTree =
         let root = PointTreeNode(source, trafo, None, None, 0, points.Root.Value) :> Bla.ITreeNode
         root, MapExt.ofList uniforms
 
-    let importAscii (sourceName : string) (trafo : Trafo3d) (file : string) (store : string) (uniforms : list<string * IMod>) =
+    let importAscii (sourceName : string) (file : string) (store : string) (uniforms : list<string * IMod>) =
         let fmt = [| Ascii.Token.PositionX; Ascii.Token.PositionY; Ascii.Token.PositionZ; Ascii.Token.ColorR; Ascii.Token.ColorG; Ascii.Token.ColorB |]
         
         let store = PointCloud.OpenStore store
@@ -2822,14 +2868,13 @@ module StoreTree =
 
         let trafo =
             Trafo3d.Translation(-bounds.Center) *
-            Trafo3d.Scale(targetSize / bounds.Size.NormMax) * 
-            trafo
+            Trafo3d.Scale(targetSize / bounds.Size.NormMax)
 
         let source = Symbol.Create sourceName
         let root = PointTreeNode(source, trafo, None, None, 0, points.Root.Value) :> Bla.ITreeNode
         root, MapExt.ofList uniforms
 
-    let import (sourceName : string) (trafo : Trafo3d) (file : string) (store : string) (uniforms : list<string * IMod>) =
+    let import (sourceName : string) (file : string) (store : string) (uniforms : list<string * IMod>) =
         do Aardvark.Data.Points.Import.Pts.PtsFormat |> ignore
         do Aardvark.Data.Points.Import.E57.E57Format |> ignore
         
@@ -2860,8 +2905,7 @@ module StoreTree =
 
         let trafo =
             Trafo3d.Translation(-bounds.Center) *
-            Trafo3d.Scale(targetSize / bounds.Size.NormMax) * 
-            trafo
+            Trafo3d.Scale(targetSize / bounds.Size.NormMax) 
 
         let source = Symbol.Create sourceName
         let root = PointTreeNode(source, trafo, None, None, 0, points.Root.Value) :> Bla.ITreeNode
@@ -2963,6 +3007,8 @@ module Shader =
 
     type UniformScope with
         member x.Overlay : V4d[] = x?StorageBuffer?Overlay
+        member x.ModelTrafos : M44d[] = x?StorageBuffer?ModelTrafos
+        member x.ModelViewTrafos : M44d[] = x?StorageBuffer?ModelViewTrafos
 
     type Vertex =
         {
@@ -2994,7 +3040,8 @@ module Shader =
 
     let lodPointSize (v : PointVertex) =
         vertex { 
-            let ovp = uniform.ModelViewTrafo * v.pos 
+            let mv = uniform.ModelViewTrafos.[v.id]
+            let ovp = mv * v.pos
 
             let vp = ovp + V4d(0.0, 0.0, 0.5*v.dist, 0.0)
             let vp1 = ovp + V4d(0.5 * v.dist, 0.0, 0.0, 0.0)
@@ -3006,14 +3053,14 @@ module Shader =
             let depthRange = abs (pp.Z / pp.W - pp1.Z / pp1.W)
 
             let pixelDist = ndcDist * float uniform.ViewportSize.X
-            let n = uniform.ModelViewTrafo * V4d(v.n, 0.0) |> Vec.xyz |> Vec.normalize
+            let n = mv * V4d(v.n, 0.0) |> Vec.xyz |> Vec.normalize
             
             let pixelDist = 
                 if pp.Z < -pp.W then -1.0
                 else uniform.PointSize * pixelDist
 
             let o = uniform.Overlay.[v.id]
-            let col = o.W * uniform.Overlay.[v.id].XYZ + (1.0 - o.W) * v.col.XYZ
+            let col = o.W * o.XYZ + (1.0 - o.W) * v.col.XYZ
 
             return { v with s = pixelDist; pos = pp; depthRange = depthRange; n = n; vp = ovp.XYZ; col = V4d(col, v.col.W) }
         }
@@ -3081,6 +3128,7 @@ module Sg =
             let surface = sg.Surface
             let pass = sg.RenderPass
 
+            let model = sg.ModelTrafo
             let view = sg.ViewTrafo
             let proj = sg.ProjTrafo
 
@@ -3094,7 +3142,7 @@ module Sg =
                         match r with
                         | :? Aardvark.Rendering.GL.Runtime as r ->
                             let preparedState = Aardvark.Rendering.GL.PreparedPipelineState.ofPipelineState fbo r.ResourceManager surface state
-                            new Bla.LodRenderer(r.Context, preparedState, pass, sg.Culling, sg.Clouds, sg.Time, view, proj) :> IPreparedRenderObject
+                            new Bla.LodRenderer(r.Context, preparedState, pass, sg.Culling, sg.Clouds, sg.Time, model, view, proj) :> IPreparedRenderObject
                         | _ ->
                             failwithf "[LoD] no vulkan backend atm."
                 }
@@ -3106,9 +3154,10 @@ module Sg =
 
 [<EntryPoint>]
 let main argv = 
-    System.Threading.ThreadPool.SetMinThreads(12,12) |> ignore
-    System.Threading.ThreadPool.SetMaxThreads(12,12) |> ignore
-    
+    //System.Runtime.GCSettings.LatencyMode <- System.Runtime.GCLatencyMode.LowLatency
+
+    System.Threading.ThreadPool.SetMinThreads(8,8) |> printfn "set: %A"
+    System.Threading.ThreadPool.SetMaxThreads(8,8) |> printfn "set: %A"
     Ag.initialize()
     Aardvark.Init()
 
@@ -3116,7 +3165,7 @@ let main argv =
     let win =
         window {
             backend Backend.GL
-            device DeviceKind.Any
+            device DeviceKind.Dedicated
             display Display.Mono
             debug false
         }
@@ -3135,7 +3184,6 @@ let main argv =
     let oktogon =
         StoreTree.import
             "ssd"
-            (Trafo3d.Translation(0.0, 0.0, 0.0)) 
             @"\\euclid\rmDATA\Data\Schottenring_2018_02_23\Laserscans\2018-02-27_BankAustria\export\oktogon\Punktwolke\BLKgesamt.e57"
             @"C:\Users\Schorsch\Development\WorkDirectory\BLK"
             [
@@ -3146,7 +3194,6 @@ let main argv =
     let kaunertal =
         StoreTree.importAscii
             "ssd"
-            (Trafo3d.Translation(0.0, 0.0, 0.0)) 
             @"C:\Users\Schorsch\Development\WorkDirectory\Kaunertal.txt"
             @"C:\Users\Schorsch\Development\WorkDirectory\KaunertalNormals"
             [
@@ -3154,14 +3201,35 @@ let main argv =
                 "TreeActive", active1 :> IMod
             ]
 
+
+
+
+    let trafo = Mod.init Trafo3d.Identity
+
+    let thread = 
+        startThread (fun () ->  
+            let mm = new MultimediaTimer.Trigger(10)
+            let sw = System.Diagnostics.Stopwatch.StartNew()
+            let mutable lastTime = sw.MicroTime
+            while true do
+                mm.Wait()
+                let now = sw.MicroTime
+                let dt = now - lastTime
+                lastTime <- now
+
+                transact (fun () -> trafo.Value <- trafo.Value * Trafo3d.RotationZ(dt.TotalSeconds * 0.1))
+
+
+        )
+
     let koeln =
         StoreTree.import
             "ssd"
-            (Trafo3d.Translation(100.0, 0.0, -1.53)) 
             @"C:\Users\Schorsch\Development\WorkDirectory\3278_5514_0_10\3278_5514_0_10"
             @"C:\Users\Schorsch\Development\WorkDirectory\3278_5514_0_10\pointcloud\"
             [
                 "Overlay", c0WithAlpha :> IMod
+                "ModelTrafo", trafo :> IMod
             ]
 
     //let koeln2 =
@@ -3202,6 +3270,9 @@ let main argv =
         | Keys.Subtract -> transact (fun () -> overlayAlpha.Value <- max 0.0 (overlayAlpha.Value - 0.1))
         | Keys.Add -> transact (fun () -> overlayAlpha.Value <- min 1.0 (overlayAlpha.Value + 0.1))
 
+        | Keys.Left -> transact (fun () -> trafo.Value <- trafo.Value * Trafo3d.Translation(-20.0, 0.0, 0.0))
+        | Keys.Right -> transact (fun () -> trafo.Value <- trafo.Value * Trafo3d.Translation(20.0, 0.0, 0.0))
+
         | Keys.D1 -> transact (fun () -> active0.Value <- not active0.Value); printfn "active0: %A" active0.Value
         | Keys.D2 -> transact (fun () -> active1.Value <- not active1.Value); printfn "active1: %A" active1.Value
         | Keys.Space -> 
@@ -3211,7 +3282,7 @@ let main argv =
                 c1.Value <- v
             )
 
-        | _ -> printfn "%A" k
+        | _ -> ()
     )
     
 
