@@ -2137,17 +2137,17 @@ module Bla =
                     renderTime.GetValue token |> ignore
                 else
                     let dequeued = 
-                    //    enter renderingStateLock
-                    //    try
-                        match AtomicQueue.tryDequeue renderDelta with
-                        | Some (ops, rest) ->
-                            renderDelta <- rest
-                            deltaEmpty <- AtomicQueue.isEmpty rest
-                            Some ops
-                        | None ->
-                            None
-                        //finally
-                        //    Monitor.Exit renderingStateLock
+                        enter renderingStateLock
+                        try
+                            match AtomicQueue.tryDequeue renderDelta with
+                            | Some (ops, rest) ->
+                                renderDelta <- rest
+                                deltaEmpty <- AtomicQueue.isEmpty rest
+                                Some ops
+                            | None ->
+                                None
+                        finally
+                            Monitor.Exit renderingStateLock
 
                     match dequeued with
                     | None -> 
@@ -2166,9 +2166,9 @@ module Bla =
                         sync()
                         run (cnt + 1)
 
-            enter renderingStateLock
-            try run 0
-            finally Monitor.Exit renderingStateLock
+            //enter renderingStateLock
+            run 0
+            //finally Monitor.Exit renderingStateLock
 
         let evaluate (calls : DrawPool) (token : AdaptiveToken) (iface : GLSLProgramInterface) =
             let t = time()
@@ -2285,6 +2285,12 @@ module Bla =
             let startTask (ct : CancellationToken) (f : unit -> 'a) =
                 Task.Factory.StartNew(Func<_>(f), ct, TaskCreationOptions.None, scheduler)
                 
+            let pull (t : AdaptiveToken) (f : AdaptiveToken -> 'r) =
+                let t = t.Isolated
+                let res = f t
+                t.Release()
+                res
+
             let thread = 
                 startThread (fun () ->
                     let mutable runningTasks = 0
@@ -2351,170 +2357,187 @@ module Bla =
                     let mutable lastView = Trafo3d.Identity
                     let mutable quality = 1.0 //0.1
 
-                    let caller = AdaptiveObject()
-                    let sub = caller.AddMarkingCallback (fun () -> notConverged.Set())
+                    //let caller = AdaptiveObject()
+                    //let sub = caller.AddMarkingCallback (fun () -> notConverged.Set())
+
+                    let subs =
+                        Dict.ofList [
+                            view :> IAdaptiveObject, view.AddMarkingCallback (fun () -> notConverged.Set())
+                            proj :> IAdaptiveObject, proj.AddMarkingCallback (fun () -> notConverged.Set())
+                            reader :> IAdaptiveObject, reader.AddMarkingCallback (fun () -> notConverged.Set())
+                        ]
+
 
                     try 
                         while not shutdown.IsCancellationRequested do
                             timer.Wait()
                             notConverged.Wait(shutdown.Token)
-                            caller.EvaluateAlways AdaptiveToken.Top (fun token ->
-                                let view = view.GetValue token
-                                let proj = proj.GetValue token
-                                let ops = reader.GetOperations token
+                            //caller.EvaluateAlways AdaptiveToken.Top (fun token ->
+                            let view = view.GetValue AdaptiveToken.Top
+                            let proj = proj.GetValue AdaptiveToken.Top
+                            let ops = reader.GetOperations AdaptiveToken.Top
                             
-                                let deltas = 
-                                    if HDeltaSet.isEmpty ops then
-                                        let viewChanged = V3d.ApproxEqual(lastView.Backward.C3.XYZ, view.Backward.C3.XYZ, 1E-7) |> not
-                                        lastView <- view
-                                        //if viewChanged then quality <- 0.1
+                            let deltas = 
+                                if HDeltaSet.isEmpty ops then
+                                    let viewChanged = V3d.ApproxEqual(lastView.Backward.C3.XYZ, view.Backward.C3.XYZ, 1E-7) |> not
+                                    lastView <- view
+                                    //if viewChanged then quality <- 0.1
                                     
-                                        let startTime = time()
+                                    let startTime = time()
 
-                                        let predictedView = view
+                                    let predictedView = view
 
-                                        let predictView (node : ITreeNode) =
-                                            let tLoad = getLoadTime node.DataSource node.DataSize
-                                            let tActivate = max (20*ms) inner.AverageRenderTime
-                                            let tUpload = updateTime.Average |> MicroTime.FromMilliseconds
-                                            let tRender = inner.AverageRenderTime
-                                            let loadTime = tLoad + tActivate + tUpload + tRender
-                                            predictedTrafo.Predict loadTime |> Option.defaultValue predictedView
+                                    let predictView (node : ITreeNode) =
+                                        let tLoad = getLoadTime node.DataSource node.DataSize
+                                        let tActivate = max (20*ms) inner.AverageRenderTime
+                                        let tUpload = updateTime.Average |> MicroTime.FromMilliseconds
+                                        let tRender = inner.AverageRenderTime
+                                        let loadTime = tLoad + tActivate + tUpload + tRender
+                                        predictedTrafo.Predict loadTime |> Option.defaultValue predictedView
                             
-                                        let newState = 
-                                            baseState |> HMap.map (fun o t -> 
-                                                let m = getRootTrafo(o.Root).GetValue token
-                                                let predictedView = m * predictedView
-                                                let predictView n = m * predictView n
+                                    let newState = 
+                                        baseState |> HMap.map (fun o t -> 
+                                            let m = getRootTrafo(o.Root)
+
+                                            subs.GetOrCreate(m, fun _ -> m.AddMarkingCallback(notConverged.Set)) |> ignore
+
+                                            let m = m.GetValue(AdaptiveToken.Top)
+
+                                            let predictedView = m * predictedView
+                                            let predictView n = m * predictView n
                                                 
-                                                MaterializedTree.expand quality predictView predictedView proj t
-                                            )
+                                            MaterializedTree.expand quality predictView predictedView proj t
+                                        )
 
-                                        let deltas = computeDeltas loadingState newState
-                                        loadingState <- newState
+                                    let deltas = computeDeltas loadingState newState
+                                    loadingState <- newState
 
-                                        let dt = time() - startTime
-                                        expandTime.Add(dt.TotalMilliseconds)
+                                    let dt = time() - startTime
+                                    expandTime.Add(dt.TotalMilliseconds)
 
-                                        deltas
+                                    deltas
 
-                                    else 
-                                        let mutable newState = loadingState
-                                        for o in ops do
-                                            match o with
-                                            | Add(_,(root, u)) -> 
-                                                rootUniforms <- HMap.add root u rootUniforms
-                                                let id = getRootId root
-                                                let r = MaterializedTree.ofNode id root
+                                else 
+                                    let mutable newState = loadingState
+                                    for o in ops do
+                                        match o with
+                                        | Add(_,(root, u)) -> 
+                                            rootUniforms <- HMap.add root u rootUniforms
+                                            let id = getRootId root
+                                            let r = MaterializedTree.ofNode id root
                                             
-                                                baseState <- HMap.add root r baseState
-                                                newState <- HMap.add root r newState
+                                            baseState <- HMap.add root r baseState
+                                            newState <- HMap.add root r newState
 
-                                            | Rem(_,(root,_)) -> 
-                                                rootUniforms <- HMap.remove root rootUniforms
-                                                freeRootId root
-                                                baseState <- HMap.remove root baseState
-                                                newState <- HMap.remove root newState
+                                        | Rem(_,(root,_)) -> 
+                                            rootUniforms <- HMap.remove root rootUniforms
+                                            match subs.TryRemove (getRootTrafo root) with
+                                            | (true, s) -> s.Dispose()
+                                            | _ -> ()
+                                            freeRootId root
 
-                                        let deltas = computeDeltas loadingState newState
-                                        loadingState <- newState
+                                            baseState <- HMap.remove root baseState
+                                            newState <- HMap.remove root newState
 
-                                        baseVersion <- newVersion()
-                                        deltas
+                                    let deltas = computeDeltas loadingState newState
+                                    loadingState <- newState
+
+                                    baseVersion <- newVersion()
+                                    deltas
                               
                      
-                                if HMap.isEmpty deltas then
-                                    if renderingConverged = 1 && runningTasks = 0 then
-                                        if baseVersion = loadingVersion && quality >= 1.0 then
-                                            notConverged.Reset()
-                                        else
-                                            baseState <- loadingState
-                                            baseVersion <- loadingVersion
-                                            quality <- min 1.0 (quality + 0.01)
-                                else
-                                    renderingConverged <- 0
-                                    loadingVersion <- newVersion()
+                            if HMap.isEmpty deltas then
+                                if renderingConverged = 1 && runningTasks = 0 then
+                                    if baseVersion = loadingVersion && quality >= 1.0 then
+                                        notConverged.Reset()
+                                    else
+                                        baseState <- loadingState
+                                        baseVersion <- loadingVersion
+                                        quality <- min 1.0 (quality + 0.01)
+                            else
+                                renderingConverged <- 0
+                                loadingVersion <- newVersion()
 
-                                    for (v, (rootId, delta)) in deltas do
-                                        stop v
+                                for (v, (rootId, delta)) in deltas do
+                                    stop v
                                     
 
-                                        match delta with
-                                            | NodeOperation.Remove children ->
-                                                let op = remove v children
+                                    match delta with
+                                        | NodeOperation.Remove children ->
+                                            let op = remove v children
+                                            lock renderingStateLock (fun () ->
+                                                submit op
+                                            )
+
+                                        | NodeOperation.Split ->
+                                            let c = new CancellationTokenSource()
+                                        
+                                            let loadChildren = 
+                                                v.Children |> Seq.toList |> List.map (fun v -> 
+                                                    let t = load c.Token rootId v (fun _ n l -> (n,l))
+                                                    t
+                                                )
+                                        
+
+
+                                            Interlocked.Increment(&runningTasks) |> ignore
+                                        
+                                            v.Children |> Seq.iter (fun ci -> cancel.[ci] <- c)
+                                            cancel.[v] <- c
+
+                                            let s = 
+                                                c.Token.Register (fun () -> 
+                                                    Interlocked.Decrement(&runningTasks) |> ignore
+                                                    v.Children |> Seq.iter (fun ci -> cancel.TryRemove ci |> ignore)
+                                                    cancel.TryRemove v |> ignore
+                                                )
+                                    
+                                            let myTask = 
+                                                Task.WhenAll(loadChildren).ContinueWith (fun (a : Task<array<_>>) ->
+                                                    if a.IsCompleted && not a.IsCanceled && not a.IsFaulted then
+                                                        let op = split v (HMap.ofArray a.Result)
+                                                            
+                                                        let cancel = 
+                                                            lock renderingStateLock (fun () ->
+                                                                if not c.IsCancellationRequested then
+                                                                    submit op
+                                                                    true
+                                                                else
+                                                                    false
+                                                            )
+                                                        if cancel then
+                                                            try c.Cancel()
+                                                            with _ -> ()
+
+                                                    c.Dispose()
+                                                )
+                                        
+                                            ()
+                                        
+
+
+                                        | NodeOperation.Collapse(children) ->
+                                            children |> List.iter stop
+                                            let myOp = collapse v children
+                                            lock renderingStateLock (fun () ->
+                                                submit myOp
+                                            )
+
+
+                                        | NodeOperation.Add ->
+                                            let ct = CancellationToken.None
+                                            Interlocked.Increment(&runningTasks) |> ignore
+     
+                                            load ct rootId v (fun _ v l ->
+                                                let op = add v l
                                                 lock renderingStateLock (fun () ->
                                                     submit op
                                                 )
-
-                                            | NodeOperation.Split ->
-                                                let c = new CancellationTokenSource()
-                                        
-                                                let loadChildren = 
-                                                    v.Children |> Seq.toList |> List.map (fun v -> 
-                                                        let t = load c.Token rootId v (fun _ n l -> (n,l))
-                                                        t
-                                                    )
-                                        
-
-
-                                                Interlocked.Increment(&runningTasks) |> ignore
-                                        
-                                                v.Children |> Seq.iter (fun ci -> cancel.[ci] <- c)
-                                                cancel.[v] <- c
-
-                                                let s = 
-                                                    c.Token.Register (fun () -> 
-                                                        Interlocked.Decrement(&runningTasks) |> ignore
-                                                        v.Children |> Seq.iter (fun ci -> cancel.TryRemove ci |> ignore)
-                                                        cancel.TryRemove v |> ignore
-                                                    )
-                                    
-                                                let myTask = 
-                                                    Task.WhenAll(loadChildren).ContinueWith (fun (a : Task<array<_>>) ->
-                                                        if a.IsCompleted && not a.IsCanceled && not a.IsFaulted then
-                                                            let op = split v (HMap.ofArray a.Result)
-                                                            
-                                                            let cancel = 
-                                                                lock renderingStateLock (fun () ->
-                                                                    if not c.IsCancellationRequested then
-                                                                        submit op
-                                                                        true
-                                                                    else
-                                                                        false
-                                                                )
-                                                            if cancel then
-                                                                try c.Cancel()
-                                                                with _ -> ()
-
-                                                        c.Dispose()
-                                                    )
-                                        
-                                                ()
-                                        
-
-
-                                            | NodeOperation.Collapse(children) ->
-                                                children |> List.iter stop
-                                                let myOp = collapse v children
-                                                lock renderingStateLock (fun () ->
-                                                    submit myOp
-                                                )
-
-
-                                            | NodeOperation.Add ->
-                                                let ct = CancellationToken.None
-                                                Interlocked.Increment(&runningTasks) |> ignore
-     
-                                                load ct rootId v (fun _ v l ->
-                                                    let op = add v l
-                                                    lock renderingStateLock (fun () ->
-                                                        submit op
-                                                    )
-                                                    Interlocked.Decrement(&runningTasks) |> ignore
-                                                ) |> ignore
-                            )
+                                                Interlocked.Decrement(&runningTasks) |> ignore
+                                            ) |> ignore
+                 
                     finally 
-                        sub.Dispose()
+                        subs |> Seq.iter (fun s -> s.Value.Dispose())
                 )
 
             
