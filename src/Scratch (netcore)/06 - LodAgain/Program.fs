@@ -1715,50 +1715,50 @@ module Bla =
 
     type internal TaskTreeState =
         {
-            mutable runningTasks    : int
-            mutable ready           : int
-            mutable totalNodes      : int
-            mutable version         : int
-            mutable splits          : int
-            mutable collapses       : int
+            runningTasks    : ref<int>
+            ready           : ref<int>
+            totalNodes      : ref<int>
+            version         : ref<int>
+            splits          : ref<int>
+            collapses       : ref<int>
         }
         
 
         member x.AddNode() = 
             lock x (fun () -> 
-                x.totalNodes <- x.totalNodes + 1
+                x.totalNodes := !x.totalNodes + 1
             )
 
         member x.RemoveNode() = 
             lock x (fun () -> 
-                x.totalNodes <- x.totalNodes - 1
+                x.totalNodes := !x.totalNodes - 1
             )
 
         member x.AddRunning() = 
             lock x (fun () -> 
-                x.runningTasks <- x.runningTasks + 1
+                x.runningTasks := !x.runningTasks + 1
             )
 
         member x.RemoveRunning() = 
             lock x (fun () -> 
-                x.runningTasks <- x.runningTasks - 1
+                x.runningTasks := !x.runningTasks - 1
             )
         
 
         member x.AddReady() = 
             lock x (fun () -> 
-                x.ready <- x.ready + 1
-                x.version <- x.version + 1
+                x.ready := !x.ready + 1
+                x.version := !x.version + 1
                 Monitor.PulseAll x
             )
 
         member x.TakeReady(minCount : int) =
             lock x (fun () -> 
-                while x.ready < minCount do
+                while !x.ready < minCount do
                     Monitor.Wait x |> ignore
 
-                let t = x.ready
-                x.ready <- 0
+                let t = !x.ready
+                x.ready := 0
                 t
             )
 
@@ -1840,39 +1840,7 @@ module Bla =
         member x.Collapse() =
             children |> List.iter (fun c -> c.Destroy())
             children <- []
-
-
-        member x.Update(node : ITreeNode, depth : int, quality : float, view : Trafo3d, proj : Trafo3d) =
-            if node <> original then failwith "[Tree] inconsistent path"
             
-            if x.HasValue then
-                match children with
-                | [] ->
-                    if node.ShouldSplit(quality, view, proj) then
-                        let n = node.Children |> Seq.toList
-                        let childTasks = System.Collections.Generic.List<Task<_>>()
-                        children <- n |> List.map (fun n -> 
-                            let node = TaskTreeNode(state, mapping, rootId, n)
-                            node.Update(n, depth + 1, quality, view, proj)
-                            childTasks.Add(node.Task)
-                            node
-                        )
-
-                        let childrenReady (t : Task<_>) =
-                            if t.IsCompleted && not t.IsFaulted && not t.IsCanceled then
-                                state.AddReady()
-
-                        Task.WhenAll(childTasks).ContinueWith(childrenReady, TaskContinuationOptions.OnlyOnRanToCompletion) |> ignore
-                
-                | o ->
-                    if node.ShouldCollapse(quality, view, proj) then
-                        children |> List.iter (fun c -> c.Destroy())
-                        children <- []
-                    else
-                        for (o, n) in Seq.zip o node.Children do
-                            o.Update(n, depth, quality, view, proj)
-
-  
         member x.Original = original
         member x.Children = children
         member x.HasValue = task.IsCompleted && not task.IsFaulted && not task.IsCanceled
@@ -1891,33 +1859,14 @@ module Bla =
         static let cmp = Func<float * _, float * _, int>(fun (a,_) (b,_) -> compare a b)
         let mutable root : Option<TaskTreeNode<'a>> = None
 
-        let state =
-            {
-                runningTasks = 0
-                ready = 0
-                totalNodes = 0
-                version = 0
-                splits = 0
-                collapses = 0
-            }
+        
+        //member x.RunningTasks = state.runningTasks
 
-        member x.ConsumeCollapses() =
-            Interlocked.Exchange(&state.collapses, 0)
-            
-        member x.ConsumeSplits() =
-            Interlocked.Exchange(&state.splits, 0)
-
-        member x.RunningTasks = state.runningTasks
-
-        member x.Version = state.version
+        //member x.Version = state.version
         member x.RootId = rootId
         member x.Root = root
 
-
-
-        member x.Update(t : Option<ITreeNode>, quality : float, view : Trafo3d, proj : Trafo3d, maxOps : int) =
-            let queue = List<float * SetOperation<TaskTreeNode<'a>>>()
-            
+        member internal x.BuildQueue(state : TaskTreeState, t : Option<ITreeNode>, quality : float, view : ITreeNode -> Trafo3d, proj : Trafo3d, queue : List<float * SetOperation<TaskTreeNode<'a>>>) =
             match root, t with
             | None, None -> 
                 ()
@@ -1928,32 +1877,75 @@ module Bla =
             | None, Some n -> 
                 let r = TaskTreeNode(state, mapping, rootId, n)
                 root <- Some r
-                r.BuildQueue(n, 0, quality, view, proj, queue)
+                r.BuildQueue(n, 0, quality, view r.Original, proj, queue)
                 
             | Some r, Some t -> 
-                r.BuildQueue(t, 0, quality, view, proj, queue)
+                r.BuildQueue(t, 0, quality, view r.Original, proj, queue)
 
+        static member internal ProcessQueue(state : TaskTreeState, queue : List<float * SetOperation<TaskTreeNode<'a>>>, quality : float, view : ITreeNode -> Trafo3d, proj : Trafo3d, maxOps : int) =
             let mutable lastQ = 0.0
-            while state.runningTasks < maxOps && queue.Count > 0 do
+            while !state.runningTasks < maxOps && queue.Count > 0 do
                 let q, op = queue.HeapDequeue(cmp)
                 lastQ <- q
                 match op with
                 | Add(_,n) -> 
                     n.StartSplit()
                     for c in n.Children do
-                        if c.Original.ShouldSplit(quality, view, proj) then
+                        let r = c.Original.Root
+                        let view = view r
+                        if c.Original.ShouldSplit(quality, view , proj) then
                             let qs = c.Original.SplitQuality(view, proj)
                             queue.HeapEnqueue(cmp, (qs, Add c))
-                    Interlocked.Increment(&state.splits) |> ignore
+                    Interlocked.Increment(&state.splits.contents) |> ignore
                 | Rem(_,n) -> 
                     n.Collapse()
-                    Interlocked.Increment(&state.collapses) |> ignore
+                    Interlocked.Increment(&state.collapses.contents) |> ignore
                     
             if queue.Count = 0 then 
                 quality
             else 
                 let qnext, _ = queue.HeapDequeue(cmp)
                 0.5 * (lastQ + qnext)
+
+        //member x.Update(t : Option<ITreeNode>, quality : float, view : Trafo3d, proj : Trafo3d, maxOps : int) =
+        //    let queue = List<float * SetOperation<TaskTreeNode<'a>>>()
+            
+        //    match root, t with
+        //    | None, None -> 
+        //        ()
+
+        //    | Some r, None -> 
+        //        r.Destroy(); root <- None
+
+        //    | None, Some n -> 
+        //        let r = TaskTreeNode(state, mapping, rootId, n)
+        //        root <- Some r
+        //        r.BuildQueue(n, 0, quality, view, proj, queue)
+                
+        //    | Some r, Some t -> 
+        //        r.BuildQueue(t, 0, quality, view, proj, queue)
+
+        //    let mutable lastQ = 0.0
+        //    while state.runningTasks < maxOps && queue.Count > 0 do
+        //        let q, op = queue.HeapDequeue(cmp)
+        //        lastQ <- q
+        //        match op with
+        //        | Add(_,n) -> 
+        //            n.StartSplit()
+        //            for c in n.Children do
+        //                if c.Original.ShouldSplit(quality, view, proj) then
+        //                    let qs = c.Original.SplitQuality(view, proj)
+        //                    queue.HeapEnqueue(cmp, (qs, Add c))
+        //            Interlocked.Increment(&state.splits) |> ignore
+        //        | Rem(_,n) -> 
+        //            n.Collapse()
+        //            Interlocked.Increment(&state.collapses) |> ignore
+                    
+        //    if queue.Count = 0 then 
+        //        quality
+        //    else 
+        //        let qnext, _ = queue.HeapDequeue(cmp)
+        //        0.5 * (lastQ + qnext)
 
     type TaskTreeReader<'a>(tree : TaskTree<'a>) =
         let mutable state : Option<TreeNode<'a>> = None
@@ -3492,6 +3484,16 @@ module Bla =
         let cameraPrediction, thread =
             let prediction = Prediction.euclidean (MicroTime(TimeSpan.FromMilliseconds 55.0))
             let roots = Dict<ITreeNode, TaskTree<GeometryInstance>>()
+            let state =
+                {
+                    runningTasks    = ref 0
+                    ready           = ref 0
+                    totalNodes      = ref 0
+                    version         = ref 0
+                    splits          = ref 0
+                    collapses       = ref 0
+                }
+            let mutable lastQ = 0.0
 
             let cameraPrediction =
                 startThread (fun () ->
@@ -3524,12 +3526,9 @@ module Bla =
                                     | false, false  -> sprintf "%s*%A+%A" parameter k d
                                 
 
-                            let collapses, splits, tasks =
-                                lock roots (fun () ->
-                                    roots.Values 
-                                    |> Seq.map (fun r -> r.ConsumeCollapses(), r.ConsumeSplits(), r.RunningTasks)
-                                    |> Seq.fold (fun (c,s,r) (ci,si,ri) -> (c + ci, s + si, r + ri)) (0,0,0)
-                                )
+                            let collapses = Interlocked.Exchange(&state.collapses.contents, 0)
+                            let splits = Interlocked.Exchange(&state.splits.contents, 0)
+                            let tasks = !state.runningTasks
 
 
                             let loads = 
@@ -3543,7 +3542,13 @@ module Bla =
                             let e = expandTime.Average |> MicroTime.FromMilliseconds
                             let u = updateTime.Average |> MicroTime.FromMilliseconds
 
-                            Log.line "m: %A (%A) r: %A l : %s e: %A u: %A c: %d s: %d t: %d" (pool.UsedMemory + inner.UsedMemory) (pool.TotalMemory + inner.TotalMemory) inner.AverageRenderTime loads e u splits collapses tasks
+                            Log.line "q: %.2f m: %A (%A) r: %A l : %s e: %A u: %A c: %d s: %d t: %d" 
+                                        lastQ 
+                                        (pool.UsedMemory + inner.UsedMemory) 
+                                        (pool.TotalMemory + inner.TotalMemory) 
+                                        inner.AverageRenderTime 
+                                        loads e u 
+                                        collapses splits tasks
 
                 )
                 
@@ -3623,7 +3628,6 @@ module Bla =
 
 
                     try 
-                        let mutable lastQ = 0.0
                         while not shutdown.IsCancellationRequested do
                             timer.Wait()
                             notConverged.Wait(shutdown.Token)
@@ -3647,17 +3651,19 @@ module Bla =
                                 | Rem(_,r) ->
                                     failwith "not implemented"
 
-
-                            for (KeyValue(k,v)) in roots do
-                                let t = getRootTrafo k
+                            let modelView (r : ITreeNode) =
+                                let t = getRootTrafo r
                                 subs.GetOrCreate(t, fun t -> t.AddMarkingCallback (fun () -> notConverged.Set())) |> ignore
                                 let m = t.GetValue()
-                                let q = v.Update(Some k, 1.0, m * view, proj, maxSplits)
-                                if q <> lastQ then
-                                    lastQ <- q
-                                    Log.warn "quality: %.2f" q
+                                m * view
 
+                            let queue = List()
+                            for (KeyValue(k,v)) in roots do
+                                v.BuildQueue(state, Some k, 1.0, modelView, proj, queue)
 
+                            let q = TaskTree<_>.ProcessQueue(state, queue, 1.0, modelView, proj, maxSplits)
+                            lastQ <- q
+                                
 
                     finally 
                         subs |> Seq.iter (fun s -> s.Value.Dispose())
@@ -3987,7 +3993,7 @@ module StoreTree =
             load ct
             
         member x.ShouldSplit (quality : float, view : Trafo3d, proj : Trafo3d) =
-            angle view > 0.4 / quality
+            self.IsNotLeaf && angle view > 0.4 / quality
 
         member x.ShouldCollapse (quality : float, view : Trafo3d, proj : Trafo3d) =
             angle view < 0.3 / quality
@@ -4455,10 +4461,10 @@ let main argv =
 
     let pcs =
         ASet.ofList [
-            //yield kaunertal
+            yield kaunertal
             yield koeln
-            //yield technologiezentrum
-            //yield oktogon
+            yield technologiezentrum
+            yield oktogon
         ]
         
     let sg =
