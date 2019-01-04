@@ -38,7 +38,6 @@ module SplineShader =
     let realRootsOf (c3 : float) (c2 : float) (c1 : float) (c0 : float) =
         realRootsOfNormed (c2 / c3) (c1 / c3) (c0 / c3)
 
-
     let clipSpline (a : V2d) (b : V2d) (c : V2d) (d : V2d) (tmin : ref<float>) (tmax : ref<float>) =
         
         let (txl0, txl1, txl2) = realRootsOf (d.X + 3.0*b.X - 3.0*c.X - a.X) (3.0*(a.X - 2.0*b.X + c.X)) (3.0 * (b.X - a.X)) (a.X - 1.0)
@@ -156,10 +155,9 @@ module SplineShader =
                 let mutable r = scannedCount - 1
                 let mutable m = (l + r) / 2
                 while l <= r do
-                    if scannedDiv.[m] < id then
-                        l <- m + 1
-                    elif scannedDiv.[m] > id then
-                        r <- m - 1
+                    let s = scannedDiv.[m]
+                    if s < id then l <- m + 1
+                    elif s > id then r <- m - 1
                     else
                         l <- m + 1
                         r <- m
@@ -197,11 +195,12 @@ module SplineShader =
                 lines.[2*id+1] <- V4f p1
         }
 
+
 module Sg =
     open Aardvark.Base.Ag
     open Aardvark.SceneGraph.Semantics
 
-    type SplineNode(viewportSize : IMod<V2i>, threshold : IMod<float>, controlPoints : V3d[]) =
+    type SplineNode(viewportSize : IMod<V2i>, threshold : IMod<float>, controlPoints : IMod<V3d[]>) =
         interface ISg
         member x.ViewportSize = viewportSize
         member x.Threshold = threshold
@@ -273,7 +272,7 @@ module Sg =
                             b
                         
 
-                //let evalulate (scannedDiv : int[]) (scannedCount : int) (ts : V2f[]) (cps : V4f[]) (lines : V4f[]
+                //let evalulate (scannedDiv : int[]) (scannedCount : int) (ts : V2f[]) (cps : V4f[]) (lines : V4f[])
                 use ip = runtime.NewInputBinding evaluate
                 ip.["scannedDiv"] <- div
                 ip.["scannedCount"] <- cnt
@@ -296,6 +295,7 @@ module Sg =
                         Log.warn "create"
                         cps <- runtime.CreateBuffer<V4f>(cpsArray.Length)
                         cps.Upload(cpsArray |> Array.map (fun v -> V4f(v.X, v.Y, v.Z, 1.0)))
+                        transact (fun () -> x.MarkOutdated())
 
                     member x.Destroy() = 
                         Log.warn "destroy"
@@ -309,40 +309,95 @@ module Sg =
                         compute t
                 }
             
-            let buffer =
-                { new AbstractOutputMod<IBuffer>() with
-                    member x.Create() = overall.Acquire()
-                    member x.Destroy() = overall.Release()
+
+            overall :> IOutputMod<_>
+            //let buffer =
+            //    { new AbstractOutputMod<IBuffer>() with
+            //        member x.Create() = overall.Acquire()
+            //        member x.Destroy() = overall.Release()
         
-                    member x.Compute(t,rt) = 
-                        let (b,_) = overall.GetValue(t)
-                        b.Buffer :> IBuffer
-                }
-            let count =
-                { new AbstractOutputMod<int>() with
-                    member x.Create() = overall.Acquire()
-                    member x.Destroy() = overall.Release()
+            //        member x.Compute(t,rt) = 
+            //            let (b,_) = overall.GetValue(t)
+            //            b.Buffer :> IBuffer
+            //    }
+            //let count =
+            //    { new AbstractOutputMod<int>() with
+            //        member x.Create() = overall.Acquire()
+            //        member x.Destroy() = overall.Release()
         
-                    member x.Compute(t,rt) = 
-                        let (_,c) = overall.GetValue(t)
-                        2 * c
-                }
-            buffer :> IOutputMod<_>, count :> IOutputMod<_>
+            //        member x.Compute(t,rt) = 
+            //            let (_,c) = overall.GetValue(t)
+            //            2 * c
+            //    }
+            //buffer :> IOutputMod<_>, count :> IOutputMod<_>
             
         member x.GlobalBoundingBox(s : SplineNode) =
             let t = s.ModelTrafo
-            t |> Mod.map (fun trafo ->
-                Box3d(s.ControlPoints |> Array.map trafo.Forward.TransformPos)
-            )
+            Mod.map2 (fun (trafo : Trafo3d) (cps : V3d[]) -> Box3d(cps |> Array.map trafo.Forward.TransformPos)) t s.ControlPoints
 
         member x.LocalBoundingBox(s : SplineNode) =
-            Box3d(s.ControlPoints) |> Mod.constant
+            s.ControlPoints |> Mod.map Box3d
 
         member x.RenderObjects(s : SplineNode) : aset<IRenderObject> =
             let runtime = s.Runtime
             let viewProj = Mod.map2 (*) s.ViewTrafo s.ProjTrafo
-            let buffer, count = subdiv runtime s.Threshold s.ViewportSize viewProj s.ControlPoints
-            
+            let mvp = Mod.map2 (*) s.ModelTrafo viewProj
+
+            //let mm = s.ControlPoints |> Mod.map (subdiv runtime s.Threshold s.ViewportSize mvp)
+            let cps = s.ControlPoints
+
+            let mutable last : Option<IOutputMod<_>> = None
+            let mutable cpsChanged = false
+
+            let bind (view : IBuffer<V4f> * int -> 'a) =
+                { new AbstractOutputMod<'a>() with
+                    override x.InputChanged(o,i) =
+                        if i = (cps :> IAdaptiveObject) then cpsChanged <- true
+
+                    member x.Create() =
+                        let v = cps.GetValue()
+                        let om = subdiv runtime s.Threshold s.ViewportSize mvp v
+                        om.Acquire()
+                        last <- Some om
+                        transact (fun () -> x.MarkOutdated())
+
+                    member x.Destroy() =
+                        match last with
+                        | Some o -> 
+                            o.RemoveOutput x
+                            o.Release()
+                            last <- None
+                        | _ -> 
+                            ()
+                        transact (fun () -> x.MarkOutdated())
+
+                    member x.Compute(t,rt) = 
+                        let v = cps.GetValue(t)
+                        let om = 
+                            if cpsChanged || Option.isNone last then
+                                cpsChanged <- false
+                                match last with
+                                | Some o ->
+                                    o.RemoveOutput x
+                                    o.Release()
+                                | _ -> 
+                                    ()
+                                let om = subdiv runtime s.Threshold s.ViewportSize mvp v
+                                om.Acquire()
+                                last <- Some om
+                                om
+                            else
+                                last.Value
+                                
+                        let r = om.GetValue(t)
+                        view r
+                }
+                
+
+
+            let buffer = bind (fun (b,_) -> b.Buffer :> IBuffer)
+            let count = bind (fun (_,c) -> 2*c)
+                
 
             let o = RenderObject.create()
             o.DrawCallInfos <- count |> Mod.map (fun c -> [DrawCallInfo(FaceVertexCount = c, InstanceCount = 1)])
@@ -374,14 +429,20 @@ let main argv =
             samples 8
         }
 
+
+
+
     let cps =
-        [|
+        Mod.init [|
             V3d.OOO; V3d.OOI; V3d.IOI; V3d.IOO
             V3d(0,1,0); V3d(0,1,1); V3d(1,1,-1); V3d(1,1,0)
         |]
 
     let threshold = Mod.init 10.0
     let active = Mod.init true
+
+    let rand = RandomSystem()
+    let bounds = Box3d(-V3d.III, V3d.III)
 
     win.Keyboard.DownWithRepeats.Values.Add (fun k ->
         match k with
@@ -390,18 +451,33 @@ let main argv =
         
         | Keys.Space -> transact (fun () -> active.Value <- not active.Value)
         
+        | Keys.Enter -> 
+            transact (fun () -> 
+                cps.Value <- Array.append cps.Value (Array.init 4 (fun _ -> rand.UniformV3d(bounds)))
+            )
+        | Keys.Back -> 
+            if cps.Value.Length > 4 then
+                transact (fun () -> 
+                    cps.Value <- Array.take (cps.Value.Length - 4) cps.Value
+                )
+        
         | _ -> ()
     )
 
     let sg =
-        Sg.SplineNode(win.Sizes, threshold, cps) :> ISg
-        |> Sg.uniform "LineWidth" (Mod.constant 6.0)
-        |> Sg.shader {
-            do! DefaultSurfaces.trafo
-            do! DefaultSurfaces.thickLine
-            do! DefaultSurfaces.thickLineRoundCaps
-            do! DefaultSurfaces.constantColor C4f.White
-        }
+        Sg.ofList [
+            for x in 0 .. 0 do
+                yield 
+                    Sg.SplineNode(win.Sizes, threshold, cps) :> ISg
+                    |> Sg.uniform "LineWidth" (Mod.constant 6.0)
+                    |> Sg.translate (float x * 2.0) 0.0 0.0
+                    |> Sg.shader {
+                        do! DefaultSurfaces.trafo
+                        do! DefaultSurfaces.thickLine
+                        do! DefaultSurfaces.thickLineRoundCaps
+                        do! DefaultSurfaces.constantColor C4f.White
+                    }
+        ]
 
     let sg =
         active 
