@@ -13,15 +13,26 @@ open System
 open System.Collections.Generic
 open System.Threading
 
-type ITreeNode =
+[<AutoOpen>]
+module ``Stopwatch Extensions`` =
+    open System.Diagnostics
+
+    type TimeSpan with
+        member x.MicroTime = MicroTime(x.Ticks * (1000000000L / TimeSpan.TicksPerSecond))
+
+    type Stopwatch with
+        member x.MicroTime = x.Elapsed.MicroTime 
+
+type ILodTreeNode =
     abstract member Level : int
     abstract member Name : string
-    abstract member Root : ITreeNode
-    abstract member Parent : Option<ITreeNode>
-    abstract member Children : seq<ITreeNode>
+    abstract member Root : ILodTreeNode
+    abstract member Parent : Option<ILodTreeNode>
+    abstract member Children : seq<ILodTreeNode>
 
     abstract member DataSource : Symbol
     abstract member DataSize : int
+    abstract member TotalDataSize : int
     abstract member GetData : CancellationToken -> IndexedGeometry * MapExt<string, Array>
 
     abstract member ShouldSplit : float * Trafo3d * Trafo3d -> bool
@@ -31,6 +42,7 @@ type ITreeNode =
     abstract member CollapseQuality : Trafo3d * Trafo3d -> float
 
     abstract member BoundingBox : Box3d
+    abstract member CellBoundingBox : Box3d
     abstract member Cell : Cell
 
     abstract member Acquire : unit -> unit
@@ -38,7 +50,7 @@ type ITreeNode =
 
 type LodTreeInstance =
     {
-        root        : ITreeNode
+        root        : ILodTreeNode
         uniforms    : MapExt<string, IMod>
     }
 
@@ -492,12 +504,16 @@ module Bla =
                 val mutable public BaseVertex : int
                 val mutable public FirstInstance : int
             end
-
+            
+        [<StructLayout(LayoutKind.Sequential)>]
         type CullingInfo =
             struct
                 val mutable public Min : V4f
                 val mutable public Max : V4f
+                val mutable public CellMin : V4f
+                val mutable public CellMax : V4f
             end
+
         module CullingInfo =
             let instanceCount (i : CullingInfo) =
                 int i.Min.W
@@ -553,17 +569,57 @@ module Bla =
                 if id < count then
                     let b = bounds.[id]
                     let rootId = int (b.Max.W + 0.5f)
-
-                    //let mutable b = b
-                    //let s = 0.4f * (b.Max.XYZ - b.Min.XYZ)
-                    //b.Min <- V4f(b.Min.XYZ + s, b.Min.W)
-                    //b.Max <- V4f(b.Max.XYZ - s, b.Max.W)
-
+                    
                     if isActive.[rootId] <> 0 && CullingInfo.intersectsViewProj viewProjs.[rootId] b then
                         infos.[id].InstanceCount <- CullingInfo.instanceCount b
                     else
                         infos.[id].InstanceCount <- 0
             }
+
+        type UniformScope with
+            member x.Bounds : CullingInfo[] = uniform?StorageBuffer?Bounds 
+            member x.ViewProjs : M44d[] = uniform?StorageBuffer?ViewProjs 
+
+        type Vertex =
+            {
+                [<InstanceId>] id : int
+                [<VertexId>] vid : int
+                [<Position>] pos : V4d
+            }
+
+        let data =
+            [|
+                V3d.OOO; V3d.IOO
+                V3d.OOI; V3d.IOI
+                V3d.OIO; V3d.IIO
+                V3d.OII; V3d.III
+                
+                V3d.OOO; V3d.OIO
+                V3d.OOI; V3d.OII
+                V3d.IOO; V3d.IIO
+                V3d.IOI; V3d.III
+                
+                V3d.OOO; V3d.OOI
+                V3d.OIO; V3d.OII
+                V3d.IOO; V3d.IOI
+                V3d.IIO; V3d.III
+            |]
+
+        let renderBounds (v : Vertex) =
+            vertex {
+                let bounds = uniform.Bounds.[v.id]
+                let rootId = int (bounds.Max.W + 0.5f)
+                    
+                let off = V3d bounds.CellMin.XYZ
+                let size = V3d bounds.CellMax.XYZ - off
+
+                let p = data.[v.vid]
+
+                let wp = off + p * size
+                let p = uniform.ViewProjs.[rootId] * V4d(wp, 1.0)
+                return { v with pos = p }
+            }
+
 
     type InstanceSignature = MapExt<string, GLSLType * Type>
     type VertexSignature = MapExt<string, Type>
@@ -616,19 +672,6 @@ module Bla =
                 uniformTypes = uniformTypes
                 attributeTypes = attributeTypes
             }
-
-    //[<AutoOpen>]
-    //module MicroTimeExtensions =
-    //    type MicroTime with
-    //        static member FromNanoseconds (ns : int64) = MicroTime(ns)
-    //        static member FromMicroseconds (us : float) = MicroTime(int64 (1000.0 * us))
-    //        static member FromMilliseconds (ms : float) = MicroTime(int64 (1000000.0 * ms))
-    //        static member FromSeconds (s : float) = MicroTime(int64 (1000000000.0 * s))
-
-    //    let ns = MicroTime(1L)
-    //    let us = MicroTime(1000L)
-    //    let ms = MicroTime(1000000L)
-    //    let s = MicroTime(1000000000L)
 
 
     type Regression(degree : int, maxSamples : int) =
@@ -955,39 +998,32 @@ module Bla =
         interface IDisposable with 
             member x.Dispose() = x.Dispose()
 
-    [<StructLayout(LayoutKind.Sequential)>]
-    type private BoundingBox =
-        struct
-            val mutable public Min : V4f
-            val mutable public Max : V4f
-        end
 
-    type IndirectBuffer(ctx : Context, bounds : bool, active : nativeptr<int>, modelViewProjs : nativeptr<int>, indexed : bool, initialCapacity : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
+    type IndirectBuffer(ctx : Context, renderBounds : nativeptr<int>, signature : IFramebufferSignature, bounds : bool, active : nativeptr<int>, modelViewProjs : nativeptr<int>, indexed : bool, initialCapacity : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
         static let es = sizeof<DrawCallInfo>
-        static let bs = sizeof<BoundingBox>
+        static let bs = sizeof<CullingShader.CullingInfo>
 
         static let ceilDiv (a : int) (b : int) =
             if a % b = 0 then a / b
             else 1 + a / b
 
         static let cullingCache = System.Collections.Concurrent.ConcurrentDictionary<Context, ComputeShader>()
+        static let boundCache = System.Collections.Concurrent.ConcurrentDictionary<Context, Program>()
         
         let initialCapacity = Fun.NextPowerOfTwo initialCapacity
         let adjust (call : DrawCallInfo) =
             if indexed then
                 let mutable c = call
-                //c.InstanceCount <- 0
                 Fun.Swap(&c.BaseVertex, &c.FirstInstance)
                 c
             else
                 let mutable c = call
-                //c.InstanceCount <- 0
                 c
 
         let drawIndices = Dict<DrawCallInfo, int>()
         let mutable capacity = initialCapacity
         let mutable mem : nativeptr<DrawCallInfo> = NativePtr.alloc capacity
-        let mutable bmem : nativeptr<BoundingBox> = if bounds then NativePtr.alloc capacity else NativePtr.zero
+        let mutable bmem : nativeptr<CullingShader.CullingInfo> = if bounds then NativePtr.alloc capacity else NativePtr.zero
 
 
         let mutable buffer = ctx.CreateBuffer (es * capacity)
@@ -1025,6 +1061,55 @@ module Bla =
             else
                 Unchecked.defaultof<ComputeShader>
 
+        let boxShader =
+            if bounds then
+                boundCache.GetOrAdd(ctx, fun ctx ->
+                    let effect =
+                        FShade.Effect.compose [
+                            Effect.ofFunction CullingShader.renderBounds
+                            Effect.ofFunction (DefaultSurfaces.constantColor C4f.Red)
+                        ]
+
+                    let shader =
+                        lazy (
+                            let cfg = signature.EffectConfig(Range1d(-1.0, 1.0), false)
+                            effect
+                            |> Effect.toModule cfg
+                            |> ModuleCompiler.compileGLSL430
+                        )
+
+                    match ctx.TryCompileProgram(effect.Id, signature, shader) with
+                    | Success v -> v
+                    | Error e -> failwith e
+                )
+            else
+                Unchecked.defaultof<Program>
+
+
+
+        let infoSlot = culling.Buffers |> List.pick (fun (a,b,c) -> if b = "infos" then Some a else None)
+        let boundSlot = culling.Buffers |> List.pick (fun (a,b,c) -> if b = "bounds" then Some a else None)
+        let activeSlot = culling.Buffers |> List.pick (fun (a,b,c) -> if b = "isActive" then Some a else None)
+        let viewProjSlot = culling.Buffers |> List.pick (fun (a,b,c) -> if b = "viewProjs" then Some a else None)
+        let uniformBlock = culling.UniformBlocks |> List.head
+        let countField = uniformBlock.ubFields |> List.find (fun f -> f.ufName = "cs_count")
+             
+        let boxBoundSlot = boxShader.InterfaceNew.storageBuffers |> Seq.pick (fun (KeyValue(a,b)) -> if a = "Bounds" then Some b.ssbBinding else None)
+        let boxViewProjSlot = boxShader.InterfaceNew.storageBuffers |> Seq.pick (fun (KeyValue(a,b)) -> if a = "ViewProjs" then Some b.ssbBinding else None)
+
+        let boxMode = NativePtr.allocArray [| GLBeginMode(int BeginMode.Lines, 2) |]
+        
+        let pCall =
+            NativePtr.allocArray [|
+                DrawCallInfo(
+                    FaceVertexCount = 24,
+                    InstanceCount = 0
+                )
+            |]
+
+        let boxDraw = 
+            NativePtr.allocArray [| new DrawCallInfoList(1, pCall) |]
+
         let resize (newCount : int) =
             let newCapacity = max initialCapacity (Fun.NextPowerOfTwo newCount)
             if newCapacity <> capacity then
@@ -1057,7 +1142,7 @@ module Bla =
         
         member x.Count = count
 
-        member x.Add(call : DrawCallInfo, box : Box3d, rootId : int) =
+        member x.Add(call : DrawCallInfo, box : Box3d, cellBounds : Box3d, rootId : int) =
             if drawIndices.ContainsKey call then
                 false
             else
@@ -1067,9 +1152,11 @@ module Bla =
                     NativePtr.set mem id (adjust call)
                     if bounds then
                         let bounds =
-                            BoundingBox(
+                            CullingShader.CullingInfo(
                                 Min = V4f(V3f box.Min, float32 call.InstanceCount),
-                                Max = V4f(V3f box.Max, float32 rootId)
+                                Max = V4f(V3f box.Max, float32 rootId),
+                                CellMin = V4f(V3f cellBounds.Min, 0.0f),
+                                CellMax = V4f(V3f cellBounds.Max, 0.0f)
                             )
                         NativePtr.set bmem id bounds
                     count <- count + 1
@@ -1081,7 +1168,7 @@ module Bla =
                     true
                 else
                     resize (count + 1)
-                    x.Add(call, box, rootId)
+                    x.Add(call, box, cellBounds, rootId)
                     
         member x.Remove(call : DrawCallInfo) =
             match drawIndices.TryRemove call with
@@ -1151,14 +1238,6 @@ module Bla =
 
         member x.CompileRender(s : ICommandStream, before : ICommandStream -> unit, mvp : nativeptr<M44f>, indexType : Option<_>, runtimeStats : nativeptr<_>, isActive : nativeptr<_>, mode : nativeptr<_>) =
             if bounds then
-                let infoSlot = culling.Buffers |> List.pick (fun (a,b,c) -> if b = "infos" then Some a else None)
-                let boundSlot = culling.Buffers |> List.pick (fun (a,b,c) -> if b = "bounds" then Some a else None)
-                let activeSlot = culling.Buffers |> List.pick (fun (a,b,c) -> if b = "isActive" then Some a else None)
-                let viewProjSlot = culling.Buffers |> List.pick (fun (a,b,c) -> if b = "viewProjs" then Some a else None)
-                let uniformBlock = culling.UniformBlocks |> List.head
-                let countField = uniformBlock.ubFields |> List.find (fun f -> f.ufName = "cs_count")
-                
-                
                 //s.NamedBufferSubData(ub.Handle, nativeint viewProjField.ufOffset, 64n, NativePtr.toNativeInt mvp)
                 s.NamedBufferSubData(ub.Handle, nativeint countField.ufOffset, 4n, NativePtr.toNativeInt bufferHandles + 8n)
 
@@ -1174,12 +1253,19 @@ module Bla =
                 s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, viewProjSlot, modelViewProjs)
                 s.BindBufferBase(BufferRangeTarget.UniformBuffer, uniformBlock.ubBinding, ub.Handle)
                 s.DispatchCompute computeSize
-
+                
+                s.Conditional(renderBounds, fun s ->
+                    let pCnt : nativeptr<int> = NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 8n)
+                    let pInstanceCnt : nativeptr<int> = NativePtr.ofNativeInt (NativePtr.toNativeInt pCall + 4n)
+                    s.Copy(pCnt, pInstanceCnt)
+                    s.UseProgram(boxShader.Handle)
+                    s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, boxBoundSlot, NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 4n))
+                    s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, boxViewProjSlot, modelViewProjs)
+                    s.DrawArrays(runtimeStats, isActive, boxMode, boxDraw)
+                )
 
                 s.UseProgram(oldProgram)
                 s.BindBufferRange(BufferRangeTarget.UniformBuffer, uniformBlock.ubBinding, oldUB, oldUBOffset, oldUBSize)
-                
-                
                 s.MemoryBarrier(MemoryBarrierFlags.CommandBarrierBit)
 
             let h = NativePtr.read indirectHandle
@@ -1209,6 +1295,10 @@ module Bla =
             count <- 0
             NativePtr.free indirectHandle
             NativePtr.free computeSize
+            NativePtr.free boxMode
+            NativePtr.free pCall
+            NativePtr.free boxDraw
+
             drawIndices.Clear()
 
         interface IDisposable with
@@ -1379,7 +1469,7 @@ module Bla =
                 | Some ib -> indexManager.Free ib
                 | None -> ()
 
-    type DrawPool(ctx : Context, bounds : bool, activeBuffer : nativeptr<int>, modelViewProjs : nativeptr<int>, state : PreparedPipelineState, pass : RenderPass) as this =
+    type DrawPool(ctx : Context, bounds : bool, renderBounds : nativeptr<int>, activeBuffer : nativeptr<int>, modelViewProjs : nativeptr<int>, state : PreparedPipelineState, pass : RenderPass) as this =
         inherit PreparedCommand(ctx, pass)
 
         static let initialIndirectSize = 256
@@ -1462,7 +1552,7 @@ module Bla =
         let getIndirectBuffer(slot : PoolSlot) =
             let key = getKey slot
             indirects.GetOrCreate(key, fun _ ->
-                new IndirectBuffer(ctx, bounds, activeBuffer, modelViewProjs, Option.isSome slot.IndexType, initialIndirectSize, usedMemory, totalMemory)
+                new IndirectBuffer(ctx, renderBounds, state.pFramebufferSignature, bounds, activeBuffer, modelViewProjs, Option.isSome slot.IndexType, initialIndirectSize, usedMemory, totalMemory)
             )
 
         let tryGetIndirectBuffer(slot : PoolSlot) =
@@ -1472,15 +1562,21 @@ module Bla =
                 | _ -> None
                 
                 
-        member x.Add(ref : PoolSlot, bounds : Box3d, rootId : int) =
+        member x.Add(ref : PoolSlot, bounds : Box3d, cellBounds : Box3d, rootId : int) =
             let ib = getIndirectBuffer ref
-            if ib.Add(ref.DrawCallInfo, bounds, rootId) then
+            if ib.Add(ref.DrawCallInfo, bounds, cellBounds, rootId) then
                 mark()
+                true
+            else
+                false
 
         member x.Add(ref : PoolSlot, rootId : int) =
             let ib = getIndirectBuffer ref
-            if ib.Add(ref.DrawCallInfo, Unchecked.defaultof<Box3d>, rootId) then
+            if ib.Add(ref.DrawCallInfo, Unchecked.defaultof<Box3d>, Unchecked.defaultof<Box3d>, rootId) then
                 mark()
+                true
+            else
+                false
 
         member x.Remove(ref : PoolSlot) =
             match tryGetIndirectBuffer ref with
@@ -1514,15 +1610,11 @@ module Bla =
 
         member x.Update() =
             puller.EvaluateAlways AdaptiveToken.Top (fun token ->   
-                //let worked =
-                //    try System.GC.TryStartNoGCRegion(12000000L)
-                //    with _ -> false
+
                 puller.OutOfDate <- true
                 
                 x.Evaluate(token, pProgramInterface)
-
-                let sw = System.Diagnostics.Stopwatch.StartNew()
-
+                
                 let rawResult = NativePtr.read endTime - NativePtr.read startTime
                 let ms = float rawResult / 1000000.0
                 avgRenderTime.Add ms
@@ -1596,14 +1688,7 @@ module Bla =
                     puller.Outputs.Add t |> ignore
 
                 x.AfterUpdate()
-
-                sw.Stop()
-                if sw.MicroTime.TotalMilliseconds > 15.0 then
-                    Log.warn "hugo: %A" sw.MicroTime
-
-                //if worked then
-                //    try System.GC.EndNoGCRegion()
-                //    with _ -> ()
+                
 
             )
 
@@ -1723,7 +1808,7 @@ module Bla =
     type MaterializedTree =
         {
             rootId      : int
-            original    : ITreeNode
+            original    : ILodTreeNode
             children    : list<MaterializedTree>
         }
 
@@ -1779,7 +1864,7 @@ module Bla =
 
     type TreeNode<'a> =
         {
-            original : ITreeNode
+            original : ILodTreeNode
             value : 'a
             children : list<TreeNode<'a>>
         }
@@ -1787,17 +1872,17 @@ module Bla =
     module internal TreeHelpers =
         let private cmp = Func<struct (float * _ * _), struct (float * _ * _), int>(fun (struct(a,_,_)) (struct(b,_,_)) -> compare a b)
 
-        let inline private enqueue (q : float) (t : ITreeNode) (view : ITreeNode -> Trafo3d) (proj : Trafo3d) (queue : List<struct (float * int64 * ITreeNode)>) =
+        let inline private enqueue (q : float) (t : ILodTreeNode) (view : ILodTreeNode -> Trafo3d) (proj : Trafo3d) (queue : List<struct (float * int64 * ILodTreeNode)>) =
             let view = view t.Root
             if t.ShouldSplit(q, view, proj) then
                 let q = t.SplitQuality(view, proj)
                 let childSize = t.Children |> Seq.sumBy (fun c -> int64 c.DataSize)
                 queue.HeapEnqueue(cmp, struct (q, childSize, t))
 
-        let getMaxQuality (current : float) (maxSize : int64) (ts : seq<ITreeNode>) (view : ITreeNode -> Trafo3d) (proj : Trafo3d) =
+        let getMaxQuality (current : float) (maxSize : int64) (ts : seq<ILodTreeNode>) (view : ILodTreeNode -> Trafo3d) (proj : Trafo3d) =
             let next = min 1.0 (current + 0.2)
             
-            let queue = List<struct (float * int64 * ITreeNode)>(1 <<< 20)
+            let queue = List<struct (float * int64 * ILodTreeNode)>(1 <<< 20)
             let mutable size = 0L
             let mutable quality = 1.0
             for t in ts do 
@@ -1819,7 +1904,7 @@ module Bla =
                 let struct (qn,_,_) = queue.HeapDequeue(cmp)
                 0.5 * (quality + qn), size
    
-    type TaskTreeNode<'a> internal(state : TaskTreeState, mapping : CancellationToken -> ITreeNode -> Task<'a>, rootId : int, original : ITreeNode) =
+    type TaskTreeNode<'a> internal(state : TaskTreeState, mapping : CancellationToken -> ILodTreeNode -> Task<'a>, rootId : int, original : ILodTreeNode) =
         static let neverTask = TaskCompletionSource<'a>().Task
         static let cmp = Func<float * _, float * _, int>(fun (a,_) (b,_) -> compare a b)
         do original.Acquire()
@@ -1857,7 +1942,7 @@ module Bla =
 
 
 
-        member x.BuildQueue(node : ITreeNode, depth : int, quality : float, collapseIfNotSplit : bool, view : Trafo3d, proj : Trafo3d, queue : List<float * SetOperation<TaskTreeNode<'a>>>) =
+        member x.BuildQueue(node : ILodTreeNode, depth : int, quality : float, collapseIfNotSplit : bool, view : Trafo3d, proj : Trafo3d, queue : List<float * SetOperation<TaskTreeNode<'a>>>) =
             if node <> original then failwith "[Tree] inconsistent path"
 
             match children with
@@ -1921,9 +2006,9 @@ module Bla =
         member x.HasChildren = not (List.isEmpty children)
         member x.AllChildrenHaveValues = children |> List.forall (fun c -> c.HasValue)
 
-    type TaskTree<'a>(mapping : CancellationToken -> ITreeNode -> Task<'a>, rootId : int) =
+    type TaskTree<'a>(mapping : CancellationToken -> ILodTreeNode -> Task<'a>, rootId : int) =
         static let cmp = Func<float * _, float * _, int>(fun (a,_) (b,_) -> compare a b)
-        static let cmpNode = Func<float * ITreeNode, float * ITreeNode, int>(fun (a,_) (b,_) -> compare a b)
+        static let cmpNode = Func<float * ILodTreeNode, float * ILodTreeNode, int>(fun (a,_) (b,_) -> compare a b)
 
         let mutable root : Option<TaskTreeNode<'a>> = None
 
@@ -1934,7 +2019,7 @@ module Bla =
         member x.RootId = rootId
         member x.Root = root
 
-        member internal x.BuildQueue(state : TaskTreeState, collapseIfNotSplit : bool, t : Option<ITreeNode>, quality : float, view : ITreeNode -> Trafo3d, proj : Trafo3d, queue : List<float * SetOperation<TaskTreeNode<'a>>>) =
+        member internal x.BuildQueue(state : TaskTreeState, collapseIfNotSplit : bool, t : Option<ILodTreeNode>, quality : float, view : ILodTreeNode -> Trafo3d, proj : Trafo3d, queue : List<float * SetOperation<TaskTreeNode<'a>>>) =
             match root, t with
             | None, None -> 
                 ()
@@ -1952,7 +2037,7 @@ module Bla =
 
 
 
-        static member internal ProcessQueue(state : TaskTreeState, queue : List<float * SetOperation<TaskTreeNode<'a>>>, quality : float, view : ITreeNode -> Trafo3d, proj : Trafo3d, maxOps : int) =
+        static member internal ProcessQueue(state : TaskTreeState, queue : List<float * SetOperation<TaskTreeNode<'a>>>, quality : float, view : ILodTreeNode -> Trafo3d, proj : Trafo3d, maxOps : int) =
             let mutable lastQ = 0.0
             while queue.Count > 0 && (!state.runningTasks < maxOps || (queue.Count > 0 && (snd queue.[0]).Count < 0)) do
                 let q, op = queue.HeapDequeue(cmp)
@@ -1996,7 +2081,7 @@ module Bla =
                     op <- op + kill c
                 op
 
-        let rec traverse (q : ref<AtomicQueue<ITreeNode, 'a>>) (o : Option<TreeNode<'a>>) (n : Option<TaskTreeNode<'a>>) =
+        let rec traverse (q : ref<AtomicQueue<ILodTreeNode, 'a>>) (o : Option<TreeNode<'a>>) (n : Option<TaskTreeNode<'a>>) =
             match o, n with
                 | None, None -> 
                     o
@@ -2111,31 +2196,36 @@ module Bla =
 
                     
                     | os, ns ->
-                        assert (ns |> List.forall (fun n -> n.HasValue))
-
+                        //assert (ns |> List.forall (fun n -> n.HasValue))
+                        let mutable worked = true
                         let children = 
                             List.zip os ns |> List.map (fun (o,n) ->
                                 match traverse q (Some o) (Some n) with
                                 | Some nn ->
                                     nn
                                 | None ->
-                                    failwith ""
+                                    worked <- false
+                                    Unchecked.defaultof<_>
                             )
                             
-                        let value =
-                            Some {
-                                original = o.original
-                                value = o.value
-                                children = children
-                            }
+                        if worked then
+                            let value =
+                                Some {
+                                    original = o.original
+                                    value = o.value
+                                    children = children
+                                }
                             
-                        value
+                            value
+                        else
+                            Log.warn "the impossible happened (no worries)"
+                            Some o
 
-        member x.Update(q : ref<AtomicQueue<ITreeNode, 'a>>) =
+        member x.Update(q : ref<AtomicQueue<ILodTreeNode, 'a>>) =
             let newState = traverse q state tree.Root
             state <- newState
             
-        member x.Destroy(q : ref<AtomicQueue<ITreeNode, 'a>>) =
+        member x.Destroy(q : ref<AtomicQueue<ILodTreeNode, 'a>>) =
             match state with
             | Some s -> 
                 q := AtomicQueue.enqueue (kill s) !q
@@ -2147,13 +2237,13 @@ module Bla =
     [<RequireQualifiedAccess>]
     type NodeOperation =
         | Split
-        | Collapse of children : list<ITreeNode>
+        | Collapse of children : list<ILodTreeNode>
         | Add
-        | Remove of children : list<ITreeNode>
+        | Remove of children : list<ILodTreeNode>
 
     type Delta =
         {
-            deltas          : hmap<ITreeNode, int * NodeOperation>
+            deltas          : hmap<ILodTreeNode, int * NodeOperation>
             splitCount      : int
             collapseCount   : int
             allocSize       : int64
@@ -2170,7 +2260,7 @@ module Bla =
         let inline original (node : MaterializedTree) = node.original
         let inline children (node : MaterializedTree) = node.children
 
-        let ofNode (id : int) (node : ITreeNode) =
+        let ofNode (id : int) (node : ILodTreeNode) =
             {
                 rootId = id
                 original = node
@@ -2186,7 +2276,7 @@ module Bla =
         let allChildren (node : MaterializedTree) =
             node.children |> Seq.collect allNodes
 
-        let qualityHistogram (histo : SortedDictionary<float, ref<int>>) (predictView : ITreeNode -> Trafo3d) (view : Trafo3d) (proj : Trafo3d) (t : MaterializedTree) (state : MaterializedTree) =
+        let qualityHistogram (histo : SortedDictionary<float, ref<int>>) (predictView : ILodTreeNode -> Trafo3d) (view : Trafo3d) (proj : Trafo3d) (t : MaterializedTree) (state : MaterializedTree) =
             let rec run (t : MaterializedTree) (state : MaterializedTree) =
                 let node = t.original
                 
@@ -2220,7 +2310,7 @@ module Bla =
         
 
 
-        let rec tryExpand (quality : float)(predictView : ITreeNode -> Trafo3d) (view : Trafo3d) (proj : Trafo3d) (t : MaterializedTree) =
+        let rec tryExpand (quality : float)(predictView : ILodTreeNode -> Trafo3d) (view : Trafo3d) (proj : Trafo3d) (t : MaterializedTree) =
             let node = t.original
 
             let inline tryExpandMany (ls : list<MaterializedTree>) =
@@ -2253,7 +2343,7 @@ module Bla =
                             | Some newChildren -> Some { t with children = newChildren }
                             | _ -> None
 
-        let expand (quality : float)(predictView : ITreeNode -> Trafo3d) (view : Trafo3d) (proj : Trafo3d) (t : MaterializedTree) =
+        let expand (quality : float)(predictView : ILodTreeNode -> Trafo3d) (view : Trafo3d) (proj : Trafo3d) (t : MaterializedTree) =
             match tryExpand quality predictView view proj t with
                 | Some n -> n
                 | None -> t
@@ -2306,15 +2396,22 @@ module Bla =
             mutable count : int
         }
 
+
     type LodRenderingInfo =
         {
-            quality     : IModRef<float>
-            maxQuality  : IModRef<float>
+            quality         : IModRef<float>
+            maxQuality      : IModRef<float>
+            renderBounds    : IMod<bool>
         }
 
-    type LodRenderer2(ctx : Context, state : PreparedPipelineState, pass : RenderPass, info : LodRenderingInfo, useCulling : bool, maxSplits : IMod<int>, roots : aset<LodTreeInstance>, renderTime : IMod<_>, model : IMod<Trafo3d>, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, budget : IMod<int64>)  =
+    type LodRenderer(ctx : Context, state : PreparedPipelineState, pass : RenderPass, info : LodRenderingInfo, useCulling : bool, maxSplits : IMod<int>, roots : aset<LodTreeInstance>, renderTime : IMod<_>, model : IMod<Trafo3d>, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, budget : IMod<int64>)  =
         inherit PreparedCommand(ctx, pass)
 
+        static let scheduler = new LimitedConcurrencyLevelTaskScheduler(ThreadPriority.BelowNormal, max 2 (Environment.ProcessorCount - 3))
+            
+        static let startTask (ct : CancellationToken) (f : unit -> 'a) =
+            Task.Factory.StartNew(Func<'a>(f), ct, TaskCreationOptions.None, scheduler)
+                
         let manager = (unbox<Runtime> ctx.Runtime).ResourceManager
         let signature = state.pProgramInterface
 
@@ -2344,22 +2441,25 @@ module Bla =
                 | _ -> 
                     MicroTime.FromMilliseconds 200.0
 
-        
-        let cache = Dict<ITreeNode, PoolSlot>()
+
+        let cache = Dict<ILodTreeNode, PoolSlot>()
 
         let needUpdate = Mod.init ()
         let mutable renderingConverged = 1
-        let renderDelta : ref<AtomicQueue<ITreeNode, GeometryInstance>> = ref AtomicQueue.empty
+        let renderDelta : ref<AtomicQueue<ILodTreeNode, GeometryInstance>> = ref AtomicQueue.empty
+
+        let pRenderBounds : nativeptr<int> = 
+            NativePtr.allocArray [| (if info.renderBounds.GetValue() then 1 else 0) |]
 
         let rootIdsLock = obj()
-        let rootIds : ModRef<hmap<ITreeNode, int>> = Mod.init HMap.empty
+        let rootIds : ModRef<hmap<ILodTreeNode, int>> = Mod.init HMap.empty
 
-        let mutable rootUniforms : hmap<ITreeNode, MapExt<string, IMod>> = HMap.empty
+        let mutable rootUniforms : hmap<ILodTreeNode, MapExt<string, IMod>> = HMap.empty
         
-        let rootUniformCache = System.Collections.Concurrent.ConcurrentDictionary<ITreeNode, System.Collections.Concurrent.ConcurrentDictionary<string, Option<IMod>>>()
-        let rootTrafoCache = System.Collections.Concurrent.ConcurrentDictionary<ITreeNode, IMod<Trafo3d>>()
+        let rootUniformCache = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, System.Collections.Concurrent.ConcurrentDictionary<string, Option<IMod>>>()
+        let rootTrafoCache = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, IMod<Trafo3d>>()
 
-        let getRootTrafo (root : ITreeNode) =
+        let getRootTrafo (root : ILodTreeNode) =
             rootTrafoCache.GetOrAdd(root, fun root ->
                 match HMap.tryFind root rootUniforms with
                 | Some table -> 
@@ -2370,7 +2470,7 @@ module Bla =
                     model
             )
                 
-        let getRootUniform (name : string) (root : ITreeNode) : Option<IMod> =
+        let getRootUniform (name : string) (root : ILodTreeNode) : Option<IMod> =
             let rootCache = rootUniformCache.GetOrAdd(root, fun root -> System.Collections.Concurrent.ConcurrentDictionary())
             rootCache.GetOrAdd(name, fun name ->
                 match name with
@@ -2386,7 +2486,7 @@ module Bla =
                     | None -> None
             )
 
-        let getRootId (root : ITreeNode) =
+        let getRootId (root : ILodTreeNode) =
             match HMap.tryFind root rootIds.Value with
             | Some id -> 
                 id
@@ -2401,7 +2501,7 @@ module Bla =
                     )
                 )
 
-        let freeRootId (root : ITreeNode) =
+        let freeRootId (root : ILodTreeNode) =
             rootUniformCache.TryRemove root |> ignore
             rootTrafoCache.TryRemove root |> ignore
             transact (fun () ->
@@ -2409,7 +2509,6 @@ module Bla =
                     rootIds.Value <- HMap.remove root rootIds.Value
                 )
             )
-
 
         let contents =
             state.pProgramInterface.storageBuffers |> MapExt.toSeq |> Seq.choose (fun (name, buffer) ->
@@ -2421,7 +2520,6 @@ module Bla =
                     
                     let content =
                         Mod.custom (fun t ->
-                            let st = time()
                             let ids = rootIds.GetValue t
                             if HMap.isEmpty ids then
                                 ArrayBuffer (System.Array.CreateInstance(typ, 0)) :> IBuffer
@@ -2436,8 +2534,6 @@ module Bla =
                                     | None ->
                                         ()
                                 )
-                                let dt = time() - st
-                                if dt.TotalMilliseconds > 5.0 then Log.warn "long upload"
                                 ArrayBuffer data :> IBuffer
                         )
                     Some (buffer.ssbBinding, content)
@@ -2479,7 +2575,6 @@ module Bla =
         let modelViewProjBuffer =
             let data = 
                 Mod.custom (fun t ->
-                    let st = time()
                     let ids = rootIds.GetValue t
                     if HMap.isEmpty ids then
                         ArrayBuffer (Array.empty<M44f>) :> IBuffer
@@ -2497,8 +2592,6 @@ module Bla =
                             | None ->
                                     failwith "bad anarchy"
                         )
-                        let dt = time() - st
-                        if dt.TotalMilliseconds > 5.0 then Log.warn "long upload"
                         ArrayBuffer data :> IBuffer
                 )
             manager.CreateBuffer data
@@ -2508,8 +2601,9 @@ module Bla =
         let activateWatch = System.Diagnostics.Stopwatch()
         let freeWatch = System.Diagnostics.Stopwatch()
         let deactivateWatch = System.Diagnostics.Stopwatch()
+        
 
-        let alloc (state : RenderState) (node : ITreeNode) (g : GeometryInstance) =
+        let alloc (state : RenderState) (node : ILodTreeNode) (g : GeometryInstance) =
             cache.GetOrCreate(node, fun node ->
                 let slot = pool.Alloc(g.signature, g.instanceCount, g.indexCount, g.vertexCount)
                 slot.Upload(g.geometry, g.uniforms)
@@ -2520,7 +2614,7 @@ module Bla =
                 slot
             )
             
-        let performOp (state : RenderState) (parentOp : AtomicOperation<ITreeNode, GeometryInstance>) (node : ITreeNode) (op : Operation<GeometryInstance>) =
+        let performOp (state : RenderState) (parentOp : AtomicOperation<ILodTreeNode, GeometryInstance>) (node : ILodTreeNode) (op : Operation<GeometryInstance>) =
             let rootId = 
                 match HMap.tryFind node.Root rootIds.Value with
                 | Some id -> id
@@ -2528,79 +2622,82 @@ module Bla =
             
             match op with
                 | Alloc(instance, active) ->
+                    allocWatch.Start()
                     inc &state.allocs
                     let slot = alloc state node instance
-                    if active > 0 then state.calls.Add(slot, node.BoundingBox, rootId) |> ignore
-                    elif active < 0 then state.calls.Remove slot |> ignore
-                  
-                    //frees.Remove(node) |> ignore
+                    allocWatch.Stop()
+
+                    if active > 0 then 
+                        activateWatch.Start()
+                        let w = state.calls.Add(slot, node.BoundingBox, node.CellBoundingBox, rootId)
+                        if not w then Log.warn "[Lod] alloc cannot activate %s (was already active)" node.Name
+                        activateWatch.Stop()
+
+                    elif active < 0 then 
+                        deactivateWatch.Start()
+                        let w = state.calls.Remove slot
+                        if not w then Log.warn "[Lod] alloc cannot deactivate %s (was already inactive)" node.Name
+                        deactivateWatch.Stop()
 
                 | Free ac ->
-                    freeWatch.Start()
                     match cache.TryRemove node with
                         | (true, slot) -> 
-                            if ac < 0 then state.calls.Remove slot |> ignore
-                            pool.Free slot
-                            //let r = frees.GetOrCreate(node, fun _ -> ref Unchecked.defaultof<_>)
-                            //r := parentOp
+                            if ac < 0 then 
+                                deactivateWatch.Start()
+                                let w = state.calls.Remove slot
+                                if not w then Log.warn "[Lod] free cannot deactivate %s (was already inactive)" node.Name
+                                deactivateWatch.Stop()
+
+                            if slot.IsDisposed then
+                                Log.warn "[Lod] cannot free %s (was already free)" node.Name
+                            else
+                                freeWatch.Start()
+                                pool.Free slot
+                                freeWatch.Stop()
+
                         | _ ->
-                            Log.warn "cannot free %s" node.Name
-                    freeWatch.Stop()
+                            Log.warn "[Lod] cannot free %s" node.Name
+                            
 
                 | Activate ->
-                    activateWatch.Start()
                     match cache.TryGetValue node with
                         | (true, slot) ->
-                            state.calls.Add(slot, node.BoundingBox, rootId) |> ignore
+                            activateWatch.Start()
+                            state.calls.Add(slot, node.BoundingBox, node.CellBoundingBox, rootId) |> ignore
+                            activateWatch.Stop()
                         | _ ->
-                            Log.warn "cannot activate %A %A" node (Option.isSome op.value)
-                            //match frees.TryGetValue(node) with
-                            //    | (true, r) ->
-                            //        let evilOp = !r
-                            //        Log.warn "cannot activate %A %A (%A)" node (Option.isSome op.value) evilOp 
-                            //    | _ ->
-                            //        Log.warn "cannot activate %A %A (no reason)" node (Option.isSome op.value)
-                    activateWatch.Stop()
+                            Log.warn "[Lod] cannot activate %A %A" node (Option.isSome op.value)
+
+                    
 
                 | Deactivate ->
-                    deactivateWatch.Start()
                     match cache.TryGetValue node with
                         | (true, slot) ->
+                            deactivateWatch.Start()
                             state.calls.Remove slot |> ignore
+                            deactivateWatch.Stop()
                         | _ ->
-                            Log.warn "cannot deactivate %A %A" node (Option.isSome op.value)
-                    deactivateWatch.Stop()
+                            Log.warn "[Lod] cannot deactivate %A %A" node (Option.isSome op.value)
+                    
                 | Nop ->
                     ()
             
-        let perform (state : RenderState) (op : AtomicOperation<ITreeNode, GeometryInstance>) =
+        let perform (state : RenderState) (op : AtomicOperation<ILodTreeNode, GeometryInstance>) =
             op.ops |> HMap.iter (performOp state op)
-            
 
-        //let glWait() =
-        //    let fence = GL.FenceSync(SyncCondition.SyncGpuCommandsComplete, WaitSyncFlags.None)
-        //    let mutable status = GL.ClientWaitSync(fence, ClientWaitSyncFlags.SyncFlushCommandsBit, 0L)
-        //    while status <> WaitSyncStatus.AlreadySignaled && status <> WaitSyncStatus.ConditionSatisfied do
-        //        status <- GL.ClientWaitSync(fence, ClientWaitSyncFlags.SyncFlushCommandsBit, 0L)
         let rec enter (l : obj) =
             let gotLock = Monitor.TryEnter(l, 5)
             if not gotLock then
-                //Log.warn "timeout"
                 enter l
 
         let sync() =
-            //let t = time()
             GL.Flush()
             GL.Finish()
-            //let n = time()
-            //let dt = n - t
-            //if dt.TotalMilliseconds > 5.0 then Log.warn "long sync %A" dt
 
         let run (token : AdaptiveToken) (maxMem : Mem) (maxTime : MicroTime) (calls : DrawPool) (iface : GLSLProgramInterface) =
             sync()
 
-            let sw = System.Diagnostics.Stopwatch.StartNew()
-      
+            
             let state =
                 {
                     iface = iface
@@ -2617,7 +2714,8 @@ module Bla =
             freeWatch.Reset()
             deactivateWatch.Reset()
 
-
+            let sw = System.Diagnostics.Stopwatch.StartNew()
+      
             let rec run (cnt : int)  =
                 let mem = state.uploadSize > maxMem
                 let time = sw.MicroTime > maxTime 
@@ -2651,13 +2749,13 @@ module Bla =
                         perform state ops
                         sync()
                         run (cnt + 1)
-
-            //enter renderingStateLock
+                        
             run 0
-            //finally Monitor.Exit renderingStateLock
 
         let evaluate (calls : DrawPool) (token : AdaptiveToken) (iface : GLSLProgramInterface) =
             needUpdate.GetValue(token)
+
+            NativePtr.write pRenderBounds (if info.renderBounds.GetValue(token) then 1 else 0)
 
             let maxTime = max (MicroTime.FromMilliseconds 1.0) calls.AverageRenderTime
             let maxMem = Mem (3L <<< 30)
@@ -2665,24 +2763,22 @@ module Bla =
             sync()
             
         let inner =
-            { new DrawPool(ctx, useCulling, activeBuffer.Pointer, modelViewProjBuffer.Pointer, state, pass) with
+            { new DrawPool(ctx, useCulling, pRenderBounds, activeBuffer.Pointer, modelViewProjBuffer.Pointer, state, pass) with
                 override x.Evaluate(token : AdaptiveToken, iface : GLSLProgramInterface) =
                     evaluate x token iface
 
                 override x.BeforeRender(stream : ICommandStream) =
                     for (slot, b) in Map.toSeq storageBuffers do 
                         stream.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, slot, b.Pointer)
-
             }
 
         
         let shutdown = new CancellationTokenSource()
-
         
-        let cameraPrediction, thread =
+        let cameraPrediction, puller, thread =
             let prediction = Prediction.euclidean (MicroTime(TimeSpan.FromMilliseconds 55.0))
             let rootLock = obj()
-            let mutable roots : hmap<ITreeNode, TaskTree<GeometryInstance>> = HMap.empty
+            let mutable roots : hmap<ILodTreeNode, TaskTree<GeometryInstance>> = HMap.empty
 
             let state =
                 {
@@ -2694,6 +2790,7 @@ module Bla =
                     collapses       = ref 0
                     dataSize        = ref 0L
                 }
+
             let mutable lastQ = 0.0
 
             let cameraPrediction =
@@ -2754,19 +2851,14 @@ module Bla =
 
                 )
                 
-            let scheduler = new LimitedConcurrencyLevelTaskScheduler(ThreadPriority.BelowNormal, max 2 (Environment.ProcessorCount - 3))
-            
-            let startTask (ct : CancellationToken) (f : unit -> 'a) =
-                Task.Factory.StartNew(Func<_>(f), ct, TaskCreationOptions.None, scheduler)
-                
             let puller =
                 startThread (fun () ->
                     let timer = new MultimediaTimer.Trigger(20)
                     
                     let mutable lastRoots = HMap.empty
-                    let mutable readers : hmap<ITreeNode, TaskTreeReader<_>> = HMap.empty
+                    let mutable readers : hmap<ILodTreeNode, TaskTreeReader<_>> = HMap.empty
 
-                    while true do
+                    while not shutdown.IsCancellationRequested do
                         timer.Wait()
 
                         let readers, removed = 
@@ -2805,10 +2897,10 @@ module Bla =
                 startThread (fun () ->
                     let notConverged = new ManualResetEventSlim(true)
 
-                    let cancel = System.Collections.Concurrent.ConcurrentDictionary<ITreeNode, CancellationTokenSource>()
+                    let cancel = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, CancellationTokenSource>()
                     let timer = new MultimediaTimer.Trigger(10)
                     
-                    let stop (node : ITreeNode) =
+                    let stop (node : ILodTreeNode) =
                         match cancel.TryRemove node with
                             | (true, c) -> 
                                 try c.Cancel()
@@ -2816,7 +2908,7 @@ module Bla =
                             | _ -> 
                                 ()
          
-                    let load (ct : CancellationToken) (rootId : int) (node : ITreeNode) (cont : CancellationToken -> ITreeNode -> GeometryInstance -> 'r) =
+                    let load (ct : CancellationToken) (rootId : int) (node : ILodTreeNode) (cont : CancellationToken -> ILodTreeNode -> GeometryInstance -> 'r) =
                         startTask ct (fun () ->
                             let startTime = time()
                             let (g,u) = node.GetData(ct)
@@ -2881,7 +2973,7 @@ module Bla =
                                         roots <- HMap.remove r roots
                                     )
 
-                            let modelView (r : ITreeNode) =
+                            let modelView (r : ILodTreeNode) =
                                 let t = getRootTrafo r
                                 subs.GetOrCreate(t, fun t -> t.AddMarkingCallback (fun () -> notConverged.Set())) |> ignore
                                 let m = t.GetValue()
@@ -2925,10 +3017,7 @@ module Bla =
                         subs |> Seq.iter (fun s -> s.Value.Dispose())
                 )
 
-            
-
-            cameraPrediction, thread
-        
+            cameraPrediction, puller, thread
         
         member x.UsedMemory : Mem = pool.UsedMemory + inner.UsedMemory
         member x.TotalMemory : Mem = pool.TotalMemory + inner.TotalMemory
@@ -2941,10 +3030,12 @@ module Bla =
                 (storageBuffers |> Map.toSeq |> Seq.map snd |> Seq.cast) 
                 (inner.Resources :> seq<_>)
             ]
+
         override x.Release() =
             shutdown.Cancel()
             cameraPrediction.Join()
             thread.Join()
+            puller.Join()
             reader.Dispose()
             inner.Dispose()
             loadTimes.Clear()
@@ -2970,14 +3061,15 @@ module StoreTree =
 
     type PointTreeNode(cache : LruDictionary<string, obj>, source : Symbol, globalTrafo : Trafo3d, root : Option<PointTreeNode>, parent : Option<PointTreeNode>, level : int, self : PointSetNode) as this =
         let bounds = self.BoundingBoxExact.Transformed globalTrafo
+        let cellBounds = self.BoundingBox.Transformed globalTrafo
         let cell = self.Cell
+        let isLeaf = self.IsLeaf
+        let id = self.Id
 
         let mutable refCount = 0
         let mutable livingChildren = 0
-        let mutable children : Option<list<ITreeNode>> = None
+        let mutable children : Option<list<ILodTreeNode>> = None
  
-        let mutable dataCache : Option<IndexedGeometry * MapExt<string, Array>> = None
-
         static let nodeId (n : PointSetNode) =
             string n.Id + "PointTreeNode"
             
@@ -3038,9 +3130,21 @@ module StoreTree =
                     else positions |> Array.map (fun _ -> C4b.White)
                     
                 let normals = 
-                    if self.HasLodNormals then self.LodNormals.Value
-                    elif self.HasNormals then self.Normals.Value
-                    else Array.create positions.Length V3f.OOI
+                    //if self.HasKdTree then 
+                    //    //if self.HasNormals then 
+                    //    //    self.Normals.Value
+                    //    //else
+                    //    let tree = self.KdTree.Value
+                    //    Aardvark.Geometry.Points.Normals.EstimateNormals(original, tree, 17)
+                    //elif self.HasLodKdTree then 
+                    //    let tree = self.LodKdTree.Value
+                    //    Aardvark.Geometry.Points.Normals.EstimateNormals(original, tree, 17)
+                    //else
+                        Array.create positions.Length V3f.OOI
+
+                    //if self.HasLodNormals then self.LodNormals.Value
+                    //elif self.HasNormals then self.Normals.Value
+                    //else Array.create positions.Length V3f.OOI
 
 
                 let tryMin (s : seq<'a>) =
@@ -3052,18 +3156,18 @@ module StoreTree =
                             | _ -> ()
                     min
 
-                //let dist =
-                //    if self.HasKdTree then 
-                //        let tree = self.KdTree.Value
-                //        getAverageDistance original positions tree
+                let dist = 0.0
+                    //if self.HasKdTree then 
+                    //    let tree = self.KdTree.Value
+                    //    getAverageDistance original positions tree
 
-                //    elif self.HasLodKdTree then 
-                //        let tree = self.LodKdTree.Value
-                //        getAverageDistance original positions tree
-                //    else 
-                //        bounds.Size.NormMax / 40.0
+                    //elif self.HasLodKdTree then 
+                    //    let tree = self.LodKdTree.Value
+                    //    getAverageDistance original positions tree
+                    //else 
+                    //    bounds.Size.NormMax / 40.0
 
-                let avgDist = bounds.Size.NormMax / 40.0 //if dist <= 0.0 then bounds.Size.NormMax / 40.0 else dist
+                let avgDist = if dist <= 0.0 then bounds.Size.NormMax / 40.0 else dist
 
                 //Log.warn "avg: %A (%d)" avgDist dist.Length
                 let geometry =
@@ -3101,7 +3205,7 @@ module StoreTree =
 
             let angle = Constant.DegreesPerRadian * atan2 avgPointDistance minDist
 
-            let factor = 1.0 //(minDist / 0.01) ** 0.1
+            let factor = 1.0 //(minDist / 0.01) ** 0.05
 
             angle / factor
         
@@ -3171,9 +3275,9 @@ module StoreTree =
                                                 match cache.TryGetValue id with
                                                 | (true, n) ->
                                                     cache.Remove id |> ignore
-                                                    unbox<ITreeNode> n |> Some
+                                                    unbox<ILodTreeNode> n |> Some
                                                 | _ -> 
-                                                    PointTreeNode(cache, source, globalTrafo, Some this.Root, Some this, level + 1, c) :> ITreeNode |> Some
+                                                    PointTreeNode(cache, source, globalTrafo, Some this.Root, Some this, level + 1, c) :> ILodTreeNode |> Some
                                     )
                             children <- Some c
                             c :> seq<_>
@@ -3195,16 +3299,16 @@ module StoreTree =
                                     let n = PointTreeNode(cache, source, globalTrafo, Some this.Root, Some this, level + 1, c)
                                     struct (n :> obj, 1L <<< 10)
                                 )
-                                |> unbox<ITreeNode> |> Some
+                                |> unbox<ILodTreeNode> |> Some
                     )
 
-        member x.Id = self.Id
+        member x.Id = id
 
         member x.GetData(ct) = 
             load ct
             
         member x.ShouldSplit (quality : float, view : Trafo3d, proj : Trafo3d) =
-            self.IsNotLeaf && angle view > 0.4 / quality
+            not isLeaf && angle view > 0.4 / quality
 
         member x.ShouldCollapse (quality : float, view : Trafo3d, proj : Trafo3d) =
             angle view < 0.3 / quality
@@ -3220,23 +3324,25 @@ module StoreTree =
         override x.ToString() = 
             sprintf "%s[%d]" (string x.Id) level
 
-        interface ITreeNode with
-            member x.Root = x.Root :> ITreeNode
+        interface ILodTreeNode with
+            member x.Root = x.Root :> ILodTreeNode
             member x.Level = level
             member x.Name = string x.Id
             member x.DataSource = source
-            member x.Parent = parent |> Option.map (fun n -> n :> ITreeNode)
+            member x.Parent = parent |> Option.map (fun n -> n :> ILodTreeNode)
             member x.Children = x.Children 
             member x.ShouldSplit(q,v,p) = x.ShouldSplit(q,v,p)
             member x.ShouldCollapse(q,v,p) = x.ShouldCollapse(q,v,p)
             member x.SplitQuality(v,p) = x.SplitQuality(v,p)
             member x.CollapseQuality(v,p) = x.CollapseQuality(v,p)
             member x.DataSize = int self.LodPointCount
+            member x.TotalDataSize = int self.PointCountTree
             member x.GetData(ct) = x.GetData(ct)
             member x.BoundingBox = bounds
+            member x.CellBoundingBox = cellBounds
             member x.Cell = cell
-            member x.Acquire() = x.Acquire()
-            member x.Release() = x.Release()
+            member x.Acquire() = ()
+            member x.Release() = ()
 
         override x.GetHashCode() = 
             HashCode.Combine(x.DataSource.GetHashCode(), self.Id.GetHashCode())
@@ -3245,9 +3351,239 @@ module StoreTree =
             match o with
                 | :? PointTreeNode as o -> x.DataSource = o.DataSource && self.Id = o.Id
                 | _ -> false
+    
+    module IndexedGeometry =
+        module private Arr = 
+            let append (l : Array) (r : Array) =
+                let et = l.GetType().GetElementType()
+                let res = Array.CreateInstance(et, l.Length + r.Length)
+                l.CopyTo(res, 0)
+                r.CopyTo(res, l.Length)
+                res
+            
+            let concat (l : seq<Array>) =
+                let l = Seq.toList l
+                match l with
+                | [] -> Array.CreateInstance(typeof<int>, 0)
+                | [a] -> a
+                | f :: _ ->
+                    let len = l |> List.sumBy (fun a -> a.Length)
+                    let et = f.GetType().GetElementType()
+                    let res = Array.CreateInstance(et, len)
+                    let mutable offset = 0
+                    for a in l do
+                        a.CopyTo(res, offset)
+                        offset <- offset + a.Length
+                    res
+
+        let union (l : IndexedGeometry) (r : IndexedGeometry) =
+            assert (l.Mode = r.Mode)
+            assert (isNull l.IndexArray = isNull r.IndexArray)
+
+            let index =
+                if isNull l.IndexArray then null
+                else Arr.append l.IndexArray r.IndexArray
+
+            let atts =
+                l.IndexedAttributes |> Seq.choose (fun (KeyValue(sem, l)) ->
+                    match r.IndexedAttributes.TryGetValue(sem) with
+                    | (true, r) -> Some (sem, Arr.append l r)
+                    | _ -> None
+                ) |> SymDict.ofSeq
+
+            IndexedGeometry(
+                Mode = l.Mode,
+                IndexArray = index,
+                IndexedAttributes = atts
+            )
 
 
-    let private cache = LruDictionary(4L <<< 30)
+        let unionMany (s : seq<IndexedGeometry>) =
+            use e = s.GetEnumerator()
+            if e.MoveNext() then
+                let mutable res = e.Current
+                while e.MoveNext() do
+                    res <- union res e.Current
+                res
+
+            else
+                IndexedGeometry()
+
+    type TreeViewNode(inner : ILodTreeNode, limit : int, parent : Option<ILodTreeNode>, root : Option<ILodTreeNode>) as this =
+        let root = match root with | Some r -> r | None -> this :> ILodTreeNode
+
+        let isLeaf = inner.TotalDataSize <= limit
+                
+        member x.ShouldSplit(q,v,p) =
+            not isLeaf && inner.ShouldSplit(q,v,p)
+
+        member x.GetData(ct : CancellationToken) =
+            if isLeaf then
+                let rec traverse (n : ILodTreeNode) =
+                    match Seq.toList n.Children with
+                    | [] -> [inner.GetData(ct)]
+                    | cs -> cs |> List.collect traverse
+
+                let datas = traverse inner
+                match datas with
+                    | (_,u) :: _ ->
+                        Log.warn "merge %d" (List.length datas)
+                        let g = datas |> List.map fst |> IndexedGeometry.unionMany
+                        g,u
+                    | _ -> 
+                        failwith ""
+            else
+                inner.GetData(ct)
+        
+        interface ILodTreeNode with
+            member x.Root = root
+            member x.Level = inner.Level
+            member x.Name = inner.Name
+            member x.DataSource = inner.DataSource
+            member x.Parent = parent
+            member x.Children = 
+                if isLeaf then Seq.empty
+                else inner.Children |> Seq.map (fun n -> TreeViewNode(n, limit, Some (this :> ILodTreeNode), Some root) :> ILodTreeNode)
+            member x.ShouldSplit(q,v,p) = x.ShouldSplit(q,v,p)
+            member x.ShouldCollapse(q,v,p) = inner.ShouldCollapse(q,v,p)
+            member x.SplitQuality(v,p) = inner.SplitQuality(v,p)
+            member x.CollapseQuality(v,p) = inner.CollapseQuality(v,p)
+            member x.DataSize = if isLeaf then inner.TotalDataSize else inner.DataSize
+            member x.TotalDataSize = inner.TotalDataSize
+            member x.GetData(ct) = x.GetData(ct)
+            member x.BoundingBox = inner.BoundingBox
+            member x.CellBoundingBox = inner.CellBoundingBox
+            member x.Cell = inner.Cell
+            member x.Acquire() = inner.Acquire()
+            member x.Release() = inner.Release()
+
+
+
+    type InCoreStructureTree(inner : ILodTreeNode, parent : Option<ILodTreeNode>, root : Option<ILodTreeNode>) as this =
+        let root = match root with | Some r -> r | None -> this :> ILodTreeNode
+        let mutable children = [] //inner.Children |> Seq.toList |> List.map (fun n -> InCoreStructureTree(n, Some (this :> ILodTreeNode), Some root) :> ILodTreeNode)
+
+        member private x.Build(nodeCount : ref<int>) =
+            inc &nodeCount.contents
+            children <- 
+                inner.Children |> Seq.toList |> List.map (fun n -> 
+                    let t = InCoreStructureTree(n, Some (this :> ILodTreeNode), Some root)
+                    t.Build(nodeCount)
+                    t :> ILodTreeNode
+                )
+
+        member x.Build() =
+            let cnt = ref 0 
+            x.Build(cnt)
+            !cnt
+
+
+        interface ILodTreeNode with
+            member x.Root = root
+            member x.Level = inner.Level
+            member x.Name = inner.Name
+            member x.DataSource = inner.DataSource
+            member x.Parent = parent
+            member x.Children = children :> seq<_>
+            member x.ShouldSplit(q,v,p) = inner.ShouldSplit(q,v,p)
+            member x.ShouldCollapse(q,v,p) = inner.ShouldCollapse(q,v,p)
+            member x.SplitQuality(v,p) = inner.SplitQuality(v,p)
+            member x.CollapseQuality(v,p) = inner.CollapseQuality(v,p)
+            member x.DataSize = inner.DataSize
+            member x.TotalDataSize = inner.TotalDataSize
+            member x.GetData(ct) = inner.GetData(ct)
+            member x.BoundingBox = inner.BoundingBox
+            member x.CellBoundingBox = inner.CellBoundingBox
+            member x.Cell = inner.Cell
+            member x.Acquire() = inner.Acquire()
+            member x.Release() = inner.Release()
+
+
+
+    let private cache = LruDictionary(1L <<< 30)
+
+
+    let gc (input : string) (key : string) (output : string) =
+        do Aardvark.Data.Points.Import.Pts.PtsFormat |> ignore
+        do Aardvark.Data.Points.Import.E57.E57Format |> ignore
+        
+        use output = PointCloud.OpenStore(output, cache)
+        use input = PointCloud.OpenStore(input, cache)
+        let set = input.GetPointSet(key)   
+       
+        let storeStructure (node : PointSetNode) =
+            let queue = Queue<PointSetNode>()
+            queue.Enqueue(node)
+
+            let mutable i = 0
+            while queue.Count > 0 do
+                let n = queue.Dequeue()
+                output.Add(string n.Id, n)
+
+                if i % 100000 = 0 then
+                    Log.line "%d nodes" i
+                    output.Flush()
+
+                if not (isNull n.Subnodes) then
+                    for c in n.Subnodes do
+                        if not (isNull c) then
+                            let c = c.Value
+                            if not (isNull c) then queue.Enqueue c
+
+                i <- i + 1
+
+        let storeAttributes (node : PointSetNode) =
+            let queue = Queue<PointSetNode>()
+            queue.Enqueue(node)
+            
+            let mutable i = 0
+            while queue.Count > 0 do
+                let n = queue.Dequeue()
+                
+                if n.HasPositions then output.Add(n.Positions.Id, n.Positions.Value)
+                if n.HasNormals then output.Add(n.Normals.Id, n.Normals.Value)
+                if n.HasColors then output.Add(n.Colors.Id, n.Colors.Value)
+                if n.HasKdTree then output.Add(n.KdTree.Id, n.KdTree.Value.Data)
+                if n.HasIntensities then output.Add(n.Intensities.Id, n.Intensities.Value)
+                if n.HasClassifications then output.Add(n.Classifications.Id, n.Classifications.Value)
+                
+                if n.HasLodPositions then output.Add(n.LodPositions.Id, n.LodPositions.Value)
+                if n.HasLodNormals then output.Add(n.LodNormals.Id, n.LodNormals.Value)
+                if n.HasLodColors then output.Add(n.LodColors.Id, n.LodColors.Value)
+                if n.HasLodKdTree then output.Add(n.LodKdTree.Id, n.LodKdTree.Value.Data)
+                if n.HasLodIntensities then output.Add(n.LodIntensities.Id, n.LodIntensities.Value)
+                if n.HasLodClassifications then output.Add(n.LodClassifications.Id, n.LodClassifications.Value)
+                
+                if i % 1000 = 0 then
+                    Log.line "%d datas" i
+                    output.Flush()
+
+                if not (isNull n.Subnodes) then
+                    for c in n.Subnodes do
+                        if not (isNull c) then
+                            let c = c.Value
+                            if not (isNull c) then queue.Enqueue c
+                            
+                i <- i + 1
+
+        let root = set.Root.Value
+
+        output.Add(key, set)
+        storeStructure root
+        storeAttributes root
+
+    let withInCoreStructure (n : LodTreeInstance) =
+        match n.root with
+        | :? InCoreStructureTree -> n
+        | _ -> 
+            let root = InCoreStructureTree(n.root, None, None)
+            let cnt = root.Build()
+            Log.warn "loaded %d nodes" cnt
+            { n with root = root }
+        
+    let withSplitLimit (limit : int) (n : LodTreeInstance) =
+        { n with root = TreeViewNode(n.root, limit, None, None) }
+        
 
     let import (sourceName : string) (file : string) (store : string) (uniforms : list<string * IMod>) =
         do Aardvark.Data.Points.Import.Pts.PtsFormat |> ignore
@@ -3284,7 +3620,7 @@ module StoreTree =
         Log.warn "bounds: %A" bounds.Size
 
         let source = Symbol.Create sourceName
-        let root = PointTreeNode(store.Cache, source, trafo, None, None, 0, root) :> ITreeNode
+        let root = PointTreeNode(store.Cache, source, trafo, None, None, 0, root) :> ILodTreeNode
         { 
             root = root
             uniforms = MapExt.ofList uniforms
@@ -3316,10 +3652,13 @@ module StoreTree =
                 
         let bounds = points.Bounds
 
+        Log.error "bounds: %A" points.Root.Value.BoundingBoxExact
+
         let trafo = Trafo3d.Translation(-bounds.Center)
 
+        Log.warn "points: %d" points.PointCount
         let source = Symbol.Create sourceName
-        let root = PointTreeNode(cache, source, trafo, None, None, 0, points.Root.Value) :> ITreeNode
+        let root = PointTreeNode(cache, source, trafo, None, None, 0, points.Root.Value) :> ILodTreeNode
         { 
             root = root
             uniforms = MapExt.ofList uniforms
@@ -3441,6 +3780,7 @@ module Shader =
             [<Position>] pos : V4d
             [<Color>] col : V4d
             [<Normal>] n : V3d
+            [<Semantic("ViewCenter"); Interpolation(InterpolationMode.Flat)>] vc : V3d
             [<Semantic("ViewPosition")>] vp : V3d
             [<Semantic("AvgPointDistance")>] dist : float
             [<Semantic("DepthRange")>] depthRange : float
@@ -3477,7 +3817,10 @@ module Shader =
             let depthRange = abs (ppz.Z - pp0.Z)
 
             let pixelDist = ndcDist * float uniform.ViewportSize.X
-            let n = mv * V4d(v.n, 0.0) |> Vec.xyz |> Vec.normalize
+
+            let s = mv * V4d(1.0, 0.0, 0.0, 0.0) |> Vec.xyz |> Vec.length
+
+            let n = (mv * V4d(v.n, 0.0)) / s |> Vec.xyz
             
             let pixelDist = 
                 if pp.Z < -pp.W then -1.0
@@ -3492,7 +3835,7 @@ module Shader =
             //    if pixelDist > 30.0 then -1.0
             //    else pixelDist //min pixelDist 30.0
 
-            return { v with s = pixelDist; pos = pp; depthRange = depthRange; n = n; vp = ovp.XYZ; col = V4d(col, v.col.W) }
+            return { v with s = pixelDist; pos = pp; depthRange = depthRange; n = n; vp = ovp.XYZ; vc = ovp.XYZ; col = V4d(col, v.col.W) }
         }
 
 
@@ -3520,10 +3863,26 @@ module Shader =
 
     let cameraLight (v : PointVertex) =
         fragment {
-            let vn = Vec.normalize v.n
+            let lvn = Vec.length v.n
+            let vn = v.n / lvn
             let vd = Vec.normalize v.vp 
 
-            let diffuse = Vec.dot vn vd |> abs
+            let c = v.c * V2d(2.0, 2.0) + V2d(-1.0, -1.0)
+            let f = Vec.dot c c
+            let z = sqrt (1.0 - f)
+            let sn = V3d(c.X, c.Y, -z)
+
+
+            let dSphere = Vec.dot sn vd |> abs
+            let dPlane = Vec.dot vn vd |> abs
+
+            let t = lvn
+            let pp : float = uniform?Planeness
+            let t = 1.0 - (1.0 - t) ** pp
+            let color = heat lvn
+
+            let diffuse = (1.0 - t) * dSphere + t * dPlane
+
             return V4d(v.col.XYZ * diffuse, v.col.W)
         }
 
@@ -3544,7 +3903,7 @@ module Sg =
     open Aardvark.SceneGraph
     open Aardvark.SceneGraph.Semantics
 
-    type LodNode(quality : IModRef<float>, maxQuality : IModRef<float>, budget : IMod<int64>, culling : bool, maxSplits : IMod<int>, time : IMod<DateTime>, clouds : aset<LodTreeInstance>) =
+    type LodNode(quality : IModRef<float>, maxQuality : IModRef<float>, budget : IMod<int64>, culling : bool, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<DateTime>, clouds : aset<LodTreeInstance>) =
         member x.Culling = culling
         member x.Time = time
         member x.Clouds = clouds
@@ -3552,6 +3911,7 @@ module Sg =
 
         member x.Quality = quality
         member x.MaxQuality = maxQuality
+        member x.RenderBounds = renderBounds
         member x.Budget = budget
         interface ISg
       
@@ -3578,15 +3938,16 @@ module Sg =
                         | :? Aardvark.Rendering.GL.Runtime as r ->
                             let preparedState = Aardvark.Rendering.GL.PreparedPipelineState.ofPipelineState fbo r.ResourceManager surface state
                             
-                            let info = 
+                            let info : Bla.LodRenderingInfo = 
                                 {
-                                    Bla.quality = sg.Quality
-                                    Bla.maxQuality = sg.MaxQuality
+                                    Bla.LodRenderingInfo.quality = sg.Quality
+                                    Bla.LodRenderingInfo.maxQuality = sg.MaxQuality
+                                    Bla.LodRenderingInfo.renderBounds = sg.RenderBounds
                                 }
                             
-                            new Bla.LodRenderer2(r.Context, preparedState, pass, info, sg.Culling, sg.MaxSplits, sg.Clouds, sg.Time, model, view, proj, sg.Budget) :> IPreparedRenderObject
+                            new Bla.LodRenderer(r.Context, preparedState, pass, info, sg.Culling, sg.MaxSplits, sg.Clouds, sg.Time, model, view, proj, sg.Budget) :> IPreparedRenderObject
                         | _ ->
-                            failwithf "[LoD] no vulkan backend atm."
+                            failwithf "[Lod] no vulkan backend atm."
                 }
 
             ASet.single (obj :> IRenderObject)
@@ -3621,7 +3982,7 @@ let main argv =
     let active0 = Mod.init true
     let active1 = Mod.init true
     let maxSplits = Mod.init 8
-
+    let renderBounds = Mod.init true
 
     let c0WithAlpha = Mod.map2 (fun (c : V4d) (a : float) -> V4d(c.XYZ, a)) c0 overlayAlpha
     let c1WithAlpha = Mod.map2 (fun (c : V4d) (a : float) -> V4d(c.XYZ, a)) c1 overlayAlpha
@@ -3630,17 +3991,27 @@ let main argv =
     let trafo2 = Mod.init (Trafo3d.Translation(V3d(100,0,0)))
     let trafo3 = Mod.init (Trafo3d.Translation(V3d(0,100,0)))
 
-    let oktogon =
-        StoreTree.import
-            "ssd"
-            @"\\euclid\rmDATA\Data\Schottenring_2018_02_23\Laserscans\2018-02-27_BankAustria\export\oktogon\Punktwolke\BLKgesamt.e57"
-            @"C:\Users\Schorsch\Development\WorkDirectory\BLK"
-            [
-                "Overlay", c0WithAlpha :> IMod
-                "ModelTrafo", trafo2 :> IMod
-                "TreeActive", active0 :> IMod
-            ]
+    //let oktogon =
+    //    StoreTree.import
+    //        "ssd"
+    //        @"\\euclid\rmDATA\Data\Schottenring_2018_02_23\Laserscans\2018-02-27_BankAustria\export\oktogon\Punktwolke\BLKgesamt.e57"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\BLK"
+    //        [
+    //            "Overlay", c0WithAlpha :> IMod
+    //            "ModelTrafo", trafo2 :> IMod
+    //            "TreeActive", active0 :> IMod
+    //        ]
             
+    //let kaunertal =
+    //    StoreTree.importAscii
+    //        "ssd"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\Kaunertal.txt"
+    //        @"\\euclid\InOut\haaser\KaunertalNormals"
+    //        [
+    //            "Overlay", c1WithAlpha :> IMod
+    //            "ModelTrafo", trafo :> IMod
+    //            "TreeActive", active1 :> IMod
+    //        ]
     let kaunertal =
         StoreTree.importAscii
             "ssd"
@@ -3651,23 +4022,33 @@ let main argv =
                 "ModelTrafo", trafo :> IMod
                 "TreeActive", active1 :> IMod
             ]
+               
                        
-    let supertoll =
-        StoreTree.importAscii
-            "ssd"
-            @"C:\Users\Schorsch\Development\WorkDirectory\supertoll.txt"
-            @"C:\Users\Schorsch\Development\WorkDirectory\supertoll"
-            [
-                "Overlay", c0WithAlpha :> IMod
-                "ModelTrafo", trafo :> IMod
-                "TreeActive", active1 :> IMod
-            ]
+    //let supertoll =
+    //    StoreTree.importAscii
+    //        "ssd"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\supertoll.txt"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\supertoll"
+    //        [
+    //            "Overlay", c0WithAlpha :> IMod
+    //            "ModelTrafo", trafo :> IMod
+    //            "TreeActive", active1 :> IMod
+    //        ]
+
+    //Log.startTimed "asdasdasd"
+    //StoreTree.gc 
+    //    @"C:\Users\Schorsch\Development\WorkDirectory\KaunertalNormals"
+    //    "kaunertal"
+    //    @"\\euclid\InOut\haaser\KaunertalNormals"
+
+    //Log.stop()
+    //System.Environment.Exit 0
 
     let technologiezentrum =
         StoreTree.import
             "ssd"
             @"C:\Users\Schorsch\Development\WorkDirectory\Technologiezentrum_Teil1.pts"
-            @"C:\Users\Schorsch\Development\WorkDirectory\Technologiezentrum"
+            @"C:\Users\Schorsch\Development\WorkDirectory\Technologiezentrum2"
             [
                 "Overlay", c0WithAlpha :> IMod
                 "ModelTrafo", trafo3 :> IMod
@@ -3687,19 +4068,6 @@ let main argv =
 
     //            transact (fun () -> trafo.Value <- trafo.Value * Trafo3d.RotationZ(dt.TotalSeconds * 0.1))
     //    )
-
-    let koeln =
-        StoreTree.import
-            "ssd"
-            @"C:\Users\Schorsch\Development\WorkDirectory\3278_5514_0_10\3278_5514_0_10"
-            @"C:\Users\Schorsch\Development\WorkDirectory\3278_5514_0_10\pointcloud\"
-            [
-                "Overlay", c0WithAlpha :> IMod
-                "ModelTrafo", trafo :> IMod
-                "TreeActive", active0 :> IMod
-            ]
-
-
     //let koelnNet =
     //    StoreTree.import
     //        "net"
@@ -3711,6 +4079,35 @@ let main argv =
     //            "TreeActive", active0 :> IMod
     //        ]
         
+
+    //let koeln =
+    //    StoreTree.import
+    //        "ssd"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\3278_5514_0_10\3278_5514_0_10"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\3278_5514_0_10\pointcloud\"
+    //        [
+    //            "Overlay", c0WithAlpha :> IMod
+    //            "ModelTrafo", trafo :> IMod
+    //            "TreeActive", active0 :> IMod
+    //        ]
+
+    let jb =
+        StoreTree.import
+            "ssd"
+            @"C:\Users\Schorsch\Development\WorkDirectory\Laserscan-P20_Beiglboeck-2015.pts"
+            @"C:\Users\Schorsch\Development\WorkDirectory\jb"
+            [
+                "Overlay", c0WithAlpha :> IMod
+                "ModelTrafo", trafo :> IMod
+                "TreeActive", active0 :> IMod
+            ]
+    //let rec traverse (n : ILodTreeNode) =
+    //    n.Acquire()
+    //    n.Children |> Seq.iter traverse
+
+    //traverse technologiezentrum.root
+
+
 
     //let allKoeln =
     //    let rx = System.Text.RegularExpressions.Regex @"^(?<x>[0-9]+)_(?<y>[0-9]+)_(?<z>[0-9]+)_(?<w>[0-9]+)$"
@@ -3778,10 +4175,13 @@ let main argv =
     let pcs = 
         //ASet.ofList allKoeln
         ASet.ofList [
-            //yield koeln
-            //yield koelnNet
+            yield StoreTree.normalize 100.0 kaunertal 
+                    //|> StoreTree.withSplitLimit 65536
+                    //|> StoreTree.withInCoreStructure 
+                    |> StoreTree.trafo trafo
+            //yield StoreTree.normalize 100.0 koelnNet
             //yield StoreTree.normalize 100.0 kaunertal
-            yield StoreTree.normalize 100.0 technologiezentrum |> StoreTree.trafo trafo
+            //yield StoreTree.normalize 100.0 technologiezentrum |> StoreTree.trafo trafo
             //yield oktogon
         ]
         
@@ -3878,11 +4278,12 @@ let main argv =
             do! DefaultSurfaces.trafo
             do! DefaultSurfaces.vertexColor
         }
-
+    let planeness = Mod.init 1.0
     let sg =
-        Sg.LodNode(quality, maxQuality, budget, true, maxSplits, win.Time, pcs) :> ISg
+        Sg.LodNode(quality, maxQuality, budget, true, renderBounds, maxSplits, win.Time, pcs) :> ISg
         |> Sg.uniform "PointSize" pointSize
         |> Sg.uniform "ViewportSize" win.Sizes
+        |> Sg.uniform "Planeness" planeness
         |> Sg.shader {
             //do! Shader.constantColor C4f.White
             do! Shader.lodPointSize
@@ -3909,6 +4310,12 @@ let main argv =
 
         | Keys.C -> transact (fun () -> budget.Value <- 2L * budget.Value); Log.line "budget: %A" (Num budget.Value)
         | Keys.X -> transact (fun () -> budget.Value <- max (budget.Value / 2L) (256L <<< 10)); Log.line "budget: %A" (Num budget.Value)
+        
+        | Keys.G -> transact (fun () -> planeness.Value <- planeness.Value * 1.15); Log.line "planeness: %f" (planeness.Value)
+        | Keys.H -> transact (fun () -> planeness.Value <- planeness.Value / 1.15); Log.line "planeness: %f" (planeness.Value)
+
+
+        | Keys.B -> transact (fun () -> renderBounds.Value <- not renderBounds.Value); Log.line "bounds: %A" renderBounds.Value
 
         | Keys.Space -> 
             transact (fun () -> 
