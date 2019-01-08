@@ -201,14 +201,14 @@ module Aara =
       positions |> Array.mapi (fun i x -> if x.AnyNaN then Some i else None) |> Array.choose id
     
     // load triangles from aaraFile and transform them with matrix
-    let loadTrianglesFromFile (aaraFile : string) (matrix : M44d) =
+    let loadTrianglesFromFile' (aaraFile : string)(indexComputation : V2i -> int[] -> int[]) (matrix : M44d) =
         let positions = aaraFile |> fromFile<V3f>
 
         let data = 
             positions.Data |> Array.map (fun x ->  x.ToV3d() |> matrix.TransformPos)
 
         let invalidIndices = getInvalidIndices data
-        let index = computeIndexArray (positions.Size.XY.ToV2i()) false (Set.ofArray invalidIndices)
+        let index = indexComputation (positions.Size.XY.ToV2i()) invalidIndices  //computeIndexArray (positions.Size.XY.ToV2i()) false (Set.ofArray invalidIndices)
               
         let triangles =             
             index 
@@ -218,7 +218,11 @@ module Aara =
                 |> Seq.toArray
 
         triangles
-
+    
+    // load triangles from aaraFile and transform them with matrix
+    let loadTrianglesFromFile (aaraFile : string) (matrix : M44d) =                
+        loadTrianglesFromFile' aaraFile (fun size invalids -> computeIndexArray size false (Set.ofArray invalids)) matrix
+        
     module Offset = 
 
       let loadRawWithOffset<'a when 'a : (new : unit -> 'a) and 'a : struct and 'a :> ValueType> (offset : int) (elementCount : int) (f : Stream) =
