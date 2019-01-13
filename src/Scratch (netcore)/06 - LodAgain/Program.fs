@@ -33,7 +33,7 @@ type ILodTreeNode =
     abstract member DataSource : Symbol
     abstract member DataSize : int
     abstract member TotalDataSize : int
-    abstract member GetData : CancellationToken -> IndexedGeometry * MapExt<string, Array>
+    abstract member GetData : ct : CancellationToken * inputs : MapExt<string, Type> -> IndexedGeometry * MapExt<string, Array>
 
     abstract member ShouldSplit : float * Trafo3d * Trafo3d -> bool
     abstract member ShouldCollapse : float * Trafo3d * Trafo3d -> bool
@@ -1814,6 +1814,7 @@ module Bla =
 
     type internal TaskTreeState =
         {
+            trigger         : MVar<unit>
             runningTasks    : ref<int>
             ready           : ref<int>
             totalNodes      : ref<int>
@@ -1879,15 +1880,15 @@ module Bla =
                 let childSize = t.Children |> Seq.sumBy (fun c -> int64 c.DataSize)
                 queue.HeapEnqueue(cmp, struct (q, childSize, t))
 
-        let getMaxQuality (current : float) (maxSize : int64) (ts : seq<ILodTreeNode>) (view : ILodTreeNode -> Trafo3d) (proj : Trafo3d) =
-            let next = min 1.0 (current + 0.2)
-            
+        let getMaxQuality (maxSize : int64) (ts : seq<ILodTreeNode>) (view : ILodTreeNode -> Trafo3d) (proj : Trafo3d) =
+
             let queue = List<struct (float * int64 * ILodTreeNode)>(1 <<< 20)
             let mutable size = 0L
             let mutable quality = 1.0
+            let mutable cnt = 0
             for t in ts do 
                 size <- size + int64 t.DataSize
-                enqueue next t view proj queue
+                enqueue 1.0 t view proj queue
 
             let inline s (struct (a,b,c)) = b
 
@@ -1896,13 +1897,13 @@ module Bla =
                 quality <- q
                 size <- size + s
                 for c in e.Children do
-                    enqueue next c view proj queue
+                    enqueue 1.0 c view proj queue
 
             if queue.Count = 0 then
                 1.0, size
             else
                 let struct (qn,_,_) = queue.HeapDequeue(cmp)
-                0.5 * (quality + qn), size
+                0.5 * (qn + quality), size
    
     type TaskTreeNode<'a> internal(state : TaskTreeState, mapping : CancellationToken -> ILodTreeNode -> Task<'a>, rootId : int, original : ILodTreeNode) =
         static let neverTask = TaskCompletionSource<'a>().Task
@@ -1968,7 +1969,7 @@ module Bla =
 
 
 
-        member x.StartSplit() =
+        member x.StartSplit(trigger : MVar<unit>) =
             let n = original.Children |> Seq.toList
             let childTasks = System.Collections.Generic.List<Task<_>>()
             children <- n |> List.map (fun n ->
@@ -1981,6 +1982,7 @@ module Bla =
             let childrenReady (t : Task<_>) =
                 if t.IsCompleted && not t.IsFaulted && not t.IsCanceled then
                     state.AddReady()
+                    MVar.put trigger ()
 
             Task.WhenAll(childTasks).ContinueWith(childrenReady, TaskContinuationOptions.OnlyOnRanToCompletion) |> ignore
             
@@ -1988,9 +1990,10 @@ module Bla =
             int64 original.DataSize +
             List.sumBy (fun (c : TaskTreeNode<_>) -> c.TotalSize) children
 
-        member x.Collapse() =
+        member x.Collapse(trigger : MVar<unit>) =
             children |> List.iter (fun c -> c.Destroy())
             children <- []
+            MVar.put trigger ()
             
         member x.Original = original
         member x.Children = children
@@ -2039,12 +2042,12 @@ module Bla =
 
         static member internal ProcessQueue(state : TaskTreeState, queue : List<float * SetOperation<TaskTreeNode<'a>>>, quality : float, view : ILodTreeNode -> Trafo3d, proj : Trafo3d, maxOps : int) =
             let mutable lastQ = 0.0
+            let mutable cnt = 0
             while queue.Count > 0 && (!state.runningTasks < maxOps || (queue.Count > 0 && (snd queue.[0]).Count < 0)) do
                 let q, op = queue.HeapDequeue(cmp)
-                
                 match op with
                 | Add(_,n) -> 
-                    n.StartSplit()
+                    n.StartSplit(state.trigger)
                     for c in n.Children do
                         let r = c.Original.Root
                         let view = view r
@@ -2055,15 +2058,19 @@ module Bla =
                     lastQ <- q
 
                 | Rem(_,n) -> 
-                    n.Collapse()
+                    n.Collapse(state.trigger)
                     Interlocked.Increment(&state.collapses.contents) |> ignore
                     lastQ <- q + quality
+
+                cnt <- cnt + 1
 
             if queue.Count = 0 then 
                 quality
             else 
                 let qnext, _ = queue.HeapDequeue(cmp)
-                0.5 * (lastQ + qnext)
+                if cnt = 0 then qnext
+                else 0.5 * (qnext + lastQ)
+                    
 
     type TaskTreeReader<'a>(tree : TaskTree<'a>) =
         let mutable state : Option<TreeNode<'a>> = None
@@ -2475,11 +2482,16 @@ module Bla =
             rootCache.GetOrAdd(name, fun name ->
                 match name with
                 | "ModelTrafos"              -> getRootTrafo root :> IMod |> Some
+                | "ModelTrafosInv"           -> getRootTrafo root |> Mod.map (fun t -> t.Inverse) :> IMod |> Some
+
                 | "ModelViewTrafos"          -> Mod.map2 (fun a b -> a * b) (getRootTrafo root) view :> IMod |> Some
+                | "ModelViewTrafosInv"       -> getRootTrafo root %* view |> Mod.map (fun t -> t.Inverse) :> IMod |> Some
+
                 | "ModelViewProjTrafos"      -> getRootTrafo root %* view %* proj :> IMod |> Some
-                | "ModelTrafoInvs"           -> getRootTrafo root |> Mod.map (fun t -> t.Inverse) :> IMod |> Some
-                | "ModelViewTrafoInvs"       -> getRootTrafo root %* view |> Mod.map (fun t -> t.Inverse) :> IMod |> Some
-                | "ModelViewTrafoProjInvs"   -> getRootTrafo root %* view %* proj |> Mod.map (fun t -> t.Inverse) :> IMod |> Some
+                | "ModelViewProjTrafosInv"   -> getRootTrafo root %* view %* proj |> Mod.map (fun t -> t.Inverse) :> IMod |> Some
+
+                | "NormalMatrices"           -> getRootTrafo root |> Mod.map (fun t -> M33d.op_Explicit t.Backward.Transposed):> IMod |> Some
+                | "NormalMatricesInv"        -> getRootTrafo root |> Mod.map (fun t -> M33d.op_Explicit t.Forward.Transposed):> IMod |> Some
                 | _ -> 
                     match HMap.tryFind root rootUniforms with
                     | Some table -> MapExt.tryFind name table
@@ -2775,13 +2787,58 @@ module Bla =
         
         let shutdown = new CancellationTokenSource()
         
+        let knownInputs =
+            Map.ofList [
+                "TreeId", None
+                
+                //"ModelTrafos", Some ("ModelTrafos", typeof<Trafo3d>)
+                "ModelTrafosInv", Some ("ModelTrafos", typeof<Trafo3d>)
+
+                "ModelViewTrafos", Some ("ModelTrafos", typeof<Trafo3d>)
+                "ModelViewTrafosInv", Some ("ModelTrafos", typeof<Trafo3d>)
+
+                "ModelViewProjTrafos", Some ("ModelTrafos", typeof<Trafo3d>)
+                "ModelViewProjTrafosInv", Some ("ModelTrafos", typeof<Trafo3d>)
+
+                "NormalMatrices", Some ("ModelTrafos", typeof<Trafo3d>)
+                "NormalMatricesInv", Some ("ModelTrafos", typeof<Trafo3d>)
+            ]
+
+        let filterInputs (m : MapExt<string, Type>) =
+            knownInputs |> Map.fold (fun m k v ->
+                match MapExt.tryRemove k m with
+                | Some (_, r) ->
+                    match v with
+                    | Some(n,t) -> MapExt.add n t r
+                    | None -> r
+                | None ->
+                    m
+            ) m
+
+        let wantedInputs =
+            let inputs =
+                state.pProgramInterface.inputs 
+                    |> List.map (fun p -> p.paramSemantic, GLSLType.toType p.paramType)
+                    |> MapExt.ofList
+            let perTreeUniforms =
+                state.pProgramInterface.storageBuffers
+                    |> MapExt.toSeq
+                    |> Seq.map (fun (_,b) -> b.ssbName, GLSLType.toType b.ssbType)
+                    |> MapExt.ofSeq
+            let res = MapExt.union inputs perTreeUniforms |> filterInputs
+            Log.warn "%A" res
+            res
+
         let cameraPrediction, puller, thread =
             let prediction = Prediction.euclidean (MicroTime(TimeSpan.FromMilliseconds 55.0))
             let rootLock = obj()
             let mutable roots : hmap<ILodTreeNode, TaskTree<GeometryInstance>> = HMap.empty
+            
+            let changesPending = MVar.create ()
 
             let state =
                 {
+                    trigger         = changesPending
                     runningTasks    = ref 0
                     ready           = ref 0
                     totalNodes      = ref 0
@@ -2797,7 +2854,7 @@ module Bla =
                 startThread (fun () ->
                     let mutable lastTime = time()
                     let mutable lastReport = time()
-                    let timer = new MultimediaTimer.Trigger(10)
+                    let timer = new MultimediaTimer.Trigger(5)
                     
                     while not shutdown.IsCancellationRequested do
                         timer.Wait()
@@ -2859,7 +2916,8 @@ module Bla =
                     let mutable readers : hmap<ILodTreeNode, TaskTreeReader<_>> = HMap.empty
 
                     while not shutdown.IsCancellationRequested do
-                        timer.Wait()
+                        //timer.Wait()
+                        MVar.take changesPending
 
                         let readers, removed = 
                             lock rootLock (fun () ->
@@ -2892,7 +2950,7 @@ module Bla =
                     for (_,r) in readers do
                         r.Destroy(renderDelta)
                 )
-
+                
             let thread = 
                 startThread (fun () ->
                     let notConverged = new ManualResetEventSlim(true)
@@ -2911,7 +2969,7 @@ module Bla =
                     let load (ct : CancellationToken) (rootId : int) (node : ILodTreeNode) (cont : CancellationToken -> ILodTreeNode -> GeometryInstance -> 'r) =
                         startTask ct (fun () ->
                             let startTime = time()
-                            let (g,u) = node.GetData(ct)
+                            let (g,u) = node.GetData(ct, wantedInputs)
 
                             let cnt = 
                                 match Seq.tryHead u with
@@ -2926,7 +2984,9 @@ module Bla =
 
 
                             if not ct.IsCancellationRequested then
-                                cont ct node loaded
+                                let res = cont ct node loaded
+                                
+                                res
                             else
                                 raise <| OperationCanceledException()
                         )
@@ -2972,6 +3032,7 @@ module Bla =
                                     lock rootLock (fun () ->
                                         roots <- HMap.remove r roots
                                     )
+                                    MVar.put changesPending ()
 
                             let modelView (r : ILodTreeNode) =
                                 let t = getRootTrafo r
@@ -2985,8 +3046,8 @@ module Bla =
                             let roots = lock rootLock (fun () -> roots)
 
                             let start = time()
-                            let maxQ, dataSize = TreeHelpers.getMaxQuality lastQ budget (Seq.map fst roots) modelView proj
-                            //let maxQ = 1.0
+                            //let maxQ, dataSize = TreeHelpers.getMaxQuality lastQ budget (Seq.map fst roots) modelView proj
+                            let maxQ = 1.0
                             let dt = time() - start
                             maxQualityTime.Add(dt.TotalMilliseconds)
 
@@ -3059,9 +3120,10 @@ module StoreTree =
     open Aardvark.Data.Points.Import
 
 
-    type PointTreeNode(cache : LruDictionary<string, obj>, source : Symbol, globalTrafo : Trafo3d, root : Option<PointTreeNode>, parent : Option<PointTreeNode>, level : int, self : PointSetNode) as this =
-        let bounds = self.BoundingBoxExact.Transformed globalTrafo
-        let cellBounds = self.BoundingBox.Transformed globalTrafo
+    type PointTreeNode(cache : LruDictionary<string, obj>, source : Symbol, globalTrafo : Similarity3d, root : Option<PointTreeNode>, parent : Option<PointTreeNode>, level : int, self : PointSetNode) as this =
+        let globalTrafoTrafo = Trafo3d globalTrafo
+        let bounds = self.BoundingBoxExact.Transformed globalTrafoTrafo
+        let cellBounds = self.BoundingBox.Transformed globalTrafoTrafo
         let cell = self.Cell
         let isLeaf = self.IsLeaf
         let id = self.Id
@@ -3110,85 +3172,90 @@ module StoreTree =
             else 
                 0.0
 
-        let load (ct : CancellationToken) =
+        let load (ct : CancellationToken) (ips : MapExt<string, Type>) =
             cache.GetOrCreate(cacheId self, fun () ->
                 let center = self.Center
+                let attributes = SymbolDict<Array>()
+                let mutable uniforms = MapExt.empty
+
 
                 let original =
                     if self.HasLodPositions then self.LodPositions.Value
                     elif self.HasPositions then self.Positions.Value
                     else [| V3f(System.Single.NaN, System.Single.NaN, System.Single.NaN) |]
-
-                let globalTrafo1 = Trafo3d.Translation(center) * globalTrafo
-                let positions = 
-                    let inline fix (p : V3f) = globalTrafo1.Forward.TransformPos (V3d p) |> V3f
-                    original |> Array.map fix
-
-                let colors = 
-                    if self.HasLodColors then self.LodColors.Value
-                    elif self.HasColors then self.Colors.Value
-                    else positions |> Array.map (fun _ -> C4b.White)
                     
-                let normals = 
-                    //if self.HasKdTree then 
-                    //    //if self.HasNormals then 
-                    //    //    self.Normals.Value
-                    //    //else
-                    //    let tree = self.KdTree.Value
-                    //    Aardvark.Geometry.Points.Normals.EstimateNormals(original, tree, 17)
-                    //elif self.HasLodKdTree then 
-                    //    let tree = self.LodKdTree.Value
-                    //    Aardvark.Geometry.Points.Normals.EstimateNormals(original, tree, 17)
-                    //else
-                        Array.create positions.Length V3f.OOI
+                let globalTrafo1 = globalTrafo * Euclidean3d(Rot3d.Identity, center)
+                let positions = 
+                    let inline fix (p : V3f) = globalTrafo1.TransformPos (V3d p) |> V3f
+                    original |> Array.map fix
+                attributes.[DefaultSemantic.Positions] <- positions
+                
+                if MapExt.containsKey "Colors" ips then
+                    let colors = 
+                        if self.HasLodColors then self.LodColors.Value
+                        elif self.HasColors then self.Colors.Value
+                        else Array.create original.Length C4b.White
+                    attributes.[DefaultSemantic.Colors] <- colors
+           
+                if MapExt.containsKey "Normals" ips then
+                    let normals = 
+                        //if self.HasNormals then self.Normals.Value
+                        //elif self.HasLodNormals then self.LodNormals.Value
+                        //else Array.create original.Length V3f.OOO
+                        if self.HasKdTree then 
+                            let tree = self.KdTree.Value
+                            Aardvark.Geometry.Points.Normals.EstimateNormals(original, tree, 17)
+                        elif self.HasLodKdTree then 
+                            let tree = self.LodKdTree.Value
+                            Aardvark.Geometry.Points.Normals.EstimateNormals(original, tree, 17)
+                        else
+                            Array.create original.Length V3f.OOO
 
-                    //if self.HasLodNormals then self.LodNormals.Value
-                    //elif self.HasNormals then self.Normals.Value
-                    //else Array.create positions.Length V3f.OOI
+                    let normals =
+                        let normalMat = (Trafo3d globalTrafo.EuclideanTransformation).Backward.Transposed |> M33d.op_Explicit
+                        let inline fix (p : V3f) = normalMat * (V3d p) |> V3f
+                        normals |> Array.map fix
+
+                    attributes.[DefaultSemantic.Normals] <- normals
 
 
-                let tryMin (s : seq<'a>) =
-                    let mutable min = None
-                    for e in s do
-                        match min with
-                            | None -> min <- Some e
-                            | Some m when e < m -> min <- Some e
-                            | _ -> ()
-                    min
+                
+                if MapExt.containsKey "AvgPointDistance" ips then
+                    let dist = 
+                        if self.HasKdTree then 
+                            let tree = self.KdTree.Value
+                            getAverageDistance original positions tree
 
-                let dist = 0.0
-                    //if self.HasKdTree then 
-                    //    let tree = self.KdTree.Value
-                    //    getAverageDistance original positions tree
+                        elif self.HasLodKdTree then 
+                            let tree = self.LodKdTree.Value
+                            getAverageDistance original positions tree
+                        else 
+                            bounds.Size.NormMax / 40.0
 
-                    //elif self.HasLodKdTree then 
-                    //    let tree = self.LodKdTree.Value
-                    //    getAverageDistance original positions tree
-                    //else 
-                    //    bounds.Size.NormMax / 40.0
+                    let avgDist = 
+                        //bounds.Size.NormMax / 40.0
+                        if dist <= 0.0 then bounds.Size.NormMax / 40.0 else dist
 
-                let avgDist = if dist <= 0.0 then bounds.Size.NormMax / 40.0 else dist
+                    uniforms <- MapExt.add "AvgPointDistance" ([| float32 avgDist |] :> System.Array) uniforms
+                    
+                if MapExt.containsKey "TreeLevel" ips then    
+                    let arr = [| float32 level |] :> System.Array
+                    uniforms <- MapExt.add "TreeLevel" arr uniforms
+                    
+                if MapExt.containsKey "MaxTreeDepth" ips then    
+                    let arr = [| self.GetMaximiumTreeDepth(true) |] :> System.Array
+                    uniforms <- MapExt.add "MaxTreeDepth" arr uniforms
+                    
+                if MapExt.containsKey "MinTreeDepth" ips then    
+                    let arr = [| self.GetMinimumTreeDepth(true) |] :> System.Array
+                    uniforms <- MapExt.add "MinTreeDepth" arr uniforms
 
-                //Log.warn "avg: %A (%d)" avgDist dist.Length
                 let geometry =
                     IndexedGeometry(
                         Mode = IndexedGeometryMode.PointList,
-                        IndexedAttributes =
-                            SymDict.ofList [
-                                DefaultSemantic.Positions, positions :> System.Array
-                                DefaultSemantic.Colors, colors :> System.Array
-                                DefaultSemantic.Normals, normals :> System.Array
-                            ]
+                        IndexedAttributes = attributes
                     )
                 
-                let uniforms =
-                    MapExt.ofList [
-                        "TreeLevel", [| float32 level |] :> System.Array
-                        "MaxTreeDepth", [| 1 |] :> System.Array
-                        "MinTreeDepth", [| 1 |] :> System.Array
-                        "AvgPointDistance", [| float32 avgDist |] :> System.Array
-                    ]
-
                 let mem = int64 positions.Length * 28L
                 let res = geometry, uniforms
                 struct (res :> obj, mem)
@@ -3304,8 +3371,8 @@ module StoreTree =
 
         member x.Id = id
 
-        member x.GetData(ct) = 
-            load ct
+        member x.GetData(ct, ips) = 
+            load ct ips
             
         member x.ShouldSplit (quality : float, view : Trafo3d, proj : Trafo3d) =
             not isLeaf && angle view > 0.4 / quality
@@ -3327,7 +3394,7 @@ module StoreTree =
         interface ILodTreeNode with
             member x.Root = x.Root :> ILodTreeNode
             member x.Level = level
-            member x.Name = string x.Id
+            member x.Name = x.ToString()
             member x.DataSource = source
             member x.Parent = parent |> Option.map (fun n -> n :> ILodTreeNode)
             member x.Children = x.Children 
@@ -3337,7 +3404,7 @@ module StoreTree =
             member x.CollapseQuality(v,p) = x.CollapseQuality(v,p)
             member x.DataSize = int self.LodPointCount
             member x.TotalDataSize = int self.PointCountTree
-            member x.GetData(ct) = x.GetData(ct)
+            member x.GetData(ct, ips) = x.GetData(ct, ips)
             member x.BoundingBox = bounds
             member x.CellBoundingBox = cellBounds
             member x.Cell = cell
@@ -3417,11 +3484,11 @@ module StoreTree =
         member x.ShouldSplit(q,v,p) =
             not isLeaf && inner.ShouldSplit(q,v,p)
 
-        member x.GetData(ct : CancellationToken) =
+        member x.GetData(ct : CancellationToken, ips : MapExt<string, Type>) =
             if isLeaf then
                 let rec traverse (n : ILodTreeNode) =
                     match Seq.toList n.Children with
-                    | [] -> [inner.GetData(ct)]
+                    | [] -> [inner.GetData(ct, ips)]
                     | cs -> cs |> List.collect traverse
 
                 let datas = traverse inner
@@ -3433,7 +3500,7 @@ module StoreTree =
                     | _ -> 
                         failwith ""
             else
-                inner.GetData(ct)
+                inner.GetData(ct, ips)
         
         interface ILodTreeNode with
             member x.Root = root
@@ -3450,7 +3517,7 @@ module StoreTree =
             member x.CollapseQuality(v,p) = inner.CollapseQuality(v,p)
             member x.DataSize = if isLeaf then inner.TotalDataSize else inner.DataSize
             member x.TotalDataSize = inner.TotalDataSize
-            member x.GetData(ct) = x.GetData(ct)
+            member x.GetData(ct, ips) = x.GetData(ct, ips)
             member x.BoundingBox = inner.BoundingBox
             member x.CellBoundingBox = inner.CellBoundingBox
             member x.Cell = inner.Cell
@@ -3491,7 +3558,7 @@ module StoreTree =
             member x.CollapseQuality(v,p) = inner.CollapseQuality(v,p)
             member x.DataSize = inner.DataSize
             member x.TotalDataSize = inner.TotalDataSize
-            member x.GetData(ct) = inner.GetData(ct)
+            member x.GetData(ct, ips) = inner.GetData(ct, ips)
             member x.BoundingBox = inner.BoundingBox
             member x.CellBoundingBox = inner.CellBoundingBox
             member x.Cell = inner.Cell
@@ -3500,15 +3567,15 @@ module StoreTree =
 
 
 
-    let private cache = LruDictionary(1L <<< 30)
+    //let private cache = LruDictionary(1L <<< 30)
 
 
     let gc (input : string) (key : string) (output : string) =
         do Aardvark.Data.Points.Import.Pts.PtsFormat |> ignore
         do Aardvark.Data.Points.Import.E57.E57Format |> ignore
         
-        use output = PointCloud.OpenStore(output, cache)
-        use input = PointCloud.OpenStore(input, cache)
+        use output = PointCloud.OpenStore(output, LruDictionary(1L <<< 30))
+        use input = PointCloud.OpenStore(input, LruDictionary(1L <<< 30))
         let set = input.GetPointSet(key)   
        
         let storeStructure (node : PointSetNode) =
@@ -3589,7 +3656,7 @@ module StoreTree =
         do Aardvark.Data.Points.Import.Pts.PtsFormat |> ignore
         do Aardvark.Data.Points.Import.E57.E57Format |> ignore
         
-        let store = PointCloud.OpenStore(store, cache)
+        let store = PointCloud.OpenStore(store, LruDictionary(1L <<< 30))
             
         let key = System.IO.Path.GetFileNameWithoutExtension(file).ToLower()
         let set = store.GetPointSet(key)
@@ -3614,8 +3681,12 @@ module StoreTree =
         let root = points.Root.Value
         let bounds = root.Cell.BoundingBox
         let trafo = 
-            Trafo3d.Translation(-bounds.Center) *
-            Trafo3d.Scale(1.0 / 100.0)
+        
+            Similarity3d(1.0, Euclidean3d(Rot3d(V3d.OOI, Constant.PiHalf), V3d.Zero)) *
+           // Similarity3d(1.0 / 100.0, Euclidean3d.Identity) * 
+            Similarity3d(1.0, Euclidean3d(Rot3d.Identity, -bounds.Center))
+            //Trafo3d.Translation(-bounds.Center) *
+            //Trafo3d.Scale(1.0 / 100.0)
 
         Log.warn "bounds: %A" bounds.Size
 
@@ -3628,7 +3699,7 @@ module StoreTree =
     
     let importAscii (sourceName : string) (file : string) (store : string) (uniforms : list<string * IMod>) =
         let fmt = [| Ascii.Token.PositionX; Ascii.Token.PositionY; Ascii.Token.PositionZ; Ascii.Token.ColorR; Ascii.Token.ColorG; Ascii.Token.ColorB |]
-        
+        let cache = LruDictionary(1L <<< 30)
         let store = PointCloud.OpenStore(store, cache)
         let key = System.IO.Path.GetFileNameWithoutExtension(file).ToLower()
         let set = store.GetPointSet(key)
@@ -3654,7 +3725,8 @@ module StoreTree =
 
         Log.error "bounds: %A" points.Root.Value.BoundingBoxExact
 
-        let trafo = Trafo3d.Translation(-bounds.Center)
+        let trafo = 
+            Similarity3d(1.0, Euclidean3d(Rot3d.Identity, -bounds.Center))
 
         Log.warn "points: %d" points.PointCount
         let source = Symbol.Create sourceName
@@ -3672,6 +3744,19 @@ module StoreTree =
         let t = 
             Trafo3d.Translation(-bounds.Center) * 
             Trafo3d.Scale(maxSize / bounds.Size.NormMax)
+
+        {
+            root = tree
+            uniforms = MapExt.add "ModelTrafo" (Mod.constant t :> IMod) uniforms
+        }
+        
+    let translate (shift : V3d) (instance : LodTreeInstance) =
+        let tree = instance.root
+        let uniforms = instance.uniforms
+
+        let bounds = tree.CellBoundingBox
+        //Log.warn "%A %A" tree.BoundingBox tree.CellBoundingBox
+        let t = Trafo3d.Translation(shift)
 
         {
             root = tree
@@ -3828,8 +3913,9 @@ module Shader =
                 else uniform.PointSize * pixelDist
 
             //let h = heat (float v.treeDepth / 6.0)
-            let o = uniform.Overlay.[v.id]
-            let col = o.W * o.XYZ + (1.0 - o.W) * v.col.XYZ
+            //let o = uniform.Overlay.[v.id]
+            //let col = o.W * h.XYZ + (1.0 - o.W) * v.col.XYZ
+            let col = v.col.XYZ
 
             //let pixelDist = 
             //    if pixelDist > 30.0 then -1.0
@@ -3879,7 +3965,7 @@ module Shader =
             let t = lvn
             let pp : float = uniform?Planeness
             let t = 1.0 - (1.0 - t) ** pp
-            let color = heat lvn
+            let color = heat t
 
             let diffuse = (1.0 - t) * dSphere + t * dPlane
 
@@ -3953,16 +4039,772 @@ module Sg =
             ASet.single (obj :> IRenderObject)
 
 
+module KdTree =
+    
+    type ClosestPointQuery =
+        {
+            point   : V3d
+            maxDist : float
+            count   : int
+        }
 
+    [<CompilationRepresentation(CompilationRepresentationFlags.UseNullAsTrueValue)>]
+    type KdNode<'a> =
+        | Empty
+        | Inner of axis : int * point : V3d * value : 'a * left : KdNode<'a> * eq : KdNode<'a> * right : KdNode<'a> * count : int
+        | Leaf of axis : int * points : array<struct (V3d * 'a)> * count : int
+
+    type private KdNodeEnumerator<'a>(root : KdNode<'a>) =
+        let mutable stack = [root]
+        let mutable hasCurrentPoint : bool = false
+        let mutable currentPoint : V3d = Unchecked.defaultof<_>
+        let mutable currentValue : 'a = Unchecked.defaultof<_>
+        let mutable currentArr : array<struct(V3d * 'a)> = null
+        let mutable currentArrCnt : int = -1
+        let mutable currentArrIndex : int = -1
+
+        let push (e : KdNode<'a>) =
+            match e with
+            | Empty -> ()
+            | _ -> stack <- e :: stack
+
+        member x.Reset() =
+            stack <- [root]
+            hasCurrentPoint <- false
+            currentArr <- null
+            currentArrIndex <- -1
+            
+        member x.Dispose() =
+            stack <- []
+            hasCurrentPoint <- false
+            currentArr <- null
+            currentArrIndex <- -1
+
+        member x.MoveNext() =
+            if not (isNull currentArr) && not hasCurrentPoint then
+                let n = 1 + currentArrIndex
+                if n < currentArrCnt then
+                    currentArrIndex <- n
+                    true
+                else
+                    currentArr <- null
+                    currentArrIndex <- -1
+                    x.MoveNext()
+            else
+                match stack with
+                | h :: rest ->
+                    stack <- rest
+                    match h with
+                    | Inner(_,p,v,l,e,r,_) -> 
+                        currentPoint <- p
+                        currentValue <- v
+                        hasCurrentPoint <- true
+                        currentArr <- null
+                        currentArrIndex <- -1
+                        push r
+                        push e
+                        push l
+                    | Leaf(_,pts,c) ->
+                        currentArr <- pts
+                        currentArrIndex <- 0
+                        currentArrCnt <- c
+                        hasCurrentPoint <- false
+                    | _ ->
+                        ()
+                    true
+                | [] ->
+                    false
+
+        member x.Current =
+            if hasCurrentPoint then currentPoint, currentValue
+            elif not (isNull currentArr) then 
+                let struct (p,v) = currentArr.[currentArrIndex]
+                (p,v)
+            else failwith ""
+
+        interface System.Collections.IEnumerator with
+            member x.MoveNext() = x.MoveNext()
+            member x.Reset() = x.Reset()
+            member x.Current = x.Current :> obj
+            
+        interface System.Collections.Generic.IEnumerator<V3d * 'a> with
+            member x.Current = x.Current
+            member x.Dispose() = x.Dispose()
+            
+    type private KdNodeKeyEnumerator<'a>(root : KdNode<'a>) =
+        let mutable stack = [root]
+        let mutable hasCurrentPoint : bool = false
+        let mutable currentPoint : V3d = Unchecked.defaultof<_>
+        let mutable currentArr : array<struct(V3d * 'a)> = null
+        let mutable currentArrCnt : int = -1
+        let mutable currentArrIndex : int = -1
+
+        let push (e : KdNode<'a>) =
+            match e with
+            | Empty -> ()
+            | _ -> stack <- e :: stack
+
+        member x.Reset() =
+            stack <- [root]
+            hasCurrentPoint <- false
+            currentArr <- null
+            currentArrIndex <- -1
+            
+        member x.Dispose() =
+            stack <- []
+            hasCurrentPoint <- false
+            currentArr <- null
+            currentArrIndex <- -1
+
+        member x.MoveNext() =
+            if not (isNull currentArr) && not hasCurrentPoint then
+                let n = 1 + currentArrIndex
+                if n < currentArrCnt then
+                    currentArrIndex <- n
+                    true
+                else
+                    currentArr <- null
+                    currentArrIndex <- -1
+                    x.MoveNext()
+            else
+                match stack with
+                | h :: rest ->
+                    stack <- rest
+                    match h with
+                    | Inner(_,p,v,l,e,r,_) -> 
+                        currentPoint <- p
+                        hasCurrentPoint <- true
+                        currentArr <- null
+                        currentArrIndex <- -1
+                        push r
+                        push e
+                        push l
+                    | Leaf(_,pts,c) ->
+                        currentArr <- pts
+                        currentArrIndex <- 0
+                        currentArrCnt <- c
+                        hasCurrentPoint <- false
+                    | _ ->
+                        ()
+                    true
+                | [] ->
+                    false
+
+        member x.Current =
+            if hasCurrentPoint then currentPoint
+            elif not (isNull currentArr) then 
+                let struct (p,v) = currentArr.[currentArrIndex]
+                p
+            else failwith ""
+
+        interface System.Collections.IEnumerator with
+            member x.MoveNext() = x.MoveNext()
+            member x.Reset() = x.Reset()
+            member x.Current = x.Current :> obj
+            
+        interface System.Collections.Generic.IEnumerator<V3d> with
+            member x.Current = x.Current
+            member x.Dispose() = x.Dispose()
+
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module private KdNode =
+        open Microsoft.FSharp.NativeInterop
+        open Aardvark.Base.Sorting
+        open Aardvark.Base.MultimethodTest
+        open System.Runtime.InteropServices
+        
+        let isEmpty (node : KdNode<'a>) =
+            match node with
+            | Empty -> true
+            | _ -> false
+
+        let count (node : KdNode<'a>) =
+            match node with
+            | Empty -> 0
+            | Leaf(_,_,c) -> c
+            | Inner(_,_,_,_,_,_,c) -> c
+
+        let leafLimit = 63
+
+        let cmp<'a> = Func<struct(float*struct(V3d * 'a)), struct(float*struct(V3d*'a)), int>(fun struct(l,_) struct(r,_) -> compare r l)
+
+        let inline enqueue (maxDist : ref<float>) (query : ClosestPointQuery) (heap : List<struct (float * struct(V3d*'a))>) (e : struct(V3d*'a)) =
+            let struct (p,_) = e
+            let d = V3d.Distance(p, query.point)
+
+            if d <= !maxDist then
+                heap.HeapEnqueue(cmp, struct(d,e))
+                if heap.Count > query.count then 
+                    heap.HeapDequeue(cmp) |> ignore
+                    let struct(m,_) = heap.[0]
+                    maxDist := m
+                        
+        let rec findArray (maxDist : ref<float>) (query : ClosestPointQuery) (heap : List<struct (float * struct(V3d*'a))>) (a : int) (l : int) (r : int) (arr : array<struct (V3d * 'a)>) =
+            let c = r - l
+
+            if c = 0 then
+                ()
+
+            elif c = 1 then
+                enqueue maxDist query heap arr.[l]
+
+            else
+                let m = (l + r) / 2
+                let e = arr.[m]
+                let struct (p, _) = e
+                let dimDist = query.point.[a] - p.[a]
+
+                let na = if a = 2 then 0 else a + 1
+
+                if dimDist > !maxDist then
+                    findArray maxDist query heap na (m+1) r arr
+                elif dimDist < -(!maxDist) then
+                    findArray maxDist query heap na l m arr
+                else
+                    enqueue maxDist query heap e
+
+                    if dimDist < 0.0 then
+                        findArray maxDist query heap na l m arr
+                        if dimDist >= -(!maxDist) then
+                            findArray maxDist query heap na (m+1) r arr
+                    else 
+                        findArray maxDist query heap na (m+1) r arr
+                        if dimDist <= !maxDist then
+                            findArray maxDist query heap na l m arr
+                   
+        let rec find (maxDist : ref<float>) (query : ClosestPointQuery) (heap : List<struct (float * struct(V3d*'a))>) (node : KdNode<'a>) =
+            match node with
+            | Empty -> 
+                ()
+
+            | Leaf(a,p,c) ->
+                findArray maxDist query heap a 0 c p
+
+            | Inner(a,p,v,l,e,r,_) ->
+                let dimDist = query.point.[a] - p.[a]
+
+                if dimDist > !maxDist then
+                    find maxDist query heap r
+
+                elif dimDist < -(!maxDist) then
+                    find maxDist query heap l
+
+                else
+                    enqueue maxDist query heap (struct(p,v))
+                    if dimDist < 0.0 then
+                        find maxDist query heap l
+                        if dimDist >= -(!maxDist) then
+                            find maxDist query heap e
+                            if dimDist >= -(!maxDist) then
+                                find maxDist query heap r
+                    else 
+                        find maxDist query heap r
+                        if dimDist <= !maxDist then
+                            find maxDist query heap e
+                            if dimDist <= !maxDist then
+                                find maxDist query heap l
+            
+
+        let private getX<'a> = Func<struct(V3d*'a), float>(fun struct (v,_) -> v.X)
+        let private getY<'a> = Func<struct(V3d*'a), float>(fun struct (v,_) -> v.Y)
+        let private getZ<'a> = Func<struct(V3d*'a), float>(fun struct (v,_) -> v.Z)
+
+        let inline get (i : int) =
+            match i with
+            | 0 -> getX
+            | 1 -> getY
+            | _ -> getZ
+
+
+        let rec buildArray (a : int) (o : int) (e : int) (arr : array<struct (V3d*'a)>) =
+            let c = e - o
+            if c > 1 then
+                let m = (o + e) / 2
+                // TODO: filter equal
+                arr.QuickMedianAscending(get a, int64 o, int64 e, int64 m)
+                let na = if a = 2 then 0 else a + 1
+                buildArray na o m arr
+                buildArray na (m+1) e arr
+
+        let rec build (par : int) (a : int) (data : array<struct (V3d*'a)>) (o : int) (e : int) =
+            let c = e - o
+            if c > leafLimit then
+                let m = (o + e) / 2
+                data.QuickMedianAscending(get a, int64 o, int64 e, int64 m)
+                let struct (p,value) = data.[m]
+                let v = p.[a]
+                    
+                let mutable eq = null
+                let mo = m
+                let mutable m = m
+                let mutable ec = 0
+                let mutable rc = 0
+                let mutable shift = 0
+                for i in o .. e - 1 do
+                    let struct (pt,vp) = data.[i]
+                    if pt.[a] = v then 
+                        if pt <> p then 
+                            if isNull eq then eq <- Array.zeroCreate 8
+                            elif ec >= eq.Length then System.Array.Resize(&eq, eq.Length * 2)
+                            eq.[ec] <- struct(pt,vp); ec <- ec + 1
+                        if i < mo then m <- m - 1
+                        shift <- shift + 1
+                    else 
+                        if shift <> 0 then
+                            data.[i - shift] <- data.[i]
+                        rc <- rc + 1
+
+                            
+                let na = if a = 2 then 0 else a + 1 //((a + 1) % 3)
+
+                let e = build (par - 1) na eq 0 ec
+                let mutable l = Empty
+                let mutable r = Empty
+
+                if par > 0 then
+                    Parallel.Invoke [|
+                        Action(fun () -> l <- build (par - 1) na data o m)
+                        Action(fun () -> r <- build (par - 1) na data m (o + rc))
+                    |]
+                else
+                    l <- build (par - 1) na data o m
+                    r <- build (par - 1) na data m (o + rc)
+
+                Inner(
+                    a, p, value,
+                    l, e, r,
+                    1 + count l + count e + count r
+                )
+            elif c > 0 then
+                let set = HashSet<V3d>(c)
+                let arr = Array.zeroCreate (e - o)
+                let mutable j = 0
+                for i in o .. e - 1 do
+                    let p = data.[i]
+                    let struct (pt,_) = p
+                    if set.Add pt then
+                        arr.[j] <- p
+                        j <- j + 1
+                    
+                //let arr = Array.sub data o (e - o)
+                buildArray a 0 j arr
+                Leaf(a, arr, j)
+            else
+                Empty
+                
+        let rec private fillArray (arr : array<struct (V3d * 'a)>) (i : int) (n : KdNode<'a>) =
+            match n with
+            | Empty -> ()
+            | Leaf(_,p,c) -> 
+                let mutable i = i
+                for j in 0 .. c - 1 do
+                    arr.[i] <- p.[j]
+                    i <- i + 1
+
+            | Inner(_,p,v,l,e,r,c) ->
+                let lc = count l
+                let ec = count e
+                arr.[i] <- struct(p,v)
+                fillArray arr (i + 1) l
+                fillArray arr (i + 1 + lc) e
+                fillArray arr (i + 1 + ec + lc) r
+
+        let toArray (n : KdNode<'a>) =
+            let cnt = count n
+            let res = Array.zeroCreate cnt
+            fillArray res 0 n
+            res
+
+        let toArrayMany (ns : list<KdNode<'a>>) =
+            let cnt = ns |> List.sumBy count
+            let arr = Array.zeroCreate cnt
+
+            let mutable offset = 0
+            for n in ns do
+                fillArray arr offset n
+                offset <- offset + count n
+            arr
+
+        let rec join (a : int) (pt : V3d) (value : 'a) (l : KdNode<'a>) (e : KdNode<'a>) (r : KdNode<'a>) =
+            let lc = count l
+            let rc = count r
+            let ec = count e
+            let cnt = ec + lc + rc + 1
+
+            if (lc > 2*rc + 1) || (rc > 2*lc + 1) then
+                let arr = Array.zeroCreate cnt
+                arr.[0] <- struct(pt,value)
+                fillArray arr 1 l
+                fillArray arr (1 + lc) r
+                fillArray arr (1 + lc + rc) e
+                build 0 a arr 0 arr.Length
+            else
+                Inner(a, pt, value, l, e, r, cnt)
+                
+        let rec tryFindArray (a : int) (l : int) (r : int) (pt : V3d) (arr : array<struct(V3d*'a)>) =
+            let c = r - l
+            if c = 0 then
+                -1
+            elif c = 1 then
+                let struct (p,_) = arr.[l]
+                if p = pt then l
+                else -1
+            else
+                let m = (l + r) / 2
+                let struct(pm,_) = arr.[m]
+                let cmp = compare pt.[a] pm.[a]
+                let na = if a = 2 then 0 else a + 1
+                if cmp = 0 then
+                    if pm = pt then  
+                        m
+                    else
+                        let li = tryFindArray na l m pt arr
+                        if li < 0 then tryFindArray na (m+1) r pt arr
+                        else li
+                elif cmp > 0 then
+                    tryFindArray na (m+1) r pt arr
+                else
+                    tryFindArray na l m pt arr
+
+        let rec contains (pt : V3d) (node : KdNode<'a>) =
+            match node with
+            | Empty -> 
+                false
+            | Leaf(a,pts,c) ->
+                let id = tryFindArray a 0 c pt pts
+                id >= 0
+            | Inner(a,p,v,l,e,r,_) ->
+                if p = pt then 
+                    true
+                else
+                    let cmp = compare pt.[a] p.[a]
+                    if cmp = 0 then contains pt e
+                    elif cmp > 0 then contains pt r
+                    else contains pt l
+
+        let rec add (a : int) (pt : V3d) (value : 'a) (node : KdNode<'a>) =
+            match node with
+            | Empty ->
+                Leaf(a, [|struct(pt,value)|], 1)
+
+            | Leaf(a,pts,c) ->
+                let id = tryFindArray a 0 c pt pts
+                if id < 0 then
+                    let n = Array.zeroCreate (c + 1)
+                    for i in 0 .. c - 1 do n.[i] <- pts.[i]
+                    n.[c] <- struct(pt,value)
+                    if pts.Length < leafLimit then
+                        buildArray a 0 n.Length n
+                        Leaf(a, n, n.Length)
+                    else
+                        build 0 a n 0 n.Length
+                else
+                    node
+               
+            | Inner(a, p, v, l, e, r, c) ->
+                let cmp = compare pt.[a] p.[a]
+                let na = if a = 2 then 0 else a + 1
+                if cmp > 0 then
+                    let r' = add na pt value r
+                    if r == r' then node
+                    else join a p v l e r'
+                elif cmp < 0 then
+                    let l' = add na pt value l
+                    if l == l' then node
+                    else join a p v l' e r
+                elif p = pt then
+                    if Unchecked.equals v value then node
+                    else Inner(a,p,value,l,e,r,c)
+                else
+                    let e' = add na pt value e
+                    if e == e' then node
+                    else join a p v l e' r    
+
+        let rec remove (a : int) (pt : V3d) (node : KdNode<'a>) =
+            match node with
+            | Empty ->
+                node
+
+            | Leaf(a,pts,c) ->
+                let id = tryFindArray a 0 c pt pts
+                if id < 0 then
+                    node
+                else
+                    if c > 1 then
+                        let res = Array.zeroCreate (c - 1)
+                        let mutable i = 0
+                        let mutable j = 0
+                        while i < pts.Length do
+                            if i <> id then
+                                res.[j] <- pts.[i]
+                                j <- j + 1
+                            i <- i + 1
+                        buildArray a 0 res.Length res
+                        Leaf(a, res, res.Length)
+                    else
+                        Empty
+               
+            | Inner(a, p, v, l, e, r, c) ->
+                let cmp = compare pt.[a] p.[a]
+                let na = if a = 2 then 0 else a + 1
+                if cmp > 0 then
+                    let r' = remove na pt r
+                    if r == r' then node
+                    else join a p v l e r'
+                elif cmp < 0 then
+                    let l' = remove na pt l
+                    if l == l' then node
+                    else join a p v l' e r
+                elif p = pt then
+                    let arr = toArrayMany [l;e;r]
+                    build 0 a arr 0 arr.Length
+                else
+                    let e' = remove na pt e
+                    if e == e' then node
+                    else join a p v l e' r    
+
+
+    type KdDict<'a>(root : KdNode<'a>) =
+        static let empty : KdDict<'a> = KdDict(KdNode.Empty)
+
+        static member Empty = empty
+
+        member x.IsEmpty = KdNode.isEmpty root
+        member x.Count = KdNode.count root
+        member internal x.Root = root
+        interface System.Collections.IEnumerable with
+            member x.GetEnumerator() = new KdNodeEnumerator<'a>(root) :> _
+            
+        interface System.Collections.Generic.IEnumerable<V3d * 'a> with
+            member x.GetEnumerator() = new KdNodeEnumerator<'a>(root) :> _
+
+    module KdDict =
+        let empty<'a> = KdDict<'a>.Empty
+
+        let isEmpty (t : KdDict<'a>) =
+            KdNode.isEmpty t.Root
+
+        let count (t : KdDict<'a>) =
+            KdNode.count t.Root
+
+        let inline private ofArrayInPlace (pts : array<struct(V3d*'a)>) =
+            KdDict(KdNode.build 4 0 pts 0 pts.Length)
+            
+        let ofSeq (pts : seq<V3d * 'a>) =
+            let pts = pts |> Seq.map (fun (p,v) -> struct(p,v)) |> Seq.toArray
+            ofArrayInPlace pts
+
+        let ofList (pts : list<V3d * 'a>) =
+            let pts = pts |> List.map (fun (p,v) -> struct(p,v)) |> List.toArray
+            ofArrayInPlace pts
+            
+        let ofArray (pts : array<V3d * 'a>) =
+            let pts = pts |> Array.map (fun (p,v) -> struct(p,v))
+            ofArrayInPlace pts
+          
+        let toSeq (t : KdDict<'a>) = t :> seq<_>
+        let toList (t : KdDict<'a>) = t |> Seq.toList
+        let toArray (t : KdDict<'a>) = t |> Seq.toArray
+        
+        let add (pt : V3d) (value : 'a) (tree : KdDict<'a>) =
+            let res = KdNode.add 0 pt value tree.Root
+            if res == tree.Root then tree
+            else KdDict(res)
+            
+        let remove (pt : V3d) (tree : KdDict<'a>) =
+            let res = KdNode.remove 0 pt tree.Root
+            if res == tree.Root then tree
+            else KdDict(res)
+
+        let contains (pt : V3d) (tree : KdDict<'a>) =
+            KdNode.contains pt tree.Root
+
+        let findClosest (query : ClosestPointQuery) (tree : KdDict<'a>) =
+            let maxDist = ref query.maxDist
+            let heap = List<struct (float * struct(V3d * 'a))>(1 + query.count)
+            KdNode.find maxDist query heap tree.Root
+
+            let arr = Array.zeroCreate heap.Count
+            for i in 1 .. arr.Length do
+                let j = arr.Length - i
+                let struct(d,struct(p,v)) = heap.HeapDequeue(KdNode.cmp)
+                arr.[j] <- p,v
+
+            arr
+
+
+    type KdSet(root : KdNode<int>) =
+        static let empty : KdSet = KdSet(KdNode.Empty)
+
+        static member Empty = empty
+        member internal x.Root = root
+        
+        member x.IsEmpty = KdNode.isEmpty root
+        member x.Count = KdNode.count root
+        interface System.Collections.IEnumerable with
+            member x.GetEnumerator() = new KdNodeKeyEnumerator<int>(root) :> _
+            
+        interface System.Collections.Generic.IEnumerable<V3d> with
+            member x.GetEnumerator() = new KdNodeKeyEnumerator<int>(root) :> _
+
+    module KdSet =
+        let empty = KdSet.Empty
+        
+
+        let isEmpty (t : KdSet) =
+            KdNode.isEmpty t.Root
+
+        let count (t : KdSet) =
+            KdNode.count t.Root
+
+        let inline private ofArrayInPlace (pts : array<struct(V3d * int)>) =
+            KdSet(KdNode.build 4 0 pts 0 pts.Length)
+            
+        let ofSeq (pts : seq<V3d>) =
+            let pts = pts |> Seq.mapi (fun i p -> struct(p,i)) |> Seq.toArray
+            ofArrayInPlace pts
+
+        let ofList (pts : list<V3d>) =
+            let pts = pts |> List.mapi (fun i p -> struct(p,i)) |> List.toArray
+            ofArrayInPlace pts
+            
+        let ofArray (pts : array<V3d>) =
+            let pts = pts |> Array.mapi (fun i p -> struct(p,i))
+            ofArrayInPlace pts
+
+        let toSeq (t : KdSet) = t :> seq<_>
+        let toList (t : KdSet) = t |> Seq.toList
+        let toArray (t : KdSet) = t |> Seq.toArray
+        
+        let add (pt : V3d) (tree : KdSet) =
+            let res = KdNode.add 0 pt 0 tree.Root
+            if res == tree.Root then tree
+            else KdSet(res)
+            
+        let remove (pt : V3d) (tree : KdSet) =
+            let res = KdNode.remove 0 pt tree.Root
+            if res == tree.Root then tree
+            else KdSet(res)
+
+        let contains (pt : V3d) (tree : KdSet) =
+            KdNode.contains pt tree.Root
+
+        let findClosest (query : ClosestPointQuery) (tree : KdSet) =
+            let maxDist = ref query.maxDist
+            let heap = List<struct (float * struct(V3d * int))>(1 + query.count)
+            KdNode.find maxDist query heap tree.Root
+
+            let arr = Array.zeroCreate heap.Count
+            for i in 1 .. arr.Length do
+                let j = arr.Length - i
+                let struct(d,struct(p,v)) = heap.HeapDequeue(KdNode.cmp)
+                arr.[j] <- p
+
+            arr
+
+
+open KdTree
+open Aardvark.Geometry
+
+let timed (name : string) (f : unit -> int) =
+    let sw = System.Diagnostics.Stopwatch.StartNew()
+    let iter =  f()
+    sw.Stop()
+    Log.line "%s: %A" name (sw.MicroTime / iter)
 
 [<EntryPoint>]
 let main argv = 
+
+    System.Threading.ThreadPool.SetMinThreads(16,16) |> ignore
+    System.Threading.ThreadPool.SetMaxThreads(16,16) |> ignore
+
+    let n = 500000
+    let buildIter = 6
+    let findIter = 1000000
+    let k = 5
+
+    let rand = RandomSystem()
+    let box = Box3d(-1000.0 * V3d.III, 1000.0 * V3d.III)
+    let data = Array.init n (fun i -> rand.UniformV3d(box))
+    //let simpleData = Array.map fst data
+    //let data = Array.append data data
+    let mutable a = KdSet.ofArray data
+    timed "build mine" (fun () ->
+        for i in 1 .. buildIter do
+            a <- KdSet.ofArray data
+        buildIter
+    )
+    
+    let mutable ref = data.CreateKdTree(Metric.Euclidean, 1E-40)
+    timed "build rft " (fun () ->
+        for i in 1 .. buildIter do
+            ref <- data.CreateKdTree(Metric.Euclidean, 1E-40)
+        buildIter
+    )
+    
+    let q = { count = k; maxDist = Double.PositiveInfinity; point = V3d.Zero }
+    let mutable mine = [||]
+    let mutable rft = Unchecked.defaultof<_>
+
+    for i in 1 .. 8 do
+        mine <- KdSet.findClosest q a
+        
+    let queryPoints = Array.init findIter (fun _ -> rand.UniformV3d(box))
+
+    timed "search mine" (fun () ->
+        for i in 0 .. findIter - 1 do
+            mine <- KdSet.findClosest { q with point = queryPoints.[i] } a
+        findIter
+    )
+       
+    timed "search rft " (fun () ->
+        for i in 0 .. findIter - 1 do
+            rft <- ref.GetClosest(ref.CreateClosestToPointQuery(Double.PositiveInfinity, k), queryPoints.[i])
+        findIter
+    )
+ 
+    let rft = rft |> Seq.sortBy (fun id -> id.Dist) |> Seq.map (fun id -> data.[int id.Index]) |> Seq.toArray
+    
+    if mine <> rft then
+        Log.warn "ERROR"
+
+    Log.start "mine"
+    for (m) in mine do
+        Log.line "%A (%f)" m (V3d.Distance(m, queryPoints.[queryPoints.Length - 1]))
+    Log.stop()
+
+    Log.start "rft"
+    for (m) in rft do
+        Log.line "%A (%f)" m (V3d.Distance(m, queryPoints.[queryPoints.Length - 1]))
+    Log.stop()
+
+    //let test() =
+    //    let pt = rand.UniformV3d(box)
+
+    //    let mine = KdTree.find { count = k; maxDist = Double.PositiveInfinity; point = pt } a
+    //    let rft = ref.GetClosest(ref.CreateClosestToPointQuery(Double.PositiveInfinity, k), pt)
+    //    let rft = rft |> Seq.sortBy (fun id -> id.Dist) |> Seq.map (fun id -> data.[int id.Index]) |> Seq.toArray
+
+    //    if mine <> rft then
+    //        Log.warn "bad %A vs %A" mine rft
+    //    else
+    //        Log.line "good"
+    //for i in 1 .. 100 do
+    //    test()
+
     //LodAgain.FileDict.test()
-    //System.Environment.Exit 0
+    System.Environment.Exit 0
     //System.Runtime.GCSettings.LatencyMode <- System.Runtime.GCLatencyMode.LowLatency
 
-    System.Threading.ThreadPool.SetMinThreads(8,8) |> ignore
-    System.Threading.ThreadPool.SetMaxThreads(8,8) |> ignore
+
+    let path, key =
+        if argv.Length < 2 then
+            @"C:\Users\Schorsch\Development\WorkDirectory\jb", @"C:\Users\Schorsch\Development\WorkDirectory\Laserscan-P20_Beiglboeck-2015.pts"
+        else
+            argv.[0], argv.[1]
+            
+
+            
     Ag.initialize()
     Aardvark.Init()
     
@@ -4012,18 +4854,40 @@ let main argv =
     //            "ModelTrafo", trafo :> IMod
     //            "TreeActive", active1 :> IMod
     //        ]
-    let kaunertal =
-        StoreTree.importAscii
-            "ssd"
-            @"C:\Users\Schorsch\Development\WorkDirectory\Kaunertal.txt"
-            @"C:\Users\Schorsch\Development\WorkDirectory\KaunertalNormals"
+    //let kaunertal =
+    //    StoreTree.import
+    //        "ssd1"
+    //        key
+    //        path
+    //        [
+    //            "Overlay", c1WithAlpha :> IMod
+    //            "ModelTrafo", trafo :> IMod
+    //            "TreeActive", active1 :> IMod
+    //        ]
+               
+    let jb1 =
+        StoreTree.import
+            "ssd2"
+            @"C:\Users\Schorsch\Development\WorkDirectory\Laserscan-P20_Beiglboeck-2015.pts"
+            @"C:\Users\Schorsch\Development\WorkDirectory\jb"
+            [
+                "Overlay", c0WithAlpha :> IMod
+                "ModelTrafo", trafo2 :> IMod
+                "TreeActive", active0 :> IMod
+            ]
+               
+                         
+    let jb2 =
+        StoreTree.import
+            "ssd1"
+            @"C:\Users\Schorsch\Development\WorkDirectory\Laserscan-P20_Beiglboeck-2015.pts"
+            @"C:\Users\Schorsch\Development\WorkDirectory\jb2"
             [
                 "Overlay", c1WithAlpha :> IMod
                 "ModelTrafo", trafo :> IMod
                 "TreeActive", active1 :> IMod
             ]
-               
-                       
+                      
     //let supertoll =
     //    StoreTree.importAscii
     //        "ssd"
@@ -4044,16 +4908,16 @@ let main argv =
     //Log.stop()
     //System.Environment.Exit 0
 
-    let technologiezentrum =
-        StoreTree.import
-            "ssd"
-            @"C:\Users\Schorsch\Development\WorkDirectory\Technologiezentrum_Teil1.pts"
-            @"C:\Users\Schorsch\Development\WorkDirectory\Technologiezentrum2"
-            [
-                "Overlay", c0WithAlpha :> IMod
-                "ModelTrafo", trafo3 :> IMod
-                "TreeActive", active1 :> IMod
-            ]
+    //let technologiezentrum =
+    //    StoreTree.import
+    //        "ssd"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\Technologiezentrum_Teil1.pts"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\Technologiezentrum2"
+    //        [
+    //            "Overlay", c0WithAlpha :> IMod
+    //            "ModelTrafo", trafo3 :> IMod
+    //            "TreeActive", active1 :> IMod
+    //        ]
             
     //let thread = 
     //    startThread (fun () ->  
@@ -4091,16 +4955,16 @@ let main argv =
     //            "TreeActive", active0 :> IMod
     //        ]
 
-    let jb =
-        StoreTree.import
-            "ssd"
-            @"C:\Users\Schorsch\Development\WorkDirectory\Laserscan-P20_Beiglboeck-2015.pts"
-            @"C:\Users\Schorsch\Development\WorkDirectory\jb"
-            [
-                "Overlay", c0WithAlpha :> IMod
-                "ModelTrafo", trafo :> IMod
-                "TreeActive", active0 :> IMod
-            ]
+    //let jb =
+    //    StoreTree.import
+    //        "ssd"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\Laserscan-P20_Beiglboeck-2015.pts"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\jb"
+    //        [
+    //            "Overlay", c0WithAlpha :> IMod
+    //            "ModelTrafo", trafo :> IMod
+    //            "TreeActive", active0 :> IMod
+    //        ]
     //let rec traverse (n : ILodTreeNode) =
     //    n.Acquire()
     //    n.Children |> Seq.iter traverse
@@ -4172,13 +5036,15 @@ let main argv =
     
 
 
+    let center = jb1.root.BoundingBox.Center
+
     let pcs = 
         //ASet.ofList allKoeln
         ASet.ofList [
-            yield StoreTree.normalize 100.0 kaunertal 
-                    //|> StoreTree.withSplitLimit 65536
-                    //|> StoreTree.withInCoreStructure 
-                    |> StoreTree.trafo trafo
+            yield StoreTree.translate (-center) jb1
+                    //|> StoreTree.trafo trafo
+            yield StoreTree.translate (-center) jb2
+                    //|> StoreTree.trafo trafo
             //yield StoreTree.normalize 100.0 koelnNet
             //yield StoreTree.normalize 100.0 kaunertal
             //yield StoreTree.normalize 100.0 technologiezentrum |> StoreTree.trafo trafo
@@ -4287,7 +5153,7 @@ let main argv =
         |> Sg.shader {
             //do! Shader.constantColor C4f.White
             do! Shader.lodPointSize
-            //do! Shader.cameraLight
+            do! Shader.cameraLight
             do! Shader.lodPointCircular
         }
         |> Sg.andAlso overlay
