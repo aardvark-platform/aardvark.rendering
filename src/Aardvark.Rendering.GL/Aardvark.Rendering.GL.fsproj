@@ -55,6 +55,8 @@
     <Compile Include="Runtime\Statistics.fs" />
     <Compile Include="Runtime\RenderTasks.fs" />
     <Compile Include="Runtime\Compute.fs" />
+    <Compile Include="Runtime\GeometryPool.fs" />
+    <Compile Include="Runtime\LodRenderer.fs" />
     <Compile Include="Runtime\Runtime.fs" />
     <None Include="paket.references" />
     <None Include="paket.template" />

@@ -394,20 +394,39 @@ module LodTreeLoader =
 
     let inline start (cfg : LodTreeLoaderConfig<'a, 'b>) (l : LodTreeLoader<'a>) = l.Start(cfg)
 
-//
-//type LodTreeRenderObject(scope : Ag.Scope, pass : RenderPass, surface : Surface, state : PipelineState, tree : LodTreeLoader<Geometry>) =
-//    let id = newId()
-//    
-//    member x.Id = id
-//    member x.AttributeScope = scope
-//    member x.RenderPass = pass
-//
-//    member x.Surface = surface
-//    member x.PipelineState = state
-//    member x.Tree = tree
-//
-//    interface IRenderObject with
-//        member x.Id = id
-//        member x.AttributeScope = scope
-//        member x.RenderPass = pass
-//
+
+
+
+
+
+
+type ILodTreeNode =
+    abstract member Level : int
+    abstract member Name : string
+    abstract member Root : ILodTreeNode
+    abstract member Parent : Option<ILodTreeNode>
+    abstract member Children : seq<ILodTreeNode>
+
+    abstract member DataSource : Symbol
+    abstract member DataSize : int
+    abstract member TotalDataSize : int
+    abstract member GetData : ct : CancellationToken * inputs : MapExt<string, Type> -> IndexedGeometry * MapExt<string, Array>
+
+    abstract member ShouldSplit : float * Trafo3d * Trafo3d -> bool
+    abstract member ShouldCollapse : float * Trafo3d * Trafo3d -> bool
+        
+    abstract member SplitQuality : Trafo3d * Trafo3d -> float
+    abstract member CollapseQuality : Trafo3d * Trafo3d -> float
+
+    abstract member BoundingBox : Box3d
+    abstract member CellBoundingBox : Box3d
+    abstract member Cell : Cell
+
+    abstract member Acquire : unit -> unit
+    abstract member Release : unit -> unit
+
+type LodTreeInstance =
+    {
+        root        : ILodTreeNode
+        uniforms    : MapExt<string, IMod>
+    }
