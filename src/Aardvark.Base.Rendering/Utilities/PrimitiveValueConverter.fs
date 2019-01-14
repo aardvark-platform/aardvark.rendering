@@ -1095,20 +1095,24 @@ module PrimitiveValueConverter =
         static let cache = System.Collections.Concurrent.ConcurrentDictionary<Type * Type, obj -> obj -> obj>()
 
         static let get (inType : Type) (outType : Type) =
-            cache.GetOrAdd((inType, outType), fun (inType, outType) ->
+            cache.GetOrAdd((inType, outType), Func<_,_>(fun (inType, outType) ->
                 let tfun = FSharpType.MakeFunctionType(inType, outType)
                 let invoke = tfun.GetMethod("Invoke")
-                cil {
-                    do! IL.ldarg 0
-                    do! IL.ldarg 1
-                    if inType.IsValueType then 
-                        do! IL.unbox inType
-                    do! IL.call invoke
-                    if outType.IsValueType then
-                        do! IL.box outType
-                    do! IL.ret
-                }
-            )
+
+                fun (f : obj) (arg : obj) ->
+                    invoke.Invoke(f, [| arg |])
+
+                //cil {
+                //    do! IL.ldarg 0
+                //    do! IL.ldarg 1
+                //    if inType.IsValueType then 
+                //        do! IL.unbox inType
+                //    do! IL.call invoke
+                //    if outType.IsValueType then
+                //        do! IL.box outType
+                //    do! IL.ret
+                //}
+            ))
 
         static member Invoke(inType : Type, outType : Type, f : obj, value : obj) =
             let invoke = get inType outType

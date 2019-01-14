@@ -197,7 +197,7 @@ module KdTree =
             | Leaf(_,_,c) -> c
             | Inner(_,_,_,_,_,_,c) -> c
 
-        let leafLimit = 63
+        let leafLimit = 31
 
         let cmp<'a> = Func<struct(float*struct(V3d * 'a)), struct(float*struct(V3d*'a)), int>(fun struct(l,_) struct(r,_) -> compare r l)
 
@@ -455,6 +455,26 @@ module KdTree =
                     elif cmp > 0 then contains pt r
                     else contains pt l
 
+        let rec tryFind (pt : V3d) (node : KdNode<'a>) =
+            match node with
+            | Empty -> 
+                None
+            | Leaf(a,pts,c) ->
+                let id = tryFindArray a 0 c pt pts
+                if id >= 0 then
+                    let struct (_,v) = pts.[id]
+                    Some v
+                else
+                    None
+            | Inner(a,p,v,l,e,r,_) ->
+                if p = pt then 
+                    Some v
+                else
+                    let cmp = compare pt.[a] p.[a]
+                    if cmp = 0 then tryFind pt e
+                    elif cmp > 0 then tryFind pt r
+                    else tryFind pt l
+
         let rec add (a : int) (pt : V3d) (value : 'a) (node : KdNode<'a>) =
             match node with
             | Empty ->
@@ -466,13 +486,19 @@ module KdTree =
                     let n = Array.zeroCreate (c + 1)
                     for i in 0 .. c - 1 do n.[i] <- pts.[i]
                     n.[c] <- struct(pt,value)
-                    if pts.Length < leafLimit then
+                    if n.Length <= leafLimit then
                         buildArray a 0 n.Length n
                         Leaf(a, n, n.Length)
                     else
                         build 0 a n 0 n.Length
                 else
-                    node
+                    let struct(_,ov) = pts.[id]
+                    if Unchecked.equals value ov then
+                        node
+                    else 
+                        let arr = Array.take c pts
+                        arr.[id] <- struct(pt, value)
+                        Leaf(a, arr, c)
                
             | Inner(a, p, v, l, e, r, c) ->
                 let cmp = compare pt.[a] p.[a]
@@ -689,8 +715,8 @@ module KdTreeTest =
 
     let run() =
 
-        let n = 500000
-        let buildIter = 6
+        let n = 10000000
+        let buildIter = 0
         let findIter = 1000000
         let k = 5
 
@@ -799,8 +825,6 @@ module StoreTree =
         let cmp = Func<float,float,int>(compare)
         let getAverageDistance (original : V3f[]) (positions : V3f[]) (tree : PointRkdTreeD<_,_>) =
             let heap = List<float>(positions.Length)
-            //let mutable sum = 0.0
-            //let mutable cnt = 0
             for i in 0 .. original.Length - 1 do
                 let q = tree.CreateClosestToPointQuery(Double.PositiveInfinity, 25)
                 let l = tree.GetClosest(q, original.[i])
@@ -812,8 +836,7 @@ module StoreTree =
                             minDist <- min (float dist) minDist
                     if not (Double.IsInfinity minDist) then
                         heap.HeapEnqueue(cmp, minDist)
-                    //sum <- sum + float dist
-                    //cnt <- cnt + 1
+
             if heap.Count > 0 then
                 let fstThrd = heap.Count / 3
                 let real = heap.Count - 2 * heap.Count / 3
@@ -835,7 +858,7 @@ module StoreTree =
                 let center = self.Center
                 let attributes = SymbolDict<Array>()
                 let mutable uniforms = MapExt.empty
-
+                let mutable vertexSize = 0L
 
                 let original =
                     if self.HasLodPositions then self.LodPositions.Value
@@ -847,27 +870,21 @@ module StoreTree =
                     let inline fix (p : V3f) = globalTrafo1.TransformPos (V3d p) |> V3f
                     original |> Array.map fix
                 attributes.[DefaultSemantic.Positions] <- positions
-                
+                vertexSize <- vertexSize + 12L
+
                 if MapExt.containsKey "Colors" ips then
                     let colors = 
                         if self.HasLodColors then self.LodColors.Value
                         elif self.HasColors then self.Colors.Value
                         else Array.create original.Length C4b.White
                     attributes.[DefaultSemantic.Colors] <- colors
+                    vertexSize <- vertexSize + 4L
            
                 if MapExt.containsKey "Normals" ips then
                     let normals = 
                         if self.HasNormals then self.Normals.Value
                         elif self.HasLodNormals then self.LodNormals.Value
                         else Array.create original.Length V3f.OOO
-                        //if self.HasKdTree then 
-                        //    let tree = self.KdTree.Value
-                        //    Aardvark.Geometry.Points.Normals.EstimateNormals(original, tree, 17)
-                        //elif self.HasLodKdTree then 
-                        //    let tree = self.LodKdTree.Value
-                        //    Aardvark.Geometry.Points.Normals.EstimateNormals(original, tree, 17)
-                        //else
-                        //    Array.create original.Length V3f.OOO
 
                     let normals =
                         let normalMat = (Trafo3d globalTrafo.EuclideanTransformation.Rot).Backward.Transposed |> M33d.op_Explicit
@@ -875,6 +892,7 @@ module StoreTree =
                         normals |> Array.map fix
 
                     attributes.[DefaultSemantic.Normals] <- normals
+                    vertexSize <- vertexSize + 12L
 
 
                 
@@ -914,7 +932,7 @@ module StoreTree =
                         IndexedAttributes = attributes
                     )
                 
-                let mem = int64 positions.Length * 28L
+                let mem = positions.LongLength * vertexSize
                 let res = geometry, uniforms
                 struct (res :> obj, mem)
             )
@@ -1066,8 +1084,8 @@ module StoreTree =
             member x.BoundingBox = bounds
             member x.CellBoundingBox = cellBounds
             member x.Cell = cell
-            member x.Acquire() = ()
-            member x.Release() = ()
+            member x.Acquire() = x.Acquire()
+            member x.Release() = x.Release()
 
         override x.GetHashCode() = 
             HashCode.Combine(x.DataSource.GetHashCode(), self.Id.GetHashCode())
@@ -1262,19 +1280,20 @@ module StoreTree =
             while queue.Count > 0 do
                 let n = queue.Dequeue()
                 
-                if n.HasPositions then output.Add(n.Positions.Id, n.Positions.Value)
-                if n.HasNormals then output.Add(n.Normals.Id, n.Normals.Value)
-                if n.HasColors then output.Add(n.Colors.Id, n.Colors.Value)
-                if n.HasKdTree then output.Add(n.KdTree.Id, n.KdTree.Value.Data)
-                if n.HasIntensities then output.Add(n.Intensities.Id, n.Intensities.Value)
-                if n.HasClassifications then output.Add(n.Classifications.Id, n.Classifications.Value)
-                
-                if n.HasLodPositions then output.Add(n.LodPositions.Id, n.LodPositions.Value)
-                if n.HasLodNormals then output.Add(n.LodNormals.Id, n.LodNormals.Value)
-                if n.HasLodColors then output.Add(n.LodColors.Id, n.LodColors.Value)
-                if n.HasLodKdTree then output.Add(n.LodKdTree.Id, n.LodKdTree.Value.Data)
-                if n.HasLodIntensities then output.Add(n.LodIntensities.Id, n.LodIntensities.Value)
-                if n.HasLodClassifications then output.Add(n.LodClassifications.Id, n.LodClassifications.Value)
+                if n.IsLeaf then
+                    if n.HasPositions then output.Add(n.Positions.Id, n.Positions.Value)
+                    if n.HasNormals then output.Add(n.Normals.Id, n.Normals.Value)
+                    if n.HasColors then output.Add(n.Colors.Id, n.Colors.Value)
+                    if n.HasKdTree then output.Add(n.KdTree.Id, n.KdTree.Value.Data)
+                    if n.HasIntensities then output.Add(n.Intensities.Id, n.Intensities.Value)
+                    if n.HasClassifications then output.Add(n.Classifications.Id, n.Classifications.Value)
+                else 
+                    if n.HasLodPositions then output.Add(n.LodPositions.Id, n.LodPositions.Value)
+                    if n.HasLodNormals then output.Add(n.LodNormals.Id, n.LodNormals.Value)
+                    if n.HasLodColors then output.Add(n.LodColors.Id, n.LodColors.Value)
+                    if n.HasLodKdTree then output.Add(n.LodKdTree.Id, n.LodKdTree.Value.Data)
+                    if n.HasLodIntensities then output.Add(n.LodIntensities.Id, n.LodIntensities.Value)
+                    if n.HasLodClassifications then output.Add(n.LodClassifications.Id, n.LodClassifications.Value)
                 
                 if i % 1000 = 0 then
                     Log.line "%d datas" i
@@ -1336,60 +1355,56 @@ module StoreTree =
         let root = points.Root.Value
         let bounds = root.Cell.BoundingBox
         let trafo = 
-        
-            Similarity3d(1.0, Euclidean3d(Rot3d(V3d.OOI, Constant.PiHalf), V3d.Zero)) *
-           // Similarity3d(1.0 / 100.0, Euclidean3d.Identity) * 
             Similarity3d(1.0, Euclidean3d(Rot3d.Identity, -bounds.Center))
             //Trafo3d.Translation(-bounds.Center) *
             //Trafo3d.Scale(1.0 / 100.0)
-
-        Log.warn "bounds: %A" bounds.Size
-
+            
         let source = Symbol.Create sourceName
         let root = PointTreeNode(store.Cache, source, trafo, None, None, 0, root) :> ILodTreeNode
+
+        let uniforms = MapExt.ofList uniforms
+        let uniforms = MapExt.add "Scales" (Mod.constant 1.0 :> IMod) uniforms
+
         { 
             root = root
-            uniforms = MapExt.ofList uniforms
+            uniforms = uniforms
         }
     
-    let importAscii (sourceName : string) (file : string) (store : string) (uniforms : list<string * IMod>) =
-        let fmt = [| Ascii.Token.PositionX; Ascii.Token.PositionY; Ascii.Token.PositionZ; Ascii.Token.ColorR; Ascii.Token.ColorG; Ascii.Token.ColorB |]
-        let cache = LruDictionary(1L <<< 30)
-        let store = PointCloud.OpenStore(store, cache)
-        let key = System.IO.Path.GetFileNameWithoutExtension(file).ToLower()
-        let set = store.GetPointSet(key)
+    //let importAscii (sourceName : string) (file : string) (store : string) (uniforms : list<string * IMod>) =
+    //    let fmt = [| Ascii.Token.PositionX; Ascii.Token.PositionY; Ascii.Token.PositionZ; Ascii.Token.ColorR; Ascii.Token.ColorG; Ascii.Token.ColorB |]
+    //    let cache = LruDictionary(1L <<< 30)
+    //    let store = PointCloud.OpenStore(store, cache)
+    //    let key = System.IO.Path.GetFileNameWithoutExtension(file).ToLower()
+    //    let set = store.GetPointSet(key)
 
-        let points = 
-            if isNull set then
-                let cfg = 
-                    ImportConfig.Default
-                        .WithStorage(store)
-                        .WithKey(key)
-                        .WithVerbose(true)
-                        .WithMaxChunkPointCount(10000000)
-                        .WithEstimateNormals(Func<_,_>(fun a -> Aardvark.Geometry.Points.Normals.EstimateNormals(Seq.toArray a, 17) :> System.Collections.Generic.IList<V3f>))
+    //    let points = 
+    //        if isNull set then
+    //            let cfg = 
+    //                ImportConfig.Default
+    //                    .WithStorage(store)
+    //                    .WithKey(key)
+    //                    .WithVerbose(true)
+    //                    .WithMaxChunkPointCount(10000000)
+    //                    .WithEstimateNormals(Func<_,_>(fun a -> Aardvark.Geometry.Points.Normals.EstimateNormals(Seq.toArray a, 17) :> System.Collections.Generic.IList<V3f>))
                         
-                let chunks = Import.Ascii.Chunks(file, fmt, cfg)
-                let res = PointCloud.Chunks(chunks, cfg)
-                store.Flush()
-                res
-            else
-                set
+    //            let chunks = Import.Ascii.Chunks(file, fmt, cfg)
+    //            let res = PointCloud.Chunks(chunks, cfg)
+    //            store.Flush()
+    //            res
+    //        else
+    //            set
                 
-        let bounds = points.Bounds
-
-        Log.error "bounds: %A" points.Root.Value.BoundingBoxExact
-
-        let trafo = 
-            Similarity3d(1.0, Euclidean3d(Rot3d.Identity, -bounds.Center))
-
-        Log.warn "points: %d" points.PointCount
-        let source = Symbol.Create sourceName
-        let root = PointTreeNode(cache, source, trafo, None, None, 0, points.Root.Value) :> ILodTreeNode
-        { 
-            root = root
-            uniforms = MapExt.ofList uniforms
-        }
+    //    let bounds = points.Bounds
+        
+    //    let trafo = 
+    //        Similarity3d(1.0, Euclidean3d(Rot3d.Identity, -bounds.Center))
+            
+    //    let source = Symbol.Create sourceName
+    //    let root = PointTreeNode(cache, source, trafo, None, None, 0, points.Root.Value) :> ILodTreeNode
+    //    { 
+    //        root = root
+    //        uniforms = MapExt.ofList uniforms
+    //    }
 
     let normalize (maxSize : float) (instance : LodTreeInstance) =
         let tree = instance.root
@@ -1402,12 +1417,12 @@ module StoreTree =
             Trafo3d.Scale scale
 
         let uniforms =
-            match MapExt.tryFind "AvgPointDistance" uniforms with
+            match MapExt.tryFind "Scales" uniforms with
             | Some (:? IMod<float> as d) ->
                 let dnew = d |> Mod.map (fun d -> d * scale) 
-                MapExt.add "AvgPointDistance" (dnew :> IMod) uniforms
+                MapExt.add "Scales" (dnew :> IMod) uniforms
             | _ ->
-                uniforms
+                MapExt.add "Scales" (Mod.constant scale :> IMod) uniforms
 
         {
             root = tree
@@ -1418,8 +1433,6 @@ module StoreTree =
         let tree = instance.root
         let uniforms = instance.uniforms
 
-        let bounds = tree.CellBoundingBox
-        //Log.warn "%A %A" tree.BoundingBox tree.CellBoundingBox
         let t = Trafo3d.Translation(shift)
 
         {
@@ -1445,13 +1458,14 @@ module StoreTree =
             (sx + sy + sz) / 3.0
 
         let uniforms =
-            match MapExt.tryFind "AvgPointDistance" uniforms with
+            match MapExt.tryFind "Scales" uniforms with
             | Some (:? IMod<float> as sOld) -> 
                 let sNew = t |> Mod.map (fun o -> getScale o.Forward)
                 let sFin = Mod.map2 (*) sOld sNew
-                MapExt.add "AvgPointDistance" (sFin :> IMod) uniforms
+                MapExt.add "Scales" (sFin :> IMod) uniforms
             | _ ->
-                uniforms
+                let sNew = t |> Mod.map (fun o -> getScale o.Forward)
+                MapExt.add "Scales" (sNew :> IMod) uniforms
                 
         { instance with uniforms = uniforms }
 
@@ -1523,6 +1537,7 @@ module Shader =
         member x.Overlay : V4d[] = x?StorageBuffer?Overlay
         member x.ModelTrafos : M44d[] = x?StorageBuffer?ModelTrafos
         member x.ModelViewTrafos : M44d[] = x?StorageBuffer?ModelViewTrafos
+        member x.Scales : float[] = x?StorageBuffer?Scales
 
     type Vertex =
         {
@@ -1557,15 +1572,15 @@ module Shader =
     let lodPointSize (v : PointVertex) =
         vertex { 
             let mv = uniform.ModelViewTrafos.[v.id]
+            let dist = v.dist * uniform.Scales.[v.id]
             let ovp = mv * v.pos
-            let vp = ovp + V4d(0.0, 0.0, 0.5*v.dist, 0.0)
 
-            
+            let vp = ovp + V4d(0.0, 0.0, 0.5*dist, 0.0)
             let ppz = uniform.ProjTrafo * ovp
-            let pp1 = uniform.ProjTrafo * (vp - V4d(0.5 * v.dist, 0.0, 0.0, 0.0))
-            let pp2 = uniform.ProjTrafo * (vp + V4d(0.5 * v.dist, 0.0, 0.0, 0.0))
-            let pp3 = uniform.ProjTrafo * (vp - V4d(0.0, 0.5 * v.dist, 0.0, 0.0))
-            let pp4 = uniform.ProjTrafo * (vp + V4d(0.0, 0.5 * v.dist, 0.0, 0.0))
+            let pp1 = uniform.ProjTrafo * (vp - V4d(0.5 * dist, 0.0, 0.0, 0.0))
+            let pp2 = uniform.ProjTrafo * (vp + V4d(0.5 * dist, 0.0, 0.0, 0.0))
+            let pp3 = uniform.ProjTrafo * (vp - V4d(0.0, 0.5 * dist, 0.0, 0.0))
+            let pp4 = uniform.ProjTrafo * (vp + V4d(0.0, 0.5 * dist, 0.0, 0.0))
 
             let pp = uniform.ProjTrafo * vp
             
@@ -1666,6 +1681,9 @@ module Shader =
 
 [<EntryPoint>]
 let main argv = 
+
+    //KdTreeTest.run()
+    //System.Environment.Exit 0
 
     Ag.initialize()
     Aardvark.Init()
@@ -1906,14 +1924,12 @@ let main argv =
     
 
 
-    let center = jb1.root.BoundingBox.Center
+    let center = jb2.root.BoundingBox.Center
 
     let pcs = 
         //ASet.ofList allKoeln
         ASet.ofList [
-            yield StoreTree.translate (-center) jb1
-                    //|> StoreTree.trafo trafo
-            yield StoreTree.translate (-center) jb2
+            yield jb2 |> StoreTree.normalize 100.0
                     //|> StoreTree.trafo trafo
             //yield StoreTree.normalize 100.0 koelnNet
             //yield StoreTree.normalize 100.0 kaunertal

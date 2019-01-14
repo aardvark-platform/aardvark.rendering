@@ -1173,8 +1173,8 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                             ids |> HMap.iter (fun root id ->
                                 match getRootUniform name root with
                                 | Some v ->
-                                    let v = v.GetValue(t) |> conv
-                                    data.SetValue(v, id)
+                                    let vc = v.GetValue(t) |> conv
+                                    data.SetValue(vc, id)
                                 | None ->
                                     ()
                             )
@@ -1678,8 +1678,10 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         let roots = lock rootLock (fun () -> roots)
 
                         let start = time()
-                        let maxQ, dataSize = TreeHelpers.getMaxQuality lastQ budget (Seq.map fst roots) modelView proj
-                        //let maxQ = 1.0
+                        let maxQ =
+                            if budget < 0L then 1.0
+                            else fst (TreeHelpers.getMaxQuality budget (Seq.map fst roots) modelView proj)
+
                         let dt = time() - start
                         maxQualityTime.Add(dt.TotalMilliseconds)
 
