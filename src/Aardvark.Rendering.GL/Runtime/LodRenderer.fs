@@ -1678,8 +1678,8 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         let roots = lock rootLock (fun () -> roots)
 
                         let start = time()
-                        //let maxQ, dataSize = TreeHelpers.getMaxQuality lastQ budget (Seq.map fst roots) modelView proj
-                        let maxQ = 1.0
+                        let maxQ, dataSize = TreeHelpers.getMaxQuality lastQ budget (Seq.map fst roots) modelView proj
+                        //let maxQ = 1.0
                         let dt = time() - start
                         maxQualityTime.Add(dt.TotalMilliseconds)
 

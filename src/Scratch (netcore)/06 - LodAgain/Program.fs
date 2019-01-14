@@ -784,6 +784,7 @@ module StoreTree =
         let cell = self.Cell
         let isLeaf = self.IsLeaf
         let id = self.Id
+        let scale = globalTrafo.Scale
 
         let mutable refCount = 0
         let mutable livingChildren = 0
@@ -856,20 +857,20 @@ module StoreTree =
            
                 if MapExt.containsKey "Normals" ips then
                     let normals = 
-                        //if self.HasNormals then self.Normals.Value
-                        //elif self.HasLodNormals then self.LodNormals.Value
-                        //else Array.create original.Length V3f.OOO
-                        if self.HasKdTree then 
-                            let tree = self.KdTree.Value
-                            Aardvark.Geometry.Points.Normals.EstimateNormals(original, tree, 17)
-                        elif self.HasLodKdTree then 
-                            let tree = self.LodKdTree.Value
-                            Aardvark.Geometry.Points.Normals.EstimateNormals(original, tree, 17)
-                        else
-                            Array.create original.Length V3f.OOO
+                        if self.HasNormals then self.Normals.Value
+                        elif self.HasLodNormals then self.LodNormals.Value
+                        else Array.create original.Length V3f.OOO
+                        //if self.HasKdTree then 
+                        //    let tree = self.KdTree.Value
+                        //    Aardvark.Geometry.Points.Normals.EstimateNormals(original, tree, 17)
+                        //elif self.HasLodKdTree then 
+                        //    let tree = self.LodKdTree.Value
+                        //    Aardvark.Geometry.Points.Normals.EstimateNormals(original, tree, 17)
+                        //else
+                        //    Array.create original.Length V3f.OOO
 
                     let normals =
-                        let normalMat = (Trafo3d globalTrafo.EuclideanTransformation).Backward.Transposed |> M33d.op_Explicit
+                        let normalMat = (Trafo3d globalTrafo.EuclideanTransformation.Rot).Backward.Transposed |> M33d.op_Explicit
                         let inline fix (p : V3f) = normalMat * (V3d p) |> V3f
                         normals |> Array.map fix
 
@@ -893,7 +894,7 @@ module StoreTree =
                         //bounds.Size.NormMax / 40.0
                         if dist <= 0.0 then bounds.Size.NormMax / 40.0 else dist
 
-                    uniforms <- MapExt.add "AvgPointDistance" ([| float32 avgDist |] :> System.Array) uniforms
+                    uniforms <- MapExt.add "AvgPointDistance" ([| float32 (scale * avgDist) |] :> System.Array) uniforms
                     
                 if MapExt.containsKey "TreeLevel" ips then    
                     let arr = [| float32 level |] :> System.Array
@@ -1121,7 +1122,6 @@ module StoreTree =
                 IndexedAttributes = atts
             )
 
-
         let unionMany (s : seq<IndexedGeometry>) =
             use e = s.GetEnumerator()
             if e.MoveNext() then
@@ -1180,8 +1180,6 @@ module StoreTree =
             member x.Cell = inner.Cell
             member x.Acquire() = inner.Acquire()
             member x.Release() = inner.Release()
-
-
 
     type InCoreStructureTree(inner : ILodTreeNode, parent : Option<ILodTreeNode>, root : Option<ILodTreeNode>) as this =
         let root = match root with | Some r -> r | None -> this :> ILodTreeNode
@@ -1398,9 +1396,18 @@ module StoreTree =
         let uniforms = instance.uniforms
 
         let bounds = tree.BoundingBox
+        let scale = maxSize / bounds.Size.NormMax
         let t = 
             Trafo3d.Translation(-bounds.Center) * 
-            Trafo3d.Scale(maxSize / bounds.Size.NormMax)
+            Trafo3d.Scale scale
+
+        let uniforms =
+            match MapExt.tryFind "AvgPointDistance" uniforms with
+            | Some (:? IMod<float> as d) ->
+                let dnew = d |> Mod.map (fun d -> d * scale) 
+                MapExt.add "AvgPointDistance" (dnew :> IMod) uniforms
+            | _ ->
+                uniforms
 
         {
             root = tree
@@ -1421,14 +1428,32 @@ module StoreTree =
         }
 
     let trafo (t : IMod<Trafo3d>) (instance : LodTreeInstance) =
-        let old =
-            match MapExt.tryFind "ModelTrafo" instance.uniforms with
-            | Some (:? IMod<Trafo3d> as t) -> t
-            | _ -> Mod.constant Trafo3d.Identity
+        let uniforms = instance.uniforms
 
-        let trafo = Mod.map2 (*) old t
+        let uniforms =
+            match MapExt.tryFind "ModelTrafo" uniforms with
+            | Some (:? IMod<Trafo3d> as old) -> 
+                let n = Mod.map2 (*) old t
+                MapExt.add "ModelTrafo" (n :> IMod) uniforms
+            | _ ->
+                uniforms
 
-        { instance with uniforms = MapExt.add "ModelTrafo" (trafo :> IMod) instance.uniforms }
+        let inline getScale (m : M44d) =
+            let sx = m * V4d.IOOO |> Vec.length
+            let sy = m * V4d.OIOO |> Vec.length
+            let sz = m * V4d.OOIO |> Vec.length
+            (sx + sy + sz) / 3.0
+
+        let uniforms =
+            match MapExt.tryFind "AvgPointDistance" uniforms with
+            | Some (:? IMod<float> as sOld) -> 
+                let sNew = t |> Mod.map (fun o -> getScale o.Forward)
+                let sFin = Mod.map2 (*) sOld sNew
+                MapExt.add "AvgPointDistance" (sFin :> IMod) uniforms
+            | _ ->
+                uniforms
+                
+        { instance with uniforms = uniforms }
 
 [<ReflectedDefinition>]
 module Shader =
@@ -1637,46 +1662,6 @@ module Shader =
             return V4d(n, 1.0)
         }
 
-module Sg =
-    open Aardvark.Base.Ag
-    open Aardvark.SceneGraph
-    open Aardvark.SceneGraph.Semantics
-
-    type LodNode(quality : IModRef<float>, maxQuality : IModRef<float>, budget : IMod<int64>, culling : bool, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<System.DateTime>, clouds : aset<LodTreeInstance>) =
-        member x.Culling = culling
-        member x.Time = time
-        member x.Clouds = clouds
-        member x.MaxSplits = maxSplits
-
-        member x.Quality = quality
-        member x.MaxQuality = maxQuality
-        member x.RenderBounds = renderBounds
-        member x.Budget = budget
-        interface ISg
-      
-    [<Semantic>]
-    type Sem() =
-        member x.RenderObjects(sg : LodNode) =
-            let scope = Ag.getContext()
-            let state = PipelineState.ofScope scope
-            let surface = sg.Surface
-            let pass = sg.RenderPass
-
-            let model = sg.ModelTrafo
-            let view = sg.ViewTrafo
-            let proj = sg.ProjTrafo
-
-            let id = newId()
-            let obj =
-                { new ICustomRenderObject with
-                    member x.Id = id
-                    member x.AttributeScope = scope
-                    member x.RenderPass = pass
-                    member x.Create(r, fbo) = 
-                        r.CreateLodRenderer(fbo, surface, state, pass, model, view, proj, sg.Quality, sg.MaxQuality, sg.Budget, sg.RenderBounds, sg.MaxSplits, sg.Time, sg.Clouds)
-                }
-
-            ASet.single (obj :> IRenderObject)
 
 
 [<EntryPoint>]
@@ -2031,7 +2016,7 @@ let main argv =
         }
     let planeness = Mod.init 1.0
     let sg =
-        Sg.LodNode(quality, maxQuality, budget, true, renderBounds, maxSplits, win.Time, pcs) :> ISg
+        Sg.LodTreeNode(quality, maxQuality, budget, renderBounds, maxSplits, win.Time, pcs) :> ISg
         |> Sg.uniform "PointSize" pointSize
         |> Sg.uniform "ViewportSize" win.Sizes
         |> Sg.uniform "Planeness" planeness
