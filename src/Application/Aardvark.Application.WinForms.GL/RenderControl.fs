@@ -110,7 +110,9 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
         with get () = autoInvalidate
         and set v = autoInvalidate <- v
 
-
+    /// <summary> Returns true if the control has been fully initialized.</summary> 
+    member x.IsLoaded 
+        with get () = loaded
 
     interface IInvalidateControl with
         member x.IsInvalid = needsRedraw
@@ -146,8 +148,11 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
 
     override x.OnHandleCreated(e) =
+
+        base.OnHandleCreated(e)
+
         let c = OpenTK.Graphics.GraphicsContext.CurrentContext
-        GL.Hint(HintTarget.PointSmoothHint, HintMode.Fastest)
+        GL.Hint(HintTarget.PointSmoothHint, HintMode.Fastest) 
         GL.Enable(EnableCap.TextureCubeMapSeamless)
         GL.Disable(EnableCap.PolygonSmooth)
 
@@ -156,10 +161,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
         //if ContextHandle.primaryContext <> null then
         //    ContextHandle.primaryContext.MakeCurrent()
-
-        base.OnHandleCreated(e)
-        loaded <- true
-
+        
         x.KeyDown.Add(fun e ->
             if e.KeyCode = System.Windows.Forms.Keys.End && e.Control then
                 renderContinuously <- not renderContinuously
@@ -258,6 +260,8 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
                 x.Invalidate()
         
     override x.OnPaint(e) =
+        base.OnPaint(e)
+        loaded <- true
         if x.OnPaintRender then
             x.Render()
                     
