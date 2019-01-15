@@ -368,11 +368,11 @@ module LodTreeHelpers =
             let mutable quality = 0.0
             let mutable cnt = 0
 
-            //let dead = HashSet<ILodTreeNode>()
+            let dead = HashSet<ILodTreeNode>()
 
             for t in ts do 
                 size <- size + int64 t.DataSize
-                //dead.Add t |> ignore
+                dead.Add t |> ignore
                 enqueue t view proj queue
 
             let inline s (struct (a,b,c)) = b
@@ -389,13 +389,13 @@ module LodTreeHelpers =
 
             while queue.Count > 0 && size + s queue.[0] <= maxSize do
                 let struct (q,s,e) = queue.HeapDequeue(cmp)
-                //dead.Remove e |> ignore
+                dead.Remove e |> ignore
                 iters <- iters + 1
                 quality <- q
                 size <- size + s
                 for c in e.Children do
                     enqueueWatch.Start()
-                    //dead.Add c |> ignore
+                    dead.Add c |> ignore
                     enqueue c view proj queue
                     enqueueWatch.Stop()
 
@@ -408,12 +408,12 @@ module LodTreeHelpers =
                 Log.warn "quality:     %A" splitQualityTime.MicroTime
                 Log.warn "per element: %A" (sw.MicroTime / iters)
             
-            //let sw = System.Diagnostics.Stopwatch.StartNew()
-            ////for d in dead do d.Release()
-            //sw.Stop()
-            //if sw.Elapsed.TotalMilliseconds > 400.0 then
-            //    Log.warn "kill:        %A (%d)" sw.MicroTime dead.Count
-            //    Log.warn "per element: %A" (sw.MicroTime / dead.Count)
+            let sw = System.Diagnostics.Stopwatch.StartNew()
+            for d in dead do d.Release()
+            sw.Stop()
+            if sw.Elapsed.TotalMilliseconds > 400.0 then
+                Log.warn "kill:        %A (%d)" sw.MicroTime dead.Count
+                Log.warn "per element: %A" (sw.MicroTime / dead.Count)
 
 
             if queue.Count = 0 then

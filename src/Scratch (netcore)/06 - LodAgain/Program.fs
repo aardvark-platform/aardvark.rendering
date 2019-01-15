@@ -2063,72 +2063,82 @@ let main argv =
 
 
 
-    let allKoeln =
-        let rx = System.Text.RegularExpressions.Regex @"^(?<x>[0-9]+)_(?<y>[0-9]+)_(?<z>[0-9]+)_(?<w>[0-9]+)$"
+    //let allKoeln =
+    //    let rx = System.Text.RegularExpressions.Regex @"^(?<x>[0-9]+)_(?<y>[0-9]+)_(?<z>[0-9]+)_(?<w>[0-9]+)$"
         
-        let stores = 
-            System.IO.Directory.GetDirectories @"\\heap.vrvis.lan\haaser\koeln\cells"
-            |> Seq.skip 100
-            |> Seq.atMost 20
-            |> Seq.choose (fun path ->
-                let name = System.IO.Path.GetFileNameWithoutExtension path
-                let m = rx.Match name
-                if m.Success then
-                    let x = m.Groups.["x"].Value |> int64
-                    let y = m.Groups.["y"].Value |> int64
-                    let z = m.Groups.["z"].Value |> int64
-                    let exp = m.Groups.["w"].Value |> int
-                    Log.warn "%d_%d_%d_%d" x y z exp
-                    let cell = Cell(x,y,z,exp)
-                    Some(cell, name, System.IO.Path.Combine(path, "pointcloud"))
-                else
-                    None
-            )
-            |> Seq.toList
+    //    let stores = 
+    //        System.IO.Directory.GetDirectories @"\\heap.vrvis.lan\haaser\koeln\cells"
+    //        |> Seq.skip 100
+    //        |> Seq.atMost 20
+    //        |> Seq.choose (fun path ->
+    //            let name = System.IO.Path.GetFileNameWithoutExtension path
+    //            let m = rx.Match name
+    //            if m.Success then
+    //                let x = m.Groups.["x"].Value |> int64
+    //                let y = m.Groups.["y"].Value |> int64
+    //                let z = m.Groups.["z"].Value |> int64
+    //                let exp = m.Groups.["w"].Value |> int
+    //                Log.warn "%d_%d_%d_%d" x y z exp
+    //                let cell = Cell(x,y,z,exp)
+    //                Some(cell, name, System.IO.Path.Combine(path, "pointcloud"))
+    //            else
+    //                None
+    //        )
+    //        |> Seq.toList
 
-        let bounds = stores |> Seq.map (fun (v,_,_) -> v.BoundingBox) |> Box3d
+    //    let bounds = stores |> Seq.map (fun (v,_,_) -> v.BoundingBox) |> Box3d
 
-        let rand = RandomSystem()
-        stores |> List.choose (fun (cell,name,path) ->
-            let color = rand.UniformC3f().ToV4d()
-            let col = Mod.map (fun (a : float) -> V4d(color.XYZ, a)) overlayAlpha
+    //    let rand = RandomSystem()
+    //    stores |> List.choose (fun (cell,name,path) ->
+    //        let color = rand.UniformC3f().ToV4d()
+    //        let col = Mod.map (fun (a : float) -> V4d(color.XYZ, a)) overlayAlpha
 
-            try
-                let instance = 
-                    StoreTree.import
-                        "net"
-                        name
-                        path
-                        [
-                            "Overlay", col :> IMod
-                            "TreeActive", Mod.constant true :> IMod
-                        ]
+    //        try
+    //            let instance = 
+    //                StoreTree.import
+    //                    "net"
+    //                    name
+    //                    path
+    //                    [
+    //                        "Overlay", col :> IMod
+    //                        "TreeActive", Mod.constant true :> IMod
+    //                    ]
 
-                let box = instance.root.Cell.BoundingBox
+    //            let box = instance.root.Cell.BoundingBox
 
-                Log.warn "box: %A" box.Size
-                let trafo = 
-                    Trafo3d.Scale(100.0) *
-                    Trafo3d.Translation(box.Center - bounds.Center) *
-                    Trafo3d.Scale(1000.0 / bounds.Size.NormMax)
-                    //Trafo3d.Scale(0.05)
-                    //Trafo3d.Translation(0.0, 0.0, box.Center.Z * 0.05)
+    //            Log.warn "box: %A" box.Size
+    //            let trafo = 
+    //                Trafo3d.Scale(100.0) *
+    //                Trafo3d.Translation(box.Center - bounds.Center) *
+    //                Trafo3d.Scale(1000.0 / bounds.Size.NormMax)
+    //                //Trafo3d.Scale(0.05)
+    //                //Trafo3d.Translation(0.0, 0.0, box.Center.Z * 0.05)
                 
-                let instance = instance |> StoreTree.transform trafo
-                //let uniforms = MapExt.add "ModelTrafo" (Mod.constant trafo :> IMod) uniforms
+    //            let instance = instance |> StoreTree.transform trafo
+    //            //let uniforms = MapExt.add "ModelTrafo" (Mod.constant trafo :> IMod) uniforms
 
-                Some instance
-            with _ ->
-                None
-        )
+    //            Some instance
+    //        with _ ->
+    //            None
+    //    )
 
 
-    
+ 
+    let koeln =
+        StoreTree.import
+            "ssd"
+            @"C:\Users\Schorsch\Development\WorkDirectory\3278_5514_0_10\3278_5514_0_10"
+            @"C:\Users\Schorsch\Development\WorkDirectory\3278_5514_0_10\pointcloud\"
+            [
+                "Overlay", c0WithAlpha :> IMod
+                "TreeActive", active0 :> IMod
+            ]   
 
     let pcs = 
         //ASet.ofList allKoeln
         ASet.ofList [
-            yield! allKoeln //yield koeln |> StoreTree.normalize 1000.0
+            //yield! allKoeln //yield koeln |> StoreTree.normalize 1000.0
+            yield koeln |> StoreTree.normalize 300.0
                     //|> StoreTree.trafo trafo
             //yield StoreTree.normalize 100.0 koelnNet
             //yield StoreTree.normalize 100.0 kaunertal
