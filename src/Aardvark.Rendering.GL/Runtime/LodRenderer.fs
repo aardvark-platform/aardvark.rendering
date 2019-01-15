@@ -345,31 +345,76 @@ module LodTreeHelpers =
 
         let private cmp = Func<struct (float * _ * _), struct (float * _ * _), int>(fun (struct(a,_,_)) (struct(b,_,_)) -> compare a b)
 
-        let inline private enqueue (q : float) (t : ILodTreeNode) (view : ILodTreeNode -> Trafo3d) (proj : Trafo3d) (queue : List<struct (float * int64 * ILodTreeNode)>) =
-            let view = view t.Root
-            if t.ShouldSplit(q, view, proj) then
-                let q = t.SplitQuality(view, proj)
+        let viewTime = System.Diagnostics.Stopwatch()
+        let splitTime = System.Diagnostics.Stopwatch()
+        let splitQualityTime = System.Diagnostics.Stopwatch()
+
+        let inline stop (sw : System.Diagnostics.Stopwatch) (f : unit -> 'a) =
+            sw.Start()
+            try f()
+            finally sw.Stop()
+
+        let inline private enqueue (t : ILodTreeNode) (view : ILodTreeNode -> Trafo3d) (proj : Trafo3d) (queue : List<struct (float * int64 * ILodTreeNode)>) =
+            let view = stop viewTime (fun () -> view t.Root)
+            if stop splitTime (fun () -> t.ShouldSplit(1.0, view, proj)) then
+                let q = stop splitQualityTime (fun () -> t.SplitQuality(view, proj))
                 let childSize = t.Children |> Seq.sumBy (fun c -> int64 c.DataSize)
                 queue.HeapEnqueue(cmp, struct (q, childSize, t))
 
         let getMaxQuality (maxSize : int64) (ts : seq<ILodTreeNode>) (view : ILodTreeNode -> Trafo3d) (proj : Trafo3d) =
 
-            let queue = List<struct (float * int64 * ILodTreeNode)>(1 <<< 20)
+            let queue = List<struct (float * int64 * ILodTreeNode)>(65536)
             let mutable size = 0L
-            let mutable quality = 1.0
+            let mutable quality = 0.0
             let mutable cnt = 0
+
+            //let dead = HashSet<ILodTreeNode>()
+
             for t in ts do 
                 size <- size + int64 t.DataSize
-                enqueue 1.0 t view proj queue
+                //dead.Add t |> ignore
+                enqueue t view proj queue
 
             let inline s (struct (a,b,c)) = b
 
+            let mutable iters = 0
+            let sw = System.Diagnostics.Stopwatch.StartNew()
+
+            viewTime.Reset()
+            splitTime.Reset()
+            splitQualityTime.Reset()
+
+
+            let enqueueWatch = System.Diagnostics.Stopwatch()
+
             while queue.Count > 0 && size + s queue.[0] <= maxSize do
                 let struct (q,s,e) = queue.HeapDequeue(cmp)
+                //dead.Remove e |> ignore
+                iters <- iters + 1
                 quality <- q
                 size <- size + s
                 for c in e.Children do
-                    enqueue 1.0 c view proj queue
+                    enqueueWatch.Start()
+                    //dead.Add c |> ignore
+                    enqueue c view proj queue
+                    enqueueWatch.Stop()
+
+            sw.Stop()
+            if sw.Elapsed.TotalMilliseconds > 400.0 then
+                Log.warn "traverse:    %A (%d)" sw.MicroTime iters
+                Log.warn "enqueue:     %A" enqueueWatch.MicroTime
+                Log.warn "view:        %A" viewTime.MicroTime
+                Log.warn "split:       %A" splitTime.MicroTime
+                Log.warn "quality:     %A" splitQualityTime.MicroTime
+                Log.warn "per element: %A" (sw.MicroTime / iters)
+            
+            //let sw = System.Diagnostics.Stopwatch.StartNew()
+            ////for d in dead do d.Release()
+            //sw.Stop()
+            //if sw.Elapsed.TotalMilliseconds > 400.0 then
+            //    Log.warn "kill:        %A (%d)" sw.MicroTime dead.Count
+            //    Log.warn "per element: %A" (sw.MicroTime / dead.Count)
+
 
             if queue.Count = 0 then
                 1.0, size
@@ -380,7 +425,6 @@ module LodTreeHelpers =
     type TaskTreeNode<'a> internal(state : TaskTreeState, mapping : CancellationToken -> ILodTreeNode -> Task<'a>, rootId : int, original : ILodTreeNode) =
         static let neverTask = TaskCompletionSource<'a>().Task
         static let cmp = Func<float * _, float * _, int>(fun (a,_) (b,_) -> compare a b)
-        do original.Acquire()
 
         let mutable cancel = Some (new CancellationTokenSource())
         let mutable task =
@@ -402,9 +446,9 @@ module LodTreeHelpers =
         member x.Task = task
 
         member x.Destroy() : unit =
+            original.Release()
             Interlocked.Add(&state.dataSize.contents, -int64 original.DataSize) |> ignore
             state.RemoveNode()
-            original.Release()
             try cancel |> Option.iter (fun c -> c.Cancel()); cancel <- None
             with _ -> ()
             children |> List.iter (fun c -> c.Destroy())
@@ -537,11 +581,11 @@ module LodTreeHelpers =
                 cnt <- cnt + 1
 
             if queue.Count = 0 then 
-                quality
+                quality, true
             else 
                 let qnext, _ = queue.HeapDequeue(cmp)
-                if cnt = 0 then qnext
-                else 0.5 * (qnext + lastQ)
+                if cnt = 0 then qnext, false
+                else 0.5 * (qnext + lastQ), false
                     
 
     type TaskTreeReader<'a>(tree : TaskTree<'a>) =
@@ -1044,7 +1088,7 @@ type LodRenderingInfo =
 type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipelineState, pass : RenderPass, info : LodRenderingInfo, useCulling : bool, maxSplits : IMod<int>, roots : aset<LodTreeInstance>, renderTime : IMod<DateTime>, model : IMod<Trafo3d>, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, budget : IMod<int64>)  =
     inherit PreparedCommand(ctx, pass)
     
-    static let scheduler = new LimitedConcurrencyLevelTaskScheduler(ThreadPriority.BelowNormal, max 2 (Environment.ProcessorCount - 3))
+    static let scheduler = new LimitedConcurrencyLevelTaskScheduler(ThreadPriority.BelowNormal, Environment.ProcessorCount)// max 2 (Environment.ProcessorCount - 3))
             
     static let startTask (ct : CancellationToken) (f : unit -> 'a) =
         Task.Factory.StartNew(Func<'a>(f), ct, TaskCreationOptions.None, scheduler)
@@ -1693,7 +1737,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         for (k,v) in roots do
                             v.BuildQueue(state, collapseIfNotSplit, Some k, maxQ, modelView, proj, queue)
             
-                        let q = TaskTree<_>.ProcessQueue(state, queue, maxQ, modelView, proj, maxSplits)
+                        let q, fin = TaskTree<_>.ProcessQueue(state, queue, maxQ, modelView, proj, maxSplits)
                         lastQ <- q
                         let dt = time() - start
                         expandTime.Add dt.TotalMilliseconds
@@ -1702,6 +1746,8 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                             info.quality.Value <- q
                             info.maxQuality.Value <- maxQ
                         )
+                        if fin then notConverged.Reset()
+
 
                         //if maxQ <> lastMaxQ then
                         //    lastMaxQ <- maxQ

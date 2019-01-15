@@ -715,9 +715,9 @@ module KdTreeTest =
 
     let run() =
 
-        let n = 10000000
-        let buildIter = 0
-        let findIter = 1000000
+        let n = 5000000
+        let buildIter = 8
+        let findIter = 100000
         let k = 5
 
         let rand = RandomSystem()
@@ -804,16 +804,18 @@ module StoreTree =
 
 
     type PointTreeNode(cache : LruDictionary<string, obj>, source : Symbol, globalTrafo : Similarity3d, root : Option<PointTreeNode>, parent : Option<PointTreeNode>, level : int, self : PointSetNode) as this =
+        static let cmp = Func<float,float,int>(compare)
+        
         let globalTrafoTrafo = Trafo3d globalTrafo
-        let bounds = self.BoundingBoxExact.Transformed globalTrafoTrafo
+        let bounds = self.BoundingBox.Transformed globalTrafoTrafo
         let cellBounds = self.BoundingBox.Transformed globalTrafoTrafo
         let cell = self.Cell
         let isLeaf = self.IsLeaf
         let id = self.Id
         let scale = globalTrafo.Scale
 
-        let mutable refCount = 0
-        let mutable livingChildren = 0
+        //let mutable refCount = 0
+        //let mutable livingChildren = 0
         let mutable children : Option<list<ILodTreeNode>> = None
  
         static let nodeId (n : PointSetNode) =
@@ -822,7 +824,6 @@ module StoreTree =
         static let cacheId (n : PointSetNode) =
             string n.Id + "GeometryData"
             
-        let cmp = Func<float,float,int>(compare)
         let getAverageDistance (original : V3f[]) (positions : V3f[]) (tree : PointRkdTreeD<_,_>) =
             let heap = List<float>(positions.Length)
             for i in 0 .. original.Length - 1 do
@@ -897,16 +898,16 @@ module StoreTree =
 
                 
                 if MapExt.containsKey "AvgPointDistance" ips then
-                    let dist = 
-                        if self.HasKdTree then 
-                            let tree = self.KdTree.Value
-                            getAverageDistance original positions tree
+                    let dist = 0.0
+                        //if self.HasKdTree then 
+                        //    let tree = self.KdTree.Value
+                        //    getAverageDistance original original tree
 
-                        elif self.HasLodKdTree then 
-                            let tree = self.LodKdTree.Value
-                            getAverageDistance original positions tree
-                        else 
-                            bounds.Size.NormMax / 40.0
+                        //elif self.HasLodKdTree then 
+                        //    let tree = self.LodKdTree.Value
+                        //    getAverageDistance original original tree
+                        //else 
+                        //    bounds.Size.NormMax / 40.0
 
                     let avgDist = 
                         //bounds.Size.NormMax / 40.0
@@ -919,11 +920,11 @@ module StoreTree =
                     uniforms <- MapExt.add "TreeLevel" arr uniforms
                     
                 if MapExt.containsKey "MaxTreeDepth" ips then    
-                    let arr = [| self.GetMaximiumTreeDepth(true) |] :> System.Array
+                    let arr = [| 1 |] :> System.Array
                     uniforms <- MapExt.add "MaxTreeDepth" arr uniforms
                     
                 if MapExt.containsKey "MinTreeDepth" ips then    
-                    let arr = [| self.GetMinimumTreeDepth(true) |] :> System.Array
+                    let arr = [| 1 |] :> System.Array
                     uniforms <- MapExt.add "MinTreeDepth" arr uniforms
 
                 let geometry =
@@ -952,41 +953,56 @@ module StoreTree =
 
             angle / factor
         
-        member x.AcquireChild() =
-            Interlocked.Increment(&livingChildren) |> ignore
+        //member x.AcquireChild() =
+        //    Interlocked.Increment(&livingChildren) |> ignore
     
-        member x.ReleaseChild() =
-            let destroy = Interlocked.Change(&livingChildren, fun o -> max 0 (o - 1), o = 1)
-            if destroy then
-                let children = 
-                    lock x (fun () ->
-                        let c = children
-                        children <- None
-                        c
-                    ) 
-                match children with
-                | Some c ->
-                    for c in c do 
-                        let c = unbox<PointTreeNode> c
-                        cache.Add(nodeId c.Original, c, 1L <<< 10) |> ignore
-                | None ->
-                    ()
+        member x.ReleaseChildren() =
+            let old = 
+                lock x (fun () -> 
+                    let c = children
+                    children <- None
+                    c
+                )
+
+            match old with
+            | Some o -> o |> List.iter (fun o -> cache.Add(nodeId (unbox<PointTreeNode> o).Original, o, 1L <<< 10) |> ignore)
+            | None -> ()
 
 
         member x.Acquire() =
-            if Interlocked.Increment(&refCount) = 1 then
-                match parent with
-                | Some p -> p.AcquireChild()
-                | None -> ()
+            ()
+            //if Interlocked.Increment(&refCount) = 1 then
+            //    match parent with
+            //    | Some p -> p.AcquireChild()
+            //    | None -> ()
+
+
+
 
         member x.Release() =
-            let destroy = Interlocked.Change(&refCount, fun o -> max 0 (o - 1), o = 1)
-            if destroy then
-                match parent with
-                | Some p -> p.ReleaseChild()
-                | None -> ()
+            lock x (fun () ->
+                match children with
+                | Some cs -> 
+                    for c in cs do (unbox<PointTreeNode> c).ReleaseChildren()
+                | None ->
+                    ()
+            )
+            
 
-        member x.Original = self
+            //match parent with
+            //| Some p -> 
+            //    p.ReleaseChildren()
+            //| None -> 
+            //    ()
+            //let destroy = Interlocked.Change(&refCount, fun o -> max 0 (o - 1), o = 1)
+            //if destroy then
+            //    livingChildren <- 0
+            //    children <- None
+            //    match parent with
+            //    | Some p -> p.ReleaseChild()
+            //    | None -> ()
+
+        member x.Original : PointSetNode = self
 
         member x.Root : PointTreeNode =
             match root with
@@ -994,56 +1010,39 @@ module StoreTree =
             | None -> x
 
         member x.Children  =
-            if livingChildren > 0 then
-                match children with
-                | Some c -> c :> seq<_>
-                | None ->
-                    lock x (fun () ->
-                        match children with
-                        | Some c -> c :> seq<_>
-                        | None ->
-                            let c = 
-                                if isNull self.Subnodes then
-                                    []
-                                else
-                                    self.Subnodes |> Seq.toList |> List.choose (fun c ->
+            match children with
+            | Some c -> c :> seq<_>
+            | None ->
+                lock x (fun () ->
+                    match children with
+                    | Some c -> c :> seq<_>
+                    | None ->
+                        let c = 
+                            if isNull self.Subnodes then
+                                []
+                            else
+                                self.Subnodes |> Seq.toList |> List.choose (fun c ->
+                                    if isNull c then
+                                        None
+                                    else
+                                        let c = c.Value
                                         if isNull c then
                                             None
                                         else
-                                            let c = c.Value
-                                            if isNull c then
-                                                None
-                                            else
-                                                let id = nodeId c
-                                                match cache.TryGetValue id with
-                                                | (true, n) ->
-                                                    cache.Remove id |> ignore
-                                                    unbox<ILodTreeNode> n |> Some
-                                                | _ -> 
-                                                    PointTreeNode(cache, source, globalTrafo, Some this.Root, Some this, level + 1, c) :> ILodTreeNode |> Some
-                                    )
-                            children <- Some c
-                            c :> seq<_>
-                                    
-                    )
-            else
-                if isNull self.Subnodes then
-                    Seq.empty
-                else
-                    self.Subnodes |> Seq.choose (fun c ->
-                        if isNull c then
-                            None
-                        else
-                            let c = c.Value
-                            if isNull c then
-                                None
-                            else
-                                cache.GetOrCreate(nodeId c, fun () ->
-                                    let n = PointTreeNode(cache, source, globalTrafo, Some this.Root, Some this, level + 1, c)
-                                    struct (n :> obj, 1L <<< 10)
+                                            let id = nodeId c
+                                            match cache.TryGetValue id with
+                                            | (true, n) ->
+                                                cache.Remove id |> ignore
+                                                unbox<ILodTreeNode> n |> Some
+                                            | _ -> 
+                                                //Log.warn "alloc %A" id
+                                                PointTreeNode(cache, source, globalTrafo, Some this.Root, Some this, level + 1, c) :> ILodTreeNode |> Some
                                 )
-                                |> unbox<ILodTreeNode> |> Some
-                    )
+                        children <- Some c
+                        c :> seq<_>
+                                    
+                )
+         
 
         member x.Id = id
 
@@ -1078,7 +1077,7 @@ module StoreTree =
             member x.ShouldCollapse(q,v,p) = x.ShouldCollapse(q,v,p)
             member x.SplitQuality(v,p) = x.SplitQuality(v,p)
             member x.CollapseQuality(v,p) = x.CollapseQuality(v,p)
-            member x.DataSize = int self.LodPointCount
+            member x.DataSize = if self.IsLeaf then int self.PointCount else 8192
             member x.TotalDataSize = int self.PointCountTree
             member x.GetData(ct, ips) = x.GetData(ct, ips)
             member x.BoundingBox = bounds
@@ -1326,18 +1325,47 @@ module StoreTree =
         { n with root = TreeViewNode(n.root, limit, None, None) }
         
 
-    let import (sourceName : string) (file : string) (store : string) (uniforms : list<string * IMod>) =
-        do Aardvark.Data.Points.Import.Pts.PtsFormat |> ignore
-        do Aardvark.Data.Points.Import.E57.E57Format |> ignore
+    let private loaders =
+        [|
+            "Aardvark.Data.Points.Import.Pts"
+            "Aardvark.Data.Points.Import.E57"
+            "Aardvark.Data.Points.Import.Yxh"
+            "Aardvark.Data.Points.Import.Ply"
+            "Aardvark.Data.Points.Import.Laszip"
+        |]
+    let mutable private loaded = false
+
+    let private init() =
+        lock loaders (fun () ->
+            if not loaded then
+                loaded <- true
+                for l in loaders do
+                    Type.GetType(l) |> ignore
+        )
+
+    let private cache = LruDictionary(1L <<< 30)
+
+    let private importAux (import : string -> Aardvark.Data.Points.ImportConfig -> PointSet) (sourceName : string) (file : string) (key : string) (store : string) (uniforms : list<string * IMod>) =
+        init()
+
+        let store = PointCloud.OpenStore(store, cache)
         
-        let store = PointCloud.OpenStore(store, LruDictionary(1L <<< 30))
-            
-        let key = System.IO.Path.GetFileNameWithoutExtension(file).ToLower()
+        let key = 
+            if String.IsNullOrEmpty key then
+                try
+                    let test = store.GetByteArray("Index")
+                    if isNull test then failwith "no key given"
+                    else System.Text.Encoding.Unicode.GetString(test)
+                with _ ->
+                    failwith "no key given"
+            else
+                key
+        
         let set = store.GetPointSet(key)
 
         let points = 
             if isNull set then
-                let config3 = 
+                let config = 
                     Aardvark.Data.Points.ImportConfig.Default
                         .WithStorage(store)
                         .WithKey(key)
@@ -1345,7 +1373,9 @@ module StoreTree =
                         .WithMaxChunkPointCount(10000000)
                         .WithEstimateNormals(Func<_,_>(fun a -> Aardvark.Geometry.Points.Normals.EstimateNormals(Seq.toArray a, 17) :> System.Collections.Generic.IList<V3f>))
         
-                let res = PointCloud.Import(file,config3)
+                let res = import file config
+                store.Add("Index", System.Text.Encoding.Unicode.GetBytes key)
+
                 store.Flush()
                 res
             else
@@ -1354,94 +1384,135 @@ module StoreTree =
 
         let root = points.Root.Value
         let bounds = root.Cell.BoundingBox
-        let trafo = 
-            Similarity3d(1.0, Euclidean3d(Rot3d.Identity, -bounds.Center))
-            //Trafo3d.Translation(-bounds.Center) *
-            //Trafo3d.Scale(1.0 / 100.0)
-            
+        let trafo = Similarity3d(1.0, Euclidean3d(Rot3d.Identity, -bounds.Center))
         let source = Symbol.Create sourceName
         let root = PointTreeNode(store.Cache, source, trafo, None, None, 0, root) :> ILodTreeNode
 
         let uniforms = MapExt.ofList uniforms
         let uniforms = MapExt.add "Scales" (Mod.constant 1.0 :> IMod) uniforms
+        
 
         { 
             root = root
             uniforms = uniforms
         }
-    
-    //let importAscii (sourceName : string) (file : string) (store : string) (uniforms : list<string * IMod>) =
-    //    let fmt = [| Ascii.Token.PositionX; Ascii.Token.PositionY; Ascii.Token.PositionZ; Ascii.Token.ColorR; Ascii.Token.ColorG; Ascii.Token.ColorB |]
-    //    let cache = LruDictionary(1L <<< 30)
-    //    let store = PointCloud.OpenStore(store, cache)
-    //    let key = System.IO.Path.GetFileNameWithoutExtension(file).ToLower()
-    //    let set = store.GetPointSet(key)
-
-    //    let points = 
-    //        if isNull set then
-    //            let cfg = 
-    //                ImportConfig.Default
-    //                    .WithStorage(store)
-    //                    .WithKey(key)
-    //                    .WithVerbose(true)
-    //                    .WithMaxChunkPointCount(10000000)
-    //                    .WithEstimateNormals(Func<_,_>(fun a -> Aardvark.Geometry.Points.Normals.EstimateNormals(Seq.toArray a, 17) :> System.Collections.Generic.IList<V3f>))
-                        
-    //            let chunks = Import.Ascii.Chunks(file, fmt, cfg)
-    //            let res = PointCloud.Chunks(chunks, cfg)
-    //            store.Flush()
-    //            res
-    //        else
-    //            set
-                
-    //    let bounds = points.Bounds
         
-    //    let trafo = 
-    //        Similarity3d(1.0, Euclidean3d(Rot3d.Identity, -bounds.Center))
-            
-    //    let source = Symbol.Create sourceName
-    //    let root = PointTreeNode(cache, source, trafo, None, None, 0, points.Root.Value) :> ILodTreeNode
-    //    { 
-    //        root = root
-    //        uniforms = MapExt.ofList uniforms
-    //    }
+    module private Parser =
+        open System.Text.RegularExpressions
 
-    let normalize (maxSize : float) (instance : LodTreeInstance) =
+        let private tokens =
+            LookupTable.lookupTable [
+                "x", Ascii.Token.PositionX
+                "y", Ascii.Token.PositionY
+                "z", Ascii.Token.PositionZ
+                "px", Ascii.Token.PositionX
+                "py", Ascii.Token.PositionY
+                "pz", Ascii.Token.PositionZ
+
+                "r", Ascii.Token.ColorR
+                "g", Ascii.Token.ColorG
+                "b", Ascii.Token.ColorB
+                "a", Ascii.Token.ColorA
+                "rf", Ascii.Token.ColorRf
+                "gf", Ascii.Token.ColorGf
+                "bf", Ascii.Token.ColorBf
+                "af", Ascii.Token.ColorAf
+
+                "i", Ascii.Token.Intensity
+                "_", Ascii.Token.Skip
+
+                "nx", Ascii.Token.NormalX
+                "ny", Ascii.Token.NormalY
+                "nz", Ascii.Token.NormalZ
+                
+            ]
+            
+        let private token = Regex @"^(nx|ny|nz|px|py|pz|rf|gf|bf|af|x|y|z|r|g|b|a|i|_)[ \t]*"
+
+        let private usage =
+            "[Ascii] valid tokens: nx|ny|nz|px|py|pz|rf|gf|bf|af|x|y|z|r|g|b|a|i|_"
+
+
+        let tryParseTokens (str : string) =
+            let str = str.Trim()
+            let rec parseTokens (start : int) (str : string) =
+                if start >= str.Length then
+                    Some []
+                else
+                    let m = token.Match(str, start, str.Length - start)
+                    if m.Success then
+                        let t = tokens m.Groups.[1].Value
+                        match parseTokens (m.Index + m.Length) str with
+                        | Some rest -> 
+                            Some (t :: rest)
+                        | None ->
+                            None
+                    else
+                        None
+
+            match parseTokens 0 str with
+            | Some t -> List.toArray t |> Some
+            | None -> None
+
+        let parseTokens (str : string) =
+            match tryParseTokens str with
+            | Some t -> t
+            | None ->
+                failwith usage
+        
+    /// imports a file into the given store (guessing the format by extension)
+    let import (sourceName : string) (file : string) (store : string) (uniforms : list<string * IMod>) =
+        let key = System.IO.Path.GetFileNameWithoutExtension(file).ToLower()
+        importAux (fun file cfg -> PointCloud.Import(file, cfg)) sourceName file key store uniforms
+
+    /// imports an ASCII file into the given store
+    /// valid tokens: nx|ny|nz|px|py|pz|rf|gf|bf|af|x|y|z|r|g|b|a|i|_
+    let importAscii (sourceName : string) (fmt : string) (file : string) (store : string) (uniforms : list<string * IMod>) =
+        let fmt = Parser.parseTokens fmt
+        let key = System.IO.Path.GetFileNameWithoutExtension(file).ToLower()
+        let import (file : string) (cfg : ImportConfig) =
+            let chunks = Ascii.Chunks(file, fmt, cfg)
+            PointCloud.Chunks(chunks, cfg)
+
+        importAux import sourceName file key store uniforms
+        
+    /// loads the specified key from the store
+    let load (sourceName : string) (key : string) (store : string) (uniforms : list<string * IMod>) =
+        let import (file : string) (cfg : ImportConfig) =
+            failwithf "key not found: %A" key
+
+        importAux import sourceName key key store uniforms
+
+
+    let normalizeTo (box : Box3d) (instance : LodTreeInstance) =
         let tree = instance.root
-        let uniforms = instance.uniforms
 
         let bounds = tree.BoundingBox
-        let scale = maxSize / bounds.Size.NormMax
+        let scale = (box.Size / bounds.Size).NormMin
         let t = 
-            Trafo3d.Translation(-bounds.Center) * 
+            Trafo3d.Translation(box.Center - bounds.Center) * 
             Trafo3d.Scale scale
 
-        let uniforms =
-            match MapExt.tryFind "Scales" uniforms with
-            | Some (:? IMod<float> as d) ->
-                let dnew = d |> Mod.map (fun d -> d * scale) 
-                MapExt.add "Scales" (dnew :> IMod) uniforms
-            | _ ->
-                MapExt.add "Scales" (Mod.constant scale :> IMod) uniforms
-
-        {
-            root = tree
-            uniforms = MapExt.add "ModelTrafo" (Mod.constant t :> IMod) uniforms
-        }
-        
-    let translate (shift : V3d) (instance : LodTreeInstance) =
-        let tree = instance.root
         let uniforms = instance.uniforms
-
-        let t = Trafo3d.Translation(shift)
+        let uniforms = MapExt.add "Scales" (Mod.constant scale :> IMod) uniforms
+        let uniforms = MapExt.add "ModelTrafo" (Mod.constant t :> IMod) uniforms
 
         {
             root = tree
-            uniforms = MapExt.add "ModelTrafo" (Mod.constant t :> IMod) uniforms
+            uniforms = uniforms
         }
 
+    let normalize (maxSize : float) (instance : LodTreeInstance) =
+        normalizeTo (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * maxSize)) instance
+    
     let trafo (t : IMod<Trafo3d>) (instance : LodTreeInstance) =
         let uniforms = instance.uniforms
+
+        let inline getScale (m : M44d) =
+            let sx = m * V4d.IOOO |> Vec.length
+            let sy = m * V4d.OIOO |> Vec.length
+            let sz = m * V4d.OOIO |> Vec.length
+            (sx + sy + sz) / 3.0
 
         let uniforms =
             match MapExt.tryFind "ModelTrafo" uniforms with
@@ -1450,12 +1521,6 @@ module StoreTree =
                 MapExt.add "ModelTrafo" (n :> IMod) uniforms
             | _ ->
                 uniforms
-
-        let inline getScale (m : M44d) =
-            let sx = m * V4d.IOOO |> Vec.length
-            let sy = m * V4d.OIOO |> Vec.length
-            let sz = m * V4d.OOIO |> Vec.length
-            (sx + sy + sz) / 3.0
 
         let uniforms =
             match MapExt.tryFind "Scales" uniforms with
@@ -1468,6 +1533,24 @@ module StoreTree =
                 MapExt.add "Scales" (sNew :> IMod) uniforms
                 
         { instance with uniforms = uniforms }
+        
+    let translate (shift : V3d) (instance : LodTreeInstance) =
+        trafo (Mod.constant (Trafo3d.Translation(shift))) instance
+        
+    let scale (scale : float) (instance : LodTreeInstance) =
+        trafo (Mod.constant (Trafo3d.Scale(scale))) instance
+        
+    let transform (t : Trafo3d) (instance : LodTreeInstance) =
+        trafo (Mod.constant t) instance
+
+[<System.Flags>]
+type PointVisualization =
+    | None          = 0x000000
+    | Color         = 0x000001
+    | Normals       = 0x000002
+    | White         = 0x000004
+    | Lighting      = 0x000100
+    | OverlayLod    = 0x001000
 
 [<ReflectedDefinition>]
 module Shader =
@@ -1534,6 +1617,7 @@ module Shader =
 
 
     type UniformScope with
+        member x.PointVisualization : PointVisualization = x?PointVisualization
         member x.Overlay : V4d[] = x?StorageBuffer?Overlay
         member x.ModelTrafos : M44d[] = x?StorageBuffer?ModelTrafos
         member x.ModelViewTrafos : M44d[] = x?StorageBuffer?ModelViewTrafos
@@ -1569,18 +1653,97 @@ module Shader =
             [<Semantic("MaxTreeDepth")>] treeDepth : int
         }
 
+
+    let flipNormal (n : V3d) =
+        let n = Vec.normalize n
+
+
+        //let a = Vec.dot V3d.IOO n |> abs
+        //let b = Vec.dot V3d.OIO n |> abs
+        //let c = Vec.dot V3d.OOI n |> abs
+
+        0.5 * (n + V3d.III)
+
+        //let mutable n = n
+        //let x = n.X
+        //let y = n.Y
+        //let z = n.Z
+
+
+        //let a = abs (atan2 y x)
+        //let b = abs (atan2 z x)
+        //let c = abs (atan2 z y)
+
+        //let a = min a (Constant.Pi - a) / Constant.PiHalf |> clamp 0.0 1.0
+        //let b = min b (Constant.Pi - b) / Constant.PiHalf |> clamp 0.0 1.0
+        //let c = min c (Constant.Pi - c) / Constant.PiHalf |> clamp 0.0 1.0
+
+        //let a = sqrt (1.0 - a*a)
+        //let b = sqrt (1.0 - b*b)
+        //let c = sqrt (1.0 - c*c)
+
+
+        //let a = a + Constant.Pi
+        //let b = b + Constant.Pi
+        //let c = c + Constant.Pi
+        
+
+
+
+        
+
+        //V3d(a,b,c)
+        //if x > y then
+        //    if z > x then
+        //        n <- n / n.Z
+        //    else
+        //        n <- n / n.X
+        //else
+        //    if z > y then 
+        //        n <- n / n.Z
+        //    else
+        //        n <- n / n.Y
+
+        //0.5 * (n + V3d.III)
+
+
+        //let n = Vec.normalize n
+        //let theta = asin n.Z
+        //let phi = atan (abs (n.Y / n.X))
+        
+        //let theta =
+        //    theta + Constant.PiHalf
+        //V3d(phi / Constant.PiHalf,theta / Constant.Pi, 1.0)
+        //if x > y then
+        //    if z > x then
+        //        if n.Z < 0.0 then -n
+        //        else n
+        //    else
+        //        if n.X < 0.0 then -n
+        //        else n
+        //else
+        //    if z > y then 
+        //        if n.Z < 0.0 then -n
+        //        else n
+        //    else
+        //        if n.Y < 0.0 then -n
+        //        else n
+
+
+
     let lodPointSize (v : PointVertex) =
         vertex { 
             let mv = uniform.ModelViewTrafos.[v.id]
-            let dist = v.dist * uniform.Scales.[v.id]
+            let scale = uniform.Scales.[v.id]
+            let dist = v.dist * scale
             let ovp = mv * v.pos
 
             let vp = ovp + V4d(0.0, 0.0, 0.5*dist, 0.0)
             let ppz = uniform.ProjTrafo * ovp
             let pp1 = uniform.ProjTrafo * (vp - V4d(0.5 * dist, 0.0, 0.0, 0.0))
             let pp2 = uniform.ProjTrafo * (vp + V4d(0.5 * dist, 0.0, 0.0, 0.0))
-            let pp3 = uniform.ProjTrafo * (vp - V4d(0.0, 0.5 * dist, 0.0, 0.0))
-            let pp4 = uniform.ProjTrafo * (vp + V4d(0.0, 0.5 * dist, 0.0, 0.0))
+            //let pp3 = uniform.ProjTrafo * (vp - V4d(0.0, 0.5 * dist, 0.0, 0.0))
+            //let pp4 = uniform.ProjTrafo * (vp + V4d(0.0, 0.5 * dist, 0.0, 0.0))
 
             let pp = uniform.ProjTrafo * vp
             
@@ -1588,17 +1751,15 @@ module Shader =
             let pp0 = pp.XYZ / pp.W
             let d1 = pp1.XYZ / pp1.W - pp0 |> Vec.length
             let d2 = pp2.XYZ / pp2.W - pp0 |> Vec.length
-            let d3 = pp3.XYZ / pp3.W - pp0 |> Vec.length
-            let d4 = pp4.XYZ / pp4.W - pp0 |> Vec.length
+            //let d3 = pp3.XYZ / pp3.W - pp0 |> Vec.length
+            //let d4 = pp4.XYZ / pp4.W - pp0 |> Vec.length
 
-            let ndcDist = 0.25 * (d1 + d2 + d3 + d4)
+            let ndcDist = 0.5 * (d1 + d2) //0.25 * (d1 + d2 + d3 + d4)
             let depthRange = abs (ppz.Z - pp0.Z)
 
             let pixelDist = ndcDist * float uniform.ViewportSize.X
-
-            let s = mv * V4d(1.0, 0.0, 0.0, 0.0) |> Vec.xyz |> Vec.length
-
-            let n = (mv * V4d(v.n, 0.0)) / s |> Vec.xyz
+            
+            let n = (mv * V4d(v.n, 0.0)) / scale |> Vec.xyz
             
             let pixelDist = 
                 if pp.Z < -pp.W then -1.0
@@ -1608,7 +1769,25 @@ module Shader =
             //let h = heat (float v.treeDepth / 6.0)
             //let o = uniform.Overlay.[v.id]
             //let col = o.W * h.XYZ + (1.0 - o.W) * v.col.XYZ
-            let col = v.col.XYZ
+            //let col = v.col.XYZ
+
+
+            let col =
+                if uniform.PointVisualization &&& PointVisualization.Color <> PointVisualization.None then
+                    v.col.XYZ
+                elif uniform.PointVisualization &&& PointVisualization.Normals <> PointVisualization.None then
+                    flipNormal v.n
+                else
+                    V3d.III
+
+            let o = uniform.Overlay.[v.id]
+            let h = heat (float v.treeDepth / 6.0)
+            let col =
+                if uniform.PointVisualization &&& PointVisualization.OverlayLod <> PointVisualization.None then
+                    o.W * h.XYZ + (1.0 - o.W) * v.col.XYZ
+                else
+                    col
+
 
             //let pixelDist = 
             //    if pixelDist > 30.0 then -1.0
@@ -1642,27 +1821,30 @@ module Shader =
 
     let cameraLight (v : PointVertex) =
         fragment {
-            let lvn = Vec.length v.n
-            let vn = v.n / lvn
-            let vd = Vec.normalize v.vp 
+            let mutable color = v.col.XYZ
 
-            let c = v.c * V2d(2.0, 2.0) + V2d(-1.0, -1.0)
-            let f = Vec.dot c c
-            let z = sqrt (1.0 - f)
-            let sn = V3d(c.X, c.Y, -z)
+            if uniform.PointVisualization &&& PointVisualization.Lighting <> PointVisualization.None then
+                let lvn = Vec.length v.n
+                let vn = v.n / lvn
+                let vd = Vec.normalize v.vp 
+
+                let c = v.c * V2d(2.0, 2.0) + V2d(-1.0, -1.0)
+                let f = Vec.dot c c
+                let z = sqrt (1.0 - f)
+                let sn = V3d(c.X, c.Y, -z)
 
 
-            let dSphere = Vec.dot sn vd |> abs
-            let dPlane = Vec.dot vn vd |> abs
+                let dSphere = Vec.dot sn vd |> abs
+                let dPlane = Vec.dot vn vd |> abs
 
-            let t = lvn
-            let pp : float = uniform?Planeness
-            let t = 1.0 - (1.0 - t) ** pp
-            let color = heat t
+                let t = lvn
+                let pp : float = uniform?Planeness
+                let t = 1.0 - (1.0 - t) ** pp
+ 
+                let diffuse = (1.0 - t) * dSphere + t * dPlane
+                color <- color * diffuse
 
-            let diffuse = (1.0 - t) * dSphere + t * dPlane
-
-            return V4d(v.col.XYZ * diffuse, v.col.W)
+            return V4d(color, v.col.W)
         }
 
 
@@ -1685,9 +1867,44 @@ let main argv =
     //KdTreeTest.run()
     //System.Environment.Exit 0
 
+    let iter = 100
+    let n = 1 <<< 20
+    let i = System.IO.DirectoryInfo @"C:\Users\Schorsch\Development\WorkDirectory\blubb"
+    let ids = Array.init n (fun i -> "entry" + string i)
+
+    //if i.Exists then i.Delete(true)
+    //let store = new Uncodium.SimpleStore.SimpleDiskStore(i.FullName)
+    //let data = Array.init 256 byte
+    //for id in ids do store.Add(id, data, fun () -> data)
+    //store.Flush()
+    //store.Dispose()
+    
+    //let store = new Uncodium.SimpleStore.SimpleDiskStore(i.FullName)
+
+    //Log.line "start"
+    //let rids = ids.RandomOrder() |> Seq.toArray
+    //let sw = System.Diagnostics.Stopwatch.StartNew()
+    //for id in rids do store.Get(id) |> ignore
+    ////for i in 1 .. iter do
+    ////    for id in ids do store.Get(id) |> ignore
+    //sw.Stop()
+    //Log.line "took: %A" (sw.MicroTime / n)
+    //store.Dispose()
+    //System.Environment.Exit 0
+
     Ag.initialize()
     Aardvark.Init()
-    
+   
+   
+    //Log.startTimed "asdasdasd"
+    //StoreTree.gc 
+    //    @"C:\Users\Schorsch\Development\WorkDirectory\KaunertalNormals2"
+    //    "kaunertal"
+    //    @"C:\Users\Schorsch\Development\WorkDirectory\KaunertalNormals4"
+
+    //Log.stop()
+    //System.Environment.Exit 0
+
     let path, key =
         if argv.Length < 2 then
             @"C:\Users\Schorsch\Development\WorkDirectory\jb", @"C:\Users\Schorsch\Development\WorkDirectory\Laserscan-P20_Beiglboeck-2015.pts"
@@ -1728,18 +1945,17 @@ let main argv =
     //        @"C:\Users\Schorsch\Development\WorkDirectory\BLK"
     //        [
     //            "Overlay", c0WithAlpha :> IMod
-    //            "ModelTrafo", trafo2 :> IMod
     //            "TreeActive", active0 :> IMod
     //        ]
             
     //let kaunertal =
     //    StoreTree.importAscii
     //        "ssd"
+    //        "xyzrgb"
     //        @"C:\Users\Schorsch\Development\WorkDirectory\Kaunertal.txt"
-    //        @"\\euclid\InOut\haaser\KaunertalNormals"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\KaunertalNormals3"
     //        [
     //            "Overlay", c1WithAlpha :> IMod
-    //            "ModelTrafo", trafo :> IMod
     //            "TreeActive", active1 :> IMod
     //        ]
     //let kaunertal =
@@ -1749,52 +1965,42 @@ let main argv =
     //        path
     //        [
     //            "Overlay", c1WithAlpha :> IMod
-    //            "ModelTrafo", trafo :> IMod
     //            "TreeActive", active1 :> IMod
     //        ]
                
-    let jb1 =
-        StoreTree.import
-            "ssd2"
-            @"C:\Users\Schorsch\Development\WorkDirectory\Laserscan-P20_Beiglboeck-2015.pts"
-            @"C:\Users\Schorsch\Development\WorkDirectory\jb"
-            [
-                "Overlay", c0WithAlpha :> IMod
-                "ModelTrafo", trafo2 :> IMod
-                "TreeActive", active0 :> IMod
-            ]
+    //let jb1 =
+    //    StoreTree.import
+    //        "ssd2"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\Laserscan-P20_Beiglboeck-2015.pts"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\jb"
+    //        [
+    //            "Overlay", c0WithAlpha :> IMod
+    //            "TreeActive", active0 :> IMod
+    //        ]
                
                          
-    let jb2 =
-        StoreTree.import
-            "ssd1"
-            @"C:\Users\Schorsch\Development\WorkDirectory\Laserscan-P20_Beiglboeck-2015.pts"
-            @"C:\Users\Schorsch\Development\WorkDirectory\jb2"
-            [
-                "Overlay", c1WithAlpha :> IMod
-                "ModelTrafo", trafo :> IMod
-                "TreeActive", active1 :> IMod
-            ]
+    //let jb2 =
+    //    StoreTree.import
+    //        "ssd1"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\Laserscan-P20_Beiglboeck-2015.pts"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\jb2"
+    //        [
+    //            "Overlay", c1WithAlpha :> IMod
+    //            "TreeActive", active1 :> IMod
+    //        ]
                       
     //let supertoll =
     //    StoreTree.importAscii
     //        "ssd"
-    //        @"C:\Users\Schorsch\Development\WorkDirectory\supertoll.txt"
-    //        @"C:\Users\Schorsch\Development\WorkDirectory\supertoll"
+    //        "xyzgb"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\Kaunertal.txt"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\kaun"
     //        [
     //            "Overlay", c0WithAlpha :> IMod
-    //            "ModelTrafo", trafo :> IMod
     //            "TreeActive", active1 :> IMod
     //        ]
 
-    //Log.startTimed "asdasdasd"
-    //StoreTree.gc 
-    //    @"C:\Users\Schorsch\Development\WorkDirectory\KaunertalNormals"
-    //    "kaunertal"
-    //    @"\\euclid\InOut\haaser\KaunertalNormals"
 
-    //Log.stop()
-    //System.Environment.Exit 0
 
     //let technologiezentrum =
     //    StoreTree.import
@@ -1803,7 +2009,6 @@ let main argv =
     //        @"C:\Users\Schorsch\Development\WorkDirectory\Technologiezentrum2"
     //        [
     //            "Overlay", c0WithAlpha :> IMod
-    //            "ModelTrafo", trafo3 :> IMod
     //            "TreeActive", active1 :> IMod
     //        ]
             
@@ -1827,7 +2032,6 @@ let main argv =
     //        @"\\heap.vrvis.lan\haaser\koeln\cells\3277_5518_0_10\pointcloud\"
     //        [
     //            "Overlay", c0WithAlpha :> IMod
-    //            "ModelTrafo", trafo2 :> IMod
     //            "TreeActive", active0 :> IMod
     //        ]
         
@@ -1839,7 +2043,6 @@ let main argv =
     //        @"C:\Users\Schorsch\Development\WorkDirectory\3278_5514_0_10\pointcloud\"
     //        [
     //            "Overlay", c0WithAlpha :> IMod
-    //            "ModelTrafo", trafo :> IMod
     //            "TreeActive", active0 :> IMod
     //        ]
 
@@ -1850,7 +2053,6 @@ let main argv =
     //        @"C:\Users\Schorsch\Development\WorkDirectory\jb"
     //        [
     //            "Overlay", c0WithAlpha :> IMod
-    //            "ModelTrafo", trafo :> IMod
     //            "TreeActive", active0 :> IMod
     //        ]
     //let rec traverse (n : ILodTreeNode) =
@@ -1861,75 +2063,72 @@ let main argv =
 
 
 
-    //let allKoeln =
-    //    let rx = System.Text.RegularExpressions.Regex @"^(?<x>[0-9]+)_(?<y>[0-9]+)_(?<z>[0-9]+)_(?<w>[0-9]+)$"
+    let allKoeln =
+        let rx = System.Text.RegularExpressions.Regex @"^(?<x>[0-9]+)_(?<y>[0-9]+)_(?<z>[0-9]+)_(?<w>[0-9]+)$"
         
-    //    let stores = 
-    //        System.IO.Directory.GetDirectories @"\\heap.vrvis.lan\haaser\koeln\cells"
-    //        |> Seq.skip 100
-    //        |> Seq.atMost 20
-    //        |> Seq.choose (fun path ->
-    //            let name = System.IO.Path.GetFileNameWithoutExtension path
-    //            let m = rx.Match name
-    //            if m.Success then
-    //                let x = m.Groups.["x"].Value |> int64
-    //                let y = m.Groups.["y"].Value |> int64
-    //                let z = m.Groups.["z"].Value |> int64
-    //                let exp = m.Groups.["w"].Value |> int
-    //                Log.warn "%d_%d_%d_%d" x y z exp
-    //                let cell = Cell(x,y,z,exp)
-    //                Some(cell, name, System.IO.Path.Combine(path, "pointcloud"))
-    //            else
-    //                None
-    //        )
-    //        |> Seq.toList
+        let stores = 
+            System.IO.Directory.GetDirectories @"\\heap.vrvis.lan\haaser\koeln\cells"
+            |> Seq.skip 100
+            |> Seq.atMost 20
+            |> Seq.choose (fun path ->
+                let name = System.IO.Path.GetFileNameWithoutExtension path
+                let m = rx.Match name
+                if m.Success then
+                    let x = m.Groups.["x"].Value |> int64
+                    let y = m.Groups.["y"].Value |> int64
+                    let z = m.Groups.["z"].Value |> int64
+                    let exp = m.Groups.["w"].Value |> int
+                    Log.warn "%d_%d_%d_%d" x y z exp
+                    let cell = Cell(x,y,z,exp)
+                    Some(cell, name, System.IO.Path.Combine(path, "pointcloud"))
+                else
+                    None
+            )
+            |> Seq.toList
 
-    //    let bounds = stores |> Seq.map (fun (v,_,_) -> v.BoundingBox) |> Box3d
+        let bounds = stores |> Seq.map (fun (v,_,_) -> v.BoundingBox) |> Box3d
 
-    //    let rand = RandomSystem()
-    //    stores |> List.choose (fun (cell,name,path) ->
-    //        let color = rand.UniformC3f().ToV4d()
-    //        let col = Mod.map (fun (a : float) -> V4d(color.XYZ, a)) overlayAlpha
+        let rand = RandomSystem()
+        stores |> List.choose (fun (cell,name,path) ->
+            let color = rand.UniformC3f().ToV4d()
+            let col = Mod.map (fun (a : float) -> V4d(color.XYZ, a)) overlayAlpha
 
-    //        try
-    //            let tree, uniforms = 
-    //                StoreTree.import
-    //                    "net"
-    //                    name
-    //                    path
-    //                    [
-    //                        "Overlay", col :> IMod
-    //                        //"ModelTrafo", Mod.constant trafo :> IMod
-    //                        "TreeActive", Mod.constant true :> IMod
-    //                    ]
+            try
+                let instance = 
+                    StoreTree.import
+                        "net"
+                        name
+                        path
+                        [
+                            "Overlay", col :> IMod
+                            "TreeActive", Mod.constant true :> IMod
+                        ]
 
-    //            let box = tree.Cell.BoundingBox
+                let box = instance.root.Cell.BoundingBox
 
-    //            Log.warn "box: %A" box.Size
-    //            let trafo = 
-    //                Trafo3d.Scale(100.0) *
-    //                Trafo3d.Translation(box.Center - bounds.Center) *
-    //                Trafo3d.Scale(1000.0 / bounds.Size.NormMax)
-    //                //Trafo3d.Scale(0.05)
-    //                //Trafo3d.Translation(0.0, 0.0, box.Center.Z * 0.05)
+                Log.warn "box: %A" box.Size
+                let trafo = 
+                    Trafo3d.Scale(100.0) *
+                    Trafo3d.Translation(box.Center - bounds.Center) *
+                    Trafo3d.Scale(1000.0 / bounds.Size.NormMax)
+                    //Trafo3d.Scale(0.05)
+                    //Trafo3d.Translation(0.0, 0.0, box.Center.Z * 0.05)
                 
-    //            let uniforms = MapExt.add "ModelTrafo" (Mod.constant trafo :> IMod) uniforms
+                let instance = instance |> StoreTree.transform trafo
+                //let uniforms = MapExt.add "ModelTrafo" (Mod.constant trafo :> IMod) uniforms
 
-    //            Some (tree, uniforms)
-    //        with _ ->
-    //            None
-    //    )
+                Some instance
+            with _ ->
+                None
+        )
 
 
     
 
-
-    let center = jb2.root.BoundingBox.Center
-
     let pcs = 
         //ASet.ofList allKoeln
         ASet.ofList [
-            yield jb2 |> StoreTree.normalize 100.0
+            yield! allKoeln //yield koeln |> StoreTree.normalize 1000.0
                     //|> StoreTree.trafo trafo
             //yield StoreTree.normalize 100.0 koelnNet
             //yield StoreTree.normalize 100.0 kaunertal
@@ -2031,11 +2230,14 @@ let main argv =
             do! DefaultSurfaces.vertexColor
         }
     let planeness = Mod.init 1.0
+    let vis = Mod.init (PointVisualization.Lighting ||| PointVisualization.Color)
+
     let sg =
         Sg.LodTreeNode(quality, maxQuality, budget, renderBounds, maxSplits, win.Time, pcs) :> ISg
         |> Sg.uniform "PointSize" pointSize
         |> Sg.uniform "ViewportSize" win.Sizes
         |> Sg.uniform "Planeness" planeness
+        |> Sg.uniform "PointVisualization" vis
         |> Sg.shader {
             //do! Shader.constantColor C4f.White
             do! Shader.lodPointSize
@@ -2046,6 +2248,20 @@ let main argv =
 
     win.Keyboard.DownWithRepeats.Values.Add(fun k ->
         match k with
+        | Keys.V ->
+            let n = 
+                match unbox<PointVisualization> (int vis.Value &&& 0xF) with
+                    | PointVisualization.Color -> PointVisualization.Normals
+                    | PointVisualization.Normals -> PointVisualization.White
+                    | _ -> PointVisualization.Color
+            transact (fun () ->
+                vis.Value <- unbox (int vis.Value &&& 0xFFFFFFF0) ||| n
+            )
+        | Keys.L ->
+            transact (fun () ->
+                vis.Value <- vis.Value ^^^ PointVisualization.Lighting
+            )
+
         | Keys.O -> transact (fun () -> pointSize.Value <- pointSize.Value / 1.3)
         | Keys.P -> transact (fun () -> pointSize.Value <- pointSize.Value * 1.3)
         | Keys.Subtract | Keys.OemMinus -> transact (fun () -> overlayAlpha.Value <- max 0.0 (overlayAlpha.Value - 0.1))
