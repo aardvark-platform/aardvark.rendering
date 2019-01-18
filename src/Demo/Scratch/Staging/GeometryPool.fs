@@ -168,53 +168,35 @@ module ``Pool Tests`` =
 
         let rnd = Random()
 
-        let geometries = CSet.empty
-    
-        let addRandom() = 
-            let pos = V3d( 
-                        rnd.NextDouble() * 10.0 - 5.0, 
-                        rnd.NextDouble() * 10.0 - 5.0,
-                        rnd.NextDouble() * 10.0 - 5.0 )
-            let trafo = Trafo3d.Scale 0.1 * Trafo3d.Translation pos
-            let ig = Primitives.unitBox
-            //let ig = Primitives.unitCone (rnd.Next(100, 1000))
-            //let ig = ig.Clone()
-            geometries.Add (ig, (Mod.init trafo)) |> ignore // NOTE: not using ModRef<Trafo3d> does not result in GC Handle leak
+        let geometrySet = Array.init 100 (fun i -> 
+                let pos = V3d( 
+                            rnd.NextDouble() * 10.0 - 5.0, 
+                            rnd.NextDouble() * 10.0 - 5.0,
+                            rnd.NextDouble() * 10.0 - 5.0 )
+                let trafo = Trafo3d.Scale 0.1 * Trafo3d.Translation pos
+                let ig = Primitives.unitBox
+                let ig = ig.Clone()
+                let trafo = Mod.init(trafo)
+                (ig, trafo)
+                //let trafoRender = Mod.map (fun (t : Trafo3d) -> M44f.op_Explicit(t.Forward)) trafo 
+                //(ig, trafo, trafoRender)
+                //let nTrafoRender = Mod.map (fun (t : Trafo3d) -> M33f.op_Explicit(t.Forward)) trafo 
+                //(ig, trafo, trafoRender, nTrafoRender)
+            )
 
-        for i in 0 .. 10 do
-            addRandom()
-
-        let initial = geometries.Count
-
-        App.Keyboard.DownWithRepeats.Values.Add(fun k ->
+        let geometries = CSet.ofArray geometrySet
                     
-            if k = Keys.R then
-                transact (fun () ->
-                    geometries.Clear()
-                )
+        System.Windows.Forms.Application.Idle.Add(fun evArgs -> 
+            Report.Line "UPDATE"
 
-            if k = Keys.Z then
-                transact (fun () ->
-                    
-                    Report.Line("adding new random stuff: Seed={0}", rnd.Next())
-             
-                    for i in 0 .. 10 do
-                        addRandom()
-                )
+            transact(fun () -> 
 
-            if k = Keys.T then
-                transact(fun () -> 
+                let subset = geometrySet.RandomOrder().TakeToArray(geometrySet.Length - 1)
+                geometries.Clear()
+                geometries.AddRange(subset) |> ignore
 
-                    if geometries.Count < 10 then
-                        addRandom()
-                    else if geometries.Count > 0 then
-                        let rem = geometries |> Seq.skip (rnd.Next(geometries.Count - 1)) |> Seq.head
-                        geometries.Remove(rem) |> ignore
                     )
-
-            Report.Line("new geometry count: {0}", geometries.Count)
-                
-        )
+                )
 
         let addToPool(ag : AdaptiveGeometry) = 
             
@@ -224,9 +206,10 @@ module ``Pool Tests`` =
             mdc
 
         let geometriesLazy = 
-            geometries |> ASet.map (fun (ig, trafo) -> ig
-                                                        |> AdaptiveGeometry.ofIndexedGeometry [ (Sem.Hugo, (trafo :> IMod)) ]
-                                                        |> addToPool)
+            geometries |> ASet.map (fun (g, t) -> 
+                                            //g |> AdaptiveGeometry.ofIndexedGeometry [ (Sem.Hugo, (tr :> IMod)); (Sem.HugoN, (ntr :> IMod)) ])
+                                            g |> AdaptiveGeometry.ofIndexedGeometry [ (Sem.Hugo, (t :> IMod)) ])
+                       |> ASet.mapUse (fun ag -> addToPool ag)
 
         // initial evaluation
         ASet.toArray geometriesLazy |> ignore
