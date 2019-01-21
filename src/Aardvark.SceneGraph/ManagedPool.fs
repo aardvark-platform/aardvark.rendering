@@ -103,6 +103,8 @@ module private ManagedBufferImplementation =
                         let remove w =
                             x.Dirty.Remove w |> ignore
                             bufferWriters.Remove view |> ignore
+                            let mutable foo = 0
+                            view.Buffer.Outputs.Consume(&foo) |> ignore
 
                         let data = BufferView.download 0 (int count) view
                         let real : IMod<'a[]> = data |> PrimitiveValueConverter.convertArray view.ElementType
@@ -139,6 +141,8 @@ module private ManagedBufferImplementation =
                         let remove w =
                             x.Dirty.Remove w |> ignore
                             uniformWriters.Remove data |> ignore
+                            let mutable foo = 0
+                            data.Outputs.Consume(&foo) |> ignore
 
                         let real : IMod<'a> = data |> PrimitiveValueConverter.convertValue
                         let w = new ManagedBufferSingleWriter<'a>(remove, real, store)
@@ -299,6 +303,9 @@ module private ManagedBufferImplementation =
         static let asize = sizeof<'a> |> nativeint
 
         override x.Release() = ()
+            // should not be necessary as this is typically the PrimitiveValueConverter
+            //let mutable foo = 0
+            //data.Outputs.Consume(&foo) |> ignore
 
         override x.Write(token, target) =
             let v = data.GetValue(token)
@@ -313,6 +320,9 @@ module private ManagedBufferImplementation =
         static let asize = sizeof<'a> |> nativeint
             
         override x.Release() = ()
+            // should not be necessary as this is typically the PrimitiveValueConverter
+            //let mutable foo = 0
+            //data.Outputs.Consume(&foo) |> ignore
 
         override x.Write(token, target) =
             let v = data.GetValue(token)
