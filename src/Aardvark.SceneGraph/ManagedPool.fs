@@ -100,14 +100,13 @@ module private ManagedBufferImplementation =
                 let writer = 
                     bufferWriters.GetOrCreate(view, fun view ->
                         isNew <- true
+                        let data = BufferView.download 0 (int count) view
+                        let real : IMod<'a[]> = data |> PrimitiveValueConverter.convertArray view.ElementType
                         let remove w =
                             x.Dirty.Remove w |> ignore
                             bufferWriters.Remove view |> ignore
-                            let mutable foo = 0
-                            view.Buffer.Outputs.Consume(&foo) |> ignore
+                            view.Buffer.Outputs.Remove(real) |> ignore // remove converter from Output of data Mod (in case there is no converter remove will do nothing, but Release of ManagedBufferSingleWriter will)
 
-                        let data = BufferView.download 0 (int count) view
-                        let real : IMod<'a[]> = data |> PrimitiveValueConverter.convertArray view.ElementType
                         let w = new ManagedBufferWriter<'a>(remove, real, store)
                         x.Dirty.Add w |> ignore
                         w
@@ -138,13 +137,12 @@ module private ManagedBufferImplementation =
                 let writer =
                     uniformWriters.GetOrCreate(data, fun data ->
                         isNew <- true
+                        let real : IMod<'a> = data |> PrimitiveValueConverter.convertValue
                         let remove w =
                             x.Dirty.Remove w |> ignore
                             uniformWriters.Remove data |> ignore
-                            let mutable foo = 0
-                            data.Outputs.Consume(&foo) |> ignore
+                            data.Outputs.Remove(real) |> ignore // remove converter from Output of data Mod (in case there is no converter remove will do nothing, but Release of ManagedBufferSingleWriter will)
 
-                        let real : IMod<'a> = data |> PrimitiveValueConverter.convertValue
                         let w = new ManagedBufferSingleWriter<'a>(remove, real, store)
                         x.Dirty.Add w |> ignore
                         w
@@ -302,10 +300,10 @@ module private ManagedBufferImplementation =
         inherit ManagedBufferWriter(remove)
         static let asize = sizeof<'a> |> nativeint
 
-        override x.Release() = ()
-            // should not be necessary as this is typically the PrimitiveValueConverter
-            //let mutable foo = 0
-            //data.Outputs.Consume(&foo) |> ignore
+        override x.Release() = 
+            // in case the data Mod is a PrimitiveValueConverter, it would be garbage collected and removal of the output is not essential
+            // in case the data Mod is directly from the application (no converter), removing the Writer from its Output is essential
+            data.Outputs.Remove(x) |> ignore
 
         override x.Write(token, target) =
             let v = data.GetValue(token)
@@ -319,10 +317,10 @@ module private ManagedBufferImplementation =
         inherit ManagedBufferWriter(remove)
         static let asize = sizeof<'a> |> nativeint
             
-        override x.Release() = ()
-            // should not be necessary as this is typically the PrimitiveValueConverter
-            //let mutable foo = 0
-            //data.Outputs.Consume(&foo) |> ignore
+        override x.Release() = 
+            // in case the data Mod is a PrimitiveValueConverter, it would be garbage collected and removal of the output is not essential
+            // in case the data Mod is directly from the application (no converter), removing the Writer from its Output is essential
+            data.Outputs.Remove(x) |> ignore
 
         override x.Write(token, target) =
             let v = data.GetValue(token)
