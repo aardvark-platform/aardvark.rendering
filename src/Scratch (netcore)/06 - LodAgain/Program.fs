@@ -802,12 +802,79 @@ module StoreTree =
     open Aardvark.Data.Points
     open Aardvark.Data.Points.Import
 
+    
+    module private AsciiFormatParser =
+        open System.Text.RegularExpressions
+        open Aardvark.Data.Points.Import
+
+        let private tokens =
+            LookupTable.lookupTable [
+                "x", Ascii.Token.PositionX
+                "y", Ascii.Token.PositionY
+                "z", Ascii.Token.PositionZ
+                "px", Ascii.Token.PositionX
+                "py", Ascii.Token.PositionY
+                "pz", Ascii.Token.PositionZ
+
+                "r", Ascii.Token.ColorR
+                "g", Ascii.Token.ColorG
+                "b", Ascii.Token.ColorB
+                "a", Ascii.Token.ColorA
+                "rf", Ascii.Token.ColorRf
+                "gf", Ascii.Token.ColorGf
+                "bf", Ascii.Token.ColorBf
+                "af", Ascii.Token.ColorAf
+
+                "i", Ascii.Token.Intensity
+                "_", Ascii.Token.Skip
+
+                "nx", Ascii.Token.NormalX
+                "ny", Ascii.Token.NormalY
+                "nz", Ascii.Token.NormalZ
+                
+            ]
+            
+        let private token = Regex @"^(nx|ny|nz|px|py|pz|rf|gf|bf|af|x|y|z|r|g|b|a|i|_)[ \t]*"
+
+        let private usage =
+            "[Ascii] valid tokens: nx|ny|nz|px|py|pz|rf|gf|bf|af|x|y|z|r|g|b|a|i|_"
+
+
+        let tryParseTokens (str : string) =
+            let str = str.Trim()
+            let rec parseTokens (start : int) (str : string) =
+                if start >= str.Length then
+                    Some []
+                else
+                    let m = token.Match(str, start, str.Length - start)
+                    if m.Success then
+                        let t = tokens m.Groups.[1].Value
+                        match parseTokens (m.Index + m.Length) str with
+                        | Some rest -> 
+                            Some (t :: rest)
+                        | None ->
+                            None
+                    else
+                        None
+
+            match parseTokens 0 str with
+            | Some t -> List.toArray t |> Some
+            | None -> None
+
+        let parseTokens (str : string) =
+            match tryParseTokens str with
+            | Some t -> t
+            | None ->
+                failwith usage
+        
+
+
 
     type PointTreeNode(cache : LruDictionary<string, obj>, source : Symbol, globalTrafo : Similarity3d, root : Option<PointTreeNode>, parent : Option<PointTreeNode>, level : int, self : PointSetNode) as this =
         static let cmp = Func<float,float,int>(compare)
         
         let globalTrafoTrafo = Trafo3d globalTrafo
-        let bounds = self.BoundingBox.Transformed globalTrafoTrafo
+        let bounds = (self :> IPointCloudNode).BoundingBoxExact.Transformed globalTrafoTrafo //self.BoundingBox.Transformed globalTrafoTrafo
         let cellBounds = self.BoundingBox.Transformed globalTrafoTrafo
         let cell = self.Cell
         let isLeaf = self.IsLeaf
@@ -862,8 +929,7 @@ module StoreTree =
                 let mutable vertexSize = 0L
 
                 let original =
-                    if self.HasLodPositions then self.LodPositions.Value
-                    elif self.HasPositions then self.Positions.Value
+                    if self.HasPositions then self.Positions.Value
                     else [| V3f(System.Single.NaN, System.Single.NaN, System.Single.NaN) |]
                     
                 let globalTrafo1 = globalTrafo * Euclidean3d(Rot3d.Identity, center)
@@ -875,8 +941,7 @@ module StoreTree =
 
                 if MapExt.containsKey "Colors" ips then
                     let colors = 
-                        if self.HasLodColors then self.LodColors.Value
-                        elif self.HasColors then self.Colors.Value
+                        if self.HasColors then self.Colors.Value
                         else Array.create original.Length C4b.White
                     attributes.[DefaultSemantic.Colors] <- colors
                     vertexSize <- vertexSize + 4L
@@ -884,7 +949,6 @@ module StoreTree =
                 if MapExt.containsKey "Normals" ips then
                     let normals = 
                         if self.HasNormals then self.Normals.Value
-                        elif self.HasLodNormals then self.LodNormals.Value
                         else Array.create original.Length V3f.OOO
 
                     let normals =
@@ -898,16 +962,10 @@ module StoreTree =
 
                 
                 if MapExt.containsKey "AvgPointDistance" ips then
-                    let dist = 0.0
-                        //if self.HasKdTree then 
-                        //    let tree = self.KdTree.Value
-                        //    getAverageDistance original original tree
-
-                        //elif self.HasLodKdTree then 
-                        //    let tree = self.LodKdTree.Value
-                        //    getAverageDistance original original tree
-                        //else 
-                        //    bounds.Size.NormMax / 40.0
+                    let dist = 
+                        match self.TryGetCellAttribute<float32>(CellAttributes.AveragePointDistance.Id) with
+                        | (true, dist) -> float dist
+                        | _ -> 0.0
 
                     let avgDist = 
                         //bounds.Size.NormMax / 40.0
@@ -920,11 +978,19 @@ module StoreTree =
                     uniforms <- MapExt.add "TreeLevel" arr uniforms
                     
                 if MapExt.containsKey "MaxTreeDepth" ips then    
-                    let arr = [| 1 |] :> System.Array
+                    let depth = 
+                        match self.TryGetCellAttribute<int>(CellAttributes.TreeMaxDepth.Id) with
+                            | (true, dist) -> dist
+                            | _ -> 1
+                    let arr = [| depth |] :> System.Array
                     uniforms <- MapExt.add "MaxTreeDepth" arr uniforms
                     
-                if MapExt.containsKey "MinTreeDepth" ips then    
-                    let arr = [| 1 |] :> System.Array
+                if MapExt.containsKey "MinTreeDepth" ips then     
+                    let depth = 
+                        match self.TryGetCellAttribute<int>(CellAttributes.TreeMinDepth.Id) with
+                            | (true, dist) -> dist
+                            | _ -> 1
+                    let arr = [| depth |] :> System.Array
                     uniforms <- MapExt.add "MinTreeDepth" arr uniforms
 
                 let geometry =
@@ -1077,7 +1143,10 @@ module StoreTree =
             member x.ShouldCollapse(q,v,p) = x.ShouldCollapse(q,v,p)
             member x.SplitQuality(v,p) = x.SplitQuality(v,p)
             member x.CollapseQuality(v,p) = x.CollapseQuality(v,p)
-            member x.DataSize = if self.IsLeaf then int self.PointCount else 8192
+            member x.DataSize = 
+                match self.TryGetCellAttribute<int64>(CellAttributes.PointCountCell.Id) with
+                    | (true, dist) -> int dist
+                    | _ -> if self.IsLeaf then int self.PointCountTree else 8192
             member x.TotalDataSize = int self.PointCountTree
             member x.GetData(ct, ips) = x.GetData(ct, ips)
             member x.BoundingBox = bounds
@@ -1239,16 +1308,13 @@ module StoreTree =
 
 
 
-    //let private cache = LruDictionary(1L <<< 30)
-
-
     let gc (input : string) (key : string) (output : string) =
         do Aardvark.Data.Points.Import.Pts.PtsFormat |> ignore
         do Aardvark.Data.Points.Import.E57.E57Format |> ignore
         
         use output = PointCloud.OpenStore(output, LruDictionary(1L <<< 30))
         use input = PointCloud.OpenStore(input, LruDictionary(1L <<< 30))
-        let set = input.GetPointSet(key)   
+        let set = input.GetPointSet(key, IdentityResolver.Default)   
        
         let storeStructure (node : PointSetNode) =
             let queue = Queue<PointSetNode>()
@@ -1279,21 +1345,13 @@ module StoreTree =
             while queue.Count > 0 do
                 let n = queue.Dequeue()
                 
-                if n.IsLeaf then
-                    if n.HasPositions then output.Add(n.Positions.Id, n.Positions.Value)
-                    if n.HasNormals then output.Add(n.Normals.Id, n.Normals.Value)
-                    if n.HasColors then output.Add(n.Colors.Id, n.Colors.Value)
-                    if n.HasKdTree then output.Add(n.KdTree.Id, n.KdTree.Value.Data)
-                    if n.HasIntensities then output.Add(n.Intensities.Id, n.Intensities.Value)
-                    if n.HasClassifications then output.Add(n.Classifications.Id, n.Classifications.Value)
-                else 
-                    if n.HasLodPositions then output.Add(n.LodPositions.Id, n.LodPositions.Value)
-                    if n.HasLodNormals then output.Add(n.LodNormals.Id, n.LodNormals.Value)
-                    if n.HasLodColors then output.Add(n.LodColors.Id, n.LodColors.Value)
-                    if n.HasLodKdTree then output.Add(n.LodKdTree.Id, n.LodKdTree.Value.Data)
-                    if n.HasLodIntensities then output.Add(n.LodIntensities.Id, n.LodIntensities.Value)
-                    if n.HasLodClassifications then output.Add(n.LodClassifications.Id, n.LodClassifications.Value)
-                
+                if n.HasPositions then output.Add(n.Positions.Id, n.Positions.Value)
+                if n.HasNormals then output.Add(n.Normals.Id, n.Normals.Value)
+                if n.HasColors then output.Add(n.Colors.Id, n.Colors.Value)
+                if n.HasKdTree then output.Add(n.KdTree.Id, n.KdTree.Value.Data)
+                if n.HasIntensities then output.Add(n.Intensities.Id, n.Intensities.Value)
+                if n.HasClassifications then output.Add(n.Classifications.Id, n.Classifications.Value)
+    
                 if i % 1000 = 0 then
                     Log.line "%d datas" i
                     output.Flush()
@@ -1361,22 +1419,24 @@ module StoreTree =
             else
                 key
         
-        let set = store.GetPointSet(key)
+        let set = store.GetPointSet(key, IdentityResolver.Default)
 
         let points = 
             if isNull set then
+                Log.startTimed "import"
                 let config = 
                     Aardvark.Data.Points.ImportConfig.Default
                         .WithStorage(store)
                         .WithKey(key)
                         .WithVerbose(true)
                         .WithMaxChunkPointCount(10000000)
-                        .WithEstimateNormals(Func<_,_>(fun a -> Aardvark.Geometry.Points.Normals.EstimateNormals(Seq.toArray a, 17) :> System.Collections.Generic.IList<V3f>))
+                        //.WithEstimateKdNormals(Func<_,_,_>(fun (t : PointRkdTreeD<_,_>) (a : V3f[]) -> a.EstimateNormals(t, 5)))
         
                 let res = import file config
                 store.Add("Index", System.Text.Encoding.Unicode.GetBytes key)
 
                 store.Flush()
+                Log.stop()
                 res
             else
                 set
@@ -1397,69 +1457,6 @@ module StoreTree =
             uniforms = uniforms
         }
         
-    module private Parser =
-        open System.Text.RegularExpressions
-
-        let private tokens =
-            LookupTable.lookupTable [
-                "x", Ascii.Token.PositionX
-                "y", Ascii.Token.PositionY
-                "z", Ascii.Token.PositionZ
-                "px", Ascii.Token.PositionX
-                "py", Ascii.Token.PositionY
-                "pz", Ascii.Token.PositionZ
-
-                "r", Ascii.Token.ColorR
-                "g", Ascii.Token.ColorG
-                "b", Ascii.Token.ColorB
-                "a", Ascii.Token.ColorA
-                "rf", Ascii.Token.ColorRf
-                "gf", Ascii.Token.ColorGf
-                "bf", Ascii.Token.ColorBf
-                "af", Ascii.Token.ColorAf
-
-                "i", Ascii.Token.Intensity
-                "_", Ascii.Token.Skip
-
-                "nx", Ascii.Token.NormalX
-                "ny", Ascii.Token.NormalY
-                "nz", Ascii.Token.NormalZ
-                
-            ]
-            
-        let private token = Regex @"^(nx|ny|nz|px|py|pz|rf|gf|bf|af|x|y|z|r|g|b|a|i|_)[ \t]*"
-
-        let private usage =
-            "[Ascii] valid tokens: nx|ny|nz|px|py|pz|rf|gf|bf|af|x|y|z|r|g|b|a|i|_"
-
-
-        let tryParseTokens (str : string) =
-            let str = str.Trim()
-            let rec parseTokens (start : int) (str : string) =
-                if start >= str.Length then
-                    Some []
-                else
-                    let m = token.Match(str, start, str.Length - start)
-                    if m.Success then
-                        let t = tokens m.Groups.[1].Value
-                        match parseTokens (m.Index + m.Length) str with
-                        | Some rest -> 
-                            Some (t :: rest)
-                        | None ->
-                            None
-                    else
-                        None
-
-            match parseTokens 0 str with
-            | Some t -> List.toArray t |> Some
-            | None -> None
-
-        let parseTokens (str : string) =
-            match tryParseTokens str with
-            | Some t -> t
-            | None ->
-                failwith usage
-        
     /// imports a file into the given store (guessing the format by extension)
     let import (sourceName : string) (file : string) (store : string) (uniforms : list<string * IMod>) =
         let key = System.IO.Path.GetFileNameWithoutExtension(file).ToLower()
@@ -1468,10 +1465,10 @@ module StoreTree =
     /// imports an ASCII file into the given store
     /// valid tokens: nx|ny|nz|px|py|pz|rf|gf|bf|af|x|y|z|r|g|b|a|i|_
     let importAscii (sourceName : string) (fmt : string) (file : string) (store : string) (uniforms : list<string * IMod>) =
-        let fmt = Parser.parseTokens fmt
+        let fmt = AsciiFormatParser.parseTokens fmt
         let key = System.IO.Path.GetFileNameWithoutExtension(file).ToLower()
         let import (file : string) (cfg : ImportConfig) =
-            let chunks = Ascii.Chunks(file, fmt, cfg)
+            let chunks = Ascii.Chunks(file, fmt, cfg.ParseConfig)
             PointCloud.Chunks(chunks, cfg)
 
         importAux import sourceName file key store uniforms
@@ -1784,7 +1781,7 @@ module Shader =
             let h = heat (float v.treeDepth / 6.0)
             let col =
                 if uniform.PointVisualization &&& PointVisualization.OverlayLod <> PointVisualization.None then
-                    o.W * h.XYZ + (1.0 - o.W) * v.col.XYZ
+                    o.W * h.XYZ + (1.0 - o.W) * col
                 else
                     col
 
@@ -1824,24 +1821,26 @@ module Shader =
             let mutable color = v.col.XYZ
 
             if uniform.PointVisualization &&& PointVisualization.Lighting <> PointVisualization.None then
-                let lvn = Vec.length v.n
+                let lvn = Vec.length v.n |> clamp 0.0 1.0
                 let vn = v.n / lvn
                 let vd = Vec.normalize v.vp 
 
                 let c = v.c * V2d(2.0, 2.0) + V2d(-1.0, -1.0)
                 let f = Vec.dot c c
-                let z = sqrt (1.0 - f)
+                let z = sqrt (max 0.0 (1.0 - f))
                 let sn = V3d(c.X, c.Y, -z)
-
-
+                
                 let dSphere = Vec.dot sn vd |> abs
-                let dPlane = Vec.dot vn vd |> abs
+                //let dPlane = Vec.dot vn vd |> abs
 
                 let t = lvn
                 let pp : float = uniform?Planeness
-                let t = 1.0 - (1.0 - t) ** pp
+                
+                let t = 
+                    if pp < 0.01 then 0.0
+                    else 1.0 - (1.0 - t) ** pp
  
-                let diffuse = (1.0 - t) * dSphere + t * dPlane
+                let diffuse = dSphere //(1.0 - t) * dSphere + t * dPlane
                 color <- color * diffuse
 
             return V4d(color, v.col.W)
@@ -1859,18 +1858,23 @@ module Shader =
             return V4d(n, 1.0)
         }
 
+open System
+open Microsoft.FSharp.NativeInterop
 
 
 [<EntryPoint>]
 let main argv = 
-
-    //KdTreeTest.run()
+    //Octree.VertexData.importAscii
+    //    @"C:\Users\Schorsch\Development\WorkDirectory\Kaunertal.txt"
+    //    "xyzrgb"
+    //    @"C:\Users\Schorsch\Development\WorkDirectory\kauny"
+        
     //System.Environment.Exit 0
 
-    let iter = 100
-    let n = 1 <<< 20
-    let i = System.IO.DirectoryInfo @"C:\Users\Schorsch\Development\WorkDirectory\blubb"
-    let ids = Array.init n (fun i -> "entry" + string i)
+    //let iter = 100
+    //let n = 1 <<< 20
+    //let i = System.IO.DirectoryInfo @"C:\Users\Schorsch\Development\WorkDirectory\blubb"
+    //let ids = Array.init n (fun i -> "entry" + string i)
 
     //if i.Exists then i.Delete(true)
     //let store = new Uncodium.SimpleStore.SimpleDiskStore(i.FullName)
@@ -1905,11 +1909,11 @@ let main argv =
     //Log.stop()
     //System.Environment.Exit 0
 
-    let path, key =
-        if argv.Length < 2 then
-            @"C:\Users\Schorsch\Development\WorkDirectory\jb", @"C:\Users\Schorsch\Development\WorkDirectory\Laserscan-P20_Beiglboeck-2015.pts"
-        else
-            argv.[0], argv.[1]
+    //let path, key =
+    //    if argv.Length < 2 then
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\jb", @"C:\Users\Schorsch\Development\WorkDirectory\Laserscan-P20_Beiglboeck-2015.pts"
+    //    else
+    //        argv.[0], argv.[1]
             
 
             
@@ -1918,6 +1922,7 @@ let main argv =
             backend Backend.GL
             device DeviceKind.Dedicated
             display Display.Mono
+            samples 1
             debug false
         }
 
@@ -1953,11 +1958,13 @@ let main argv =
     //        "ssd"
     //        "xyzrgb"
     //        @"C:\Users\Schorsch\Development\WorkDirectory\Kaunertal.txt"
-    //        @"C:\Users\Schorsch\Development\WorkDirectory\KaunertalNormals3"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\kauny2"
     //        [
     //            "Overlay", c1WithAlpha :> IMod
     //            "TreeActive", active1 :> IMod
+               
     //        ]
+
     //let kaunertal =
     //    StoreTree.import
     //        "ssd1"
@@ -1968,7 +1975,7 @@ let main argv =
     //            "TreeActive", active1 :> IMod
     //        ]
                
-    //let jb1 =
+    //let jb2 =
     //    StoreTree.import
     //        "ssd2"
     //        @"C:\Users\Schorsch\Development\WorkDirectory\Laserscan-P20_Beiglboeck-2015.pts"
@@ -2006,7 +2013,7 @@ let main argv =
     //    StoreTree.import
     //        "ssd"
     //        @"C:\Users\Schorsch\Development\WorkDirectory\Technologiezentrum_Teil1.pts"
-    //        @"C:\Users\Schorsch\Development\WorkDirectory\Technologiezentrum2"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\techy"
     //        [
     //            "Overlay", c0WithAlpha :> IMod
     //            "TreeActive", active1 :> IMod
@@ -2036,15 +2043,15 @@ let main argv =
     //        ]
         
 
-    //let koeln =
-    //    StoreTree.import
-    //        "ssd"
-    //        @"C:\Users\Schorsch\Development\WorkDirectory\3278_5514_0_10\3278_5514_0_10"
-    //        @"C:\Users\Schorsch\Development\WorkDirectory\3278_5514_0_10\pointcloud\"
-    //        [
-    //            "Overlay", c0WithAlpha :> IMod
-    //            "TreeActive", active0 :> IMod
-    //        ]
+    let koeln =
+        StoreTree.import
+            "ssd"
+            @"C:\Users\Schorsch\Development\WorkDirectory\3278_5514_0_10\3278_5514_0_10"
+            @"C:\Users\Schorsch\Development\WorkDirectory\3278_5514_0_10\pointcloud\"
+            [
+                "Overlay", c0WithAlpha :> IMod
+                "TreeActive", active0 :> IMod
+            ]
 
     //let jb =
     //    StoreTree.import
@@ -2108,7 +2115,6 @@ let main argv =
 
     //            Log.warn "box: %A" box.Size
     //            let trafo = 
-    //                Trafo3d.Scale(100.0) *
     //                Trafo3d.Translation(box.Center - bounds.Center) *
     //                Trafo3d.Scale(1000.0 / bounds.Size.NormMax)
     //                //Trafo3d.Scale(0.05)
@@ -2124,21 +2130,22 @@ let main argv =
 
 
  
-    let koeln =
-        StoreTree.import
-            "ssd"
-            @"C:\Users\Schorsch\Development\WorkDirectory\3278_5514_0_10\3278_5514_0_10"
-            @"C:\Users\Schorsch\Development\WorkDirectory\3278_5514_0_10\pointcloud\"
-            [
-                "Overlay", c0WithAlpha :> IMod
-                "TreeActive", active0 :> IMod
-            ]   
+    //let koeln =
+    //    StoreTree.import
+    //        "ssd"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\3278_5514_0_10\3278_5514_0_10"
+    //        @"C:\Users\Schorsch\Development\WorkDirectory\3278_5514_0_10\pointcloud\"
+    //        [
+    //            "Overlay", c0WithAlpha :> IMod
+    //            "TreeActive", active0 :> IMod
+    //        ]   
 
     let pcs = 
         //ASet.ofList allKoeln
         ASet.ofList [
+            yield koeln |> StoreTree.normalize 300.0 |> StoreTree.trafo trafo
             //yield! allKoeln //yield koeln |> StoreTree.normalize 1000.0
-            yield koeln |> StoreTree.normalize 300.0
+            //yield koeln |> StoreTree.normalize 300.0
                     //|> StoreTree.trafo trafo
             //yield StoreTree.normalize 100.0 koelnNet
             //yield StoreTree.normalize 100.0 kaunertal
@@ -2239,8 +2246,8 @@ let main argv =
             do! DefaultSurfaces.trafo
             do! DefaultSurfaces.vertexColor
         }
-    let planeness = Mod.init 1.0
-    let vis = Mod.init (PointVisualization.Lighting ||| PointVisualization.Color)
+    let planeness = Mod.init 0.00001
+    let vis = Mod.init (PointVisualization.Lighting ||| PointVisualization.Color ||| PointVisualization.OverlayLod)
 
     let sg =
         Sg.LodTreeNode(quality, maxQuality, budget, renderBounds, maxSplits, win.Time, pcs) :> ISg
@@ -2261,8 +2268,7 @@ let main argv =
         | Keys.V ->
             let n = 
                 match unbox<PointVisualization> (int vis.Value &&& 0xF) with
-                    | PointVisualization.Color -> PointVisualization.Normals
-                    | PointVisualization.Normals -> PointVisualization.White
+                    | PointVisualization.Color -> PointVisualization.White
                     | _ -> PointVisualization.Color
             transact (fun () ->
                 vis.Value <- unbox (int vis.Value &&& 0xFFFFFFF0) ||| n
