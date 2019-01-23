@@ -1,4 +1,5 @@
 Aardvark.Base.Incremental
 FShade.Core
+FShade.GLSL
 FSharp.Core
 SourceLink.Create.CommandLine

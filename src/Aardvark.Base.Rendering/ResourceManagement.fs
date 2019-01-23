@@ -535,36 +535,36 @@ and ResourceCache<'h, 'v when 'v : unmanaged>(parent : Option<ResourceCache<'h, 
             r.ForceDispose()
         store.Clear()
 
-type ConstantResource<'h, 'v when 'h : equality and 'v : unmanaged>(kind : ResourceKind, handle : 'h, v : 'v) =
-    inherit ConstantObject()
-    static let th = typeof<'h>
+//type ConstantResource<'h, 'v when 'h : equality and 'v : unmanaged>(kind : ResourceKind, handle : 'h, v : 'v) =
+//    inherit ConstantObject()
+//    static let th = typeof<'h>
 
-    let h = Mod.constant handle
-    let ptr = NativePtr.alloc 1
-    do NativePtr.write ptr v
+//    let h = Mod.constant handle
+//    let ptr = NativePtr.alloc 1
+//    do NativePtr.write ptr v
 
-    member x.Handle = handle
+//    member x.Handle = handle
 
-    override x.GetHashCode() = handle.GetHashCode()
+//    override x.GetHashCode() = handle.GetHashCode()
 
-    override x.Equals o =
-        match o with
-            | :? ConstantResource<'h, 'v> as o -> o.Handle = x.Handle
-            | _ -> false
+//    override x.Equals o =
+//        match o with
+//            | :? ConstantResource<'h, 'v> as o -> o.Handle = x.Handle
+//            | _ -> false
 
-    interface IDisposable with
-        member x.Dispose() = ()
+//    interface IDisposable with
+//        member x.Dispose() = ()
 
-    interface IResource<'h, 'v> with
-        member x.HandleType = th
-        member x.IsDisposed = false
-        member x.Kind = kind
-        member x.AddRef() = ()
-        member x.RemoveRef() = ()
-        member x.Handle = h
-        member x.Update(token, caller) = ()
-        member x.Info = ResourceInfo.Zero
-        member x.Pointer = ptr
+//    interface IResource<'h, 'v> with
+//        member x.HandleType = th
+//        member x.IsDisposed = false
+//        member x.Kind = kind
+//        member x.AddRef() = ()
+//        member x.RemoveRef() = ()
+//        member x.Handle = h
+//        member x.Update(token, caller) = ()
+//        member x.Info = ResourceInfo.Zero
+//        member x.Pointer = ptr
 
 type InputSet(o : IAdaptiveObject) =
     let l = obj()

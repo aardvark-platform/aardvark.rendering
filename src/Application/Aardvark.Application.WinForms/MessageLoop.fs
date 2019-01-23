@@ -7,6 +7,7 @@ open System.Windows.Forms
 open System.Threading
 open System.Collections.Concurrent
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open Aardvark.Application
 
 type IControl =

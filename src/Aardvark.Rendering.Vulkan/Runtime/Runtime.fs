@@ -601,6 +601,10 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     interface IRuntime with
 
+        member x.CreateLodRenderer(fbo : IFramebufferSignature, surface : Aardvark.Base.Surface, state : PipelineState, pass : Aardvark.Base.Rendering.RenderPass, model : IMod<Trafo3d>, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, quality : IModRef<float>, maxQuality : IModRef<float>, budget : IMod<int64>, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<DateTime>, data : aset<LodTreeInstance>) =
+            failf "not implemented"
+
+
         member x.DeviceCount = device.PhysicalDevices.Length
 
         member x.MaxLocalSize = device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize

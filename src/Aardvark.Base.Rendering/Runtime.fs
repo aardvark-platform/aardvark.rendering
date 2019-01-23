@@ -241,56 +241,62 @@ module Management =
             changeCapacity newCapacity
             
         member x.Alloc(align : nativeint, size : nativeint) =
-            lock free (fun () ->
-                match free.TryGetAligned(align, size) with
-                    | Some b ->
-                        let alignedOffset = next align b.Offset
-                        let alignedSize = b.Size - (alignedOffset - b.Offset)
-                        if alignedOffset > b.Offset then
-                            let l = Block<'a>(x, store, b.Offset, alignedOffset - b.Offset, true, b.Prev, b)
-                            if isNull l.Prev then first <- l
-                            else l.Prev.Next <- l
-                            b.Prev <- l
-                            free.Insert(l)
-                            b.Offset <- alignedOffset
-                            b.Size <- alignedSize        
+            if size = 0n then
+                Block<'a>(x, store, 0n, 0n, true, null, null)
+            else
+                lock free (fun () ->
+                    match free.TryGetAligned(align, size) with
+                        | Some b ->
+                            let alignedOffset = next align b.Offset
+                            let alignedSize = b.Size - (alignedOffset - b.Offset)
+                            if alignedOffset > b.Offset then
+                                let l = Block<'a>(x, store, b.Offset, alignedOffset - b.Offset, true, b.Prev, b)
+                                if isNull l.Prev then first <- l
+                                else l.Prev.Next <- l
+                                b.Prev <- l
+                                free.Insert(l)
+                                b.Offset <- alignedOffset
+                                b.Size <- alignedSize        
                             
-                        if alignedSize > size then
-                            let r = Block<'a>(x, store, alignedOffset + size, alignedSize - size, true, b, b.Next)
-                            if isNull r.Next then last <- r
-                            else r.Next.Prev <- r
-                            b.Next <- r
-                            free.Insert(r)
-                            b.Size <- size
+                            if alignedSize > size then
+                                let r = Block<'a>(x, store, alignedOffset + size, alignedSize - size, true, b, b.Next)
+                                if isNull r.Next then last <- r
+                                else r.Next.Prev <- r
+                                b.Next <- r
+                                free.Insert(r)
+                                b.Size <- size
 
-                        b.IsFree <- false
-                        b
-                    | None ->
-                        grow size
-                        x.Alloc(align, size)
+                            b.IsFree <- false
+                            b
+                        | None ->
+                            grow size
+                            x.Alloc(align, size)
 
-            )
+                )
 
         member x.Alloc(size : nativeint) =
-            lock free (fun () ->
-                match free.TryGetGreaterOrEqual size with
-                    | Some b ->
-                        if b.Size > size then
-                            let rest = Block<'a>(x, store, b.Offset + size, b.Size - size, true, b, b.Next)
+            if size = 0n then
+                Block<'a>(x, store, 0n, 0n, true, null, null)
+            else
+                lock free (fun () ->
+                    match free.TryGetGreaterOrEqual size with
+                        | Some b ->
+                            if b.Size > size then
+                                let rest = Block<'a>(x, store, b.Offset + size, b.Size - size, true, b, b.Next)
                         
-                            if isNull rest.Next then last <- rest
-                            else rest.Next.Prev <- rest
-                            b.Next <- rest
+                                if isNull rest.Next then last <- rest
+                                else rest.Next.Prev <- rest
+                                b.Next <- rest
 
-                            free.Insert(rest)
-                            b.Size <- size
+                                free.Insert(rest)
+                                b.Size <- size
 
-                        b.IsFree <- false
-                        b
-                    | None ->
-                        grow size
-                        x.Alloc size
-            )
+                            b.IsFree <- false
+                            b
+                        | None ->
+                            grow size
+                            x.Alloc size
+                )
 
         member x.Free(b : Block<'a>) =
             if not b.IsFree then
@@ -671,6 +677,7 @@ type IPreparedRenderObject =
     abstract member Update : AdaptiveToken * RenderToken -> unit
     abstract member Original : Option<RenderObject>
 
+
 type ShaderStage =
     | Vertex = 1
     | TessControl = 2
@@ -765,6 +772,9 @@ and IRuntime =
     abstract member PrepareSurface : IFramebufferSignature * ISurface -> IBackendSurface
     abstract member PrepareRenderObject : IFramebufferSignature * IRenderObject -> IPreparedRenderObject
 
+    // type LodNode(quality : IModRef<float>, maxQuality : IModRef<float>, budget : IMod<int64>, culling : bool, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<DateTime>, clouds : aset<LodTreeInstance>) =
+    abstract member CreateLodRenderer : fbo : IFramebufferSignature * surface : Surface * state : PipelineState * pass : RenderPass * model : IMod<Trafo3d> * view : IMod<Trafo3d> * proj : IMod<Trafo3d> * quality : IModRef<float> * maxQuality : IModRef<float> * budget : IMod<int64> * renderBounds : IMod<bool> * maxSplits : IMod<int> * time : IMod<DateTime> * data : aset<LodTreeInstance> -> IPreparedRenderObject
+
 //    abstract member MaxLocalSize : V3i
 //    abstract member Compile : FShade.ComputeShader -> IComputeShader
 //    abstract member Delete : IComputeShader -> unit
@@ -816,6 +826,11 @@ and IRuntime =
     abstract member CompileClear : fboSignature : IFramebufferSignature * clearColors : IMod<Map<Symbol, C4f>> * clearDepth : IMod<Option<double>> -> IRenderTask
     abstract member CompileRender : fboSignature : IFramebufferSignature * BackendConfiguration * aset<IRenderObject> -> IRenderTask
     
+
+and ICustomRenderObject =
+    inherit IRenderObject
+    
+    abstract member Create : IRuntime * IFramebufferSignature -> IPreparedRenderObject
 
 
 and IRenderTask =

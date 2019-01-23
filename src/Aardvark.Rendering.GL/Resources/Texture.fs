@@ -37,11 +37,7 @@ type Texture =
         member x.Size1D = x.Size.X
         member x.Size2D = x.Size.XY
         member x.Size3D = x.Size
-
-        interface IContextChild with
-            member x.Context = x.Context
-            member x.Handle = x.Handle
-
+        
         interface IBackendTexture with
             member x.Runtime = x.Context.Runtime :> ITextureRuntime
             member x.WantMipMaps = x.MipMapLevels > 1
@@ -2056,7 +2052,7 @@ module TextureExtensions =
 
 
     [<AutoOpen>]
-    module private Uploads =
+    module internal Uploads =
         let getTextureTarget' (dim : TextureDimension, isArray : bool, isMS : bool) =
             match dim, isArray, isMS with
 
@@ -3033,20 +3029,7 @@ module TextureExtensions =
         
 
 
-
-
-    module ExecutionContext =
-
-        let internal getTextureTarget (texture : Texture) = Uploads.getTextureTarget texture
-
-        let bindTexture (unit : int) (texture : Texture) =
-            seq {
-                yield Instruction.ActiveTexture(int TextureUnit.Texture0 + unit)
-                
-                let target = getTextureTarget texture
-                yield Instruction.BindTexture (int target) texture.Handle
-            }            
-
+      
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Texture =
 

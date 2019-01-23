@@ -14,12 +14,14 @@
     <OutputPath>..\..\bin\Release</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="RunningMean.fs" />
     <Compile Include="DefaultSemantic.fs" />
     <Compile Include="Utilities\ColoredLock.fs" />
     <Compile Include="Utilities\PrimitiveValueConverter.fs" />
     <Compile Include="Utilities\GPUVendor.fs" />
     <Compile Include="Utilities\ArrayVisitor.fs" />
     <Compile Include="Utilities\LockedResource.fs" />
+    <Compile Include="Utilities\UniformWriters.fs" />
     <Compile Include="Types\RenderPass.fs" />
     <Compile Include="Types\IndexedGeometry.fs" />
     <Compile Include="Types\FrameStatistics.fs" />

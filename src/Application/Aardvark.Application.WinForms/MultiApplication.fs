@@ -269,6 +269,10 @@ and MultiRuntime(runtimes : IRuntime[]) =
     interface IRuntime with
         member x.DeviceCount = runtimes |> Seq.map (fun r -> r.DeviceCount) |> Seq.min
 
+        member x.CreateLodRenderer(fbo : IFramebufferSignature, surface : Aardvark.Base.Surface, state : PipelineState, pass : Aardvark.Base.Rendering.RenderPass, model : IMod<Trafo3d>, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, quality : IModRef<float>, maxQuality : IModRef<float>, budget : IMod<int64>, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<DateTime>, data : aset<LodTreeInstance>) =
+            failwithf "not implemented"
+
+
         member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) : unit =
             failwith "not implemented"
 

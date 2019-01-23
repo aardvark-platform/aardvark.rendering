@@ -466,6 +466,19 @@ module OpenGl =
         /// </summary>
         let BindProgram  = getProcAddress "glUseProgram"
 
+        let DispatchCompute = getProcAddress "glDispatchCompute"
+        let GetInteger = getProcAddress "glGetIntegerv"
+        let GetFloat = getProcAddress "glGetFloatv"
+        let GetDouble = getProcAddress "glGetDoublev"
+        let GetBoolean = getProcAddress "glGetBooleanv"
+
+        let GetIndexedInteger = getProcAddress "glGetIntegeri_v"
+        let GetIndexedInteger64 = getProcAddress "glGetInteger64i_v"
+
+        let NamedBufferData = getProcAddress "glNamedBufferData"
+        let NamedBufferSubData = getProcAddress "glNamedBufferSubData"
+        let MemoryBarrier = getProcAddress "glMemoryBarrier"
+
         /// <summary>
         /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glActiveTexture.xml
         /// </summary>
@@ -490,6 +503,7 @@ module OpenGl =
         /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindBufferBase.xml
         /// </summary>
         let BindBufferBase  = getProcAddress "glBindBufferBase"
+        
 
         /// <summary>
         /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindBufferRange.xml
@@ -668,6 +682,17 @@ module OpenGl =
         /// https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glDrawBuffer.xhtml
         /// </summary>
         let DrawBuffer = getProcAddress "glDrawBuffer"
+
+        
+        let GenQueries = getProcAddress "glGenQueries"
+        let DeleteQueries = getProcAddress "glDeleteQueries"
+        let BeginQuery = getProcAddress "glBeginQuery"
+        let EndQuery = getProcAddress "glEndQuery"
+        let QueryCounter = getProcAddress "glQueryCounter"
+        let GetQueryObjectInt32 = getProcAddress "glGetQueryObjectiv"
+        let GetQueryObjectInt64 = getProcAddress "glGetQueryObjecti64v"
+        let GetQueryObjectUInt32 = getProcAddress "glGetQueryObjectuiv"
+        let GetQueryObjectUInt64 = getProcAddress "glGetQueryObjectui64v"
 
 
         let Uniform1iv = getProcAddress "glUniform1iv"

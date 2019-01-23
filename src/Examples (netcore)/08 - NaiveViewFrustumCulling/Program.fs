@@ -55,6 +55,7 @@ let main argv =
         
     let mutable cullingDisabled = false
     let cullTask =
+        let ndc = Box3d(-V3d.III, V3d.III)
         let mutable lastVisibleCnt = 0
         RenderTask.custom (fun (task,token,output) -> 
             let view = cameraView.GetValue()

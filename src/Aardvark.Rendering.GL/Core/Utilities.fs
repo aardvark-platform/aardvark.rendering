@@ -18,30 +18,6 @@ module TypeSizeExtensions =
             // TODO: improve for non-standard types (e.g. M23f)
             System.Runtime.InteropServices.Marshal.SizeOf(x)
 
-//type ExtensionSet(s : seq<string>) =
-//    let extPrefix (e : string) =
-//        let id = e.IndexOf '_'
-//        if id > 0 then
-//            e.Substring(0, id)
-//        else
-//            ""
-//
-//    let extName(e : string) =
-//        let id = e.IndexOf '_'
-//        if id > 0 then
-//            e.Substring(id + 1)
-//        else
-//            e
-//
-//    let children = s |> Seq.groupBy extPrefix |> Seq.filter (fun (g,_) -> g <> "") |> Seq.map (fun (g,v) -> g, ExtensionSet (v |> Seq.map extName)) |> Map.ofSeq
-//    let entries = s |> Seq.filter (fun s -> s |> extPrefix = "") |> Set.ofSeq
-//
-//    [<System.Diagnostics.DebuggerBrowsable(System.Diagnostics.DebuggerBrowsableState.RootHidden)>]
-//    member x.Children = children
-//
-//    [<System.Diagnostics.DebuggerBrowsable(System.Diagnostics.DebuggerBrowsableState.RootHidden)>]
-//    member x.Entries = children
-
 type Driver = { device : GPUVendor; vendor : string; renderer : string; glsl : Version; version : Version; versionString : string; extensions : Set<string> }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
