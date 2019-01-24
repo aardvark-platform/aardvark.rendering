@@ -123,18 +123,18 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.DeviceCount = 1
 
 
-        member x.CreateLodRenderer(fbo : IFramebufferSignature, surface : Surface, state : PipelineState, pass : RenderPass, model : IMod<Trafo3d>, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, quality : IModRef<float>, maxQuality : IModRef<float>, budget : IMod<int64>, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<DateTime>, data : aset<LodTreeInstance>) =
+        member x.CreateLodRenderer(config : LodRendererConfig, data : aset<LodTreeInstance>) =
 
-            let preparedState = PreparedPipelineState.ofPipelineState fbo x.ResourceManager surface state
+            let preparedState = PreparedPipelineState.ofPipelineState config.fbo x.ResourceManager config.surface config.state
                             
-            let info : LodRenderingInfo = 
-                {
-                    LodRenderingInfo.quality = quality
-                    LodRenderingInfo.maxQuality = maxQuality
-                    LodRenderingInfo.renderBounds = renderBounds
-                }
+            //let info : LodRenderingInfo = 
+            //    {
+            //        LodRenderingInfo.quality = quality
+            //        LodRenderingInfo.maxQuality = maxQuality
+            //        LodRenderingInfo.renderBounds = renderBounds
+            //    }
                             
-            new LodRenderer(x.Context, x.ResourceManager, preparedState, pass, info, true, maxSplits, data, time, model, view, proj, budget) :> IPreparedRenderObject
+            new LodRenderer(x.Context, x.ResourceManager, preparedState, config, data) :> IPreparedRenderObject
 
 
         member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) : unit =

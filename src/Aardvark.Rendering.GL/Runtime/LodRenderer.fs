@@ -1085,8 +1085,8 @@ type LodRenderingInfo =
         renderBounds    : IMod<bool>
     }
 
-type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipelineState, pass : RenderPass, info : LodRenderingInfo, useCulling : bool, maxSplits : IMod<int>, roots : aset<LodTreeInstance>, renderTime : IMod<DateTime>, model : IMod<Trafo3d>, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, budget : IMod<int64>)  =
-    inherit PreparedCommand(ctx, pass)
+type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipelineState, config : LodRendererConfig, roots : aset<LodTreeInstance>)  =
+    inherit PreparedCommand(ctx, config.pass)
     
     static let scheduler = new LimitedConcurrencyLevelTaskScheduler(ThreadPriority.BelowNormal, Environment.ProcessorCount)// max 2 (Environment.ProcessorCount - 3))
             
@@ -1102,7 +1102,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
         
 
     let reader = roots.GetReader()
-    let euclideanView = view |> Mod.map Euclidean3d
+    let euclideanView = config.view |> Mod.map Euclidean3d
 
   
     let loadTimes = System.Collections.Concurrent.ConcurrentDictionary<Symbol, Regression>()
@@ -1129,7 +1129,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
     let renderDelta : ref<AtomicQueue<ILodTreeNode, GeometryPoolInstance>> = ref AtomicQueue.empty
 
     let pRenderBounds : nativeptr<int> = 
-        NativePtr.allocArray [| (if info.renderBounds.GetValue() then 1 else 0) |]
+        NativePtr.allocArray [| (if config.renderBounds.GetValue() then 1 else 0) |]
 
     let rootIdsLock = obj()
     let rootIds : ModRef<hmap<ILodTreeNode, int>> = Mod.init HMap.empty
@@ -1147,10 +1147,10 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
             match HMap.tryFind root rootUniforms with
             | Some table -> 
                 match MapExt.tryFind "ModelTrafo" table with
-                | Some (:? IMod<Trafo3d> as m) -> model %* m
-                | _ -> model
+                | Some (:? IMod<Trafo3d> as m) -> config.model %* m
+                | _ -> config.model
             | None ->
-                model
+                config.model
         )
                 
     let getRootUniform (name : string) (root : ILodTreeNode) : Option<IMod> =
@@ -1160,11 +1160,11 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
             | "ModelTrafos"              -> getRootTrafo root :> IMod |> Some
             | "ModelTrafosInv"           -> getRootTrafo root |> Mod.map (fun t -> t.Inverse) :> IMod |> Some
 
-            | "ModelViewTrafos"          -> Mod.map2 (fun a b -> a * b) (getRootTrafo root) view :> IMod |> Some
-            | "ModelViewTrafosInv"       -> getRootTrafo root %* view |> Mod.map (fun t -> t.Inverse) :> IMod |> Some
+            | "ModelViewTrafos"          -> Mod.map2 (fun a b -> a * b) (getRootTrafo root) config.view :> IMod |> Some
+            | "ModelViewTrafosInv"       -> getRootTrafo root %* config.view |> Mod.map (fun t -> t.Inverse) :> IMod |> Some
 
-            | "ModelViewProjTrafos"      -> getRootTrafo root %* view %* proj :> IMod |> Some
-            | "ModelViewProjTrafosInv"   -> getRootTrafo root %* view %* proj |> Mod.map (fun t -> t.Inverse) :> IMod |> Some
+            | "ModelViewProjTrafos"      -> getRootTrafo root %* config.view %* config.proj :> IMod |> Some
+            | "ModelViewProjTrafosInv"   -> getRootTrafo root %* config.view %* config.proj |> Mod.map (fun t -> t.Inverse) :> IMod |> Some
 
             | "NormalMatrices"           -> getRootTrafo root |> Mod.map (fun t -> M33d.op_Explicit t.Backward.Transposed):> IMod |> Some
             | "NormalMatricesInv"        -> getRootTrafo root |> Mod.map (fun t -> M33d.op_Explicit t.Forward.Transposed):> IMod |> Some
@@ -1412,7 +1412,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                 if state.nodeSize > 0 && state.count > 0 then
                     updateTime.Add(sw.MicroTime.TotalMilliseconds)
 
-                renderTime.GetValue token |> ignore
+                config.time.GetValue token |> ignore
             else
                 let dequeued = 
                     enter renderDelta
@@ -1443,7 +1443,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
     let evaluate (calls : DrawPool) (token : AdaptiveToken) (iface : GLSLProgramInterface) =
         needUpdate.GetValue(token)
 
-        NativePtr.write pRenderBounds (if info.renderBounds.GetValue(token) then 1 else 0)
+        NativePtr.write pRenderBounds (if config.renderBounds.GetValue(token) then 1 else 0)
 
         let maxTime = max (MicroTime.FromMilliseconds 1.0) calls.AverageRenderTime
         let maxMem = Mem (3L <<< 30)
@@ -1451,7 +1451,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
         sync()
             
     let inner =
-        { new DrawPool(ctx, useCulling, pRenderBounds, activeBuffer.Pointer, modelViewProjBuffer.Pointer, state, pass) with
+        { new DrawPool(ctx, true, pRenderBounds, activeBuffer.Pointer, modelViewProjBuffer.Pointer, state, config.pass) with
             override x.Evaluate(token : AdaptiveToken, iface : GLSLProgramInterface) =
                 evaluate x token iface
 
@@ -1670,11 +1670,11 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                       
                 let subs =
                     Dict.ofList [
-                        view :> IAdaptiveObject, view.AddMarkingCallback (fun () -> notConverged.Set())
-                        proj :> IAdaptiveObject, proj.AddMarkingCallback (fun () -> notConverged.Set())
+                        config.view :> IAdaptiveObject, config.view.AddMarkingCallback (fun () -> notConverged.Set())
+                        config.proj :> IAdaptiveObject, config.proj.AddMarkingCallback (fun () -> notConverged.Set())
+                        config.maxSplits :> IAdaptiveObject, config.maxSplits.AddMarkingCallback (fun () -> notConverged.Set())
+                        config.budget :> IAdaptiveObject, config.budget.AddMarkingCallback (fun () -> notConverged.Set())
                         reader :> IAdaptiveObject, reader.AddMarkingCallback (fun () -> notConverged.Set())
-                        maxSplits :> IAdaptiveObject, maxSplits.AddMarkingCallback (fun () -> notConverged.Set())
-                        budget :> IAdaptiveObject, budget.AddMarkingCallback (fun () -> notConverged.Set())
                     ]
 
                 let mutable lastMaxQ = 0.0
@@ -1683,10 +1683,10 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         timer.Wait()
                         notConverged.Wait(shutdown.Token)
                         //caller.EvaluateAlways AdaptiveToken.Top (fun token ->
-                        let view = view.GetValue AdaptiveToken.Top
-                        let proj = proj.GetValue AdaptiveToken.Top
+                        let view = config.view.GetValue AdaptiveToken.Top
+                        let proj = config.proj.GetValue AdaptiveToken.Top
                         let ops = reader.GetOperations AdaptiveToken.Top
-                        let maxSplits = maxSplits.GetValue AdaptiveToken.Top
+                        let maxSplits = config.maxSplits.GetValue AdaptiveToken.Top
                           
                         for o in ops do
                             match o with
@@ -1718,7 +1718,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                                 
 
 
-                        let budget = budget.GetValue()
+                        let budget = config.budget.GetValue()
                         let roots = lock rootLock (fun () -> roots)
 
                         let start = time()
@@ -1741,10 +1741,18 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         lastQ <- q
                         let dt = time() - start
                         expandTime.Add dt.TotalMilliseconds
-
+                        
                         transact (fun () -> 
-                            info.quality.Value <- q
-                            info.maxQuality.Value <- maxQ
+                            config.stats.Value <-
+                                {
+                                    quality = q
+                                    maxQuality = maxQ
+                                    totalPrimitives = !state.dataSize
+                                    totalNodes = !state.totalNodes
+                                    usedMemory = pool.UsedMemory + inner.UsedMemory
+                                    allocatedMemory = pool.TotalMemory + inner.TotalMemory 
+                                    renderTime = inner.AverageRenderTime 
+                                }
                         )
                         if fin then notConverged.Reset()
 

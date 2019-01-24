@@ -14,35 +14,32 @@ module LodTreeRendering =
             time : IMod<System.DateTime>
             maxSplits : IMod<int>
             renderBounds : IMod<bool>
-            quality : IModRef<float>
-            maxQuality : IModRef<float>
+            stats : IModRef<LodRendererStats>
         }
 
     module LodTreeRenderConfig =
         let simple =
             {
-                budget = Mod.constant (1L <<< 30)
+                budget = Mod.constant -1L
                 time = Mod.time
                 maxSplits = Mod.constant System.Environment.ProcessorCount
                 renderBounds = Mod.constant false
-                quality = Mod.init 0.0
-                maxQuality = Mod.init 0.0
+                stats = Mod.init Unchecked.defaultof<_>
             }
 
     module Sg = 
-        type LodTreeNode(quality : IModRef<float>, maxQuality : IModRef<float>, budget : IMod<int64>, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<System.DateTime>, clouds : aset<LodTreeInstance>) =
+        type LodTreeNode(stats : IModRef<LodRendererStats>, budget : IMod<int64>, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<System.DateTime>, clouds : aset<LodTreeInstance>) =
             member x.Time = time
             member x.Clouds = clouds
             member x.MaxSplits = maxSplits
 
-            member x.Quality = quality
-            member x.MaxQuality = maxQuality
+            member x.Stats = stats
             member x.RenderBounds = renderBounds
             member x.Budget = budget
             interface ISg
 
         let lodTree (cfg : LodTreeRenderConfig) (data : aset<LodTreeInstance>) =
-            LodTreeNode(cfg.quality, cfg.maxQuality, cfg.budget, cfg.renderBounds, cfg.maxSplits, cfg.time, data) :> ISg
+            LodTreeNode(cfg.stats, cfg.budget, cfg.renderBounds, cfg.maxSplits, cfg.time, data) :> ISg
     
 
 namespace Aardvark.SceneGraph.Semantics
@@ -71,7 +68,23 @@ type LodNodeSem() =
                 member x.AttributeScope = scope
                 member x.RenderPass = pass
                 member x.Create(r, fbo) = 
-                    r.CreateLodRenderer(fbo, surface, state, pass, model, view, proj, sg.Quality, sg.MaxQuality, sg.Budget, sg.RenderBounds, sg.MaxSplits, sg.Time, sg.Clouds)
+                    let config =
+                        {
+                            fbo = fbo
+                            time = sg.Time
+                            surface = surface
+                            state = state
+                            pass = pass
+                            model = model
+                            view = view
+                            proj = proj
+                            budget = sg.Budget
+                            renderBounds = sg.RenderBounds
+                            maxSplits = sg.MaxSplits
+                            stats = sg.Stats
+                        }
+
+                    r.CreateLodRenderer(config, sg.Clouds)
             }
 
         ASet.single (obj :> IRenderObject)

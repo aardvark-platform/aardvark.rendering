@@ -753,6 +753,33 @@ type IResourceManager =
     abstract member CreateBuffer : buffer : IMod<IBuffer> -> IResource<IBackendBuffer>
     abstract member CreateTexture : texture : IMod<ITexture> -> IResource<IBackendTexture>
 
+and [<Struct>] LodRendererStats =
+    {
+        quality         : float
+        maxQuality      : float
+        totalPrimitives : int64
+        totalNodes      : int
+        allocatedMemory : Mem
+        usedMemory      : Mem
+        renderTime      : MicroTime
+    }
+
+and LodRendererConfig =
+    {
+        fbo : IFramebufferSignature
+        time : IMod<DateTime>
+        surface : Surface
+        state : PipelineState
+        pass : RenderPass
+        model : IMod<Trafo3d>
+        view : IMod<Trafo3d>
+        proj : IMod<Trafo3d>
+        budget : IMod<int64>
+        renderBounds : IMod<bool>
+        maxSplits : IMod<int>
+        stats : IModRef<LodRendererStats>
+    }
+
 and IRuntime =
     inherit IBufferRuntime
     inherit ITextureRuntime
@@ -773,7 +800,7 @@ and IRuntime =
     abstract member PrepareRenderObject : IFramebufferSignature * IRenderObject -> IPreparedRenderObject
 
     // type LodNode(quality : IModRef<float>, maxQuality : IModRef<float>, budget : IMod<int64>, culling : bool, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<DateTime>, clouds : aset<LodTreeInstance>) =
-    abstract member CreateLodRenderer : fbo : IFramebufferSignature * surface : Surface * state : PipelineState * pass : RenderPass * model : IMod<Trafo3d> * view : IMod<Trafo3d> * proj : IMod<Trafo3d> * quality : IModRef<float> * maxQuality : IModRef<float> * budget : IMod<int64> * renderBounds : IMod<bool> * maxSplits : IMod<int> * time : IMod<DateTime> * data : aset<LodTreeInstance> -> IPreparedRenderObject
+    abstract member CreateLodRenderer : config : LodRendererConfig * data : aset<LodTreeInstance> -> IPreparedRenderObject
 
 //    abstract member MaxLocalSize : V3i
 //    abstract member Compile : FShade.ComputeShader -> IComputeShader

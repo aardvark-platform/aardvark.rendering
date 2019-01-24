@@ -238,6 +238,18 @@ module Sg =
             let cache = ShapeCache.GetOrCreateCache(t.Runtime)
             let shapes = RenderObject.create()
                 
+            let content =
+                content |> Mod.map (fun c ->
+                    
+                    let shapes =
+                        c.concreteShapes 
+                        |> List.groupBy (fun c -> c.z)
+                        |> List.sortBy fst
+                        |> List.collect (fun (z,g) -> g)
+
+                    { c with concreteShapes = shapes }
+                )
+
             let indirectAndOffsets =
                 content |> Mod.map (fun renderText ->
                     let indirectBuffer = 
