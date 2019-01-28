@@ -1451,7 +1451,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
         sync()
             
     let inner =
-        { new DrawPool(ctx, true, pRenderBounds, activeBuffer.Pointer, modelViewProjBuffer.Pointer, state, config.pass) with
+        { new DrawPool(ctx, config.alphaToCoverage, true, pRenderBounds, activeBuffer.Pointer, modelViewProjBuffer.Pointer, state, config.pass) with
             override x.Evaluate(token : AdaptiveToken, iface : GLSLProgramInterface) =
                 evaluate x token iface
 

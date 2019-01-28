@@ -15,6 +15,7 @@ module LodTreeRendering =
             maxSplits : IMod<int>
             renderBounds : IMod<bool>
             stats : IModRef<LodRendererStats>
+            alphaToCoverage : bool
         }
 
     module LodTreeRenderConfig =
@@ -25,10 +26,11 @@ module LodTreeRendering =
                 maxSplits = Mod.constant System.Environment.ProcessorCount
                 renderBounds = Mod.constant false
                 stats = Mod.init Unchecked.defaultof<_>
+                alphaToCoverage = false
             }
 
     module Sg = 
-        type LodTreeNode(stats : IModRef<LodRendererStats>, budget : IMod<int64>, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<System.DateTime>, clouds : aset<LodTreeInstance>) =
+        type LodTreeNode(stats : IModRef<LodRendererStats>, alphaToCoverage : bool, budget : IMod<int64>, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<System.DateTime>, clouds : aset<LodTreeInstance>) =
             member x.Time = time
             member x.Clouds = clouds
             member x.MaxSplits = maxSplits
@@ -36,10 +38,11 @@ module LodTreeRendering =
             member x.Stats = stats
             member x.RenderBounds = renderBounds
             member x.Budget = budget
+            member x.AlphaToCoverage = alphaToCoverage
             interface ISg
 
         let lodTree (cfg : LodTreeRenderConfig) (data : aset<LodTreeInstance>) =
-            LodTreeNode(cfg.stats, cfg.budget, cfg.renderBounds, cfg.maxSplits, cfg.time, data) :> ISg
+            LodTreeNode(cfg.stats, cfg.alphaToCoverage, cfg.budget, cfg.renderBounds, cfg.maxSplits, cfg.time, data) :> ISg
     
 
 namespace Aardvark.SceneGraph.Semantics
@@ -82,6 +85,7 @@ type LodNodeSem() =
                             renderBounds = sg.RenderBounds
                             maxSplits = sg.MaxSplits
                             stats = sg.Stats
+                            alphaToCoverage = sg.AlphaToCoverage
                         }
 
                     r.CreateLodRenderer(config, sg.Clouds)

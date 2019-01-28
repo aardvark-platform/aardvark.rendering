@@ -533,7 +533,7 @@ type IndexManager(ctx : Context, chunkSize : int, usedMemory : ref<int64>, total
     interface IDisposable with 
         member x.Dispose() = x.Dispose()
 
-type IndirectBuffer(ctx : Context, renderBounds : nativeptr<int>, signature : IFramebufferSignature, bounds : bool, active : nativeptr<int>, modelViewProjs : nativeptr<int>, indexed : bool, initialCapacity : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
+type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : nativeptr<int>, signature : IFramebufferSignature, bounds : bool, active : nativeptr<int>, modelViewProjs : nativeptr<int>, indexed : bool, initialCapacity : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
     static let es = sizeof<DrawCallInfo>
     static let bs = sizeof<CullingShader.CullingInfo>
 
@@ -802,14 +802,21 @@ type IndirectBuffer(ctx : Context, renderBounds : nativeptr<int>, signature : IF
             s.BindBufferRange(BufferRangeTarget.UniformBuffer, uniformBlock.ubBinding, oldUB, oldUBOffset, oldUBSize)
             s.MemoryBarrier(MemoryBarrierFlags.CommandBarrierBit)
 
+
         let h = NativePtr.read indirectHandle
         if h.Y > 0 then
             before(s)
+            if alphaToCoverage then 
+                s.Enable(int EnableCap.SampleAlphaToCoverage)
+
             match indexType with
                 | Some indexType ->
                     s.DrawElementsIndirect(runtimeStats, isActive, mode, int indexType, indirectHandle)
                 | _ -> 
                     s.DrawArraysIndirect(runtimeStats, isActive, mode, indirectHandle)
+            
+            if alphaToCoverage then 
+                s.Disable(int EnableCap.SampleAlphaToCoverage)
         else
             Log.warn "empty indirect call"
 
@@ -1004,7 +1011,7 @@ type GeometryPool private(ctx : Context) =
             | Some ib -> indexManager.Free ib
             | None -> ()
 
-type DrawPool(ctx : Context, bounds : bool, renderBounds : nativeptr<int>, activeBuffer : nativeptr<int>, modelViewProjs : nativeptr<int>, state : PreparedPipelineState, pass : RenderPass) as this =
+type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds : nativeptr<int>, activeBuffer : nativeptr<int>, modelViewProjs : nativeptr<int>, state : PreparedPipelineState, pass : RenderPass) as this =
     inherit PreparedCommand(ctx, pass)
 
     static let initialIndirectSize = 256
@@ -1087,7 +1094,7 @@ type DrawPool(ctx : Context, bounds : bool, renderBounds : nativeptr<int>, activ
     let getIndirectBuffer(slot : PoolSlot) =
         let key = getKey slot
         indirects.GetOrCreate(key, fun _ ->
-            new IndirectBuffer(ctx, renderBounds, state.pFramebufferSignature, bounds, activeBuffer, modelViewProjs, Option.isSome slot.IndexType, initialIndirectSize, usedMemory, totalMemory)
+            new IndirectBuffer(ctx, alphaToCoverage, renderBounds, state.pFramebufferSignature, bounds, activeBuffer, modelViewProjs, Option.isSome slot.IndexType, initialIndirectSize, usedMemory, totalMemory)
         )
 
     let tryGetIndirectBuffer(slot : PoolSlot) =

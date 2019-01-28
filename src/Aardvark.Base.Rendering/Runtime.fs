@@ -778,6 +778,7 @@ and LodRendererConfig =
         renderBounds : IMod<bool>
         maxSplits : IMod<int>
         stats : IModRef<LodRendererStats>
+        alphaToCoverage : bool
     }
 
 and IRuntime =
