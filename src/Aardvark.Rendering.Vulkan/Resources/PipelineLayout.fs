@@ -138,7 +138,7 @@ module PipelineLayout =
                 setCount <- max setCount (block.ssbSet + 1)
                 let key = (block.ssbSet, block.ssbBinding)
                 let referenced = 
-                    match uniformBlocks.TryGetValue key with
+                    match storageBlocks.TryGetValue key with
                         | (true, (_, referencedBy)) -> referencedBy
                         | _ -> VkShaderStageFlags.None  
                 storageBlocks.[key] <- (block, referenced ||| flags)
