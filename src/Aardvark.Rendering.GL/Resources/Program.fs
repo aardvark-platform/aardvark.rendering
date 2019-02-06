@@ -547,9 +547,16 @@ module ProgramExtensions =
                 let (file : string, content : Option<ShaderCacheEntry>) =
                     match x.ShaderCachePath with    
                         | Some cachePath ->
+
+                            // NOTE: contex.Diver represent information obtained by primary context -> possible that resource context have been created differently -> use driver information from actual context
+                            let driver = match x.CurrentContextHandle with
+                                            | Some ch -> ch.Driver
+                                            | _ -> Log.warn "context not current!!"
+                                                   x.Driver
+                            
                             let key = 
-                                {
-                                    device      = x.Driver.vendor + "_" + x.Driver.renderer + "_" + x.Driver.versionString
+                                {   // NOTE: Profile mask can be None, Core or Compatibility, shaders are not necessary compatible between those
+                                    device      = driver.vendor + "_" + driver.renderer + "_" + driver.versionString + "/" + driver.profileMask.ToString() 
                                     id          = id
                                     outputs     = signature.ColorAttachments |> Map.toList |> List.map (fun (id,(name, s)) -> string name, (id, s.format)) |> Map.ofList
                                     layered     = signature.PerLayerUniforms
@@ -574,23 +581,40 @@ module ProgramExtensions =
                         addProgram x
                         GL.ProgramBinary(prog, c.format, c.binary, c.binary.Length)
                         GL.Check "could not create program from binary"
+                        
+                        let linkStatus = GL.GetProgram(prog, GetProgramParameterName.LinkStatus)
+                        if linkStatus = 0 then // GL_False
+                            let info = GL.GetProgramInfoLog(prog)
+                            GL.DeleteProgram(prog)
+                            Log.warn "Error Loading Program Binary: Format=%A\nInfo: %s" c.format info
 
-                        let program =
-                            {
-                                Context = x
-                                Code = c.code
-                                Handle = prog
-                                HasTessellation = c.hasTess
-                                //ShadersNew = []
-                                SupportedModes = c.modes
-                                InterfaceNew = c.iface
-                                // deprecated stuff
-                                UniformGetters = SymDict.empty
-                                Interface = ShaderReflection.ShaderInterface.empty
-                                TextureInfo = Map.empty
-                            }
+                            Log.warn "Fallback: compiling shader from code"
+                            let code = code.Value
+                            let outputs = code.iface.outputs |> List.map (fun p -> p.paramName, p.paramLocation) |> Map.ofList
+                            match x.TryCompileProgramCode(outputs, true, code.code) with
+                            | Success prog ->
+                                let prog = { prog with InterfaceNew = code.iface }
+                                Success prog
+                            | Error e ->
+                                Error e
 
-                        Success program
+                        else
+                            let program = 
+                                {
+                                    Context = x
+                                    Code = c.code
+                                    Handle = prog
+                                    HasTessellation = c.hasTess
+                                    //ShadersNew = []
+                                    SupportedModes = c.modes
+                                    InterfaceNew = c.iface
+                                    // deprecated stuff
+                                    UniformGetters = SymDict.empty
+                                    Interface = ShaderReflection.ShaderInterface.empty
+                                    TextureInfo = Map.empty
+                                }
+
+                            Success program
 
                     | _ -> 
                         let code = code.Value
