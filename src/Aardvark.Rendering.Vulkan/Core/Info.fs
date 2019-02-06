@@ -3,8 +3,10 @@
 open System
 open System.Threading
 open Aardvark.Base
+open Microsoft.FSharp.NativeInterop
 
-#nowarn "51"
+#nowarn "9"
+// #nowarn "51"
 
 // =======================================================================
 // Extension Info
@@ -51,15 +53,19 @@ module LayerInfo =
 
     let internal ofVulkan (prop : VkLayerProperties) =
         let name = prop.layerName.Value
-        let mutable count = 0u
-        VkRaw.vkEnumerateInstanceExtensionProperties(name, &&count, NativePtr.zero)
-            |> check "could not get available instance layers"
+        let properties =
+            temporary<uint32, _> (fun pCount ->
+                VkRaw.vkEnumerateInstanceExtensionProperties(name, pCount, NativePtr.zero)
+                    |> check "could not get available instance layers"
 
-        let properties = Array.zeroCreate (int count)
-        properties |> NativePtr.withA (fun ptr ->
-            VkRaw.vkEnumerateInstanceExtensionProperties(name, &&count, ptr)
-                |> check "could not get available instance layers"
-        )
+                let count = NativePtr.read pCount
+                let properties = Array.zeroCreate (int count)
+                properties |> NativePtr.withA (fun ptr ->
+                    VkRaw.vkEnumerateInstanceExtensionProperties(name, pCount, ptr)
+                        |> check "could not get available instance layers"
+                )
+                properties
+            )
 
         let layerExtensions = 
             properties 
@@ -76,15 +82,21 @@ module LayerInfo =
 
     let internal ofVulkanDevice (device : VkPhysicalDevice) (prop : VkLayerProperties) =
         let name = prop.layerName.Value
-        let mutable count = 0u
-        VkRaw.vkEnumerateDeviceExtensionProperties(device, name, &&count, NativePtr.zero)
-            |> check "could not get available instance layers"
+        
+        let properties =
+            temporary<uint32, _> (fun pCount ->
+                VkRaw.vkEnumerateDeviceExtensionProperties(device, name, pCount, NativePtr.zero)
+                    |> check "could not get available instance layers"
 
-        let properties = Array.zeroCreate (int count)
-        properties |> NativePtr.withA (fun ptr ->
-            VkRaw.vkEnumerateDeviceExtensionProperties(device, name, &&count, ptr)
-                |> check "could not get available instance layers"
-        )
+                let count = NativePtr.read pCount
+                let properties = Array.zeroCreate (int count)
+                properties |> NativePtr.withA (fun ptr ->
+                    VkRaw.vkEnumerateDeviceExtensionProperties(device, name, pCount, ptr)
+                        |> check "could not get available instance layers"
+                )
+                properties
+            )
+
 
         let layerExtensions = 
             properties 

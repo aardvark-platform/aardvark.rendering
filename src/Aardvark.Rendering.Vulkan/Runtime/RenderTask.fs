@@ -15,7 +15,7 @@ open System.Collections.Generic
 open Aardvark.Base.Runtime
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 type ICommandStreamResource =
     inherit IResourceLocation<VKVM.CommandStream>

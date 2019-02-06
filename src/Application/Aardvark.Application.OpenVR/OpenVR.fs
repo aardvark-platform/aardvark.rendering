@@ -883,6 +883,9 @@ type VrRenderer() =
 
     abstract member UpdatePoses : TrackedDevicePose_t[] -> unit
     default x.UpdatePoses _ = ()
+    
+    abstract member AfterSubmit : unit -> unit
+    default x.AfterSubmit () = ()
 
     member x.StatisticsFrameCount
         with get() = statFrameCount
@@ -933,7 +936,9 @@ type VrRenderer() =
 
                         swSubmit.Start()
                         compositor.Submit(EVREye.Eye_Left, &lTex.Info, &lTex.Bounds, lTex.Flags) |> check "submit left"
+                        x.AfterSubmit()
                         compositor.Submit(EVREye.Eye_Right, &rTex.Info, &rTex.Bounds, rTex.Flags) |> check "submit right"
+                        x.AfterSubmit()
                         swSubmit.Stop()
             else
                 Log.error "[OpenVR] %A" err

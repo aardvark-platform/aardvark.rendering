@@ -14,7 +14,7 @@ open System.Collections.Generic
 open Microsoft.FSharp.Core.LanguagePrimitives.IntrinsicOperators
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 
 type QueryPool =

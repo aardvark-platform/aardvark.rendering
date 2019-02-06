@@ -9,7 +9,7 @@ open Aardvark.Base.Incremental
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 type ResourceInfo<'a> =
     {
@@ -943,32 +943,42 @@ module Resources =
                     let depthStencil = depthStencil.Update(token) |> ignore; depthStencil.Pointer
                     let colorBlendState = colorBlendState.Update(token) |> ignore; colorBlendState.Pointer
 
-                    let mutable desc =
-                        VkGraphicsPipelineCreateInfo(
-                            VkStructureType.GraphicsPipelineCreateInfo, 0n,
-                            VkPipelineCreateFlags.None,
-                            uint32 prog.ShaderCreateInfos.Length,
-                            pShaderCreateInfos,
-                            inputState,
-                            inputAssembly,
-                            pTessState,
-                            &&viewportState,
-                            rasterizerState,
-                            &&multisampleState,
-                            depthStencil,
-                            colorBlendState,
-                            &&dynamicStates, //dynamic
-                            prog.PipelineLayout.Handle,
-                            renderPass.Handle,
-                            0u,
-                            VkPipeline.Null,
-                            0
+                    let handle = 
+                        temporary<VkPipeline,_> (fun pHandle ->
+                            viewportState |> pin (fun pViewport ->
+                                multisampleState |> pin (fun pMultisampleState ->
+                                    dynamicStates |> pin (fun pDynamicStates ->
+                                        let desc =
+                                            VkGraphicsPipelineCreateInfo(
+                                                VkStructureType.GraphicsPipelineCreateInfo, 0n,
+                                                VkPipelineCreateFlags.None,
+                                                uint32 prog.ShaderCreateInfos.Length,
+                                                pShaderCreateInfos,
+                                                inputState,
+                                                inputAssembly,
+                                                pTessState,
+                                                pViewport,
+                                                rasterizerState,
+                                                pMultisampleState,
+                                                depthStencil,
+                                                colorBlendState,
+                                                pDynamicStates, //dynamic
+                                                prog.PipelineLayout.Handle,
+                                                renderPass.Handle,
+                                                0u,
+                                                VkPipeline.Null,
+                                                0
+                                            )
+                    
+                                        desc |> pin (fun pDesc ->
+                                            VkRaw.vkCreateGraphicsPipelines(device.Handle, VkPipelineCache.Null, 1u, pDesc, NativePtr.zero, pHandle)
+                                                |> check "could not create pipeline"
+                                            NativePtr.read pHandle
+                                        )
+                                    )
+                                )
+                            )
                         )
-
-                    let mutable handle = VkPipeline.Null
-                    VkRaw.vkCreateGraphicsPipelines(device.Handle, VkPipelineCache.Null, 1u, &&desc, NativePtr.zero, &&handle)
-                        |> check "could not create pipeline"
-
                     Pipeline(device, handle, Unchecked.defaultof<_>)
 
                 )

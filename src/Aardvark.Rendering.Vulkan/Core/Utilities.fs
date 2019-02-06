@@ -8,10 +8,23 @@ open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 [<AutoOpen>]
 module private Utilities =
+
+    let temporary<'a, 'r when 'a : unmanaged> (f : nativeptr<'a> -> 'r) =
+        let arr : 'a[] = Array.zeroCreate 1
+        let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
+        try f (NativePtr.ofNativeInt (gc.AddrOfPinnedObject()))
+        finally gc.Free()
+        
+    let pin (f : nativeptr<'a> -> 'r) (v : 'a)  =
+        let arr : 'a[] = [|v|]
+        let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
+        try f (NativePtr.ofNativeInt (gc.AddrOfPinnedObject()))
+        finally gc.Free()
+
     let check (str : string) (err : VkResult) =
         if err <> VkResult.VkSuccess then 
             Log.error "[Vulkan] %s (%A)" str err

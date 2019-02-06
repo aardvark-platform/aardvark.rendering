@@ -3,7 +3,7 @@ open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
 open Aardvark.Application
-
+open System.Threading
 [<EntryPoint>]
 let main argv = 
     
@@ -15,16 +15,17 @@ let main argv =
     // and may show it later.
     let win =
         window {
-            backend Backend.GL
-            display Display.Mono
+            backend Backend.Vulkan
+            display Display.OpenVR
             debug true
-            samples 8
+            samples 1
         }
+
 
     // define a dynamic transformation depending on the window's time
     // This time is a special value that can be used for animations which
     // will be evaluated when rendering the scene
-    let dynamicTrafo =
+    let dynamicTrafo = //Trafo3d.Identity |> Mod.constant
         let startTime = System.DateTime.Now
         win.Time |> Mod.map (fun t ->
             let t = (t - startTime).TotalSeconds
@@ -45,8 +46,16 @@ let main argv =
             // apply the dynamic transformation to the box
             |> Sg.trafo dynamicTrafo
     
-    // show the window
-    win.Scene <- sg
-    win.Run()
+    let run () = 
+        // show the window
+        win.Scene <- sg
+        win.Run()
 
+    //let t = Thread(ThreadStart run)
+    //t.Start()
+    //
+    //win2.Scene <- sg
+    //win2.Run()
+
+    run()
     0

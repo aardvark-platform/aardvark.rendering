@@ -14,7 +14,7 @@ open System.Collections.Generic
 open Aardvark.Base.Runtime
 open FShade
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 type private MappedBuffer(d : Device, store : ResizeBuffer) =
     inherit ConstantMod<IBuffer>(store)
@@ -139,21 +139,22 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
     let debugMessage (msg : DebugMessage) =
-        if not (ignored.Contains msg.id) then
-            let str = msg.layerPrefix + ": " + msg.message
-            match msg.severity with
-                | MessageSeverity.Error ->
-                    Report.Error("[Vulkan] {0}", str)
-                    debugBreak msg
+        if device.DebugReportActive then
+            if not (ignored.Contains msg.id) then
+                let str = msg.layerPrefix + ": " + msg.message
+                match msg.severity with
+                    | MessageSeverity.Error ->
+                        Report.Error("[Vulkan] {0}", str)
+                        debugBreak msg
 
-                | MessageSeverity.Warning ->
-                    Report.Warn("[Vulkan] {0}", str)
+                    | MessageSeverity.Warning ->
+                        Report.Warn("[Vulkan] {0}", str)
 
-                | MessageSeverity.Information ->
-                    Report.Line("[Vulkan] {0}", str)
+                    | MessageSeverity.Information ->
+                        Report.Line("[Vulkan] {0}", str)
 
-                | _ ->
-                    Report.Line("[Vulkan] DEBUG: {0}", str)
+                    | _ ->
+                        Report.Line("[Vulkan] DEBUG: {0}", str)
 
     // install debug output to file (and errors/warnings to console)
     let debugSubscription = 

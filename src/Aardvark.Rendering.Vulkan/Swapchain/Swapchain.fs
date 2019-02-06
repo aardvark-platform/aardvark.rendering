@@ -12,7 +12,7 @@ open Microsoft.FSharp.NativeInterop
 open KHRSwapchain
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 [<AutoOpen>]
 module private EnumExtensions =

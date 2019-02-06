@@ -11,7 +11,7 @@ open Aardvark.Rendering.Vulkan
 
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 type IndirectBuffer =
     class

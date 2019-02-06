@@ -4,7 +4,7 @@ open System.Runtime.InteropServices
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 [<StructLayout(LayoutKind.Sequential)>]
 type V2ui =

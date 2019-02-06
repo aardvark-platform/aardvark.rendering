@@ -13,7 +13,7 @@ open Microsoft.FSharp.NativeInterop
 open Management
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 module GeometryPoolUtilities =
 
