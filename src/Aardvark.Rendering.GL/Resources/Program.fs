@@ -419,9 +419,10 @@ module ProgramExtensions =
     open FShade.Imperative
     open FShade
 
-    let private codeCache = ConcurrentDictionary<Context * string * IFramebufferSignature, Error<Program>>()
+    // NOTE: shader caches no longer depending on Context. shaders objects can be shared between contexts, even if a context is using a different GL profile
+    let private codeCache = ConcurrentDictionary<string * IFramebufferSignature, Error<Program>>()
     
-    let private staticShaderCache = ConcurrentDictionary<Context * FShade.Effect * IFramebufferSignature, Error<FShade.GLSL.GLSLProgramInterface * IMod<Program>>>()
+    let private staticShaderCache = ConcurrentDictionary<FShade.Effect * IFramebufferSignature, Error<FShade.GLSL.GLSLProgramInterface * IMod<Program>>>()
     let private dynamicShaderCache = ConditionalWeakTable<(FShade.EffectConfig -> FShade.EffectInputLayout * IMod<FShade.Imperative.Module>), Error<FShade.GLSL.GLSLProgramInterface * IMod<Program>>>()
     let private shaderPickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
 
@@ -542,7 +543,7 @@ module ProgramExtensions =
             )
 
         member x.TryCompileProgram(id : string, signature : IFramebufferSignature, code : Lazy<GLSL.GLSLShader>) : Error<_> =
-            codeCache.GetOrAdd((x, id, signature), fun (x, id, signature) ->
+            codeCache.GetOrAdd((id, signature), fun (id, signature) ->
                 
                 let (file : string, content : Option<ShaderCacheEntry>) =
                     match x.ShaderCachePath with    
@@ -651,7 +652,7 @@ module ProgramExtensions =
         member x.TryCreateProgram(signature : IFramebufferSignature, surface : Surface, topology : IndexedGeometryMode) : Error<GLSL.GLSLProgramInterface * IMod<Program>> =
             match surface with
                 | Surface.FShadeSimple effect ->
-                    staticShaderCache.GetOrAdd((x, effect, signature), fun (x, effect, signature) ->
+                    staticShaderCache.GetOrAdd((effect, signature), fun (effect, signature) ->
                         let glsl = 
                             lazy (
                                 let module_ = signature.Link(effect, Range1d(-1.0, 1.0), false, topology)
