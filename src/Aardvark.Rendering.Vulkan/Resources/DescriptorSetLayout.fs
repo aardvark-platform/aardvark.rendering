@@ -10,7 +10,7 @@ open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 [<AllowNullLiteral>]
 type DescriptorSetLayoutBinding =
@@ -60,23 +60,24 @@ module DescriptorSetLayout =
     let empty (d : Device) = DescriptorSetLayout(d, VkDescriptorSetLayout.Null, Array.empty)
 
     let create (bindings : array<DescriptorSetLayoutBinding>) (device : Device) =
-        let arr = bindings |> Array.map (fun b -> b.Handle)
         assert (bindings |> Seq.mapi (fun i b -> b.Binding = i) |> Seq.forall id)
-        arr |> NativePtr.withA (fun pArr ->
-            let mutable info =
+        native {
+            let! pArr = bindings |> Array.map (fun b -> b.Handle)
+            let! pInfo =
                 VkDescriptorSetLayoutCreateInfo(
                     VkStructureType.DescriptorSetLayoutCreateInfo, 0n,
                     VkDescriptorSetLayoutCreateFlags.MinValue,
-                    uint32 arr.Length,
+                    uint32 bindings.Length,
                     pArr
                 )
-
-            let mutable handle = VkDescriptorSetLayout.Null
-            VkRaw.vkCreateDescriptorSetLayout(device.Handle, &&info, NativePtr.zero, &&handle)
+            let! pHandle = VkDescriptorSetLayout.Null
+            VkRaw.vkCreateDescriptorSetLayout(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create DescriptorSetLayout"
 
-            DescriptorSetLayout(device, handle, bindings)
-        )
+            let handle = NativePtr.read pHandle
+            return DescriptorSetLayout(device, handle, bindings)
+        }
+
 
     let delete (layout : DescriptorSetLayout) (device : Device) =
         if layout.Handle.IsValid then

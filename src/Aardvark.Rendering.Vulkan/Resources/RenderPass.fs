@@ -10,7 +10,7 @@ open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 
 type RenderPass =
@@ -63,22 +63,22 @@ type RenderPass =
 module RenderPass =
     
     let create (attachments : Map<Symbol, AttachmentSignature>) (layers : int) (perLayer : Set<string>) (device : Device) =
-        let depthAtt        = attachments |> Map.tryFind DefaultSemantic.Depth
-        let attachments     = attachments |> Map.remove DefaultSemantic.Depth
-        let colorAtt        = attachments |> Map.toSeq |> Seq.mapi (fun i (s,a) -> i,s,a) |> Seq.toArray
-        let depthAtt        = depthAtt |> Option.map (fun s -> colorAtt.Length, s)
+        native {
+            let depthAtt        = attachments |> Map.tryFind DefaultSemantic.Depth
+            let attachments     = attachments |> Map.remove DefaultSemantic.Depth
+            let colorAtt        = attachments |> Map.toSeq |> Seq.mapi (fun i (s,a) -> i,s,a) |> Seq.toArray
+            let depthAtt        = depthAtt |> Option.map (fun s -> colorAtt.Length, s)
+            
+            let colorReferences = 
+                colorAtt |> Array.map (fun (i,s,a) -> VkAttachmentReference(uint32 i, VkImageLayout.ColorAttachmentOptimal))
 
+            let! pDepthReference =
+                match depthAtt with
+                    | Some (i,d) -> VkAttachmentReference(uint32 i, VkImageLayout.DepthStencilAttachmentOptimal)
+                    | _ -> VkAttachmentReference(~~~0u, VkImageLayout.DepthStencilAttachmentOptimal)
 
-        let colorReferences = 
-            colorAtt |> Array.map (fun (i,s,a) -> VkAttachmentReference(uint32 i, VkImageLayout.ColorAttachmentOptimal))
-
-        let mutable depthReference =
-            match depthAtt with
-                | Some (i,d) -> VkAttachmentReference(uint32 i, VkImageLayout.DepthStencilAttachmentOptimal)
-                | _ -> VkAttachmentReference(~~~0u, VkImageLayout.DepthStencilAttachmentOptimal)
-
-        colorReferences |> NativePtr.withA (fun pColorReferences ->
-            let mutable subpassDescription =
+            let! pColorReferences = colorReferences
+            let! pSubpassDescription =
                 VkSubpassDescription(
                     VkSubpassDescriptionFlags.MinValue,
                     VkPipelineBindPoint.Graphics,
@@ -93,7 +93,7 @@ module RenderPass =
                     NativePtr.zero,
 
                     //depth
-                    &&depthReference, 
+                    pDepthReference, 
 
                     //preserve
                     0u, NativePtr.zero
@@ -180,27 +180,25 @@ module RenderPass =
                 match depthAttachmentDescription with
                     | Some d -> Array.append colorAttachmentDescriptions [|d|]
                     | None -> colorAttachmentDescriptions
+            let! pAttachmentDescriptions = attachmentDescriptions
+            let! pInfo =
+                VkRenderPassCreateInfo(
+                    VkStructureType.RenderPassCreateInfo, 0n, 
+                    VkRenderPassCreateFlags.MinValue,
+                    uint32 attachmentDescriptions.Length, pAttachmentDescriptions,
+                    1u, pSubpassDescription,
+                    0u, NativePtr.zero
+                )
 
-            attachmentDescriptions |> NativePtr.withA (fun pAttachmentDescriptions -> 
-                let mutable info =
-                    VkRenderPassCreateInfo(
-                        VkStructureType.RenderPassCreateInfo, 0n, 
-                        VkRenderPassCreateFlags.MinValue,
-                        uint32 attachmentDescriptions.Length, pAttachmentDescriptions,
-                        1u, &&subpassDescription,
-                        0u, NativePtr.zero
-                    )
-
-                let mutable handle = VkRenderPass.Null
-                VkRaw.vkCreateRenderPass(device.Handle, &&info, NativePtr.zero, &&handle) |> check "vkCreateRenderPass"
+            let! pHandle = VkRenderPass.Null
+            VkRaw.vkCreateRenderPass(device.Handle, pInfo, NativePtr.zero, pHandle) |> check "vkCreateRenderPass"
 
 
-                let colorMap = colorAtt |> Array.map (fun (i,s,v) -> i,(s,v)) |> Map.ofArray
+            let colorMap = colorAtt |> Array.map (fun (i,s,v) -> i,(s,v)) |> Map.ofArray
 
-                RenderPass(device, handle, colorAtt.Length, colorMap, depthAtt, layers, perLayer)
-            )
-        )
-
+            return RenderPass(device, !!pHandle, colorAtt.Length, colorMap, depthAtt, layers, perLayer)
+  
+        }
 
 
     let delete (pass : RenderPass) (device : Device) =

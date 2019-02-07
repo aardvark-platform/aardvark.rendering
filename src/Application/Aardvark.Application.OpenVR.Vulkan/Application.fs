@@ -137,6 +137,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
     let swResolve   = Stopwatch()
     let swTotal     = Stopwatch()
     
+    let queue = device.GraphicsFamily.Queues |> List.head
     
     new(samples) = VulkanVRApplicationLayered(samples, false)
     new(debug) = VulkanVRApplicationLayered(1, debug)
@@ -181,6 +182,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
                 VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.SampledBit
             )
 
+        
             
 
         let nDepth =
@@ -209,8 +211,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
         cImg <- nImg
         fImg <- nfImg
         fbo <- nFbo
-
-        let queue = device.GraphicsFamily.Queues |> List.head
+        
 
         let fTex = 
             VRVulkanTextureData_t(
@@ -255,6 +256,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
         }
 
     override x.Render() = 
+        device.DebugReportActive <- true
         swTotal.Start()
         let output = OutputDescription.ofFramebuffer fbo
 
@@ -287,7 +289,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
             device.perform {
                 for di in 0 .. int device.AllCount - 1 do
                     do! Command.SetDeviceMask (1u <<< di)
-
+                    do! Command.TransformLayout(fImg, VkImageLayout.TransferDstOptimal)
                     do! Command.TransformLayout(cImg, VkImageLayout.TransferSrcOptimal)
 
                     if samples > 1 then
@@ -309,6 +311,8 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
         else
             device.perform {
                 do! Command.TransformLayout(cImg, VkImageLayout.TransferSrcOptimal)
+                do! Command.TransformLayout(fImg, VkImageLayout.TransferDstOptimal)
+
                 if samples > 1 then
                     do! Command.ResolveMultisamples(cImg.[ImageAspect.Color, 0, 0], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(info.framebufferSize, 1))
                     do! Command.ResolveMultisamples(cImg.[ImageAspect.Color, 0, 1], V3i.Zero, fImg.[ImageAspect.Color, 0, 0], V3i(info.framebufferSize.X, 0, 0), V3i(info.framebufferSize, 1))
@@ -323,6 +327,17 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
 
         transact (fun () -> time.MarkOutdated(); version.Value <- version.Value + 1)
         swTotal.Stop()
+        device.DebugReportActive <- false
+
+    override x.AfterSubmit() =
+        device.perform {
+            do! Command.TransformLayout(fImg.[ImageAspect.Color,*,*], VkImageLayout.General, VkImageLayout.TransferSrcOptimal)
+        }
+
+    override x.Use (action : unit -> 'r) =
+        let mutable res = Unchecked.defaultof<'r>
+        device.GraphicsFamily.RunSynchronously(QueueCommand.Custom (fun _queue _fence -> res <- action()))
+        res
 
     override x.Release() = 
         // delete views

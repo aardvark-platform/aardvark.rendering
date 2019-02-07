@@ -11,7 +11,7 @@ open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 #nowarn "44" // 0044 obsolete
 
 type SparseImageBind =
@@ -75,20 +75,23 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
     inherit Image(device, handle, size, levels, slices, 1, dim, format, DevicePtr.Null, VkImageLayout.Undefined)
 
     let requirements =
-        let mutable reqs = VkMemoryRequirements()
-        VkRaw.vkGetImageMemoryRequirements(device.Handle, handle, &&reqs)
-        reqs
+        native {
+            let! pReqs = VkMemoryRequirements()
+            VkRaw.vkGetImageMemoryRequirements(device.Handle, handle, pReqs)
+            return !!pReqs
+        }
 
     let sparseRequirements =
-        let mutable count = 0u
-        VkRaw.vkGetImageSparseMemoryRequirements(device.Handle, handle, &&count, NativePtr.zero)
+        native {
+            let! pCount = 0u
+            VkRaw.vkGetImageSparseMemoryRequirements(device.Handle, handle,pCount, NativePtr.zero)
+            
+            let requirements = Array.zeroCreate (int !!pCount)
+            let! pRequirements = requirements
+            VkRaw.vkGetImageSparseMemoryRequirements(device.Handle, handle, pCount, pRequirements)
 
-        let requirements = Array.zeroCreate (int count)
-        requirements |> NativePtr.withA (fun pRequirements ->
-            VkRaw.vkGetImageSparseMemoryRequirements(device.Handle, handle, &&count, pRequirements)
-        )
-
-        requirements
+            return requirements
+        }
 
     let pageSize = 
         let v = sparseRequirements.[0].formatProperties.imageGranularity
@@ -106,13 +109,15 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
         int sparseRequirements.[0].imageMipTailFirstLod
 
     let memory =
-        let mutable reqs = VkMemoryRequirements()
-        VkRaw.vkGetImageMemoryRequirements(device.Handle, handle, &&reqs)
-
-        device.Memories |> Array.find (fun mem ->
-            let mask = 1u <<< mem.Index
-            mask &&& reqs.memoryTypeBits <> 0u
-        )
+        native {
+            let! pReqs = VkMemoryRequirements()
+            VkRaw.vkGetImageMemoryRequirements(device.Handle, handle, pReqs)
+            let reqs = !!pReqs
+            return device.Memories |> Array.find (fun mem ->
+                let mask = 1u <<< mem.Index
+                mask &&& reqs.memoryTypeBits <> 0u
+            )
+        }
 
     let tailPtr = 
         let totalSize = 
@@ -175,11 +180,11 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
                         
 
             if binds.Count > 0 then
-                let binds = CSharpList.toArray binds
-                binds |> NativePtr.withA (fun pBinds ->
-                    let mutable images =
+                native {
+                    let! pBinds = CSharpList.toArray binds
+                    let! pImages =
                         VkSparseImageOpaqueMemoryBindInfo(
-                            handle, uint32 binds.Length, pBinds
+                            handle, uint32 binds.Count, pBinds
                         )
 
                     let bind = 
@@ -187,7 +192,7 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
                             VkStructureType.BindSparseInfo, 0n,
                             0u, NativePtr.zero,
                             0u, NativePtr.zero,
-                            1u, &&images,
+                            1u, pImages,
                             0u, NativePtr.zero,
                             0u, NativePtr.zero
                         )
@@ -199,7 +204,7 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
                     )
                     f.Wait()
                     f.Dispose()
-                )  
+                }
 
             tailPtr
 
@@ -291,8 +296,9 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
 
                     )
 
-                binds |> NativePtr.withA (fun pBinds ->
-                    let mutable images =
+                native {
+                    let! pBinds = binds
+                    let! pImages =
                         VkSparseImageMemoryBindInfo(
                             handle, uint32 binds.Length, pBinds
                         )
@@ -303,7 +309,7 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
                             0u, NativePtr.zero,
                             0u, NativePtr.zero,
                             0u, NativePtr.zero,
-                            1u, &&images,
+                            1u, pImages,
                             0u, NativePtr.zero
                 
                         )
@@ -316,8 +322,7 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
                         f.Wait()
                         f.Dispose()
                     )
-
-                )
+                }
             )
 
     member x.Bind(level : int, slice : int, offset : V3i, size : V3i, ptr : DevicePtr) =
@@ -338,32 +343,32 @@ type SparseImageDeviceExtensions private() =
 
     [<Extension>]
     static member CreateSparseImage(device : Device, size : V3i, mipMapLevels : int, count : int, dim : TextureDimension, format : VkFormat, usage : VkImageUsageFlags, allocMipTail : DeviceHeap -> int64 -> int64 -> DevicePtr) : SparseImage =
+        native {
+            let imageType = VkImageType.ofTextureDimension dim
 
-        let imageType = VkImageType.ofTextureDimension dim
-
-        let mutable info =
-            VkImageCreateInfo(
-                VkStructureType.ImageCreateInfo, 0n,
-                VkImageCreateFlags.SparseBindingBit ||| VkImageCreateFlags.SparseResidencyBit ||| VkImageCreateFlags.SparseAliasedBit,
-                imageType,
-                format,
-                VkExtent3D(size.X, size.Y, size.Z),
-                uint32 mipMapLevels,
-                uint32 count,
-                VkSampleCountFlags.D1Bit,
-                VkImageTiling.Optimal,
-                usage,
-                device.AllSharingMode, device.AllQueueFamiliesCnt, device.AllQueueFamiliesPtr,
-                VkImageLayout.Preinitialized
-            )
+            let! pInfo =
+                VkImageCreateInfo(
+                    VkStructureType.ImageCreateInfo, 0n,
+                    VkImageCreateFlags.SparseBindingBit ||| VkImageCreateFlags.SparseResidencyBit ||| VkImageCreateFlags.SparseAliasedBit,
+                    imageType,
+                    format,
+                    VkExtent3D(size.X, size.Y, size.Z),
+                    uint32 mipMapLevels,
+                    uint32 count,
+                    VkSampleCountFlags.D1Bit,
+                    VkImageTiling.Optimal,
+                    usage,
+                    device.AllSharingMode, device.AllQueueFamiliesCnt, device.AllQueueFamiliesPtr,
+                    VkImageLayout.Preinitialized
+                )
 
 
-        let mutable handle = VkImage.Null
-        VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, &&handle)
-            |> check "could not create sparse image"
+            let! pHandle = VkImage.Null
+            VkRaw.vkCreateImage(device.Handle, pInfo, NativePtr.zero, pHandle)
+                |> check "could not create sparse image"
 
-        new SparseImage(device, handle, size, mipMapLevels, count, dim, format, allocMipTail)
-        
+            return new SparseImage(device, !!pHandle, size, mipMapLevels, count, dim, format, allocMipTail)
+        }
     [<Extension>]
     static member CreateSparseImage(device : Device, size : V3i, mipMapLevels : int, count : int, dim : TextureDimension, format : VkFormat, usage : VkImageUsageFlags) =
         SparseImageDeviceExtensions.CreateSparseImage(
@@ -655,7 +660,8 @@ module SparseTextureImplemetation =
                     { new Command() with
                         member x.Compatible = QueueFlags.All
                         member x.Enqueue cmd =
-                            copies |> NativePtr.withA (fun pCopies ->
+                            native {
+                                let! pCopies = copies
                                 cmd.AppendCommand()
                                 VkRaw.vkCmdCopyBufferToImage(
                                     cmd.Handle,
@@ -665,7 +671,7 @@ module SparseTextureImplemetation =
                                     uint32 copies.Length,
                                     pCopies
                                 )
-                            )
+                            }
 
                             Disposable.Empty
                     }

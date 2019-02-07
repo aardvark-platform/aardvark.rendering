@@ -10,7 +10,7 @@ open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 
 type Descriptor =
@@ -37,22 +37,25 @@ module DescriptorSet =
             let canWork = Interlocked.Change(&pool.SetCount, fun c -> if c <= 0 then 0, false else c-1, true)
             
             if canWork then
-                let mutable info =
-                    VkDescriptorSetAllocateInfo(
-                        VkStructureType.DescriptorSetAllocateInfo, 0n, 
-                        pool.Handle, 
-                        1u, 
-                        &&layout.Handle
-                    )
+                native {
+                    let! pLayoutHandle = layout.Handle
+                    let! pInfo =
+                        VkDescriptorSetAllocateInfo(
+                            VkStructureType.DescriptorSetAllocateInfo, 0n, 
+                            pool.Handle, 
+                            1u, 
+                            pLayoutHandle
+                        )
 
-                let mutable handle = VkDescriptorSet.Null
-                let res = VkRaw.vkAllocateDescriptorSets(pool.Device.Handle, &&info, &&handle)
+                    let! pHandle = VkDescriptorSet.Null
+                    let res = VkRaw.vkAllocateDescriptorSets(pool.Device.Handle, pInfo, pHandle)
 
-                if res = VkResult.VkErrorFragmentedPool then
-                    None
-                else
-                    res |> check "could not allocate DescriptorSet"
-                    Some (DescriptorSet(pool.Device, pool, layout, handle))
+                    if res = VkResult.VkErrorFragmentedPool then
+                        return None
+                    else
+                        res |> check "could not allocate DescriptorSet"
+                        return Some (DescriptorSet(pool.Device, pool, layout, !!pHandle))
+                }
             else
                 None
         )
@@ -65,8 +68,11 @@ module DescriptorSet =
     let free (desc : DescriptorSet) (pool : DescriptorPool) =
         lock pool (fun () ->
             if desc.Handle.IsValid then
-                VkRaw.vkFreeDescriptorSets(pool.Device.Handle, pool.Handle, 1u, &&desc.Handle)
-                    |> check "could not free DescriptorSet"
+                native {
+                    let! pHandle = desc.Handle
+                    VkRaw.vkFreeDescriptorSets(pool.Device.Handle, pool.Handle, 1u, pHandle)
+                        |> check "could not free DescriptorSet"
+                }
 
                 desc.Handle <- VkDescriptorSet.Null
                 Interlocked.Increment(&pool.SetCount) |> ignore
@@ -188,10 +194,10 @@ module DescriptorSet =
 
                             [| write |]
                    )
-
-        let pWrites = NativePtr.pushStackArray writes
-        VkRaw.vkUpdateDescriptorSets(device.Handle, uint32 writes.Length, pWrites, 0u, NativePtr.zero) 
-   
+        native {
+            let! pWrites = writes
+            VkRaw.vkUpdateDescriptorSets(device.Handle, uint32 writes.Length, pWrites, 0u, NativePtr.zero) 
+        }
 type private DescriptorPoolBag(device : Device, perPool : int, resourcesPerPool : int) =
     inherit RefCountedResource()
 

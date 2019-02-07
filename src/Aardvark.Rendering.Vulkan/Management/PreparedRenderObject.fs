@@ -11,7 +11,7 @@ open Microsoft.FSharp.NativeInterop
 open Aardvark.Base.Incremental
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 
 type PreparedRenderObject =

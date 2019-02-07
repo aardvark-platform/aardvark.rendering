@@ -10,7 +10,7 @@ open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 type Framebuffer =
     class
@@ -61,9 +61,10 @@ module Framebuffer =
                             view
                         | _ -> failf "missing framebuffer attachment %A/%A" idx sem
                 )
-
-        attachments |> Array.map (fun a -> a.Handle) |> NativePtr.withA (fun pAttachments ->
-            let mutable info =
+                
+        native {
+            let! pAttachments = attachments |> Array.map (fun a -> a.Handle)
+            let! pInfo =
                 VkFramebufferCreateInfo(
                     VkStructureType.FramebufferCreateInfo, 0n,
                     VkFramebufferCreateFlags.MinValue,
@@ -74,17 +75,17 @@ module Framebuffer =
                     uint32 minLayers
                 )
 
-            let mutable handle = VkFramebuffer.Null
-            VkRaw.vkCreateFramebuffer(device.Handle, &&info, NativePtr.zero, &&handle)
+            let! pHandle = VkFramebuffer.Null
+            VkRaw.vkCreateFramebuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create framebuffer"
 
             let real =
                 let sems = attachmentSems |> Map.toSeq |> Seq.map snd |> Set.ofSeq
                 views |> Map.filter (fun k _ -> Set.contains k sems)
 
-
-            new Framebuffer(device, handle, pass, minSize, real, attachments)
-        )
+            let handle = NativePtr.read pHandle
+            return new Framebuffer(device, handle, pass, minSize, real, attachments)
+        }
 
     let delete (fbo : Framebuffer) (device : Device) =
         if device.Handle <> 0n && fbo.Handle.IsValid then

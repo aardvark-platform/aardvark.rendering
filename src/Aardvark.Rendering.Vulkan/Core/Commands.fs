@@ -8,9 +8,10 @@ open System.Collections.Generic
 open System.Collections.Concurrent
 open Aardvark.Base
 open Aardvark.Rendering.Vulkan
+open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-#nowarn "51"
+//// #nowarn "51"
  
 
 [<AbstractClass>]
@@ -88,9 +89,10 @@ type Command() =
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
-                    handles |> NativePtr.withA (fun pHandles ->
+                    native {
+                        let! pHandles = handles
                         VkRaw.vkCmdExecuteCommands(cmd.Handle, uint32 handles.Length, pHandles)
-                    )
+                    }
                     Disposable.Empty
             }
 
@@ -370,8 +372,8 @@ module ``Memory Commands`` =
                 member x.Compatible = QueueFlags.All
 
                 member x.Enqueue cmd =
-                    let mutable srcBuffer = VkBuffer.Null
-                    let mutable dstBuffer = VkBuffer.Null
+                    //let mutable srcBuffer = VkBuffer.Null
+                    //let mutable dstBuffer = VkBuffer.Null
                     let device = src.Memory.Heap.Device
                     let align = device.MinUniformBufferOffsetAlignment
 
@@ -380,7 +382,7 @@ module ``Memory Commands`` =
                     let srcCopyOffset = srcOffset - srcBufferOffset
                     let srcBufferSize = size + srcCopyOffset
 
-                    let mutable srcInfo =
+                    let srcInfo =
                         VkBufferCreateInfo(
                             VkStructureType.BufferCreateInfo, 0n,
                             VkBufferCreateFlags.None,
@@ -388,9 +390,14 @@ module ``Memory Commands`` =
                             0u, NativePtr.zero
                     )
 
-                    VkRaw.vkCreateBuffer(device.Handle, &&srcInfo, NativePtr.zero, &&srcBuffer)
-                        |> check "could not create temporary buffer"
-
+                    let srcBuffer =
+                        srcInfo |> pin (fun pInfo ->
+                            temporary<VkBuffer,_> (fun pBuffer ->
+                                VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pBuffer)
+                                    |> check "could not create temporary buffer"
+                                NativePtr.read pBuffer
+                            )
+                        )
                     VkRaw.vkBindBufferMemory(device.Handle, srcBuffer, src.Memory.Handle, uint64 srcBufferOffset)
                         |> check "could not bind temporary buffer memory"
 
@@ -400,26 +407,30 @@ module ``Memory Commands`` =
                     let dstCopyOffset = dstOffset - dstBufferOffset
                     let dstBufferSize = size + dstCopyOffset
 
-
-                    let mutable dstInfo =
-                        VkBufferCreateInfo(
-                            VkStructureType.BufferCreateInfo, 0n,
-                            VkBufferCreateFlags.None,
-                            uint64 dstBufferSize, VkBufferUsageFlags.TransferDstBit, VkSharingMode.Exclusive, 
-                            0u, NativePtr.zero
-                    )
-
-                    VkRaw.vkCreateBuffer(device.Handle, &&dstInfo, NativePtr.zero, &&dstBuffer)
-                        |> check "could not create temporary buffer"
-
+                    let dstBuffer =
+                        temporary<VkBuffer,_> (fun pBuffer ->
+                            let dstInfo =
+                                VkBufferCreateInfo(
+                                    VkStructureType.BufferCreateInfo, 0n,
+                                    VkBufferCreateFlags.None,
+                                    uint64 dstBufferSize, VkBufferUsageFlags.TransferDstBit, VkSharingMode.Exclusive, 
+                                    0u, NativePtr.zero
+                            )
+                            dstInfo |> pin (fun pInfo ->
+                                VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pBuffer)
+                                    |> check "could not create temporary buffer"
+                                NativePtr.read pBuffer
+                            )
+                        )
                     VkRaw.vkBindBufferMemory(device.Handle, dstBuffer, dst.Memory.Handle, uint64 dstBufferOffset)
                         |> check "could not bind temporary buffer memory"
 
 
-                    let mutable copyInfo = VkBufferCopy(uint64 srcCopyOffset, uint64 dstCopyOffset, uint64 size)
+                    let copyInfo = VkBufferCopy(uint64 srcCopyOffset, uint64 dstCopyOffset, uint64 size)
                     cmd.AppendCommand()
-                    VkRaw.vkCmdCopyBuffer(cmd.Handle, srcBuffer, dstBuffer, 1u, &&copyInfo)
-
+                    copyInfo |> pin (fun pCopy ->
+                        VkRaw.vkCmdCopyBuffer(cmd.Handle, srcBuffer, dstBuffer, 1u, pCopy)
+                    )
                     { new Disposable() with
                         member x.Dispose() =
                             if srcBuffer.IsValid then VkRaw.vkDestroyBuffer(device.Handle, srcBuffer, NativePtr.zero)

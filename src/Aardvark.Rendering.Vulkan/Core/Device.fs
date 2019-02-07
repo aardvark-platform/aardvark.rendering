@@ -11,7 +11,7 @@ open Aardvark.Base
 open KHRSwapchain
 
 #nowarn "9"
-#nowarn "51"
+//// #nowarn "51"
 
 type private QueueFamilyPool(allFamilies : array<QueueFamilyInfo>) =
     let available = Array.copy allFamilies
@@ -122,7 +122,7 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
     
     let mutable shaderCachePath : Option<string> = None
     let mutable validateShaderCaches = false
-
+    let mutable debugReportActive = true
 
     let allIndicesArr = 
         [|
@@ -202,49 +202,46 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
                     )
                 )
 
-        queueInfos |> NativePtr.withA (fun ptr ->
-            //let layers = Set.toArray layers
+        native {
+            let! ptr = queueInfos
             let extensions = List.toArray extensions
-            //let pLayers = CStr.sallocMany layers
-            //let pExtensions = CStr.sallocMany extensions
-            extensions |> CStr.susemany (fun cExtensions pExtensions ->
+            let! pExtensions = extensions
 
-            
-                let mutable features = VkPhysicalDeviceFeatures()
-                VkRaw.vkGetPhysicalDeviceFeatures(physical.Handle, &&features)
-
-
-                let deviceHandles = deviceGroup |> Array.map (fun d -> d.Handle)
-
-                deviceHandles |> NativePtr.withA(fun pDevices ->
-                    let mutable groupInfo =
-                        VkDeviceGroupDeviceCreateInfo(
-                            VkStructureType.DeviceGroupDeviceCreateInfo,
-                            0n,
-                            uint32 deviceGroup.Length,
-                            pDevices
-                        )
-
-                    let next = if isGroup then NativePtr.toNativeInt &&groupInfo else 0n
-
-                    let mutable info =
-                        VkDeviceCreateInfo(
-                            VkStructureType.DeviceCreateInfo, next,
-                            VkDeviceCreateFlags.MinValue,
-                            uint32 queueInfos.Length, ptr,
-                            0u, NativePtr.zero,
-                            uint32 cExtensions, pExtensions,
-                            &&features
-                        )
-
-                    let mutable device = VkDevice.Zero
-                    VkRaw.vkCreateDevice(physical.Handle, &&info, NativePtr.zero, &&device)
-                        |> check "could not create device"
-
-                    device
+            let features = 
+                temporary<VkPhysicalDeviceFeatures, VkPhysicalDeviceFeatures> (fun pFeatures ->
+                    VkRaw.vkGetPhysicalDeviceFeatures(physical.Handle, pFeatures)
+                    NativePtr.read pFeatures
                 )
-            )
-        )
+
+
+            let deviceHandles = deviceGroup |> Array.map (fun d -> d.Handle)
+            let! pDevices = deviceHandles
+            let! pGroupInfo =
+                VkDeviceGroupDeviceCreateInfo(
+                    VkStructureType.DeviceGroupDeviceCreateInfo,
+                    0n,
+                    uint32 deviceGroup.Length,
+                    pDevices
+                )
+                
+            let next = if isGroup then NativePtr.toNativeInt pGroupInfo else 0n
+            let! pFeatures = features
+            let! pInfo =
+                VkDeviceCreateInfo(
+                    VkStructureType.DeviceCreateInfo, next,
+                    VkDeviceCreateFlags.MinValue,
+                    uint32 queueInfos.Length, ptr,
+                    0u, NativePtr.zero,
+                    uint32 extensions.Length, pExtensions,
+                    pFeatures
+                )
+            let! pDevice = VkDevice.Zero
+            
+            VkRaw.vkCreateDevice(physical.Handle,pInfo, NativePtr.zero, pDevice)
+                |> check "could not create device"
+
+            return !!pDevice
+        }
 
     let graphicsFamily, computeFamily, transferFamily =
         let offsets = Array.zeroCreate physical.QueueFamilies.Length
@@ -333,6 +330,10 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
         )
 
     member x.CopyEngine = copyEngine.Value
+
+    member x.DebugReportActive 
+        with get() = debugReportActive
+        and set v = debugReportActive <- v
 
     member x.ValidateShaderCaches
         with get() = validateShaderCaches
@@ -751,16 +752,18 @@ and CopyEngine(family : DeviceQueueFamily) =
                 stream.Run cmd.Handle
                 cmd.End()
 
-                let mutable cmdHandle = cmd.Handle
-                let mutable submit =
-                    VkSubmitInfo(
-                        VkStructureType.SubmitInfo, 0n,
-                        0u, NativePtr.zero, NativePtr.zero,
-                        1u, &&cmdHandle,
-                        0u, NativePtr.zero
+                cmd.Handle |> pin (fun pCmd ->
+                    let submit =
+                        VkSubmitInfo(
+                            VkStructureType.SubmitInfo, 0n,
+                            0u, NativePtr.zero, NativePtr.zero,
+                            1u, pCmd,
+                            0u, NativePtr.zero
+                        )
+                    submit |> pin (fun pSubmit ->
+                        VkRaw.vkQueueSubmit(queue.Handle, 1u, pSubmit, fence.Handle) |> ignore
                     )
-
-                VkRaw.vkQueueSubmit(queue.Handle, 1u, &&submit, fence.Handle) |> ignore
+                )
                 lock enqueueMon (fun () -> 
                     vDone <- vEnqueue
                     Monitor.PulseAll enqueueMon
@@ -925,8 +928,11 @@ and [<AbstractClass>] Resource<'a when 'a : unmanaged and 'a : equality> =
 
 
 and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : QueueFamilyInfo, index : int) =
-    let mutable handle = VkQueue.Zero
-    do VkRaw.vkGetDeviceQueue(deviceHandle, uint32 familyInfo.index, uint32 index, &&handle)
+    let handle = 
+        temporary<VkQueue, VkQueue> (fun pQueue ->
+            VkRaw.vkGetDeviceQueue(deviceHandle, uint32 familyInfo.index, uint32 index, pQueue)
+            NativePtr.read pQueue
+        )
 
 
     let transfer = QueueFlags.transfer familyInfo.flags
@@ -963,7 +969,8 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
                         )
                     )
 
-                groupInfos |> NativePtr.withA (fun pGroupInfos ->
+                native {
+                    let! pGroupInfos = groupInfos
                     let binds = 
                         let mutable gi = 0
                         binds |> Array.collect (fun b ->
@@ -974,15 +981,14 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
                                 res
                             )
                         )
-                
-                    binds |> NativePtr.withA (fun pBinds ->
-                        VkRaw.vkQueueBindSparse(handle, uint32 binds.Length, pBinds, fence)
-                    )
-                )
+                    let! pBinds= binds
+                    return VkRaw.vkQueueBindSparse(handle, uint32 binds.Length, pBinds, fence)
+                }
             else
-                binds |> NativePtr.withA (fun pBinds ->
-                    VkRaw.vkQueueBindSparse(handle, uint32 binds.Length, pBinds, fence)
-                )
+                native {
+                    let! pBinds = binds
+                    return VkRaw.vkQueueBindSparse(handle, uint32 binds.Length, pBinds, fence)
+                }
         )
         
     member private x.SubmitPrivate(cmds : list<CommandBuffer>, waitFor : list<Semaphore>, signal : list<Semaphore>, fence : Option<Fence>) =
@@ -1005,7 +1011,7 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
 
                 if device.IsDeviceGroup then
                     let! pCmdMasks = cmds |> Array.map (fun _ -> device.AllMask)
-                    let mutable mask = device.AllMask
+                    //let mask = device.AllMask
 
                     let waitCount, pWaitIndices =
                         if waitFor.Length > 0 then device.AllCount, device.AllIndices
@@ -1015,36 +1021,41 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
                         if waitFor.Length > 0 then device.AllCount, device.AllIndices
                         else 0u, NativePtr.zero
 
-                    let mutable ext =
+                    let ext =
                         VkDeviceGroupSubmitInfo(
                             VkStructureType.DeviceGroupSubmitInfo, 0n, 
                             waitCount, pWaitIndices,
                             uint32 cmds.Length, pCmdMasks,
                             signalCount, pSignalIndices
                         )
+                    ext |> pin (fun pExt ->
 
-                    let mutable submit =
-                        VkSubmitInfo(
-                            VkStructureType.SubmitInfo, NativePtr.toNativeInt (&&ext),
-                            uint32 waitFor.Length, pWaitFor, NativePtr.cast pMasks,
-                            uint32 cmds.Length, pCmds,
-                            uint32 signal.Length, pSignal
-                        )
-
-                    VkRaw.vkQueueSubmit(handle, 1u, &&submit, fence)
-                        |> check "could not submit command buffer"
+                        let submit =
+                            VkSubmitInfo(
+                                VkStructureType.SubmitInfo, NativePtr.toNativeInt pExt,
+                                uint32 waitFor.Length, pWaitFor, NativePtr.cast pMasks,
+                                uint32 cmds.Length, pCmds,
+                                uint32 signal.Length, pSignal
+                            )
+                        submit |> pin (fun pSubmit ->
+                            VkRaw.vkQueueSubmit(handle, 1u, pSubmit, fence)
+                                |> check "could not submit command buffer"
+                        )   
+                    )
 
                 else
-                    let mutable submit =
+                    let submit =
                         VkSubmitInfo(
                             VkStructureType.SubmitInfo, 0n,
                             uint32 waitFor.Length, pWaitFor, NativePtr.cast pMasks,
                             uint32 cmds.Length, pCmds,
                             uint32 signal.Length, pSignal
                         )
-
-                    VkRaw.vkQueueSubmit(handle, 1u, &&submit, fence)
-                        |> check "could not submit command buffer"
+                        
+                    submit |> pin (fun pSubmit ->
+                        VkRaw.vkQueueSubmit(handle, 1u, pSubmit, fence)
+                            |> check "could not submit command buffer"
+                    )
             }
         )
 
@@ -1290,16 +1301,21 @@ and DeviceCommandPool internal(device : Device, index : int, queueFamily : Devic
     let allPools = ConcurrentHashSet<VkCommandPool>()
 
     let createCommandPoolHandle _ =
-        let mutable createInfo =
+        let createInfo =
             VkCommandPoolCreateInfo(
                 VkStructureType.CommandPoolCreateInfo, 0n,
                 VkCommandPoolCreateFlags.ResetCommandBufferBit,
                 uint32 index
             )
-        let mutable handle = VkCommandPool.Null
-        VkRaw.vkCreateCommandPool(device.Handle, &&createInfo, NativePtr.zero, &&handle)
-            |> check "could not create command pool"
+        let handle = 
+            createInfo |> pin (fun pCreate ->
+                temporary<VkCommandPool,VkCommandPool> (fun pHandle ->
+                    VkRaw.vkCreateCommandPool(device.Handle, pCreate, NativePtr.zero, pHandle)
+                        |> check "could not create command pool"
+                    NativePtr.read pHandle
+                )
 
+            )
         allPools.Add handle |> ignore
 
         handle
@@ -1333,16 +1349,20 @@ and DeviceCommandPool internal(device : Device, index : int, queueFamily : Devic
         member x.Dispose() = x.Dispose()
 
 and CommandPool internal(device : Device, familyIndex : int, queueFamily : DeviceQueueFamily) =
-    let mutable handle = VkCommandPool.Null
-    let mutable createInfo =
-        VkCommandPoolCreateInfo(
-            VkStructureType.CommandPoolCreateInfo, 0n,
-            VkCommandPoolCreateFlags.ResetCommandBufferBit,
-            uint32 familyIndex
+    let mutable handle =
+        let createInfo =
+            VkCommandPoolCreateInfo(
+                VkStructureType.CommandPoolCreateInfo, 0n,
+                VkCommandPoolCreateFlags.ResetCommandBufferBit,
+                uint32 familyIndex
+            )
+        createInfo |> pin (fun pCreate ->
+            temporary<VkCommandPool, VkCommandPool> (fun pHandle ->
+                VkRaw.vkCreateCommandPool(device.Handle, pCreate, NativePtr.zero, pHandle)
+                    |> check "could not create command pool"
+                NativePtr.read pHandle
+            )
         )
-
-    do VkRaw.vkCreateCommandPool(device.Handle, &&createInfo, NativePtr.zero, &&handle)
-        |> check "could not create command pool"
 
     member x.Device = device
     member x.QueueFamily = queueFamily
@@ -1364,20 +1384,20 @@ and CommandPool internal(device : Device, familyIndex : int, queueFamily : Devic
 and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : DeviceQueueFamily, level : CommandBufferLevel) =   
 
     let mutable handle = 
-        let info =
-            VkCommandBufferAllocateInfo(
-                VkStructureType.CommandBufferAllocateInfo, 0n,
-                pool,
-                unbox (int level),
-                1u
-            )
-        [| info |] |> NativePtr.withA (fun pInfo ->
-            let mutable handle = VkCommandBuffer.Zero
-            VkRaw.vkAllocateCommandBuffers(device.Handle, pInfo, &&handle)
+        native {
+            let! pInfo =
+                VkCommandBufferAllocateInfo(
+                    VkStructureType.CommandBufferAllocateInfo, 0n,
+                    pool,
+                    unbox (int level),
+                    1u
+                )
+            let! pHandle = VkCommandBuffer.Zero
+            VkRaw.vkAllocateCommandBuffers(device.Handle, pInfo, pHandle)
                 |> check "could not allocated command buffer"
 
-            handle
-        )
+            return !!pHandle
+        }
 
     let mutable commands = 0
     let mutable recording = false
@@ -1396,49 +1416,42 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
         recording <- false
 
     member x.Begin(usage : CommandBufferUsage) =
-        cleanup()
-        let mutable inh =
-            VkCommandBufferInheritanceInfo(
-                VkStructureType.CommandBufferInheritanceInfo, 0n,
-                VkRenderPass.Null, 0u,
-                VkFramebuffer.Null, 
-                0u,
-                VkQueryControlFlags.None,
-                VkQueryPipelineStatisticFlags.None
-            )
+        native {
+            cleanup()
+            let! pInh =
+                VkCommandBufferInheritanceInfo(
+                    VkStructureType.CommandBufferInheritanceInfo, 0n,
+                    VkRenderPass.Null, 0u,
+                    VkFramebuffer.Null, 
+                    0u,
+                    VkQueryControlFlags.None,
+                    VkQueryPipelineStatisticFlags.None
+                )
+            let! pNext =
+                if device.AllCount > 1u then
+                    VkDeviceGroupCommandBufferBeginInfo(
+                        VkStructureType.DeviceGroupCommandBufferBeginInfo, 0n,
+                        device.AllMask
+                    ) |> Some
+                else 
+                    None
 
-
-
-        
-
-        let mutable next =
-            if device.AllCount > 1u then
-                VkDeviceGroupCommandBufferBeginInfo(
-                    VkStructureType.DeviceGroupCommandBufferBeginInfo, 0n,
-                    device.AllMask
-                ) |> Some
-            else 
-                None
-
-
-        next |> NativePtr.withOption (fun pNext ->
-            let mutable info =
+            let! pInfo =
                 VkCommandBufferBeginInfo(
                     VkStructureType.CommandBufferBeginInfo, NativePtr.toNativeInt pNext,
                     unbox (int usage),
-                    &&inh
+                    pInh
                 )
-
-            VkRaw.vkBeginCommandBuffer(handle, &&info)
+            VkRaw.vkBeginCommandBuffer(handle, pInfo)
                 |> check "could not begin command buffer"
-        )
+        }
 
         commands <- 0
         recording <- true
 
     member x.Begin(pass : Resource<VkRenderPass>, usage : CommandBufferUsage) =
         cleanup()
-        let mutable inh =
+        let inh =
             VkCommandBufferInheritanceInfo(
                 VkStructureType.CommandBufferInheritanceInfo, 0n,
                 pass.Handle, 0u,
@@ -1448,23 +1461,25 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
                 VkQueryPipelineStatisticFlags.None
             )
 
-        let mutable info =
-            VkCommandBufferBeginInfo(
-                VkStructureType.CommandBufferBeginInfo, 0n,
-                unbox (int usage),
-                &&inh
+        inh |> pin (fun pInh ->
+            let info =
+                VkCommandBufferBeginInfo(
+                    VkStructureType.CommandBufferBeginInfo, 0n,
+                    unbox (int usage),
+                    pInh
+                )
+            info |> pin (fun pInfo ->
+                VkRaw.vkBeginCommandBuffer(handle, pInfo)
+                    |> check "could not begin command buffer"
             )
-
-        VkRaw.vkBeginCommandBuffer(handle, &&info)
-            |> check "could not begin command buffer"
-
+        )
 
         commands <- 0
         recording <- true
 
     member x.Begin(pass : Resource<VkRenderPass>, framebuffer : Resource<VkFramebuffer>, usage : CommandBufferUsage) =
         cleanup()
-        let mutable inh =
+        let inh =
             VkCommandBufferInheritanceInfo(
                 VkStructureType.CommandBufferInheritanceInfo, 0n,
                 pass.Handle, 0u,
@@ -1473,17 +1488,20 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
                 VkQueryControlFlags.None,
                 VkQueryPipelineStatisticFlags.None
             )
-
-        let mutable info =
-            VkCommandBufferBeginInfo(
-                VkStructureType.CommandBufferBeginInfo, 0n,
-                unbox (int usage),
-                &&inh
+            
+        inh |> pin (fun pInh ->
+            let info =
+                VkCommandBufferBeginInfo(
+                    VkStructureType.CommandBufferBeginInfo, 0n,
+                    unbox (int usage),
+                    pInh
+                )
+            
+            info |> pin (fun pInfo ->
+                VkRaw.vkBeginCommandBuffer(handle, pInfo)
+                    |> check "could not begin command buffer"
             )
-
-        VkRaw.vkBeginCommandBuffer(handle, &&info)
-            |> check "could not begin command buffer"
-
+        )
 
         commands <- 0
         recording <- true
@@ -1508,8 +1526,9 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
  
     member x.WaitAll(e : Event[]) =
         x.AppendCommand()
-        let handles = e |> Array.map (fun e -> e.Handle)
-        handles |> NativePtr.withA (fun ptr ->
+        native {
+            let handles = e |> Array.map (fun e -> e.Handle)
+            let! ptr = handles
             VkRaw.vkCmdWaitEvents(
                 handle, uint32 handles.Length, ptr,
                 VkPipelineStageFlags.None, VkPipelineStageFlags.AllCommandsBit,
@@ -1517,11 +1536,12 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
                 0u, NativePtr.zero,
                 0u, NativePtr.zero
             )
-        )
+        }
     member x.WaitAll(e : Event[], dstFlags : VkPipelineStageFlags) =
         x.AppendCommand()
-        let handles = e |> Array.map (fun e -> e.Handle)
-        handles |> NativePtr.withA (fun ptr ->
+        native {
+            let handles = e |> Array.map (fun e -> e.Handle)
+            let! ptr = handles
             VkRaw.vkCmdWaitEvents(
                 handle, uint32 handles.Length, ptr,
                 VkPipelineStageFlags.None, dstFlags,
@@ -1529,7 +1549,8 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
                 0u, NativePtr.zero,
                 0u, NativePtr.zero
             )
-        )
+        }
+
     member x.IsEmpty = commands = 0
     member x.CommandCount = commands
     member x.IsRecording = recording
@@ -1555,7 +1576,7 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
         if handle <> 0n && device.Handle <> 0n then
             cleanup()
             
-            VkRaw.vkFreeCommandBuffers(device.Handle, pool, 1u, &&handle)
+            handle |> pin (fun pHandle -> VkRaw.vkFreeCommandBuffers(device.Handle, pool, 1u, pHandle))
             handle <- 0n
 
         if disposing then 
@@ -1575,15 +1596,15 @@ and Fence internal(device : Device, signaled : bool) =
     let pFence : nativeptr<VkFence> = NativePtr.alloc 1
 
     do 
-        let info =
-            VkFenceCreateInfo(
-                VkStructureType.FenceCreateInfo, 0n,
-                (if signaled then VkFenceCreateFlags.SignaledBit else VkFenceCreateFlags.None)
-            )
-        [|info|] |> NativePtr.withA (fun pInfo ->
+        native {
+            let! pInfo =
+                VkFenceCreateInfo(
+                    VkStructureType.FenceCreateInfo, 0n,
+                    (if signaled then VkFenceCreateFlags.SignaledBit else VkFenceCreateFlags.None)
+                )
             VkRaw.vkCreateFence(device.Handle, pInfo, NativePtr.zero, pFence)
                 |> check "could not create fence"
-        )
+        }
 
     member x.Device = device
     member x.Handle = NativePtr.read pFence
@@ -1666,17 +1687,18 @@ and Semaphore internal(device : Device) =
 
 
     let mutable handle = 
-        let mutable handle = VkSemaphore.Null
-        let mutable info =
+        let info =
             VkSemaphoreCreateInfo(
                 VkStructureType.SemaphoreCreateInfo, 0n,
                 VkSemaphoreCreateFlags.MinValue
             )
-
-        VkRaw.vkCreateSemaphore(device.Handle, &&info, NativePtr.zero, &&handle)
-            |> check "could not create semaphore"
-
-        handle
+        info |> pin (fun pInfo ->
+            temporary<VkSemaphore, VkSemaphore> (fun pHandle ->
+                VkRaw.vkCreateSemaphore(device.Handle, pInfo, NativePtr.zero, pHandle)
+                    |> check "could not create semaphore"
+                NativePtr.read pHandle
+            )
+        )
 
     member x.Device = device
     member x.Handle = handle
@@ -1696,15 +1718,20 @@ and Semaphore internal(device : Device) =
         member x.Dispose() = x.Dispose()
 
 and Event internal(device : Device) =
-    let mutable info =
-        VkEventCreateInfo(
-            VkStructureType.EventCreateInfo, 0n,
-            VkEventCreateFlags.MinValue
-        )
 
-    let mutable handle = VkEvent.Null
-    do VkRaw.vkCreateEvent(device.Handle, &&info, NativePtr.zero, &&handle)
-        |> check "could not create event"
+    let mutable handle =
+        let info =
+            VkEventCreateInfo(
+                VkStructureType.EventCreateInfo, 0n,
+                VkEventCreateFlags.MinValue
+            )
+        info |> pin (fun pInfo ->
+            temporary<VkEvent, VkEvent> (fun pHandle ->
+                VkRaw.vkCreateEvent(device.Handle, pInfo, NativePtr.zero, pHandle)
+                    |> check "could not create event"
+                NativePtr.read pHandle
+            )
+        )
 
     member x.Device = device
     member x.Handle = handle
@@ -1743,24 +1770,30 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
     let maxAllocationSize = physical.MaxAllocationSize
 
     let createNullPtr() =
-        let mutable mem = VkDeviceMemory.Null
 
-        let mutable info =
+        let info =
             VkMemoryAllocateInfo(
                 VkStructureType.MemoryAllocateInfo, 0n, 
                 16UL,
                 uint32 memory.index
             )
 
-        VkRaw.vkAllocateMemory(device.Handle, &&info, NativePtr.zero, &&mem)
-            |> check "could not 'allocate' null pointer for device heap"
+        let mem = 
+            info |> pin (fun pInfo ->
+                temporary<VkDeviceMemory, VkDeviceMemory> (fun pHandle ->
+                    VkRaw.vkAllocateMemory(device.Handle, pInfo, NativePtr.zero, pHandle)
+                        |> check "could not 'allocate' null pointer for device heap"
+                    NativePtr.read pHandle
+                )
+            )
 
         let hostPtr = 
             if hostVisible then
-                let mutable ptr = 0n
-                VkRaw.vkMapMemory(device.Handle, mem, 0UL, 16UL, VkMemoryMapFlags.MinValue, &&ptr)
-                    |> check "could not map memory"
-                ptr
+                temporary<nativeint, nativeint> (fun pPtr ->
+                    VkRaw.vkMapMemory(device.Handle, mem, 0UL, 16UL, VkMemoryMapFlags.MinValue, pPtr)
+                        |> check "could not map memory"
+                    NativePtr.read pPtr
+                )
             else
                 0n
 
@@ -1802,25 +1835,29 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
             false
         else
             if heap.TryAdd size then
-                let mutable info =
+                let info =
                     VkMemoryAllocateInfo(
                         VkStructureType.MemoryAllocateInfo, 0n,
                         uint64 size,
                         uint32 memory.index
                     )
 
-                let mutable mem = VkDeviceMemory.Null
-            
-                VkRaw.vkAllocateMemory(device.Handle, &&info, NativePtr.zero, &&mem)
-                    |> check "could not allocate memory"
-
+                let mem =
+                    info |> pin (fun pInfo ->
+                        temporary<VkDeviceMemory, VkDeviceMemory> (fun pHandle ->
+                            VkRaw.vkAllocateMemory(device.Handle, pInfo, NativePtr.zero, pHandle)
+                                |> check "could not allocate memory"
+                            NativePtr.read pHandle
+                        )
+                    )
             
                 let hostPtr = 
                     if hostVisible then
-                        let mutable hostPtr = 0n
-                        VkRaw.vkMapMemory(device.Handle, mem, 0UL, uint64 size, VkMemoryMapFlags.MinValue, &&hostPtr)
-                            |> check "could not map memory"
-                        hostPtr
+                        temporary<nativeint, nativeint> (fun pPtr ->
+                            VkRaw.vkMapMemory(device.Handle, mem, 0UL, uint64 size, VkMemoryMapFlags.MinValue, pPtr)
+                                |> check "could not map memory"
+                            NativePtr.read pPtr
+                        )
                     else
                         0n
 
@@ -2177,9 +2214,11 @@ and [<AllowNullLiteral>] DevicePtr internal(memory : DeviceMemory, offset : int6
                 f ptr
             finally 
                 if not memory.Heap.IsHostCoherent then
-                    let mutable range = VkMappedMemoryRange(VkStructureType.MappedMemoryRange, 0n, memory.Handle, uint64 x.Offset, uint64 x.Size)
-                    VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, &&range)
-                        |> check "could not flush memory range"
+                    let range = VkMappedMemoryRange(VkStructureType.MappedMemoryRange, 0n, memory.Handle, uint64 x.Offset, uint64 x.Size)
+                    range |> pin (fun pRange ->
+                        VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, pRange)
+                            |> check "could not flush memory range"
+                    )
 
                 Monitor.Exit x
         else
@@ -2221,6 +2260,7 @@ and QueueCommand =
         
     | ExecuteCommand of waitFor : list<Semaphore> * signal : list<Semaphore> * cmd : ICommand
     | Atomically of children : list<QueueCommand>
+    | Custom of (DeviceQueue -> Fence -> unit)
 
 and DeviceTask(parent : DeviceQueueThread, priority : int) =
     let lockObj = obj()
@@ -2395,36 +2435,42 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                 let signalCount, pSignalIndices =
                     if waitFor.Length > 0 then device.AllCount, device.AllIndices
                     else 0u, NativePtr.zero
+                    
+                let! pExt = 
+                    [|
+                        VkDeviceGroupSubmitInfo(
+                            VkStructureType.DeviceGroupSubmitInfo, 0n, 
+                            waitCount, pWaitIndices,
+                            uint32 cmds.Length, pCmdMasks,
+                            signalCount, pSignalIndices
+                        )
+                    |]
+                    
+                let! pSubmit = 
+                    [|
+                        VkSubmitInfo(
+                            VkStructureType.SubmitInfo, NativePtr.toNativeInt pExt,
+                            uint32 waitFor.Length, pWaitFor, NativePtr.cast pMasks,
+                            uint32 cmds.Length, pCmds,
+                            uint32 signal.Length, pSignal
+                        )
+                    |]
 
-                let mutable ext =
-                    VkDeviceGroupSubmitInfo(
-                        VkStructureType.DeviceGroupSubmitInfo, 0n, 
-                        waitCount, pWaitIndices,
-                        uint32 cmds.Length, pCmdMasks,
-                        signalCount, pSignalIndices
-                    )
-
-                let mutable submit =
-                    VkSubmitInfo(
-                        VkStructureType.SubmitInfo, NativePtr.toNativeInt (&&ext),
-                        uint32 waitFor.Length, pWaitFor, NativePtr.cast pMasks,
-                        uint32 cmds.Length, pCmds,
-                        uint32 signal.Length, pSignal
-                    )
-
-                VkRaw.vkQueueSubmit(queue.Handle, 1u, &&submit, fence)
+                VkRaw.vkQueueSubmit(queue.Handle, 1u, pSubmit, fence)
                     |> check "could not submit command buffer"
 
             else
-                let mutable submit =
-                    VkSubmitInfo(
-                        VkStructureType.SubmitInfo, 0n,
-                        uint32 waitFor.Length, pWaitFor, NativePtr.cast pMasks,
-                        uint32 cmds.Length, pCmds,
-                        uint32 signal.Length, pSignal
-                    )
+                let! pSubmit = 
+                    [|
+                        VkSubmitInfo(
+                            VkStructureType.SubmitInfo, 0n,
+                            uint32 waitFor.Length, pWaitFor, NativePtr.cast pMasks,
+                            uint32 cmds.Length, pCmds,
+                            uint32 signal.Length, pSignal
+                        )
+                    |]
 
-                VkRaw.vkQueueSubmit(queue.Handle, 1u, &&submit, fence)
+                VkRaw.vkQueueSubmit(queue.Handle, 1u, pSubmit, fence)
                     |> check "could not submit command buffer"
         }
 
@@ -2505,7 +2551,7 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                     |> check "could not bind sparse memory"
 
             else
-                let mutable bindInfo =
+                let bindInfo =
                     VkBindSparseInfo(
                         VkStructureType.BindSparseInfo, 0n,
                         0u, NativePtr.zero,
@@ -2514,42 +2560,60 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                         uint32 imageBinds.Length, pImageBindInfos,
                         0u, NativePtr.zero
                     )
-
-                VkRaw.vkQueueBindSparse(queue.Handle, 1u, &&bindInfo, fence.Handle)
-                    |> check "could not bind sparse memory"
+                bindInfo |> pin (fun pInfo ->
+                    VkRaw.vkQueueBindSparse(queue.Handle, 1u, pInfo, fence.Handle)
+                        |> check "could not bind sparse memory"
+                )
         }
 
     let rec acquireNextImage (queue : DeviceQueue) (swapchain : VkSwapchainKHR) (buffer : ref<uint32>) (fence : Fence) =
-        let res  =VkRaw.vkAcquireNextImageKHR(queue.Device.Handle, swapchain, ~~~0UL, VkSemaphore.Null, fence.Handle, &&buffer.contents)
+        let res =
+            native {
+                let arr = [| !buffer |]
+                let! pArr = arr
+                let res = VkRaw.vkAcquireNextImageKHR(queue.Device.Handle, swapchain, ~~~0UL, VkSemaphore.Null, fence.Handle, pArr)
+                buffer := arr.[0]
+                return res
+            }
         if res <> VkResult.VkSuccess then
             System.Diagnostics.Debugger.Launch() |> ignore
             acquireNextImage queue swapchain buffer fence
             //|> check "could not acquire Swapchain Image"
 
     let present (queue : DeviceQueue) (swapchain : VkSwapchainKHR) (buffer : ref<uint32>) =
-        let mutable handle = swapchain
-        let mutable result = VkResult.VkSuccess
+        native {
+            let arr = [| !buffer |]
+            let! pHandle = [| swapchain |]
+            let! pArr = arr
+            let! pResult = [| VkResult.VkSuccess |]
 
-        let mutable info =
-            VkPresentInfoKHR(
-                VkStructureType.PresentInfoKhr, 0n, 
-                0u, NativePtr.zero,
-                1u, &&handle,
-                &&buffer.contents,
-                &&result
-            )
+            let! pInfo =
+                [|
+                    VkPresentInfoKHR(
+                        VkStructureType.PresentInfoKhr, 0n, 
+                        0u, NativePtr.zero,
+                        1u, pHandle,
+                        pArr,
+                        pResult
+                    )
+                |]
                 
-        VkRaw.vkQueuePresentKHR(queue.Handle, &&info) 
-            |> check "could not acquire image"
+            VkRaw.vkQueuePresentKHR(queue.Handle, pInfo) 
+                |> check "could not acquire image"
 
-        VkRaw.vkQueueWaitIdle(queue.Handle)
-            |> check "could not wait for queue"
-
+            VkRaw.vkQueueWaitIdle(queue.Handle)
+                |> check "could not wait for queue"
+            buffer := arr.[0]
+        }
 
 
 
     let rec perform (queue : DeviceQueue) (pool : CommandPool) (cmd : QueueCommand) (fence : Fence) =
         match cmd with
+            | QueueCommand.Custom action ->
+                fence.Reset()
+                action queue fence
+
             | QueueCommand.Submit(waitFor, signal, cmds) ->
                 fence.Reset()
                 submit queue waitFor signal cmds fence
@@ -2583,6 +2647,7 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                 buffer.Dispose()
 
             | QueueCommand.Atomically many ->
+                Log.warn "atomic"
                 for m in many do perform queue pool m fence
                     
 
@@ -2595,13 +2660,13 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
             | QueueCommand.BindSparse _ -> "BindSparse"
             | QueueCommand.Present _ -> "Present"
             | QueueCommand.Submit(_,_,cmd) -> sprintf "Submit%d" (List.length cmd)
+            | QueueCommand.Custom _ -> "Custom"
             | ExecuteCommand _ -> "Execute"
 
     let run (queue : DeviceQueue) () =
         let device = queue.Device
-        let fence = device.CreateFence()
         let pool = queue.Family.CreateCommandPool()
-
+        let fence = device.CreateFence()
         try
             while running do
                 let priority, item, tcs =
@@ -2624,7 +2689,7 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
             | :? OperationCanceledException -> ()
             | e -> Log.error "[Vulkan] DeviceQueueThread faulted: %A" e
 
-        fence.Dispose()
+        //fence.Dispose()
         pool.Dispose()
 
     let threads = 

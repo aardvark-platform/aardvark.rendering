@@ -9,7 +9,7 @@ open Aardvark.Base.Incremental
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 type ResourceInfo<'a> =
     {
@@ -875,10 +875,10 @@ module Resources =
             let device = prog.Device
 
             let pipeline = 
-                prog.ShaderCreateInfos |> NativePtr.withA (fun pShaderCreateInfos ->
-
-
-                    let mutable viewportState =
+                native {
+                    let! pShaderCreateInfos = prog.ShaderCreateInfos
+                    
+                    let! pViewportState =
                         let vp  =
                             if device.AllCount > 1u then
                                 if renderPass.LayerCount > 1 then 1u
@@ -895,8 +895,8 @@ module Resources =
                             NativePtr.zero
                         )
 
-                    let pSampleMasks = NativePtr.pushStackArray multisample.sampleMask
-                    let mutable multisampleState =
+                    let! pSampleMasks = multisample.sampleMask
+                    let! pMultisampleState =
                         let ms = multisample
                         VkPipelineMultisampleStateCreateInfo(
                             VkStructureType.PipelineMultisampleStateCreateInfo, 0n,
@@ -911,28 +911,26 @@ module Resources =
                         )
             
                     let dynamicStates = [| VkDynamicState.Viewport; VkDynamicState.Scissor |]
+                    let! pDynamicStates = Array.map uint32 dynamicStates
         
-                    let pDynamicStates = NativePtr.pushStackArray dynamicStates
-            
-                    let mutable pTessState = NativePtr.stackalloc 1
-                    if prog.HasTessellation then
-                        let state = 
-                            VkPipelineTessellationStateCreateInfo(
-                                VkStructureType.PipelineTessellationStateCreateInfo, 0n,
-                                VkPipelineTessellationStateCreateFlags.MinValue,
-                                uint32 prog.TessellationPatchSize
-                            )
-                        NativePtr.write pTessState state
-                    else
-                        pTessState <- NativePtr.zero
+                    let! pTessStateInfo = 
+                        VkPipelineTessellationStateCreateInfo(
+                            VkStructureType.PipelineTessellationStateCreateInfo, 0n,
+                            VkPipelineTessellationStateCreateFlags.MinValue,
+                            uint32 prog.TessellationPatchSize
+                        )
 
-                    let mutable dynamicStates =
+                    let pTessState = 
+                        if prog.HasTessellation then pTessStateInfo
+                        else NativePtr.zero
+
+                    let! pDynamicStates =
                         VkPipelineDynamicStateCreateInfo(
                             VkStructureType.PipelineDynamicStateCreateInfo, 0n,
                             VkPipelineDynamicStateCreateFlags.MinValue, 
 
                             uint32 dynamicStates.Length,
-                            pDynamicStates
+                            NativePtr.cast pDynamicStates
                         )
 
                     // TODO: tessellation input-patch-size
@@ -943,7 +941,8 @@ module Resources =
                     let depthStencil = depthStencil.Update(token) |> ignore; depthStencil.Pointer
                     let colorBlendState = colorBlendState.Update(token) |> ignore; colorBlendState.Pointer
 
-                    let mutable desc =
+                    let! pHandle = VkPipeline.Null
+                    let! pDesc =
                         VkGraphicsPipelineCreateInfo(
                             VkStructureType.GraphicsPipelineCreateInfo, 0n,
                             VkPipelineCreateFlags.None,
@@ -952,12 +951,12 @@ module Resources =
                             inputState,
                             inputAssembly,
                             pTessState,
-                            &&viewportState,
+                            pViewportState,
                             rasterizerState,
-                            &&multisampleState,
+                            pMultisampleState,
                             depthStencil,
                             colorBlendState,
-                            &&dynamicStates, //dynamic
+                            pDynamicStates, //dynamic
                             prog.PipelineLayout.Handle,
                             renderPass.Handle,
                             0u,
@@ -965,13 +964,11 @@ module Resources =
                             0
                         )
 
-                    let mutable handle = VkPipeline.Null
-                    VkRaw.vkCreateGraphicsPipelines(device.Handle, VkPipelineCache.Null, 1u, &&desc, NativePtr.zero, &&handle)
+                    VkRaw.vkCreateGraphicsPipelines(device.Handle, VkPipelineCache.Null, 1u, pDesc, NativePtr.zero, pHandle)
                         |> check "could not create pipeline"
 
-                    Pipeline(device, handle, Unchecked.defaultof<_>)
-
-                )
+                    return Pipeline(device, !!pHandle, Unchecked.defaultof<_>)
+                }
 
             pipeline.Handle
     

@@ -13,7 +13,7 @@ open Microsoft.FSharp.NativeInterop
 open Management
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 module GeometryPoolUtilities =
 
@@ -287,37 +287,37 @@ module GeometryPoolUtilities =
         static let sRange = sizeof<VkMappedMemoryRange> |> nativeint
 
         let transfer = device.TransferFamily
-
-        let align = int64 device.MinUniformBufferOffsetAlignment
-        //let hm = device.HostMemory.AllocRaw(ptr.Size)
+       
         
-        let mutable ptr = 0n
-        let hm, hostBuffer =
-            let mutable handle = VkBuffer.Null
-            let mutable info =
-                VkBufferCreateInfo(
-                    VkStructureType.BufferCreateInfo, 0n,
-                    VkBufferCreateFlags.None,
-                    uint64 size, 
-                    VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit,
-                    device.AllSharingMode,
-                    device.AllQueueFamiliesCnt, device.AllQueueFamiliesPtr
-                )
-            VkRaw.vkCreateBuffer(device.Handle, &&info, NativePtr.zero, &&handle)
-                |> check "could not create buffer"
+        let mutable ptr, hm, hostBuffer =
+            native {
+                let! pHandle = VkBuffer.Null
+                let! pInfo =
+                    VkBufferCreateInfo(
+                        VkStructureType.BufferCreateInfo, 0n,
+                        VkBufferCreateFlags.None,
+                        uint64 size, 
+                        VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit,
+                        device.AllSharingMode,
+                        device.AllQueueFamiliesCnt, device.AllQueueFamiliesPtr
+                    )
+                VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
+                    |> check "could not create buffer"
 
-            let mutable reqs = VkMemoryRequirements()
-            VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, &&reqs)
-            let hm = device.HostMemory.AllocRaw(int64 reqs.size)
+                let! pReqs = VkMemoryRequirements()
+                VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, pReqs)
+                let reqs = pReqs.Value
+                let hm = device.HostMemory.AllocRaw(int64 reqs.size)
 
-            VkRaw.vkBindBufferMemory(device.Handle, handle, hm.Handle, 0UL)
-                |> check "could not bind host memory"
+                VkRaw.vkBindBufferMemory(device.Handle, handle, hm.Handle, 0UL)
+                    |> check "could not bind host memory"
 
-            VkRaw.vkMapMemory(device.Handle, hm.Handle, 0UL, uint64 hm.Size, VkMemoryMapFlags.MinValue, &&ptr)
-                |> check "could not map memory"
-            
-            hm, new Buffer(device, handle, hm, size, VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit)
-
+                let! pPtr = 0n
+                VkRaw.vkMapMemory(device.Handle, hm.Handle, 0UL, uint64 hm.Size, VkMemoryMapFlags.MinValue, pPtr)
+                    |> check "could not map memory"
+                    
+                return pPtr.Value, hm, new Buffer(device, handle, hm, size, VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit)
+            }
         let mutable isEmpty = true
 
         let mutable dirty = RangeSet.empty
@@ -434,38 +434,42 @@ module GeometryPoolUtilities =
 
         let mutable scratchBuffer, scratchMem, scratchPtr =
             if size > 0L then
-                let mutable buffer = VkBuffer.Null
-                let mutable info =
-                    VkBufferCreateInfo(
-                        VkStructureType.BufferCreateInfo, 0n,
-                        VkBufferCreateFlags.None,
-                        uint64 streamSize,
-                        VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit,
-                        device.AllSharingMode,
-                        device.AllQueueFamiliesCnt,
-                        device.AllQueueFamiliesPtr
-                    )
+                native {
+                    let! pBuffer = VkBuffer.Null
+                    let! pInfo =
+                        VkBufferCreateInfo(
+                            VkStructureType.BufferCreateInfo, 0n,
+                            VkBufferCreateFlags.None,
+                            uint64 streamSize,
+                            VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit,
+                            device.AllSharingMode,
+                            device.AllQueueFamiliesCnt,
+                            device.AllQueueFamiliesPtr
+                        )
 
-                VkRaw.vkCreateBuffer(device.Handle, &&info, NativePtr.zero, &&buffer)
-                    |> check "could not create buffer"
+                    VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pBuffer)
+                        |> check "could not create buffer"
 
-                let mutable reqs = VkMemoryRequirements()
-                VkRaw.vkGetBufferMemoryRequirements(device.Handle, buffer, &&reqs)
+                    let buffer = !!pBuffer
+                    let! pReqs = VkMemoryRequirements()
+                    VkRaw.vkGetBufferMemoryRequirements(device.Handle, buffer, pReqs)
+                    let reqs = !!pReqs
 
-                let compatible = reqs.memoryTypeBits &&& (1u <<< device.HostMemory.Index) <> 0u
-                if not compatible then
-                    failf "cannot create buffer with host visible memory"
+                    let compatible = reqs.memoryTypeBits &&& (1u <<< device.HostMemory.Index) <> 0u
+                    if not compatible then
+                        failf "cannot create buffer with host visible memory"
 
-                let bufferMem = device.HostMemory.AllocRaw(int64 reqs.size)
+                    let bufferMem = device.HostMemory.AllocRaw(int64 reqs.size)
 
-                VkRaw.vkBindBufferMemory(device.Handle, buffer, bufferMem.Handle, 0UL)
-                    |> check "could not bind buffer memory"
+                    VkRaw.vkBindBufferMemory(device.Handle, buffer, bufferMem.Handle, 0UL)
+                        |> check "could not bind buffer memory"
 
-                let mutable memPtr = 0n
-                VkRaw.vkMapMemory(device.Handle, bufferMem.Handle, 0UL, uint64 bufferMem.Size, VkMemoryMapFlags.MinValue, &&memPtr)
-                    |> check "could not map memory"
+                    let! pMemPtr = 0n
+                    VkRaw.vkMapMemory(device.Handle, bufferMem.Handle, 0UL, uint64 bufferMem.Size, VkMemoryMapFlags.MinValue, pMemPtr)
+                        |> check "could not map memory"
 
-                buffer, bufferMem, memPtr
+                    return buffer, bufferMem, !!pMemPtr
+                }
             else
                 VkBuffer.Null, DeviceMemory.Null, 0n
 
@@ -543,27 +547,29 @@ module GeometryPoolUtilities =
 
                     | Some scratchOffset ->
                         Marshal.Copy(data, scratchPtr + nativeint scratchOffset, size)
-                        let mutable region =
-                            VkMappedMemoryRange(
-                                VkStructureType.MappedMemoryRange, 0n,
-                                scratchMem.Handle, 
-                                uint64 scratchOffset, uint64 size
-                            )
+                        native {
+                            let! pRegion =
+                                VkMappedMemoryRange(
+                                    VkStructureType.MappedMemoryRange, 0n,
+                                    scratchMem.Handle, 
+                                    uint64 scratchOffset, uint64 size
+                                )
 
-                        VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, &&region)
-                            |> check "could not flush range"
-
+                            VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, pRegion)
+                                |> check "could not flush range"
+                        }
                         use t = device.Token
 
                         t.Enqueue 
                             { new Command() with
                                 member x.Compatible = QueueFlags.All
                                 member x.Enqueue cmd =
-                                    let mutable copyInfo =
-                                        VkBufferCopy(uint64 scratchOffset, uint64 offset, uint64 size)
-                                    cmd.AppendCommand()
-                                    VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, &&copyInfo)
-                                    Disposable.Empty
+                                    native {
+                                        let! pCopyInfo = VkBufferCopy(uint64 scratchOffset, uint64 offset, uint64 size)
+                                        cmd.AppendCommand()
+                                        VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, pCopyInfo)
+                                        return Disposable.Empty
+                                    }
                             }
 
                         t.Sync()
@@ -583,34 +589,38 @@ module GeometryPoolUtilities =
 
         let mutable scratchBuffer, scratchMem =
             if size > 0L then
-                let mutable buffer = VkBuffer.Null
-                let mutable info =
-                    VkBufferCreateInfo(
-                        VkStructureType.BufferCreateInfo, 0n,
-                        VkBufferCreateFlags.None,
-                        uint64 streamSize,
-                        VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit,
-                        device.AllSharingMode,
-                        device.AllQueueFamiliesCnt,
-                        device.AllQueueFamiliesPtr
-                    )
+                native {
+                    let! pBuffer = VkBuffer.Null
+                    let! pInfo =
+                        VkBufferCreateInfo(
+                            VkStructureType.BufferCreateInfo, 0n,
+                            VkBufferCreateFlags.None,
+                            uint64 streamSize,
+                            VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit,
+                            device.AllSharingMode,
+                            device.AllQueueFamiliesCnt,
+                            device.AllQueueFamiliesPtr
+                        )
 
-                VkRaw.vkCreateBuffer(device.Handle, &&info, NativePtr.zero, &&buffer)
-                    |> check "could not create buffer"
+                    VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pBuffer)
+                        |> check "could not create buffer"
 
-                let mutable reqs = VkMemoryRequirements()
-                VkRaw.vkGetBufferMemoryRequirements(device.Handle, buffer, &&reqs)
+                    let buffer = !!pBuffer
+                    let! pReqs = VkMemoryRequirements()
+                    VkRaw.vkGetBufferMemoryRequirements(device.Handle, buffer, pReqs)
+                    let reqs = !!pReqs
 
-                let compatible = reqs.memoryTypeBits &&& (1u <<< device.HostMemory.Index) <> 0u
-                if not compatible then
-                    failf "cannot create buffer with host visible memory"
+                    let compatible = reqs.memoryTypeBits &&& (1u <<< device.HostMemory.Index) <> 0u
+                    if not compatible then
+                        failf "cannot create buffer with host visible memory"
 
-                let bufferMem = device.HostMemory.Alloc(int64 reqs.alignment, int64 reqs.size)
+                    let bufferMem = device.HostMemory.Alloc(int64 reqs.alignment, int64 reqs.size)
 
-                VkRaw.vkBindBufferMemory(device.Handle, buffer, bufferMem.Memory.Handle, uint64 bufferMem.Offset)
-                    |> check "could not bind buffer memory"
+                    VkRaw.vkBindBufferMemory(device.Handle, buffer, bufferMem.Memory.Handle, uint64 bufferMem.Offset)
+                        |> check "could not bind buffer memory"
 
-                buffer, bufferMem
+                    return buffer, bufferMem
+                }
             else
                 VkBuffer.Null, DevicePtr.Null
 
@@ -647,9 +657,11 @@ module GeometryPoolUtilities =
                                     member x.Compatible = QueueFlags.All
                                     member x.Enqueue(cmd) =
                                         cmd.AppendCommand()
-                                        let mutable copyInfo = VkBufferCopy(uint64 offset, uint64 offset, uint64 size)
-                                        VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, &&copyInfo)
-                                        Disposable.Empty
+                                        native {
+                                            let! pCopyInfo = VkBufferCopy(uint64 offset, uint64 offset, uint64 size)
+                                            VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, pCopyInfo)
+                                            return Disposable.Empty
+                                        }
                                 }
                             )
                         )

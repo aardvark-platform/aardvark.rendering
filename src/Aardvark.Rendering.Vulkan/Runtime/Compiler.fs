@@ -13,7 +13,7 @@ open System.Diagnostics
 open System.Collections.Generic
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 type CompilerScope =
     {

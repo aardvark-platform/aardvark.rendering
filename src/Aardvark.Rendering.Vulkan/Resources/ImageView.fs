@@ -9,7 +9,7 @@ open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 
 [<AutoOpen>]
@@ -186,29 +186,30 @@ module ImageView =
                 do! Command.SyncPeersDefault(img, VkImageLayout.ShaderReadOnlyOptimal)
             }
 
-        let viewType = viewType slices samplerType.isArray samplerType.dimension
-        let mutable info = 
-            VkImageViewCreateInfo(
-                VkStructureType.ImageViewCreateInfo, 0n,
-                VkImageViewCreateFlags.MinValue,
-                img.Handle,
-                viewType, 
-                img.Format,
-                componentMapping,
-                VkImageSubresourceRange(
-                    aspect, 
-                    uint32 levelRange.Min,
-                    uint32 levels,
-                    uint32 arrayRange.Min,
-                    uint32 slices
+        native {
+            let viewType = viewType slices samplerType.isArray samplerType.dimension
+            let! pInfo = 
+                VkImageViewCreateInfo(
+                    VkStructureType.ImageViewCreateInfo, 0n,
+                    VkImageViewCreateFlags.MinValue,
+                    img.Handle,
+                    viewType, 
+                    img.Format,
+                    componentMapping,
+                    VkImageSubresourceRange(
+                        aspect, 
+                        uint32 levelRange.Min,
+                        uint32 levels,
+                        uint32 arrayRange.Min,
+                        uint32 slices
+                    )
                 )
-            )
-        let mutable handle = VkImageView.Null
-        VkRaw.vkCreateImageView(device.Handle, &&info, NativePtr.zero, &&handle)
-            |> check "could not create image view"
+            let! pHandle = VkImageView.Null
+            VkRaw.vkCreateImageView(device.Handle, pInfo, NativePtr.zero, pHandle)
+                |> check "could not create image view"
 
-        ImageView(device, handle, img, viewType, levelRange, arrayRange, isResolved)
-
+            return ImageView(device, !!pHandle, img, viewType, levelRange, arrayRange, isResolved)
+        }
     let createStorageView (componentMapping : VkComponentMapping) (img : Image) (imageType : FShade.GLSL.GLSLImageType) (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
         let levels = 1 + levelRange.Max - levelRange.Min |> min img.MipMapLevels
         let slices = 1 + arrayRange.Max - arrayRange.Min |> min img.Count
@@ -245,27 +246,29 @@ module ImageView =
             }
 
         let viewType = viewType slices imageType.isArray imageType.dimension
-        let mutable info = 
-            VkImageViewCreateInfo(
-                VkStructureType.ImageViewCreateInfo, 0n,
-                VkImageViewCreateFlags.MinValue,
-                img.Handle,
-                viewType, 
-                img.Format,
-                componentMapping,
-                VkImageSubresourceRange(
-                    aspect, 
-                    uint32 levelRange.Min,
-                    uint32 levels,
-                    uint32 arrayRange.Min,
-                    uint32 slices
+        native {
+            let! pInfo = 
+                VkImageViewCreateInfo(
+                    VkStructureType.ImageViewCreateInfo, 0n,
+                    VkImageViewCreateFlags.MinValue,
+                    img.Handle,
+                    viewType, 
+                    img.Format,
+                    componentMapping,
+                    VkImageSubresourceRange(
+                        aspect, 
+                        uint32 levelRange.Min,
+                        uint32 levels,
+                        uint32 arrayRange.Min,
+                        uint32 slices
+                    )
                 )
-            )
-        let mutable handle = VkImageView.Null
-        VkRaw.vkCreateImageView(device.Handle, &&info, NativePtr.zero, &&handle)
-            |> check "could not create image view"
+            let! pHandle = VkImageView.Null
+            VkRaw.vkCreateImageView(device.Handle, pInfo, NativePtr.zero, pHandle)
+                |> check "could not create image view"
 
-        ImageView(device, handle, img, viewType, levelRange, arrayRange, isResolved)
+            return ImageView(device, !!pHandle, img, viewType, levelRange, arrayRange, isResolved)
+        }
 
     let createOutpuView (img : Image) (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
         let levels = 1 + levelRange.Max - levelRange.Min |> min img.MipMapLevels
@@ -276,27 +279,29 @@ module ImageView =
         let aspect = VkFormat.toShaderAspect img.Format
 
         let viewType = viewTypeTex slices (slices > 1) img.Dimension
-        let mutable info = 
-            VkImageViewCreateInfo(
-                VkStructureType.ImageViewCreateInfo, 0n,
-                VkImageViewCreateFlags.MinValue,
-                img.Handle,
-                viewType, 
-                img.Format,
-                VkComponentMapping.Identity,
-                VkImageSubresourceRange(
-                    aspect, 
-                    uint32 levelRange.Min,
-                    uint32 levels,
-                    uint32 arrayRange.Min,
-                    uint32 slices
+        native {
+            let! pInfo = 
+                VkImageViewCreateInfo(
+                    VkStructureType.ImageViewCreateInfo, 0n,
+                    VkImageViewCreateFlags.MinValue,
+                    img.Handle,
+                    viewType, 
+                    img.Format,
+                    VkComponentMapping.Identity,
+                    VkImageSubresourceRange(
+                        aspect, 
+                        uint32 levelRange.Min,
+                        uint32 levels,
+                        uint32 arrayRange.Min,
+                        uint32 slices
+                    )
                 )
-            )
-        let mutable handle = VkImageView.Null
-        VkRaw.vkCreateImageView(device.Handle, &&info, NativePtr.zero, &&handle)
-            |> check "could not create image view"
+            let! pHandle = VkImageView.Null
+            VkRaw.vkCreateImageView(device.Handle, pInfo, NativePtr.zero, pHandle)
+                |> check "could not create image view"
 
-        ImageView(device, handle, img, viewType, levelRange, arrayRange, false)
+            return ImageView(device, !!pHandle, img, viewType, levelRange, arrayRange, false)
+        }
 
     let delete (view : ImageView) (device : Device) =
         if device.Handle <> 0n && view.Handle.IsValid then

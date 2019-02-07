@@ -11,7 +11,7 @@ open Microsoft.FSharp.NativeInterop
 open Microsoft.FSharp.Reflection
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 type UnmanagedStruct(ptr : nativeint, size : int) =
     let mutable ptr = ptr
@@ -84,8 +84,8 @@ type UniformBuffer =
         val mutable public Storage : UnmanagedStruct
         val mutable public Layout : FShade.GLSL.GLSLUniformBuffer
 
-        new(device : Device, handle : VkBuffer, mem : DevicePtr, storage : UnmanagedStruct, layout : FShade.GLSL.GLSLUniformBuffer) = 
-            { inherit Buffer(device, handle, mem, mem.Size, VkBufferUsageFlags.UniformBufferBit); Storage = storage; Layout = layout }
+        new(buffer : Buffer, storage : UnmanagedStruct, layout : FShade.GLSL.GLSLUniformBuffer) = 
+            { inherit Buffer(buffer.Device, buffer.Handle, buffer.Memory, buffer.Size, buffer.Usage, RefCount = buffer.RefCount); Storage = storage; Layout = layout }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -95,12 +95,12 @@ module UniformBuffer =
         let size = layout.ubSize
         let storage = UnmanagedStruct.alloc size
 
-        let align = device.MinUniformBufferOffsetAlignment
-        let alignedSize = Alignment.next align (int64 size)
+        //let align = device.MinUniformBufferOffsetAlignment
+        //let alignedSize = Alignment.next align (int64 size)
 
-        let buffer = device.CreateBuffer(VkBufferUsageFlags.UniformBufferBit ||| VkBufferUsageFlags.TransferDstBit, alignedSize)
+        let buffer = device.CreateBuffer(VkBufferUsageFlags.UniformBufferBit ||| VkBufferUsageFlags.TransferDstBit, int64 size)
 
-        new UniformBuffer(device, buffer.Handle, buffer.Memory, storage, layout)
+        new UniformBuffer(buffer, storage, layout)
 
 
     let upload (b : UniformBuffer) (device : Device) =

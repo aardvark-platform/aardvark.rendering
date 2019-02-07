@@ -14,7 +14,7 @@ open System.Collections.Generic
 open Microsoft.FSharp.Core.LanguagePrimitives.IntrinsicOperators
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 
 type QueryPool =
@@ -29,20 +29,22 @@ type QueryPool =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module QueryPool =
     let create (cnt : int) (device : Device) =
-        let mutable info = 
-            VkQueryPoolCreateInfo(
-                VkStructureType.QueryPoolCreateInfo, 0n,
-                VkQueryPoolCreateFlags.MinValue,
-                VkQueryType.Timestamp,
-                uint32 cnt,
-                VkQueryPipelineStatisticFlags.None
-            )
+        native {
+            let! pInfo = 
+                VkQueryPoolCreateInfo(
+                    VkStructureType.QueryPoolCreateInfo, 0n,
+                    VkQueryPoolCreateFlags.MinValue,
+                    VkQueryType.Timestamp,
+                    uint32 cnt,
+                    VkQueryPipelineStatisticFlags.None
+                )
 
-        let mutable handle = VkQueryPool.Null
-        VkRaw.vkCreateQueryPool(device.Handle, &&info, NativePtr.zero, &&handle)
-            |> check "could not create query pool"
+            let! pHandle = VkQueryPool.Null
+            VkRaw.vkCreateQueryPool(device.Handle, pInfo, NativePtr.zero, pHandle)
+                |> check "could not create query pool"
 
-        QueryPool(device, handle, cnt)
+            return QueryPool(device, !!pHandle, cnt)
+        }
 
     let delete (pool : QueryPool) =
         VkRaw.vkDestroyQueryPool(pool.Device.Handle, pool.Handle, NativePtr.zero)
@@ -240,23 +242,25 @@ module StopwatchPool =
             }
 
     let create (count : int) (pool : DescriptorPool) =
-        let device = pool.Device
-        let stampCount = 2 * count
-        let mutable info = 
-            VkQueryPoolCreateInfo(
-                VkStructureType.QueryPoolCreateInfo, 0n,
-                VkQueryPoolCreateFlags.MinValue,
-                VkQueryType.Timestamp,
-                uint32 stampCount,
-                VkQueryPipelineStatisticFlags.None
-            )
+        native {
+            let device = pool.Device
+            let stampCount = 2 * count
+            let! pInfo = 
+                VkQueryPoolCreateInfo(
+                    VkStructureType.QueryPoolCreateInfo, 0n,
+                    VkQueryPoolCreateFlags.MinValue,
+                    VkQueryType.Timestamp,
+                    uint32 stampCount,
+                    VkQueryPipelineStatisticFlags.None
+                )
 
-        let mutable handle = VkQueryPool.Null
-        VkRaw.vkCreateQueryPool(device.Handle, &&info, NativePtr.zero, &&handle)
-            |> check "could not create query pool"
+            let! pHandle = VkQueryPool.Null
+            VkRaw.vkCreateQueryPool(device.Handle, pInfo, NativePtr.zero, pHandle)
+                |> check "could not create query pool"
 
-        let shader = device |> ComputeShader.ofFunction Kernels.accumulate
-        new StopwatchPool(handle, count, shader)
+            let shader = device |> ComputeShader.ofFunction Kernels.accumulate
+            return new StopwatchPool(!!pHandle, count, shader)
+        }
 
     let delete (pool : StopwatchPool) =
         pool.Dispose()

@@ -14,7 +14,7 @@ open System.Collections.Generic
 open Aardvark.Base.Runtime
 open FShade
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 type private MappedBuffer(d : Device, store : ResizeBuffer) =
     inherit ConstantMod<IBuffer>(store)
@@ -139,21 +139,22 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
     let debugMessage (msg : DebugMessage) =
-        if not (ignored.Contains msg.id) then
-            let str = msg.layerPrefix + ": " + msg.message
-            match msg.severity with
-                | MessageSeverity.Error ->
-                    Report.Error("[Vulkan] {0}", str)
-                    debugBreak msg
+        if device.DebugReportActive then
+            if not (ignored.Contains msg.id) then
+                let str = msg.layerPrefix + ": " + msg.message
+                match msg.severity with
+                    | MessageSeverity.Error ->
+                        Report.Error("[Vulkan] {0}", str)
+                        debugBreak msg
 
-                | MessageSeverity.Warning ->
-                    Report.Warn("[Vulkan] {0}", str)
+                    | MessageSeverity.Warning ->
+                        Report.Warn("[Vulkan] {0}", str)
 
-                | MessageSeverity.Information ->
-                    Report.Line("[Vulkan] {0}", str)
+                    | MessageSeverity.Information ->
+                        Report.Line("[Vulkan] {0}", str)
 
-                | _ ->
-                    Report.Line("[Vulkan] DEBUG: {0}", str)
+                    | _ ->
+                        Report.Line("[Vulkan] DEBUG: {0}", str)
 
     // install debug output to file (and errors/warnings to console)
     let debugSubscription = 
@@ -360,11 +361,17 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         let usage =
             if isDepth then 
-                VkImageUsageFlags.DepthStencilAttachmentBit ||| 
-                VkImageUsageFlags.TransferSrcBit ||| 
-                VkImageUsageFlags.TransferDstBit |||
-                //VkImageUsageFlags.StorageBit |||
-                VkImageUsageFlags.SampledBit
+                if count > 1 then
+                    VkImageUsageFlags.DepthStencilAttachmentBit ||| 
+                    VkImageUsageFlags.TransferSrcBit ||| 
+                    VkImageUsageFlags.TransferDstBit |||
+                    VkImageUsageFlags.SampledBit
+                else
+                    VkImageUsageFlags.DepthStencilAttachmentBit ||| 
+                    VkImageUsageFlags.TransferSrcBit ||| 
+                    VkImageUsageFlags.TransferDstBit |||
+                    VkImageUsageFlags.StorageBit |||
+                    VkImageUsageFlags.SampledBit
             else 
                 VkImageUsageFlags.ColorAttachmentBit ||| 
                 VkImageUsageFlags.TransferSrcBit ||| 
@@ -531,7 +538,12 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         let src = unbox<Image> src
         let dst = unbox<Image> dst
 
+        let srcLayout = src.Layout
+        let dstLayout = dst.Layout
+
         device.perform {
+            if srcLayout <> VkImageLayout.TransferSrcOptimal then do! Command.TransformLayout(src, VkImageLayout.TransferSrcOptimal)
+            if dstLayout <> VkImageLayout.TransferDstOptimal then do! Command.TransformLayout(dst, VkImageLayout.TransferDstOptimal)
             if src.Samples = dst.Samples then
                 do! Command.Copy(
                         src.[ImageAspect.Color, srcBaseLevel .. srcBaseLevel + levels - 1, srcBaseSlice .. srcBaseSlice + slices - 1],
@@ -545,6 +557,9 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                             src.[ImageAspect.Color, srcLevel, srcBaseSlice .. srcBaseSlice + slices - 1],
                             dst.[ImageAspect.Color, dstLevel, dstBaseSlice .. dstBaseSlice + slices - 1]
                         )
+            
+            if srcLayout <> VkImageLayout.TransferSrcOptimal then do! Command.TransformLayout(src, srcLayout)
+            if dstLayout <> VkImageLayout.TransferDstOptimal then do! Command.TransformLayout(dst, dstLayout)
         }
 
 

@@ -15,7 +15,7 @@ open Aardvark.Base.ReflectionHelpers
 
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 [<AbstractClass>]
 type private PixImageVisitor<'r>() =
@@ -1541,7 +1541,7 @@ module DeviceTensorCommandExtensions =
             { new Command() with
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
-                    let mutable copy =
+                    let copy =
                         VkBufferImageCopy(
                             0UL,
                             0u,
@@ -1552,7 +1552,9 @@ module DeviceTensorCommandExtensions =
                         )
                         
                     cmd.AppendCommand()
-                    VkRaw.vkCmdCopyBufferToImage(cmd.Handle, src.Buffer.Handle, dst.Image.Handle, dst.Image.Layout, 1u, &&copy)
+                    copy |> pin (fun pCopy ->
+                        VkRaw.vkCmdCopyBufferToImage(cmd.Handle, src.Buffer.Handle, dst.Image.Handle, dst.Image.Layout, 1u, pCopy)
+                    )
                     Disposable.Empty
             }
 
@@ -1584,7 +1586,7 @@ module DeviceTensorCommandExtensions =
             { new Command() with
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
-                    let mutable copy =
+                    let copy =
                         VkBufferImageCopy(
                             0UL,
                             0u,
@@ -1595,7 +1597,9 @@ module DeviceTensorCommandExtensions =
                         )
                         
                     cmd.AppendCommand()
-                    VkRaw.vkCmdCopyImageToBuffer(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Buffer.Handle, 1u, &&copy)
+                    copy |> pin (fun pCopy ->
+                        VkRaw.vkCmdCopyImageToBuffer(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Buffer.Handle, 1u, pCopy)
+                    )
                     Disposable.Empty
             }
 
@@ -1609,7 +1613,7 @@ module DeviceTensorCommandExtensions =
                 member x.Enqueue(cmd) =
                     cmd.AppendCommand()
 
-                    let mutable imageMemoryBarrier =
+                    let imageMemoryBarrier =
                         VkImageMemoryBarrier(
                             VkStructureType.ImageMemoryBarrier, 0n,
                             VkAccessFlags.None,
@@ -1622,14 +1626,16 @@ module DeviceTensorCommandExtensions =
                             src.VkImageSubresourceRange
                         )
 
-                    VkRaw.vkCmdPipelineBarrier(
-                        cmd.Handle,
-                        VkPipelineStageFlags.TopOfPipeBit,
-                        VkImageLayout.toDstStageFlags dstLayout,
-                        VkDependencyFlags.None,
-                        0u, NativePtr.zero,
-                        0u, NativePtr.zero,
-                        1u, &&imageMemoryBarrier
+                    imageMemoryBarrier |> pin (fun pBarrier ->
+                        VkRaw.vkCmdPipelineBarrier(
+                            cmd.Handle,
+                            VkPipelineStageFlags.TopOfPipeBit,
+                            VkImageLayout.toDstStageFlags dstLayout,
+                            VkDependencyFlags.None,
+                            0u, NativePtr.zero,
+                            0u, NativePtr.zero,
+                            1u, pBarrier
+                        )
                     )
 
                     Disposable.Empty
@@ -1837,8 +1843,8 @@ module ``Image Command Extensions`` =
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
                     let srcLayout = src.Image.Layout
-                    let dstLayout = dst.Image.Layout
-                    let mutable copy =
+                    let dstLayout = dst.Image.Layout // bring this one to dstoptimal if undefined.
+                    let copy =
                         VkImageCopy(
                             src.VkImageSubresourceLayers,
                             VkOffset3D(srcOffset.X, srcOffset.Y, srcOffset.Z),
@@ -1848,7 +1854,9 @@ module ``Image Command Extensions`` =
                         )
 
                     cmd.AppendCommand()
-                    VkRaw.vkCmdCopyImage(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Image.Handle, dst.Image.Layout, 1u, &&copy)
+                    copy |> pin (fun pCopy ->
+                        VkRaw.vkCmdCopyImage(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Image.Handle, dst.Image.Layout, 1u, pCopy)
+                    )
                     Disposable.Empty
             }
 
@@ -1881,7 +1889,7 @@ module ``Image Command Extensions`` =
             { new Command() with
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
-                    let mutable copy =
+                    let copy =
                         VkBufferImageCopy(
                             uint64 srcOffset,
                             uint32 srcStride.X,
@@ -1892,7 +1900,9 @@ module ``Image Command Extensions`` =
                         )
                         
                     cmd.AppendCommand()
-                    VkRaw.vkCmdCopyBufferToImage(cmd.Handle, src.Handle, dst.Image.Handle, dst.Image.Layout, 1u, &&copy)
+                    copy |> pin (fun pCopy ->
+                        VkRaw.vkCmdCopyBufferToImage(cmd.Handle, src.Handle, dst.Image.Handle, dst.Image.Layout, 1u, pCopy)
+                    )
                     Disposable.Empty
             }
 
@@ -1900,7 +1910,7 @@ module ``Image Command Extensions`` =
             { new Command() with
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
-                    let mutable copy =
+                    let copy =
                         VkBufferImageCopy(
                             uint64 dstOffset,
                             uint32 dstStride.X,
@@ -1911,7 +1921,9 @@ module ``Image Command Extensions`` =
                         )
                         
                     cmd.AppendCommand()
-                    VkRaw.vkCmdCopyImageToBuffer(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Handle, 1u, &&copy)
+                    copy |> pin (fun pCopy ->
+                        VkRaw.vkCmdCopyImageToBuffer(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Handle, 1u, pCopy)
+                    )
                     Disposable.Empty
             }
 
@@ -1922,7 +1934,7 @@ module ``Image Command Extensions`` =
             { new Command() with
                 member x.Compatible = QueueFlags.Graphics
                 member x.Enqueue (cmd : CommandBuffer) =
-                    let mutable resolve =
+                    let resolve =
                         VkImageResolve(
                             src.VkImageSubresourceLayers,
                             VkOffset3D(srcOffset.X, srcOffset.Y, srcOffset.Z),
@@ -1932,7 +1944,9 @@ module ``Image Command Extensions`` =
                         )
 
                     cmd.AppendCommand()
-                    VkRaw.vkCmdResolveImage(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Image.Handle, dst.Image.Layout, 1u, &&resolve)
+                    resolve |> pin (fun pResolve ->
+                        VkRaw.vkCmdResolveImage(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Image.Handle, dst.Image.Layout, 1u, pResolve)
+                    )
                     Disposable.Empty
             }
 
@@ -1976,7 +1990,7 @@ module ``Image Command Extensions`` =
                     dstOffsets.[1] <- VkOffset3D(dstRange.Max.X, dstRange.Max.Y, dstRange.Max.Z)
 
 
-                    let mutable blit =
+                    let blit =
                         VkImageBlit(
                             src.VkImageSubresourceLayers,
                             srcOffsets,
@@ -1985,7 +1999,9 @@ module ``Image Command Extensions`` =
                         )
                     
                     cmd.AppendCommand()
-                    VkRaw.vkCmdBlitImage(cmd.Handle, src.Image.Handle, srcLayout, dst.Image.Handle, dstLayout, 1u, &&blit, filter)
+                    blit |> pin (fun pBlit ->
+                        VkRaw.vkCmdBlitImage(cmd.Handle, src.Image.Handle, srcLayout, dst.Image.Handle, dstLayout, 1u, pBlit, filter)
+                    )
                     Disposable.Empty
             }
 
@@ -2013,11 +2029,14 @@ module ``Image Command Extensions`` =
             
                         cmd.Enqueue (Command.TransformLayout(img.Image, VkImageLayout.TransferDstOptimal))
                     
-                        let mutable clearValue = VkClearColorValue(float32 = color.ToV4f())
-                        let mutable range = img.VkImageSubresourceRange
-                        cmd.AppendCommand()
-                        VkRaw.vkCmdClearColorImage(cmd.Handle, img.Image.Handle, VkImageLayout.TransferDstOptimal, &&clearValue, 1u, &&range)
-
+                        let clearValue = VkClearColorValue(float32 = color.ToV4f())
+                        let range = img.VkImageSubresourceRange
+                        clearValue |> pin (fun pClear ->
+                            range |> pin (fun pRange ->
+                                cmd.AppendCommand()
+                                VkRaw.vkCmdClearColorImage(cmd.Handle, img.Image.Handle, VkImageLayout.TransferDstOptimal, pClear, 1u, pRange)
+                            )
+                        )
                         cmd.Enqueue (Command.TransformLayout(img.Image, originalLayout))
                         Disposable.Empty
                 }
@@ -2037,9 +2056,12 @@ module ``Image Command Extensions`` =
                   
                         let mutable clearValue = VkClearDepthStencilValue(float32 depth, stencil)
                         let mutable range = img.VkImageSubresourceRange
-                        cmd.AppendCommand()
-                        VkRaw.vkCmdClearDepthStencilImage(cmd.Handle, img.Image.Handle, VkImageLayout.TransferDstOptimal, &&clearValue, 1u, &&range)
-
+                        clearValue |> pin (fun pClear ->
+                            range |> pin (fun pRange ->
+                                cmd.AppendCommand()
+                                VkRaw.vkCmdClearDepthStencilImage(cmd.Handle, img.Image.Handle, VkImageLayout.TransferDstOptimal, pClear, 1u, pRange)
+                            )
+                        )
                         cmd.Enqueue (Command.TransformLayout(img.Image, originalLayout))
                         Disposable.Empty
                 }
@@ -2053,7 +2075,7 @@ module ``Image Command Extensions`` =
                     let srcStage = VkAccessFlags.toVkPipelineStageFlags src
                     let dstStage = VkAccessFlags.toVkPipelineStageFlags dst
 
-                    let mutable image =
+                    let image =
                         VkImageMemoryBarrier(
                             VkStructureType.ImageMemoryBarrier, 0n,
                             src, dst, 
@@ -2063,13 +2085,15 @@ module ``Image Command Extensions`` =
                             img.VkImageSubresourceRange
                         )
 
-                    VkRaw.vkCmdPipelineBarrier(
-                        cmd.Handle,
-                        srcStage, dstStage,
-                        VkDependencyFlags.None,
-                        0u, NativePtr.zero,
-                        0u, NativePtr.zero,
-                        1u, &&image
+                    image |> pin (fun pImage ->
+                        VkRaw.vkCmdPipelineBarrier(
+                            cmd.Handle,
+                            srcStage, dstStage,
+                            VkDependencyFlags.None,
+                            0u, NativePtr.zero,
+                            0u, NativePtr.zero,
+                            1u, pImage
+                        )
                     )
 
                     Disposable.Empty
@@ -2147,7 +2171,7 @@ module ``Image Command Extensions`` =
 
                             else VkPipelineStageFlags.None
 
-                        let mutable barrier =
+                        let barrier =
                             VkImageMemoryBarrier(
                                 VkStructureType.ImageMemoryBarrier, 0n, 
                                 src,
@@ -2161,14 +2185,16 @@ module ``Image Command Extensions`` =
                             )
 
                         cmd.AppendCommand()
-                        VkRaw.vkCmdPipelineBarrier(
-                            cmd.Handle,
-                            srcMask,
-                            dstMask,
-                            VkDependencyFlags.None,
-                            0u, NativePtr.zero,
-                            0u, NativePtr.zero,
-                            1u, &&barrier
+                        barrier |> pin (fun pBarrier ->
+                            VkRaw.vkCmdPipelineBarrier(
+                                cmd.Handle,
+                                srcMask,
+                                dstMask,
+                                VkDependencyFlags.None,
+                                0u, NativePtr.zero,
+                                0u, NativePtr.zero,
+                                1u, pBarrier
+                            )
                         )
                         Disposable.Empty
                 }
@@ -2216,7 +2242,7 @@ module ``Image Command Extensions`` =
 
                             for ci in 0 .. baseImage.PeerHandles.Length - 1 do
                                 let srcSub = img.[srcSlices.Min .. srcSlices.Max].VkImageSubresourceLayers
-                                let mutable copy =
+                                let copy =
                                     VkImageCopy(
                                         srcSub,
                                         VkOffset3D(srcRange.Min.X, srcRange.Min.Y, srcRange.Min.Z),
@@ -2229,30 +2255,33 @@ module ``Image Command Extensions`` =
                                     let imgSize = int64 copy.extent.width * int64 copy.extent.height * int64 copy.extent.depth * 4L
                                     totalSize <- totalSize + imgSize * int64 copy.srcSubresource.layerCount
 
-                                VkRaw.vkCmdCopyImage(
-                                    cmd.Handle, 
-                                    baseImage.Handle, VkImageLayout.TransferSrcOptimal, 
-                                    baseImage.PeerHandles.[ci], VkImageLayout.TransferDstOptimal,
-                                    1u, &&copy
+                                copy |> pin (fun pCopy ->
+                                    VkRaw.vkCmdCopyImage(
+                                        cmd.Handle, 
+                                        baseImage.Handle, VkImageLayout.TransferSrcOptimal, 
+                                        baseImage.PeerHandles.[ci], VkImageLayout.TransferDstOptimal,
+                                        1u, pCopy
+                                    )
                                 )
 
                         VkRaw.vkCmdSetDeviceMask(cmd.Handle, baseImage.Device.AllMask)
 
-                        let mutable mem =
+                        let mem =
                             VkMemoryBarrier(
                                 VkStructureType.MemoryBarrier, 0n,
                                 VkAccessFlags.TransferWriteBit,
                                 VkAccessFlags.TransferReadBit ||| VkAccessFlags.ShaderReadBit
                             )
-
-                        VkRaw.vkCmdPipelineBarrier(
-                            cmd.Handle,
-                            VkPipelineStageFlags.TransferBit,
-                            VkPipelineStageFlags.TransferBit ||| VkPipelineStageFlags.VertexShaderBit,
-                            VkDependencyFlags.DeviceGroupBit,
-                            1u, &&mem, 
-                            0u, NativePtr.zero, 
-                            0u, NativePtr.zero
+                        mem |> pin (fun pMem ->
+                            VkRaw.vkCmdPipelineBarrier(
+                                cmd.Handle,
+                                VkPipelineStageFlags.TransferBit,
+                                VkPipelineStageFlags.TransferBit ||| VkPipelineStageFlags.VertexShaderBit,
+                                VkDependencyFlags.DeviceGroupBit,
+                                1u, pMem, 
+                                0u, NativePtr.zero, 
+                                0u, NativePtr.zero
+                            )
                         )
 
                     Disposable.Empty
@@ -2269,7 +2298,7 @@ module Image =
     open KHRBindMemory2
 
     let allocLinear (size : V2i) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
-        let mutable info =
+        let info =
             VkImageCreateInfo(
                 VkStructureType.ImageCreateInfo, 0n,
                 VkImageCreateFlags.None,
@@ -2286,12 +2315,20 @@ module Image =
                 VkImageLayout.Preinitialized
             ) 
 
-        let mutable handle = VkImage.Null
-        VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, &&handle)
-            |> check "could not create image"
+        let mutable handle = 
+            temporary (fun pHandle ->
+                info |> pin (fun pInfo ->
+                    VkRaw.vkCreateImage(device.Handle, pInfo, NativePtr.zero, pHandle)
+                        |> check "could not create image"
+                    NativePtr.read pHandle
+                )
+            )
 
-        let mutable reqs = VkMemoryRequirements()
-        VkRaw.vkGetImageMemoryRequirements(device.Handle, handle, &&reqs)
+        let reqs =
+            temporary (fun ptr ->
+                VkRaw.vkGetImageMemoryRequirements(device.Handle, handle, ptr)
+                NativePtr.read ptr
+            )
         let memalign = int64 reqs.alignment |> Alignment.next device.BufferImageGranularity
         let memsize = int64 reqs.size |> Alignment.next device.BufferImageGranularity
 
@@ -2356,7 +2393,7 @@ module Image =
                 if mayHavePeers then VkImageCreateFlags.AliasBit ||| flags
                 else flags
                 
-            let mutable info =
+            let info =
                 VkImageCreateInfo(
                     VkStructureType.ImageCreateInfo, 0n,
                     flags,
@@ -2373,12 +2410,19 @@ module Image =
                     VkImageLayout.Undefined
                 ) 
 
-            let mutable handle = VkImage.Null
-            VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, &&handle)
-                |> check "could not create image"
-
-            let mutable reqs = VkMemoryRequirements()
-            VkRaw.vkGetImageMemoryRequirements(device.Handle, handle, &&reqs)
+            let handle = 
+                temporary (fun pHandle ->
+                    info |> pin (fun pInfo ->
+                        VkRaw.vkCreateImage(device.Handle, pInfo, NativePtr.zero, pHandle)
+                            |> check "could not create image"
+                        NativePtr.read pHandle
+                    )
+                )
+            let reqs =
+                temporary (fun ptr ->
+                    VkRaw.vkGetImageMemoryRequirements(device.Handle, handle,ptr)
+                    NativePtr.read ptr
+                )
             let memalign = int64 reqs.alignment |> Alignment.next device.BufferImageGranularity
             let memsize = int64 reqs.size |> Alignment.next device.BufferImageGranularity
             let ptr = device.Alloc(VkMemoryRequirements(uint64 memsize, uint64 memalign, reqs.memoryTypeBits), true)
@@ -2390,9 +2434,14 @@ module Image =
                 let handles = Array.zeroCreate indices.Length
                 handles.[0] <- handle
                 for i in 1 .. indices.Length - 1 do
-                    let mutable handle = VkImage.Null
-                    VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, &&handle)
-                        |> check "could not create image"
+                    let handle = 
+                        temporary (fun pHandle ->
+                            info |> pin (fun pInfo ->
+                                VkRaw.vkCreateImage(device.Handle, pInfo, NativePtr.zero, pHandle)
+                                    |> check "could not create image"
+                                NativePtr.read pHandle
+                            )
+                        )
                     handles.[1] <- handle
 
                 for off in 0 .. indices.Length - 1 do 
@@ -2401,32 +2450,26 @@ module Image =
                             indices.[(i+off) % indices.Length] |> uint32
                         )
 
-                    deviceIndices |> NativePtr.withA (fun pDeviceIndices ->
-                        let mutable groupInfo =
+                    native {
+                        let! pDeviceIndices = deviceIndices
+                        let groupInfo =
                             VkBindImageMemoryDeviceGroupInfo(
                                 VkStructureType.BindImageMemoryDeviceGroupInfo, 0n,
                                 uint32 deviceIndices.Length, pDeviceIndices,
                                 0u, NativePtr.zero
                             )
-                        let mutable info =  
+                        let! pGroup = groupInfo
+                        let! pInfo =  
                             VkBindImageMemoryInfo(
-                                VkStructureType.BindImageMemoryInfo, NativePtr.toNativeInt &&groupInfo,
+                                VkStructureType.BindImageMemoryInfo, NativePtr.toNativeInt pGroup,
                                 handles.[off],
                                 ptr.Memory.Handle,
                                 uint64 ptr.Offset
                             )
-                            //VkBindImageMemoryInfo(
-                            //    VkStructureType.BindImageMemoryInfo, 0n,
-                            //    handles.[off],
-                            //    ptr.Memory.Handle,
-                            //    uint64 ptr.Offset,
-                            //    uint32 deviceIndices.Length, pDeviceIndices,
-                            //    0u, NativePtr.zero
-                            //)
-
-                        VkRaw.vkBindImageMemory2(device.Handle, 1u, &&info)
+                        VkRaw.vkBindImageMemory2(device.Handle, 1u, pInfo)
                             |> check "could not bind image memory"
-                    )
+                    }
+                    
 
                 let result = Image(device, handles.[0], size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
                 result.PeerHandles <- Array.skip 1 handles
@@ -2798,9 +2841,14 @@ module Image =
                     let srcLevel = image.[0, level]
                     let temp = allocLinear srcLevel.Size.XY format VkImageUsageFlags.TransferSrcBit device
 
-                    let mutable resource = VkImageSubresource(VkImageAspectFlags.ColorBit, 0u, 0u)
-                    let mutable layout = VkSubresourceLayout()
-                    VkRaw.vkGetImageSubresourceLayout(device.Handle, temp.Handle, &&resource, &&layout)
+                    let resource = VkImageSubresource(VkImageAspectFlags.ColorBit, 0u, 0u)
+                    let layout = 
+                        resource |> pin (fun pResource ->
+                            temporary (fun pLayout ->
+                                VkRaw.vkGetImageSubresourceLayout(device.Handle, temp.Handle, pResource, pLayout)
+                                NativePtr.read pLayout
+                            )
+                        )
                     let vkRowPitch = int64 layout.rowPitch
 
                     let blockSize = CompressionMode.blockSize compressionMode

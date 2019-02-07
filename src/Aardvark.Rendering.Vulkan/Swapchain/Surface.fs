@@ -18,7 +18,7 @@ open KHRXcbSurface
 open KHRWaylandSurface
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 //static member XLibSurfaceCreateInfo = unbox<VkStructureType> 1000004000
 //static member XcbSurfaceCreateInfo = unbox<VkStructureType> 1000005000
@@ -97,14 +97,24 @@ type Surface(device : Device, handle : VkSurfaceKHR) =
     let family = device.GraphicsFamily
         
 
-    let mutable supported = 0u
-    do VkRaw.vkGetPhysicalDeviceSurfaceSupportKHR(physical.Handle, uint32 family.Index, handle, &&supported)
-        |> check "could not get Surface support info"
+    let supported =
+        native {
+            let! ptr = 0u
+            VkRaw.vkGetPhysicalDeviceSurfaceSupportKHR(physical.Handle, uint32 family.Index, handle, ptr)
+                |> check "could not get Surface support info"
+            return !!ptr
+        }
 
-    let mutable surfaceCaps = VkSurfaceCapabilitiesKHR()
-    do if supported <> 0u then
-            VkRaw.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical.Handle, handle, &&surfaceCaps) 
-                |> check "could not get Surface capabilities"
+    let surfaceCaps = 
+        if supported <> 0u then
+            native {
+                let! pSurfaceCaps = VkSurfaceCapabilitiesKHR()
+                VkRaw.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical.Handle, handle, pSurfaceCaps) 
+                    |> check "could not get Surface capabilities"
+                return !!pSurfaceCaps
+            }
+        else 
+            VkSurfaceCapabilitiesKHR()
         
     let supportedTransforms = unbox<VkSurfaceTransformFlagsKHR> (int surfaceCaps.supportedTransforms) |> VkSurfaceTransformFlagsKHR.toImageTrafos
     let supportedCompositeAlpha = unbox<VkCompositeAlphaFlagsKHR> (int surfaceCaps.supportedCompositeAlpha)
@@ -116,41 +126,41 @@ type Surface(device : Device, handle : VkSurfaceKHR) =
     let maxImageCount = int surfaceCaps.maxImageCount
 
 
-    let mutable presentModes =
+    let presentModes =
         if supported = 0u then
             Set.empty
         else
-            let mutable count = 0u
-            VkRaw.vkGetPhysicalDeviceSurfacePresentModesKHR(physical.Handle, handle, &&count, NativePtr.zero) 
-                |> check "could not get Surface present modes"
-
-            
-            let modes : int[] = Array.zeroCreate (int count)
-            modes |> NativePtr.withA (fun pModes ->
-                VkRaw.vkGetPhysicalDeviceSurfacePresentModesKHR(physical.Handle, handle, &&count, NativePtr.cast pModes) 
+            native {
+                let! pCount = 0u
+                VkRaw.vkGetPhysicalDeviceSurfacePresentModesKHR(physical.Handle, handle, pCount, NativePtr.zero) 
                     |> check "could not get Surface present modes"
-            )
+                    
+                let modes : int[] = Array.zeroCreate (int !!pCount)
+                let! pModes = modes
+                VkRaw.vkGetPhysicalDeviceSurfacePresentModesKHR(physical.Handle, handle, pCount, NativePtr.cast pModes) 
+                    |> check "could not get Surface present modes"
 
-            modes |> Seq.map unbox<VkPresentModeKHR> |> Set.ofSeq
+                return modes |> Seq.map unbox<VkPresentModeKHR> |> Set.ofSeq
+            }
 
     let supportedFormats =
         if supported = 0u then
             Map.empty
         else
-            let mutable formatCount = 0u
-            VkRaw.vkGetPhysicalDeviceSurfaceFormatsKHR(physical.Handle, handle, &&formatCount, NativePtr.zero) 
-                |> check "could not get supported Surface formats"
-
-            let formats = Array.zeroCreate (int formatCount)
-            formats |> NativePtr.withA (fun pFormats ->
-                VkRaw.vkGetPhysicalDeviceSurfaceFormatsKHR(physical.Handle, handle, &&formatCount, pFormats) 
+            native {
+                let! pFormatCount = 0u
+                VkRaw.vkGetPhysicalDeviceSurfaceFormatsKHR(physical.Handle, handle, pFormatCount, NativePtr.zero) 
                     |> check "could not get supported Surface formats"
-            )
 
-            formats
-                |> Seq.map (fun fmt -> fmt.format, fmt.colorSpace)
-                |> Map.ofSeqDupl
+                let formats = Array.zeroCreate (int !!pFormatCount)
+                let! pFormats = formats
+                VkRaw.vkGetPhysicalDeviceSurfaceFormatsKHR(physical.Handle, handle, pFormatCount, pFormats) 
+                    |> check "could not get supported Surface formats"
 
+                return formats
+                    |> Seq.map (fun fmt -> fmt.format, fmt.colorSpace)
+                    |> Map.ofSeqDupl
+            }
     let availableFormats =
         supportedFormats |> Map.toSeq |> Seq.map fst |> Set.ofSeq
 
@@ -175,10 +185,13 @@ type Surface(device : Device, handle : VkSurfaceKHR) =
        
     member x.Size =
         if supported <> 0u && handle.IsValid then
-            let mutable surfaceCaps = VkSurfaceCapabilitiesKHR()
-            VkRaw.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical.Handle, handle, &&surfaceCaps) 
-                |> check "could not get Surface capabilities"
-
+            let surfaceCaps =
+                native {
+                    let! ptr = VkSurfaceCapabilitiesKHR()
+                    VkRaw.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical.Handle, handle, ptr) 
+                        |> check "could not get Surface capabilities"
+                    return !!ptr
+                }
             V2i(int surfaceCaps.currentExtent.width, int surfaceCaps.currentExtent.height)
         else
             V2i.Zero
@@ -190,77 +203,79 @@ type Surface(device : Device, handle : VkSurfaceKHR) =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Surface =
     let create (info : SurfaceInfo) (device : Device) =
-        let instance = device.Instance
-        let mutable handle = VkSurfaceKHR.Null
+        native {
+            let instance = device.Instance
+            let! pHandle = VkSurfaceKHR.Null
 
-        match info with
-            | XLib info ->
-                let mutable info = 
-                    VkXlibSurfaceCreateInfoKHR(
-                        VkStructureType.XlibSurfaceCreateInfoKhr, 0n,
-                        VkXlibSurfaceCreateFlagsKHR.MinValue,
-                        info.dpy,
-                        info.window
-                    )
+            match info with
+                | XLib info ->
+                    let! pInfo = 
+                        VkXlibSurfaceCreateInfoKHR(
+                            VkStructureType.XlibSurfaceCreateInfoKhr, 0n,
+                            VkXlibSurfaceCreateFlagsKHR.MinValue,
+                            info.dpy,
+                            info.window
+                        )
 
-                VkRaw.vkCreateXlibSurfaceKHR(instance.Handle, &&info, NativePtr.zero, &&handle)
-                    |> check "could not create xlib surface"
+                    VkRaw.vkCreateXlibSurfaceKHR(instance.Handle, pInfo, NativePtr.zero, pHandle)
+                        |> check "could not create xlib surface"
 
-            | Xcb info ->
-                let mutable info =
-                    VkXcbSurfaceCreateInfoKHR(
-                        VkStructureType.XcbSurfaceCreateInfoKhr, 0n,
-                        VkXcbSurfaceCreateFlagsKHR.MinValue,
-                        info.connection,
-                        info.window
-                    )
-                VkRaw.vkCreateXcbSurfaceKHR(instance.Handle, &&info, NativePtr.zero, &&handle)
-                    |> check "could not create xcb surface"
+                | Xcb info ->
+                    let! pInfo =
+                        VkXcbSurfaceCreateInfoKHR(
+                            VkStructureType.XcbSurfaceCreateInfoKhr, 0n,
+                            VkXcbSurfaceCreateFlagsKHR.MinValue,
+                            info.connection,
+                            info.window
+                        )
+                    VkRaw.vkCreateXcbSurfaceKHR(instance.Handle, pInfo, NativePtr.zero, pHandle)
+                        |> check "could not create xcb surface"
 
-            | Wayland info ->
-                let mutable info =
-                    VkWaylandSurfaceCreateInfoKHR(
-                        VkStructureType.WaylandSurfaceCreateInfoKhr, 0n,
-                        VkWaylandSurfaceCreateFlagsKHR.MinValue,
-                        info.display,
-                        info.surface
-                    )
-                VkRaw.vkCreateWaylandSurfaceKHR(instance.Handle, &&info, NativePtr.zero, &&handle)
-                    |> check "could not create wayland surface"
+                | Wayland info ->
+                    let! pInfo =
+                        VkWaylandSurfaceCreateInfoKHR(
+                            VkStructureType.WaylandSurfaceCreateInfoKhr, 0n,
+                            VkWaylandSurfaceCreateFlagsKHR.MinValue,
+                            info.display,
+                            info.surface
+                        )
+                    VkRaw.vkCreateWaylandSurfaceKHR(instance.Handle, pInfo, NativePtr.zero, pHandle)
+                        |> check "could not create wayland surface"
 
-            | Mir info ->
-                let mutable info =
-                    VkMirSurfaceCreateInfoKHR(
-                        VkStructureType.MirSurfaceCreateInfoKhr, 0n,
-                        VkMirSurfaceCreateFlagsKHR.MinValue,
-                        info.connection,
-                        info.mirSurface
-                    )
-                VkRaw.vkCreateMirSurfaceKHR(instance.Handle, &&info, NativePtr.zero, &&handle)
-                    |> check "could not create mir surface"
+                | Mir info ->
+                    let! pInfo =
+                        VkMirSurfaceCreateInfoKHR(
+                            VkStructureType.MirSurfaceCreateInfoKhr, 0n,
+                            VkMirSurfaceCreateFlagsKHR.MinValue,
+                            info.connection,
+                            info.mirSurface
+                        )
+                    VkRaw.vkCreateMirSurfaceKHR(instance.Handle, pInfo, NativePtr.zero, pHandle)
+                        |> check "could not create mir surface"
 
-            | Android info ->
-                let mutable info =
-                    VkAndroidSurfaceCreateInfoKHR(
-                        VkStructureType.AndroidSurfaceCreateInfoKhr, 0n,
-                        VkAndroidSurfaceCreateFlagsKHR.MinValue,
-                        info.window
-                    )
-                VkRaw.vkCreateAndroidSurfaceKHR(instance.Handle, &&info, NativePtr.zero, &&handle)
-                    |> check "could not create android surface"
+                | Android info ->
+                    let! pInfo =
+                        VkAndroidSurfaceCreateInfoKHR(
+                            VkStructureType.AndroidSurfaceCreateInfoKhr, 0n,
+                            VkAndroidSurfaceCreateFlagsKHR.MinValue,
+                            info.window
+                        )
+                    VkRaw.vkCreateAndroidSurfaceKHR(instance.Handle, pInfo, NativePtr.zero, pHandle)
+                        |> check "could not create android surface"
 
-            | Win32 info ->
-                let mutable info =
-                    VkWin32SurfaceCreateInfoKHR(
-                        VkStructureType.Win32SurfaceCreateInfoKhr, 0n, 
-                        VkWin32SurfaceCreateFlagsKHR.MinValue,
-                        info.hinstance,
-                        info.hwnd
-                    )
-                VkRaw.vkCreateWin32SurfaceKHR(instance.Handle, &&info, NativePtr.zero, &&handle)
-                    |> check "could not create win32 surface"
+                | Win32 info ->
+                    let! pInfo =
+                        VkWin32SurfaceCreateInfoKHR(
+                            VkStructureType.Win32SurfaceCreateInfoKhr, 0n, 
+                            VkWin32SurfaceCreateFlagsKHR.MinValue,
+                            info.hinstance,
+                            info.hwnd
+                        )
+                    VkRaw.vkCreateWin32SurfaceKHR(instance.Handle, pInfo, NativePtr.zero, pHandle)
+                        |> check "could not create win32 surface"
 
-        Surface(device, handle)
+            return Surface(device, !!pHandle)
+        }
 
     let delete (s : Surface) (device : Device) =
         if s.Handle.IsValid then

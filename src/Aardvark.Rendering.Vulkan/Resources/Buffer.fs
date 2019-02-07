@@ -10,7 +10,7 @@ open Aardvark.Base
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 // =======================================================================
 // Resource Definition
@@ -69,7 +69,7 @@ module BufferCommands =
                     let srcCopyOffset = srcOffset - srcBufferOffset
                     let srcBufferSize = size + srcCopyOffset
 
-                    let mutable srcInfo =
+                    let srcInfo =
                         VkBufferCreateInfo(
                             VkStructureType.BufferCreateInfo, 0n,
                             VkBufferCreateFlags.None,
@@ -78,13 +78,19 @@ module BufferCommands =
                         )
                         
                     let mutable srcBuffer =
-                        let mutable srcBuffer = VkBuffer.Null
-                        VkRaw.vkCreateBuffer(device.Handle, &&srcInfo, NativePtr.zero, &&srcBuffer)
-                            |> check "could not create temporary buffer"
-                        srcBuffer
+                        srcInfo |> pin (fun pInfo ->
+                            temporary<VkBuffer,_> (fun pBuffer ->
+                                VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pBuffer)
+                                    |> check "could not create temporary buffer"
+                                NativePtr.read pBuffer
+                            )
+                        )
 
-                    let mutable reqs = VkMemoryRequirements()
-                    VkRaw.vkGetBufferMemoryRequirements(device.Handle, srcBuffer, &&reqs)
+                    let reqs = 
+                        temporary (fun pReqs -> 
+                            VkRaw.vkGetBufferMemoryRequirements(device.Handle, srcBuffer, pReqs)
+                            NativePtr.read pReqs
+                        )
 
                     if srcBufferOffset % (int64 reqs.alignment) <> 0L then
                         VkRaw.warn "bad buffer alignment"
@@ -92,9 +98,11 @@ module BufferCommands =
                     VkRaw.vkBindBufferMemory(device.Handle, srcBuffer, src.Memory.Handle, uint64 srcBufferOffset)
                         |> check "could not bind temporary buffer memory"
 
-                    let mutable copyInfo = VkBufferCopy(uint64 srcCopyOffset, uint64 dstOffset, uint64 size)
+                    let copyInfo = VkBufferCopy(uint64 srcCopyOffset, uint64 dstOffset, uint64 size)
                     cmd.AppendCommand()
-                    VkRaw.vkCmdCopyBuffer(cmd.Handle, srcBuffer, dst.Handle, 1u, &&copyInfo)
+                    copyInfo |> pin (fun pInfo ->
+                        VkRaw.vkCmdCopyBuffer(cmd.Handle, srcBuffer, dst.Handle, 1u, pInfo)
+                    )
 
                     { new Disposable() with
                         member x.Dispose() =
@@ -110,7 +118,7 @@ module BufferCommands =
             { new Command() with
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
-                    let mutable dstBuffer = VkBuffer.Null
+                    //let mutable dstBuffer = VkBuffer.Null
                     let device = src.Device
                     let align = device.MinUniformBufferOffsetAlignment
 
@@ -120,7 +128,7 @@ module BufferCommands =
                     let dstBufferSize = size + dstCopyOffset
 
 
-                    let mutable dstInfo =
+                    let dstInfo =
                         VkBufferCreateInfo(
                             VkStructureType.BufferCreateInfo, 0n,
                             VkBufferCreateFlags.None,
@@ -128,16 +136,21 @@ module BufferCommands =
                             0u, NativePtr.zero
                     )
 
-                    VkRaw.vkCreateBuffer(device.Handle, &&dstInfo, NativePtr.zero, &&dstBuffer)
-                        |> check "could not create temporary buffer"
-
+                    let dstBuffer =
+                        temporary (fun pDstBuffer ->
+                            dstInfo |> pin (fun pInfo ->
+                                VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pDstBuffer)
+                                    |> check "could not create temporary buffer"
+                                NativePtr.read pDstBuffer
+                            )
+                        )
                     VkRaw.vkBindBufferMemory(device.Handle, dstBuffer, dst.Memory.Handle, uint64 dstBufferOffset)
                         |> check "could not bind temporary buffer memory"
 
 
-                    let mutable copyInfo = VkBufferCopy(uint64 srcOffset, uint64 dstCopyOffset, uint64 size)
+                    let copyInfo = VkBufferCopy(uint64 srcOffset, uint64 dstCopyOffset, uint64 size)
                     cmd.AppendCommand()
-                    VkRaw.vkCmdCopyBuffer(cmd.Handle, src.Handle, dstBuffer, 1u, &&copyInfo)
+                    copyInfo |> pin (fun pInfo -> VkRaw.vkCmdCopyBuffer(cmd.Handle, src.Handle, dstBuffer, 1u, pInfo))
 
                     { new Disposable() with
                         member x.Dispose() = 
@@ -153,9 +166,9 @@ module BufferCommands =
             { new Command() with
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
-                    let mutable copyInfo = VkBufferCopy(uint64 srcOffset, uint64 dstOffset, uint64 size)
+                    let copyInfo = VkBufferCopy(uint64 srcOffset, uint64 dstOffset, uint64 size)
                     cmd.AppendCommand()
-                    VkRaw.vkCmdCopyBuffer(cmd.Handle, src.Handle, dst.Handle, 1u, &&copyInfo)
+                    copyInfo |> pin (fun pInfo -> VkRaw.vkCmdCopyBuffer(cmd.Handle, src.Handle, dst.Handle, 1u, pInfo))
                     Disposable.Empty
             }
 
@@ -260,7 +273,7 @@ module BufferCommands =
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
-                    let mutable barrier =
+                    let barrier =
                         VkBufferMemoryBarrier(
                             VkStructureType.BufferMemoryBarrier, 0n,
                             src,
@@ -298,15 +311,16 @@ module BufferCommands =
                             | VkAccessFlags.UniformReadBit -> VkPipelineStageFlags.VertexShaderBit
                             | VkAccessFlags.VertexAttributeReadBit -> VkPipelineStageFlags.VertexInputBit
                             | _ -> VkPipelineStageFlags.None
-
-                    VkRaw.vkCmdPipelineBarrier(
-                        cmd.Handle, 
-                        srcStage, 
-                        dstStage,
-                        VkDependencyFlags.None,
-                        0u, NativePtr.zero,
-                        1u, &&barrier,
-                        0u, NativePtr.zero
+                    barrier |> pin (fun pBarrier ->
+                        VkRaw.vkCmdPipelineBarrier(
+                            cmd.Handle, 
+                            srcStage, 
+                            dstStage,
+                            VkDependencyFlags.None,
+                            0u, NativePtr.zero,
+                            1u, pBarrier,
+                            0u, NativePtr.zero
+                        )
                     )
 
                     Disposable.Empty
@@ -317,7 +331,7 @@ module BufferCommands =
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
-                    let mutable barrier =
+                    let barrier =
                         VkBufferMemoryBarrier(
                             VkStructureType.BufferMemoryBarrier, 0n,
                             VkAccessFlags.TransferWriteBit ||| VkAccessFlags.HostWriteBit ||| VkAccessFlags.MemoryWriteBit ||| VkAccessFlags.ShaderWriteBit,
@@ -327,16 +341,18 @@ module BufferCommands =
                             0UL,
                             uint64 b.Size
                         )
-
-                    VkRaw.vkCmdPipelineBarrier(
-                        cmd.Handle, 
-                        VkPipelineStageFlags.TopOfPipeBit, 
-                        VkPipelineStageFlags.BottomOfPipeBit,
-                        VkDependencyFlags.None,
-                        0u, NativePtr.zero,
-                        1u, &&barrier,
-                        0u, NativePtr.zero
+                    barrier |> pin (fun pBarrier ->
+                        VkRaw.vkCmdPipelineBarrier(
+                            cmd.Handle, 
+                            VkPipelineStageFlags.TopOfPipeBit, 
+                            VkPipelineStageFlags.BottomOfPipeBit,
+                            VkDependencyFlags.None,
+                            0u, NativePtr.zero,
+                            1u, pBarrier,
+                            0u, NativePtr.zero
+                        )
                     )
+
 
                     Disposable.Empty
             }
@@ -397,7 +413,7 @@ module Buffer =
     let empty (usage : VkBufferUsageFlags) (device : Device) =
         let key = (device, usage)
         emptyBuffers.GetOrAdd(key, fun (device, usage) ->
-            let mutable info =
+            let info =
                 VkBufferCreateInfo(
                     VkStructureType.BufferCreateInfo, 0n,
                     VkBufferCreateFlags.None,
@@ -408,12 +424,20 @@ module Buffer =
                     device.AllQueueFamiliesPtr
                 )
 
-            let mutable handle = VkBuffer.Null
-            VkRaw.vkCreateBuffer(device.Handle, &&info, NativePtr.zero, &&handle)
-                |> check "could not create empty buffer"
+            let handle = 
+                info |> pin (fun pInfo ->
+                    temporary (fun pHandle ->
+                        VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
+                            |> check "could not create empty buffer"
+                        NativePtr.read pHandle
+                    )
+                )
 
-            let mutable reqs = VkMemoryRequirements()
-            VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, &&reqs)
+            let reqs = 
+                temporary (fun ptr ->
+                    VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, ptr)
+                    NativePtr.read ptr
+                )
 
             let mem = device.Alloc(reqs, true)
             VkRaw.vkBindBufferMemory(device.Handle, handle, mem.Memory.Handle, uint64 mem.Offset)
@@ -432,7 +456,7 @@ module Buffer =
 
     let createConcurrent (conc : bool) (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
         let device = memory.Device
-        let mutable info =
+        let info =
             VkBufferCreateInfo(
                 VkStructureType.BufferCreateInfo, 0n,
                 VkBufferCreateFlags.None,
@@ -443,12 +467,19 @@ module Buffer =
                 (if conc then device.AllQueueFamiliesPtr else NativePtr.zero)
             )
 
-        let mutable handle = VkBuffer.Null
-        VkRaw.vkCreateBuffer(device.Handle, &&info, NativePtr.zero, &&handle)
-            |> check "could not create buffer"
-
-        let mutable reqs = VkMemoryRequirements()
-        VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, &&reqs)
+        let handle =
+            info |> pin (fun pInfo ->
+                temporary (fun pHandle ->
+                    VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
+                        |> check "could not create buffer"
+                    NativePtr.read pHandle
+                )
+            )
+        let reqs =
+            temporary (fun ptr ->   
+                VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, ptr)
+                NativePtr.read ptr
+            )
 
         if reqs.memoryTypeBits &&& (1u <<< memory.Index) = 0u then
             failf "cannot create buffer using memory %A" memory
@@ -599,7 +630,7 @@ module BufferView =
         if b.Size = 0L then
             BufferView(device, VkBufferView.Null, b, fmt, offset, size)
         else
-            let mutable info = 
+            let info = 
                 VkBufferViewCreateInfo(
                     VkStructureType.BufferViewCreateInfo, 0n,
                     VkBufferViewCreateFlags.MinValue,
@@ -609,10 +640,14 @@ module BufferView =
                     size
                 )
 
-            let mutable handle = VkBufferView.Null
-            VkRaw.vkCreateBufferView(device.Handle, &&info, NativePtr.zero, &&handle)
-                |> check "could not create BufferView"
-
+            let handle = 
+                info |> pin (fun pInfo ->
+                    temporary (fun pHandle ->
+                        VkRaw.vkCreateBufferView(device.Handle, pInfo, NativePtr.zero, pHandle)
+                            |> check "could not create BufferView"
+                        NativePtr.read pHandle
+                    )
+                )
             BufferView(device, handle, b, fmt, offset, size)
 
     let delete (view : BufferView) (device : Device) =

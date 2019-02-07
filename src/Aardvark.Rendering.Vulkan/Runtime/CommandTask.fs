@@ -17,7 +17,7 @@ open Aardvark.Rendering.Vulkan
 open System.Threading.Tasks
 
 #nowarn "9"
-#nowarn "51"
+// #nowarn "51"
 
 // ===========================================================================================
 // ResourceManager stuff
