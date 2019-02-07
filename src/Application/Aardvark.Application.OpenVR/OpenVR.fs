@@ -938,9 +938,9 @@ type VrRenderer() =
                         swSubmit.Start()
                         x.Use(fun () ->
                             compositor.Submit(EVREye.Eye_Left, &lTex.Info, &lTex.Bounds, lTex.Flags) |> check "submit left"
-                            x.AfterSubmit()
+                            //x.AfterSubmit()
                             compositor.Submit(EVREye.Eye_Right, &rTex.Info, &rTex.Bounds, rTex.Flags) |> check "submit right"
-                            x.AfterSubmit()
+                            //x.AfterSubmit()
                         )
                         swSubmit.Stop()
             else
