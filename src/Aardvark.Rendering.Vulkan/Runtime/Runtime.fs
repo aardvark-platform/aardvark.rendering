@@ -230,7 +230,19 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     member x.CompileClear(signature : IFramebufferSignature, color : IMod<Map<Symbol, C4f>>, depth : IMod<Option<float>>) : IRenderTask =
         let pass = unbox<RenderPass> signature
-        let colors = pass.ColorAttachments |> Map.toSeq |> Seq.map (fun (_,(sem,att)) -> sem, color |> Mod.map (Map.find sem)) |> Map.ofSeq
+        let colors = 
+            pass.ColorAttachments 
+            |> Map.toSeq 
+            |> Seq.map (fun (_,(sem,att)) -> 
+                sem, color |> Mod.map (fun c -> 
+                            match Map.tryFind sem c with 
+                            | None -> 
+                                Log.warn "no clear color defined for sem: %s. Using black." sem
+                                C4f.Black 
+                            | Some c -> c
+                     )
+               ) 
+            |> Map.ofSeq
         new RenderTask.ClearTask(device, unbox signature, colors, depth, Some (Mod.constant 0u)) :> IRenderTask
 
 
@@ -351,7 +363,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                 VkImageUsageFlags.DepthStencilAttachmentBit ||| 
                 VkImageUsageFlags.TransferSrcBit ||| 
                 VkImageUsageFlags.TransferDstBit |||
-                VkImageUsageFlags.StorageBit |||
+                //VkImageUsageFlags.StorageBit |||
                 VkImageUsageFlags.SampledBit
             else 
                 VkImageUsageFlags.ColorAttachmentBit ||| 
