@@ -46,12 +46,13 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
     
+    Aardvark.Rendering.GL.Config.CheckErrors <- true
     // window { ... } is similar to show { ... } but instead
     // of directly showing the window we get the window-instance
     // and may show it later.
     let win =
         window {
-            backend Backend.Vulkan
+            backend Backend.GL
             display Display.Mono
             debug true
             samples 8

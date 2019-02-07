@@ -237,7 +237,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                 sem, color |> Mod.map (fun c -> 
                             match Map.tryFind sem c with 
                             | None -> 
-                                Log.warn "no clear color defined for sem: %s. Using black." sem
+                                Log.warn "no clear color defined for sem: %A. Using black." sem
                                 C4f.Black 
                             | Some c -> c
                      )
