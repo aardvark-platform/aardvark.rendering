@@ -1005,7 +1005,9 @@ module RenderTask =
         let runtime = task.Runtime.Value
         let signature = task.FramebufferSignature.Value
 
-        let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
+        let clearColors = 
+            sem |> Set.toList |> List.filter (fun s -> s <> DefaultSemantic.Depth) |> List.map (fun s -> s,C4f.Black)
+        let clear = runtime.CompileClear(signature, ~~clearColors, ~~1.0)
         let fbo = runtime.CreateFramebuffer(signature, sem, size)
 
         let res = new SequentialRenderTask([|clear; task|]) |> renderTo fbo

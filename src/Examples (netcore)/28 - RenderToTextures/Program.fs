@@ -46,15 +46,14 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
     
-    Aardvark.Rendering.GL.Config.CheckErrors <- true
     // window { ... } is similar to show { ... } but instead
     // of directly showing the window we get the window-instance
     // and may show it later.
     let win =
         window {
-            backend Backend.GL
+            backend Backend.Vulkan
             display Display.Mono
-            debug true
+            debug false
             samples 8
         }
 
@@ -96,8 +95,8 @@ let main argv =
             |> Sg.compile win.Runtime signature
             |> RenderTask.renderSemantics (
                     Set.ofList [
-                        DefaultSemantic.Depth; 
-                        DefaultSemantic.Colors; 
+                        DefaultSemantic.Depth
+                        DefaultSemantic.Colors
                         Sym.ofString "WPos"]
                ) size
 
