@@ -89,9 +89,10 @@ type Command() =
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
-                    handles |> NativePtr.withA (fun pHandles ->
+                    native {
+                        let! pHandles = handles
                         VkRaw.vkCmdExecuteCommands(cmd.Handle, uint32 handles.Length, pHandles)
-                    )
+                    }
                     Disposable.Empty
             }
 

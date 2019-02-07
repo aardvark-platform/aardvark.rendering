@@ -228,16 +228,18 @@ module PipelineLayout =
 
         // create a pipeline layout from the given DescriptorSetLayouts
         let handles = setLayouts |> Array.map (fun d -> d.Handle)
-        handles |> NativePtr.withA (fun pHandles ->
-            let mutable info =
+
+        native {
+            let! pHandles = handles
+            let! pInfo =
                 VkPipelineLayoutCreateInfo(
                     VkStructureType.PipelineLayoutCreateInfo, 0n,
                     VkPipelineLayoutCreateFlags.MinValue,
                     uint32 handles.Length, pHandles,
                     0u, NativePtr.zero
                 )
-            let mutable handle = VkPipelineLayout.Null
-            VkRaw.vkCreatePipelineLayout(device.Handle, &&info, NativePtr.zero, &&handle)
+            let! pHandle = VkPipelineLayout.Null
+            VkRaw.vkCreatePipelineLayout(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create PipelineLayout"
   
             let info =    
@@ -251,8 +253,8 @@ module PipelineLayout =
                     pEffectLayout   = None
                 }    
                       
-            PipelineLayout(device, handle, setLayouts, info, layers, perLayer)
-        )
+            return PipelineLayout(device, !!pHandle, setLayouts, info, layers, perLayer)
+        }
 
     let delete (layout : PipelineLayout) (device : Device) =
         layout.RemoveRef()

@@ -16,9 +16,9 @@ let main argv =
     let win =
         window {
             backend Backend.Vulkan
-            display Display.OpenVR
+            display Display.Stereo
             debug true
-            samples 1
+            samples 8
         }
 
 

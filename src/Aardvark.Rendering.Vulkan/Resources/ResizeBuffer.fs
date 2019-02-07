@@ -49,10 +49,13 @@ type private SparseBlock =
 type SparseBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer, virtualSize : int64) =
     inherit Buffer(device, handle, new DevicePtr(DeviceMemory.Null, 0L, virtualSize), virtualSize, usage)
     
-    let mutable reqs = VkMemoryRequirements()
-    do VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, &&reqs)
-    let align = int64 reqs.alignment
-    let memoryTypeBits = reqs.memoryTypeBits
+    let align, memoryTypeBits =
+        native {
+            let! pReqs = VkMemoryRequirements()
+            VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, pReqs)
+            let reqs = !!pReqs
+            return int64 reqs.alignment, reqs.memoryTypeBits
+        }
 
     let malloc(size : int64) =
         let reqs = VkMemoryRequirements(uint64 size, uint64 align, memoryTypeBits)
@@ -246,9 +249,12 @@ type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
     inherit Buffer(device, handle, new DevicePtr(DeviceMemory.Null, 0L, 2L <<< 30), virtualSize, usage)
 
     let align, memoryTypeBits = 
-        let mutable reqs = VkMemoryRequirements()
-        VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, &&reqs)
-        int64 reqs.alignment, reqs.memoryTypeBits
+        native {
+            let! pReqs = VkMemoryRequirements()
+            VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, pReqs)
+            let reqs = !!pReqs
+            return int64 reqs.alignment, reqs.memoryTypeBits
+        }
 
     let resourceLock = new ResourceLock()
 
@@ -396,26 +402,28 @@ type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ResizeBuffer =
     let create (usage : VkBufferUsageFlags) (device : Device) =
-        let usage = usage ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.TransferSrcBit
+        native {
+            let usage = usage ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.TransferSrcBit
 
-        let virtualSize = 2L <<< 30
-        let mutable info =
-            VkBufferCreateInfo(
-                VkStructureType.BufferCreateInfo, 0n,
-                VkBufferCreateFlags.SparseBindingBit ||| VkBufferCreateFlags.SparseResidencyBit,
-                uint64 virtualSize,
-                usage,
-                device.AllSharingMode,
-                device.AllQueueFamiliesCnt,
-                device.AllQueueFamiliesPtr
-            )
+            let virtualSize = 2L <<< 30
+            let! pInfo =
+                VkBufferCreateInfo(
+                    VkStructureType.BufferCreateInfo, 0n,
+                    VkBufferCreateFlags.SparseBindingBit ||| VkBufferCreateFlags.SparseResidencyBit,
+                    uint64 virtualSize,
+                    usage,
+                    device.AllSharingMode,
+                    device.AllQueueFamiliesCnt,
+                    device.AllQueueFamiliesPtr
+                )
 
-        let mutable handle = VkBuffer.Null
+            let! pHandle = VkBuffer.Null
 
-        VkRaw.vkCreateBuffer(device.Handle, &&info, NativePtr.zero, &&handle)
-            |> check "could not create sparse buffer"
+            VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
+                |> check "could not create sparse buffer"
 
-        new ResizeBuffer(device, usage, handle, virtualSize)
+            return new ResizeBuffer(device, usage, !!pHandle, virtualSize)
+        }
 
     let delete (b : ResizeBuffer) (d : Device) =
         b.Dispose()

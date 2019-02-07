@@ -187,25 +187,27 @@ module private DebugReportHelpers =
             if n = 1 then
                 gc <- GCHandle.Alloc(callbackDelegate)
                 let ptr = Marshal.GetFunctionPointerForDelegate(callbackDelegate)
-                
-                let mutable info =
-                    VkDebugUtilsMessengerCreateInfoEXT(
-                        VkStructureType.DebugUtilsMessengerCreateInfoExt, 0n,
-                        VkDebugUtilsMessengerCreateFlagsEXT.MinValue,
-                        VkDebugUtilsMessageSeverityFlagsEXT.All,
+                native {
+                    let! pInfo =
+                        VkDebugUtilsMessengerCreateInfoEXT(
+                            VkStructureType.DebugUtilsMessengerCreateInfoExt, 0n,
+                            VkDebugUtilsMessengerCreateFlagsEXT.MinValue,
+                            VkDebugUtilsMessageSeverityFlagsEXT.All,
 
-                        VkDebugUtilsMessageTypeFlagsEXT.VkDebugUtilsMessageTypeGeneralBitExt ||| 
-                        VkDebugUtilsMessageTypeFlagsEXT.VkDebugUtilsMessageTypeValidationBitExt ||| 
-                        VkDebugUtilsMessageTypeFlagsEXT.VkDebugUtilsMessageTypePerformanceBitExt,
+                            VkDebugUtilsMessageTypeFlagsEXT.VkDebugUtilsMessageTypeGeneralBitExt ||| 
+                            VkDebugUtilsMessageTypeFlagsEXT.VkDebugUtilsMessageTypeValidationBitExt ||| 
+                            VkDebugUtilsMessageTypeFlagsEXT.VkDebugUtilsMessageTypePerformanceBitExt,
 
-                        ptr, 123n
-                    )
+                            ptr, 123n
+                        )
 
+                    let! pCallback = callback
 
-                VkRaw.vkCreateDebugUtilsMessengerEXT(instance.Handle, &&info, NativePtr.zero, &&callback)
-                    |> check "vkCreateDebugUtilsMessengerEXT"
+                    VkRaw.vkCreateDebugUtilsMessengerEXT(instance.Handle, pInfo, NativePtr.zero, pCallback)
+                        |> check "vkCreateDebugUtilsMessengerEXT"
                     
-                instance.BeforeDispose.AddHandler(instanceDisposedHandler)
+                    instance.BeforeDispose.AddHandler(instanceDisposedHandler)
+                }
 
             id
 
@@ -236,16 +238,17 @@ module private DebugReportHelpers =
                 
         member x.Raise(severity : MessageSeverity, msg : string) =
             let flags = VkDebugUtilsMessageSeverityFlagsEXT.ofMessageSeverity severity
-
-            msg |> CStr.suse (fun str -> 
-                let mutable objectName =
+            native {
+                let! str = msg
+                
+                let! pObjectName =
                     VkDebugUtilsObjectNameInfoEXT(
                         VkStructureType.DebugUtilsObjectNameInfoExt, 0n,
                         VkObjectType.Instance, uint64 instance.Handle,
                         NativePtr.zero
                     )
 
-                let mutable info = 
+                let! pInfo = 
                     VkDebugUtilsMessengerCallbackDataEXT(
                         VkStructureType.DebugUtilsMessengerCallbackDataExt, 0n,
                         VkDebugUtilsMessengerCallbackDataFlagsEXT.MinValue,
@@ -253,16 +256,16 @@ module private DebugReportHelpers =
                         str, 
                         0u, NativePtr.zero,
                         0u, NativePtr.zero,
-                        1u, &&objectName
+                        1u, pObjectName
                     )
 
                 VkRaw.vkSubmitDebugUtilsMessageEXT(
                     instance.Handle,
                     flags,
                     VkDebugUtilsMessageTypeFlagsEXT.VkDebugUtilsMessageTypeGeneralBitExt,
-                    &&info
+                    pInfo
                 )
-            )
+            }
             
 [<AbstractClass; Sealed; Extension>]
 type InstanceExtensions private() =

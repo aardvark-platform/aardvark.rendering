@@ -393,40 +393,41 @@ module ``Compute Commands`` =
             { new Command() with
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
-                    
-                    let mutable imageMemoryBarrier =
-                        VkImageMemoryBarrier(
-                            VkStructureType.ImageMemoryBarrier, 0n,
-                            src, dst,
-                            VkImageLayout.General, VkImageLayout.General,
-                            VK_QUEUE_FAMILY_IGNORED,
-                            VK_QUEUE_FAMILY_IGNORED,
-                            img.Image.Handle,
-                            img.VkImageSubresourceRange
+                    native {
+                        let! pImageMemoryBarrier =
+                            VkImageMemoryBarrier(
+                                VkStructureType.ImageMemoryBarrier, 0n,
+                                src, dst,
+                                VkImageLayout.General, VkImageLayout.General,
+                                VK_QUEUE_FAMILY_IGNORED,
+                                VK_QUEUE_FAMILY_IGNORED,
+                                img.Image.Handle,
+                                img.VkImageSubresourceRange
+                            )
+
+                        let srcStage =
+                            match src with
+                                | VkAccessFlags.TransferReadBit | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
+                                | _ -> VkPipelineStageFlags.ComputeShaderBit
+                            
+                        let dstStage =
+                            match dst with
+                                | VkAccessFlags.TransferReadBit | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
+                                | _ -> VkPipelineStageFlags.ComputeShaderBit
+
+                        cmd.AppendCommand()
+                        VkRaw.vkCmdPipelineBarrier(
+                            cmd.Handle, 
+                            srcStage,
+                            dstStage,
+                            VkDependencyFlags.None,
+                            0u, NativePtr.zero,
+                            0u, NativePtr.zero,
+                            1u, pImageMemoryBarrier
                         )
 
-                    let srcStage =
-                        match src with
-                            | VkAccessFlags.TransferReadBit | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
-                            | _ -> VkPipelineStageFlags.ComputeShaderBit
-                            
-                    let dstStage =
-                        match dst with
-                            | VkAccessFlags.TransferReadBit | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
-                            | _ -> VkPipelineStageFlags.ComputeShaderBit
-
-                    cmd.AppendCommand()
-                    VkRaw.vkCmdPipelineBarrier(
-                        cmd.Handle, 
-                        srcStage,
-                        dstStage,
-                        VkDependencyFlags.None,
-                        0u, NativePtr.zero,
-                        0u, NativePtr.zero,
-                        1u, &&imageMemoryBarrier
-                    )
-
-                    Disposable.Empty
+                        return Disposable.Empty
+                    }
             }
 
     module TextureLayout = 
@@ -1089,50 +1090,52 @@ module ComputeShader =
             let layout =
                 device.CreatePipelineLayout([| shader |], 1, Set.empty)
                 
-            let shaderInfo =
-                VkPipelineShaderStageCreateInfo(
-                    VkStructureType.PipelineShaderStageCreateInfo, 0n,
-                    VkPipelineShaderStageCreateFlags.MinValue,
-                    VkShaderStageFlags.ComputeBit,
-                    module_.Handle,
-                    main,
-                    NativePtr.zero
-                )
-
-            let mutable pipelineInfo =
-                VkComputePipelineCreateInfo(
-                    VkStructureType.ComputePipelineCreateInfo, 0n,
-                    VkPipelineCreateFlags.None,
-                    shaderInfo,
-                    layout.Handle,
-                    VkPipeline.Null,
-                    0
-                )
-
-            let mutable handle = VkPipeline.Null
-            VkRaw.vkCreateComputePipelines(device.Handle, VkPipelineCache.Null, 1u, &&pipelineInfo, NativePtr.zero, &&handle)
-                |> check "could not create compute pipeline"
-
-            let textureNames =
-                iface.shaderSamplers |> Seq.collect (fun samName ->
-                    let sam = iface.program.samplers.[samName]
-                    sam.samplerTextures |> Seq.mapi (fun i (texName, state) ->
-                        (samName, i), texName
+            native {
+                let shaderInfo =
+                    VkPipelineShaderStageCreateInfo(
+                        VkStructureType.PipelineShaderStageCreateInfo, 0n,
+                        VkPipelineShaderStageCreateFlags.MinValue,
+                        VkShaderStageFlags.ComputeBit,
+                        module_.Handle,
+                        main,
+                        NativePtr.zero
                     )
-                )
-                |> Map.ofSeq
 
-            let samplers =
-                iface.shaderSamplers |> Seq.collect (fun samName ->
-                    let sam = iface.program.samplers.[samName]
-                    sam.samplerTextures |> Seq.mapi (fun i (_, state) ->
-                        (samName, i), device.CreateSampler state.SamplerStateDescription
+                let! pPipelineInfo =
+                    VkComputePipelineCreateInfo(
+                        VkStructureType.ComputePipelineCreateInfo, 0n,
+                        VkPipelineCreateFlags.None,
+                        shaderInfo,
+                        layout.Handle,
+                        VkPipeline.Null,
+                        0
                     )
-                )
-                |> Map.ofSeq
+
+                let! pHandle = VkPipeline.Null
+                VkRaw.vkCreateComputePipelines(device.Handle, VkPipelineCache.Null, 1u, pPipelineInfo, NativePtr.zero, pHandle)
+                    |> check "could not create compute pipeline"
+
+                let textureNames =
+                    iface.shaderSamplers |> Seq.collect (fun samName ->
+                        let sam = iface.program.samplers.[samName]
+                        sam.samplerTextures |> Seq.mapi (fun i (texName, state) ->
+                            (samName, i), texName
+                        )
+                    )
+                    |> Map.ofSeq
+
+                let samplers =
+                    iface.shaderSamplers |> Seq.collect (fun samName ->
+                        let sam = iface.program.samplers.[samName]
+                        sam.samplerTextures |> Seq.mapi (fun i (_, state) ->
+                            (samName, i), device.CreateSampler state.SamplerStateDescription
+                        )
+                    )
+                    |> Map.ofSeq
                 
-            ComputeShader(device, module_, layout, handle, textureNames, samplers, groupSize, glsl)
-                |> LoadResult.Loaded
+                return ComputeShader(device, module_, layout, !!pHandle, textureNames, samplers, groupSize, glsl)
+                    |> LoadResult.Loaded
+            }
         with _ ->
             Failed BrokenCache
 
@@ -1191,26 +1194,28 @@ module ComputeShader =
                         NativePtr.zero
                     )
 
-                let mutable pipelineInfo =
-                    VkComputePipelineCreateInfo(
-                        VkStructureType.ComputePipelineCreateInfo, 0n,
-                        VkPipelineCreateFlags.None,
-                        shaderInfo,
-                        layout.Handle,
-                        VkPipeline.Null,
-                        0
-                    )
+                native {
+                    let! pPipelineInfo =
+                        VkComputePipelineCreateInfo(
+                            VkStructureType.ComputePipelineCreateInfo, 0n,
+                            VkPipelineCreateFlags.None,
+                            shaderInfo,
+                            layout.Handle,
+                            VkPipeline.Null,
+                            0
+                        )
 
-                let mutable handle = VkPipeline.Null
-                VkRaw.vkCreateComputePipelines(device.Handle, VkPipelineCache.Null, 1u, &&pipelineInfo, NativePtr.zero, &&handle)
-                    |> check "could not create compute pipeline"
+                    let! pHandle = VkPipeline.Null
+                    VkRaw.vkCreateComputePipelines(device.Handle, VkPipelineCache.Null, 1u, pPipelineInfo, NativePtr.zero, pHandle)
+                        |> check "could not create compute pipeline"
 
                
-                let samplers =
-                    shader.csSamplerStates |> Map.map (fun _ s -> device.CreateSampler s.SamplerStateDescription)
+                    let samplers =
+                        shader.csSamplerStates |> Map.map (fun _ s -> device.CreateSampler s.SamplerStateDescription)
                 
 
-                ComputeShader(device, sm, layout, handle, shader.csTextureNames, samplers, shader.csLocalSize, Some glsl.code)
+                    return ComputeShader(device, sm, layout, !!pHandle, shader.csTextureNames, samplers, shader.csLocalSize, Some glsl.code)
+                }
             | _ ->
                 failf "could not create compute shader"
 

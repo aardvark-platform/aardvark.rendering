@@ -4,7 +4,7 @@ open System.Runtime.InteropServices
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-// #nowarn "51"
+#nowarn "51"
 
 [<StructLayout(LayoutKind.Sequential)>]
 type V2ui =
@@ -94,19 +94,19 @@ module NativePtr =
     let free (ptr : nativeptr<'a>) =
         ptr |> NativePtr.toNativeInt |> Marshal.FreeHGlobal
 
-    let inline pushStackArray (elements : seq<'a>) =
-        let arr = elements |> Seq.toArray
-        let ptr = NativePtr.stackalloc arr.Length
-        for i in 0..arr.Length-1 do
-            NativePtr.set ptr i arr.[i]
-        ptr
+    //let inline pushStackArray (elements : seq<'a>) =
+    //    let arr = elements |> Seq.toArray
+    //    let ptr = NativePtr.stackalloc arr.Length
+    //    for i in 0..arr.Length-1 do
+    //        NativePtr.set ptr i arr.[i]
+    //    ptr
 
     let zero<'a when 'a : unmanaged> : nativeptr<'a> = NativePtr.ofNativeInt 0n
 
-    let inline stackallocWith size (f : nativeptr<'a> -> 'b) =
-        let ptr = NativePtr.stackalloc size
-        let r = f ptr
-        myId r
+    //let inline stackallocWith size (f : nativeptr<'a> -> 'b) =
+    //    let ptr = NativePtr.stackalloc size
+    //    let r = f ptr
+    //    myId r
 
     module Operators =
     
@@ -121,14 +121,14 @@ module NativePtr =
 
 module CStr =
 
-    let writeTo (ptr : cstr) (str : System.String) =
-        let arr = System.Text.ASCIIEncoding.ASCII.GetBytes str
-        let mutable ptr = ptr
-        for b in arr do
-            NativePtr.write ptr b
-            ptr <- ptr |> NativePtr.step 1
-        NativePtr.write ptr 0uy
-        ptr |> NativePtr.step 1
+    //let writeTo (ptr : cstr) (str : System.String) =
+    //    let arr = System.Text.ASCIIEncoding.ASCII.GetBytes str
+    //    let mutable ptr = ptr
+    //    for b in arr do
+    //        NativePtr.write ptr b
+    //        ptr <- ptr |> NativePtr.step 1
+    //    NativePtr.write ptr 0uy
+    //    ptr |> NativePtr.step 1
 
     let strlen(str : cstr) =
         let mutable l = 0
@@ -137,76 +137,74 @@ module CStr =
         l
 
 
-    let inline salloc (str : string) =
-        let ptr = NativePtr.stackalloc (str.Length - 1)
-        str |> writeTo ptr |> ignore
-        ptr
+    //let inline salloc (str : string) =
+    //    let ptr = NativePtr.stackalloc (str.Length - 1)
+    //    str |> writeTo ptr |> ignore
+    //    ptr
 
-    [<System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)>]
-    let suse (f : cstr -> 'r) (str : string) =
-        let ptr = NativePtr.stackalloc (str.Length - 1)
-        str |> writeTo ptr |> ignore
-        f ptr
+    //[<System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)>]
+    //let suse (f : cstr -> 'r) (str : string) =
+    //    let ptr = NativePtr.stackalloc (str.Length - 1)
+    //    str |> writeTo ptr |> ignore
+    //    f ptr
 
-    let inline sallocMany (strs : seq<string>) =
-        let mutable length = 0
-        let mutable count = 0
-        for s in strs do
-            length <- length + s.Length + 1
-            count <- count + 1
+    //let inline sallocMany (strs : seq<string>) =
+    //    let mutable length = 0
+    //    let mutable count = 0
+    //    for s in strs do
+    //        length <- length + s.Length + 1
+    //        count <- count + 1
 
-        let content = NativePtr.stackalloc length
-        let ptrs = NativePtr.stackalloc count
+    //    let content = NativePtr.stackalloc length
+    //    let ptrs = NativePtr.stackalloc count
 
-        let mutable currentPtr = ptrs
-        let mutable current = content
-        for s in strs do
-            NativePtr.write currentPtr current
-            current <- s |> writeTo current
-            currentPtr <- currentPtr |> NativePtr.step 1
+    //    let mutable currentPtr = ptrs
+    //    let mutable current = content
+    //    for s in strs do
+    //        NativePtr.write currentPtr current
+    //        current <- s |> writeTo current
+    //        currentPtr <- currentPtr |> NativePtr.step 1
 
-        ptrs
+    //    ptrs
 
-    let susemany (f : int -> nativeptr<cstr> -> 'r) (strings : seq<string>) =
-        let mutable length = 0
-        let mutable count = 0
-        for s in strings do
-            length <- length + s.Length + 1
-            count <- count + 1
+    //let susemany (f : int -> nativeptr<cstr> -> 'r) (strings : seq<string>) =
+    //    let mutable length = 0
+    //    let mutable count = 0
+    //    for s in strings do
+    //        length <- length + s.Length + 1
+    //        count <- count + 1
 
-        let content : byte[] = Array.zeroCreate length
+    //    let content : byte[] = Array.zeroCreate length
         
-        let gc = GCHandle.Alloc(content, GCHandleType.Pinned)
-        try
-            let pData = gc.AddrOfPinnedObject()
-            let mutable i = 0
-            let mutable o = 0
-            let offsets = Array.zeroCreate count
+    //    let gc = GCHandle.Alloc(content, GCHandleType.Pinned)
+    //    try
+    //        let pData = gc.AddrOfPinnedObject()
+    //        let mutable i = 0
+    //        let mutable o = 0
+    //        let offsets = Array.zeroCreate count
 
-            for s in strings do
-                let arr = System.Text.Encoding.ASCII.GetBytes(s)
-                offsets.[i] <- pData + nativeint o
-                arr.CopyTo(content, o)
-                content.[o + arr.Length] <- 0uy
-                o <- o + arr.Length + 1
-                i <- i + 1
+    //        for s in strings do
+    //            let arr = System.Text.Encoding.ASCII.GetBytes(s)
+    //            offsets.[i] <- pData + nativeint o
+    //            arr.CopyTo(content, o)
+    //            content.[o + arr.Length] <- 0uy
+    //            o <- o + arr.Length + 1
+    //            i <- i + 1
 
                 
-            let gc = GCHandle.Alloc(offsets, GCHandleType.Pinned)
-            try
-                let pStrs = gc.AddrOfPinnedObject()
-                f count (NativePtr.ofNativeInt pStrs)
-            finally
-                gc.Free()
+    //        let gc = GCHandle.Alloc(offsets, GCHandleType.Pinned)
+    //        try
+    //            let pStrs = gc.AddrOfPinnedObject()
+    //            f count (NativePtr.ofNativeInt pStrs)
+    //        finally
+    //            gc.Free()
 
-        finally 
-            gc.Free()
+    //    finally 
+    //        gc.Free()
 
 
     let malloc (str : string) =
-        let ptr = NativePtr.malloc (str.Length + 1)
-        str |> writeTo ptr |> ignore
-        ptr
+        Marshal.StringToHGlobalAnsi str |> NativePtr.ofNativeInt<byte>
 
     let toString (str : cstr) =
         Marshal.PtrToStringAnsi(str |> NativePtr.toNativeInt)

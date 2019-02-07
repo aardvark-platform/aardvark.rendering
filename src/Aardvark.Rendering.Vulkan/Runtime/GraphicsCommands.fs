@@ -30,19 +30,21 @@ module ``Graphics Commands`` =
             { new Command() with
                 member x.Compatible = QueueFlags.Graphics
                 member x.Enqueue cmd =
-                    let mutable info =
-                        VkRenderPassBeginInfo(
-                            VkStructureType.RenderPassBeginInfo, 0n,
-                            renderPass.Handle,
-                            framebuffer.Handle,
-                            VkRect2D(VkOffset2D(bounds.Min.X, bounds.Min.Y), VkExtent2D(1 + bounds.SizeX, 1 + bounds.SizeY)),
-                            0u,
-                            NativePtr.zero
-                        )
+                    native {
+                        let! pInfo =
+                            VkRenderPassBeginInfo(
+                                VkStructureType.RenderPassBeginInfo, 0n,
+                                renderPass.Handle,
+                                framebuffer.Handle,
+                                VkRect2D(VkOffset2D(bounds.Min.X, bounds.Min.Y), VkExtent2D(1 + bounds.SizeX, 1 + bounds.SizeY)),
+                                0u,
+                                NativePtr.zero
+                            )
             
-                    cmd.AppendCommand()
-                    VkRaw.vkCmdBeginRenderPass(cmd.Handle, &&info, if inlineContent then VkSubpassContents.Inline else VkSubpassContents.SecondaryCommandBuffers)
-                    Disposable.Empty
+                        cmd.AppendCommand()
+                        VkRaw.vkCmdBeginRenderPass(cmd.Handle, pInfo, if inlineContent then VkSubpassContents.Inline else VkSubpassContents.SecondaryCommandBuffers)
+                        return Disposable.Empty
+                    }
             }
 
         static member BeginPass(renderPass : RenderPass, framebuffer : Framebuffer, inlineContent : bool) =
@@ -55,15 +57,16 @@ module ``Graphics Commands`` =
                 member x.Compatible = QueueFlags.Graphics
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
-                    let viewports =
-                        viewports |> Array.map (fun b ->
-                            VkViewport(float32 b.Min.X, float32 b.Min.X, float32 (1 + b.SizeX), float32 (1 + b.SizeY), 0.0f, 1.0f)
-                        )
+                    native {
+                        let! pViewports =
+                            viewports |> Array.map (fun b ->
+                                VkViewport(float32 b.Min.X, float32 b.Min.X, float32 (1 + b.SizeX), float32 (1 + b.SizeY), 0.0f, 1.0f)
+                            )
 
-                    viewports |> NativePtr.withA (fun pViewports ->
                         VkRaw.vkCmdSetViewport(cmd.Handle, 0u, uint32 viewports.Length, pViewports)
-                    )
-                    Disposable.Empty
+                    
+                        return Disposable.Empty
+                    }
             }
 
         static member SetScissors(scissors : Box2i[]) =
@@ -71,15 +74,15 @@ module ``Graphics Commands`` =
                 member x.Compatible = QueueFlags.Graphics
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
-                    let scissors =
-                        scissors |> Array.map (fun b ->
-                            VkRect2D(VkOffset2D(b.Min.X, b.Min.Y), VkExtent2D(1 + b.SizeX, 1 + b.SizeY))
-                        )
+                    native {
+                        let! pScissors =
+                            scissors |> Array.map (fun b ->
+                                VkRect2D(VkOffset2D(b.Min.X, b.Min.Y), VkExtent2D(1 + b.SizeX, 1 + b.SizeY))
+                            )
 
-                    scissors |> NativePtr.withA (fun pScissors ->
                         VkRaw.vkCmdSetScissor(cmd.Handle, 0u, uint32 scissors.Length, pScissors)
-                    )
-                    Disposable.Empty
+                        return Disposable.Empty
+                    }
             }
 
 //

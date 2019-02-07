@@ -24,33 +24,35 @@ module private EnumExtensions =
                 { new Command() with
                     member x.Compatible = QueueFlags.All
                     member x.Enqueue cmd =
-                        let familyIndex = cmd.QueueFamily.Index
-                        let mutable prePresentBarrier =
-                            VkImageMemoryBarrier(
-                                VkStructureType.ImageMemoryBarrier, 0n, 
-                                VkAccessFlags.ColorAttachmentWriteBit,
-                                VkAccessFlags.MemoryReadBit,
-                                VkImageLayout.ColorAttachmentOptimal,
-                                VkImageLayout.PresentSrcKhr,
-                                uint32 familyIndex,
-                                uint32 familyIndex,
-                                img.Handle,
-                                VkImageSubresourceRange(VkImageAspectFlags.ColorBit, 0u, 1u, 0u, 1u)
+                        native {
+                            let familyIndex = cmd.QueueFamily.Index
+                            let! pPrePresentBarrier =
+                                VkImageMemoryBarrier(
+                                    VkStructureType.ImageMemoryBarrier, 0n, 
+                                    VkAccessFlags.ColorAttachmentWriteBit,
+                                    VkAccessFlags.MemoryReadBit,
+                                    VkImageLayout.ColorAttachmentOptimal,
+                                    VkImageLayout.PresentSrcKhr,
+                                    uint32 familyIndex,
+                                    uint32 familyIndex,
+                                    img.Handle,
+                                    VkImageSubresourceRange(VkImageAspectFlags.ColorBit, 0u, 1u, 0u, 1u)
+                                )
+
+                            cmd.AppendCommand()
+                            VkRaw.vkCmdPipelineBarrier(
+                                cmd.Handle,
+                                VkPipelineStageFlags.AllCommandsBit, 
+                                VkPipelineStageFlags.BottomOfPipeBit, 
+                                VkDependencyFlags.None, 
+                                0u, NativePtr.zero, 
+                                0u, NativePtr.zero, 
+                                1u, pPrePresentBarrier
                             )
 
-                        cmd.AppendCommand()
-                        VkRaw.vkCmdPipelineBarrier(
-                            cmd.Handle,
-                            VkPipelineStageFlags.AllCommandsBit, 
-                            VkPipelineStageFlags.BottomOfPipeBit, 
-                            VkDependencyFlags.None, 
-                            0u, NativePtr.zero, 
-                            0u, NativePtr.zero, 
-                            1u, &&prePresentBarrier
-                        )
-
-                        img.Layout <- VkImageLayout.PresentSrcKhr
-                        Disposable.Empty
+                            img.Layout <- VkImageLayout.PresentSrcKhr
+                            return Disposable.Empty
+                        }
                 }
 
 
@@ -78,70 +80,74 @@ type Swapchain(device : Device, description : SwapchainDescription) =
     let presentTrafo = VkSurfaceTransformFlagsKHR.ofImageTrafo description.presentTrafo
 
     let recreate (old : VkSwapchainKHR) (size : V2i) =
-        let extent = VkExtent2D(size.X, size.Y)
-        let surface = description.surface
-        let renderPass = description.renderPass
+        let handle = 
+            native {
+                let extent = VkExtent2D(size.X, size.Y)
+                let surface = description.surface
+                let renderPass = description.renderPass
 
-        let colorUsage =
-            if description.samples = 1 then VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferDstBit
-            else VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferDstBit
+                let colorUsage =
+                    if description.samples = 1 then VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferDstBit
+                    else VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferDstBit
 
-        let mutable info =
-            VkSwapchainCreateInfoKHR(
-                VkStructureType.SwapChainCreateInfoKHR, 0n, 
-                VkSwapchainCreateFlagsKHR.MinValue,
+                let! pInfo =
+                    VkSwapchainCreateInfoKHR(
+                        VkStructureType.SwapChainCreateInfoKHR, 0n, 
+                        VkSwapchainCreateFlagsKHR.MinValue,
 
-                surface.Handle,
-                uint32 description.buffers,
-                description.colorFormat,
+                        surface.Handle,
+                        uint32 description.buffers,
+                        description.colorFormat,
 
-                description.colorSpace,
-                extent,
+                        description.colorSpace,
+                        extent,
 
-                1u,
-                colorUsage,
-                VkSharingMode.Exclusive,
-                0u, NativePtr.zero,
+                        1u,
+                        colorUsage,
+                        VkSharingMode.Exclusive,
+                        0u, NativePtr.zero,
 
-                presentTrafo,
-                VkCompositeAlphaFlagsKHR.VkCompositeAlphaOpaqueBitKhr,
-                description.presentMode,
-                1u,
-                old
-            )
+                        presentTrafo,
+                        VkCompositeAlphaFlagsKHR.VkCompositeAlphaOpaqueBitKhr,
+                        description.presentMode,
+                        1u,
+                        old
+                    )
 
-        let mutable handle = VkSwapchainKHR.Null
-        VkRaw.vkCreateSwapchainKHR(device.Handle, &&info, NativePtr.zero, &&handle)
-            |> check "could not create Swapchain"
-        
+                let! pHandle = VkSwapchainKHR.Null
+                VkRaw.vkCreateSwapchainKHR(device.Handle, pInfo, NativePtr.zero, pHandle)
+                    |> check "could not create Swapchain"
+                return !!pHandle
+            }
+
         use token = device.Token
 
         let buffers = 
-            let mutable count = 0u
-            VkRaw.vkGetSwapchainImagesKHR(device.Handle, handle, &&count, NativePtr.zero)
-                |> check "could not get Swapchain Images"
-
-            let imageHandles = Array.zeroCreate (int count)
-            imageHandles |> NativePtr.withA (fun pImages ->
-                VkRaw.vkGetSwapchainImagesKHR(device.Handle, handle, &&count, pImages)
+            native {
+                let! pCount = 0u
+                VkRaw.vkGetSwapchainImagesKHR(device.Handle, handle, pCount, NativePtr.zero)
                     |> check "could not get Swapchain Images"
-            )
 
-            imageHandles |> Array.map (fun handle ->
-                let image = 
-                    Image(
-                        device,
-                        handle,
-                        V3i(size.X, size.Y, 1),
-                        1, 1, 1,
-                        TextureDimension.Texture2D,
-                        description.colorFormat,
-                        Unchecked.defaultof<_>,
-                        VkImageLayout.Undefined
-                    )
-                device.CreateOutputImageView(image, 0, 1, 0, 1)
+                let imageHandles = Array.zeroCreate (int !!pCount)
+                let! pImages = imageHandles
+                VkRaw.vkGetSwapchainImagesKHR(device.Handle, handle, pCount, pImages)
+                    |> check "could not get Swapchain Images"
 
-            )
+                return imageHandles |> Array.map (fun handle ->
+                    let image = 
+                        Image(
+                            device,
+                            handle,
+                            V3i(size.X, size.Y, 1),
+                            1, 1, 1,
+                            TextureDimension.Texture2D,
+                            description.colorFormat,
+                            Unchecked.defaultof<_>,
+                            VkImageLayout.Undefined
+                        )
+                    device.CreateOutputImageView(image, 0, 1, 0, 1)
+                )
+            }
 
         let colorView =
             let image = 

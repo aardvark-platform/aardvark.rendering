@@ -187,6 +187,8 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
             | Some i -> i
             | None -> { flags = FragmentFlags.DepthUnchanged; discard = false; sampleShading = false }
 
+
+
     let createInfos =
         shaders |> Array.map (fun shader ->
             VkPipelineShaderStageCreateInfo(

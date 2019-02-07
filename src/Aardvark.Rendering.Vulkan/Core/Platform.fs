@@ -19,32 +19,30 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
 
 
     static let availableLayers =
-        temporary<uint32, _> (fun pCount ->
+        native {
+            let! pCount = 0u
             VkRaw.vkEnumerateInstanceLayerProperties(pCount, NativePtr.zero)
                 |> check "could not get available instance layers"
-
-            let count = NativePtr.read pCount
-            let properties = Array.zeroCreate (int count)
-            properties |> NativePtr.withA (fun ptr ->
-                VkRaw.vkEnumerateInstanceLayerProperties(pCount, ptr)
-                    |> check "could not get available instance layers"
-            )
-            properties |> Array.map LayerInfo.ofVulkan
-        )
+                
+            let properties = Array.zeroCreate (int !!pCount)
+            let! ptr = properties
+            VkRaw.vkEnumerateInstanceLayerProperties(pCount, ptr)
+                |> check "could not get available instance layers"
+            return properties |> Array.map LayerInfo.ofVulkan
+        }
 
     static let globalExtensions =
-        temporary<uint32, _> (fun pCount ->
+        native {
+            let! pCount = 0u
             VkRaw.vkEnumerateInstanceExtensionProperties(null, pCount, NativePtr.zero)
                 |> check "could not get available instance layers"
-
-            let count = NativePtr.read pCount
-            let properties = Array.zeroCreate (int count)
-            properties |> NativePtr.withA (fun ptr ->
-                VkRaw.vkEnumerateInstanceExtensionProperties(null, pCount, ptr)
-                    |> check "could not get available instance layers"
-            )
-            properties |> Array.map ExtensionInfo.ofVulkan
-        )
+                
+            let properties = Array.zeroCreate (int !!pCount)
+            let! ptr = properties
+            VkRaw.vkEnumerateInstanceExtensionProperties(null, pCount, ptr)
+                |> check "could not get available instance layers"
+            return properties |> Array.map ExtensionInfo.ofVulkan
+        }
 
     static let availableLayerNames = availableLayers |> Seq.map (fun l -> l.name.ToLower(), l) |> Map.ofSeq
     static let globalExtensionNames = globalExtensions |> Seq.map (fun p -> p.name.ToLower(), p.name) |> Map.ofSeq
@@ -89,89 +87,85 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
         let layers = List.toArray layers
         let extensions = List.toArray extensions
 
-        layers |> CStr.susemany (fun cLayers pLayers ->
-            extensions |> CStr.susemany (fun cExtensions pExtensions ->
-            
-                let rec tryCreate (apiVersion : Version) =
-                    let version = apiVersion.ToVulkan()
+        let rec tryCreate (apiVersion : Version) =
+            native {
+                let! pLayers = layers
+                let! pExtensions = extensions
+                let version = apiVersion.ToVulkan()
                 
-                    let applicationInfo =
-                        VkApplicationInfo(
-                            VkStructureType.ApplicationInfo, 0n,
-                            appName,
-                            0u,
-                            appName,
-                            0u,
-                            version
-                        )
-
-                    applicationInfo |> pin (fun pApplicationInfo ->
-                        let info =
-                            VkInstanceCreateInfo(
-                                VkStructureType.InstanceCreateInfo, 0n,
-                                VkInstanceCreateFlags.MinValue,
-                                pApplicationInfo,
-                                uint32 cLayers, pLayers,
-                                uint32 cExtensions, pExtensions
-                            )
-
-                        info |> pin (fun pInfo ->
-                            temporary<VkInstance, _> (fun pInstance ->
-                                let res = VkRaw.vkCreateInstance(pInfo, NativePtr.zero, pInstance)
-                                let instance = NativePtr.read pInstance
-                                if res = VkResult.VkSuccess then 
-                                    Some (instance, apiVersion)
-                                elif apiVersion.Minor > 0 then
-                                    tryCreate (Version(apiVersion.Major, apiVersion.Minor - 1, apiVersion.Build))
-                                else
-                                    None
-                            )
-                        )
+                let! pApplicationInfo =
+                    VkApplicationInfo(
+                        VkStructureType.ApplicationInfo, 0n,
+                        appName,
+                        0u,
+                        appName,
+                        0u,
+                        version
                     )
-                match tryCreate apiVersion with
-                    | Some instance -> instance
-                    | None -> failf "could not create instance"
-            )
-        )
+                    
+                let! pInfo =
+                    VkInstanceCreateInfo(
+                        VkStructureType.InstanceCreateInfo, 0n,
+                        VkInstanceCreateFlags.MinValue,
+                        pApplicationInfo,
+                        uint32 layers.Length, pLayers,
+                        uint32 extensions.Length, pExtensions
+                    )
+                let! pInstance = VkInstance.Zero
+                
+                let res = VkRaw.vkCreateInstance(pInfo, NativePtr.zero, pInstance)
+                let instance = NativePtr.read pInstance
+                if res = VkResult.VkSuccess then 
+                    return Some (instance, apiVersion)
+                elif apiVersion.Minor > 0 then
+                    return tryCreate (Version(apiVersion.Major, apiVersion.Minor - 1, apiVersion.Build))
+                else
+                    return None
+            }
+
+        match tryCreate apiVersion with
+            | Some instance -> instance
+            | None -> failf "could not create instance"
 
     let devices =
-        temporary<uint32,_> (fun pDeviceCount ->
+        native {
+            let! pDeviceCount = 0u
             VkRaw.vkEnumeratePhysicalDevices(instance, pDeviceCount, NativePtr.zero)
                 |> check "could not get physical devices"
+                
+            let devices = Array.zeroCreate (int !!pDeviceCount)
+            let! ptr = devices
+            VkRaw.vkEnumeratePhysicalDevices(instance, pDeviceCount, ptr)
+                |> check "could not get physical devices"
 
-            let deviceCount = NativePtr.read pDeviceCount
-            let devices = Array.zeroCreate (int deviceCount)
-            devices |> NativePtr.withA (fun ptr ->
-                VkRaw.vkEnumeratePhysicalDevices(instance, pDeviceCount, ptr)
-                    |> check "could not get physical devices"
-            )
+            return devices |> Array.map (fun d -> PhysicalDevice(this, d, extensions, apiVersion))
+        }
 
-            devices |> Array.map (fun d -> PhysicalDevice(this, d, extensions, apiVersion))
-        )
     let groups =    
         if apiVersion >= Version(1,1) then
-            temporary<uint32,_> (fun pGroupCount ->
-        
+            native {
+                let! pGroupCount = 0u
+
                 VkRaw.vkEnumeratePhysicalDeviceGroups(instance, pGroupCount, NativePtr.zero)
                     |> check "could not get physical device groups"
 
                 let groupCount = NativePtr.read pGroupCount
                 let groups = Array.zeroCreate (int groupCount)
-                groups |> NativePtr.withA (fun ptr ->
-                    VkRaw.vkEnumeratePhysicalDeviceGroups(instance, pGroupCount, ptr)
-                        |> check "could not get physical device groups"
-                )
+                let! ptr = groups
+                VkRaw.vkEnumeratePhysicalDeviceGroups(instance, pGroupCount, ptr)
+                    |> check "could not get physical device groups"
 
-                groups |> Array.mapi (fun i d -> 
-                    let devices = 
-                        Array.init (int d.physicalDeviceCount) (fun ii ->
-                            let handle = d.physicalDevices.[ii]
-                            devices |> Array.find (fun dd -> dd.Handle = handle)
-                        )
-                    PhysicalDeviceGroup(this, devices, extensions, apiVersion)
-                )
-                |> Array.filter (fun g -> g.Devices.Length > 1)
-            )
+                return
+                    groups |> Array.mapi (fun i d -> 
+                        let devices = 
+                            Array.init (int d.physicalDeviceCount) (fun ii ->
+                                let handle = d.physicalDevices.[ii]
+                                devices |> Array.find (fun dd -> dd.Handle = handle)
+                            )
+                        PhysicalDeviceGroup(this, devices, extensions, apiVersion)
+                    )
+                    |> Array.filter (fun g -> g.Devices.Length > 1)
+            }
         else
             [||]
 
@@ -309,33 +303,31 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
     
 
     let availableLayers = 
-        temporary<uint32,_> (fun pCount ->
+        native {
+            let! pCount = 0u
             VkRaw.vkEnumerateDeviceLayerProperties(handle, pCount, NativePtr.zero)
                 |> check "could not get device-layers"
-
-            let count = NativePtr.read pCount
-            let props = Array.zeroCreate (int count)
-            props |> NativePtr.withA (fun ptr ->
-                VkRaw.vkEnumerateDeviceLayerProperties(handle, pCount, ptr)
-                    |> check "could not get device-layers"
-            )
-
-            props |> Array.map (LayerInfo.ofVulkanDevice handle)
-        )
+                
+            let props = Array.zeroCreate (int !!pCount)
+            let! ptr = props
+            VkRaw.vkEnumerateDeviceLayerProperties(handle, pCount, ptr)
+                |> check "could not get device-layers"
+      
+            return props |> Array.map (LayerInfo.ofVulkanDevice handle)
+        }
 
     let globalExtensions =
-        temporary<uint32,_> (fun pCount ->
+        native {
+            let! pCount = 0u
             VkRaw.vkEnumerateDeviceExtensionProperties(handle, null, pCount, NativePtr.zero)
                 |> check "could not get device-extensions"
-
-            let count = NativePtr.read pCount
-            let props = Array.zeroCreate (int count)
-            props |> NativePtr.withA (fun ptr ->
-                VkRaw.vkEnumerateDeviceExtensionProperties(handle, null, pCount, ptr)
-                    |> check "could not get device-layers"
-            )
-            props |> Array.map ExtensionInfo.ofVulkan
-        )
+                
+            let props = Array.zeroCreate (int !!pCount)
+            let! ptr = props
+            VkRaw.vkEnumerateDeviceExtensionProperties(handle, null, pCount, ptr)
+                |> check "could not get device-layers"
+            return props |> Array.map ExtensionInfo.ofVulkan
+        }
 
     let properties =
         temporary<VkPhysicalDeviceProperties,_> (fun pProp -> 
@@ -419,16 +411,15 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
     
 
     let queueFamilyInfos =
-        temporary<uint32,_> (fun pCount ->
+        native {
+            let! pCount = 0u
             VkRaw.vkGetPhysicalDeviceQueueFamilyProperties(handle, pCount, NativePtr.zero)
+            
+            let props = Array.zeroCreate (int !!pCount)
+            let! ptr = props
+            VkRaw.vkGetPhysicalDeviceQueueFamilyProperties(handle, pCount, ptr)  
 
-            let count = NativePtr.read pCount
-            let props = Array.zeroCreate (int count)
-            props |> NativePtr.withA (fun ptr ->
-                VkRaw.vkGetPhysicalDeviceQueueFamilyProperties(handle, pCount, ptr)  
-            )
-
-            props |> Array.mapi (fun i p ->
+            return props |> Array.mapi (fun i p ->
                 {
                     index                       = i
                     count                       = int p.queueCount
@@ -437,12 +428,14 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
                     timestampBits               = int p.timestampValidBits
                 }
             )
-        )
+        }
+
     let mutable memoryProperties =
-        temporary<VkPhysicalDeviceMemoryProperties,_> (fun pProps ->
+        native {
+            let! pProps = VkPhysicalDeviceMemoryProperties()
             VkRaw.vkGetPhysicalDeviceMemoryProperties(handle, pProps)
-            NativePtr.read pProps
-        )
+            return !!pProps
+        }
         
     let heaps =
         Array.init (int memoryProperties.memoryHeapCount) (fun i ->

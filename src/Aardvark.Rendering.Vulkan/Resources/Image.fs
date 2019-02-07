@@ -2450,35 +2450,26 @@ module Image =
                             indices.[(i+off) % indices.Length] |> uint32
                         )
 
-                    deviceIndices |> NativePtr.withA (fun pDeviceIndices ->
+                    native {
+                        let! pDeviceIndices = deviceIndices
                         let groupInfo =
                             VkBindImageMemoryDeviceGroupInfo(
                                 VkStructureType.BindImageMemoryDeviceGroupInfo, 0n,
                                 uint32 deviceIndices.Length, pDeviceIndices,
                                 0u, NativePtr.zero
                             )
-                        groupInfo |> pin (fun pGroup ->
-                            let  info =  
-                                VkBindImageMemoryInfo(
-                                    VkStructureType.BindImageMemoryInfo, NativePtr.toNativeInt pGroup,
-                                    handles.[off],
-                                    ptr.Memory.Handle,
-                                    uint64 ptr.Offset
-                                )
-                                //VkBindImageMemoryInfo(
-                                //    VkStructureType.BindImageMemoryInfo, 0n,
-                                //    handles.[off],
-                                //    ptr.Memory.Handle,
-                                //    uint64 ptr.Offset,
-                                //    uint32 deviceIndices.Length, pDeviceIndices,
-                                //    0u, NativePtr.zero
-                                //)
-                            info |> pin (fun pInfo ->
-                                VkRaw.vkBindImageMemory2(device.Handle, 1u, pInfo)
-                                    |> check "could not bind image memory"
+                        let! pGroup = groupInfo
+                        let! pInfo =  
+                            VkBindImageMemoryInfo(
+                                VkStructureType.BindImageMemoryInfo, NativePtr.toNativeInt pGroup,
+                                handles.[off],
+                                ptr.Memory.Handle,
+                                uint64 ptr.Offset
                             )
-                        )
-                    )
+                        VkRaw.vkBindImageMemory2(device.Handle, 1u, pInfo)
+                            |> check "could not bind image memory"
+                    }
+                    
 
                 let result = Image(device, handles.[0], size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
                 result.PeerHandles <- Array.skip 1 handles

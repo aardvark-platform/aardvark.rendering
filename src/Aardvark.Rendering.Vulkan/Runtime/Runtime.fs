@@ -349,11 +349,17 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         let usage =
             if isDepth then 
-                VkImageUsageFlags.DepthStencilAttachmentBit ||| 
-                VkImageUsageFlags.TransferSrcBit ||| 
-                VkImageUsageFlags.TransferDstBit |||
-                VkImageUsageFlags.StorageBit |||
-                VkImageUsageFlags.SampledBit
+                if count > 1 then
+                    VkImageUsageFlags.DepthStencilAttachmentBit ||| 
+                    VkImageUsageFlags.TransferSrcBit ||| 
+                    VkImageUsageFlags.TransferDstBit |||
+                    VkImageUsageFlags.SampledBit
+                else
+                    VkImageUsageFlags.DepthStencilAttachmentBit ||| 
+                    VkImageUsageFlags.TransferSrcBit ||| 
+                    VkImageUsageFlags.TransferDstBit |||
+                    VkImageUsageFlags.StorageBit |||
+                    VkImageUsageFlags.SampledBit
             else 
                 VkImageUsageFlags.ColorAttachmentBit ||| 
                 VkImageUsageFlags.TransferSrcBit ||| 
@@ -520,7 +526,12 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         let src = unbox<Image> src
         let dst = unbox<Image> dst
 
+        let srcLayout = src.Layout
+        let dstLayout = dst.Layout
+
         device.perform {
+            if srcLayout <> VkImageLayout.TransferSrcOptimal then do! Command.TransformLayout(src, VkImageLayout.TransferSrcOptimal)
+            if dstLayout <> VkImageLayout.TransferDstOptimal then do! Command.TransformLayout(dst, VkImageLayout.TransferDstOptimal)
             if src.Samples = dst.Samples then
                 do! Command.Copy(
                         src.[ImageAspect.Color, srcBaseLevel .. srcBaseLevel + levels - 1, srcBaseSlice .. srcBaseSlice + slices - 1],
@@ -534,6 +545,9 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                             src.[ImageAspect.Color, srcLevel, srcBaseSlice .. srcBaseSlice + slices - 1],
                             dst.[ImageAspect.Color, dstLevel, dstBaseSlice .. dstBaseSlice + slices - 1]
                         )
+            
+            if srcLayout <> VkImageLayout.TransferSrcOptimal then do! Command.TransformLayout(src, srcLayout)
+            if dstLayout <> VkImageLayout.TransferDstOptimal then do! Command.TransformLayout(dst, dstLayout)
         }
 
 

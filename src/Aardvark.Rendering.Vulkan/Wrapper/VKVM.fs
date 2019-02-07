@@ -7,7 +7,7 @@ open Aardvark.Base
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-// #nowarn "51"
+#nowarn "51"
 
 [<AutoOpen>]
 module IndirectCommands =

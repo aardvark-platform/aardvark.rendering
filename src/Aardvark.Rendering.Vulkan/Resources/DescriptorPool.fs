@@ -32,8 +32,9 @@ module DescriptorPool =
                 VkDescriptorPoolSize(t, uint32 c)  
             )
 
-        descriptorCounts |> NativePtr.withA (fun pDescriptorCounts ->
-            let mutable info =
+        native {
+            let! pDescriptorCounts = descriptorCounts
+            let! pInfo =
                 VkDescriptorPoolCreateInfo(
                     VkStructureType.DescriptorPoolCreateInfo, 0n,
                     VkDescriptorPoolCreateFlags.FreeDescriptorSetBit,
@@ -42,12 +43,13 @@ module DescriptorPool =
                     pDescriptorCounts
                 )
 
-            let mutable handle = VkDescriptorPool.Null
-            VkRaw.vkCreateDescriptorPool(device.Handle, &&info, NativePtr.zero, &&handle)
+            let! pHandle = VkDescriptorPool.Null
+            VkRaw.vkCreateDescriptorPool(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create DescriptorPool"
         
-            DescriptorPool(device, handle, setCount, counts)
-        )
+            return DescriptorPool(device, !!pHandle, setCount, counts)
+
+        }
 
 
     let delete (pool : DescriptorPool) (device : Device) =

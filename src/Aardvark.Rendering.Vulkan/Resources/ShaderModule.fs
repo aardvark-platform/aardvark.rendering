@@ -68,8 +68,9 @@ module ShaderModule =
         ]
 
     let private createRaw (binary : byte[]) (device : Device) =
-        binary |> NativePtr.withA (fun pBinary ->
-            let mutable info =
+        native {
+            let! pBinary = binary
+            let! pInfo =
                 VkShaderModuleCreateInfo(
                     VkStructureType.ShaderModuleCreateInfo, 0n, 
                     VkShaderModuleCreateFlags.MinValue,
@@ -77,12 +78,12 @@ module ShaderModule =
                     NativePtr.cast pBinary
                 )
 
-            let mutable handle = VkShaderModule.Null
-            VkRaw.vkCreateShaderModule(device.Handle, &&info, NativePtr.zero, &&handle)
+            let! pHandle = VkShaderModule.Null
+            VkRaw.vkCreateShaderModule(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create shader module"
 
-            handle
-        )
+            return !!pHandle
+        }
         
     let ofGLSL (stage : ShaderStage) (info : FShade.GLSL.GLSLShader) (device : Device) =
         let siface = info.iface.shaders.[ShaderStage.toFShade stage]
