@@ -2260,6 +2260,7 @@ and QueueCommand =
         
     | ExecuteCommand of waitFor : list<Semaphore> * signal : list<Semaphore> * cmd : ICommand
     | Atomically of children : list<QueueCommand>
+    | Custom of (DeviceQueue -> Fence -> unit)
 
 and DeviceTask(parent : DeviceQueueThread, priority : int) =
     let lockObj = obj()
@@ -2609,6 +2610,10 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
 
     let rec perform (queue : DeviceQueue) (pool : CommandPool) (cmd : QueueCommand) (fence : Fence) =
         match cmd with
+            | QueueCommand.Custom action ->
+                fence.Reset()
+                action queue fence
+
             | QueueCommand.Submit(waitFor, signal, cmds) ->
                 fence.Reset()
                 submit queue waitFor signal cmds fence
@@ -2655,6 +2660,7 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
             | QueueCommand.BindSparse _ -> "BindSparse"
             | QueueCommand.Present _ -> "Present"
             | QueueCommand.Submit(_,_,cmd) -> sprintf "Submit%d" (List.length cmd)
+            | QueueCommand.Custom _ -> "Custom"
             | ExecuteCommand _ -> "Execute"
 
     let run (queue : DeviceQueue) () =

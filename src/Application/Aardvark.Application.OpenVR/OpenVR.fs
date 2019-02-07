@@ -887,6 +887,9 @@ type VrRenderer() =
     abstract member AfterSubmit : unit -> unit
     default x.AfterSubmit () = ()
 
+    abstract member Use : action : (unit -> 'r) -> 'r
+    default x.Use f = f()
+
     member x.StatisticsFrameCount
         with get() = statFrameCount
         and set v = statFrameCount <- v
@@ -896,9 +899,7 @@ type VrRenderer() =
     member x.Run () =
         if not isAlive then raise <| ObjectDisposedException("VrSystem")
         let (lTex, rTex) = x.OnLoad infos.[0] 
-
         
-
         while isAlive do
             swTotal.Start()
             swProcessEvents.Start()
@@ -906,7 +907,7 @@ type VrRenderer() =
             swProcessEvents.Stop()
 
             swWaitPoses.Start()
-            let err = compositor.WaitGetPoses(renderPoses, gamePoses)
+            let err = x.Use (fun () -> compositor.WaitGetPoses(renderPoses, gamePoses))
             swWaitPoses.Stop()
 
             if err = EVRCompositorError.None then
@@ -935,10 +936,12 @@ type VrRenderer() =
                         swRender.Stop()
 
                         swSubmit.Start()
-                        compositor.Submit(EVREye.Eye_Left, &lTex.Info, &lTex.Bounds, lTex.Flags) |> check "submit left"
-                        x.AfterSubmit()
-                        compositor.Submit(EVREye.Eye_Right, &rTex.Info, &rTex.Bounds, rTex.Flags) |> check "submit right"
-                        x.AfterSubmit()
+                        x.Use(fun () ->
+                            compositor.Submit(EVREye.Eye_Left, &lTex.Info, &lTex.Bounds, lTex.Flags) |> check "submit left"
+                            x.AfterSubmit()
+                            compositor.Submit(EVREye.Eye_Right, &rTex.Info, &rTex.Bounds, rTex.Flags) |> check "submit right"
+                            x.AfterSubmit()
+                        )
                         swSubmit.Stop()
             else
                 Log.error "[OpenVR] %A" err

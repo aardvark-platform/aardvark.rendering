@@ -137,6 +137,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
     let swResolve   = Stopwatch()
     let swTotal     = Stopwatch()
     
+    let queue = device.GraphicsFamily.Queues |> List.head
     
     new(samples) = VulkanVRApplicationLayered(samples, false)
     new(debug) = VulkanVRApplicationLayered(1, debug)
@@ -210,8 +211,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
         cImg <- nImg
         fImg <- nfImg
         fbo <- nFbo
-
-        let queue = device.GraphicsFamily.Queues |> List.head
+        
 
         let fTex = 
             VRVulkanTextureData_t(
@@ -333,6 +333,11 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
         device.perform {
             do! Command.TransformLayout(fImg.[ImageAspect.Color,*,*], VkImageLayout.General, VkImageLayout.TransferSrcOptimal)
         }
+
+    override x.Use (action : unit -> 'r) =
+        let mutable res = Unchecked.defaultof<'r>
+        device.GraphicsFamily.RunSynchronously(QueueCommand.Custom (fun _queue _fence -> res <- action()))
+        res
 
     override x.Release() = 
         // delete views
