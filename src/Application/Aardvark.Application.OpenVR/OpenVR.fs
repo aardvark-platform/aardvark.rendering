@@ -735,7 +735,19 @@ type VrRenderer() =
                 ]
         )
             
-
+    let getChaperone () =
+        let mutable quad = Unchecked.defaultof<_>
+        if OpenVR.Chaperone.GetPlayAreaRect(&quad) then
+            let quad = 
+                Polygon3d [|
+                    V3d(quad.vCorners0.v0, quad.vCorners0.v1, quad.vCorners0.v2)
+                    V3d(quad.vCorners1.v0, quad.vCorners1.v1, quad.vCorners1.v2)
+                    V3d(quad.vCorners2.v0, quad.vCorners2.v1, quad.vCorners2.v2)
+                    V3d(quad.vCorners3.v0, quad.vCorners3.v1, quad.vCorners3.v2)
+                |]
+            Some quad
+        else
+            None
 
     let compositor = OpenVR.Compositor
     let renderPoses = Array.zeroCreate (int OpenVR.k_unMaxTrackedDeviceCount)
@@ -743,7 +755,8 @@ type VrRenderer() =
 
 
     [<VolatileField>]
-    let mutable isAlive = true
+    let mutable running = false
+    let mutable isDisposed = false
 
     let check (str : string) (err : EVRCompositorError) =
         if err <> EVRCompositorError.None then
@@ -806,6 +819,8 @@ type VrRenderer() =
     let mutable statFrameCount = 20
     let evtStatistics = EventSource<VrSystemStats>()
 
+    let mutable textures = None
+
     static member EyeIndexSym = sEyeIndex
     static member RCoordSym = sRCoord
     static member GCoordSym = sGCoord
@@ -824,6 +839,8 @@ type VrRenderer() =
                         device.Trigger(&evt)
                     | None ->
                         ()
+
+    member x.Chaperone = getChaperone()
 
     member x.BackgroundColor
         with get() = backgroundColor
@@ -850,7 +867,7 @@ type VrRenderer() =
     member x.DesiredSize = desiredSize
 
     member x.Shutdown() =
-        isAlive <- false
+        running <- false
 
     member x.Info = infos.[0]
 
@@ -897,10 +914,17 @@ type VrRenderer() =
     member x.Statistics = evtStatistics :> IEvent<_>
 
     member x.Run () =
-        if not isAlive then raise <| ObjectDisposedException("VrSystem")
-        let (lTex, rTex) = x.OnLoad infos.[0] 
-        
-        while isAlive do
+        if isDisposed then raise <| ObjectDisposedException("VrRenderer")
+        running <- true
+        let (lTex, rTex) =
+            match textures with
+            | Some t -> t
+            | None ->
+                let t = x.OnLoad infos.[0] 
+                textures <- Some t
+                t
+
+        while running do
             swTotal.Start()
             swProcessEvents.Start()
             x.ProcessEvents(eventQueue)
@@ -979,14 +1003,31 @@ type VrRenderer() =
                 swTotal.Reset()
                 swRender.Reset()
                 frameCount <- 0
+                
+        //OpenVR.Shutdown()
+        //lTex.Dispose()
+        //rTex.Dispose()
+        //x.Release()
 
+    member x.Dispose() =
+        if not isDisposed then
+            isDisposed <- true
 
-        OpenVR.Shutdown()
-        lTex.Dispose()
-        rTex.Dispose()
-        x.Release()
+            if running then x.Shutdown()
+
+            OpenVR.Shutdown()
+            match textures with
+            | Some (lTex, rTex) -> 
+                lTex.Dispose()
+                rTex.Dispose()
+                textures <- None
+            | None ->
+                ()
+            x.Release()
 
     member x.Hmd = hmds.[0]
 
     member x.Controllers = devices |> Array.filter (fun d -> d.Type = VrDeviceType.Controller)
 
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
