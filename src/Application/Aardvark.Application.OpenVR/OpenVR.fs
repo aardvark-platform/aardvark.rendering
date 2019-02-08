@@ -740,10 +740,10 @@ type VrRenderer() =
         if OpenVR.Chaperone.GetPlayAreaRect(&quad) then
             let quad = 
                 Polygon3d [|
-                    V3d(quad.vCorners0.v0, quad.vCorners0.v1, quad.vCorners0.v2)
-                    V3d(quad.vCorners1.v0, quad.vCorners1.v1, quad.vCorners1.v2)
-                    V3d(quad.vCorners2.v0, quad.vCorners2.v1, quad.vCorners2.v2)
-                    V3d(quad.vCorners3.v0, quad.vCorners3.v1, quad.vCorners3.v2)
+                    V3d(quad.vCorners0.v0, quad.vCorners0.v2, -quad.vCorners0.v1)
+                    V3d(quad.vCorners1.v0, quad.vCorners1.v2, -quad.vCorners1.v1)
+                    V3d(quad.vCorners2.v0, quad.vCorners2.v2, -quad.vCorners2.v1)
+                    V3d(quad.vCorners3.v0, quad.vCorners3.v2, -quad.vCorners3.v1)
                 |]
             Some quad
         else
@@ -764,6 +764,7 @@ type VrRenderer() =
             //failwithf "[OpenVR] %A: %s" err str
 
     let depthRange = Range1d(0.15, 1000.0) |> Mod.init
+    let mutable scaleFactor = 1.0
 
 
     let projections =
@@ -779,10 +780,12 @@ type VrRenderer() =
         )
 
     let desiredSize =
-        let mutable width = 0u
-        let mutable height = 0u
-        system.GetRecommendedRenderTargetSize(&width,&height)
-        V2i(int width, int height)
+        lazy (
+            let mutable width = 0u
+            let mutable height = 0u
+            system.GetRecommendedRenderTargetSize(&width,&height)
+            V2i(max 1.0 (float width * scaleFactor), max 1.0 (float height * scaleFactor))
+        )
 
 
     let view (t : Trafo3d) =
@@ -797,12 +800,14 @@ type VrRenderer() =
         |]
 
     let infos =
-        hmds |> Array.map (fun hmd ->
-            {
-                framebufferSize = desiredSize
-                viewTrafos = hmd.MotionState.Pose |> Mod.map view  //CameraView.lookAt (V3d(3,4,5)) V3d.Zero V3d.OOI |> CameraView.viewTrafo |> Mod.constant //hmd.MotionState.Pose |> Mod.map Trafo.inverse |> Unhate.register "viewTrafo"
-                projTrafos = projections
-            }
+        lazy (
+            hmds |> Array.map (fun hmd ->
+                {
+                    framebufferSize = desiredSize.Value
+                    viewTrafos = hmd.MotionState.Pose |> Mod.map view  //CameraView.lookAt (V3d(3,4,5)) V3d.Zero V3d.OOI |> CameraView.viewTrafo |> Mod.constant //hmd.MotionState.Pose |> Mod.map Trafo.inverse |> Unhate.register "viewTrafo"
+                    projTrafos = projections
+                }
+            )
         )
 
     let mutable backgroundColor = C4f.Black
@@ -849,6 +854,10 @@ type VrRenderer() =
     member x.DepthRange
         with get() = depthRange.Value
         and set r = transact (fun () -> depthRange.Value <- r)
+
+    member x.ScaleFactor
+        with get() = scaleFactor
+        and set r = scaleFactor <- r
             
     member x.GetVulkanInstanceExtensions() = 
         let b = System.Text.StringBuilder(4096, 4096)
@@ -864,12 +873,12 @@ type VrRenderer() =
 
     member x.System = system
     member x.Compositor = compositor
-    member x.DesiredSize = desiredSize
+    member x.DesiredSize = desiredSize.Value
 
     member x.Shutdown() =
         running <- false
 
-    member x.Info = infos.[0]
+    member x.Info = infos.Value.[0]
 
     member x.HiddenAreaMesh = hiddenAreaMesh
 
@@ -920,7 +929,7 @@ type VrRenderer() =
             match textures with
             | Some t -> t
             | None ->
-                let t = x.OnLoad infos.[0] 
+                let t = x.OnLoad infos.Value.[0] 
                 textures <- Some t
                 t
 
