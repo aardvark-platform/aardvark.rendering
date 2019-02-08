@@ -10,6 +10,8 @@ let main argv =
     
     Ag.initialize()
     Aardvark.Init()
+
+    printfn "press [Space] to increment texture id."
    
 
     use app = new OpenGlApplication(true)
@@ -50,11 +52,11 @@ let main argv =
     // the signature describes the formats and of all render targets which are subsequently used for rendering)
     let signature =
         runtime.CreateFramebufferSignature [
-            DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+            DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba32f; samples = 1 }
             DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
         ]
 
-    let color = [| runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1); runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1) |]
+    let color = [| runtime.CreateTexture(size, TextureFormat.Rgba32f, 1, 1, 1); runtime.CreateTexture(size, TextureFormat.Rgba32f, 1, 1, 1) |]
     let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
 
     // Create a framebuffer matching signature and capturing the render to texture targets
@@ -69,46 +71,60 @@ let main argv =
             )
         )
 
+    // mapped to texture/fbo using `mod` 2
     let currentTexture = Mod.init 0
 
-    let texture = currentTexture |> Mod.map (fun i -> color.[(i+1)%2] :> ITexture)
+    // history 
+    let texture = currentTexture |> Mod.map (fun i -> color.[i % 2] :> ITexture)
+    // current 
+    let currentState = currentTexture |> Mod.map (fun i -> color.[(i+1) % 2] :> ITexture)
+
+    // you could use classical ping pong variables as well (as mod) and just change them as needed.
 
     let task = 
         Sg.box (Mod.constant C4b.Red) (Mod.constant box)
             |> Sg.shader {
                 do! DefaultSurfaces.trafo
                 do! DefaultSurfaces.vertexColor
+                do! DefaultSurfaces.diffuseTexture
             }
-            //|> Sg.texture (Sym.ofString "old") texture
+            |> Sg.diffuseTexture texture
             // apply the dynamic transformation to the box
             |> Sg.trafo dynamicTrafo
             // extract our viewTrafo from the dynamic cameraView and attach it to the scene graphs viewTrafo 
             |> Sg.viewTrafo (cameraView  |> Mod.map CameraView.viewTrafo )
             // compute a projection trafo, given the frustum contained in frustum
             |> Sg.projTrafo (frustum |> Mod.map Frustum.projTrafo    )
+            |> Sg.depthTest (Mod.init DepthTestMode.None)
             |> Sg.compile runtime signature
 
-    let clear = runtime.CompileClear(signature,Mod.constant C4f.Red, Mod.constant 1.0)
+    // clear current target
+    let clear = runtime.CompileClear(signature, Mod.constant C4f.Green, Mod.constant 1.0)
 
+    // this a custom render task which call others and can be chained with outer render tasks
+    // we need this to control where to render to
     let renderToTarget =
         RenderTask.custom (fun (self,token,outputDesc) -> 
+            // choose where to render to
             let target = fbos.[(currentTexture.Value+1)%2]
+            // manually clear and render to target
             let output = OutputDescription.ofFramebuffer target
             clear.Run(token, output)
-            task.Run(null,output)
+            task.Run(token,output)
         )
 
+    // just visualize using fullscreen quad
     let visualizeCurrentState =
         Sg.fullScreenQuad 
         |> Sg.shader {
              do! DefaultSurfaces.diffuseTexture
-             //do! DefaultSurfaces.constantColor C4f.White 
            }
-        |> Sg.diffuseTexture texture
+        |> Sg.diffuseTexture currentState
         |> Sg.compile runtime win.FramebufferSignature
 
     win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ -> 
         transact (fun _ -> currentTexture.Value <- (currentTexture.Value + 1) % 2 )
+        printfn "current id: %d" currentTexture.Value
     )
 
     win.RenderTask <- 
