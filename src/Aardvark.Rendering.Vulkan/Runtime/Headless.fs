@@ -41,7 +41,7 @@ type HeadlessVulkanApplication(debug : bool, instanceExtensions : list<string>, 
         if instance.Devices.Length = 0 then
             failwithf "[Vulkan] could not get vulkan devices"
         else
-            ConsoleDeviceChooser.run instance.Devices
+            ConsoleDeviceChooser.run (CustomDeviceChooser.Filter instance.Devices)
 
     do instance.PrintInfo(Logger.Default, physicalDevice)
 

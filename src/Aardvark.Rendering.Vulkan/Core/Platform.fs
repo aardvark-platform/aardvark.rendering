@@ -565,6 +565,21 @@ module PhysicalDevice =
 
 
 
+type CustomDeviceChooser private() =
+    static let mutable choose : Option<seq<PhysicalDevice> -> PhysicalDevice> = None
+
+    static member Register(c : seq<PhysicalDevice> -> PhysicalDevice) =
+        choose <- Some c
+
+    static member Filter(devices : seq<PhysicalDevice>) =
+        match choose with
+        | Some c -> Seq.singleton(c devices)
+        | None -> devices
+
+
+    
+
+
 module ConsoleDeviceChooser =
     open System.IO
     open System.Reflection
@@ -675,6 +690,8 @@ module ConsoleDeviceChooser =
                                         choose()
                             else
                                 choose()
-                    
-    let run (devices : seq<PhysicalDevice>) =
+             
+    
+    let run (devices : seq<PhysicalDevice>) : PhysicalDevice =
         run' None devices
+        

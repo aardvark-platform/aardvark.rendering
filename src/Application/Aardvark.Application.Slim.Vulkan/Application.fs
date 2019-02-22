@@ -279,7 +279,7 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
         if instance.Devices.Length = 0 then
             failwithf "[Vulkan] could not get vulkan devices"
         else
-            chooseDevice (Array.toList instance.Devices)
+            chooseDevice (Seq.toList (CustomDeviceChooser.Filter instance.Devices))
 
     do instance.PrintInfo(Logger.Get 2, physicalDevice)
 
