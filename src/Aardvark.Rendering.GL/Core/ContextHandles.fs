@@ -36,6 +36,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
     let mutable debugCallbackInstalled = false
     let mutable onMakeCurrent : ConcurrentHashSet<unit -> unit> = null
     let mutable debugOutputEnabled = false
+    let mutable driverInfo = None
 
     static member Current
         with get() = 
@@ -60,6 +61,14 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
     member x.WindowInfo = window
     
     member x.Handle = handle
+
+    member x.Driver = 
+        match driverInfo with
+        | None ->
+            let v = Driver.readInfo()
+            driverInfo <- Some v
+            v
+        | Some v -> v
 
     member x.IsCurrent =
         handle.IsCurrent

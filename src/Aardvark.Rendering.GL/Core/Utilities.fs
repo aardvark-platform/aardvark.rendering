@@ -18,7 +18,16 @@ module TypeSizeExtensions =
             // TODO: improve for non-standard types (e.g. M23f)
             System.Runtime.InteropServices.Marshal.SizeOf(x)
 
-type Driver = { device : GPUVendor; vendor : string; renderer : string; glsl : Version; version : Version; versionString : string; extensions : Set<string> }
+
+// profileMask: 
+// GL_CONTEXT_CORE_PROFILE_BIT          1
+// GL_CONTEXT_COMPATIBILITY_PROFILE_BIT 2
+// contextFlags:
+// GL_CONTEXT_FLAG_FORWARD_COMPATIBLE_BIT 1
+// GL_CONTEXT_FLAG_DEBUG_BIT              2
+// GL_CONTEXT_FLAG_ROBUST_ACCESS_BIT      4
+// GL_CONTEXT_FLAG_NO_ERROR_BIT           8
+type Driver = { device : GPUVendor; vendor : string; renderer : string; glsl : Version; version : Version; versionString : string; profileMask : int; contextFlags : int; extensions : Set<string> }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Driver =
@@ -49,6 +58,8 @@ module Driver =
         let versionStr = GL.GetString(StringName.Version)
         let version = versionStr |> parseVersion
         let glslVersion = GL.GetString(StringName.ShadingLanguageVersion) |> parseVersion
+        let profileMask =  GL.GetInteger(unbox<_> OpenTK.Graphics.OpenGL4.All.ContextProfileMask)
+        let contextFlags = GL.GetInteger(GetPName.ContextFlags)
 
         let mutable extensions = Set.empty
         let extensionCount = GL.GetInteger(0x821d |> unbox<GetPName>) // GL_NUM_EXTENSIONS
@@ -73,6 +84,8 @@ module Driver =
             glsl = glslVersion
             version = version
             versionString = versionStr
+            profileMask = profileMask
+            contextFlags = contextFlags
             extensions = extensions 
         }
 
