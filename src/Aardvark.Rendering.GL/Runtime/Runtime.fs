@@ -687,18 +687,36 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             GL.Check "could not bind read framebuffer"
             match ms with
                 | :? IBackendTextureOutputView as ms ->
+                    let baseSlice = ms.slices.Min
+                    let slices = 1 + ms.slices.Max - baseSlice
                     let tex = ms.texture |> unbox<Texture>
-                    GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2DMultisample, tex.Handle, ms.level)
-                    GL.Check "could not set read framebuffer texture"
+
+                    if slices <> 1  then failwith "layer sub-ranges not supported atm."
+                    
+                    if tex.IsArray then
+                        GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, tex.Handle, ms.level, baseSlice)
+                        GL.Check "could not set read framebuffer texture"
+                    else
+                        GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2DMultisample, tex.Handle, ms.level)
+                        GL.Check "could not set read framebuffer texture"
                     
                 | :? Renderbuffer as ms ->
                     GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, ms.Handle)
                     GL.Check "could not set read framebuffer texture"
 
                 | :? ITextureLevel as ms ->
+                    let baseSlice = ms.Slices.Min
+                    let slices = 1 + ms.Slices.Max - baseSlice
                     let tex = ms.Texture |> unbox<Texture>
-                    GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2DMultisample, tex.Handle, ms.Level)
-                    GL.Check "could not set read framebuffer texture"
+
+                    if slices <> 1  then failwith "layer sub-ranges not supported atm."
+                    
+                    if tex.IsArray then
+                        GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, tex.Handle, ms.Level, baseSlice)
+                        GL.Check "could not set read framebuffer texture"
+                    else
+                        GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2DMultisample, tex.Handle, ms.Level)
+                        GL.Check "could not set read framebuffer texture"
                     
 
 //                | :? IBackendTextureOutputView as ms ->
@@ -717,8 +735,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             GL.Check "could not set write framebuffer texture"
 
 
-            let mutable src = Box2i(srcOffset.X, srcOffset.Y, size.X, size.Y)
-            let mutable dst = Box2i(dstOffset.X, dstOffset.Y, size.X, size.Y)
+            let mutable src = Box2i.FromMinAndSize(srcOffset, size)
+            let mutable dst = Box2i.FromMinAndSize(dstOffset, size)
 
             match trafo with
                 | ImageTrafo.Rot0 -> ()
