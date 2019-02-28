@@ -2337,9 +2337,17 @@ module TextureExtensions =
 
             // TODO: GetTextureSubImage does not work
             if bindTarget = TextureTarget.Texture2DArray then
+
                 let buffer = Array.zeroCreate<byte> targetSize
-                //GL.GetTextureSubImage(int bindTarget, level, 0, 0, slice, image.Size.X, image.Size.Y, 1, pixelFormat, pixelType, targetSize, buffer)
-                GL.GetTextureSubImage(int target, level, 0, 0, slice, image.Size.X, image.Size.Y, 1, pixelFormat, pixelType, targetSize, buffer)
+
+                // GetTexImage works and there is data in the buffer...
+                //let ptr = GCHandle.Alloc(buffer, GCHandleType.Pinned)
+                //GL.GetTexImage(bindTarget, level, pixelFormat, pixelType, ptr.AddrOfPinnedObject())
+                //GL.Check "could not GetTextureSubImage"
+                //ptr.Free()
+
+                GL.GetTextureSubImage(int bindTarget, level, 0, 0, slice, image.Size.X, image.Size.Y, 1, pixelFormat, pixelType, targetSize, buffer)
+                GL.Check "could not GetTextureSubImage"
 
                 let dstInfo = image.VolumeInfo
                 let dy = int64(alignedLineSize / elementSize)

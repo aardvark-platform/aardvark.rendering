@@ -699,7 +699,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                         GL.Check "could not set read framebuffer texture"
                     else
                         // NOTE: allow to resolve/copy singlesample textures as well
-                        GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, (if tex.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), tex.Handle, ms.Level)
+                        GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, (if tex.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), tex.Handle, ms.level)
                         GL.Check "could not set read framebuffer texture"
                     
                 | :? Renderbuffer as ms ->
