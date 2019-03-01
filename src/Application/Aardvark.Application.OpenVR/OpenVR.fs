@@ -599,7 +599,7 @@ module VrSystemStats =
     
 
 [<AbstractClass>]
-type VrRenderer() =
+type VrRenderer(adjustSize : V2i -> V2i) =
     let system =
         let mutable err = EVRInitError.None
         let sys = OpenVR.Init(&err)
@@ -764,8 +764,6 @@ type VrRenderer() =
             //failwithf "[OpenVR] %A: %s" err str
 
     let depthRange = Range1d(0.15, 1000.0) |> Mod.init
-    let mutable scaleFactor = 1.0
-
 
     let projections =
         //let headToEye = system.GetEyeToHeadTransform(EVREye.Eye_Right) |> Trafo.ofHmdMatrix34 |> Trafo.inverse
@@ -784,7 +782,8 @@ type VrRenderer() =
             let mutable width = 0u
             let mutable height = 0u
             system.GetRecommendedRenderTargetSize(&width,&height)
-            V2i(max 1.0 (float width * scaleFactor), max 1.0 (float height * scaleFactor))
+            let s = adjustSize(V2i(int width, int height))
+            V2i(max 1 s.X, max 1 s.Y)
         )
 
 
@@ -855,10 +854,6 @@ type VrRenderer() =
         with get() = depthRange.Value
         and set r = transact (fun () -> depthRange.Value <- r)
 
-    member x.ScaleFactor
-        with get() = scaleFactor
-        and set r = scaleFactor <- r
-            
     member x.GetVulkanInstanceExtensions() = 
         let b = System.Text.StringBuilder(4096, 4096)
         let len = compositor.GetVulkanInstanceExtensionsRequired(b, 4096u) 
@@ -1040,3 +1035,5 @@ type VrRenderer() =
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
+
+    new() = new VrRenderer(id)

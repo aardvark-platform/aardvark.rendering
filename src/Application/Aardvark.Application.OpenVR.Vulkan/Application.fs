@@ -56,8 +56,8 @@ module StereoShader =
             return V4d.IIII
         }
 
-type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
-    inherit VrRenderer()
+type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i -> V2i) as this  =
+    inherit VrRenderer(adjustSize)
     
     let app = new HeadlessVulkanApplication(debug, this.GetVulkanInstanceExtensions(), fun d -> this.GetVulkanDeviceExtensions d.Handle)
     
@@ -139,9 +139,14 @@ type VulkanVRApplicationLayered(samples : int, debug : bool) as this  =
     
     let queue = device.GraphicsFamily.Queues |> List.head
     
-    new(samples) = VulkanVRApplicationLayered(samples, false)
-    new(debug) = VulkanVRApplicationLayered(1, debug)
-    new() = VulkanVRApplicationLayered(1, false)
+    new(samples, adjustSize) = new VulkanVRApplicationLayered(samples, false, adjustSize)
+    new(debug, adjustSize) = new VulkanVRApplicationLayered(1, debug, adjustSize)
+    new(adjustSize) = new VulkanVRApplicationLayered(1, false, adjustSize)
+    
+    new(samples, debug) = new VulkanVRApplicationLayered(samples, debug, id)
+    new(samples) = new VulkanVRApplicationLayered(samples, false, id)
+    new(debug) = new VulkanVRApplicationLayered(1, debug, id)
+    new() = new VulkanVRApplicationLayered(1, false, id)
 
     member x.Version = version
     member x.Texture = tex

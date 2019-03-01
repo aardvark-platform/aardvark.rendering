@@ -56,8 +56,8 @@ module StereoShader =
             return V4d.IIII
         }
 
-type OpenGlVRApplicationLayered(samples : int, debug : bool)  =
-    inherit VrRenderer()
+type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i -> V2i)  =
+    inherit VrRenderer(adjustSize)
 
     let app = new Aardvark.Application.Slim.OpenGlApplication(true,debug)
     let runtime = app.Runtime
@@ -251,3 +251,5 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool)  =
 
     interface IRenderWindow with
         member x.Run() = x.Run()
+
+    new(samples : int, debug : bool) = new OpenGlVRApplicationLayered(samples, debug, id)
