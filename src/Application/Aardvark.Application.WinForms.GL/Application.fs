@@ -57,9 +57,13 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
                     try GLVM.vmInit()
                     with _ -> Log.line "No glvm found, running without glvm"
                
+                    // GL_CONTEXT_CORE_PROFILE_BIT 1
+                    // GL_CONTEXT_COMPATIBILITY_PROFILE_BIT 2
+                    let profileType = if ctx.Driver.profileMask = 1 then " Core" elif ctx.Driver.profileMask = 2 then " Compatibility" else ""
+
                     Log.line "vendor:   %A" ctx.Driver.vendor
                     Log.line "renderer: %A" ctx.Driver.renderer 
-                    Log.line "version:  OpenGL %A / GLSL %A" ctx.Driver.version ctx.Driver.glsl
+                    Log.line "version:  OpenGL %A / GLSL %A %s" ctx.Driver.version ctx.Driver.glsl profileType
 
                     Log.stop()
                 )
