@@ -44,6 +44,7 @@ type DeviceKind =
 
 type RenderConfig =
     {
+        app             : Option<IApplication>
         backend         : Backend
         debug           : DebugVerbosity
         samples         : int
@@ -417,20 +418,25 @@ module Utilities =
                 
 
     let createApplication (cfg : RenderConfig) =
-        let enableDebug = cfg.debug <> DebugVerbosity.None
-        match cfg.backend with
-            | Backend.GL -> 
-                new OpenGlApplication(cfg.deviceKind = DeviceKind.Dedicated, enableDebug) :> IApplication
-            | Backend.Vulkan -> 
-                let app = new VulkanApplication(enableDebug, chooseDevice cfg) 
-                if enableDebug then
-                    app.Runtime.DebugVerbosity <- toMessageSeverity cfg.debug
-                app :> IApplication
+        match cfg.app with
+        | Some app -> 
+            app
+        | None -> 
+            let enableDebug = cfg.debug <> DebugVerbosity.None
+            match cfg.backend with
+                | Backend.GL -> 
+                    new OpenGlApplication(cfg.deviceKind = DeviceKind.Dedicated, enableDebug) :> IApplication
+                | Backend.Vulkan -> 
+                    let app = new VulkanApplication(enableDebug, chooseDevice cfg) 
+                    if enableDebug then
+                        app.Runtime.DebugVerbosity <- toMessageSeverity cfg.debug
+                    app :> IApplication
 
-    let createGameWindow app (cfg : RenderConfig) =
-        match cfg.backend with
-        | Backend.GL -> (unbox<OpenGlApplication> app).CreateGameWindow(cfg.samples) :> IRenderWindow
-        | Backend.Vulkan -> (unbox<VulkanApplication> app).CreateGameWindow(cfg.samples) :> IRenderWindow
+    let createGameWindow (app : IApplication) (cfg : RenderConfig) =
+        match app with
+        | :? OpenGlApplication as app -> app.CreateGameWindow(cfg.samples) :> IRenderWindow
+        | :? VulkanApplication as app -> app.CreateGameWindow(cfg.samples) :> IRenderWindow
+        | _ -> failwithf "unknown app type: %A" app
 
     let private createMonoScreen (cfg : RenderConfig) =
         let app = createApplication cfg
@@ -654,7 +660,7 @@ module Utilities =
         match cfg.backend with
             | Backend.Vulkan ->
                 let enableDebug = cfg.debug <> DebugVerbosity.None
-                let app = VulkanVRApplicationLayered(cfg.samples, enableDebug)
+                let app = new VulkanVRApplicationLayered(cfg.samples, enableDebug)
                 if enableDebug then
                     app.Runtime.DebugVerbosity <- toMessageSeverity cfg.debug
 
@@ -697,7 +703,7 @@ module Utilities =
 
             | Backend.GL -> 
                 let enableDebug = cfg.debug <> DebugVerbosity.None
-                let app = OpenGlVRApplicationLayered(cfg.samples, enableDebug)
+                let app = new OpenGlVRApplicationLayered(cfg.samples, enableDebug)
 
                 let hmdLocation = app.Hmd.MotionState.Pose |> Mod.map (fun t -> t.Forward.C3.XYZ)
 
@@ -751,6 +757,7 @@ module Utilities =
 
     let run (display : Display) (backend : Backend) (scene : ISg) =
         runConfig {
+            app = None
             scene = scene
             display = display
             backend = backend
@@ -834,6 +841,7 @@ module ``Render Utilities`` =
     type ShowBuilder() =
         member x.Yield(()) =
             {
+                app = None
                 backend = Backend.Vulkan
                 debug = DebugVerbosity.Warning
                 samples = 8
@@ -842,6 +850,10 @@ module ``Render Utilities`` =
                 deviceKind = DeviceKind.Dedicated
                 initialCamera = None
             }
+            
+        [<CustomOperation("app")>]
+        member x.Application(s : RenderConfig, a : IApplication) =
+            { s with app = Some a }
 
         [<CustomOperation("backend")>]
         member x.Backend(s : RenderConfig, b : Backend) =
@@ -881,8 +893,8 @@ module ``Render Utilities`` =
     type WindowBuilder() =
 
         member x.Yield(()) =
-    
             {
+                app = None
                 backend = Backend.Vulkan
                 debug = DebugVerbosity.Warning
                 samples = 8
@@ -891,6 +903,10 @@ module ``Render Utilities`` =
                 scene = Sg.empty
                 initialCamera = None
             }
+            
+        [<CustomOperation("app")>]
+        member x.Application(s : RenderConfig, a : IApplication) =
+            { s with app = Some a }
 
         [<CustomOperation("backend")>]
         member x.Backend(s : RenderConfig, b : Backend) =
