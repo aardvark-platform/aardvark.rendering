@@ -349,8 +349,8 @@ type VrDevice(system : CVRSystem, deviceType : VrDeviceType, index : int) =
 
     member x.RenderModelName = renderModelName.Value 
 
-    member internal x.Update(poses : TrackedDevicePose_t[]) =
-        state.Update(&poses.[index])
+    member internal x.Update(pose : byref<TrackedDevicePose_t>) =
+        state.Update(&pose)
 
         let mutable state = VRControllerState_t()
         if system.GetControllerState(uint32 index, &state, uint32 sizeof<VRControllerState_t>) then
@@ -608,7 +608,7 @@ type VrRenderer(adjustSize : V2i -> V2i) =
             failwithf "[OpenVR] %s" (OpenVR.GetStringForHmdError err)
         sys
     
-    let devicesPerIndex =
+    let deviceCache =
         [|
             for i in 0u .. OpenVR.k_unMaxTrackedDeviceCount-1u do
                 let deviceType = system.GetTrackedDeviceClass i
@@ -617,6 +617,49 @@ type VrRenderer(adjustSize : V2i -> V2i) =
                 else
                     yield None
         |]
+
+    let connectedDevices = Mod.custom (fun _ -> lock deviceCache (fun () -> Seq.choose id deviceCache |> HRefSet.ofSeq))
+    let connectedAll = connectedDevices |> ASet.ofMod
+    let connectedHmds = connectedAll |> ASet.filter (fun d -> d.Type = VrDeviceType.Hmd)
+    let connectedControllers = connectedAll |> ASet.filter (fun d -> d.Type = VrDeviceType.Controller)
+
+    let updateDevice (i : uint32) =
+        if i >= 0u && i < uint32 deviceCache.Length then
+            lock deviceCache (fun () ->
+                let deviceType = system.GetTrackedDeviceClass i
+                if deviceType <> ETrackedDeviceClass.Invalid then
+                    let d = VrDevice(system, VrDeviceType.ofETrackedDeviceClass deviceType, int i)
+                    deviceCache.[int i] <- Some d
+                else
+                    deviceCache.[int i] <- None
+            )
+            transact connectedDevices.MarkOutdated
+
+    let tryGetDevice (i : uint32) =
+        if i >= 0u && i < uint32 deviceCache.Length then
+            let mutable changed = false
+            let result = 
+                lock deviceCache (fun () ->
+                    match deviceCache.[int i] with
+                    | Some d -> Some d
+                    | None -> 
+                        let deviceType = system.GetTrackedDeviceClass i
+                        if deviceType <> ETrackedDeviceClass.Invalid then
+                            let d = VrDevice(system, VrDeviceType.ofETrackedDeviceClass deviceType, int i)
+                            deviceCache.[int i] <- Some d
+                            changed <- true
+                            Some d
+                        else
+                            None
+                )
+            if changed then 
+                transact connectedDevices.MarkOutdated
+            result
+        else
+            None
+
+    let getAllDevices() = 
+        Seq.init (int OpenVR.k_unMaxTrackedDeviceCount) uint32 |> Seq.choose tryGetDevice
 
     static let sEyeIndex = Symbol.Create "EyeIndex"
     static let sRCoord = Symbol.Create "RCoord"
@@ -651,9 +694,9 @@ type VrRenderer(adjustSize : V2i -> V2i) =
                 ]
         )
 
-    let devices = devicesPerIndex |> Array.choose id
+    //let devices = devicesPerIndex |> Array.choose id
         
-    let hmds = devices |> Array.filter (fun d -> d.Type = VrDeviceType.Hmd)
+    let hmds = getAllDevices() |> Seq.filter (fun d -> d.Type = VrDeviceType.Hmd) |> Seq.toArray 
 
     let getDistortionGeometry (gridSize : V2i) =
         
@@ -834,15 +877,22 @@ type VrRenderer(adjustSize : V2i -> V2i) =
         
         let mutable evt : VREvent_t = Unchecked.defaultof<VREvent_t>
         while system.PollNextEvent(&evt, uint32 sizeof<VREvent_t>) do
-            
             events.Enqueue evt
-            let id = evt.trackedDeviceIndex |> int
-            if id >= 0 && id < devicesPerIndex.Length then
-                match devicesPerIndex.[id] with
-                    | Some device ->
-                        device.Trigger(&evt)
-                    | None ->
-                        ()
+            let id = evt.trackedDeviceIndex
+
+            let t = unbox<EVREventType> (int evt.eventType)
+            match t with
+            | EVREventType.VREvent_TrackedDeviceActivated 
+            | EVREventType.VREvent_TrackedDeviceDeactivated 
+            | EVREventType.VREvent_TrackedDeviceUpdated
+            | EVREventType.VREvent_TrackedDeviceRoleChanged ->
+                updateDevice id
+            | _ ->
+                match tryGetDevice id with
+                | Some device ->
+                    device.Trigger(&evt)
+                | None ->
+                    ()
 
     member x.Chaperone = getChaperone()
 
@@ -942,7 +992,11 @@ type VrRenderer(adjustSize : V2i -> V2i) =
                 swUpdatePoses.Start()
                 // update all poses
                 transact (fun () ->
-                    for d in devices do d.Update(renderPoses)
+                    for i in 0 .. renderPoses.Length - 1 do
+                        let mutable pose = renderPoses.[i]
+                        match tryGetDevice (uint32 i) with
+                        | Some device -> device.Update(&pose)
+                        | None -> ()
                 )
 
                 x.UpdatePoses(renderPoses)
@@ -1030,8 +1084,12 @@ type VrRenderer(adjustSize : V2i -> V2i) =
             x.Release()
 
     member x.Hmd = hmds.[0]
-
-    member x.Controllers = devices |> Array.filter (fun d -> d.Type = VrDeviceType.Controller)
+    member x.AllDevices = getAllDevices() |> Seq.toArray
+    member x.Controllers = getAllDevices() |> Seq.filter (fun d -> d.Type = VrDeviceType.Controller) |> Seq.toArray
+    
+    member x.ConnectedDevices = connectedAll
+    member x.ConnectedHmds = connectedHmds
+    member x.ConnectedControllers = connectedControllers
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
