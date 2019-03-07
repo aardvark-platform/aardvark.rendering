@@ -516,6 +516,23 @@ module PreparedPipelineState =
 [<AutoOpen>]
 module PreparedPipelineStateAssembler =
     
+    let private usedClipPlanes (iface : GLSLProgramInterface) =
+        let candidates = [FShade.ShaderStage.Geometry; FShade.ShaderStage.TessEval; FShade.ShaderStage.Vertex ]
+        let beforeRasterize = candidates |> List.tryPick (fun s -> MapExt.tryFind s iface.shaders)
+        match beforeRasterize with
+        | Some shader ->
+            match MapExt.tryFind "gl_ClipDistance" shader.shaderBuiltInOutputs with
+            | Some t ->
+                let cnt = 
+                    match t with
+                    | GLSLType.Array(len,_,_) -> len
+                    | _ -> 8
+                Seq.init cnt id |> Set.ofSeq
+            | None ->
+                Set.empty
+        | None ->
+            Set.empty
+
     type ICommandStream with
     
         member x.SetPipelineState(s : CompilerInfo, me : PreparedPipelineState) =
@@ -540,6 +557,10 @@ module PreparedPipelineStateAssembler =
                 x.Enable(int OpenTK.Graphics.OpenGL4.EnableCap.ProgramPointSize)
             else
                 x.Disable(int OpenTK.Graphics.OpenGL4.EnableCap.ProgramPointSize)
+
+            let meUsed = usedClipPlanes me.pProgramInterface
+            for i in meUsed do
+                x.Enable(int OpenTK.Graphics.OpenGL4.EnableCap.ClipDistance0 + i)
             
 
             // bind all uniform-buffers (if needed)
@@ -601,6 +622,14 @@ module PreparedPipelineStateAssembler =
                     else
                         x.Disable(int OpenTK.Graphics.OpenGL4.EnableCap.ProgramPointSize)
             
+
+            let prevUsed = usedClipPlanes prev.pProgramInterface
+            let meUsed = usedClipPlanes me.pProgramInterface
+
+            if prevUsed <> meUsed then
+                for i in meUsed do
+                    x.Enable(int OpenTK.Graphics.OpenGL4.EnableCap.ClipDistance0 + i)
+
 
             // bind all uniform-buffers (if needed)
             for (id,ub) in Map.toSeq me.pUniformBuffers do
@@ -981,7 +1010,9 @@ type EpilogCommand(ctx : Context) =
         stream.SetDrawBuffers(s.drawBufferCount, s.drawBuffers)
         stream.UseProgram(0)
         stream.BindBuffer(int OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer, 0)
-        
+        for i in 0 .. 7 do
+            stream.Disable(int OpenTK.Graphics.OpenGL4.EnableCap.ClipDistance0 + i)
+
     override x.EntryState = None
     override x.ExitState = None
 
