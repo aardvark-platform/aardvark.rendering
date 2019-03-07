@@ -778,6 +778,7 @@ and LodRendererConfig =
         renderBounds : IMod<bool>
         maxSplits : IMod<int>
         stats : IModRef<LodRendererStats>
+        pickTrees : Option<mmap<ILodTreeNode,SimplePickTree>>
         alphaToCoverage : bool
     }
 

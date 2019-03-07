@@ -341,6 +341,22 @@ module LodTreeHelpers =
             children : list<TreeNode<'a>>
         }
 
+
+    module SimplePickTree =
+        
+        let rec ofTreeNode (trafo : Trafo3d) (v : TreeNode<GeometryPoolInstance>) =
+            let positions = v.value.geometry.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+            let bounds = v.original.Cell.BoundingBox
+
+            SimplePickTree (
+                bounds,
+                positions,
+                trafo,
+                v.value.geometry.IndexedAttributes |> SymDict.toSeq |> MapExt.ofSeq,
+                v.value.uniforms,
+                v.children |> List.map (ofTreeNode trafo)
+            )
+
     module TreeHelpers =
 
         let private cmp = Func<struct (float * _ * _), struct (float * _ * _), int>(fun (struct(a,_,_)) (struct(b,_,_)) -> compare a b)
@@ -743,6 +759,9 @@ module LodTreeHelpers =
                         else
                             Log.warn "the impossible happened (no worries)"
                             Some o
+
+        member x.Root = state |> Option.map (fun r -> r.original)
+        member x.State = state
 
         member x.Update(q : ref<AtomicQueue<ILodTreeNode, 'a>>) =
             let newState = traverse q state tree.Root
@@ -1590,14 +1609,16 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                     
                 let mutable lastRoots = HMap.empty
                 let mutable readers : hmap<ILodTreeNode, TaskTreeReader<_>> = HMap.empty
-
+                
+                let pickTrees = config.pickTrees
+                let hasPickTree = Option.isSome pickTrees
                 while not shutdown.IsCancellationRequested do
                     //timer.Wait()
                     MVar.take changesPending
 
                     let readers, removed = 
                         lock rootLock (fun () ->
-                            let removed = List<TaskTreeReader<_>>()
+                            let removed = List<ILodTreeNode * TaskTreeReader<_>>()
 
                             let delta = HMap.computeDelta lastRoots roots
                             lastRoots <- roots
@@ -1608,7 +1629,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                                     match HMap.tryRemove k readers with
                                     | Some (r, rs) ->
                                         readers <- rs
-                                        removed.Add(r)
+                                        removed.Add((k, r))
                                     | None ->
                                         ()
                                 | Set v ->
@@ -1617,13 +1638,32 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                             readers, removed
                         )
 
-                    for r in removed do
+                    for (root, r) in removed do
+                        match pickTrees with
+                        | Some mm -> 
+                            transact (fun () -> mm.Value <- mm.Value |> HMap.remove root)
+                        | None -> ()
                         r.Destroy(renderDelta)
 
-                    for (_,r) in readers do
+                    for (root,r) in readers do
                         r.Update(renderDelta)
+                        match pickTrees with
+                        | Some mm ->
+                            let trafo = getRootTrafo root
+                            let picky = r.State |> Option.map (fun s -> SimplePickTree.ofTreeNode (Mod.force trafo) s)
+                            transact (fun () -> 
+                                match picky with
+                                | Some picky -> mm.Value <- mm.Value |> HMap.add root picky
+                                | None -> mm.Value <- mm.Value |> HMap.remove root
+                            )
+                        | None ->
+                            ()
                     
-                for (_,r) in readers do
+                for (root,r) in readers do
+                    match pickTrees with
+                    | Some mm -> 
+                        transact (fun () -> mm.Value <- mm.Value |> HMap.remove root)
+                    | None -> ()
                     r.Destroy(renderDelta)
             )
                 
@@ -1688,78 +1728,79 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         let ops = reader.GetOperations AdaptiveToken.Top
                         let maxSplits = config.maxSplits.GetValue AdaptiveToken.Top
                           
-                        for o in ops do
-                            match o with
-                            | Add(_,i) ->
-                                let r = i.root
-                                let u = i.uniforms
-                                let rid = getRootId r
-                                rootUniforms <- HMap.add r u rootUniforms
-                                let load ct n = load ct rid n (fun _ _ r -> r)
-                                lock rootLock (fun () ->
-                                    roots <- HMap.add r (TaskTree(load, rid)) roots
-                                )
+                        if maxSplits > 0 then
+                            for o in ops do
+                                match o with
+                                | Add(_,i) ->
+                                    let r = i.root
+                                    let u = i.uniforms
+                                    let rid = getRootId r
+                                    rootUniforms <- HMap.add r u rootUniforms
+                                    let load ct n = load ct rid n (fun _ _ r -> r)
+                                    lock rootLock (fun () ->
+                                        roots <- HMap.add r (TaskTree(load, rid)) roots
+                                    )
 
-                            | Rem(_,i) ->
-                                let r = i.root
-                                let u = i.uniforms
-                                rootUniforms <- HMap.remove r rootUniforms
-                                freeRootId r
-                                lock rootLock (fun () ->
-                                    roots <- HMap.remove r roots
-                                )
-                                MVar.put changesPending ()
+                                | Rem(_,i) ->
+                                    let r = i.root
+                                    let u = i.uniforms
+                                    rootUniforms <- HMap.remove r rootUniforms
+                                    freeRootId r
+                                    lock rootLock (fun () ->
+                                        roots <- HMap.remove r roots
+                                    )
+                                    MVar.put changesPending ()
 
-                        let modelView (r : ILodTreeNode) =
-                            let t = getRootTrafo r
-                            subs.GetOrCreate(t, fun t -> t.AddMarkingCallback (fun () -> notConverged.Set())) |> ignore
-                            let m = t.GetValue()
-                            m * view
+                            let modelView (r : ILodTreeNode) =
+                                let t = getRootTrafo r
+                                subs.GetOrCreate(t, fun t -> t.AddMarkingCallback (fun () -> notConverged.Set())) |> ignore
+                                let m = t.GetValue()
+                                m * view
                                 
 
 
-                        let budget = config.budget.GetValue()
-                        let roots = lock rootLock (fun () -> roots)
+                            let budget = config.budget.GetValue()
+                            let roots = lock rootLock (fun () -> roots)
 
-                        let start = time()
-                        let maxQ =
-                            if budget < 0L then 1.0
-                            else fst (TreeHelpers.getMaxQuality budget (Seq.map fst roots) modelView proj)
+                            let start = time()
+                            let maxQ =
+                                if budget < 0L then 1.0
+                                else fst (TreeHelpers.getMaxQuality budget (Seq.map fst roots) modelView proj)
 
-                        let dt = time() - start
-                        maxQualityTime.Add(dt.TotalMilliseconds)
+                            let dt = time() - start
+                            maxQualityTime.Add(dt.TotalMilliseconds)
 
 
-                        let collapseIfNotSplit = maxQ < 1.0
                             
-                        let start = time()
-                        let queue = List()
-                        for (k,v) in roots do
-                            v.BuildQueue(state, collapseIfNotSplit, Some k, maxQ, modelView, proj, queue)
+                            let collapseIfNotSplit = maxQ < 1.0
+                            let start = time()
+                            let queue = List()
+                            for (k,v) in roots do
+                                v.BuildQueue(state, collapseIfNotSplit, Some k, maxQ, modelView, proj, queue)
             
-                        let q, fin = TaskTree<_>.ProcessQueue(state, queue, maxQ, modelView, proj, maxSplits)
-                        lastQ <- q
-                        let dt = time() - start
-                        expandTime.Add dt.TotalMilliseconds
-                        
-                        transact (fun () -> 
-                            config.stats.Value <-
-                                {
-                                    quality = q
-                                    maxQuality = maxQ
-                                    totalPrimitives = !state.dataSize
-                                    totalNodes = !state.totalNodes
-                                    usedMemory = pool.UsedMemory + inner.UsedMemory
-                                    allocatedMemory = pool.TotalMemory + inner.TotalMemory 
-                                    renderTime = inner.AverageRenderTime 
-                                }
-                        )
-                        if fin then notConverged.Reset()
+                            let q, fin = TaskTree<_>.ProcessQueue(state, queue, maxQ, modelView, proj, maxSplits)
+                            lastQ <- q
+                            let dt = time() - start
+                            expandTime.Add dt.TotalMilliseconds
+
+                            transact (fun () -> 
+                                config.stats.Value <-
+                                    {
+                                        quality = lastQ
+                                        maxQuality = maxQ
+                                        totalPrimitives = !state.dataSize
+                                        totalNodes = !state.totalNodes
+                                        usedMemory = pool.UsedMemory + inner.UsedMemory
+                                        allocatedMemory = pool.TotalMemory + inner.TotalMemory 
+                                        renderTime = inner.AverageRenderTime 
+                                    }
+                            )
+                            if fin then notConverged.Reset()
 
 
-                        //if maxQ <> lastMaxQ then
-                        //    lastMaxQ <- maxQ
-                        //    Log.warn "maxQ: %.3f (%A / %A)" maxQ (Num dataSize)(Num !state.dataSize)
+                            //if maxQ <> lastMaxQ then
+                            //    lastMaxQ <- maxQ
+                            //    Log.warn "maxQ: %.3f (%A / %A)" maxQ (Num dataSize)(Num !state.dataSize)
 
 
                 finally 
