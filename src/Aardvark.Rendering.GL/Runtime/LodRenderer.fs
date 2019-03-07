@@ -1725,10 +1725,10 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         //caller.EvaluateAlways AdaptiveToken.Top (fun token ->
                         let view = config.view.GetValue AdaptiveToken.Top
                         let proj = config.proj.GetValue AdaptiveToken.Top
-                        let ops = reader.GetOperations AdaptiveToken.Top
                         let maxSplits = config.maxSplits.GetValue AdaptiveToken.Top
                           
                         if maxSplits > 0 then
+                            let ops = reader.GetOperations AdaptiveToken.Top
                             for o in ops do
                                 match o with
                                 | Add(_,i) ->
