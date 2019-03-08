@@ -344,14 +344,15 @@ module LodTreeHelpers =
 
     module SimplePickTree =
         
-        let rec ofTreeNode (trafo : Trafo3d) (v : TreeNode<GeometryPoolInstance>) =
+        let rec ofTreeNode (trafo : IMod<Trafo3d>) (v : TreeNode<GeometryPoolInstance>) =
             let positions = v.value.geometry.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
-            let bounds = v.original.Cell.BoundingBox
-
+            let bounds = v.original.WorldCellBoundingBox
+            
             SimplePickTree (
                 bounds,
                 positions,
                 trafo,
+                v.original.Root.DataTrafo,
                 v.value.geometry.IndexedAttributes |> SymDict.toSeq |> MapExt.ofSeq,
                 v.value.uniforms,
                 v.children |> List.map (ofTreeNode trafo)
@@ -1157,7 +1158,8 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
         
     let rootUniformCache = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, System.Collections.Concurrent.ConcurrentDictionary<string, Option<IMod>>>()
     let rootTrafoCache = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, IMod<Trafo3d>>()
-
+    let rootTrafoWorldCache = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, IMod<Trafo3d>>()
+    
 
 
 
@@ -1166,12 +1168,23 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
             match HMap.tryFind root rootUniforms with
             | Some table -> 
                 match MapExt.tryFind "ModelTrafo" table with
-                | Some (:? IMod<Trafo3d> as m) -> config.model %* m
-                | _ -> config.model
+                | Some (:? IMod<Trafo3d> as m) -> (m |> Mod.map ( fun m -> root.DataTrafo * m )) %* config.model
+                | _ -> config.model |> Mod.map ( fun m -> root.DataTrafo * m )
             | None ->
-                config.model
+                config.model |> Mod.map ( fun m -> root.DataTrafo * m )
         )
-                
+           
+    let getRootTrafoWorld (root : ILodTreeNode) =
+        rootTrafoWorldCache.GetOrAdd(root, fun root ->
+            match HMap.tryFind root rootUniforms with
+            | Some table -> 
+                match MapExt.tryFind "ModelTrafo" table with
+                | Some (:? IMod<Trafo3d> as m) -> m |> Mod.map ( fun m -> root.DataTrafo * m )
+                | _ -> Mod.constant root.DataTrafo
+            | None ->
+                Mod.constant root.DataTrafo
+        )     
+
     let getRootUniform (name : string) (root : ILodTreeNode) : Option<IMod> =
         let rootCache = rootUniformCache.GetOrAdd(root, fun root -> System.Collections.Concurrent.ConcurrentDictionary())
         rootCache.GetOrAdd(name, fun name ->
@@ -1336,7 +1349,9 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
 
                 if active > 0 then 
                     activateWatch.Start()
-                    let w = state.calls.Add(slot, node.BoundingBox, node.CellBoundingBox, rootId)
+                    let b = node.WorldBoundingBox.Transformed(node.DataTrafo.Inverse)
+                    let cb = node.WorldCellBoundingBox.Transformed(node.DataTrafo.Inverse)
+                    let w = state.calls.Add(slot, b, cb, rootId)
                     if not w then Log.warn "[Lod] alloc cannot activate %s (was already active)" node.Name
                     activateWatch.Stop()
 
@@ -1370,7 +1385,9 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                 match cache.TryGetValue node with
                     | (true, slot) ->
                         activateWatch.Start()
-                        state.calls.Add(slot, node.BoundingBox, node.CellBoundingBox, rootId) |> ignore
+                        let b = node.WorldBoundingBox.Transformed(node.DataTrafo.Inverse)
+                        let cb = node.WorldCellBoundingBox.Transformed(node.DataTrafo.Inverse)
+                        state.calls.Add(slot, b, cb, rootId) |> ignore
                         activateWatch.Stop()
                     | _ ->
                         Log.warn "[Lod] cannot activate %A %A" node (Option.isSome op.value)
@@ -1649,8 +1666,8 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         r.Update(renderDelta)
                         match pickTrees with
                         | Some mm ->
-                            let trafo = getRootTrafo root
-                            let picky = r.State |> Option.map (fun s -> SimplePickTree.ofTreeNode (Mod.force trafo) s)
+                            let trafo = getRootTrafoWorld root
+                            let picky = r.State |> Option.map (fun s -> SimplePickTree.ofTreeNode trafo s)
                             transact (fun () -> 
                                 match picky with
                                 | Some picky -> mm.Value <- mm.Value |> HMap.add root picky

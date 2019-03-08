@@ -418,9 +418,11 @@ type ILodTreeNode =
     abstract member SplitQuality : Trafo3d * Trafo3d -> float
     abstract member CollapseQuality : Trafo3d * Trafo3d -> float
 
-    abstract member BoundingBox : Box3d
-    abstract member CellBoundingBox : Box3d
+    abstract member WorldBoundingBox : Box3d
+    abstract member WorldCellBoundingBox : Box3d
     abstract member Cell : Cell
+
+    abstract member DataTrafo : Trafo3d
 
     abstract member Acquire : unit -> unit
     abstract member Release : unit -> unit

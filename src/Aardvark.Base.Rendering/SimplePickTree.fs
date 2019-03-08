@@ -3,6 +3,7 @@
 open System
 open Aardvark.Base
 open Aardvark.Base.Geometry
+open Aardvark.Base.Incremental
 
 [<AutoOpen>]
 module private SimplePickTreeHelpers = 
@@ -98,25 +99,29 @@ module private SimplePickTreeHelpers =
                                 
 type SimplePickTree(  _bounds : Box3d,
                       _positions : V3f[],
-                      _trafo : Trafo3d,
+                      _trafo : IMod<Trafo3d>,
+                      _dataTrafo : Trafo3d,
                       _attributes : MapExt<Symbol, Array>,
                       _uniforms : MapExt<string, Array>,
                       _children : list<SimplePickTree>) =
 
-    let _positions = 
-        lazy (
-            _positions |> Array.map (fun v -> _trafo.Forward.TransformPos(V3d v))
-        )
+    static let transform (trafo : Trafo3d) (part : RayPart) =
+        let mutable newRay = part.Ray.Ray.Transformed(trafo.Forward)
+        let f = part.Ray.Ray.Direction.Length / newRay.Direction.Length
+        newRay.Direction <- newRay.Direction * f
+        RayPart(FastRay3d newRay, part.TMin, part.TMax)
 
     let _bvh = 
         lazy ( _children |> List.toArray |> Aardvark.Base.Geometry.BvhTree.create (fun c -> c.bounds) )
 
     member x.bounds = _bounds
-    member x.positions = _positions.Value
+    member x.positions = _positions
     member x.attributes = _attributes
     member x.uniforms = _uniforms
     member x.children = _children
     member x.bvh = _bvh.Value
+    member x.trafo = _trafo
+    member x.dataTrafo = _dataTrafo
             
     member private x.FindInternal(ray : RayPart, radiusD : float, radiusK : float) =
         if ray.Ray.Intersects(x.bounds, &ray.TMin, &ray.TMax) then
@@ -126,7 +131,8 @@ type SimplePickTree(  _bounds : Box3d,
                 intersections (fun r (t : SimplePickTree) -> t.FindInternal(r, radiusD, radiusK)) bvh.Data ray root
             | None ->
                 let hits = 
-                    _positions.Value |> Array.choose ( fun p -> 
+                    _positions |> Array.choose ( fun p -> 
+                        let p = _dataTrafo.Forward.TransformPos (V3d p)
                         let o = p - ray.Ray.Ray.Origin
                         let t = Vec.dot o ray.Ray.Ray.Direction
                         if t >= ray.TMin && t <= ray.TMax then
@@ -150,17 +156,23 @@ type SimplePickTree(  _bounds : Box3d,
         let tMax = tMax * len
         let radiusT1 = tan ray.Angle / len
         let rp = RayPart(FastRay3d(Ray3d(ray.Origin, ray.Direction / len)),tMin,tMax)
-        x.FindInternal(rp, 0.0, radiusT1)
+        let t = _trafo.GetValue()
+        let rp = transform t.Inverse rp
+        x.FindInternal(rp, 0.0, radiusT1) |> Seq.map (fun hit -> RayHit(hit.T, V3d hit.Value |> t.Forward.TransformPos))
         
     member x.FindPoints(cylinder : Cylinder3d) =
         let dir = cylinder.P1 - cylinder.P0
         let len = dir.Length
         let rp = RayPart(FastRay3d(Ray3d(cylinder.P0, dir / len)),0.0,len)
-        x.FindInternal(rp,cylinder.Radius, 0.0)
+        let t = _trafo.GetValue()
+        let rp = transform t.Inverse rp
+        x.FindInternal(rp,cylinder.Radius, 0.0) |> Seq.map (fun hit -> RayHit(hit.T, V3d hit.Value |> t.Forward.TransformPos))
 
     member x.FindPoints(ray : Ray3d,  tMin : float, tMax : float, radius : float) =
         let len = ray.Direction.Length
         let tMin = tMin * len
         let tMax = tMax * len
         let rp = RayPart(FastRay3d(Ray3d(ray.Origin, ray.Direction / len)),tMin,tMax)
-        x.FindInternal(rp, radius, 0.0)
+        let t = _trafo.GetValue()
+        let rp = transform t.Inverse rp
+        x.FindInternal(rp, radius, 0.0) |> Seq.map (fun hit -> RayHit(hit.T, V3d hit.Value |> t.Forward.TransformPos))
