@@ -106,10 +106,20 @@ type SimplePickTree(  _bounds : Box3d,
                       _children : list<SimplePickTree>) =
 
     static let transform (trafo : Trafo3d) (part : RayPart) =
-        let mutable newRay = part.Ray.Ray.Transformed(trafo.Forward)
-        let f = part.Ray.Ray.Direction.Length / newRay.Direction.Length
-        newRay.Direction <- newRay.Direction * f
-        RayPart(FastRay3d newRay, part.TMin, part.TMax)
+        let ray = part.Ray.Ray
+        let np = trafo.Forward.TransformPos ray.Origin
+        let nd = trafo.Forward.TransformDir ray.Direction
+        let nr = FastRay3d(Ray3d(np,nd))
+
+        let f = nr.Ray.Direction.Length / part.Ray.Ray.Direction.Length
+        let ntmi = part.TMin * f
+        let ntma = part.TMax * f
+
+        RayPart(nr,ntmi,ntma)
+        //let mutable newRay = part.Ray.Ray.Transformed(trafo.Forward)
+        //let f = part.Ray.Ray.Direction.Length / newRay.Direction.Length
+        //newRay.Direction <- newRay.Direction * f
+        //RayPart(FastRay3d newRay, part.TMin, part.TMax)
 
     let _bvh = 
         lazy ( _children |> List.toArray |> Aardvark.Base.Geometry.BvhTree.create (fun c -> c.bounds) )
@@ -174,5 +184,5 @@ type SimplePickTree(  _bounds : Box3d,
         let tMax = tMax * len
         let rp = RayPart(FastRay3d(Ray3d(ray.Origin, ray.Direction / len)),tMin,tMax)
         let t = _trafo.GetValue()
-        let rp = transform t.Inverse rp
+        let rp = rp //transform t.Inverse rp
         x.FindInternal(rp, radius, 0.0) |> Seq.map (fun hit -> RayHit(hit.T, V3d hit.Value |> t.Forward.TransformPos))
