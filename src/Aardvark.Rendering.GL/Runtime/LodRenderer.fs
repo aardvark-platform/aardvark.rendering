@@ -1173,17 +1173,6 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
             | None ->
                 config.model |> Mod.map ( fun m -> root.DataTrafo * m )
         )
-           
-    let getRootTrafoWorld (root : ILodTreeNode) =
-        rootTrafoWorldCache.GetOrAdd(root, fun root ->
-            match HMap.tryFind root rootUniforms with
-            | Some table -> 
-                match MapExt.tryFind "ModelTrafo" table with
-                | Some (:? IMod<Trafo3d> as m) -> m |> Mod.map ( fun m -> root.DataTrafo * m )
-                | _ -> Mod.constant root.DataTrafo
-            | None ->
-                Mod.constant root.DataTrafo
-        )     
 
     let getRootUniform (name : string) (root : ILodTreeNode) : Option<IMod> =
         let rootCache = rootUniformCache.GetOrAdd(root, fun root -> System.Collections.Concurrent.ConcurrentDictionary())
@@ -1666,7 +1655,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         r.Update(renderDelta)
                         match pickTrees with
                         | Some mm ->
-                            let trafo = getRootTrafoWorld root
+                            let trafo = getRootTrafo root
                             let picky = r.State |> Option.map (fun s -> SimplePickTree.ofTreeNode trafo s)
                             transact (fun () -> 
                                 match picky with
