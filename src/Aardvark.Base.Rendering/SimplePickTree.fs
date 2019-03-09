@@ -96,7 +96,14 @@ module private SimplePickTreeHelpers =
                                 let ri = intersections tryIntersect data rpart right
                                 yield! Seq.mergeSorted (fun (lh : RayHit<_>) (rh : RayHit<_>) -> compare lh.T rh.T) li ri
                         }
-                                
+          
+[<Struct>]
+type SimplePickPoint =
+    {
+        DataPosition : V3d
+        WorldPosition : V3d
+    }
+
 type SimplePickTree(  _bounds : Box3d,
                       _positions : V3f[],
                       _trafo : IMod<Trafo3d>,
@@ -109,9 +116,10 @@ type SimplePickTree(  _bounds : Box3d,
         let ray = part.Ray.Ray
         let np = trafo.Forward.TransformPos ray.Origin
         let nd = trafo.Forward.TransformDir ray.Direction
-        let nr = FastRay3d(Ray3d(np,nd))
+        let l = Vec.length nd
+        let nr = FastRay3d(Ray3d(np,nd / l))
 
-        let f = nr.Ray.Direction.Length / part.Ray.Ray.Direction.Length
+        let f = 1.0 / part.Ray.Ray.Direction.Length
         let ntmi = part.TMin * f
         let ntma = part.TMax * f
 
@@ -141,15 +149,15 @@ type SimplePickTree(  _bounds : Box3d,
                 intersections (fun r (t : SimplePickTree) -> t.FindInternal(r, radiusD, radiusK)) bvh.Data ray root
             | None ->
                 let hits = 
-                    _positions |> Array.choose ( fun p -> 
-                        let p = _dataTrafo.Forward.TransformPos (V3d p)
+                    x.positions |> Array.choose ( fun p -> 
+                        let p = x.dataTrafo.Forward.TransformPos (V3d p)
                         let o = p - ray.Ray.Ray.Origin
                         let t = Vec.dot o ray.Ray.Ray.Direction
                         if t >= ray.TMin && t <= ray.TMax then
                             let dist = Vec.cross o ray.Ray.Ray.Direction |> Vec.lengthSquared
                             let r = radiusD + t * radiusK
                             if dist < r*r then
-                                Some (RayHit(t, p))
+                                Some (RayHit(t, { DataPosition = p; WorldPosition = x.dataTrafo.Backward.TransformPos p }))
                             else
                                 None
                         else
@@ -160,29 +168,23 @@ type SimplePickTree(  _bounds : Box3d,
         else
             Seq.empty
 
-    member x.FindPoints(ray : Cone3d, tMin : float, tMax : float) =
+
+    member x.FindPoints(ray : Ray3d,  tMin : float, tMax : float, d : float, k : float) =
         let len = ray.Direction.Length
         let tMin = tMin * len
         let tMax = tMax * len
-        let radiusT1 = tan ray.Angle / len
         let rp = RayPart(FastRay3d(Ray3d(ray.Origin, ray.Direction / len)),tMin,tMax)
-        let t = _trafo.GetValue()
-        let rp = transform t.Inverse rp
-        x.FindInternal(rp, 0.0, radiusT1) |> Seq.map (fun hit -> RayHit(hit.T, V3d hit.Value |> t.Forward.TransformPos))
-        
+        let t = x.trafo.GetValue()
+        let rp = transform (t.Inverse * x.dataTrafo) rp
+        x.FindInternal(rp, d, k) |> Seq.map (fun hit -> RayHit(hit.T, { hit.Value with WorldPosition = V3d hit.Value.WorldPosition |> t.Forward.TransformPos }))
+
+    member x.FindPoints(ray : Cone3d, tMin : float, tMax : float) =
+        x.FindPoints(Ray3d(ray.Origin, ray.Direction), tMin, tMax, 0.0, tan ray.Angle)
+
     member x.FindPoints(cylinder : Cylinder3d) =
         let dir = cylinder.P1 - cylinder.P0
         let len = dir.Length
-        let rp = RayPart(FastRay3d(Ray3d(cylinder.P0, dir / len)),0.0,len)
-        let t = _trafo.GetValue()
-        let rp = transform t.Inverse rp
-        x.FindInternal(rp,cylinder.Radius, 0.0) |> Seq.map (fun hit -> RayHit(hit.T, V3d hit.Value |> t.Forward.TransformPos))
+        x.FindPoints(Ray3d(cylinder.P0, dir / len), 0.0, len, cylinder.Radius, 0.0)
 
     member x.FindPoints(ray : Ray3d,  tMin : float, tMax : float, radius : float) =
-        let len = ray.Direction.Length
-        let tMin = tMin * len
-        let tMax = tMax * len
-        let rp = RayPart(FastRay3d(Ray3d(ray.Origin, ray.Direction / len)),tMin,tMax)
-        let t = _trafo.GetValue()
-        let rp = rp //transform t.Inverse rp
-        x.FindInternal(rp, radius, 0.0) |> Seq.map (fun hit -> RayHit(hit.T, V3d hit.Value |> t.Forward.TransformPos))
+        x.FindPoints(ray, tMin, tMax, radius, 0.0)
