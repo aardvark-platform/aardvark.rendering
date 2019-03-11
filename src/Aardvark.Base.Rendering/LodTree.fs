@@ -418,12 +418,34 @@ type ILodTreeNode =
     abstract member SplitQuality : Trafo3d * Trafo3d -> float
     abstract member CollapseQuality : Trafo3d * Trafo3d -> float
 
-    abstract member BoundingBox : Box3d
-    abstract member CellBoundingBox : Box3d
+    abstract member WorldBoundingBox : Box3d
+    abstract member WorldCellBoundingBox : Box3d
     abstract member Cell : Cell
+
+    abstract member DataTrafo : Trafo3d
 
     abstract member Acquire : unit -> unit
     abstract member Release : unit -> unit
+
+type SimplePickTree(  _original : ILodTreeNode,
+                      _bounds : Box3d,
+                      _positions : V3f[],
+                      _trafo : IMod<Trafo3d>,
+                      _dataTrafo : Trafo3d,
+                      _attributes : MapExt<Symbol, Array>,
+                      _uniforms : MapExt<string, Array>,
+                      _children : Lazy<list<SimplePickTree>>) =
+
+    let _bvh = lazy ( _children.Value |> List.toArray |> Aardvark.Base.Geometry.BvhTree.create (fun c -> c.bounds) )
+    member x.original = _original
+    member x.bounds = _bounds
+    member x.positions = _positions
+    member x.attributes = _attributes
+    member x.uniforms = _uniforms
+    member x.children = _children.Value
+    member x.bvh = _bvh.Value
+    member x.trafo = _trafo
+    member x.dataTrafo = _dataTrafo
 
 type LodTreeInstance =
     {
