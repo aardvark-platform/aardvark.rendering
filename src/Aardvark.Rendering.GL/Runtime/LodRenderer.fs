@@ -349,13 +349,14 @@ module LodTreeHelpers =
             let bounds = v.original.WorldCellBoundingBox
             
             SimplePickTree (
+                v.original,
                 bounds,
                 positions,
                 trafo,
                 v.original.Root.DataTrafo,
                 v.value.geometry.IndexedAttributes |> SymDict.toSeq |> MapExt.ofSeq,
                 v.value.uniforms,
-                v.children |> List.map (ofTreeNode trafo)
+                lazy (v.children |> List.map (ofTreeNode trafo))
             )
 
     module TreeHelpers =
