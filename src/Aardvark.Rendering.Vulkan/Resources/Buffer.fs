@@ -52,112 +52,7 @@ type BufferView =
 [<AutoOpen>]
 module BufferCommands =
     type Command with
-        
-        // ptr to buffer
-        static member Copy(src : DevicePtr, srcOffset : int64, dst : Buffer, dstOffset : int64, size : int64) =
-            if size < 0L || srcOffset < 0L || srcOffset + size > src.Size || dstOffset < 0L || dstOffset + size > dst.Size then
-                failf "bad copy range"
-
-            { new Command() with
-                member x.Compatible = QueueFlags.All
-                member x.Enqueue cmd =
-                    let device = src.Memory.Heap.Device
-                    let align = device.MinUniformBufferOffsetAlignment
-
-                    let srcOffset = src.Offset + srcOffset
-                    let srcBufferOffset = Alignment.prev align srcOffset
-                    let srcCopyOffset = srcOffset - srcBufferOffset
-                    let srcBufferSize = size + srcCopyOffset
-
-                    let srcInfo =
-                        VkBufferCreateInfo(
-                            VkStructureType.BufferCreateInfo, 0n,
-                            VkBufferCreateFlags.None,
-                            uint64 srcBufferSize, VkBufferUsageFlags.TransferSrcBit, VkSharingMode.Exclusive, 
-                            0u, NativePtr.zero
-                        )
-                        
-                    let mutable srcBuffer =
-                        srcInfo |> pin (fun pInfo ->
-                            temporary<VkBuffer,_> (fun pBuffer ->
-                                VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pBuffer)
-                                    |> check "could not create temporary buffer"
-                                NativePtr.read pBuffer
-                            )
-                        )
-
-                    let reqs = 
-                        temporary (fun pReqs -> 
-                            VkRaw.vkGetBufferMemoryRequirements(device.Handle, srcBuffer, pReqs)
-                            NativePtr.read pReqs
-                        )
-
-                    if srcBufferOffset % (int64 reqs.alignment) <> 0L then
-                        VkRaw.warn "bad buffer alignment"
-
-                    VkRaw.vkBindBufferMemory(device.Handle, srcBuffer, src.Memory.Handle, uint64 srcBufferOffset)
-                        |> check "could not bind temporary buffer memory"
-
-                    let copyInfo = VkBufferCopy(uint64 srcCopyOffset, uint64 dstOffset, uint64 size)
-                    cmd.AppendCommand()
-                    copyInfo |> pin (fun pInfo ->
-                        VkRaw.vkCmdCopyBuffer(cmd.Handle, srcBuffer, dst.Handle, 1u, pInfo)
-                    )
-
-                    { new Disposable() with
-                        member x.Dispose() =
-                            if srcBuffer.IsValid then VkRaw.vkDestroyBuffer(device.Handle, srcBuffer, NativePtr.zero)
-                    }
-            }
-
-        // buffer to ptr
-        static member Copy(src : Buffer, srcOffset : int64, dst : DevicePtr, dstOffset : int64, size : int64) =
-            if size < 0L || srcOffset < 0L || srcOffset + size > src.Size || dstOffset < 0L || dstOffset + size > dst.Size then
-                failf "bad copy range"
-
-            { new Command() with
-                member x.Compatible = QueueFlags.All
-                member x.Enqueue cmd =
-                    //let mutable dstBuffer = VkBuffer.Null
-                    let device = src.Device
-                    let align = device.MinUniformBufferOffsetAlignment
-
-                    let dstOffset = dst.Offset + dstOffset
-                    let dstBufferOffset = Alignment.prev align dstOffset
-                    let dstCopyOffset = dstOffset - dstBufferOffset
-                    let dstBufferSize = size + dstCopyOffset
-
-
-                    let dstInfo =
-                        VkBufferCreateInfo(
-                            VkStructureType.BufferCreateInfo, 0n,
-                            VkBufferCreateFlags.None,
-                            uint64 dstBufferSize, VkBufferUsageFlags.TransferDstBit, VkSharingMode.Exclusive, 
-                            0u, NativePtr.zero
-                    )
-
-                    let dstBuffer =
-                        temporary (fun pDstBuffer ->
-                            dstInfo |> pin (fun pInfo ->
-                                VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pDstBuffer)
-                                    |> check "could not create temporary buffer"
-                                NativePtr.read pDstBuffer
-                            )
-                        )
-                    VkRaw.vkBindBufferMemory(device.Handle, dstBuffer, dst.Memory.Handle, uint64 dstBufferOffset)
-                        |> check "could not bind temporary buffer memory"
-
-
-                    let copyInfo = VkBufferCopy(uint64 srcOffset, uint64 dstCopyOffset, uint64 size)
-                    cmd.AppendCommand()
-                    copyInfo |> pin (fun pInfo -> VkRaw.vkCmdCopyBuffer(cmd.Handle, src.Handle, dstBuffer, 1u, pInfo))
-
-                    { new Disposable() with
-                        member x.Dispose() = 
-                            if dstBuffer.IsValid then VkRaw.vkDestroyBuffer(device.Handle, dstBuffer, NativePtr.zero)
-                    }
-            }
-
+       
         // buffer to buffer
         static member Copy(src : Buffer, srcOffset : int64, dst : Buffer, dstOffset : int64, size : int64) =
             if size < 0L || srcOffset < 0L || srcOffset + size > src.Size || dstOffset < 0L || dstOffset + size > dst.Size then
@@ -191,20 +86,11 @@ module BufferCommands =
                         Disposable.Empty
                 }
 
-        static member inline Copy(src : DevicePtr, dst : Buffer, size : int64) = 
-            Command.Copy(src, 0L, dst, 0L, size)
 
-        static member inline Copy(src : Buffer, dst : DevicePtr, size : int64) = 
-            Command.Copy(src, 0L, dst, 0L, size)
 
         static member inline Copy(src : Buffer, dst : Buffer, size : int64) = 
             Command.Copy(src, 0L, dst, 0L, size)
 
-        static member inline Copy(src : DevicePtr, dst : Buffer) = 
-            Command.Copy(src, 0L, dst, 0L, min src.Size dst.Size)
-
-        static member inline Copy(src : Buffer, dst : DevicePtr) = 
-            Command.Copy(src, 0L, dst, 0L, min src.Size dst.Size)
 
         static member inline Copy(src : Buffer, dst : Buffer) = 
             Command.Copy(src, 0L, dst, 0L, min src.Size dst.Size)
@@ -555,12 +441,13 @@ module Buffer =
         let deviceAlignedSize = Alignment.next align (int64 buffer.Size)
         let deviceMem = buffer.Memory
         
-        let hostPtr = device.HostMemory.Alloc(align, deviceAlignedSize)
-        hostPtr.Mapped (fun dst -> writer dst)
+
+        let tmp = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit buffer.Size
+        tmp.Memory.Mapped (fun dst -> writer dst)
 
         device.eventually {
-            try do! Command.Copy(hostPtr, 0L, buffer, 0L, buffer.Size)
-            finally hostPtr.Dispose()
+            try do! Command.Copy(tmp, 0L, buffer, 0L, buffer.Size)
+            finally delete tmp device
         }
 
     let rec tryUpdate (data : IBuffer) (buffer : Buffer) =

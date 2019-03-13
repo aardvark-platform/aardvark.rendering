@@ -348,13 +348,11 @@ type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
             failf "MappedBuffer not writeable"
 
         LockedResource.access x (fun () ->
-            let align = device.MinUniformBufferOffsetAlignment
-            let alignedSize = size |> Alignment.next align
-            let temp = device.HostMemory.Alloc(align, alignedSize)
-            let res = temp.Mapped writer
+            let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit size
+            let res = temp.Memory.Mapped writer
             device.TransferFamily.run {
                 try do! Command.Copy(temp, 0L, x, offset, size)
-                finally temp.Dispose()
+                finally Buffer.delete temp device
             }
             res
         )
@@ -367,17 +365,12 @@ type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
             failf "MappedBuffer not readable"
         
         LockedResource.access x (fun () ->
-            let align = device.MinUniformBufferOffsetAlignment
-            let alignedSize = size |> Alignment.next align
-            let temp = device.HostMemory.Alloc(align, alignedSize)
-
+            let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit size
             device.TransferFamily.run {
-                try do! Command.Copy(x, offset, temp, 0L, size)
-                finally temp.Dispose()
+                do! Command.Copy(x, offset, temp, 0L, size)
             }
-
-
-            let res = temp.Mapped reader
+            let res = temp.Memory.Mapped reader
+            Buffer.delete temp device
             res
         )
 
