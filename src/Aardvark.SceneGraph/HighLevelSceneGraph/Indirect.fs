@@ -191,8 +191,7 @@ module Indirect =
             cache.Clear()
             manager.Dispose()
             manager <- Aardvark.Base.Management.MemoryManager.createNop()
-            let mutable foo = 0
-            for d in dirty do d.Outputs.Consume(&foo) |> ignore
+            for d in dirty do d.Outputs.Clear()
             dirty.Clear()
             transact x.MarkOutdated
 

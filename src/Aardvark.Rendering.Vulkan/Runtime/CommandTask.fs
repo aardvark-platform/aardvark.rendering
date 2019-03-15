@@ -288,10 +288,9 @@ module private RuntimeCommands =
 
             member x.Dispose() =
                 manager.Free block
-                let mutable foo = 0
                 lock dirtySet (fun () -> 
                     for w in writers do 
-                        w.Outputs.Consume(&foo) |> ignore
+                        w.Outputs.Clear()
                         dirtySet.Remove w |> ignore
                 )
                 block <- Block<_>(manager, nref Unchecked.defaultof<_>, 0n, 0n, false)

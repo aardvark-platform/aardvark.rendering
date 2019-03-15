@@ -155,8 +155,7 @@ module TreeDiff =
                 updaters.Values |> Seq.iter (fun u -> u.Outputs.Remove x |> ignore)
                 reader.Dispose()
                 updaters.Clear()
-                let mutable foo = 0
-                x.Outputs.Consume(&foo) |> ignore
+                x.Outputs.Clear()
             )
 
         member x.Update(token) =
@@ -212,8 +211,7 @@ module TreeDiff =
             lock x (fun () ->
                 last <- None
                 input.Outputs.Remove x |> ignore
-                let mutable foo = 0
-                x.Outputs.Consume(&foo) |> ignore
+                x.Outputs.Clear()
             )
 
         member x.Update token =
@@ -261,15 +259,13 @@ module TreeDiff =
 
         member x.Kill() =
             lock x (fun () ->
-                let mutable foo = 0
-                x.Outputs.Consume(&foo) |> ignore
+                x.Outputs.Clear()
                 childUpdater.Kill()
             )
 
         member x.Remove(parent : string) =
             lock x (fun () ->
-                let mutable foo = 0
-                x.Outputs.Consume(&foo) |> ignore
+                x.Outputs.Clear()
                 childUpdater.Kill()
                 [RemNode n.Description.key]
             )

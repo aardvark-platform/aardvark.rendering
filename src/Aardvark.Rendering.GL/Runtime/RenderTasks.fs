@@ -137,8 +137,7 @@ module RenderTasks =
         override x.Release() =
             if not isDisposed then
                 isDisposed <- true
-                let dummy = ref 0
-                currentContext.Outputs.Consume(dummy) |> ignore
+                currentContext.Outputs.Clear()
                 x.Release2()
         override x.FramebufferSignature = Some fboSignature
         override x.Runtime = Some ctx.Runtime
@@ -345,8 +344,7 @@ module RenderTasks =
                 hasProgram <- false
                 program.Dispose()
 
-                let mutable foo = 0
-                (objects :> aset<_>).Content.Outputs.Consume(&foo) |> ignore
+                (objects :> aset<_>).Content.Outputs.Clear()
 
                 objects.Clear()
         

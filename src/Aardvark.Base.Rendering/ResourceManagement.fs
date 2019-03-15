@@ -181,8 +181,7 @@ type Resource<'h, 'v when 'v : unmanaged>(kind : ResourceKind) =
         NativePtr.free pointer
 
         lock x (fun () ->
-            let mutable foo = 0
-            x.Outputs.Consume(&foo) |> ignore
+            x.Outputs.Clear()
             x.OutOfDate <- true
             handle.UnsafeCache <- Unchecked.defaultof<_>
         )

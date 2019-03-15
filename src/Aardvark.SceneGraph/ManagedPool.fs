@@ -279,8 +279,7 @@ module private ManagedBufferImplementation =
                 if targetRegions.Count = 0 then
                     x.Release()
                     remove x
-                    let mutable foo = 0
-                    x.Outputs.Consume(&foo) |> ignore
+                    x.Outputs.Clear()
                     true
                 else
                     false
