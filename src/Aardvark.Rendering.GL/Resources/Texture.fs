@@ -70,6 +70,10 @@ type Texture =
 
     end
 
+type TextureViewHandle(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int, size : V3i, count : Option<int>, format : TextureFormat) = 
+    inherit Texture(ctx, handle, dimension, mipMapLevels, multisamples, size, count, format, 0L, true)
+        
+
 [<AutoOpen>]
 module TextureCubeExtensions =
     // PositiveX = 0,
@@ -99,9 +103,15 @@ module ResourceCounts =
         Interlocked.Increment(&ctx.MemoryUsage.TextureCount) |> ignore
         Interlocked.Add(&ctx.MemoryUsage.TextureMemory,size) |> ignore
 
+    let addTextureView (ctx:Context) =
+        Interlocked.Increment(&ctx.MemoryUsage.TextureViewCount) |> ignore
+
     let removeTexture (ctx:Context) size =
         Interlocked.Decrement(&ctx.MemoryUsage.TextureCount)  |> ignore
         Interlocked.Add(&ctx.MemoryUsage.TextureMemory,-size) |> ignore
+
+    let removeTextureView (ctx:Context) =
+        Interlocked.Decrement(&ctx.MemoryUsage.TextureViewCount) |> ignore
 
     let updateTexture (ctx:Context) oldSize newSize =
         Interlocked.Add(&ctx.MemoryUsage.TextureMemory,newSize-oldSize) |> ignore
@@ -559,7 +569,7 @@ module TextureCreationExtensions =
                     else if orig.Dimension <> TextureDimension.TextureCube && slices.Min <> slices.Max then failwithf "cannot create multi-slice view as not array"
                     else None
                     
-                let tex = Texture(x, handle, dim, levelCount, orig.Multisamples, orig.Size, sliceCount, orig.Format, 0L, true)
+                let tex = TextureViewHandle(x, handle, dim, levelCount, orig.Multisamples, orig.Size, sliceCount, orig.Format)
                 let target = TextureTarget.ofTexture tex
                   
                 GL.TextureView(
@@ -571,6 +581,8 @@ module TextureCreationExtensions =
                     slices.Min, match sliceCount with | Some x -> x; | _ -> 1
                 )
                 GL.Check "could not create texture view"
+
+                addTextureView x
 
                 tex
             )
@@ -2802,7 +2814,9 @@ module TextureExtensions =
             
         member x.Delete(t : Texture) =
             using x.ResourceLock (fun _ ->
-                removeTexture x t.SizeInBytes
+                match t with 
+                | :? TextureViewHandle -> removeTextureView x
+                | _ -> removeTexture x t.SizeInBytes
                 GL.DeleteTexture(t.Handle)
                 GL.Check "could not delete texture"
             )
