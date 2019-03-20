@@ -66,6 +66,10 @@ type Texture =
 
     end
 
+type TextureViewHandle(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int, size : V3i, count : Option<int>, format : TextureFormat) = 
+    inherit Texture(ctx, handle, dimension, mipMapLevels, multisamples, size, count, format, 0L, true)
+        
+
 [<AutoOpen>]
 module TextureCubeExtensions =
     // PositiveX = 0,
@@ -95,9 +99,15 @@ module ResourceCounts =
         Interlocked.Increment(&ctx.MemoryUsage.TextureCount) |> ignore
         Interlocked.Add(&ctx.MemoryUsage.TextureMemory,size) |> ignore
 
+    let addTextureView (ctx:Context) =
+        Interlocked.Increment(&ctx.MemoryUsage.TextureViewCount) |> ignore
+
     let removeTexture (ctx:Context) size =
         Interlocked.Decrement(&ctx.MemoryUsage.TextureCount)  |> ignore
         Interlocked.Add(&ctx.MemoryUsage.TextureMemory,-size) |> ignore
+
+    let removeTextureView (ctx:Context) =
+        Interlocked.Decrement(&ctx.MemoryUsage.TextureViewCount) |> ignore
 
     let updateTexture (ctx:Context) oldSize newSize =
         Interlocked.Add(&ctx.MemoryUsage.TextureMemory,newSize-oldSize) |> ignore
@@ -555,7 +565,7 @@ module TextureCreationExtensions =
                     else if orig.Dimension <> TextureDimension.TextureCube && slices.Min <> slices.Max then failwithf "cannot create multi-slice view as not array"
                     else None
                     
-                let tex = Texture(x, handle, dim, levelCount, orig.Multisamples, orig.Size, sliceCount, orig.Format, 0L, true)
+                let tex = TextureViewHandle(x, handle, dim, levelCount, orig.Multisamples, orig.Size, sliceCount, orig.Format)
                 let target = TextureTarget.ofTexture tex
                   
                 GL.TextureView(
@@ -567,6 +577,8 @@ module TextureCreationExtensions =
                     slices.Min, match sliceCount with | Some x -> x; | _ -> 1
                 )
                 GL.Check "could not create texture view"
+
+                addTextureView x
 
                 tex
             )
@@ -2306,7 +2318,7 @@ module TextureExtensions =
                     failwith "implement me"
             ()
 
-        let downloadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (level : int) (image : PixImage) =
+        let downloadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (level : int) (slice : int) (image : PixImage) =
             let format = image.PixFormat
             let bindTarget =  getTextureTarget t
             GL.BindTexture(bindTarget, t.Handle)
@@ -2331,17 +2343,20 @@ module TextureExtensions =
             let alignedLineSize = (lineSize + (packAlign - 1)) &&& ~~~(packAlign - 1)
             let targetSize = alignedLineSize * image.Size.Y
 
-            let b = GL.GenBuffer()
-            GL.BindBuffer(BufferTarget.PixelPackBuffer, b)
-            GL.Check "could not bind buffer"
-            GL.BufferStorage(BufferTarget.PixelPackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapReadBit)
-            GL.Check "could not set buffer storage"
-            GL.GetTexImage(target, level, pixelFormat, pixelType, 0n)
-            GL.Check "could not get texture image"
+            // TODO: GetTextureSubImage does not work
+            if bindTarget = TextureTarget.Texture2DArray then
 
-            let src = GL.MapBufferRange(BufferTarget.PixelPackBuffer, 0n, nativeint targetSize, BufferAccessMask.MapReadBit)
-            GL.Check "could not map buffer"
-            try
+                let buffer = Array.zeroCreate<byte> targetSize
+
+                // GetTexImage works and there is data in the buffer...
+                //let ptr = GCHandle.Alloc(buffer, GCHandleType.Pinned)
+                //GL.GetTexImage(bindTarget, level, pixelFormat, pixelType, ptr.AddrOfPinnedObject())
+                //GL.Check "could not GetTextureSubImage"
+                //ptr.Free()
+
+                GL.GetTextureSubImage(int bindTarget, level, 0, 0, slice, image.Size.X, image.Size.Y, 1, pixelFormat, pixelType, targetSize, buffer)
+                GL.Check "could not GetTextureSubImage"
+
                 let dstInfo = image.VolumeInfo
                 let dy = int64(alignedLineSize / elementSize)
                 let srcInfo = 
@@ -2350,27 +2365,57 @@ module TextureExtensions =
                         dstInfo.Size, 
                         V3l(dstInfo.SZ, -dy, 1L)
                     )
+                let handle = GCHandle.Alloc(buffer, GCHandleType.Pinned)
+                try
+                    let handlePtr = handle.AddrOfPinnedObject()
+                    NativeVolume.copyNativeToImage handlePtr srcInfo image
+                finally
+                    handle.Free()
+                
+            else
+                let b = GL.GenBuffer()
+                GL.BindBuffer(BufferTarget.PixelPackBuffer, b)
+                GL.Check "could not bind buffer"
+                GL.BufferStorage(BufferTarget.PixelPackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapReadBit)
+                GL.Check "could not set buffer storage"
+                //if t.IsArray then
+                //    GL.GetTextureSubImage(int bindTarget, level, 0, 0, slice, image.Size.X, image.Size.Y, 1, pixelFormat, pixelType, 0, nativeint 0)
+                //else
+                GL.GetTexImage(target, level, pixelFormat, pixelType, 0n)
+                GL.Check "could not get texture image"
 
-                NativeVolume.copyNativeToImage src srcInfo image
+                let src = GL.MapBufferRange(BufferTarget.PixelPackBuffer, 0n, nativeint targetSize, BufferAccessMask.MapReadBit)
+                GL.Check "could not map buffer"
+                try
+                    let dstInfo = image.VolumeInfo
+                    let dy = int64(alignedLineSize / elementSize)
+                    let srcInfo = 
+                        VolumeInfo(
+                            dy * (dstInfo.Size.Y - 1L), 
+                            dstInfo.Size, 
+                            V3l(dstInfo.SZ, -dy, 1L)
+                        )
 
-            finally
-                GL.UnmapBuffer(BufferTarget.PixelPackBuffer) |> ignore
-                GL.Check "could not unmap buffer"
+                    NativeVolume.copyNativeToImage src srcInfo image
 
-            GL.BindBuffer(BufferTarget.PixelPackBuffer, 0)
-            GL.Check "could not unbind buffer"
-            GL.DeleteBuffer(b)
-            GL.Check "could not delete buffer"
+                finally
+                    GL.UnmapBuffer(BufferTarget.PixelPackBuffer) |> ignore
+                    GL.Check "could not unmap buffer"
+
+                GL.BindBuffer(BufferTarget.PixelPackBuffer, 0)
+                GL.Check "could not unbind buffer"
+                GL.DeleteBuffer(b)
+                GL.Check "could not delete buffer"
 
             GL.BindTexture(bindTarget, 0)
             GL.Check "could not unbind texture"
 
-        let downloadTexture2D (t : Texture) (level : int) (image : PixImage) =
-            downloadTexture2DInternal TextureTarget.Texture2D true t level image
-
+        let downloadTexture2D (t : Texture) (level : int) (slice : int) (image : PixImage) =
+            downloadTexture2DInternal TextureTarget.Texture2D true t level slice image
+             
         let downloadTextureCube (t : Texture) (level : int) (side : CubeSide) (image : PixImage) =
             let target = cubeSides.[int side] |> snd
-            downloadTexture2DInternal target false t level image
+            downloadTexture2DInternal target false t level 0 image
 
     //let texSizeInBytes (size : V3i, t : TextureFormat, samples : int) =
     //    let pixelCount = (int64 size.X) * (int64 size.Y) * (int64 size.Z) * (int64 samples)
@@ -2765,7 +2810,9 @@ module TextureExtensions =
             
         member x.Delete(t : Texture) =
             using x.ResourceLock (fun _ ->
-                removeTexture x t.SizeInBytes
+                match t with 
+                | :? TextureViewHandle -> removeTextureView x
+                | _ -> removeTexture x t.SizeInBytes
                 GL.DeleteTexture(t.Handle)
                 GL.Check "could not delete texture"
             )
@@ -2955,7 +3002,7 @@ module TextureExtensions =
             using x.ResourceLock (fun _ ->
                 match t.Dimension with
                     | TextureDimension.Texture2D -> 
-                        downloadTexture2D t level target
+                        downloadTexture2D t level slice target
 
                     | TextureDimension.TextureCube ->
                         downloadTextureCube t level (unbox slice) target
@@ -2974,7 +3021,7 @@ module TextureExtensions =
                         img.Volume <- target.AsVolume()
                         img.Format <- Col.Format.Stencil
 
-                        downloadTexture2D t level img
+                        downloadTexture2D t level 0 img
 
                      | TextureDimension.TextureCube ->
 
@@ -2998,7 +3045,7 @@ module TextureExtensions =
                         img.Volume <- target.AsVolume()
                         img.Format <- Col.Format.Depth
 
-                        downloadTexture2D t level img
+                        downloadTexture2D t level 0 img
 
                     | TextureDimension.TextureCube ->
 

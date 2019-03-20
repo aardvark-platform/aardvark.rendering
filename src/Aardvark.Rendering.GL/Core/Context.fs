@@ -42,6 +42,7 @@ type MemoryUsage() =
     class
         [<DefaultValue>] val mutable public TextureCount : int
         [<DefaultValue>] val mutable public TextureMemory : int64
+        [<DefaultValue>] val mutable public TextureViewCount : int
 
         [<DefaultValue>] val mutable public RenderBufferCount : int
         [<DefaultValue>] val mutable public RenderBufferMemory : int64

@@ -690,52 +690,71 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         
         new RenderTasks.ClearTask(x, fboSignature, clearValues, depth, ctx) :> IRenderTask
 
-    member x.ResolveMultisamples(ms : IFramebufferOutput, srcOffset : V2i, ss : IBackendTexture, dstOffset : V2i, size : V2i, trafo : ImageTrafo) =
+    member x.ResolveMultisamples(ms : IFramebufferOutput, srcOffset : V2i, ss : IBackendTexture, dstOffset : V2i, dstLayer : int, size : V2i, trafo : ImageTrafo) =
         using ctx.ResourceLock (fun _ ->
             let mutable oldFbo = 0
             OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo);
 
-            let tex = ss |> unbox<Texture>
+            let targetTex = ss |> unbox<Texture>
             //let size = ms.Size
             let readFbo = OpenGL.GL.GenFramebuffer()
             let drawFbo = OpenGL.GL.GenFramebuffer()
 
             OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.ReadFramebuffer,readFbo)
             GL.Check "could not bind read framebuffer"
+            let mutable multiSlice = false
             match ms with
                 | :? IBackendTextureOutputView as ms ->
+                    let baseSlice = ms.slices.Min
+                    let slices = 1 + ms.slices.Max - baseSlice
                     let tex = ms.texture |> unbox<Texture>
-                    GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2DMultisample, tex.Handle, ms.level)
-                    GL.Check "could not set read framebuffer texture"
+
+                    if slices <> 1 then failwith "layer sub-ranges not supported atm."
+                    
+                    if tex.IsArray || tex.Dimension = TextureDimension.TextureCube then
+                        GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, tex.Handle, ms.level, baseSlice)
+                        GL.Check "could not set read framebuffer texture"
+                    else
+                        // NOTE: allow to resolve/copy singlesample textures as well
+                        GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, (if tex.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), tex.Handle, ms.level)
+                        GL.Check "could not set read framebuffer texture"
                     
                 | :? Renderbuffer as ms ->
                     GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, ms.Handle)
                     GL.Check "could not set read framebuffer texture"
 
                 | :? ITextureLevel as ms ->
+                    let baseSlice = ms.Slices.Min
+                    let slices = 1 + ms.Slices.Max - baseSlice
                     let tex = ms.Texture |> unbox<Texture>
-                    GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2DMultisample, tex.Handle, ms.Level)
-                    GL.Check "could not set read framebuffer texture"
-                    
 
-//                | :? IBackendTextureOutputView as ms ->
-//                    let tex = ms.texture |> unbox<Texture>
-//                    GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2DMultisample, tex.Handle, ms.level)
-//                    GL.Check "could not set read framebuffer texture"
-//                    
-//                    
+                    if slices <> 1 then failwith "layer sub-ranges not supported atm."
+                    
+                    if tex.IsArray || tex.Dimension = TextureDimension.TextureCube then
+                        GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, tex.Handle, ms.Level, baseSlice)
+                        GL.Check "could not set read framebuffer texture"
+                    else
+                        // NOTE: allow to resolve/copy singlesample textures as well
+                        GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, (if tex.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), tex.Handle, ms.Level)
+                        GL.Check "could not set read framebuffer texture"
 
                 | _ ->
                     failwithf "[GL] cannot resolve %A" ms
-              
+            
+            // NOTE: binding src texture with multiple slices using FramebufferTexture(..) and dst as FramebufferTexture(..) only blits first slice
+            // TODO: maybe multilayer copy works using FramebufferTexture2D with TextureTarget.TextureArray
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer,drawFbo)
             GL.Check "could not bind write framebuffer"
-            GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, tex.Handle, 0)
-            GL.Check "could not set write framebuffer texture"
+            if targetTex.IsArray || targetTex.Dimension = TextureDimension.TextureCube then
+                GL.FramebufferTextureLayer(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, targetTex.Handle, 0, dstLayer)
+                GL.Check "could not set write framebuffer texture"
+            else
+                GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, targetTex.Handle, 0)
+                GL.Check "could not set write framebuffer texture"
 
 
-            let mutable src = Box2i(srcOffset.X, srcOffset.Y, size.X, size.Y)
-            let mutable dst = Box2i(dstOffset.X, dstOffset.Y, size.X, size.Y)
+            let mutable src = Box2i.FromMinAndSize(srcOffset, size)
+            let mutable dst = Box2i.FromMinAndSize(dstOffset, size)
 
             match trafo with
                 | ImageTrafo.Rot0 -> ()
@@ -764,7 +783,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         )
 
     member x.ResolveMultisamples(ms : IFramebufferOutput, ss : IBackendTexture, trafo : ImageTrafo) =
-        x.ResolveMultisamples(ms, V2i.Zero, ss, V2i.Zero, ms.Size.XY, trafo)
+        x.ResolveMultisamples(ms, V2i.Zero, ss, V2i.Zero, 0, ms.Size.XY, trafo)
 
     member x.GenerateMipMaps(t : IBackendTexture) =
         match t with
