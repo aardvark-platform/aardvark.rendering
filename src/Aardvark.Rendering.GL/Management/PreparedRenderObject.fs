@@ -281,8 +281,7 @@ module PreparedPipelineState =
         let drawBuffers = 
             match rj.WriteBuffers with
                 | Some set -> 
-                    let man = DrawBufferManager.Get(fboSignature)
-                    man.CreateConfig(set) |> Some
+                    x.DrawBufferManager.CreateConfig(set) |> Some
                 | _ -> None
 
         let depthMask =
@@ -465,8 +464,7 @@ module PreparedPipelineState =
         let drawBuffers = 
             match rj.writeBuffers with
                 | Some set -> 
-                    let man = DrawBufferManager.Get(fboSignature)
-                    man.CreateConfig(set) |> Some
+                    x.DrawBufferManager.CreateConfig(set) |> Some
                 | _ -> None
 
         let depthMask =

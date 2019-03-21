@@ -26,7 +26,7 @@ module RenderTasks =
         let ctx = manager.Context
         let renderTaskLock = RenderTaskLock()
         let manager = ResourceManager(manager, Some (fboSignature, renderTaskLock), shareTextures, shareBuffers)
-        let allBuffers = DrawBufferManager.Get(fboSignature).CreateConfig(fboSignature.ColorAttachments |> Map.toSeq |> Seq.map (snd >> fst) |> Set.ofSeq)
+        let allBuffers = manager.DrawBufferManager.CreateConfig(fboSignature.ColorAttachments |> Map.toSeq |> Seq.map (snd >> fst) |> Set.ofSeq)
         let structureChanged = Mod.custom ignore
         let runtimeStats = NativePtr.alloc 1
 
@@ -449,7 +449,7 @@ module RenderTasks =
             updateResources token t
 
         override x.Perform(token : AdaptiveToken, rt : RenderToken, fbo : Framebuffer, output : OutputDescription) =
-            DrawBufferManager.Get(fbo.Signature).Write(fbo)
+            x.ResourceManager.DrawBufferManager.Write(fbo)
 
             if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then
                 primitivesGenerated.Restart()
