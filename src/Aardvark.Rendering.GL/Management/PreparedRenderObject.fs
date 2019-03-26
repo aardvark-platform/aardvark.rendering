@@ -657,9 +657,7 @@ type ResourceManagerExtensions private() =
 
 
         let isActive = x.CreateIsActive rj.IsActive
-        let beginMode = 
-            let hasTessMod = program.Handle |> Mod.map (fun p -> p.HasTessellation)
-            x.CreateBeginMode(hasTessMod, rj.Mode)
+        let beginMode = x.CreateBeginMode(program.Handle, rj.Mode)
         let drawCalls = if isNull rj.DrawCallInfos then Unchecked.defaultof<_> else x.CreateDrawCallInfoList rj.DrawCallInfos
         let depthTest = x.CreateDepthTest rj.DepthTest
         let cullMode = x.CreateCullMode rj.CullMode
