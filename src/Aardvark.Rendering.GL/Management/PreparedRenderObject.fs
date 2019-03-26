@@ -916,9 +916,7 @@ module PreparedObjectInfo =
         let attachmentCount = if attachments.Length > 0 then 1 + (attachments |> List.map (fun (i,_) -> i) |> List.max) else 0
 
         let isActive = x.CreateIsActive rj.IsActive
-        let beginMode = 
-            let hasTessMod = program.Handle |> Mod.map (fun p -> p.HasTessellation)
-            x.CreateBeginMode(hasTessMod, rj.Mode)
+        let beginMode = x.CreateBeginMode(program.Handle, rj.Mode)
         let drawCalls = if isNull rj.DrawCallInfos then Unchecked.defaultof<_> else x.CreateDrawCallInfoList rj.DrawCallInfos
 
 

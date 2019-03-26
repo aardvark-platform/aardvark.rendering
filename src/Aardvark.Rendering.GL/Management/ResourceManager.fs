@@ -266,11 +266,11 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let uniformBufferManager = UniformBufferManager ctx
 
     let hasTessDrawModeCache = 
-        ConcurrentDictionary<IndexedGeometryMode, UnaryCache<IMod<bool>, IMod<GLBeginMode>>>()
+        ConcurrentDictionary<IndexedGeometryMode, UnaryCache<IMod<Program>, IMod<GLBeginMode>>>()
         
     let getTessDrawModeCache (mode : IndexedGeometryMode) =
         hasTessDrawModeCache.GetOrAdd(mode, fun mode ->
-            UnaryCache(Mod.map (fun t -> ctx.ToBeginMode(mode, t)))
+            UnaryCache(Mod.map (fun t -> ctx.ToBeginMode(mode, t.HasTessellation)))
         )
 
     let samplerDescriptionCache = UnaryCache(fun (samplerState : FShade.SamplerState) -> samplerState.SamplerStateDescription)
@@ -602,8 +602,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
       
-    member x.CreateBeginMode(hasTess : IMod<bool>, drawMode : IndexedGeometryMode) =
-        let mode = getTessDrawModeCache(drawMode).Invoke(hasTess)
+    member x.CreateBeginMode(prog : IMod<Program>, drawMode : IndexedGeometryMode) =
+        let mode = getTessDrawModeCache(drawMode).Invoke(prog)
         beginModeCache.GetOrCreate(mode, {
             create = fun b      -> b
             update = fun h b    -> b
