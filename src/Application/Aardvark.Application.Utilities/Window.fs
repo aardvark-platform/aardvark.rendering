@@ -52,6 +52,7 @@ type RenderConfig =
         scene           : ISg
         deviceKind      : DeviceKind
         initialCamera   : Option<CameraView>
+        initialSpeed    : Option<float>
     }
 
 [<AutoOpen>]
@@ -448,9 +449,11 @@ module Utilities =
                 | None -> CameraView.lookAt (V3d(6.0, 6.0, 6.0)) V3d.Zero V3d.OOI
                 | Some c -> c
 
+        let speed = cfg.initialSpeed |> Option.defaultValue 1.0
+
         let view =
             initialView
-                |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
+                |> DefaultCameraController.controlExt speed win.Mouse win.Keyboard win.Time
                 |> Mod.map CameraView.viewTrafo
 
         let proj =
@@ -554,9 +557,11 @@ module Utilities =
                 | None -> CameraView.lookAt (V3d(6.0, 6.0, 6.0)) V3d.Zero V3d.OOI
                 | Some c -> c
 
+        let speed = cfg.initialSpeed |> Option.defaultValue 1.0
+
         let view = 
             initialView
-                |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
+                |> DefaultCameraController.controlExt speed win.Mouse win.Keyboard win.Time
                 |> Mod.map CameraView.viewTrafo
 
         let near = 0.1
@@ -765,6 +770,7 @@ module Utilities =
             samples = 8
             deviceKind = DeviceKind.Dedicated
             initialCamera = None
+            initialSpeed  = None
         }
 
 [<AutoOpen>]
@@ -849,6 +855,7 @@ module ``Render Utilities`` =
                 scene = Sg.empty
                 deviceKind = DeviceKind.Dedicated
                 initialCamera = None
+                initialSpeed = None
             }
             
         [<CustomOperation("app")>]
@@ -886,6 +893,10 @@ module ``Render Utilities`` =
         [<CustomOperation("initialCamera")>]
         member x.InitialCamera(state : RenderConfig, c : CameraView) =
             { state with initialCamera = Some c }
+            
+        [<CustomOperation("initialSpeed")>]
+        member x.InitialSpeed(state : RenderConfig, s : float) =
+            { state with initialSpeed = Some s }
 
         member x.Run(cfg : RenderConfig) =
             Utilities.runConfig (cliOverrides cfg)
@@ -902,6 +913,7 @@ module ``Render Utilities`` =
                 display = Display.Mono
                 scene = Sg.empty
                 initialCamera = None
+                initialSpeed = None
             }
             
         [<CustomOperation("app")>]
@@ -935,6 +947,10 @@ module ``Render Utilities`` =
         [<CustomOperation("initialCamera")>]
         member x.InitialCamera(state : RenderConfig, c : CameraView) =
             { state with initialCamera = Some c }
+            
+        [<CustomOperation("initialSpeed")>]
+        member x.InitialSpeed(state : RenderConfig, s : float) =
+            { state with initialSpeed = Some s }
 
         member x.Run(cfg : RenderConfig) =
             Utilities.createWindow (cliOverrides cfg)

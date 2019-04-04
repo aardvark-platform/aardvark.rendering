@@ -53,8 +53,8 @@ module DefaultCameraController =
             if d then
                 return location |> Mod.step (fun op delta (cam : CameraView) ->
                     let trafo =
-                        M44d.Rotation(cam.Right, float delta.Y * -0.01) *
-                        M44d.Rotation(cam.Sky, float delta.X * -0.01)
+                        M44d.Rotation(cam.Right, float delta.Y * -0.005 ) *
+                        M44d.Rotation(cam.Sky, float delta.X * -0.005   )
 
                     let newForward = trafo.TransformDir cam.Forward |> Vec.normalize
                     cam.WithForward(newForward)
@@ -219,6 +219,15 @@ module DefaultCameraController =
             else
                 return AdaptiveFunc.Identity
         }
+
+    let controlReset (initial : CameraView) (k : IKeyboard) =
+        adaptive {
+            let! t = k.IsDown Keys.F9
+            if t then
+                return Mod.constant 0 |> Mod.step (fun _ _ _ -> initial )
+            else
+                return AdaptiveFunc.Identity
+        }
         
     let controllScrollWithSpeed (moveSpeed : ModRef<float>) (m : IMouse) (time : IMod<DateTime>) =
         let active = Mod.init false
@@ -276,3 +285,22 @@ module DefaultCameraController =
             controlZoomWithSpeed speed mouse
             controllScrollWithSpeed speed mouse time
         ]
+
+    let controlExt (initialSpeed : float ) (mouse : IMouse) (keyboard : IKeyboard) (time : IMod<DateTime>) (cam : CameraView) : IMod<CameraView> =
+        let speed = Mod.init initialSpeed
+
+        keyboard.DownWithRepeats.Values.Add ( fun k -> 
+            match k with
+            | Keys.PageUp -> transact ( fun _ -> speed.Value <- speed.Value * 1.3 )
+            | Keys.PageDown -> transact ( fun _ -> speed.Value <- speed.Value / 1.3 )
+            | _ -> ()
+        )
+
+        Mod.integrate cam time [
+           controlWSADwithSpeed speed keyboard time
+           controlLookAround mouse
+           controlReset cam keyboard
+           controlPanWithSpeed speed mouse
+           controlZoomWithSpeed speed mouse
+           controllScrollWithSpeed speed mouse time
+       ]
