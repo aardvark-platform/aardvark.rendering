@@ -770,7 +770,10 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
 
        
 
-    member x.CompileRender(s : ICommandStream, before : ICommandStream -> unit, mvp : nativeptr<M44f>, indexType : Option<_>, runtimeStats : nativeptr<_>, isActive : nativeptr<_>, mode : nativeptr<_>) =
+    member x.CompileRender(s : ICommandStream, before : ICommandStream -> unit, mvp : nativeptr<M44f>, indexType : Option<_>, runtimeStats : nativeptr<_>, isActive : nativeptr<_>, mode : nativeptr<_>) : NativeStats =
+
+        let mutable icnt = 0 // counting dynamic
+
         if bounds then
             //s.NamedBufferSubData(ub.Handle, nativeint viewProjField.ufOffset, 64n, NativePtr.toNativeInt mvp)
             s.NamedBufferSubData(ub.Handle, nativeint countField.ufOffset, 4n, NativePtr.toNativeInt bufferHandles + 8n)
@@ -802,7 +805,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
             s.BindBufferRange(BufferRangeTarget.UniformBuffer, uniformBlock.ubBinding, oldUB, oldUBOffset, oldUBSize)
             s.MemoryBarrier(MemoryBarrierFlags.CommandBarrierBit)
 
-
+            
         let h = NativePtr.read indirectHandle
         if h.Y > 0 then
             before(s)
@@ -817,8 +820,11 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
             
             if alphaToCoverage then 
                 s.Disable(int EnableCap.SampleAlphaToCoverage)
+                icnt <- icnt + 2 // enable + disable
         else
             Log.warn "empty indirect call"
+
+        NativeStats(InstructionCount = 16 + 5 + icnt) // 16 fixed + 5 conditional + (0 / 2)
 
     member x.Dispose() =
         let ess = if bounds then es + bs else es
@@ -1075,15 +1081,16 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
     let totalMemory = ref 0L
     let avgRenderTime = RunningMean(10)
 
-    let compile (indexType : Option<DrawElementsType>, mode : nativeptr<GLBeginMode>, a : VertexInputBindingHandle, ib : IndirectBuffer) (s : ICommandStream) =
+    let compile (indexType : Option<DrawElementsType>, mode : nativeptr<GLBeginMode>, a : VertexInputBindingHandle, ib : IndirectBuffer) (s : ICommandStream) : NativeStats =
+        let stats = NativeStats(InstructionCount = 1)
         s.BindVertexAttributes(contextHandle, a)
-        ib.CompileRender(s, this.BeforeRender, mvpResource.Pointer, indexType, runtimeStats, isActive, mode)
+        stats + ib.CompileRender(s, this.BeforeRender, mvpResource.Pointer, indexType, runtimeStats, isActive, mode)
 
     let indirects = Dict<_, IndirectBuffer>()
     let isOutdated = NativePtr.allocArray [| 1 |]
     let updateFun = Marshal.PinDelegate(new System.Action(this.Update))
     let mutable oldCalls : list<Option<DrawElementsType> * nativeptr<GLBeginMode> * VertexInputBindingHandle * IndirectBuffer> = []
-    let program = new ChangeableNativeProgram<_>(fun a s -> compile a (AssemblerCommandStream s))
+    let program = new ChangeableNativeProgram<_, _>((fun a s -> compile a (AssemblerCommandStream s)), NativeStats.Zero, (+), (-))
     let puller = AdaptiveObject()
     let sub = puller.AddMarkingCallback (fun () -> NativePtr.write isOutdated 1)
     let tasks = System.Collections.Generic.HashSet<IRenderTask>()
@@ -1249,13 +1256,16 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
         stream.Copy(info.runtimeStats, runtimeStats)
         stream.Copy(info.contextHandle, contextHandle)
             
-        stream.SetPipelineState(info, state, lastState)
+        let stats = stream.SetPipelineState(info, state, lastState)
             
         stream.QueryTimestamp(query, startTime)
         stream.CallIndirect(program.EntryPointer)
         stream.QueryTimestamp(query, endTime)
 
         stream.Copy(runtimeStats, info.runtimeStats)
+
+        stats
+        
 
     override x.Release() =
         state.Dispose()

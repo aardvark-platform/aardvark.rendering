@@ -250,7 +250,7 @@ module RenderTasks =
 
 
     type NativeRenderProgram(cmp : IComparer<PreparedCommand>, scope : CompilerInfo, content : aset<PreparedCommand>) =
-        inherit NativeProgram<PreparedCommand>(ASet.sortWith (curry cmp.Compare) content, fun l r s -> r.Compile(scope, AssemblerCommandStream(s), l))
+        inherit NativeProgram<PreparedCommand, NativeStats>(ASet.sortWith (curry cmp.Compare) content, (fun l r s -> r.Compile(scope, AssemblerCommandStream(s), l)), NativeStats.Zero, (+), (-))
         
         let mutable stats = NativeProgramUpdateStatistics.Zero
         member x.Count = stats.Count
@@ -337,6 +337,8 @@ module RenderTasks =
         override x.Perform(token, t) =
             x.Update(token, t) |> ignore
             x.Execution (t, fun () -> program.Run())
+            let ic = program.Stats.InstructionCount
+            t.AddInstructions(ic, 0) // don't know active
                
 
         override x.Dispose() =

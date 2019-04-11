@@ -511,6 +511,16 @@ module PreparedPipelineState =
             pMultisample = multisample
         }
   
+
+type NativeStats =
+    struct
+        val mutable public InstructionCount : int
+        static member Zero = NativeStats()
+        static member (+) (l : NativeStats, r : NativeStats) = NativeStats(InstructionCount = l.InstructionCount + r.InstructionCount)
+        static member (-) (l : NativeStats, r : NativeStats) = NativeStats(InstructionCount = l.InstructionCount - r.InstructionCount)
+    end
+
+
 [<AutoOpen>]
 module PreparedPipelineStateAssembler =
     
@@ -533,7 +543,10 @@ module PreparedPipelineStateAssembler =
 
     type ICommandStream with
     
-        member x.SetPipelineState(s : CompilerInfo, me : PreparedPipelineState) =
+        member x.SetPipelineState(s : CompilerInfo, me : PreparedPipelineState) : NativeStats =
+
+            let mutable icnt = 0 // counting dynamic instructions
+
             x.SetDepthMask(me.pDepthBufferMask)
             x.SetStencilMask(me.pStencilBufferMask)
             match me.pDrawBuffers with
@@ -541,7 +554,7 @@ module PreparedPipelineStateAssembler =
                     x.SetDrawBuffers(s.drawBufferCount, s.drawBuffers)
                 | Some b ->
                     x.SetDrawBuffers(b.Count, NativePtr.toNativeInt b.Buffers)
-                   
+                                       
             x.SetDepthTest(me.pDepthTestMode)  
             x.SetPolygonMode(me.pPolygonMode)
             x.SetCullMode(me.pCullMode)
@@ -559,14 +572,17 @@ module PreparedPipelineStateAssembler =
             let meUsed = usedClipPlanes me.pProgramInterface
             for i in meUsed do
                 x.Enable(int OpenTK.Graphics.OpenGL4.EnableCap.ClipDistance0 + i)
+                icnt <- icnt + 1
             
 
             // bind all uniform-buffers (if needed)
             for (id,ub) in Map.toSeq me.pUniformBuffers do
                 x.BindUniformBufferView(id, ub)
+                icnt <- icnt + 1
 
             for (id, ssb) in Map.toSeq me.pStorageBuffers do
                 x.BindStorageBuffer(id, ssb)
+                icnt <- icnt + 1
 
             // bind all textures/samplers (if needed)
 
@@ -577,13 +593,22 @@ module PreparedPipelineStateAssembler =
             // bind all top-level uniforms (if needed)
             for (id,u) in Map.toSeq me.pUniforms do
                 x.BindUniformLocation(id, u)
+                icnt <- icnt + 1
 
-        member x.SetPipelineState(s : CompilerInfo, me : PreparedPipelineState, prev : PreparedPipelineState) =
+            NativeStats(InstructionCount = icnt + 12) // 12 fixed instruction 
+            
+
+        member x.SetPipelineState(s : CompilerInfo, me : PreparedPipelineState, prev : PreparedPipelineState) : NativeStats =
+            
+            let mutable icnt = 0
+
             if prev.pDepthBufferMask <> me.pDepthBufferMask then
                 x.SetDepthMask(me.pDepthBufferMask)
+                icnt <- icnt + 1
 
             if prev.pStencilBufferMask <> me.pStencilBufferMask then
                 x.SetStencilMask(me.pStencilBufferMask)
+                icnt <- icnt + 1
 
             if prev.pDrawBuffers <> me.pDrawBuffers then
                 match me.pDrawBuffers with
@@ -591,34 +616,43 @@ module PreparedPipelineStateAssembler =
                         x.SetDrawBuffers(s.drawBufferCount, s.drawBuffers)
                     | Some b ->
                         x.SetDrawBuffers(b.Count, NativePtr.toNativeInt b.Buffers)
+                icnt <- icnt + 1
                    
             if prev.pDepthTestMode <> me.pDepthTestMode then
                 x.SetDepthTest(me.pDepthTestMode)  
+                icnt <- icnt + 1
                 
             if prev.pPolygonMode <> me.pPolygonMode then
                 x.SetPolygonMode(me.pPolygonMode)
+                icnt <- icnt + 1
                 
             if prev.pCullMode <> me.pCullMode then
                 x.SetCullMode(me.pCullMode)
+                icnt <- icnt + 1
 
             if prev.pBlendMode <> me.pBlendMode then
                 x.SetBlendMode(me.pBlendMode)
+                icnt <- icnt + 1
 
             if prev.pStencilMode <> me.pStencilMode then
                 x.SetStencilMode(me.pStencilMode)
+                icnt <- icnt + 1
 
             if prev.pMultisample <> me.pMultisample then
                 x.SetMultisample(me.pMultisample)
+                icnt <- icnt + 1
 
             if prev.pProgram <> me.pProgram then
                 let myProg = me.pProgram.Handle.GetValue()
                 x.UseProgram(me.pProgram)
+                icnt <- icnt + 1
 
                 if obj.ReferenceEquals(prev.pProgram, null) || prev.pProgram.Handle.GetValue().WritesPointSize <> myProg.WritesPointSize then
                     if myProg.WritesPointSize then
                         x.Enable(int OpenTK.Graphics.OpenGL4.EnableCap.ProgramPointSize)
                     else
                         x.Disable(int OpenTK.Graphics.OpenGL4.EnableCap.ProgramPointSize)
+                    icnt <- icnt + 1
             
 
             let prevUsed = usedClipPlanes prev.pProgramInterface
@@ -627,6 +661,7 @@ module PreparedPipelineStateAssembler =
             if prevUsed <> meUsed then
                 for i in meUsed do
                     x.Enable(int OpenTK.Graphics.OpenGL4.EnableCap.ClipDistance0 + i)
+                    icnt <- icnt + 1
 
 
             // bind all uniform-buffers (if needed)
@@ -639,6 +674,7 @@ module PreparedPipelineStateAssembler =
                         ()
                     | _ -> 
                         x.BindUniformBufferView(id, ub)
+                        icnt <- icnt + 1
 
             for (id, ssb) in Map.toSeq me.pStorageBuffers do
                 match Map.tryFind id prev.pStorageBuffers with
@@ -647,6 +683,7 @@ module PreparedPipelineStateAssembler =
                         ()
                     | _ -> 
                         x.BindStorageBuffer(id, ssb)
+                        icnt <- icnt + 1
 
             // bind all textures/samplers (if needed)
 
@@ -654,18 +691,20 @@ module PreparedPipelineStateAssembler =
             
             if prev.pTextures <> me.pTextures then
                 x.BindTexturesAndSamplers(me.pTextures)
+                icnt <- icnt + 1
 
             // bind all top-level uniforms (if needed)
             for (id,u) in Map.toSeq me.pUniforms do
                 match Map.tryFind id prev.pUniforms with
                     | Some old when old = u -> ()
-                    | _ -> x.BindUniformLocation(id, u)
+                    | _ -> x.BindUniformLocation(id, u); icnt <- icnt + 1
 
-        member x.SetPipelineState(s : CompilerInfo, me : PreparedPipelineState, prev : Option<PreparedPipelineState>) =
+            NativeStats(InstructionCount = icnt)
+
+        member x.SetPipelineState(s : CompilerInfo, me : PreparedPipelineState, prev : Option<PreparedPipelineState>) : NativeStats =
             match prev with
                 | Some prev -> x.SetPipelineState(s, me, prev)
                 | None -> x.SetPipelineState(s, me)
-
 
 
 [<AbstractClass>]
@@ -703,7 +742,7 @@ type PreparedCommand(ctx : Context, renderPass : RenderPass) =
         
     abstract member GetResources : unit -> seq<IResource>
     abstract member Release : unit -> unit
-    abstract member Compile : info : CompilerInfo * stream : ICommandStream * prev : Option<PreparedCommand> -> unit
+    abstract member Compile : info : CompilerInfo * stream : ICommandStream * prev : Option<PreparedCommand> -> NativeStats
     abstract member EntryState : Option<PreparedPipelineState>
     abstract member ExitState : Option<PreparedPipelineState>
     
@@ -940,7 +979,7 @@ module PreparedObjectInfo =
 module PreparedObjectInfoAssembler =
     
     type ICommandStream with
-        member x.Render(s : CompilerInfo, me : PreparedObjectInfo) =
+        member x.Render(s : CompilerInfo, me : PreparedObjectInfo) : NativeStats =
         
             // bind the VAO (if needed)
             x.BindVertexAttributes(s.contextHandle, me.oVertexInputBinding)
@@ -964,11 +1003,16 @@ module PreparedObjectInfoAssembler =
                         | None ->
                             x.DrawArrays(s.runtimeStats, isActive, beginMode, me.oDrawCallInfos)
 
-        member x.Render(s : CompilerInfo, me : PreparedObjectInfo, prev : PreparedObjectInfo) =
+            NativeStats(InstructionCount = 2)
+
+        member x.Render(s : CompilerInfo, me : PreparedObjectInfo, prev : PreparedObjectInfo) : NativeStats =
         
+            let mutable icnt = 0
+
             // bind the VAO (if needed)
             if prev.oVertexInputBinding <> me.oVertexInputBinding then
                 x.BindVertexAttributes(s.contextHandle, me.oVertexInputBinding)
+                icnt <- icnt + 1
 
             // draw the thing
             let isActive = me.oIsActive
@@ -989,7 +1033,9 @@ module PreparedObjectInfoAssembler =
                         | None ->
                             x.DrawArrays(s.runtimeStats, isActive, beginMode, me.oDrawCallInfos)
 
-        member x.Render(s : CompilerInfo, me : PreparedObjectInfo, prev : Option<PreparedObjectInfo>) =
+            NativeStats(InstructionCount = icnt + 1)
+
+        member x.Render(s : CompilerInfo, me : PreparedObjectInfo, prev : Option<PreparedObjectInfo>) : NativeStats =
             match prev with
                 | Some prev -> x.Render(s, me, prev)
                 | None -> x.Render(s, me)
@@ -1008,6 +1054,7 @@ type EpilogCommand(ctx : Context) =
         stream.BindBuffer(int OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer, 0)
         for i in 0 .. 7 do
             stream.Disable(int OpenTK.Graphics.OpenGL4.EnableCap.ClipDistance0 + i)
+        NativeStats(InstructionCount = 13)
 
     override x.EntryState = None
     override x.ExitState = None
@@ -1017,7 +1064,7 @@ type NopCommand(ctx : Context, pass : RenderPass) =
 
     override x.GetResources() = Seq.empty
     override x.Release() = ()
-    override x.Compile(_,_,_) = ()
+    override x.Compile(_,_,_) = NativeStats.Zero
     override x.EntryState = None
     override x.ExitState = None
 
@@ -1036,7 +1083,7 @@ type PreparedObjectCommand(state : PreparedPipelineState, info : PreparedObjectI
             yield! info.Resources
         }
 
-    override x.Compile(s : CompilerInfo, stream : ICommandStream, prev : Option<PreparedCommand>) =
+    override x.Compile(s : CompilerInfo, stream : ICommandStream, prev : Option<PreparedCommand>) : NativeStats =
         let prevInfo =
             match prev with
                 | Some (:? PreparedObjectCommand as p) -> Some p.Info
@@ -1048,8 +1095,8 @@ type PreparedObjectCommand(state : PreparedPipelineState, info : PreparedObjectI
             | _ -> None
 
             
-        stream.SetPipelineState(s, state, prevState)
-        stream.Render(s, info, prevInfo)
+        let stats = stream.SetPipelineState(s, state, prevState)
+        stats + stream.Render(s, info, prevInfo)
 
     override x.EntryState = Some state
     override x.ExitState = Some state
@@ -1068,9 +1115,11 @@ type MultiCommand(ctx : Context, cmds : list<PreparedCommand>, renderPass : Rend
 
     override x.Compile(info, stream, prev) =
         let mutable prev = prev
+        let mutable s = NativeStats.Zero
         for c in cmds do
-            c.Compile(info, stream, prev)
+            s <- s + c.Compile(info, stream, prev)
             prev <- Some c
+        s
 
     override x.EntryState = first |> Option.bind (fun first -> first.EntryState)
     override x.ExitState = last |> Option.bind (fun last -> last.ExitState)
