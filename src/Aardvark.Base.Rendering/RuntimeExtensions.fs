@@ -146,6 +146,9 @@ type RuntimeExtensions private() =
             Map.ofSeq attachments
         )
 
+    /// <summary>
+    /// Clear all color attachments, depth and stencil of a framebuffer object (each optional).
+    /// </summary>
     [<Extension>]
     static member Clear(this : IRuntime, fbo : IFramebuffer, color : Option<C4f>, depth : Option<float>, stencil : Option<int>) =
         let clearColors = 
@@ -154,6 +157,15 @@ type RuntimeExtensions private() =
                 fbo.Signature.ColorAttachments |> Seq.map (fun x-> (fst x.Value, c)) |> Map.ofSeq
             | None -> Map.empty
         this.Clear(fbo, clearColors, depth, stencil)
+
+    /// <summary>
+    /// Clear a specific color attachment of a framebuffer object with the given color.
+    /// </summary>
+    [<Extension>]
+    static member Clear(this : IRuntime, fbo : IFramebuffer, name : Symbol, color : C4f) =
+        let clearColors = Map.ofSeq [(name, color) ]
+        this.Clear(fbo, clearColors, None, None)
+
 
 [<AbstractClass; Sealed; Extension>]
 type IBackendTextureExtensions private() =
