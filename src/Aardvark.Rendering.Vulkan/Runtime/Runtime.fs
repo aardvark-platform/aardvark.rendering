@@ -732,3 +732,16 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.CopyAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
             x.CopyAsync(src, srcOffset, dst, size)
+
+        
+        member x.Clear(fbo : IFramebuffer, clearColors : Map<Symbol,C4f>, depth : Option<float>, stencil : Option<int>) =
+            failwith "not implemented"
+
+        member x.ClearColor(texture : IBackendTexture, color : C4f) =
+            failwith "not implemented"
+
+        member x.ClearDepthStencil(texture : IBackendTexture, depth : Option<float>, stencil : Option<int>) =
+            failwith "not implemented"
+
+        member x.CreateTextureView(texture : IBackendTexture, levels : Range1i, slices : Range1i, isArray : bool) : IBackendTexture =
+            failwith "not implemented"

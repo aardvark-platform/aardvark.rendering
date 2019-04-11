@@ -146,6 +146,15 @@ type RuntimeExtensions private() =
             Map.ofSeq attachments
         )
 
+    [<Extension>]
+    static member Clear(this : IRuntime, fbo : IFramebuffer, color : Option<C4f>, depth : Option<float>, stencil : Option<int>) =
+        let clearColors = 
+            match color with
+            | Some c ->
+                fbo.Signature.ColorAttachments |> Seq.map (fun x-> (fst x.Value, c)) |> Map.ofSeq
+            | None -> Map.empty
+        this.Clear(fbo, clearColors, depth, stencil)
+
 [<AbstractClass; Sealed; Extension>]
 type IBackendTextureExtensions private() =
     

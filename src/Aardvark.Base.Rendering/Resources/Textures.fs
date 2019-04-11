@@ -114,6 +114,13 @@ and ITextureRuntime =
     abstract member CreateTextureArray : size : V2i * format : TextureFormat * levels : int * samples : int * count : int -> IBackendTexture
     abstract member CreateTextureCube : size : int * format : TextureFormat * levels : int * samples : int -> IBackendTexture
 
+    abstract member ClearColor : texture : IBackendTexture * color : C4f -> unit
+    abstract member ClearDepthStencil : texture : IBackendTexture * depth : Option<float> * stencil : Option<int> -> unit
+
+    abstract member CreateTextureView : texture : IBackendTexture * levels : Range1i * slices : Range1i * isArray : bool -> IBackendTexture
+
+
+
 
 [<AutoOpen>]
 module private PixVisitors =
