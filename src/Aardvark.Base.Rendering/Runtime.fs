@@ -854,7 +854,12 @@ and IRuntime =
 
     abstract member CompileClear : fboSignature : IFramebufferSignature * clearColors : IMod<Map<Symbol, C4f>> * clearDepth : IMod<Option<double>> -> IRenderTask
     abstract member CompileRender : fboSignature : IFramebufferSignature * BackendConfiguration * aset<IRenderObject> -> IRenderTask
-    
+
+    abstract member Clear : fbo : IFramebuffer * clearColors : Map<Symbol, C4f> * depth : Option<float> * stencil : Option<int> -> unit
+
+    //abstract member CreateQuery : string -> int
+    //abstract member DeleteQuery : int
+
 
 and ICustomRenderObject =
     inherit IRenderObject

@@ -26,6 +26,7 @@
     <Compile Include="Core\UnsharedObject.fs" />
     <Compile Include="Core\InternalFormat.fs" />
     <Compile Include="Core\ModeHandles.fs" />
+    <Compile Include="Core\MemoryInfo.fs" />
     <Compile Include="Core\Extensions.fs" />
     <Compile Include="Core\Extensions\EXT_direct_state_access.fs" />
     <Compile Include="Core\Extensions\ARB_sparse_buffer.fs" />
