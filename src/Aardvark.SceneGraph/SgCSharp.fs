@@ -75,6 +75,12 @@ type SceneGraphExtensions =
     [<Extension>]
     static member CullMode(sg : ISg, mode : IMod<CullMode>) = Sg.CullModeApplicator(mode, sg) :> ISg
 
+    [<Extension>]
+    static member FrontFace(sg : ISg, frontFace : WindingOrder) = Sg.FrontFaceApplicator(Mod.constant frontFace, sg) :> ISg
+
+    [<Extension>]
+    static member FrontFace(sg : ISg, frontFace : IMod<WindingOrder>) = Sg.FrontFaceApplicator(frontFace, sg) :> ISg
+
    
     [<Extension>]
     static member BlendMode(sg : ISg, mode : BlendMode) = Sg.BlendModeApplicator(Mod.constant mode, sg) :> ISg
@@ -95,6 +101,18 @@ type SceneGraphExtensions =
 
     [<Extension>]
     static member DepthTestMode(sg : ISg, mode : IMod<DepthTestMode>) = Sg.DepthTestModeApplicator(mode, sg) :> ISg
+
+    [<Extension>]
+    static member DepthBias(sg : ISg, constant : float, slopeScale : float) = Sg.DepthBiasApplicator(Mod.constant (DepthBiasState(constant, slopeScale, 0.0)), sg) :> ISg
+
+    [<Extension>]
+    static member DepthBias(sg : ISg, constant : float, slopeScale : float, clamp : float) = Sg.DepthBiasApplicator(Mod.constant (DepthBiasState(constant, slopeScale, clamp)), sg) :> ISg
+
+    [<Extension>]
+    static member DepthBias(sg : ISg, state : DepthBiasState) = Sg.DepthBiasApplicator(Mod.constant state, sg) :> ISg
+
+    [<Extension>]
+    static member DepthBias(sg : ISg, state : IMod<DepthBiasState>) = Sg.DepthBiasApplicator(state, sg) :> ISg
 
     [<Extension>]
     static member WithEffects(sg : ISg, effects : seq<FShadeEffect>) : ISg = Sg.effect effects sg
