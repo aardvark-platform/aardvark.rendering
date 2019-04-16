@@ -1034,7 +1034,7 @@ DllExport(void) hglSetDepthBias(DepthBiasInfo* state)
 {
 	trace("hglSetDepthBias\n");
 	auto s = *state;
-	if (s.Constant != 0 && s.SlopeScale != 0)
+	if (s.Constant != 0 || s.SlopeScale != 0)
 	{
 		glEnable(GL_POLYGON_OFFSET_FILL);
 		glEnable(GL_POLYGON_OFFSET_LINE);
