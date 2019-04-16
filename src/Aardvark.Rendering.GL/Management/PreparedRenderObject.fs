@@ -44,7 +44,9 @@ type PreparedPipelineState =
         pTextures : IResource<TextureBinding, TextureBinding>
         
         pDepthTestMode : IResource<DepthTestInfo, DepthTestInfo>
+        pDepthBias : IResource<DepthBiasInfo, DepthBiasInfo>
         pCullMode : IResource<int, int>
+        pFrontFace : IResource<int, int>
         pPolygonMode : IResource<int, int>
         pBlendMode : IResource<GLBlendMode, GLBlendMode>
         pStencilMode : IResource<GLStencilMode, GLStencilMode>
@@ -295,7 +297,9 @@ module PreparedPipelineState =
                 | None -> true
                 
         let depthTest = x.CreateDepthTest rj.DepthTest
+        let depthBias = x.CreateDepthBias rj.DepthBias
         let cullMode = x.CreateCullMode rj.CullMode
+        let frontFace = x.CreateFrontFace rj.FrontFace
         let polygonMode = x.CreatePolygonMode rj.FillMode
         let blendMode = x.CreateBlendMode rj.BlendMode
         let stencilMode = x.CreateStencilMode rj.StencilMode
@@ -319,7 +323,9 @@ module PreparedPipelineState =
             pDepthBufferMask = depthMask
             pStencilBufferMask = stencilMask
             pDepthTestMode = depthTest
+            pDepthBias = depthBias
             pCullMode = cullMode
+            pFrontFace = frontFace
             pPolygonMode = polygonMode
             pBlendMode = blendMode
             pStencilMode = stencilMode
@@ -478,7 +484,9 @@ module PreparedPipelineState =
                 | None -> true
                 
         let depthTest = x.CreateDepthTest rj.depthTest
+        let depthBias = x.CreateDepthBias rj.depthBias
         let cullMode = x.CreateCullMode rj.cullMode
+        let frontFace = x.CreateFrontFace rj.frontFace
         let polygonMode = x.CreatePolygonMode rj.fillMode
         let blendMode = x.CreateBlendMode rj.blendMode
         let stencilMode = x.CreateStencilMode rj.stencilMode
@@ -503,7 +511,9 @@ module PreparedPipelineState =
             pDepthBufferMask = depthMask
             pStencilBufferMask = stencilMask
             pDepthTestMode = depthTest
+            pDepthBias = depthBias
             pCullMode = cullMode
+            pFrontFace = frontFace
             pPolygonMode = polygonMode
             pBlendMode = blendMode
             pStencilMode = stencilMode
@@ -556,8 +566,10 @@ module PreparedPipelineStateAssembler =
                     x.SetDrawBuffers(b.Count, NativePtr.toNativeInt b.Buffers)
                                        
             x.SetDepthTest(me.pDepthTestMode)  
+            x.SetDepthBias(me.pDepthBias)
             x.SetPolygonMode(me.pPolygonMode)
             x.SetCullMode(me.pCullMode)
+            x.SetFrontFace(me.pFrontFace)
             x.SetBlendMode(me.pBlendMode)
             x.SetStencilMode(me.pStencilMode)
             x.SetMultisample(me.pMultisample)
@@ -595,7 +607,7 @@ module PreparedPipelineStateAssembler =
                 x.BindUniformLocation(id, u)
                 icnt <- icnt + 1
 
-            NativeStats(InstructionCount = icnt + 12) // 12 fixed instruction 
+            NativeStats(InstructionCount = icnt + 14) // 14 fixed instruction 
             
 
         member x.SetPipelineState(s : CompilerInfo, me : PreparedPipelineState, prev : PreparedPipelineState) : NativeStats =
@@ -621,6 +633,10 @@ module PreparedPipelineStateAssembler =
             if prev.pDepthTestMode <> me.pDepthTestMode then
                 x.SetDepthTest(me.pDepthTestMode)  
                 icnt <- icnt + 1
+
+            if prev.pDepthBias <> me.pDepthBias then
+                x.SetDepthBias(me.pDepthBias)  
+                icnt <- icnt + 1
                 
             if prev.pPolygonMode <> me.pPolygonMode then
                 x.SetPolygonMode(me.pPolygonMode)
@@ -628,6 +644,10 @@ module PreparedPipelineStateAssembler =
                 
             if prev.pCullMode <> me.pCullMode then
                 x.SetCullMode(me.pCullMode)
+                icnt <- icnt + 1
+            
+            if prev.pFrontFace <> me.pFrontFace then
+                x.SetFrontFace(me.pFrontFace)
                 icnt <- icnt + 1
 
             if prev.pBlendMode <> me.pBlendMode then

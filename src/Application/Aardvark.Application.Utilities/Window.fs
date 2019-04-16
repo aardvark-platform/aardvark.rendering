@@ -277,8 +277,8 @@ module Utilities =
                 transact (fun () ->
                     let newCull = 
                         match cullMode.Value with
-                            | CullMode.None -> CullMode.Clockwise
-                            | CullMode.Clockwise -> CullMode.CounterClockwise
+                            | CullMode.None -> CullMode.Back
+                            | CullMode.Back -> CullMode.Front
                             | _ -> CullMode.None
                     status.Value <- sprintf "cull: %A" newCull
                     cullMode.Value <- newCull

@@ -799,7 +799,7 @@ let main argv =
                 do! Shaders.march
             }
             |> Sg.blendMode (Mod.constant blendMode)
-            |> Sg.cullMode (Mod.constant CullMode.CounterClockwise)
+            |> Sg.cullMode (Mod.constant CullMode.Back)
             |> Sg.depthTest (Mod.constant DepthTestMode.None)
             |> Sg.pass pa
             |> Sg.transform trafo

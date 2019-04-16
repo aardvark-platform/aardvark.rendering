@@ -30,8 +30,10 @@ type ICommandStream =
     abstract member SetStencilMask : mask : bool -> unit 
     abstract member SetDrawBuffers : count : int * ptr : nativeint -> unit 
     abstract member SetDepthTest : m : nativeptr<DepthTestInfo> -> unit 
+    abstract member SetDepthBias : m : nativeptr<DepthBiasInfo> -> unit 
     abstract member SetPolygonMode : m : nativeptr<int> -> unit 
     abstract member SetCullMode : m : nativeptr<int> -> unit 
+    abstract member SetFrontFace : m : nativeptr<int> -> unit 
     abstract member SetBlendMode : m : nativeptr<GLBlendMode> -> unit 
     abstract member SetStencilMode : m : nativeptr<GLStencilMode> -> unit 
     abstract member SetConservativeRaster : r : nativeptr<int> -> unit 
@@ -262,6 +264,11 @@ module GLAssemblerExtensions =
              s.BeginCall(1)
              s.PushArg(NativePtr.toNativeInt m)
              s.Call(OpenGl.Pointers.HSetDepthTest)
+
+        member this.SetDepthBias(m : nativeptr<DepthBiasInfo>) =
+             s.BeginCall(1)
+             s.PushArg(NativePtr.toNativeInt m)
+             s.Call(OpenGl.Pointers.HSetDepthBias)    
              
         member this.SetPolygonMode(m : nativeptr<int>) =
              s.BeginCall(1)
@@ -272,6 +279,11 @@ module GLAssemblerExtensions =
              s.BeginCall(1)
              s.PushArg(NativePtr.toNativeInt m)
              s.Call(OpenGl.Pointers.HSetCullFace)
+
+        member this.SetFrontFace(m : nativeptr<int>) =
+             s.BeginCall(1)
+             s.PushIntArg(NativePtr.toNativeInt m)
+             s.Call(OpenGl.Pointers.FrontFace)
              
         member this.SetBlendMode(m : nativeptr<GLBlendMode>) =
              s.BeginCall(1)
@@ -734,8 +746,10 @@ module GLAssemblerExtensions =
             member this.SetBlendMode(m: nativeptr<GLBlendMode>) = this.SetBlendMode(m)
             member this.SetConservativeRaster(r: nativeptr<int>) = this.SetConservativeRaster(r)
             member this.SetCullMode(m: nativeptr<int>) = this.SetCullMode(m)
+            member this.SetFrontFace(m: nativeptr<int>) = this.SetFrontFace(m)
             member this.SetDepthMask(mask: bool) = this.SetDepthMask(mask)
             member this.SetDepthTest(m: nativeptr<DepthTestInfo>) = this.SetDepthTest(m)
+            member this.SetDepthBias(m: nativeptr<DepthBiasInfo>) = this.SetDepthBias(m)
             member this.SetDrawBuffers(count: int, ptr: nativeint) = this.SetDrawBuffers(count, ptr)
             member this.SetMultisample(r: nativeptr<int>) = this.SetMultisample(r)
             member this.SetPolygonMode(m: nativeptr<int>) = this.SetPolygonMode(m)
@@ -830,8 +844,10 @@ module GLAssemblerExtensions =
             member x.SetBlendMode(m: nativeptr<GLBlendMode>) = inner.SetBlendMode(m); x.Append("SetBlendMode", m)
             member x.SetConservativeRaster(r: nativeptr<int>) = inner.SetConservativeRaster(r); x.Append("SetConservativeRaster", r)
             member x.SetCullMode(m: nativeptr<int>) = inner.SetCullMode(m); x.Append("SetCullMode", m)
+            member x.SetFrontFace(m: nativeptr<int>) = inner.SetFrontFace(m); x.Append("SetFrontFace", m)
             member x.SetDepthMask(mask: bool) = inner.SetDepthMask(mask); x.Append("SetDepthMask", mask)
             member x.SetDepthTest(m: nativeptr<DepthTestInfo>) = inner.SetDepthTest(m); x.Append("SetDepthTest", m)
+            member x.SetDepthBias(m: nativeptr<DepthBiasInfo>) = inner.SetDepthBias(m); x.Append("SetDepthBias", m)
             member x.SetDrawBuffers(count: int, ptr: nativeint) = inner.SetDrawBuffers(count, ptr); x.Append("SetDrawBuffers", count, ptr)
             member x.SetMultisample(r: nativeptr<int>) = inner.SetMultisample(r); x.Append("SetMultisample", r)
             member x.SetPolygonMode(m: nativeptr<int>) = inner.SetPolygonMode(m); x.Append("SetPolygonMode", m)
@@ -868,8 +884,10 @@ module GLAssemblerExtensions =
             x.DeleteQueries(1, query)
 
         member inline x.SetDepthTest(m : IResource<'a, DepthTestInfo>) = x.SetDepthTest(m.Pointer)
+        member inline x.SetDepthBias(m : IResource<'a, DepthBiasInfo>) = x.SetDepthBias(m.Pointer)
         member inline x.SetPolygonMode(m : IResource<'a, int>) = x.SetPolygonMode(m.Pointer)
         member inline x.SetCullMode(m : IResource<'a, int>) = x.SetCullMode(m.Pointer)
+        member inline x.SetFrontFace(m : IResource<'a, int>) = x.SetFrontFace(m.Pointer)
         member inline x.SetBlendMode(m : IResource<'a, GLBlendMode>) = x.SetBlendMode(m.Pointer)
         member inline x.SetStencilMode(m : IResource<'a, GLStencilMode>) = x.SetStencilMode(m.Pointer)
         member inline x.UseProgram(m : IResource<Program, int>) = x.UseProgram(m.Pointer)

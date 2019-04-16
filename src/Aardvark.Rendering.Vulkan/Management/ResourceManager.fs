@@ -655,14 +655,16 @@ module Resources =
                 float32 depth.depthBounds.Max
             )
             
-    type RasterizerStateResource(owner : IResourceCache, key : list<obj>, depth : IMod<DepthTestMode>, cull : IMod<CullMode>, fill : IMod<FillMode>) =
+    type RasterizerStateResource(owner : IResourceCache, key : list<obj>, depth : IMod<DepthTestMode>, bias : IMod<DepthBiasState>, cull : IMod<CullMode>, frontFace : IMod<WindingOrder>, fill : IMod<FillMode>) =
         inherit AbstractPointerResourceWithEquality<VkPipelineRasterizationStateCreateInfo>(owner, key)
 
         override x.Compute(token) =
             let depth = depth.GetValue token
+            let bias = bias.GetValue token
             let cull = cull.GetValue token
+            let front = frontFace.GetValue token
             let fill = fill.GetValue token
-            let state = RasterizerState.create false depth cull fill
+            let state = RasterizerState.create false depth bias cull front fill
 
             VkPipelineRasterizationStateCreateInfo(
                 VkStructureType.PipelineRasterizationStateCreateInfo, 0n,
@@ -1417,8 +1419,8 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateDepthStencilState(depthWrite : bool, depth : IMod<DepthTestMode>, stencil : IMod<StencilMode>) =
         depthStencilCache.GetOrCreate([depthWrite :> obj; depth :> obj; stencil :> obj], fun cache key -> new DepthStencilStateResource(cache, key, depthWrite, depth, stencil))
         
-    member x.CreateRasterizerState(depth : IMod<DepthTestMode>, cull : IMod<CullMode>, fill : IMod<FillMode>) =
-        rasterizerStateCache.GetOrCreate([depth :> obj; cull :> obj; fill :> obj], fun cache key -> new RasterizerStateResource(cache, key, depth, cull, fill))
+    member x.CreateRasterizerState(depth : IMod<DepthTestMode>, bias : IMod<DepthBiasState>, cull : IMod<CullMode>, front : IMod<WindingOrder>, fill : IMod<FillMode>) =
+        rasterizerStateCache.GetOrCreate([depth :> obj; bias :> obj; cull :> obj; front :> obj, fill :> obj], fun cache key -> new RasterizerStateResource(cache, key, depth, bias, cull, front, fill))
 
     member x.CreateColorBlendState(pass : RenderPass, writeBuffers : Option<Set<Symbol>>, blend : IMod<BlendMode>) =
         colorBlendStateCache.GetOrCreate(

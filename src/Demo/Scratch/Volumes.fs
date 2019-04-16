@@ -2166,7 +2166,7 @@ module VolumeTest =
                     do! Shader.fragment
                    }
                 |> Sg.depthTest (Mod.constant DepthTestMode.None)
-                |> Sg.cullMode (Mod.constant CullMode.CounterClockwise)
+                |> Sg.cullMode (Mod.constant CullMode.Back)
                 |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
                 |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
 

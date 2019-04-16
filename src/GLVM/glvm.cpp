@@ -127,6 +127,8 @@ DllExport(void) vmInit()
 	glDisableVertexAttribArray = (PFNGLDISABLEVERTEXATTRIBARRAYPROC)getProc("glDisableVertexAttribArray");
 	glVertexAttribDivisor = (PFNGLVERTEXATTRIBDIVISORPROC)getProc("glVertexAttribDivisor");
 
+	glPolygonOffsetClamp = (PFNGLPOLYGONOFFSETCLAMP)getProc("glPolygonOffsetClampEXT");
+
 	#endif
 
 }
@@ -398,6 +400,9 @@ void runInstruction(Instruction* i)
 		break;
 	case HSetDepthTest:
 		hglSetDepthTest((DepthTestMode*)i->Arg0);
+		break;
+	case HSetDepthBias:
+		hglSetDepthBias((DepthBiasInfo*)i->Arg0);
 		break;
 	case HSetCullFace:
 		hglSetCullFace((GLenum*)i->Arg0);
@@ -1021,6 +1026,29 @@ DllExport(void) hglSetDepthTest(DepthTestMode* mode)
 		if (m.Clamp) glEnable(GL_DEPTH_CLAMP);
 		else glDisable(GL_DEPTH_CLAMP);
 		
+	}
+	endtrace("a")
+}
+
+DllExport(void) hglSetDepthBias(DepthBiasInfo* state)
+{
+	trace("hglSetDepthBias\n");
+	auto s = *state;
+	if (s.Constant != 0 && s.SlopeScale != 0)
+	{
+		glEnable(GL_POLYGON_OFFSET_FILL);
+		glEnable(GL_POLYGON_OFFSET_LINE);
+		glEnable(GL_POLYGON_OFFSET_POINT);
+		if (glPolygonOffsetClamp != NULL) // check if extensions is available
+			glPolygonOffsetClamp(s.SlopeScale, s.Constant, s.Clamp);
+		else
+			glPolygonOffset(s.SlopeScale, s.Constant);
+	}
+	else
+	{
+		glDisable(GL_POLYGON_OFFSET_FILL);
+		glDisable(GL_POLYGON_OFFSET_LINE);
+		glDisable(GL_POLYGON_OFFSET_POINT);
 	}
 	endtrace("a")
 }

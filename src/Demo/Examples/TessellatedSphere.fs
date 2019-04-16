@@ -118,7 +118,7 @@ module TessellatedSphere =
                                 ]
                     |> Sg.blendMode (Rendering.BlendMode.Blend |> Mod.constant )
                     |> Sg.fillMode  (FillMode.Line |> Mod.constant)
-                    |> Sg.cullMode  (CullMode.Clockwise |> Mod.constant)
+                    |> Sg.cullMode  (CullMode.Back |> Mod.constant)
                     |> Sg.trafo     (Trafo3d.Identity |> Mod.constant)
                     |> Sg.viewTrafo viewTrafo
                     |> Sg.projTrafo projTrafo

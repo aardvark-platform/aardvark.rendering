@@ -65,7 +65,7 @@ type ResourceManagerExtensions private() =
             this.CreateInputAssemblyState(state.geometryMode, program)
 
         let rasterizerState =
-            this.CreateRasterizerState(state.depthTest, state.cullMode, state.fillMode)
+            this.CreateRasterizerState(state.depthTest, state.depthBias, state.cullMode, state.frontFace, state.fillMode)
 
         let colorBlendState =
             this.CreateColorBlendState(renderPass, state.writeBuffers, state.blendMode)

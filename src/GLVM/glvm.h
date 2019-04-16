@@ -65,7 +65,6 @@ static PFNGLDELETEVERTEXARRAYSPROC						glDeleteVertexArrays;
 static PFNGLENABLEVERTEXATTRIBARRAYPROC					glEnableVertexAttribArray;
 static PFNGLDISABLEVERTEXATTRIBARRAYPROC				glDisableVertexAttribArray;
 static PFNGLVERTEXATTRIBDIVISORPROC						glVertexAttribDivisor;
-
 #else
 typedef void (APIENTRYP PFNGLDRAWARRAYSINSTANCEDBASEINSTANCEPROC) (GLenum mode, GLint first, GLsizei count, GLsizei primcount, GLuint baseinstance);
 typedef void (APIENTRYP PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC) (GLenum mode, GLsizei count, GLenum type, const void *indices, GLsizei primcount, GLint basevertex, GLuint baseinstance);
@@ -81,9 +80,11 @@ static PFNGLMULTIDRAWELEMENTSINDIRECTPROC				glMultiDrawElementsIndirect;
 
 typedef void (APIENTRYP PFNGLBINDTEXTURESPROC) (GLuint first, GLsizei count, const GLuint *textures);
 typedef void (APIENTRYP PFNGLBINDSAMPLERSPROC) (GLuint first, GLsizei count, const GLuint *samplers);
+typedef void (APIENTRYP PFNGLPOLYGONOFFSETCLAMP) (GLfloat factor, GLfloat bias, GLfloat clamp);
 
 static PFNGLBINDTEXTURESPROC glBindTextures;
 static PFNGLBINDSAMPLERSPROC glBindSamplers;
+static PFNGLPOLYGONOFFSETCLAMP glPolygonOffsetClamp;
 
 // enum holding the available instruction codes
 typedef enum {
@@ -158,7 +159,8 @@ typedef enum {
 	HSetConservativeRaster = 110,
 	HSetMultisample = 111,
 	HBindTextures = 112,
-	HBindSamplers = 113
+	HBindSamplers = 113,
+	HSetDepthBias = 114,
 
 } InstructionCode;
 
@@ -226,6 +228,7 @@ DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* m
 DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, HandleAndCount* handleAndCount);
 DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, HandleAndCount* handleAndCount);
 DllExport(void) hglSetDepthTest(DepthTestMode* mode);
+DllExport(void) hglSetDepthBias(DepthBiasInfo* state);
 DllExport(void) hglSetCullFace(GLenum* face);
 DllExport(void) hglSetPolygonMode(GLenum* mode);
 DllExport(void) hglSetBlendMode(BlendMode* mode);

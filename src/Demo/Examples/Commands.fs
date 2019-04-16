@@ -81,7 +81,9 @@ module CommandTest =
         let state =
             {
                 depthTest           = Mod.constant DepthTestMode.LessOrEqual
+                depthBias           = Mod.constant (DepthBiasState(0.0, 0.0, 0.0))
                 cullMode            = Mod.constant CullMode.None
+                frontFace           = Mod.constant WindingOrder.CounterClockwise
                 blendMode           = Mod.constant BlendMode.None
                 fillMode            = Mod.constant FillMode.Fill
                 stencilMode         = Mod.constant StencilMode.Disabled

@@ -254,7 +254,9 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let beginModeCache          = derivedCache (fun m -> m.BeginModeCache)
     let drawCallInfoCache       = derivedCache (fun m -> m.DrawCallInfoCache)
     let depthTestCache          = derivedCache (fun m -> m.DepthTestCache)
+    let depthBiasCache          = derivedCache (fun m -> m.DepthBiasCache)
     let cullModeCache           = derivedCache (fun m -> m.CullModeCache)
+    let frontFaceCache          = derivedCache (fun m -> m.FrontFaceCache)
     let polygonModeCache        = derivedCache (fun m -> m.PolygonModeCache)
     let blendModeCache          = derivedCache (fun m -> m.BlendModeCache)
     let stencilModeCache        = derivedCache (fun m -> m.StencilModeCache)
@@ -289,7 +291,9 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     member private x.BeginModeCache         : ResourceCache<GLBeginMode, GLBeginMode>       = beginModeCache
     member private x.DrawCallInfoCache      : ResourceCache<DrawCallInfoList, DrawCallInfoList> = drawCallInfoCache
     member private x.DepthTestCache         : ResourceCache<DepthTestInfo, DepthTestInfo>   = depthTestCache
+    member private x.DepthBiasCache         : ResourceCache<DepthBiasInfo, DepthBiasInfo>   = depthBiasCache
     member private x.CullModeCache          : ResourceCache<int, int>                       = cullModeCache
+    member private x.FrontFaceCache         : ResourceCache<int, int>                       = frontFaceCache
     member private x.PolygonModeCache       : ResourceCache<int, int>                       = polygonModeCache
     member private x.BlendModeCache         : ResourceCache<GLBlendMode, GLBlendMode>       = blendModeCache
     member private x.StencilModeCache       : ResourceCache<GLStencilMode, GLStencilMode>   = stencilModeCache
@@ -633,10 +637,30 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
+    member x.CreateDepthBias(value : IMod<DepthBiasState>) =
+        depthBiasCache.GetOrCreate(value, {
+            create = fun b      -> ctx.ToDepthBias b
+            update = fun h b    -> ctx.ToDepthBias b
+            delete = fun h      -> ()
+            info =   fun h      -> ResourceInfo.Zero
+            view = id
+            kind = ResourceKind.Unknown
+        })
+
     member x.CreateCullMode(value : IMod<CullMode>) =
         cullModeCache.GetOrCreate(value, {
             create = fun b      -> ctx.ToCullMode b
             update = fun h b    -> ctx.ToCullMode b
+            delete = fun h      -> ()
+            info =   fun h      -> ResourceInfo.Zero
+            view = id
+            kind = ResourceKind.Unknown
+        })
+
+    member x.CreateFrontFace(mode : IMod<WindingOrder>) =
+        frontFaceCache.GetOrCreate(mode, {
+            create = fun b      -> ctx.ToFrontFace b
+            update = fun h b    -> ctx.ToFrontFace b
             delete = fun h      -> ()
             info =   fun h      -> ResourceInfo.Zero
             view = id

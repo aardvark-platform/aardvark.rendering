@@ -19,7 +19,9 @@ type AirState =
         surface             : Surface
 
         depthTest           : IMod<DepthTestMode>
+        depthBias           : IMod<DepthBiasState>
         cullMode            : IMod<CullMode>
+        frontFace           : IMod<WindingOrder>
         blendMode           : IMod<BlendMode>
         fillMode            : IMod<FillMode>
         stencilMode         : IMod<StencilMode>
@@ -128,7 +130,9 @@ module AirState =
             surface             = ro.Surface
                               
             depthTest           = ro.DepthTest
+            depthBias           = ro.DepthBias
             cullMode            = ro.CullMode
+            frontFace           = ro.FrontFace
             blendMode           = ro.BlendMode
             fillMode            = ro.FillMode
             stencilMode         = ro.StencilMode
@@ -154,7 +158,9 @@ module AirState =
     let mode = reader (fun s -> s.mode)
     let surface = reader (fun s -> s.surface)
     let depthTest = reader (fun s -> s.depthTest)
+    let depthBias = reader (fun s -> s.depthBias)
     let cullMode = reader (fun s -> s.cullMode)
+    let frontFace = reader (fun s-> s.frontFace)
     let blendMode = reader (fun s -> s.blendMode)
     let fillMode = reader (fun s -> s.fillMode)
     let stencilMode = reader (fun s -> s.stencilMode)
@@ -220,7 +226,9 @@ type Air private() =
                 ro.Mode <- state.mode
                 ro.Surface <- state.surface
                 ro.DepthTest <- state.depthTest
+                ro.DepthBias <- state.depthBias
                 ro.CullMode <- state.cullMode
+                ro.FrontFace <- state.frontFace
                 ro.BlendMode <- state.blendMode
                 ro.FillMode <- state.fillMode
                 ro.StencilMode <- state.stencilMode

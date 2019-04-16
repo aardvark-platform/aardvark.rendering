@@ -91,6 +91,12 @@ typedef struct {
 	int Clamp;
 } DepthTestMode;
 
+typedef struct {
+	float Constant;
+	float SlopeScale;
+	float Clamp;
+} DepthBiasInfo;
+
 struct VertexAttribValue
 {
 	float 		X;

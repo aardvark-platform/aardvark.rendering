@@ -46,7 +46,9 @@ module RenderObject =
         rj.WriteBuffers <- scope?WriteBuffers
 
         rj.DepthTest <- scope?DepthTestMode
+        rj.DepthBias <- scope?DepthBias
         rj.CullMode <- scope?CullMode
+        rj.FrontFace <- scope?FrontFace
         rj.FillMode <- scope?FillMode
         rj.StencilMode <- scope?StencilMode
         rj.BlendMode <- scope?BlendMode
@@ -78,7 +80,9 @@ module PipelineState =
             }
         {
             depthTest           = scope?DepthTestMode
+            depthBias           = scope?DepthBias
             cullMode            = scope?CullMode
+            frontFace           = scope?FrontFace
             blendMode           = scope?BlendMode
             fillMode            = scope?FillMode
             stencilMode         = scope?StencilMode

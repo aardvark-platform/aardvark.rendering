@@ -173,7 +173,14 @@ module Sg =
 
         member x.Mode = mode
 
-        new(value : IMod<DepthTestMode>, child : ISg) = DepthTestModeApplicator(value, Mod.constant child)
+        new(mode : IMod<DepthTestMode>, child : ISg) = DepthTestModeApplicator(mode, Mod.constant child)
+
+     type DepthBiasApplicator(bias : IMod<DepthBiasState>, child : IMod<ISg>) =
+        inherit AbstractApplicator(child)
+
+        member x.State = bias
+
+        new(state : IMod<DepthBiasState>, child : ISg) = DepthBiasApplicator(state, Mod.constant child)
 
     type CullModeApplicator(mode : IMod<CullMode>, child : IMod<ISg>) =
         inherit AbstractApplicator(child)
@@ -181,6 +188,13 @@ module Sg =
         member x.Mode = mode
 
         new(value : IMod<CullMode>, child : ISg) = CullModeApplicator(value, Mod.constant child)
+
+    type FrontFaceApplicator(winding : IMod<WindingOrder>, child : IMod<ISg>) =
+        inherit AbstractApplicator(child)
+
+        member x.WindingOrder = winding
+
+        new(winding : IMod<WindingOrder>, child : ISg) = FrontFaceApplicator(winding, Mod.constant child)
 
     type FillModeApplicator(mode : IMod<FillMode>, child : IMod<ISg>) =
         inherit AbstractApplicator(child)
@@ -208,14 +222,18 @@ module Sg =
         inherit AbstractApplicator(child)
 
         let depth = state |> Mod.map (fun s -> s.DepthTest)
+        let bias = state |> Mod.map (fun s -> s.DepthBias)
         let cull = state |> Mod.map (fun s -> s.CullMode)
+        let front = state |> Mod.map (fun s -> s.FrontFace)
         let fill = state |> Mod.map (fun s -> s.FillMode)
         let stencil = state |> Mod.map (fun s -> s.StencilMode)
         let blend = state |> Mod.map (fun s -> s.BlendMode)
 
         member x.RasterizerState = state
         member x.DepthTestMode = depth
+        member x.DepthBias = bias
         member x.CullMode = cull
+        member x.FrontFace = front
         member x.FillMode = fill
         member x.StencilMode = stencil
         member x.BlendMode = blend

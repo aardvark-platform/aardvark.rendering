@@ -135,7 +135,9 @@ module RuntimeCommandSemantics =
                     let state =
                         {
                             depthTest           = parent.DepthTestMode
+                            depthBias           = parent.DepthBias
                             cullMode            = parent.CullMode
+                            frontFace           = parent.FrontFace
                             blendMode           = parent.BlendMode
                             fillMode            = parent.FillMode
                             stencilMode         = parent.StencilMode
@@ -164,7 +166,9 @@ module RuntimeCommandSemantics =
                     let state =
                         {
                             depthTest           = parent.DepthTestMode
+                            depthBias           = parent.DepthBias
                             cullMode            = parent.CullMode
+                            frontFace           = parent.FrontFace
                             blendMode           = parent.BlendMode
                             fillMode            = parent.FillMode
                             stencilMode         = parent.StencilMode

@@ -439,6 +439,7 @@ module Sg =
             boundary.StencilMode <- Mod.constant writeStencil
             boundary.FillMode <- Mod.constant FillMode.Fill
             shapes.DepthTest <- Mod.constant DepthTestMode.None
+            shapes.DepthBias <- Mod.constant (DepthBiasState(0.0, 0.0, 0.0))
             shapes.StencilMode <- Mod.constant readStencil
 
             //shapes :> IRenderObject |> ASet.single

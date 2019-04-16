@@ -101,7 +101,7 @@ module Volume =
                 do! Shader.vertex
                 do! Shader.fragment
                }
-            |> Sg.cullMode (Mod.constant CullMode.CounterClockwise)
+            |> Sg.cullMode (Mod.constant CullMode.Back)
 
 
 

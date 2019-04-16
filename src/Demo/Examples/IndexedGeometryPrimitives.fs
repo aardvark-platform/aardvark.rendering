@@ -105,7 +105,7 @@ module IndexedGeometry =
             |> Sg.projTrafo Interactive.DefaultProjTrafo
             |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.vertexColor |> toEffect]
             |> Sg.fillMode (Mod.constant FillMode.Fill)
-            |> Sg.cullMode (Mod.constant CullMode.CounterClockwise)
+            |> Sg.cullMode (Mod.constant CullMode.Back)
 
     let run () =
         Aardvark.Rendering.Interactive.FsiSetup.defaultCamera <- false

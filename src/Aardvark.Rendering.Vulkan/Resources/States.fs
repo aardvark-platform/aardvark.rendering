@@ -395,23 +395,30 @@ module RasterizerState =
 
     let private toVkCullMode =
         LookupTable.lookupTable [
-            CullMode.Clockwise, VkCullModeFlags.BackBit
-            CullMode.CounterClockwise, VkCullModeFlags.FrontBit
+            CullMode.Back, VkCullModeFlags.BackBit
+            CullMode.Front, VkCullModeFlags.FrontBit
+            CullMode.FrontAndBack, VkCullModeFlags.FrontAndBack
             CullMode.None, VkCullModeFlags.None
         ]
 
+    let private toVkFrontFace =
+        LookupTable.lookupTable [
+            WindingOrder.Clockwise, VkFrontFace.Clockwise
+            WindingOrder.CounterClockwise, VkFrontFace.CounterClockwise
+        ]
+
    
-    let create (usesDiscard : bool) (depth : DepthTestMode) (cull : CullMode) (fill : FillMode) =
+    let create (usesDiscard : bool) (depth : DepthTestMode) (bias : DepthBiasState) (cull : CullMode) (frontFace : WindingOrder) (fill : FillMode) =
         {
             depthClampEnable        = depth.Clamp
             rasterizerDiscardEnable = usesDiscard
             polygonMode             = toVkPolygonMode fill
             cullMode                = toVkCullMode cull
-            frontFace               = VkFrontFace.Clockwise
-            depthBiasEnable         = false
-            depthBiasConstantFactor = 0.0
-            depthBiasClamp          = 0.0
-            depthBiasSlopeFactor    = 0.0
+            frontFace               = toVkFrontFace frontFace
+            depthBiasEnable         = bias.BiasEnabled
+            depthBiasConstantFactor = bias.Constant
+            depthBiasClamp          = bias.Clamp
+            depthBiasSlopeFactor    = bias.SlopeScale
             lineWidth               = 1.0
         }
 

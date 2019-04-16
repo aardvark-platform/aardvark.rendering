@@ -13,7 +13,9 @@ module ModeSemantics =
 
     type ISg with
         member x.DepthTestMode : IMod<DepthTestMode> = x?DepthTestMode
+        member x.DepthBias     : IMod<DepthBiasState> = x?DepthBias
         member x.CullMode      : IMod<CullMode>      = x?CullMode
+        member x.FrontFace     : IMod<WindingOrder>  = x?FrontFace
         member x.FillMode      : IMod<FillMode>      = x?FillMode
         member x.StencilMode   : IMod<StencilMode>   = x?StencilMode
         member x.BlendMode     : IMod<BlendMode>     = x?BlendMode
@@ -26,7 +28,9 @@ module ModeSemantics =
 
     module Semantic =
         let depthTestMode  (s : ISg) = s.DepthTestMode
+        let depthBias      (s : ISg) = s.DepthBias
         let cullMode       (s : ISg) = s.CullMode
+        let frontFace      (s : ISg) = s.FrontFace
         let fillMode       (s : ISg) = s.FillMode
         let stencilMode    (s : ISg) = s.StencilMode
         let blendMode      (s : ISg) = s.BlendMode
@@ -48,12 +52,20 @@ module ModeSemantics =
         let defaultDepthWriteMask = Mod.constant true
         let defaultConservativeRaster = Mod.constant false
         let defaultMultisample = Mod.constant true
+        let defaultDepthBias = Mod.constant (DepthBiasState(0.0, 0.0, 0.0))
+        let defaultFrontFace = Mod.constant WindingOrder.Clockwise
 
         member x.DepthTestMode(e : Root<ISg>) =
             e.Child?DepthTestMode <- defaultDepth
 
+        member x.DepthBias(e : Root<ISg>) =
+            e.Child?DepthBias <- defaultDepthBias
+
         member x.CullMode(e : Root<ISg>) =
             e.Child?CullMode <- defaultCull
+
+        member x.FrontFace(e : Root<ISg>) =
+            e.Child?FrontFace <- defaultFrontFace
 
         member x.FillMode(e : Root<ISg>) =
             e.Child?FillMode <- defaultFill
@@ -90,9 +102,15 @@ module ModeSemantics =
 
         member x.DepthTestMode(a : Sg.DepthTestModeApplicator) =
             a.Child?DepthTestMode <- a.Mode
+        
+        member x.DepthBias(a : Sg.DepthBiasApplicator) =
+            a.Child?DepthBias <- a.State
 
         member x.CullMode(a : Sg.CullModeApplicator) =
             a.Child?CullMode <- a.Mode
+
+        member x.FrontFace(a : Sg.FrontFaceApplicator) =
+            a.Child?FrontFace <- a.WindingOrder
 
         member x.FillMode(a : Sg.FillModeApplicator) =
             a.Child?FillMode <- a.Mode
@@ -117,4 +135,5 @@ module ModeSemantics =
 
         member x.BlendMode(a : Sg.RasterizerStateApplicator) =
             a.Child?BlendMode <- a.BlendMode
+
 

@@ -123,6 +123,9 @@ module OpenGl =
                   | Back = 0x0405
                   | FrontAndBack = 0x0408
 
+        type WindingOrder = CW = 0x0900
+                          | CCW = 0x0901
+
         type BlendFactor = Zero = 0
                          | One = 1
                          | SrcColor = 0x0300
@@ -541,6 +544,11 @@ module OpenGl =
         let CullFace  = getProcAddress "glCullFace"
 
         /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glFrontFace.xml
+        /// </summary>
+        let FrontFace  = getProcAddress "glFrontFace"
+
+        /// <summary>
         /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBlendFuncSeparate.xml
         /// </summary>
         let BlendFuncSeparate  = getProcAddress "glBlendFuncSeparate"
@@ -719,6 +727,7 @@ module OpenGl =
         let HDrawArraysIndirect = getGLVMProcAddress "hglDrawArraysIndirect"
         let HDrawElementsIndirect = getGLVMProcAddress "hglDrawElementsIndirect"
         let HSetDepthTest = getGLVMProcAddress "hglSetDepthTest"
+        let HSetDepthBias = getGLVMProcAddress "hglSetDepthBias"
         let HSetCullFace = getGLVMProcAddress "hglSetCullFace"
         let HSetPolygonMode = getGLVMProcAddress "hglSetPolygonMode"
         let HSetBlendMode = getGLVMProcAddress "hglSetBlendMode"

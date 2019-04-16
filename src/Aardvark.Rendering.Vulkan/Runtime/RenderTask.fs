@@ -45,7 +45,9 @@ module RenderCommands =
             surface             : Aardvark.Base.Surface
 
             depthTest           : IMod<DepthTestMode>
+            depthBias           : IMod<DepthBiasState>
             cullMode            : IMod<CullMode>
+            frontFace           : IMod<WindingOrder>
             blendMode           : IMod<BlendMode>
             fillMode            : IMod<FillMode>
             stencilMode         : IMod<StencilMode>
@@ -124,7 +126,7 @@ module RenderCommands =
                 x.CreateInputAssemblyState(state.geometryMode, program)
 
             let rasterizerState =
-                x.CreateRasterizerState(state.depthTest, state.cullMode, state.fillMode)
+                x.CreateRasterizerState(state.depthTest, state.depthBias, state.cullMode, state.frontFace, state.fillMode)
 
             let colorBlendState =
                 x.CreateColorBlendState(renderPass, state.writeBuffers, state.blendMode)

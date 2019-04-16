@@ -63,7 +63,9 @@ let testCompile() =
             Surface             = Surface.Backend (surface :> ISurface)
                       
             DepthTest           = Mod.constant DepthTestMode.LessOrEqual
+            DepthBias           = Mod.constant (DepthBiasState(0.0, 0.0, 0.0))
             CullMode            = Mod.constant CullMode.None
+            FrontFace           = Mod.constant WindingOrder.CounterClockwise
             BlendMode           = Mod.constant BlendMode.None
             FillMode            = Mod.constant FillMode.Fill
             StencilMode         = Mod.constant StencilMode.Disabled

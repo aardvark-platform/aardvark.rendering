@@ -197,8 +197,14 @@ module PointerContextExtensions =
             let clamp = if mode.Clamp then 1 else 0
             DepthTestInfo(value, clamp)
 
+        member x.ToDepthBias(state : DepthBiasState) =
+            DepthBiasInfo(float32 state.Constant, float32 state.SlopeScale, float32 state.Clamp)
+
         member x.ToCullMode(mode : CullMode) =
-            Translations.toGLFace mode
+            Translations.toGLCullMode mode
+
+        member x.ToFrontFace(frontFace : Aardvark.Base.Rendering.WindingOrder) =
+            Translations.toGLFrontFace frontFace
 
         member x.ToPolygonMode(mode : FillMode) =
             Translations.toGLPolygonMode mode

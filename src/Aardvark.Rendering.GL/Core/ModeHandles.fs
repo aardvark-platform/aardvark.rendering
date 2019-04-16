@@ -86,6 +86,15 @@ type DepthTestInfo =
 
         new(comparison, clamp) = { Comparison = comparison; Clamp = clamp }
     end
+
+type DepthBiasInfo =
+    struct
+        val mutable public Constant : float32
+        val mutable public SlopeScale : float32
+        val mutable public Clamp : float32
+
+        new(constant, slopeScale, clamp) = { Constant = constant; SlopeScale = slopeScale; Clamp = clamp }
+    end
 //
 //[<StructLayout(LayoutKind.Sequential)>]
 //type DepthTestModeHandle =

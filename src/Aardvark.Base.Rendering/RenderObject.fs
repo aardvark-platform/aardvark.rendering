@@ -247,7 +247,9 @@ type RenderObject =
         mutable Surface             : Surface
                               
         mutable DepthTest           : IMod<DepthTestMode>
+        mutable DepthBias           : IMod<DepthBiasState>
         mutable CullMode            : IMod<CullMode>
+        mutable FrontFace           : IMod<WindingOrder>
         mutable BlendMode           : IMod<BlendMode>
         mutable FillMode            : IMod<FillMode>
         mutable StencilMode         : IMod<StencilMode>
@@ -286,7 +288,9 @@ type RenderObject =
           Mode = IndexedGeometryMode.TriangleList
           Surface = Surface.None
           DepthTest = null
+          DepthBias = null
           CullMode = null
+          FrontFace = null
           BlendMode = null
           FillMode = null
           StencilMode = null
@@ -341,7 +345,9 @@ module RenderObjectExtensions =
           Mode = IndexedGeometryMode.TriangleList
           Surface = Surface.None
           DepthTest = null
+          DepthBias = null
           CullMode = null
+          FrontFace = null
           BlendMode = null
           FillMode = null
           StencilMode = null
@@ -389,7 +395,9 @@ type MultiRenderObject(children : list<IRenderObject>) =
 type PipelineState =
     {
         depthTest           : IMod<DepthTestMode>
+        depthBias           : IMod<DepthBiasState>
         cullMode            : IMod<CullMode>
+        frontFace           : IMod<WindingOrder>
         blendMode           : IMod<BlendMode>
         fillMode            : IMod<FillMode>
         stencilMode         : IMod<StencilMode>

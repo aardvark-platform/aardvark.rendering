@@ -78,12 +78,19 @@ module Translations =
             | DepthTestComparison.Always -> CompareFunction.Always |> int
             | _ -> failwithf "unknown comparison %A" f
 
-    let toGLFace (f : CullMode) =
+    let toGLCullMode (f : CullMode) =
         match f with
-            | CullMode.Clockwise -> Face.Back |> int
-            | CullMode.CounterClockwise -> Face.Front |> int
-            | CullMode.None -> 0
+            | CullMode.None -> 0// glDisable(GL_CULL_FACE) / glCullFace will not be set and
+            | CullMode.Front -> Face.Back |> int
+            | CullMode.Back -> Face.Front |> int
+            | CullMode.FrontAndBack-> Face.FrontAndBack |> int
             | _ -> failwithf "unknown comparison %A" f
+
+    let toGLFrontFace (f : Aardvark.Base.Rendering.WindingOrder) =
+        match f with
+            | Aardvark.Base.Rendering.WindingOrder.Clockwise -> WindingOrder.CW |> int
+            | Aardvark.Base.Rendering.WindingOrder.CounterClockwise -> WindingOrder.CCW |> int
+            | _ -> failwithf "unknown winding order %A" f
 
     let toGLFunction (f : StencilCompareFunction) =
         match f with

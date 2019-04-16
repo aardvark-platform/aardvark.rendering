@@ -224,7 +224,7 @@ let main argv =
             do! Shader.vertex
             do! Shader.fragment
             }
-        |> Sg.cullMode (Mod.constant CullMode.CounterClockwise)
+        |> Sg.cullMode (Mod.constant CullMode.Back)
 
     win.Scene <- sg
     win.Run()
