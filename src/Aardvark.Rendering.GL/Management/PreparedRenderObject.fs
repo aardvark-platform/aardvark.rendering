@@ -77,7 +77,9 @@ type PreparedPipelineState =
             yield x.pConservativeRaster :> _
             yield x.pMultisample :> _
             yield x.pDepthTestMode :> _
+            yield x.pDepthBias :> _
             yield x.pCullMode :> _
+            yield x.pFrontFace :> _
             yield x.pPolygonMode :> _
             yield x.pBlendMode :> _
             yield x.pStencilMode :> _
