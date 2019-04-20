@@ -708,6 +708,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.CreateTexture(size, format, levels, samples) = x.CreateTexture(size, format, levels, samples, 1)
         member x.CreateTextureArray(size, format, levels, samples, count) = x.CreateTexture(size, format, levels, samples, count)
         member x.CreateTextureCube(size, format, levels, samples) = x.CreateTextureCube(size, format, levels, samples)
+        member x.CreateTextureCubeArray(size, format, levels, samples, count) = failwith "not implemented"
 
         member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) = x.CreateTexture(size, dim, format, slices, levels, samples)
 

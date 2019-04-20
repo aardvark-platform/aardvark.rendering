@@ -163,13 +163,44 @@ let testDownloadSlice() =
 
     ()
 
+let testTextureCubeArray() =
+    let app = new OpenGlApplication(false, true)
+    let runtime = app.Runtime
+    let texRt = runtime :> ITextureRuntime
+
+    let cta = texRt.CreateTextureCubeArray(128, TextureFormat.Rgba8, 1, 1, 4)
+
+    let cube0View = texRt.CreateTextureView(cta, Range1i(0,0), Range1i(0,5), false) // create TextureCube view of [0]
+    let cube1View = texRt.CreateTextureView(cta, Range1i(0,0), Range1i(6,11), false) // create TextureCube view of [1]
+    let cube0Face0View = texRt.CreateTextureView(cta, Range1i(0,0), Range1i(0,0), false) // create Texture2d view of cube[0].face[0]
+    let cube0Face1View = texRt.CreateTextureView(cta, Range1i(0,0), Range1i(1,1), false) // create Texture2d view of cube[0].face[1]
+    let cube1Face2View = texRt.CreateTextureView(cta, Range1i(0,0), Range1i(8,8), false) // create Texture2d view of cube[1].face[2]
+    let cube2Face0To2View = texRt.CreateTextureView(cta, Range1i(0,0), Range1i(12,14), true) // create Texture2dArray of range 
+    let cube2Face0To5View = texRt.CreateTextureView(cta, Range1i(0,0), Range1i(12,17), true) // create Texture2dArray of range spanning cube
+    let cube0to1FacesView = texRt.CreateTextureView(cta, Range1i(0,0), Range1i(0,11), true) // create Texture2dArray of complete cube 0 & 1
+    let cubeArrayFacesView = texRt.CreateTextureView(cta, Range1i(0,0), Range1i(0,23), true) // create Texture2dArray of complete TextureCubeArray
+    //let cube0Cube1ArrayView = texRt.CreateTextureView(cta, Range1i(0,0), Range1i(0,11), true) // API does not allow to create TextureCubeArray sub-range
+     
+    texRt.DeleteTexture(cta)
+    texRt.DeleteTexture(cube0View)
+    texRt.DeleteTexture(cube1View)
+    texRt.DeleteTexture(cube0Face0View)
+    texRt.DeleteTexture(cube0Face1View)
+    texRt.DeleteTexture(cube1Face2View)
+    texRt.DeleteTexture(cube2Face0To2View)
+    texRt.DeleteTexture(cube2Face0To5View)
+    texRt.DeleteTexture(cube0to1FacesView)
+    texRt.DeleteTexture(cubeArrayFacesView)
+    
+
+
 [<EntryPoint>]
 let main args =
     Aardvark.Base.Ag.initialize()
     Aardvark.Init()
     //testCompile()
 
-    testDownloadSlice()
+    testTextureCubeArray()
 
     //RenderingTests.``[GL] concurrent group change``()
     //RenderingTests.``[GL] memory leak test``()

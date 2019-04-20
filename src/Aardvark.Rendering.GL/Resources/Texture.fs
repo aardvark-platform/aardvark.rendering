@@ -336,6 +336,18 @@ module TextureCreationExtensions =
 
                 tex
             )
+
+        member x.CreateTextureCubeArray(size : int, mipMapLevels : int, t : TextureFormat, samples : int, count : int) =
+            using x.ResourceLock (fun _ ->
+                let h = GL.GenTexture()
+                GL.Check "could not create texture"
+
+                addTexture x 0L
+                let tex = Texture(x, h, TextureDimension.TextureCube, mipMapLevels, 1, V3i(size, size, 0), Some count, t, 0L, false)
+                x.UpdateTextureCubeArray(tex, size, count, mipMapLevels, t, samples)
+
+                tex
+            )
             
         member x.UpdateTexture1D(tex : Texture, size : int, mipMapLevels : int, t : TextureFormat) =
             using x.ResourceLock (fun _ ->
@@ -469,6 +481,34 @@ module TextureCreationExtensions =
                 tex.ImmutableFormat <- true
             )
 
+        member x.UpdateTexture1DArray(tex : Texture, size : int, count : int, mipMapLevels : int, t : TextureFormat) =
+            using x.ResourceLock (fun _ ->
+                if tex.ImmutableFormat then
+                    failwith "cannot update format/size for immutable texture"
+
+                GL.BindTexture(TextureTarget.Texture1DArray, tex.Handle)
+                GL.Check "could not bind texture"
+
+                let sizeInBytes = texSizeInBytes(V3i(size, 1, 1), t, 1, mipMapLevels) * (int64 count)
+                updateTexture tex.Context tex.SizeInBytes sizeInBytes
+                tex.SizeInBytes <- sizeInBytes
+  
+                GL.TexStorage2D(TextureTarget2d.Texture1DArray, mipMapLevels, unbox (int t), size, count)
+                GL.Check "could not allocate texture"
+
+                GL.BindTexture(TextureTarget.Texture1DArray, 0)
+                GL.Check "could not unbind texture"
+                
+                tex.IsArray <- true
+                tex.MipMapLevels <- mipMapLevels
+                tex.Dimension <- TextureDimension.Texture1D
+                tex.Count <- count
+                tex.Multisamples <- 1
+                tex.Size <- V3i(size, 0, 0)
+                tex.Format <- t
+                tex.ImmutableFormat <- true
+            )
+
         member x.UpdateTexture2DArray(tex : Texture, size : V2i, count : int, mipMapLevels : int, t : TextureFormat, samples : int) =
             using x.ResourceLock (fun _ ->
                 if tex.ImmutableFormat then
@@ -510,30 +550,44 @@ module TextureCreationExtensions =
                 tex.ImmutableFormat <- true
             )
 
-        member x.UpdateTexture1DArray(tex : Texture, size : int, count : int, mipMapLevels : int, t : TextureFormat) =
+        member x.UpdateTextureCubeArray(tex : Texture, size : int, count : int, mipMapLevels : int, t : TextureFormat, samples : int) =
             using x.ResourceLock (fun _ ->
                 if tex.ImmutableFormat then
                     failwith "cannot update format/size for immutable texture"
 
-                GL.BindTexture(TextureTarget.Texture1DArray, tex.Handle)
+                let target =
+                    if samples = 1 then TextureTarget.TextureCubeMapArray
+                    else
+                        Log.warn "multi-sampled cube map array not supported"
+                        failwith "multi-sampled cube map array not supported"
+
+                GL.BindTexture(target, tex.Handle)
                 GL.Check "could not bind texture"
 
-                let sizeInBytes = texSizeInBytes(V3i(size, 1, 1), t, 1, mipMapLevels) * (int64 count)
+                let sizeInBytes = texSizeInBytes(V3i(size, size, 1), t, samples, mipMapLevels) * 6L * (int64 count)
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
+
+                if samples = 1 then
+                    GL.TexStorage3D(unbox (int target), mipMapLevels, unbox (int t), size, size, count * 6) // NOTE: there is no TextureTarget3d.TextureCubeMapArray ??
+                else
+                    if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
+                    failwith "not reachable"
   
-                GL.TexStorage2D(TextureTarget2d.Texture1DArray, mipMapLevels, unbox (int t), size, count)
                 GL.Check "could not allocate texture"
 
-                GL.BindTexture(TextureTarget.Texture1DArray, 0)
-                GL.Check "could not unbind texture"
+                GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels)
+                GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
                 
-                tex.IsArray <- true
+                GL.BindTexture(target, 0)
+                GL.Check "could not unbind texture"
+
                 tex.MipMapLevels <- mipMapLevels
-                tex.Dimension <- TextureDimension.Texture1D
+                tex.Dimension <- TextureDimension.TextureCube
+                tex.IsArray <- true
                 tex.Count <- count
-                tex.Multisamples <- 1
-                tex.Size <- V3i(size, 0, 0)
+                tex.Multisamples <- samples
+                tex.Size <- V3i(size, size, 0)
                 tex.Format <- t
                 tex.ImmutableFormat <- true
             )
@@ -550,22 +604,22 @@ module TextureCreationExtensions =
                     match orig.Dimension with
                         | TextureDimension.TextureCube -> 
                             if isArray || slices.Min = slices.Max then 
-                                // address TextureCube as array or a single slice
+                                // address TextureCube or TextureCubeArray as Texture2d or Texture2dArray
                                 TextureDimension.Texture2D
                             else
-                                if slices.Min <> 0 && slices.Max <> 5 then failwithf "cannot take multiple slices from CubeMap"
-                                // allow to address certain levels
+                                // address certain levels or single cube of cubeArray
+                                if slices.Max - slices.Min + 1 <> 6 then failwithf "Creating multi-slice view (sliceCount>1 && sliceCount<>6) of CubeTexture(Array) requires isArray=true"
                                 TextureDimension.TextureCube
                         | d -> d
 
                 let levelCount = 1 + levels.Max - levels.Min
-                let sliceCount =
+                let sliceCountHandle = if isArray then Some (1 + slices.Max - slices.Min)  else None
+                let sliceCountCreate =
                     // create array if requested -> allows to create single views of array texture and an array view of a single texture
-                    if isArray then Some (1 + slices.Max - slices.Min) 
-                    else if orig.Dimension <> TextureDimension.TextureCube && slices.Min <> slices.Max then failwithf "cannot create multi-slice view as not array"
+                    if isArray || orig.Dimension = TextureDimension.TextureCube && slices.Min <> slices.Max then Some (1 + slices.Max - slices.Min) 
                     else None
                     
-                let tex = TextureViewHandle(x, handle, dim, levelCount, orig.Multisamples, orig.Size, sliceCount, orig.Format)
+                let tex = TextureViewHandle(x, handle, dim, levelCount, orig.Multisamples, orig.Size, sliceCountHandle, orig.Format)
                 let target = TextureTarget.ofTexture tex
                   
                 GL.TextureView(
@@ -574,7 +628,7 @@ module TextureCreationExtensions =
                     orig.Handle,
                     unbox (int orig.Format),
                     levels.Min, 1 + levels.Max - levels.Min,
-                    slices.Min, match sliceCount with | Some x -> x; | _ -> 1
+                    slices.Min, match sliceCountCreate with | Some x -> x; | _ -> 1
                 )
                 GL.Check "could not create texture view"
 
