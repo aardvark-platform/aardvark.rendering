@@ -90,13 +90,13 @@ type StencilState =
 module InputAssemblyState =
     let ofIndexedGeometryMode =
         LookupTable.lookupTable [
-            IndexedGeometryMode.LineAdjacencyList,      { topology = VkPrimitiveTopology.LineListWithAdjacency; restartEnable = true }
-            IndexedGeometryMode.LineList,               { topology = VkPrimitiveTopology.LineList; restartEnable = true }
+            IndexedGeometryMode.LineAdjacencyList,      { topology = VkPrimitiveTopology.LineListWithAdjacency; restartEnable = false }
+            IndexedGeometryMode.LineList,               { topology = VkPrimitiveTopology.LineList; restartEnable = false }
             IndexedGeometryMode.LineStrip,              { topology = VkPrimitiveTopology.LineStrip; restartEnable = true }
             IndexedGeometryMode.PointList,              { topology = VkPrimitiveTopology.PointList; restartEnable = false }
-            IndexedGeometryMode.QuadList,               { topology = VkPrimitiveTopology.PatchList; restartEnable = true }
-            IndexedGeometryMode.TriangleAdjacencyList,  { topology = VkPrimitiveTopology.TriangleListWithAdjacency; restartEnable = true }
-            IndexedGeometryMode.TriangleList,           { topology = VkPrimitiveTopology.TriangleList; restartEnable = true }
+            IndexedGeometryMode.QuadList,               { topology = VkPrimitiveTopology.PatchList; restartEnable = false }
+            IndexedGeometryMode.TriangleAdjacencyList,  { topology = VkPrimitiveTopology.TriangleListWithAdjacency; restartEnable = false }
+            IndexedGeometryMode.TriangleList,           { topology = VkPrimitiveTopology.TriangleList; restartEnable = false }
             IndexedGeometryMode.TriangleStrip,          { topology = VkPrimitiveTopology.TriangleStrip; restartEnable = true }
         ]
         
