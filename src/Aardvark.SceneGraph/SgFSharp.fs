@@ -178,6 +178,12 @@ module SgFSharp =
         let depthMask (depthWriteEnabled : IMod<bool>) (sg : ISg) =
             Sg.DepthWriteMaskApplicator(depthWriteEnabled, Mod.constant sg)
 
+        let depthBias (m : IMod<DepthBiasState>) (sg: ISg) =
+            Sg.DepthBiasApplicator(m, sg) :> ISg
+
+        let frontFace (m : IMod<WindingOrder>) (sg: ISg) = 
+            Sg.FrontFaceApplicator(m, sg) :> ISg
+
         let private arrayModCache = ConditionalWeakTable<IMod, IMod<Array>>()
         let private bufferModCache = ConditionalWeakTable<IMod, BufferView>()
 
