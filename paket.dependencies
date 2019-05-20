@@ -19,7 +19,7 @@ nuget CommonMark.NET                     ~> 0.15.1
 nuget GLSLangSharp                       ~> 0.4.1
 
 nuget BruTile                            ~> 2.0.0-alpha1
-nuget Unofficial.LibTessDotNet           ~> 2.0.0
+nuget Unofficial.LibTessDotNet           ~> 2.0.2
 nuget SharpDX.Direct3D9                  ~> 4.0.1
 nuget Unofficial.AssimpNet               ~> 4.0.1
 
