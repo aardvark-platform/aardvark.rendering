@@ -811,6 +811,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
             before(s)
             if alphaToCoverage then 
                 s.Enable(int EnableCap.SampleAlphaToCoverage)
+                s.Enable(int EnableCap.SampleAlphaToOne)
 
             match indexType with
                 | Some indexType ->
@@ -820,6 +821,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
             
             if alphaToCoverage then 
                 s.Disable(int EnableCap.SampleAlphaToCoverage)
+                s.Disable(int EnableCap.SampleAlphaToOne)
                 icnt <- icnt + 2 // enable + disable
         else
             Log.warn "empty indirect call"
