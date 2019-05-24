@@ -372,14 +372,14 @@ module LodTreeHelpers =
             try f()
             finally sw.Stop()
 
-        let inline private enqueue (t : ILodTreeNode) (view : ILodTreeNode -> Trafo3d) (proj : Trafo3d) (queue : List<struct (float * int64 * ILodTreeNode)>) =
+        let inline private enqueue (t : ILodTreeNode) (s : float) (view : ILodTreeNode -> Trafo3d) (proj : Trafo3d) (queue : List<struct (float * int64 * ILodTreeNode)>) =
             let view = stop viewTime (fun () -> view t.Root)
-            if stop splitTime (fun () -> t.ShouldSplit(1.0, view, proj)) then
-                let q = stop splitQualityTime (fun () -> t.SplitQuality(view, proj))
+            if stop splitTime (fun () -> t.ShouldSplit(s,1.0, view, proj)) then
+                let q = stop splitQualityTime (fun () -> t.SplitQuality(s,view, proj))
                 let childSize = t.Children |> Seq.sumBy (fun c -> int64 c.DataSize)
                 queue.HeapEnqueue(cmp, struct (q, childSize, t))
 
-        let getMaxQuality (maxSize : int64) (ts : seq<ILodTreeNode>) (view : ILodTreeNode -> Trafo3d) (proj : Trafo3d) =
+        let getMaxQuality (maxSize : int64) splitfactor (ts : seq<ILodTreeNode>) (view : ILodTreeNode -> Trafo3d) (proj : Trafo3d) =
 
             let queue = List<struct (float * int64 * ILodTreeNode)>(65536)
             let mutable size = 0L
@@ -391,7 +391,7 @@ module LodTreeHelpers =
             for t in ts do 
                 size <- size + int64 t.DataSize
                 dead.Add t |> ignore
-                enqueue t view proj queue
+                enqueue t splitfactor view proj queue
 
             let inline s (struct (a,b,c)) = b
 
@@ -414,7 +414,7 @@ module LodTreeHelpers =
                 for c in e.Children do
                     enqueueWatch.Start()
                     dead.Add c |> ignore
-                    enqueue c view proj queue
+                    enqueue c splitfactor view proj queue
                     enqueueWatch.Stop()
 
             sw.Stop()
@@ -477,28 +477,28 @@ module LodTreeHelpers =
 
 
 
-        member x.BuildQueue(node : ILodTreeNode, depth : int, quality : float, collapseIfNotSplit : bool, view : Trafo3d, proj : Trafo3d, queue : List<float * SetOperation<TaskTreeNode<'a>>>) =
+        member x.BuildQueue(node : ILodTreeNode, depth : int, quality : float, splitfactor : float, collapseIfNotSplit : bool, view : Trafo3d, proj : Trafo3d, queue : List<float * SetOperation<TaskTreeNode<'a>>>) =
             if node <> original then failwith "[Tree] inconsistent path"
 
             match children with
             | [] ->
-                if node.ShouldSplit(quality, view, proj) then
-                    let qs = node.SplitQuality(view, proj)
+                if node.ShouldSplit(splitfactor, quality, view, proj) then
+                    let qs = node.SplitQuality(splitfactor, view, proj)
                     queue.HeapEnqueue(cmp, (qs, Add x))
             | o ->
                 let collapse =
-                    if collapseIfNotSplit then not (node.ShouldSplit(quality, view, proj))
-                    else node.ShouldCollapse(quality, view, proj)
+                    if collapseIfNotSplit then not (node.ShouldSplit(splitfactor, quality, view, proj))
+                    else node.ShouldCollapse(splitfactor, quality, view, proj)
 
                 if collapse then
                     let qc = 
-                        if collapseIfNotSplit then node.SplitQuality(view, proj)
-                        else node.CollapseQuality(view, proj)
+                        if collapseIfNotSplit then node.SplitQuality(splitfactor, view, proj)
+                        else node.CollapseQuality(splitfactor, view, proj)
                     queue.HeapEnqueue(cmp, (qc - quality, Rem x))
 
                 else
                     for (o, n) in Seq.zip o node.Children do
-                        o.BuildQueue(n, depth, quality, collapseIfNotSplit, view, proj, queue)
+                        o.BuildQueue(n, depth, quality, splitfactor, collapseIfNotSplit, view, proj, queue)
 
 
 
@@ -556,7 +556,7 @@ module LodTreeHelpers =
         member x.RootId = rootId
         member x.Root = root
 
-        member internal x.BuildQueue(state : TaskTreeState, collapseIfNotSplit : bool, t : Option<ILodTreeNode>, quality : float, view : ILodTreeNode -> Trafo3d, proj : Trafo3d, queue : List<float * SetOperation<TaskTreeNode<'a>>>) =
+        member internal x.BuildQueue(state : TaskTreeState, collapseIfNotSplit : bool, t : Option<ILodTreeNode>, quality : float, splitfactor : float, view : ILodTreeNode -> Trafo3d, proj : Trafo3d, queue : List<float * SetOperation<TaskTreeNode<'a>>>) =
             match root, t with
             | None, None -> 
                 ()
@@ -567,14 +567,14 @@ module LodTreeHelpers =
             | None, Some n -> 
                 let r = TaskTreeNode(state, mapping, rootId, n)
                 root <- Some r
-                r.BuildQueue(n, 0, quality, collapseIfNotSplit, view r.Original, proj, queue)
+                r.BuildQueue(n, 0, quality, splitfactor, collapseIfNotSplit, view r.Original, proj, queue)
                 
             | Some r, Some t -> 
-                r.BuildQueue(t, 0, quality, collapseIfNotSplit, view r.Original, proj, queue)
+                r.BuildQueue(t, 0, quality, splitfactor, collapseIfNotSplit, view r.Original, proj, queue)
 
 
 
-        static member internal ProcessQueue(state : TaskTreeState, queue : List<float * SetOperation<TaskTreeNode<'a>>>, quality : float, view : ILodTreeNode -> Trafo3d, proj : Trafo3d, maxOps : int) =
+        static member internal ProcessQueue(state : TaskTreeState, queue : List<float * SetOperation<TaskTreeNode<'a>>>, quality : float, splitfactor : float, view : ILodTreeNode -> Trafo3d, proj : Trafo3d, maxOps : int) =
             let mutable lastQ = 0.0
             let mutable cnt = 0
             while queue.Count > 0 && (!state.runningTasks < maxOps || (queue.Count > 0 && (snd queue.[0]).Count < 0)) do
@@ -585,8 +585,8 @@ module LodTreeHelpers =
                     for c in n.Children do
                         let r = c.Original.Root
                         let view = view r
-                        if c.Original.ShouldSplit(quality, view , proj) then
-                            let qs = c.Original.SplitQuality(view, proj)
+                        if c.Original.ShouldSplit(splitfactor, quality, view, proj) then
+                            let qs = c.Original.SplitQuality(splitfactor, view, proj)
                             queue.HeapEnqueue(cmp, (qs, Add c))
                     Interlocked.Increment(&state.splits.contents) |> ignore
                     lastQ <- q
@@ -820,13 +820,13 @@ module LodTreeHelpers =
         let allChildren (node : MaterializedTree) =
             node.children |> Seq.collect allNodes
 
-        let qualityHistogram (histo : SortedDictionary<float, ref<int>>) (predictView : ILodTreeNode -> Trafo3d) (view : Trafo3d) (proj : Trafo3d) (t : MaterializedTree) (state : MaterializedTree) =
+        let qualityHistogram splitfactor (histo : SortedDictionary<float, ref<int>>) (predictView : ILodTreeNode -> Trafo3d) (view : Trafo3d) (proj : Trafo3d) (t : MaterializedTree) (state : MaterializedTree) =
             let rec run (t : MaterializedTree) (state : MaterializedTree) =
                 let node = t.original
                 
-                if List.isEmpty t.children && node.ShouldSplit(1.0, view, proj) then //&& node.ShouldSplit(predictView node, proj) then
+                if List.isEmpty t.children && node.ShouldSplit(splitfactor, 1.0, view, proj) then //&& node.ShouldSplit(predictView node, proj) then
                     if List.isEmpty state.children then
-                        let minQ = node.SplitQuality(view, proj)
+                        let minQ = node.SplitQuality(splitfactor, view, proj)
                         match histo.TryGetValue minQ with
                         | (true, r) -> 
                             r := !r + 1
@@ -834,7 +834,7 @@ module LodTreeHelpers =
                             let r = ref 1
                             histo.[minQ] <- r
 
-                elif not (List.isEmpty t.children) && node.ShouldCollapse(1.0, view, proj) then
+                elif not (List.isEmpty t.children) && node.ShouldCollapse(splitfactor, 1.0, view, proj) then
                     ()
 
                 else
@@ -854,14 +854,14 @@ module LodTreeHelpers =
         
 
 
-        let rec tryExpand (quality : float)(predictView : ILodTreeNode -> Trafo3d) (view : Trafo3d) (proj : Trafo3d) (t : MaterializedTree) =
+        let rec tryExpand (splitfactor : float)(quality : float)(predictView : ILodTreeNode -> Trafo3d) (view : Trafo3d) (proj : Trafo3d) (t : MaterializedTree) =
             let node = t.original
 
             let inline tryExpandMany (ls : list<MaterializedTree>) =
                 let mutable changed = false
                 let newCs = 
                     ls |> List.map (fun c ->
-                        match tryExpand quality predictView view proj c with
+                        match tryExpand splitfactor quality predictView view proj c with
                             | Some newC -> 
                                 changed <- true
                                 newC
@@ -871,10 +871,10 @@ module LodTreeHelpers =
                 if changed then Some newCs
                 else None
                 
-            if List.isEmpty t.children && node.ShouldSplit(quality, view, proj) then //&& node.ShouldSplit(predictView node, proj) then
+            if List.isEmpty t.children && node.ShouldSplit(splitfactor, quality, view, proj) then //&& node.ShouldSplit(predictView node, proj) then
                 Some { t with children = node.Children |> Seq.toList |> List.map (ofNode t.rootId) }
 
-            elif not (List.isEmpty t.children) && node.ShouldCollapse(quality, view, proj) then
+            elif not (List.isEmpty t.children) && node.ShouldCollapse(splitfactor, quality, view, proj) then
                 Some { t with children = [] }
 
             else
@@ -887,8 +887,8 @@ module LodTreeHelpers =
                             | Some newChildren -> Some { t with children = newChildren }
                             | _ -> None
 
-        let expand (quality : float)(predictView : ILodTreeNode -> Trafo3d) (view : Trafo3d) (proj : Trafo3d) (t : MaterializedTree) =
-            match tryExpand quality predictView view proj t with
+        let expand splitfactor (quality : float)(predictView : ILodTreeNode -> Trafo3d) (view : Trafo3d) (proj : Trafo3d) (t : MaterializedTree) =
+            match tryExpand splitfactor quality predictView view proj t with
                 | Some n -> n
                 | None -> t
 
@@ -1722,6 +1722,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         config.maxSplits :> IAdaptiveObject, config.maxSplits.AddMarkingCallback (fun () -> notConverged.Set())
                         config.budget :> IAdaptiveObject, config.budget.AddMarkingCallback (fun () -> notConverged.Set())
                         reader :> IAdaptiveObject, reader.AddMarkingCallback (fun () -> notConverged.Set())
+                        config.splitfactor :> IAdaptiveObject, config.splitfactor.AddMarkingCallback (fun () -> notConverged.Set())
                     ]
 
                 let mutable lastMaxQ = 0.0
@@ -1767,12 +1768,13 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
 
 
                             let budget = config.budget.GetValue()
+                            let splitfactor = config.splitfactor.GetValue()
                             let roots = lock rootLock (fun () -> roots)
 
                             let start = time()
                             let maxQ =
                                 if budget < 0L then 1.0
-                                else fst (TreeHelpers.getMaxQuality budget (Seq.map fst roots) modelView proj)
+                                else fst (TreeHelpers.getMaxQuality budget splitfactor (Seq.map fst roots) modelView proj)
 
                             let dt = time() - start
                             maxQualityTime.Add(dt.TotalMilliseconds)
@@ -1783,9 +1785,9 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                             let start = time()
                             let queue = List()
                             for (k,v) in roots do
-                                v.BuildQueue(state, collapseIfNotSplit, Some k, maxQ, modelView, proj, queue)
+                                v.BuildQueue(state, collapseIfNotSplit, Some k, maxQ, splitfactor, modelView, proj, queue)
             
-                            let q, fin = TaskTree<_>.ProcessQueue(state, queue, maxQ, modelView, proj, maxSplits)
+                            let q, fin = TaskTree<_>.ProcessQueue(state, queue, maxQ, splitfactor, modelView, proj, maxSplits)
                             lastQ <- q
                             let dt = time() - start
                             expandTime.Add dt.TotalMilliseconds

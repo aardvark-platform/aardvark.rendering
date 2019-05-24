@@ -775,6 +775,7 @@ and LodRendererConfig =
         view : IMod<Trafo3d>
         proj : IMod<Trafo3d>
         budget : IMod<int64>
+        splitfactor : IMod<float>
         renderBounds : IMod<bool>
         maxSplits : IMod<int>
         stats : IModRef<LodRendererStats>

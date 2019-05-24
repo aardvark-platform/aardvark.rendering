@@ -412,11 +412,11 @@ type ILodTreeNode =
     abstract member TotalDataSize : int
     abstract member GetData : ct : CancellationToken * inputs : MapExt<string, Type> -> IndexedGeometry * MapExt<string, Array>
 
-    abstract member ShouldSplit : float * Trafo3d * Trafo3d -> bool
-    abstract member ShouldCollapse : float * Trafo3d * Trafo3d -> bool
+    abstract member ShouldSplit : float * float * Trafo3d * Trafo3d -> bool
+    abstract member ShouldCollapse : float * float * Trafo3d * Trafo3d -> bool
         
-    abstract member SplitQuality : Trafo3d * Trafo3d -> float
-    abstract member CollapseQuality : Trafo3d * Trafo3d -> float
+    abstract member SplitQuality : float * Trafo3d * Trafo3d -> float
+    abstract member CollapseQuality : float * Trafo3d * Trafo3d -> float
 
     abstract member WorldBoundingBox : Box3d
     abstract member WorldCellBoundingBox : Box3d
