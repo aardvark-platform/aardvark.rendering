@@ -12,6 +12,7 @@ module LodTreeRendering =
     type LodTreeRenderConfig =
         {
             budget : IMod<int64>
+            splitfactor : IMod<float>
             time : IMod<System.DateTime>
             maxSplits : IMod<int>
             renderBounds : IMod<bool>
@@ -24,6 +25,7 @@ module LodTreeRendering =
         let simple =
             {
                 budget = Mod.constant -1L
+                splitfactor = Mod.constant 0.4
                 time = Mod.time
                 maxSplits = Mod.constant System.Environment.ProcessorCount
                 renderBounds = Mod.constant false
@@ -33,7 +35,7 @@ module LodTreeRendering =
             }
 
     module Sg = 
-        type LodTreeNode(stats : IModRef<LodRendererStats>, pickTrees : Option<mmap<ILodTreeNode,SimplePickTree>>, alphaToCoverage : bool, budget : IMod<int64>, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<System.DateTime>, clouds : aset<LodTreeInstance>) =
+        type LodTreeNode(stats : IModRef<LodRendererStats>, pickTrees : Option<mmap<ILodTreeNode,SimplePickTree>>, alphaToCoverage : bool, budget : IMod<int64>, splitfactor : IMod<float>, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<System.DateTime>, clouds : aset<LodTreeInstance>) =
             member x.Time = time
             member x.Clouds = clouds
             member x.MaxSplits = maxSplits
@@ -43,15 +45,16 @@ module LodTreeRendering =
             member x.RenderBounds = renderBounds
             member x.Budget = budget
             member x.AlphaToCoverage = alphaToCoverage
+            member x.SplitFactor = splitfactor
             interface ISg
 
-            new(stats : IModRef<LodRendererStats>, pickTrees : mmap<ILodTreeNode,SimplePickTree>, alphaToCoverage : bool, budget : IMod<int64>, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<System.DateTime>, clouds : aset<LodTreeInstance>) =
-                LodTreeNode(stats, Some pickTrees, alphaToCoverage, budget, renderBounds, maxSplits, time, clouds)
-            new(stats : IModRef<LodRendererStats>, alphaToCoverage : bool, budget : IMod<int64>, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<System.DateTime>, clouds : aset<LodTreeInstance>) =
-                LodTreeNode(stats, None, alphaToCoverage, budget, renderBounds, maxSplits, time, clouds)
+            new(stats : IModRef<LodRendererStats>, pickTrees : mmap<ILodTreeNode,SimplePickTree>, alphaToCoverage : bool, budget : IMod<int64>, splitfactor : IMod<float>, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<System.DateTime>, clouds : aset<LodTreeInstance>) =
+                LodTreeNode(stats, Some pickTrees, alphaToCoverage, budget, splitfactor, renderBounds, maxSplits, time, clouds)
+            new(stats : IModRef<LodRendererStats>, alphaToCoverage : bool, budget : IMod<int64>, splitfactor : IMod<float>, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<System.DateTime>, clouds : aset<LodTreeInstance>) =
+                LodTreeNode(stats, None, alphaToCoverage, budget, splitfactor, renderBounds, maxSplits, time, clouds)
 
         let lodTree (cfg : LodTreeRenderConfig) (data : aset<LodTreeInstance>) =
-            LodTreeNode(cfg.stats, cfg.alphaToCoverage, cfg.budget, cfg.renderBounds, cfg.maxSplits, cfg.time, data) :> ISg
+            LodTreeNode(cfg.stats, cfg.alphaToCoverage, cfg.budget, cfg.splitfactor, cfg.renderBounds, cfg.maxSplits, cfg.time, data) :> ISg
     
 
 namespace Aardvark.SceneGraph.Semantics
@@ -93,6 +96,7 @@ type LodNodeSem() =
                             budget = sg.Budget
                             renderBounds = sg.RenderBounds
                             maxSplits = sg.MaxSplits
+                            splitfactor = sg.SplitFactor
                             stats = sg.Stats
                             pickTrees = sg.PickTrees
                             alphaToCoverage = sg.AlphaToCoverage
