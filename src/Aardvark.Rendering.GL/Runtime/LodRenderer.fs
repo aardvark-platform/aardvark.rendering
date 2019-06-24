@@ -1699,12 +1699,19 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                             | Some (KeyValue(_, (v : Array) )) -> v.Length
                             | _ -> 1
 
+                        let vct = g.IndexedAttributes.[DefaultSemantic.Positions] |> (fun t -> t.Length)
+                        if vct = 0 then 
+                            Log.error "ALARMMMMMM"
+                        elif vct < 10 then
+                            Log.warn "small node: %A" vct
+
                         let u = MapExt.add "TreeId" (Array.create cnt rootId :> System.Array) u
                         let loaded = GeometryPoolInstance.ofGeometry signature g u
                                 
                         let endTime = time()
                         addLoadTime node.DataSource node.DataSize (endTime - startTime)
 
+                        
 
                         if not ct.IsCancellationRequested then
                             let res = cont ct node loaded
