@@ -287,7 +287,12 @@ type InstanceBuffer(ctx : Context, semantics : MapExt<string, GLSLType * Type>, 
                 let elemSize = GLSLType.sizeof glsl
                 let write = UniformWriters.getWriter 0 glsl input
                 totalSize <- totalSize + int64 count * int64 elemSize
-                ctx.CreateBuffer(elemSize * count), elemSize, write
+
+                let buffer =
+                    if count = 0 then new Aardvark.Rendering.GL.Buffer(ctx, 0n, 0)
+                    else ctx.CreateBuffer(elemSize * count)
+
+                buffer, elemSize, write
             )
         buffers, totalSize
             
@@ -331,7 +336,7 @@ type InstanceBuffer(ctx : Context, semantics : MapExt<string, GLSLType * Type>, 
 
     member x.Dispose() =
         use __ = ctx.ResourceLock
-        buffers |> MapExt.iter (fun _ (b,_,_) -> ctx.Delete b)
+        buffers |> MapExt.iter (fun _ (b,_,_) -> if b.SizeInBytes > 0n then ctx.Delete b)
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -344,7 +349,10 @@ type VertexBuffer(ctx : Context, semantics : MapExt<string, Type>, count : int) 
             semantics |> MapExt.map (fun sem typ ->
                 let elemSize = Marshal.SizeOf typ
                 totalSize <- totalSize + int64 elemSize * int64 count
-                ctx.CreateBuffer(elemSize * count), elemSize, typ
+                let buffer =
+                    if count = 0 then new Aardvark.Rendering.GL.Buffer(ctx, 0n, 0)
+                    else ctx.CreateBuffer(elemSize * count)
+                buffer, elemSize, typ
             )
         totalSize, buffers
             
@@ -389,7 +397,7 @@ type VertexBuffer(ctx : Context, semantics : MapExt<string, Type>, count : int) 
 
     member x.Dispose() =
         use __ = ctx.ResourceLock
-        buffers |> MapExt.iter (fun _ (b,_,_) -> ctx.Delete b)
+        buffers |> MapExt.iter (fun _ (b,_,_) -> if b.SizeInBytes > 0n then ctx.Delete b)
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -703,7 +711,10 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
             else
                 resize (count + 1)
                 x.Add(call, box, cellBounds, rootId)
-                    
+                 
+    member x.Contains (call : DrawCallInfo) =
+        drawIndices.ContainsKey call
+
     member x.Remove(call : DrawCallInfo) =
         match drawIndices.TryRemove call with
             | (true, oid) ->
@@ -1128,6 +1139,13 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
             true
         else
             false
+
+    member x.Contains(ref : PoolSlot) =
+        match tryGetIndirectBuffer ref with
+            | Some ib -> 
+                ib.Contains ref.DrawCallInfo
+            | None ->
+                false
 
     member x.Remove(ref : PoolSlot) =
         match tryGetIndirectBuffer ref with

@@ -772,7 +772,8 @@ module LodTreeHelpers =
         member x.Destroy(q : ref<AtomicQueue<ILodTreeNode, 'a>>) =
             match state with
             | Some s -> 
-                q := AtomicQueue.enqueue (kill s) !q
+                let res = kill s
+                lock q (fun () -> q := AtomicQueue.enqueue res !q)
                 state <- None
             | None ->
                 ()
@@ -1099,6 +1100,12 @@ module LodTreeHelpers =
 
 open LodTreeHelpers
 
+[<AutoOpen>]
+module private Assertions =
+    
+    let inline ensure action fmt = Printf.kprintf (fun str -> if not (action()) then Report.Warn("[Lod] {0}", str)) fmt
+    let inline bad fmt = Printf.kprintf (fun str -> Report.Warn("[Lod] {0}", str)) fmt
+
 type LodRenderingInfo =
     {
         quality         : IModRef<float>
@@ -1312,8 +1319,11 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
     let freeWatch = System.Diagnostics.Stopwatch()
     let deactivateWatch = System.Diagnostics.Stopwatch()
         
-
     let alloc (state : RenderState) (node : ILodTreeNode) (g : GeometryPoolInstance) =
+        ensure 
+            (fun () -> not (cache.ContainsKey node))
+            "%A already existing" node 
+
         cache.GetOrCreate(node, fun node ->
             let slot = pool.Alloc(g.signature, g.instanceCount, g.indexCount, g.vertexCount)
             slot.Upload(g.geometry, g.uniforms)
@@ -1342,33 +1352,35 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                     let b = node.WorldBoundingBox.Transformed(node.DataTrafo.Inverse)
                     let cb = node.WorldCellBoundingBox.Transformed(node.DataTrafo.Inverse)
                     let w = state.calls.Add(slot, b, cb, rootId)
-                    if not w then Log.warn "[Lod] alloc cannot activate %s (was already active)" node.Name
+                    if not w then bad "alloc cannot activate %s (was already active)" node.Name
                     activateWatch.Stop()
 
                 elif active < 0 then 
                     deactivateWatch.Start()
                     let w = state.calls.Remove slot
-                    if not w then Log.warn "[Lod] alloc cannot deactivate %s (was already inactive)" node.Name
+                    if not w then bad "alloc cannot deactivate %s (was already inactive)" node.Name
                     deactivateWatch.Stop()
 
             | Free ac ->
                 match cache.TryRemove node with
                     | (true, slot) -> 
-                        if ac < 0 then 
-                            deactivateWatch.Start()
-                            let w = state.calls.Remove slot
-                            if not w then Log.warn "[Lod] free cannot deactivate %s (was already inactive)" node.Name
-                            deactivateWatch.Stop()
-
                         if slot.IsDisposed then
-                            Log.warn "[Lod] cannot free %s (was already free)" node.Name
+                            bad "cannot free %s (was already free)" node.Name
                         else
+                            if ac < 0 then 
+                                deactivateWatch.Start()
+                                let w = state.calls.Remove slot
+                                if not w then bad "free cannot deactivate %s (was already inactive)" node.Name
+                                deactivateWatch.Stop()
+                            else 
+                                ensure (fun () -> not (state.calls.Contains slot)) "free must deactivate before deleting %s" node.Name
+
                             freeWatch.Start()
                             pool.Free slot
                             freeWatch.Stop()
 
                     | _ ->
-                        Log.warn "[Lod] cannot free %s" node.Name
+                        bad "cannot free %s" node.Name
                             
 
             | Activate ->
@@ -1377,10 +1389,10 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         activateWatch.Start()
                         let b = node.WorldBoundingBox.Transformed(node.DataTrafo.Inverse)
                         let cb = node.WorldCellBoundingBox.Transformed(node.DataTrafo.Inverse)
-                        state.calls.Add(slot, b, cb, rootId) |> ignore
+                        if not (state.calls.Add(slot, b, cb, rootId)) then bad "%s already active" node.Name
                         activateWatch.Stop()
                     | _ ->
-                        Log.warn "[Lod] cannot activate %A %A" node (Option.isSome op.value)
+                        bad "cannot activate %A %A" node (Option.isSome op.value)
 
                     
 
@@ -1388,10 +1400,10 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                 match cache.TryGetValue node with
                     | (true, slot) ->
                         deactivateWatch.Start()
-                        state.calls.Remove slot |> ignore
+                        if not (state.calls.Remove slot) then bad "%s not active" node.Name
                         deactivateWatch.Stop()
                     | _ ->
-                        Log.warn "[Lod] cannot deactivate %A %A" node (Option.isSome op.value)
+                        bad "cannot deactivate %A %A" node (Option.isSome op.value)
                     
             | Nop ->
                 ()
@@ -1699,12 +1711,6 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                             | Some (KeyValue(_, (v : Array) )) -> v.Length
                             | _ -> 1
 
-                        let vct = g.IndexedAttributes.[DefaultSemantic.Positions] |> (fun t -> t.Length)
-                        if vct = 0 then 
-                            Log.error "ALARMMMMMM"
-                        elif vct < 10 then
-                            Log.warn "small node: %A" vct
-
                         let u = MapExt.add "TreeId" (Array.create cnt rootId :> System.Array) u
                         let loaded = GeometryPoolInstance.ofGeometry signature g u
                                 
@@ -1764,7 +1770,8 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                                     lock rootLock (fun () ->
                                         roots <- HMap.remove r roots
                                     )
-                                    MVar.put changesPending ()
+
+                            if ops.Count > 0 then MVar.put changesPending ()
 
                             let modelView (r : ILodTreeNode) =
                                 let t = getRootTrafo r
