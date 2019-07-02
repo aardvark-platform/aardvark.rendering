@@ -44,6 +44,7 @@
     <Compile Include="PointCloud.fs" />
     <Compile Include="ManagedPool.fs" />
     <Compile Include="FShadeSceneGraph.fs" />
+    <Compile Include="ShaderCompositions.fs" />
     <Compile Include="Imperative.fs" />
     <Compile Include="SgCSharp.fs" />
     <Compile Include="RuntimeExtensions.fs" />
