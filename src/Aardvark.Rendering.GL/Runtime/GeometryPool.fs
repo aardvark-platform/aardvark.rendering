@@ -731,6 +731,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
                     if bounds then
                         let lb = NativePtr.get bmem last
                         NativePtr.set bmem oid lb
+                    dirty <- RangeSet.remove (Range1i(last,last)) dirty
                     dirty <- RangeSet.insert (Range1i(oid,oid)) dirty
                         
                 resize last
@@ -750,15 +751,17 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
                 let ptr = ctx.MapBufferRange(buffer, 0n, nativeint (count * es), BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
                 let bptr = ctx.MapBufferRange(bbuffer, 0n, nativeint (count * bs), BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
                 for r in toUpload do
-                    let o = r.Min * es |> nativeint
-                    let s = (1 + r.Max - r.Min) * es |> nativeint
-                    Marshal.Copy(NativePtr.toNativeInt mem + o, ptr + o, s)
-                    GL.FlushMappedNamedBufferRange(buffer.Handle, o, s)
+                    let r = Range1i(clamp 0 (count - 1) r.Min, clamp 0 (count - 1) r.Max)
+                    if r.Max >= r.Min then
+                        let o = r.Min * es |> nativeint
+                        let s = (1 + r.Max - r.Min) * es |> nativeint
+                        Marshal.Copy(NativePtr.toNativeInt mem + o, ptr + o, s)
+                        GL.FlushMappedNamedBufferRange(buffer.Handle, o, s)
                         
-                    let o = r.Min * bs |> nativeint
-                    let s = (1 + r.Max - r.Min) * bs |> nativeint
-                    Marshal.Copy(NativePtr.toNativeInt bmem + o, bptr + o, s)
-                    GL.FlushMappedNamedBufferRange(bbuffer.Handle, o, s)
+                        let o = r.Min * bs |> nativeint
+                        let s = (1 + r.Max - r.Min) * bs |> nativeint
+                        Marshal.Copy(NativePtr.toNativeInt bmem + o, bptr + o, s)
+                        GL.FlushMappedNamedBufferRange(bbuffer.Handle, o, s)
 
                 ctx.UnmapBuffer(buffer)
                 ctx.UnmapBuffer(bbuffer)

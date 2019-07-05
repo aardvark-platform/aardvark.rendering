@@ -140,6 +140,8 @@ module BufferExtensions =
             using x.ResourceLock (fun _ ->
                 let handle = Interlocked.Exchange(&buffer.Handle, -1)
                 if handle <> -1 then
+                    buffer.SizeInBytes <- 0n
+                    buffer.Handle <- 0
                     removeBuffer x (int64 buffer.SizeInBytes)
                     GL.DeleteBuffer handle
                     GL.Check "failed to delete buffer"
