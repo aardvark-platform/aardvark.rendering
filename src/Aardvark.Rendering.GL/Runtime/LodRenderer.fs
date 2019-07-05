@@ -97,11 +97,20 @@ module LodTreeHelpers =
     let Deactivate<'a> = Operation<'a>.Deactivate
 
     let (|Nop|Alloc|Free|Activate|Deactivate|) (o : Operation<'a>) =
-        if o.alloc > 0 then Alloc(o.value.Value, o.active)
-        elif o.alloc < 0 then Free(o.active)
-        elif o.active > 0 then Activate
-        elif o.active < 0 then Deactivate
-        else Nop
+        if o.alloc > 0 then 
+            if o.alloc > 1 then Log.warn "alloc(%d, %d)" o.alloc o.active
+            Alloc(o.value.Value, o.active)
+        elif o.alloc < 0 then 
+            if -o.alloc > 1 then Log.warn "free(%d, %d)" -o.alloc o.active
+            Free(o.active)
+        elif o.active > 0 then 
+            if o.active > 1 then Log.warn "activate %d" o.active
+            Activate
+        elif o.active < 0 then 
+            if -o.active > 1 then Log.warn "deactivate %d" -o.active
+            Deactivate
+        else 
+            Nop
         
     [<StructuredFormatDisplay("{AsString}")>]
     type AtomicOperation<'a, 'b> =
@@ -464,27 +473,31 @@ module LodTreeHelpers =
         member x.Task = task
 
         member x.Destroy() : unit =
-            original.Release()
-            Interlocked.Add(&state.dataSize.contents, -int64 original.DataSize) |> ignore
-            state.RemoveNode()
-            try cancel |> Option.iter (fun c -> c.Cancel()); cancel <- None
-            with _ -> ()
-            children |> List.iter (fun c -> c.Destroy())
-            children <- []
-            cancel <- None
-            task <- neverTask
+            lock x (fun () ->
+                Interlocked.Add(&state.dataSize.contents, -int64 original.DataSize) |> ignore
+                state.RemoveNode()
+                original.Release()
+                try cancel |> Option.iter (fun c -> c.Cancel()); cancel <- None
+                with _ -> ()
+                children |> List.iter (fun c -> c.Destroy())
+                children <- []
+                cancel <- None
+                task <- neverTask
+            )
             
 
 
 
-        member x.BuildQueue(node : ILodTreeNode, depth : int, quality : float, splitfactor : float, collapseIfNotSplit : bool, view : Trafo3d, proj : Trafo3d, queue : List<float * SetOperation<TaskTreeNode<'a>>>) =
+        member x.BuildQueue(node : ILodTreeNode, depth : int, quality : float, splitfactor : float, collapseIfNotSplit : bool, view : Trafo3d, proj : Trafo3d, queue : List<float * TaskTreeOp<'a>>) =
             if node <> original then failwith "[Tree] inconsistent path"
 
             match children with
             | [] ->
                 if node.ShouldSplit(splitfactor, quality, view, proj) then
                     let qs = node.SplitQuality(splitfactor, view, proj)
-                    queue.HeapEnqueue(cmp, (qs, Add x))
+                    queue.HeapEnqueue(cmp, (qs, TSplit x))
+                elif node.Level = 0 then
+                    Log.warn "happy with root %A %A" view.Backward.C3.XYZ (node.WorldBoundingBox.Transformed(node.DataTrafo.Inverse))
             | o ->
                 let collapse =
                     if collapseIfNotSplit then not (node.ShouldSplit(splitfactor, quality, view, proj))
@@ -494,14 +507,16 @@ module LodTreeHelpers =
                     let qc = 
                         if collapseIfNotSplit then node.SplitQuality(splitfactor, view, proj)
                         else node.CollapseQuality(splitfactor, view, proj)
-                    queue.HeapEnqueue(cmp, (qc - quality, Rem x))
+                    queue.HeapEnqueue(cmp, (qc - quality, TCollapse x))
 
                 else
-                    for (o, n) in Seq.zip o node.Children do
-                        o.BuildQueue(n, depth, quality, splitfactor, collapseIfNotSplit, view, proj, queue)
-
-
-
+                    let o = List.toArray o
+                    let n = Seq.toArray node.Children
+                    if o.Length <> n.Length then
+                        Log.warn "the very bad happened %d vs %d" o.Length n.Length
+                    else
+                        for (o, n) in Array.zip o n do
+                            o.BuildQueue(n, depth, quality, splitfactor, collapseIfNotSplit, view, proj, queue)
 
         member x.StartSplit(trigger : MVar<unit>) =
             let n = original.Children |> Seq.toList
@@ -531,8 +546,18 @@ module LodTreeHelpers =
             
         member x.Original = original
         member x.Children = children
-        member x.HasValue = task.IsCompleted && not task.IsFaulted && not task.IsCanceled
-        member x.Value = task.Result
+
+        member x.TryValue =
+            lock x (fun () ->
+                if task.IsCompleted && not task.IsFaulted && not task.IsCanceled then
+                    Some task.Result
+                else
+                    None
+            )
+
+
+        member x.HasValue = lock x (fun () -> task.IsCompleted && not task.IsFaulted && not task.IsCanceled)
+        //member x.Value = task.Result
 
         member x.TryGetValue() =
             if task.IsCompleted && not task.IsFaulted && not task.IsCanceled then
@@ -542,6 +567,17 @@ module LodTreeHelpers =
 
         member x.HasChildren = not (List.isEmpty children)
         member x.AllChildrenHaveValues = children |> List.forall (fun c -> c.HasValue)
+
+    and TaskTreeOp<'a> =
+        | TAdd of (unit -> unit)
+        | TRem of (unit -> unit)
+        | TSplit of TaskTreeNode<'a>
+        | TCollapse of TaskTreeNode<'a>
+
+        member inline x.Important =
+            match x with
+            | TAdd _ | TRem _ | TCollapse _ -> true
+            | _ -> false
 
     type TaskTree<'a>(mapping : CancellationToken -> ILodTreeNode -> Task<'a>, rootId : int) =
         static let cmp = Func<float * _, float * _, int>(fun (a,_) (b,_) -> compare a b)
@@ -556,42 +592,61 @@ module LodTreeHelpers =
         member x.RootId = rootId
         member x.Root = root
 
-        member internal x.BuildQueue(state : TaskTreeState, collapseIfNotSplit : bool, t : Option<ILodTreeNode>, quality : float, splitfactor : float, view : ILodTreeNode -> Trafo3d, proj : Trafo3d, queue : List<float * SetOperation<TaskTreeNode<'a>>>) =
-            match root, t with
-            | None, None -> 
-                ()
+        member internal x.BuildQueue(state : TaskTreeState, collapseIfNotSplit : bool, t : ILodTreeNode, quality : float, splitfactor : float, view : ILodTreeNode -> Trafo3d, proj : Trafo3d, queue : List<float * TaskTreeOp<'a>>) =
+            match root with
+            //| None -> 
+            //    Log.warn "empty tree"
+            //    ()
 
-            | Some r, None -> 
-                r.Destroy(); root <- None
+            //| Some r, None -> 
+            //    let destroy() =
+            //        r.Destroy()
+            //        root <- None
+            //        MVar.put state.trigger ()
+            //    queue.HeapEnqueue(cmp, (-1.0, TaskTreeOp.TRem destroy))
+            //    //r.Destroy(); root <- None
 
-            | None, Some n -> 
-                let r = TaskTreeNode(state, mapping, rootId, n)
-                root <- Some r
-                r.BuildQueue(n, 0, quality, splitfactor, collapseIfNotSplit, view r.Original, proj, queue)
+            | None -> 
+                let create () =
+                    let n = TaskTreeNode(state, mapping, rootId, t)
+                    root <- Some n
+                    n.Task.ContinueWith (fun (t : Task<_>) -> MVar.put state.trigger ()) |> ignore
+
+                queue.HeapEnqueue(cmp, (-1.0, TaskTreeOp.TAdd create))
                 
-            | Some r, Some t -> 
+            | Some r -> 
                 r.BuildQueue(t, 0, quality, splitfactor, collapseIfNotSplit, view r.Original, proj, queue)
 
 
 
-        static member internal ProcessQueue(state : TaskTreeState, queue : List<float * SetOperation<TaskTreeNode<'a>>>, quality : float, splitfactor : float, view : ILodTreeNode -> Trafo3d, proj : Trafo3d, maxOps : int) =
+        static member internal ProcessQueue(state : TaskTreeState, queue : List<float * TaskTreeOp<'a>>, quality : float, splitfactor : float, view : ILodTreeNode -> Trafo3d, proj : Trafo3d, maxOps : int) =
             let mutable lastQ = 0.0
             let mutable cnt = 0
-            while queue.Count > 0 && (!state.runningTasks < maxOps || (queue.Count > 0 && (snd queue.[0]).Count < 0)) do
+            let mutable finIfEmpty = true
+
+
+            while queue.Count > 0 && (!state.runningTasks < maxOps || (queue.Count > 0 && (snd queue.[0]).Important)) do
                 let q, op = queue.HeapDequeue(cmp)
                 match op with
-                | Add(_,n) -> 
+                | TAdd create ->
+                    create()
+                    finIfEmpty <- false
+
+                | TRem destroy ->
+                    destroy()
+
+                | TSplit n -> 
                     n.StartSplit(state.trigger)
                     for c in n.Children do
                         let r = c.Original.Root
                         let view = view r
                         if c.Original.ShouldSplit(splitfactor, quality, view, proj) then
                             let qs = c.Original.SplitQuality(splitfactor, view, proj)
-                            queue.HeapEnqueue(cmp, (qs, Add c))
+                            queue.HeapEnqueue(cmp, (qs, TSplit c))
                     Interlocked.Increment(&state.splits.contents) |> ignore
                     lastQ <- q
 
-                | Rem(_,n) -> 
+                | TCollapse n -> 
                     n.Collapse(state.trigger)
                     Interlocked.Increment(&state.collapses.contents) |> ignore
                     lastQ <- q + quality
@@ -599,7 +654,7 @@ module LodTreeHelpers =
                 cnt <- cnt + 1
 
             if queue.Count = 0 then 
-                quality, true
+                quality, finIfEmpty
             else 
                 let qnext, _ = queue.HeapDequeue(cmp)
                 if cnt = 0 then qnext, false
@@ -608,6 +663,19 @@ module LodTreeHelpers =
 
     type TaskTreeReader<'a>(tree : TaskTree<'a>) =
         let mutable state : Option<TreeNode<'a>> = None
+        let mutable destroyed = false
+        let mutable mutex = 0
+        let mutable currentCaller = ""
+
+        let check (caller : string) (f : unit -> 'x) =
+            let c = Interlocked.Increment(&mutex)
+            try
+                if c > 1 then Log.warn "race %s vs %s" currentCaller caller
+                else currentCaller <- caller
+                f()
+            finally
+                currentCaller <- ""
+                Interlocked.Decrement(&mutex) |> ignore
 
         let rec allNodes (t : TreeNode<'a>) =
             Seq.append (Seq.singleton t.original) (t.children |> Seq.collect allNodes)
@@ -622,314 +690,426 @@ module LodTreeHelpers =
                     op <- op + kill c
                 op
 
-        let rec traverse (q : ref<AtomicQueue<ILodTreeNode, 'a>>) (o : Option<TreeNode<'a>>) (n : Option<TaskTreeNode<'a>>) =
+        let rec snap (n : TaskTreeNode<'a>) =
+            match n.TryValue with
+            | Some v -> 
+                let nc = n.Children
+                let allReady = nc |> List.map snap
+                if List.forall Option.isSome allReady then
+                    let cs = allReady |> List.map Option.get
+                    Some {
+                        original = n.Original
+                        value = v
+                        children = cs
+                    }
+                else
+                    Some {
+                        original = n.Original
+                        value = v
+                        children = []
+                    }
+
+            | None ->
+                None
+
+        let rec traverse2 (q : ref<AtomicQueue<ILodTreeNode, 'a>>) (o : Option<TreeNode<'a>>) (n : Option<TreeNode<'a>>) =
             match o, n with
-                | None, None -> 
-                    o
+            | None, None ->
+                ()
+            | Some o, None ->
+                let op = kill o
+                lock q (fun () -> q := AtomicQueue.enqueue op !q)
+            | None, Some n ->
+                let qc = ref AtomicQueue.empty
+                n.children |> List.iter (fun c -> traverse2 qc None (Some c))
+                let op = 
+                    AtomicQueue.toOperation !qc +
+                    AtomicOperation.ofList [ n.original, Operation.Alloc(n.value, List.isEmpty n.children) ]
+                         
+                lock q (fun () -> q := AtomicQueue.enqueue op !q) 
+            | Some o, Some n ->
+                assert (Unchecked.equals o.value n.value)
+                match o.children, n.children with
+                | [], [] -> 
+                    ()
+                | oc, [] ->
+                    let qc = ref AtomicQueue.empty
+                    oc |> List.iter (fun c -> traverse2 qc (Some c) None)
+                    let op = 
+                        AtomicQueue.toOperation !qc +
+                        AtomicOperation.ofList [ n.original, Operation.Activate ]
+                        
+                    lock q (fun () -> q := AtomicQueue.enqueue op !q) 
 
-                | Some o, None ->
-                    let op = kill o
-                    lock q (fun () -> q := AtomicQueue.enqueue op !q)
-                    None
+                | [], nc ->
+                    let qc = ref AtomicQueue.empty
+                    nc |> List.iter (fun c -> traverse2 qc None (Some c))
+                    let op = 
+                        AtomicQueue.toOperation !qc +
+                        AtomicOperation.ofList [ n.original, Operation.Deactivate ]
+                        
+                    lock q (fun () -> q := AtomicQueue.enqueue op !q) 
 
-                | None, Some n ->
-                    if n.HasValue then
-                        let v = n.Value
-
-                        let mutable qc = ref AtomicQueue.empty
-                        let mutable worked = true
-                        let children = System.Collections.Generic.List<_>()
-                        let nc = n.Children
-                        use e = (nc :> seq<_>).GetEnumerator()
-                        while e.MoveNext() && worked do
-                            let cn = traverse qc None (Some e.Current)
-                            match cn with
-                            | Some cn -> 
-                                children.Add cn
-                            | None ->
-                                worked <- false
+                | oc, nc ->
+                    List.iter2 (fun o n -> traverse2 q (Some o) (Some n)) oc nc
 
 
-                        if worked && not (List.isEmpty nc) then
-                            let ops = 
-                                AtomicQueue.toOperation !qc +
-                                AtomicOperation.ofList [ n.Original, Operation.Alloc(v, false) ]
+
+        let traverse (q : ref<AtomicQueue<ILodTreeNode, 'a>>) (o : Option<TreeNode<'a>>) (n : Option<TaskTreeNode<'a>>) =
+            let snap = n |> Option.bind snap
+
+            match snap, n with
+            | None, Some t -> Log.warn "empty snap: %A" t.Original
+            | _ -> ()
+
+            traverse2 q o snap
+            snap
+            //match o, n with
+            //    | None, None -> 
+            //        o
+
+            //    | Some o, None ->
+            //        let op = kill o
+            //        lock q (fun () -> q := AtomicQueue.enqueue op !q)
+            //        None
+
+            //    | None, Some n ->
+            //        match n.TryValue with
+            //        | Some v ->
+            //            let mutable qc = ref AtomicQueue.empty
+            //            let mutable worked = true
+            //            let children = System.Collections.Generic.List<_>()
+            //            let nc = n.Children
+            //            use e = (nc :> seq<_>).GetEnumerator()
+            //            while e.MoveNext() && worked do
+            //                let cn = traverse qc None (Some e.Current)
+            //                match cn with
+            //                | Some cn -> 
+            //                    children.Add cn
+            //                | None ->
+            //                    worked <- false
+
+
+            //            if worked && not (List.isEmpty nc) then
+            //                let ops = 
+            //                    AtomicQueue.toOperation !qc +
+            //                    AtomicOperation.ofList [ n.Original, Operation.Alloc(v, false) ]
                             
-                            let value = 
-                                Some {
-                                    original = n.Original
-                                    value = v
-                                    children = Seq.toList children
-                                }
+            //                let value = 
+            //                    Some {
+            //                        original = n.Original
+            //                        value = v
+            //                        children = Seq.toList children
+            //                    }
 
-                            lock q (fun () -> q := AtomicQueue.enqueue ops !q)
+            //                lock q (fun () -> q := AtomicQueue.enqueue ops !q)
 
-                            value
+            //                value
 
-                        else
-                            let value = 
-                                Some {
-                                    original = n.Original
-                                    value = v
-                                    children = []
-                                }
-                            let op = AtomicOperation.ofList [ n.Original, Operation.Alloc(v, true) ]
-                            lock q (fun () -> q := AtomicQueue.enqueue op !q)
-                            value
-                    else
-                        None
+            //            else
+            //                let value = 
+            //                    Some {
+            //                        original = n.Original
+            //                        value = v
+            //                        children = []
+            //                    }
+            //                let op = AtomicOperation.ofList [ n.Original, Operation.Alloc(v, true) ]
+            //                lock q (fun () -> q := AtomicQueue.enqueue op !q)
+            //                value
+            //        | None ->
+            //            None
 
 
-                | Some o, Some n ->
-                    match o.children, n.Children with
-                    | [], [] ->
-                        Some o
+            //    | Some o, Some n -> 
+            //        let nc = n.Children
+            //        let anyNonReady = nc |> List.exists (fun n -> not n.HasValue)
+            //        match o.children, nc with
+            //        | [], [] ->
+            //            Some o
                         
-                    | _, n when n |> List.exists (fun n -> not n.HasValue) ->
-                        Some o
+            //        | [], _n when anyNonReady ->
+            //            Some o
+
+            //        | cs, _n when anyNonReady ->
+            //            Log.warn "fischig"
+
+            //            let op = cs |> List.sumBy kill 
+            //            lock q (fun () -> q := AtomicQueue.enqueue op !q)
+            //            Some { o with children = [] }
                         
 
-                    | [], ns ->
-                        let mutable worked = true
-                        let childQueue = ref AtomicQueue.empty
-                        let children =
-                            ns |> List.map (fun c ->
-                                match traverse childQueue None (Some c) with
-                                | Some c ->
-                                    c
-                                | None ->
-                                    worked <- false
-                                    Unchecked.defaultof<_>
-                            )
-                        if worked then
-                            let op = 
-                                AtomicQueue.toOperation !childQueue + 
-                                AtomicOperation.ofList [ o.original, Operation.Deactivate ]
+            //        | [], ns ->
+            //            let mutable worked = true
+            //            let childQueue = ref AtomicQueue.empty
+            //            let children =
+            //                ns |> List.map (fun c ->
+            //                    match traverse childQueue None (Some c) with
+            //                    | Some c ->
+            //                        c
+            //                    | None ->
+            //                        worked <- false
+            //                        Unchecked.defaultof<_>
+            //                )
+            //            if worked then
+            //                let op = 
+            //                    AtomicQueue.toOperation !childQueue + 
+            //                    AtomicOperation.ofList [ o.original, Operation.Deactivate ]
                         
-                            let value =
-                                Some {
-                                    original = o.original
-                                    value = o.value
-                                    children = children
-                                }
+            //                let value =
+            //                    Some {
+            //                        original = o.original
+            //                        value = o.value
+            //                        children = children
+            //                    }
 
-                            lock q (fun () -> q := AtomicQueue.enqueue op !q)
+            //                lock q (fun () -> q := AtomicQueue.enqueue op !q)
 
-                            value
-                        else
-                            Log.warn "the impossible happened (no worries)"
-                            Some o
+            //                value
+            //            else
+            //                Log.warn "the impossible happened (no worries)"
+            //                Some o
 
-                    | os, [] ->
-                        let op = 
-                            AtomicOperation.ofList [ o.original, Operation.Activate ] +
-                            List.sumBy kill os
+            //        | os, [] ->
+            //            let op = 
+            //                AtomicOperation.ofList [ o.original, Operation.Activate ] +
+            //                List.sumBy kill os
                             
-                        let value =
-                            Some {
-                                original = o.original
-                                value = o.value
-                                children = []
-                            }
+            //            let value =
+            //                Some {
+            //                    original = o.original
+            //                    value = o.value
+            //                    children = []
+            //                }
 
-                        lock q (fun () -> q := AtomicQueue.enqueue op !q)
-                        value
+            //            lock q (fun () -> q := AtomicQueue.enqueue op !q)
+            //            value
 
                     
-                    | os, ns ->
-                        //assert (ns |> List.forall (fun n -> n.HasValue))
-                        let mutable worked = true
-                        let children = 
-                            List.zip os ns |> List.map (fun (o,n) ->
-                                match traverse q (Some o) (Some n) with
-                                | Some nn ->
-                                    nn
-                                | None ->
-                                    worked <- false
-                                    Unchecked.defaultof<_>
-                            )
+            //        | os, ns ->
+            //            //assert (ns |> List.forall (fun n -> n.HasValue))
+            //            let mutable worked = true
+            //            let children = 
+            //                List.zip os ns |> List.map (fun (o,n) ->
+            //                    match traverse q (Some o) (Some n) with
+            //                    | Some nn ->
+            //                        nn
+            //                    | None ->
+            //                        worked <- false
+            //                        Unchecked.defaultof<_>
+            //                )
                             
-                        if worked then
-                            let value =
-                                Some {
-                                    original = o.original
-                                    value = o.value
-                                    children = children
-                                }
+            //            if worked then
+            //                let value =
+            //                    Some {
+            //                        original = o.original
+            //                        value = o.value
+            //                        children = children
+            //                    }
                             
-                            value
-                        else
-                            Log.warn "the impossible happened (no worries)"
-                            Some o
+            //                value
+            //            else
+            //                Log.warn "the impossible happened (no worries)"
+            //                Some o
 
-        member x.Root = state |> Option.map (fun r -> r.original)
+        member x.Tree = tree
+        //member x.Root = state |> Option.map (fun r -> r.original)
         member x.State = state
 
-        member x.Update(q : ref<AtomicQueue<ILodTreeNode, 'a>>) =
-            let newState = traverse q state tree.Root
-            state <- newState
+        member x.Update(q : ref<AtomicQueue<ILodTreeNode, 'a>>) =   
+            check "Update" (fun () ->
+                if not destroyed then
+                    let s = state
+                    let newState = traverse q s tree.Root
+
+                    //match s, newState with 
+                    //| None, Some r ->
+                    //    Log.line "boot %A" r.original
+                    //| Some o, None ->
+                    //    Log.line "unboot %A" o.original
+                        
+                    //| None, None ->
+                    //    Log.line "!!!!!empty"
+                        
+
+                    //| _ ->
+                    //    ()
+
+
+                    assert (state == s)
+                    state <- newState
+                else 
+                    Log.warn "[Lod] update of dead tree"
+            )
             
         member x.Destroy(q : ref<AtomicQueue<ILodTreeNode, 'a>>) =
-            match state with
-            | Some s -> 
-                let res = kill s
-                lock q (fun () -> q := AtomicQueue.enqueue res !q)
-                state <- None
-            | None ->
-                ()
-
-
-    [<RequireQualifiedAccess>]
-    type NodeOperation =
-        | Split
-        | Collapse of children : list<ILodTreeNode>
-        | Add
-        | Remove of children : list<ILodTreeNode>
-
-    type Delta =
-        {
-            deltas          : hmap<ILodTreeNode, int * NodeOperation>
-            splitCount      : int
-            collapseCount   : int
-            allocSize       : int64
-            freeSize        : int64
-        }
-
-        static member Empty =
-            {
-                deltas = HMap.empty; splitCount = 0; collapseCount = 0; allocSize = 0L; freeSize = 0L
-            }
-
-    module MaterializedTree =
-        
-        let inline original (node : MaterializedTree) = node.original
-        let inline children (node : MaterializedTree) = node.children
-
-        let ofNode (id : int) (node : ILodTreeNode) =
-            {
-                rootId = id
-                original = node
-                children = []
-            }
-
-        
-        let rec allNodes (node : MaterializedTree) =
-            Seq.append 
-                (Seq.singleton node)
-                (node.children |> Seq.collect allNodes)
-
-        let allChildren (node : MaterializedTree) =
-            node.children |> Seq.collect allNodes
-
-        let qualityHistogram splitfactor (histo : SortedDictionary<float, ref<int>>) (predictView : ILodTreeNode -> Trafo3d) (view : Trafo3d) (proj : Trafo3d) (t : MaterializedTree) (state : MaterializedTree) =
-            let rec run (t : MaterializedTree) (state : MaterializedTree) =
-                let node = t.original
-                
-                if List.isEmpty t.children && node.ShouldSplit(splitfactor, 1.0, view, proj) then //&& node.ShouldSplit(predictView node, proj) then
-                    if List.isEmpty state.children then
-                        let minQ = node.SplitQuality(splitfactor, view, proj)
-                        match histo.TryGetValue minQ with
-                        | (true, r) -> 
-                            r := !r + 1
-                        | _ -> 
-                            let r = ref 1
-                            histo.[minQ] <- r
-
-                elif not (List.isEmpty t.children) && node.ShouldCollapse(splitfactor, 1.0, view, proj) then
+            check "Destroy" (fun () ->
+                destroyed <- true
+                match tree.Root with
+                | Some r -> 
+                    //Log.line "destroy %A" r.Original
+                    r.Destroy()
+                | None -> ()
+                match state with
+                | Some s -> 
+                    let res = kill s
+                    lock q (fun () -> q := AtomicQueue.enqueue res !q)
+                    state <- None
+                | None ->
                     ()
+            )
 
-                else
-                    match t.children, state.children with
-                        | [], [] ->
-                            ()
 
-                        | [], _ -> ()
-                        | _, [] -> ()
+    //[<RequireQualifiedAccess>]
+    //type NodeOperation =
+    //    | Split
+    //    | Collapse of children : list<ILodTreeNode>
+    //    | Add
+    //    | Remove of children : list<ILodTreeNode>
 
-                        | l,r ->
-                            List.iter2 run l r
+    //type Delta =
+    //    {
+    //        deltas          : hmap<ILodTreeNode, int * NodeOperation>
+    //        splitCount      : int
+    //        collapseCount   : int
+    //        allocSize       : int64
+    //        freeSize        : int64
+    //    }
+
+    //    static member Empty =
+    //        {
+    //            deltas = HMap.empty; splitCount = 0; collapseCount = 0; allocSize = 0L; freeSize = 0L
+    //        }
+
+    //module MaterializedTree =
+        
+    //    let inline original (node : MaterializedTree) = node.original
+    //    let inline children (node : MaterializedTree) = node.children
+
+    //    let ofNode (id : int) (node : ILodTreeNode) =
+    //        {
+    //            rootId = id
+    //            original = node
+    //            children = []
+    //        }
+
+        
+    //    let rec allNodes (node : MaterializedTree) =
+    //        Seq.append 
+    //            (Seq.singleton node)
+    //            (node.children |> Seq.collect allNodes)
+
+    //    let allChildren (node : MaterializedTree) =
+    //        node.children |> Seq.collect allNodes
+
+    //    let qualityHistogram splitfactor (histo : SortedDictionary<float, ref<int>>) (predictView : ILodTreeNode -> Trafo3d) (view : Trafo3d) (proj : Trafo3d) (t : MaterializedTree) (state : MaterializedTree) =
+    //        let rec run (t : MaterializedTree) (state : MaterializedTree) =
+    //            let node = t.original
+                
+    //            if List.isEmpty t.children && node.ShouldSplit(splitfactor, 1.0, view, proj) then //&& node.ShouldSplit(predictView node, proj) then
+    //                if List.isEmpty state.children then
+    //                    let minQ = node.SplitQuality(splitfactor, view, proj)
+    //                    match histo.TryGetValue minQ with
+    //                    | (true, r) -> 
+    //                        r := !r + 1
+    //                    | _ -> 
+    //                        let r = ref 1
+    //                        histo.[minQ] <- r
+
+    //            elif not (List.isEmpty t.children) && node.ShouldCollapse(splitfactor, 1.0, view, proj) then
+    //                ()
+
+    //            else
+    //                match t.children, state.children with
+    //                    | [], [] ->
+    //                        ()
+
+    //                    | [], _ -> ()
+    //                    | _, [] -> ()
+
+    //                    | l,r ->
+    //                        List.iter2 run l r
             
-            run t state
+    //        run t state
 
 
         
 
 
-        let rec tryExpand (splitfactor : float)(quality : float)(predictView : ILodTreeNode -> Trafo3d) (view : Trafo3d) (proj : Trafo3d) (t : MaterializedTree) =
-            let node = t.original
+    //    let rec tryExpand (splitfactor : float)(quality : float)(predictView : ILodTreeNode -> Trafo3d) (view : Trafo3d) (proj : Trafo3d) (t : MaterializedTree) =
+    //        let node = t.original
 
-            let inline tryExpandMany (ls : list<MaterializedTree>) =
-                let mutable changed = false
-                let newCs = 
-                    ls |> List.map (fun c ->
-                        match tryExpand splitfactor quality predictView view proj c with
-                            | Some newC -> 
-                                changed <- true
-                                newC
-                            | None ->
-                                c
-                    )
-                if changed then Some newCs
-                else None
+    //        let inline tryExpandMany (ls : list<MaterializedTree>) =
+    //            let mutable changed = false
+    //            let newCs = 
+    //                ls |> List.map (fun c ->
+    //                    match tryExpand splitfactor quality predictView view proj c with
+    //                        | Some newC -> 
+    //                            changed <- true
+    //                            newC
+    //                        | None ->
+    //                            c
+    //                )
+    //            if changed then Some newCs
+    //            else None
                 
-            if List.isEmpty t.children && node.ShouldSplit(splitfactor, quality, view, proj) then //&& node.ShouldSplit(predictView node, proj) then
-                Some { t with children = node.Children |> Seq.toList |> List.map (ofNode t.rootId) }
+    //        if List.isEmpty t.children && node.ShouldSplit(splitfactor, quality, view, proj) then //&& node.ShouldSplit(predictView node, proj) then
+    //            Some { t with children = node.Children |> Seq.toList |> List.map (ofNode t.rootId) }
 
-            elif not (List.isEmpty t.children) && node.ShouldCollapse(splitfactor, quality, view, proj) then
-                Some { t with children = [] }
+    //        elif not (List.isEmpty t.children) && node.ShouldCollapse(splitfactor, quality, view, proj) then
+    //            Some { t with children = [] }
 
-            else
-                match t.children with
-                    | [] ->
-                        None
+    //        else
+    //            match t.children with
+    //                | [] ->
+    //                    None
 
-                    | children ->
-                        match tryExpandMany children with
-                            | Some newChildren -> Some { t with children = newChildren }
-                            | _ -> None
+    //                | children ->
+    //                    match tryExpandMany children with
+    //                        | Some newChildren -> Some { t with children = newChildren }
+    //                        | _ -> None
 
-        let expand splitfactor (quality : float)(predictView : ILodTreeNode -> Trafo3d) (view : Trafo3d) (proj : Trafo3d) (t : MaterializedTree) =
-            match tryExpand splitfactor quality predictView view proj t with
-                | Some n -> n
-                | None -> t
+    //    let expand splitfactor (quality : float)(predictView : ILodTreeNode -> Trafo3d) (view : Trafo3d) (proj : Trafo3d) (t : MaterializedTree) =
+    //        match tryExpand splitfactor quality predictView view proj t with
+    //            | Some n -> n
+    //            | None -> t
 
-        let rec computeDelta (acc : Delta) (o : MaterializedTree) (n : MaterializedTree) =
-            if System.Object.ReferenceEquals(o,n) then
-                acc
-            else
+    //    let rec computeDelta (acc : Delta) (o : MaterializedTree) (n : MaterializedTree) =
+    //        if System.Object.ReferenceEquals(o,n) then
+    //            acc
+    //        else
 
-                let rec computeChildDeltas (acc : Delta) (os : list<MaterializedTree>) (ns : list<MaterializedTree>) =
-                    match os, ns with
-                        | [], [] -> 
-                            acc
-                        | o :: os, n :: ns ->
-                            let acc = computeDelta acc o n
-                            computeChildDeltas acc os ns
-                        | _ ->
-                            failwith "inconsistent child count"
+    //            let rec computeChildDeltas (acc : Delta) (os : list<MaterializedTree>) (ns : list<MaterializedTree>) =
+    //                match os, ns with
+    //                    | [], [] -> 
+    //                        acc
+    //                    | o :: os, n :: ns ->
+    //                        let acc = computeDelta acc o n
+    //                        computeChildDeltas acc os ns
+    //                    | _ ->
+    //                        failwith "inconsistent child count"
                             
-                if o.original = n.original then
-                    match o.children, n.children with
-                        | [], []    -> 
-                            acc
+    //            if o.original = n.original then
+    //                match o.children, n.children with
+    //                    | [], []    -> 
+    //                        acc
 
-                        | [], _     ->
-                            { acc with
-                                deltas = HMap.add n.original (n.rootId, NodeOperation.Split) acc.deltas
-                                splitCount = 1 + acc.splitCount
-                                allocSize = int64 n.original.DataSize + acc.allocSize
-                            }
-                        | oc, []    -> 
-                            let children = allChildren o |> Seq.map original |> Seq.toList
-                            { acc with
-                                deltas = HMap.add n.original (n.rootId, NodeOperation.Collapse(children)) acc.deltas
-                                collapseCount = 1 + acc.collapseCount
-                                freeSize = children |> List.fold (fun s c -> s + int64 c.DataSize) acc.freeSize
-                            }
-                        | os, ns    -> 
-                            computeChildDeltas acc os ns
-                else
-                    failwith "inconsistent child values"
+    //                    | [], _     ->
+    //                        { acc with
+    //                            deltas = HMap.add n.original (n.rootId, NodeOperation.Split) acc.deltas
+    //                            splitCount = 1 + acc.splitCount
+    //                            allocSize = int64 n.original.DataSize + acc.allocSize
+    //                        }
+    //                    | oc, []    -> 
+    //                        let children = allChildren o |> Seq.map original |> Seq.toList
+    //                        { acc with
+    //                            deltas = HMap.add n.original (n.rootId, NodeOperation.Collapse(children)) acc.deltas
+    //                            collapseCount = 1 + acc.collapseCount
+    //                            freeSize = children |> List.fold (fun s c -> s + int64 c.DataSize) acc.freeSize
+    //                        }
+    //                    | os, ns    -> 
+    //                        computeChildDeltas acc os ns
+    //            else
+    //                failwith "inconsistent child values"
 
 
 
@@ -1113,6 +1293,51 @@ type LodRenderingInfo =
         renderBounds    : IMod<bool>
     }
 
+type UniqueTree(id : Guid, root : Option<UniqueTree>, parent : Option<ILodTreeNode>, inner : ILodTreeNode) =
+    //let root = defaultArg root this
+
+    member x.Id = id
+    member x.Inner = inner
+
+    override x.GetHashCode() =
+        HashCode.Combine(id.GetHashCode(), inner.GetHashCode())
+        
+    override x.Equals o =
+        match o with
+        | :? UniqueTree as o -> id = o.Id && inner = o.Inner
+        | _ -> false
+
+    override x.ToString() = 
+        sprintf "U(%A, %A)" id inner
+        
+    member x.Root = match root with | Some r -> r | None -> x 
+    interface ILodTreeNode with
+        member x.Level = inner.Level
+        member x.Name = inner.Name
+        member x.Root = x.Root :> ILodTreeNode
+        member x.Parent = parent
+        member x.Children = inner.Children |> Seq.map (fun c -> UniqueTree(id, Some x.Root, Some (x :> ILodTreeNode), c) :> ILodTreeNode)
+
+        member x.DataSource = inner.DataSource
+        member x.DataSize = inner.DataSize
+        member x.TotalDataSize = inner.TotalDataSize
+        member x.GetData (ct : CancellationToken, inputs : MapExt<string, Type>) = inner.GetData(ct, inputs)
+
+        member x.ShouldSplit(a,b,c,d) = inner.ShouldSplit(a,b,c,d)
+        member x.ShouldCollapse(a,b,c,d)  = inner.ShouldCollapse(a,b,c,d)
+        
+        member x.SplitQuality(a,b,c) = inner.SplitQuality(a,b,c) 
+        member x.CollapseQuality(a,b,c) = inner.CollapseQuality(a,b,c)
+
+        member x.WorldBoundingBox = inner.WorldBoundingBox
+        member x.WorldCellBoundingBox = inner.WorldCellBoundingBox
+        member x.Cell = inner.Cell
+
+        member x.DataTrafo = inner.DataTrafo
+
+        member x.Acquire() = inner.Acquire()
+        member x.Release() = inner.Release()
+
 type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipelineState, config : LodRendererConfig, roots : aset<LodTreeInstance>)  =
     inherit PreparedCommand(ctx, config.pass)
     
@@ -1129,7 +1354,9 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
     let pool = GeometryPool.Get ctx
         
 
-    let reader = roots.GetReader()
+    let reader =
+        let roots = roots |> ASet.map (fun r -> { r with root = UniqueTree(Guid.NewGuid(), None, None, r.root) :> ILodTreeNode })
+        roots.GetReader()
     let euclideanView = config.view |> Mod.map Euclidean3d
 
   
@@ -1153,7 +1380,6 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
     let cache = Dict<ILodTreeNode, PoolSlot>()
 
     let needUpdate = Mod.init ()
-    let mutable renderingConverged = 1
     let renderDelta : ref<AtomicQueue<ILodTreeNode, GeometryPoolInstance>> = ref AtomicQueue.empty
 
     let pRenderBounds : nativeptr<int> = 
@@ -1163,6 +1389,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
     let rootIds : ModRef<hmap<ILodTreeNode, int>> = Mod.init HMap.empty
 
     let mutable rootUniforms : hmap<ILodTreeNode, MapExt<string, IMod>> = HMap.empty
+    let toFreeUniforms : ref<hset<ILodTreeNode>> = ref HSet.empty
         
     let rootUniformCache = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, System.Collections.Concurrent.ConcurrentDictionary<string, Option<IMod>>>()
     let rootTrafoCache = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, IMod<Trafo3d>>()
@@ -1172,6 +1399,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
 
 
     let getRootTrafo (root : ILodTreeNode) =
+        let root = root.Root
         rootTrafoCache.GetOrAdd(root, fun root ->
             match HMap.tryFind root rootUniforms with
             | Some table -> 
@@ -1179,10 +1407,11 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                 | Some (:? IMod<Trafo3d> as m) -> (m |> Mod.map ( fun m -> root.DataTrafo * m )) %* config.model
                 | _ -> config.model |> Mod.map ( fun m -> root.DataTrafo * m )
             | None ->
+                Log.error "bad trafo"
                 config.model |> Mod.map ( fun m -> root.DataTrafo * m )
         )
-
     let getRootUniform (name : string) (root : ILodTreeNode) : Option<IMod> =
+        let root = root.Root
         let rootCache = rootUniformCache.GetOrAdd(root, fun root -> System.Collections.Concurrent.ConcurrentDictionary())
         rootCache.GetOrAdd(name, fun name ->
             match name with
@@ -1203,7 +1432,8 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                 | None -> None
         )
 
-    let getRootId (root : ILodTreeNode) =
+    let getRootId (root : ILodTreeNode) =   
+        let root = root.Root
         match HMap.tryFind root rootIds.Value with
         | Some id -> 
             id
@@ -1219,6 +1449,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
             )
 
     let freeRootId (root : ILodTreeNode) =
+        let root = root.Root
         rootUniformCache.TryRemove root |> ignore
         rootTrafoCache.TryRemove root |> ignore
         transact (fun () ->
@@ -1362,6 +1593,13 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                     deactivateWatch.Stop()
 
             | Free ac ->
+                if node.Level = 0 then
+                    lock toFreeUniforms (fun () ->
+                        toFreeUniforms := HSet.add node !toFreeUniforms
+                    )
+                    //rootUniforms <- HMap.remove node rootUniforms
+                    //freeRootId node
+
                 match cache.TryRemove node with
                     | (true, slot) -> 
                         if slot.IsDisposed then
@@ -1373,8 +1611,9 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                                 if not w then bad "free cannot deactivate %s (was already inactive)" node.Name
                                 deactivateWatch.Stop()
                             else 
-                                ensure (fun () -> not (state.calls.Contains slot)) "free must deactivate before deleting %s" node.Name
+                                ensure (fun () -> not (state.calls.Remove slot)) "free must deactivate before deleting %s" node.Name
 
+                    
                             freeWatch.Start()
                             pool.Free slot
                             freeWatch.Stop()
@@ -1450,6 +1689,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                 if state.nodeSize > 0 && state.count > 0 then
                     updateTime.Add(sw.MicroTime.TotalMilliseconds)
 
+                //Log.line "rerun: %d (%d)" cnt renderDelta.Value.Count
                 config.time.GetValue token |> ignore
             else
                 let dequeued = 
@@ -1469,7 +1709,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                     if state.nodeSize > 0 && state.count > 0 then
                         updateTime.Add(sw.MicroTime.TotalMilliseconds)
   
-                    renderingConverged <- 1
+                    //Log.line "done: %d (%d)" cnt renderDelta.Value.Count
 
                 | Some ops ->
                     perform state ops
@@ -1479,6 +1719,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
         run 0
 
     let evaluate (calls : DrawPool) (token : AdaptiveToken) (iface : GLSLProgramInterface) =
+        //Log.line "update"
         needUpdate.GetValue(token)
 
         NativePtr.write pRenderBounds (if config.renderBounds.GetValue(token) then 1 else 0)
@@ -1547,6 +1788,9 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
         let prediction = Prediction.euclidean (MicroTime(TimeSpan.FromMilliseconds 55.0))
         let rootLock = obj()
         let mutable roots : hmap<ILodTreeNode, TaskTree<GeometryPoolInstance>> = HMap.empty
+        let mutable lastQ = 0.0
+        let mutable lastRoots = HMap.empty
+        let mutable readers : hmap<ILodTreeNode, TaskTreeReader<_>> = HMap.empty
             
         let changesPending = MVar.create ()
 
@@ -1562,7 +1806,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                 dataSize        = ref 0L
             }
 
-        let mutable lastQ = 0.0
+                
 
         let cameraPrediction =
             startThread (fun () ->
@@ -1579,6 +1823,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                     let now = time()
                     if not (AtomicQueue.isEmpty !renderDelta) && (now - lastTime > flushTime) then
                         lastTime <- now
+                        //Log.line "trigger: %A" renderDelta.Value.Count
                         transact (fun () -> needUpdate.MarkOutdated())
                             
 
@@ -1611,6 +1856,10 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         let e = expandTime.Average |> MicroTime.FromMilliseconds
                         let u = updateTime.Average |> MicroTime.FromMilliseconds
                         let q = maxQualityTime.Average |> MicroTime.FromMilliseconds
+                        ()
+
+                        //let roots = readers |> HMap.keys |> Seq.map string |> String.concat ", "
+                        //Log.line "%s" roots
 
                         Log.line "q: %.2f m: %A (%A) r: %A l : %s mq: %A e: %A u: %A c: %d s: %d t: %d d: %A" 
                                     lastQ 
@@ -1622,22 +1871,22 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
 
             )
                 
+        //let rootDeltas = ref HDeltaSet.empty
+
         let puller =
             startThread (fun () ->
                 let timer = new MultimediaTimer.Trigger(20)
                     
-                let mutable lastRoots = HMap.empty
-                let mutable readers : hmap<ILodTreeNode, TaskTreeReader<_>> = HMap.empty
-                
                 let pickTrees = config.pickTrees
-                let hasPickTree = Option.isSome pickTrees
                 while not shutdown.IsCancellationRequested do
-                    //timer.Wait()
-                    MVar.take changesPending
-
+                    timer.Wait()
+                    //MVar.take changesPending
+                    
+                    // atomic fetch
                     let readers, removed = 
                         lock rootLock (fun () ->
-                            let removed = List<ILodTreeNode * TaskTreeReader<_>>()
+                            let roots = roots
+                            let removed = List<Option<ILodTreeNode> * TaskTreeReader<_>>()
 
                             let delta = HMap.computeDelta lastRoots roots
                             lastRoots <- roots
@@ -1648,20 +1897,34 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                                     match HMap.tryRemove k readers with
                                     | Some (r, rs) ->
                                         readers <- rs
-                                        removed.Add((k, r))
+                                        removed.Add((Some k, r))
                                     | None ->
-                                        ()
+                                        Log.error "[Lod] free of unknown: %A" (k.GetHashCode())
                                 | Set v ->
-                                    let r = TaskTreeReader(v)
-                                    readers <- HMap.add k r readers
+                                    match HMap.tryFind k readers with
+                                    | Some o ->
+                                        Log.error "[Lod] double add %A" k
+                                        removed.Add (None, o)
+                                        let r = TaskTreeReader(v)
+                                        //rootUniformCache.TryRemove k |> ignore
+                                        //rootTrafoCache.TryRemove k |> ignore
+                                        //transact (fun () -> rootIds.MarkOutdated())
+                                        readers <- HMap.add k r readers
+
+                                    | None ->
+                                        let r = TaskTreeReader(v)
+                                        readers <- HMap.add k r readers
                             readers, removed
                         )
 
                     for (root, r) in removed do
-                        match pickTrees with
-                        | Some mm -> 
-                            transact (fun () -> mm.Value <- mm.Value |> HMap.remove root)
-                        | None -> ()
+                        match root with
+                        | Some root -> 
+                            match pickTrees with
+                            | Some mm -> transact (fun () -> mm.Value <- mm.Value |> HMap.remove root)
+                            | None -> ()
+                        | None ->
+                            ()
                         r.Destroy(renderDelta)
 
                     for (root,r) in readers do
@@ -1676,8 +1939,10 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                                 | None -> mm.Value <- mm.Value |> HMap.remove root
                             )
                         | None ->
+                            Log.warn "empty tree: %A" root
                             ()
                     
+
                 for (root,r) in readers do
                     match pickTrees with
                     | Some mm -> 
@@ -1688,7 +1953,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                 
         let thread = 
             startThread (fun () ->
-                let notConverged = new ManualResetEventSlim(true)
+                let notConverged = MVar.create () //new ManualResetEventSlim(true)
 
                 let cancel = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, CancellationTokenSource>()
                 let timer = new MultimediaTimer.Trigger(10)
@@ -1721,7 +1986,6 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
 
                         if not ct.IsCancellationRequested then
                             let res = cont ct node loaded
-                                
                             res
                         else
                             raise <| OperationCanceledException()
@@ -1730,60 +1994,106 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                       
                 let subs =
                     Dict.ofList [
-                        config.view :> IAdaptiveObject, config.view.AddMarkingCallback (fun () -> notConverged.Set())
-                        config.proj :> IAdaptiveObject, config.proj.AddMarkingCallback (fun () -> notConverged.Set())
-                        config.maxSplits :> IAdaptiveObject, config.maxSplits.AddMarkingCallback (fun () -> notConverged.Set())
-                        config.budget :> IAdaptiveObject, config.budget.AddMarkingCallback (fun () -> notConverged.Set())
-                        reader :> IAdaptiveObject, reader.AddMarkingCallback (fun () -> notConverged.Set())
-                        config.splitfactor :> IAdaptiveObject, config.splitfactor.AddMarkingCallback (fun () -> notConverged.Set())
+                        config.view :> IAdaptiveObject, config.view.AddMarkingCallback (MVar.put notConverged)
+                        config.proj :> IAdaptiveObject, config.proj.AddMarkingCallback (MVar.put notConverged)
+                        config.maxSplits :> IAdaptiveObject, config.maxSplits.AddMarkingCallback (MVar.put notConverged)
+                        config.budget :> IAdaptiveObject, config.budget.AddMarkingCallback (MVar.put notConverged)
+                        reader :> IAdaptiveObject, reader.AddMarkingCallback (MVar.put notConverged)
+                        config.splitfactor :> IAdaptiveObject, config.splitfactor.AddMarkingCallback (MVar.put notConverged)
                     ]
 
                 let mutable lastMaxQ = 0.0
                 try 
+                    let mutable deltas = HDeltaSet.empty
+                    let reg = shutdown.Token.Register (System.Action(MVar.put notConverged))
                     while not shutdown.IsCancellationRequested do
                         timer.Wait()
-                        notConverged.Wait(shutdown.Token)
+                        MVar.take notConverged
+                        shutdown.Token.ThrowIfCancellationRequested()
+
                         //caller.EvaluateAlways AdaptiveToken.Top (fun token ->
                         let view = config.view.GetValue AdaptiveToken.Top
                         let proj = config.proj.GetValue AdaptiveToken.Top
                         let maxSplits = config.maxSplits.GetValue AdaptiveToken.Top
                           
-                        if maxSplits > 0 then
+                        deltas <-   
                             let ops = reader.GetOperations AdaptiveToken.Top
-                            for o in ops do
-                                match o with
-                                | Add(_,i) ->
-                                    let r = i.root
-                                    let u = i.uniforms
-                                    let rid = getRootId r
-                                    rootUniforms <- HMap.add r u rootUniforms
-                                    let load ct n = load ct rid n (fun _ _ r -> r)
-                                    lock rootLock (fun () ->
-                                        roots <- HMap.add r (TaskTree(load, rid)) roots
-                                    )
+                            HDeltaSet.combine deltas ops
 
-                                | Rem(_,i) ->
-                                    let r = i.root
-                                    let u = i.uniforms
-                                    rootUniforms <- HMap.remove r rootUniforms
-                                    freeRootId r
-                                    lock rootLock (fun () ->
-                                        roots <- HMap.remove r roots
-                                    )
+                        let toFree = 
+                            lock toFreeUniforms (fun () ->
+                                let r = !toFreeUniforms
+                                toFreeUniforms := HSet.empty
+                                r
+                            )
 
-                            if ops.Count > 0 then MVar.put changesPending ()
+                        toFree |> HSet.iter ( fun node -> 
+                            freeRootId node
+                            rootUniforms <- HMap.remove node rootUniforms
+                        )
+                        
+
+                        if maxSplits > 0 then
+                            let ops =
+                                let d = deltas
+                                deltas <- HDeltaSet.empty
+                                d
+
+                            //if ops.Count > 0 then
+                            //    lock rootDeltas (fun () ->
+                            //        rootDeltas := HDeltaSet.combine !rootDeltas ops
+                            //    )
+                            //    MVar.put changesPending ()
+
+                            //if ops.Count > 0 then 
+                            //    for o in ops do
+                            //        match o with
+                            //        | Add(_,v) ->
+                            //            Log.warn "add %A" v.root
+                            //        | Rem(_,v) ->
+                            //            Log.warn "rem %A" v.root
+
+                            let roots = 
+                                if ops.Count > 0 then
+                                    lock rootLock (fun () ->
+                                        for o in ops do
+                                            match o with
+                                            | Add(_,i) ->
+                                                let r = i.root
+                                                match HMap.tryFind r roots with
+                                                | Some o ->
+                                                    Log.error "[Lod] add of existing root %A" i.root
+                                                | None -> 
+                                                    let u = i.uniforms
+                                                    rootUniforms <- HMap.add r u rootUniforms
+                                                    let rid = getRootId r
+                                                    let load ct n = load ct rid n (fun _ _ r -> r)
+                                                    roots <- HMap.add r (TaskTree(load, rid)) roots
+
+                                            | Rem(_,i) ->
+                                                let r = i.root
+                                                match HMap.tryRemove r roots with
+                                                | Some (_, rest) ->
+                                                    
+                                                    roots <- rest
+                                                | None ->
+                                                    Log.error "[Lod] remove of nonexisting root %A" i.root
+
+                                        MVar.put changesPending ()
+                                        roots
+                                    )
+                                else
+                                    lock rootLock (fun () -> roots)
+                                
 
                             let modelView (r : ILodTreeNode) =
                                 let t = getRootTrafo r
-                                subs.GetOrCreate(t, fun t -> t.AddMarkingCallback (fun () -> notConverged.Set())) |> ignore
+                                subs.GetOrCreate(t, fun t -> t.AddMarkingCallback (MVar.put notConverged)) |> ignore
                                 let m = t.GetValue()
                                 m * view
                                 
-
-
                             let budget = config.budget.GetValue()
                             let splitfactor = config.splitfactor.GetValue()
-                            let roots = lock rootLock (fun () -> roots)
 
                             let start = time()
                             let maxQ =
@@ -1799,7 +2109,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                             let start = time()
                             let queue = List()
                             for (k,v) in roots do
-                                v.BuildQueue(state, collapseIfNotSplit, Some k, maxQ, splitfactor, modelView, proj, queue)
+                                v.BuildQueue(state, collapseIfNotSplit, k, maxQ, splitfactor, modelView, proj, queue)
             
                             let q, fin = TaskTree<_>.ProcessQueue(state, queue, maxQ, splitfactor, modelView, proj, maxSplits)
                             lastQ <- q
@@ -1818,12 +2128,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                                         renderTime = inner.AverageRenderTime 
                                     }
                             )
-                            if fin then notConverged.Reset()
-
-
-                            //if maxQ <> lastMaxQ then
-                            //    lastMaxQ <- maxQ
-                            //    Log.warn "maxQ: %.3f (%A / %A)" maxQ (Num dataSize)(Num !state.dataSize)
+                            if not fin then MVar.put notConverged ()
 
 
                 finally 
@@ -1854,7 +2159,6 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
         loadTimes.Clear()
         for slot in cache.Values do pool.Free slot
         cache.Clear()
-        renderingConverged <- 1
         renderDelta := AtomicQueue.empty
         storageBuffers |> Map.toSeq |> Seq.iter (fun (_,b) -> b.Dispose())
         activeBuffer.Dispose()

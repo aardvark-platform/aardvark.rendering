@@ -408,13 +408,13 @@ type VertexManager(ctx : Context, semantics : MapExt<string, Type>, chunkSize : 
 
     let mem : Memory<VertexBuffer> =
         let malloc (size : nativeint) =
-            Log.warn "alloc VertexBuffer"
+            //Log.warn "alloc VertexBuffer"
             let res = new VertexBuffer(ctx, semantics, int size)
             Interlocked.Add(&totalMemory.contents, res.TotalSize) |> ignore
             res
 
         let mfree (ptr : VertexBuffer) (size : nativeint) =
-            Log.warn "free VertexBuffer"
+            //Log.warn "free VertexBuffer"
             Interlocked.Add(&totalMemory.contents, -ptr.TotalSize) |> ignore
             ptr.Dispose()
 
@@ -456,13 +456,13 @@ type InstanceManager(ctx : Context, semantics : MapExt<string, GLSLType * Type>,
 
     let mem : Memory<InstanceBuffer> =
         let malloc (size : nativeint) =
-            Log.warn "alloc InstanceBuffer"
+            //Log.warn "alloc InstanceBuffer"
             let res = new InstanceBuffer(ctx, semantics, int size)
             Interlocked.Add(&totalMemory.contents, res.TotalSize) |> ignore
             res
 
         let mfree (ptr : InstanceBuffer) (size : nativeint) =
-            Log.warn "free InstanceBuffer"
+            //Log.warn "free InstanceBuffer"
             Interlocked.Add(&totalMemory.contents, -ptr.TotalSize) |> ignore
             ptr.Dispose()
 
@@ -1104,8 +1104,14 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
     let updateFun = Marshal.PinDelegate(new System.Action(this.Update))
     let mutable oldCalls : list<Option<DrawElementsType> * nativeptr<GLBeginMode> * VertexInputBindingHandle * IndirectBuffer> = []
     let program = new ChangeableNativeProgram<_, _>((fun a s -> compile a (AssemblerCommandStream s)), NativeStats.Zero, (+), (-))
-    let puller = AdaptiveObject()
-    let sub = puller.AddMarkingCallback (fun () -> NativePtr.write isOutdated 1)
+    let puller = 
+        { new AdaptiveObject() with
+            override x.Mark() =
+                NativePtr.write isOutdated 1
+                true
+        }
+
+    //let sub = puller.AddMarkingCallback (fun () -> NativePtr.write isOutdated 1)
     let tasks = System.Collections.Generic.HashSet<IRenderTask>()
 
     let mark() = transact (fun () -> puller.MarkOutdated())
