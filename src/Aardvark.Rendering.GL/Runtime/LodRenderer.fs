@@ -1880,7 +1880,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                 let pickTrees = config.pickTrees
                 while not shutdown.IsCancellationRequested do
                     timer.Wait()
-                    //MVar.take changesPending
+                    MVar.take changesPending
                     
                     // atomic fetch
                     let readers, removed = 
