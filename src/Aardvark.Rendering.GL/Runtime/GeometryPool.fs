@@ -836,7 +836,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
             if alphaToCoverage then 
                 s.Disable(int EnableCap.SampleAlphaToCoverage)
                 s.Disable(int EnableCap.SampleAlphaToOne)
-                icnt <- icnt + 2 // enable + disable
+                icnt <- icnt + 4 // enable + disable
         else
             Log.warn "empty indirect call"
 
