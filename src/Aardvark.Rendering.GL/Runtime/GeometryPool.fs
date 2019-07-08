@@ -287,7 +287,12 @@ type InstanceBuffer(ctx : Context, semantics : MapExt<string, GLSLType * Type>, 
                 let elemSize = GLSLType.sizeof glsl
                 let write = UniformWriters.getWriter 0 glsl input
                 totalSize <- totalSize + int64 count * int64 elemSize
-                ctx.CreateBuffer(elemSize * count), elemSize, write
+
+                let buffer =
+                    if count = 0 then new Aardvark.Rendering.GL.Buffer(ctx, 0n, 0)
+                    else ctx.CreateBuffer(elemSize * count)
+
+                buffer, elemSize, write
             )
         buffers, totalSize
             
@@ -331,7 +336,7 @@ type InstanceBuffer(ctx : Context, semantics : MapExt<string, GLSLType * Type>, 
 
     member x.Dispose() =
         use __ = ctx.ResourceLock
-        buffers |> MapExt.iter (fun _ (b,_,_) -> ctx.Delete b)
+        buffers |> MapExt.iter (fun _ (b,_,_) -> if b.SizeInBytes > 0n then ctx.Delete b)
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -344,7 +349,10 @@ type VertexBuffer(ctx : Context, semantics : MapExt<string, Type>, count : int) 
             semantics |> MapExt.map (fun sem typ ->
                 let elemSize = Marshal.SizeOf typ
                 totalSize <- totalSize + int64 elemSize * int64 count
-                ctx.CreateBuffer(elemSize * count), elemSize, typ
+                let buffer =
+                    if count = 0 then new Aardvark.Rendering.GL.Buffer(ctx, 0n, 0)
+                    else ctx.CreateBuffer(elemSize * count)
+                buffer, elemSize, typ
             )
         totalSize, buffers
             
@@ -389,7 +397,7 @@ type VertexBuffer(ctx : Context, semantics : MapExt<string, Type>, count : int) 
 
     member x.Dispose() =
         use __ = ctx.ResourceLock
-        buffers |> MapExt.iter (fun _ (b,_,_) -> ctx.Delete b)
+        buffers |> MapExt.iter (fun _ (b,_,_) -> if b.SizeInBytes > 0n then ctx.Delete b)
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -400,13 +408,13 @@ type VertexManager(ctx : Context, semantics : MapExt<string, Type>, chunkSize : 
 
     let mem : Memory<VertexBuffer> =
         let malloc (size : nativeint) =
-            Log.warn "alloc VertexBuffer"
+            //Log.warn "alloc VertexBuffer"
             let res = new VertexBuffer(ctx, semantics, int size)
             Interlocked.Add(&totalMemory.contents, res.TotalSize) |> ignore
             res
 
         let mfree (ptr : VertexBuffer) (size : nativeint) =
-            Log.warn "free VertexBuffer"
+            //Log.warn "free VertexBuffer"
             Interlocked.Add(&totalMemory.contents, -ptr.TotalSize) |> ignore
             ptr.Dispose()
 
@@ -448,13 +456,13 @@ type InstanceManager(ctx : Context, semantics : MapExt<string, GLSLType * Type>,
 
     let mem : Memory<InstanceBuffer> =
         let malloc (size : nativeint) =
-            Log.warn "alloc InstanceBuffer"
+            //Log.warn "alloc InstanceBuffer"
             let res = new InstanceBuffer(ctx, semantics, int size)
             Interlocked.Add(&totalMemory.contents, res.TotalSize) |> ignore
             res
 
         let mfree (ptr : InstanceBuffer) (size : nativeint) =
-            Log.warn "free InstanceBuffer"
+            //Log.warn "free InstanceBuffer"
             Interlocked.Add(&totalMemory.contents, -ptr.TotalSize) |> ignore
             ptr.Dispose()
 
@@ -703,7 +711,10 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
             else
                 resize (count + 1)
                 x.Add(call, box, cellBounds, rootId)
-                    
+                 
+    member x.Contains (call : DrawCallInfo) =
+        drawIndices.ContainsKey call
+
     member x.Remove(call : DrawCallInfo) =
         match drawIndices.TryRemove call with
             | (true, oid) ->
@@ -720,6 +731,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
                     if bounds then
                         let lb = NativePtr.get bmem last
                         NativePtr.set bmem oid lb
+                    dirty <- RangeSet.remove (Range1i(last,last)) dirty
                     dirty <- RangeSet.insert (Range1i(oid,oid)) dirty
                         
                 resize last
@@ -739,15 +751,17 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
                 let ptr = ctx.MapBufferRange(buffer, 0n, nativeint (count * es), BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
                 let bptr = ctx.MapBufferRange(bbuffer, 0n, nativeint (count * bs), BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
                 for r in toUpload do
-                    let o = r.Min * es |> nativeint
-                    let s = (1 + r.Max - r.Min) * es |> nativeint
-                    Marshal.Copy(NativePtr.toNativeInt mem + o, ptr + o, s)
-                    GL.FlushMappedNamedBufferRange(buffer.Handle, o, s)
+                    let r = Range1i(clamp 0 (count - 1) r.Min, clamp 0 (count - 1) r.Max)
+                    if r.Max >= r.Min then
+                        let o = r.Min * es |> nativeint
+                        let s = (1 + r.Max - r.Min) * es |> nativeint
+                        Marshal.Copy(NativePtr.toNativeInt mem + o, ptr + o, s)
+                        GL.FlushMappedNamedBufferRange(buffer.Handle, o, s)
                         
-                    let o = r.Min * bs |> nativeint
-                    let s = (1 + r.Max - r.Min) * bs |> nativeint
-                    Marshal.Copy(NativePtr.toNativeInt bmem + o, bptr + o, s)
-                    GL.FlushMappedNamedBufferRange(bbuffer.Handle, o, s)
+                        let o = r.Min * bs |> nativeint
+                        let s = (1 + r.Max - r.Min) * bs |> nativeint
+                        Marshal.Copy(NativePtr.toNativeInt bmem + o, bptr + o, s)
+                        GL.FlushMappedNamedBufferRange(bbuffer.Handle, o, s)
 
                 ctx.UnmapBuffer(buffer)
                 ctx.UnmapBuffer(bbuffer)
@@ -1093,8 +1107,14 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
     let updateFun = Marshal.PinDelegate(new System.Action(this.Update))
     let mutable oldCalls : list<Option<DrawElementsType> * nativeptr<GLBeginMode> * VertexInputBindingHandle * IndirectBuffer> = []
     let program = new ChangeableNativeProgram<_, _>((fun a s -> compile a (AssemblerCommandStream s)), NativeStats.Zero, (+), (-))
-    let puller = AdaptiveObject()
-    let sub = puller.AddMarkingCallback (fun () -> NativePtr.write isOutdated 1)
+    let puller = 
+        { new AdaptiveObject() with
+            override x.Mark() =
+                NativePtr.write isOutdated 1
+                true
+        }
+
+    //let sub = puller.AddMarkingCallback (fun () -> NativePtr.write isOutdated 1)
     let tasks = System.Collections.Generic.HashSet<IRenderTask>()
 
     let mark() = transact (fun () -> puller.MarkOutdated())
@@ -1128,6 +1148,13 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
             true
         else
             false
+
+    member x.Contains(ref : PoolSlot) =
+        match tryGetIndirectBuffer ref with
+            | Some ib -> 
+                ib.Contains ref.DrawCallInfo
+            | None ->
+                false
 
     member x.Remove(ref : PoolSlot) =
         match tryGetIndirectBuffer ref with
