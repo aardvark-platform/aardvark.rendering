@@ -65,6 +65,7 @@ module ComputeTest =
 
         let ctx = prog.Context
         let iface = prog.Interface
+        let iface : ShaderInterface = failwith "fail"
 
         let bufferTypes =
             iface.StorageBlocks |> List.map (fun b -> 

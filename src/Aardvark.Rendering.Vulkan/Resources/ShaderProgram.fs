@@ -216,12 +216,8 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
     member x.GLSL = original
     member x.Inputs = inputs
     member x.Outputs = outputs
-    //member x.UniformBlocks = layout.UniformBlocks
-    //member x.Textures = layout.Textures
 
     member x.Surface = original
-    //member x.UniformGetters = original.Uniforms
-    //member x.Samplers = original.Samplers
 
     member x.HasTessellation = Option.isSome tessInfo
     member x.HasDiscard = fragInfo.discard
@@ -245,11 +241,6 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
 
     interface IBackendSurface with
         member x.Handle = x :> obj
-        member x.Inputs = failwith "obsolete" //inputs |> List.map (fun p -> p.paramName, p.paramType)
-        member x.Outputs = failwith "obsolete" //outputs |> List.map (fun p -> p.paramName, p.paramType)
-        member x.Uniforms = failf "not implemented"
-        member x.Samplers = failf "not implemented" //original.Samplers |> Dictionary.toList |> List.map (fun ((a,b),c) -> (a,b,c))
-        member x.UniformGetters = failf "not implemented" //original.Uniforms
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderProgram =

@@ -636,8 +636,8 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
     let uniformBlock = culling.UniformBlocks |> List.head
     let countField = uniformBlock.ubFields |> List.find (fun f -> f.ufName = "cs_count")
              
-    let boxBoundSlot = boxShader.InterfaceNew.storageBuffers |> Seq.pick (fun (KeyValue(a,b)) -> if a = "Bounds" then Some b.ssbBinding else None)
-    let boxViewProjSlot = boxShader.InterfaceNew.storageBuffers |> Seq.pick (fun (KeyValue(a,b)) -> if a = "ViewProjs" then Some b.ssbBinding else None)
+    let boxBoundSlot = boxShader.Interface.storageBuffers |> Seq.pick (fun (KeyValue(a,b)) -> if a = "Bounds" then Some b.ssbBinding else None)
+    let boxViewProjSlot = boxShader.Interface.storageBuffers |> Seq.pick (fun (KeyValue(a,b)) -> if a = "ViewProjs" then Some b.ssbBinding else None)
 
     let boxMode = NativePtr.allocArray [| GLBeginMode(int BeginMode.Lines, 2) |]
         

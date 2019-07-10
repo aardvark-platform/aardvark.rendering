@@ -211,12 +211,9 @@ module PreparedPipelineState =
                     )
                    )
                 |> List.choose (fun (sampler, index, (texName, samplerState)) ->
-                    let name = sampler.samplerName
-                    let samplerInfo = { textureName = Symbol.Create texName; samplerState = x.GetSamplerStateDescription(samplerState) } // SamplerStateDescription ARE BUILT OVER AND OVER AGAIN?
-                    //let samplerInfo = { textureName = Symbol.Create texName; samplerState = samplerState.SamplerStateDescription } // SamplerStateDescription ARE BUILT OVER AND OVER AGAIN?
 
-                    let sem = samplerInfo.textureName
-                    let samplerState = samplerInfo.samplerState
+                    let sem = Symbol.Create texName
+                    let samplerState = x.GetSamplerStateDescription(samplerState)
 
                     match rj.Uniforms.TryGetUniform(rj.AttributeScope, sem) with
                         | Some tex ->
@@ -398,12 +395,9 @@ module PreparedPipelineState =
                     )
                    )
                 |> List.choose (fun (sampler, index, (texName, samplerState)) ->
-                    let name = sampler.samplerName
-                    let samplerInfo = { textureName = Symbol.Create texName; samplerState = x.GetSamplerStateDescription(samplerState) } // SamplerStateDescription ARE BUILT OVER AND OVER AGAIN?
-                    //let samplerInfo = { textureName = Symbol.Create texName; samplerState = samplerState.SamplerStateDescription } // SamplerStateDescription ARE BUILT OVER AND OVER AGAIN?
 
-                    let sem = samplerInfo.textureName
-                    let samplerState = samplerInfo.samplerState
+                    let sem = Symbol.Create texName
+                    let samplerState = x.GetSamplerStateDescription(samplerState)
 
                     match rj.globalUniforms.TryGetUniform(Ag.emptyScope, sem) with
                         | Some tex ->
