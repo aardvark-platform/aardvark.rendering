@@ -96,14 +96,13 @@ module Sg =
                     reader.State |> HRefSet.toArray |> Array.map (fun (trafo,shapes) ->
                         shapes.GetValue token
                     )
-                )
-                
+                )    
 
             let trafoBuffer =
                 trafosAndShapes |> Mod.map (fun state ->
                     state |> Array.mapi (fun i (trafo,shapes) ->
-                        let depthOffset =
-                            M44d.Translation(0.0, 0.0, float i / 100.0)
+                        let depthOffset = M44d.Identity 
+                            //M44d.Translation(0.0, 0.0, float i / 100.0) // WHY?
 
                         let trafo = 
                             M34d.op_Explicit (
@@ -192,7 +191,6 @@ module Sg =
                     member x.Dispose() = old.Dispose()
                 }
 
-
             let aa =
                 match shapes.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "Antialias") with
                     | Some (:? IMod<bool> as aa) -> aa
@@ -229,9 +227,17 @@ module Sg =
             shapes.IndirectBuffer <- indirect
             shapes.InstanceAttributes <- instanceAttributes
             shapes.Mode <- IndexedGeometryMode.TriangleList
-            shapes.Surface <- Surface.FShadeSimple cache.InstancedEffect
 
-            ASet.single (shapes :> IRenderObject)
+            trafosAndShapes 
+                |> Mod.map(fun l -> 
+                    let billboard = l |> Array.map(fun (_,s) -> s.renderStyle) |> Array.contains RenderStyle.Billboard
+                    if billboard then 
+                      shapes.Surface <- Surface.FShadeSimple cache.InstancedBillboardEffect
+                    else
+                      shapes.Surface <- Surface.FShadeSimple cache.InstancedEffect
+
+                    shapes :> IRenderObject)
+                |> Mod.toASet
 
         member x.RenderObjects(t : Shape) : aset<IRenderObject> =
             let content = t.Content
@@ -350,9 +356,8 @@ module Sg =
             shapes.IndirectBuffer <- indirectAndOffsets |> Mod.map (fun (i,_,_) -> i)
             shapes.InstanceAttributes <- instanceAttributes
             shapes.Mode <- IndexedGeometryMode.TriangleList
-            shapes.Surface <- Surface.FShadeSimple cache.Effect
-
-
+            shapes.DepthBias <- Mod.constant (DepthBiasState(0.0, 0.0, 0.0))
+            
             //shapes.WriteBuffers <- Some (Set.ofList [DefaultSemantic.Colors])
 
             let boundary = RenderObject.create()
@@ -410,7 +415,6 @@ module Sg =
                 }
             boundary.Surface <- Surface.FShadeSimple cache.BoundaryEffect
 
-
             let writeStencil =
                 StencilMode(
                     StencilOperationFunction.Replace,
@@ -438,12 +442,26 @@ module Sg =
             boundary.WriteBuffers <- writeBuffers
             boundary.StencilMode <- Mod.constant writeStencil
             boundary.FillMode <- Mod.constant FillMode.Fill
-            shapes.DepthTest <- Mod.constant DepthTestMode.None
-            shapes.DepthBias <- Mod.constant (DepthBiasState(0.0, 0.0, 0.0))
-            shapes.StencilMode <- Mod.constant readStencil
 
-            //shapes :> IRenderObject |> ASet.single
-            MultiRenderObject [boundary; shapes] :> IRenderObject |> ASet.single
+            content |> Mod.map(fun x -> 
+                match x.renderStyle with
+                | RenderStyle.Normal -> 
+                    shapes.Surface <- Surface.FShadeSimple cache.Effect
+                    shapes.DepthTest <- Mod.constant(DepthTestMode.None)
+                    shapes.StencilMode <- Mod.constant(readStencil)
+                    MultiRenderObject [boundary; shapes] :> IRenderObject 
+                | RenderStyle.NoBoundary ->
+                    shapes.Surface <- Surface.FShadeSimple cache.Effect
+                    shapes.DepthTest <- Mod.constant(DepthTestMode.LessOrEqual)
+                    shapes.StencilMode <- Mod.constant(StencilMode.Disabled)
+                    shapes :> IRenderObject // MultiRenderObject [shapes] :> IRenderObject 
+                | RenderStyle.Billboard -> 
+                    shapes.Surface <- Surface.FShadeSimple cache.BillboardEffect
+                    shapes.DepthTest <- Mod.constant(DepthTestMode.LessOrEqual)
+                    shapes.StencilMode <- Mod.constant(StencilMode.Disabled)
+                    shapes :> IRenderObject
+
+                ) |> Mod.toASet
 
         member x.FillGlyphs(s : ISg) =
             let mode = s.FillMode
@@ -461,11 +479,9 @@ module Sg =
     let shapeWithBackground (color : C4b) (border : Border2d) (content : IMod<ShapeList>) =
         Shape(true, color, border, content) :> ISg
 
-
     let shapes (content : aset<IMod<Trafo3d> * IMod<ShapeList>>) =
         ShapeSet(content) :> ISg
         
-
     let textWithConfig (cfg : TextConfig) (content : IMod<string>) =
         content 
         |> Mod.map cfg.Layout

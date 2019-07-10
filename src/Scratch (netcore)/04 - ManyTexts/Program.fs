@@ -78,17 +78,18 @@ let main argv =
 
     let font = Font "Consolas"
 
-    let shapes =
-        Text.Layout(font, C4b.Blue, TextAlignment.Center, Box2d(V2d(0.0, -0.25), V2d(1.0, 0.5)), "HUGO g | µ\nWAWAWA ||| )(){}\nWAWAW")
+    //let shapes =
+    //    Text.Layout(font, TextAlignment.Center, Box2d(V2d(0.0, -0.25), V2d(1.0, 0.5)), "HUGO g | µ\nWAWAWA ||| )(){}\nWAWAW")
            
     //let shapes = { shapes with flipViewDependent = false }
 
-    let cfg = 
+    let cfg : TextConfig = 
         {
             font = Font "Consolas"
             color = C4b.White
             align = TextAlignment.Center
             flipViewDependent = true
+            renderStyle       = RenderStyle.NoBoundary
         }
         
 
