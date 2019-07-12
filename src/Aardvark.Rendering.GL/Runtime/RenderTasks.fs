@@ -310,7 +310,9 @@ module RenderTasks =
                                             let cmp = compare ls.pProgram.Id rs.pProgram.Id
                                             if cmp <> 0 then cmp
                                             else
-                                                let cmp = compare ls.pTextures.Id rs.pTextures.Id
+                                                let leftId = if ls.pTextureBindings.Length > 0 then match (snd ls.pTextureBindings.[0]) with | ArrayBinding ab -> ab.Id; | SingleBinding (t, s) -> t.Id else -1
+                                                let rigthId = if rs.pTextureBindings.Length > 0 then match (snd rs.pTextureBindings.[0]) with | ArrayBinding ab -> ab.Id; | SingleBinding (t, s) -> t.Id else -1
+                                                let cmp = compare leftId rigthId
                                                 if cmp <> 0 then cmp
                                                 else compare l.Id r.Id
                     }
