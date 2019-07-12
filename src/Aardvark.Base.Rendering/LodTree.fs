@@ -406,6 +406,7 @@ type ILodTreeNode =
     abstract member Root : ILodTreeNode
     abstract member Parent : Option<ILodTreeNode>
     abstract member Children : seq<ILodTreeNode>
+    abstract member Id : obj
 
     abstract member DataSource : Symbol
     abstract member DataSize : int

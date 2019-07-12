@@ -1313,6 +1313,7 @@ type UniqueTree(id : Guid, root : Option<UniqueTree>, parent : Option<ILodTreeNo
     member x.Root = match root with | Some r -> r | None -> x 
     interface ILodTreeNode with
         member x.Level = inner.Level
+        member x.Id = inner.Id
         member x.Name = inner.Name
         member x.Root = x.Root :> ILodTreeNode
         member x.Parent = parent
