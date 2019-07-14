@@ -720,26 +720,26 @@ module PreparedPipelineStateAssembler =
                         icnt <- icnt + 1
                 )
 
-            let mutable lastUsedTextureSlot = match prev.pTextureBindings |> Array.tryLast with
-                                              | Some (slot, binding) -> slot.Max
-                                              | None -> -1
-
             // bind all textures/samplers (if needed)
             for (slotRange, binding) in me.pTextureBindings do
-                match Map.tryFind (slotRange.Min) prev.pTextureSlots with
+                let old = Map.tryFind (slotRange.Min) prev.pTextureSlots
+                match old with
                 | Some old when old = binding -> ()
                 | _ -> 
                     match binding with 
                     | SingleBinding (tex, sam) ->
-                        if lastUsedTextureSlot <> slotRange.Min then
-                            x.SetActiveTexture(slotRange.Min)
-                            lastUsedTextureSlot <- slotRange.Min
+                        x.SetActiveTexture(slotRange.Min)
                         x.BindTexture(tex)
-                        x.BindSampler(slotRange.Min, sam)
-                        icnt <- icnt + 3
+                        match old with
+                        | Some old ->
+                            match old with 
+                            | SingleBinding (otex, osam) when Object.ReferenceEquals(osam, sam) -> ()
+                            | _ ->
+                                x.BindSampler(slotRange.Min, sam); icnt <- icnt + 1
+                        | None -> x.BindSampler(slotRange.Min, sam); icnt <- icnt + 1
+                        icnt <- icnt + 2
                     | ArrayBinding ta ->
                         x.BindTexturesAndSamplers(ta) // internally will use 2 OpenGL calls glBindTextures and glBindSamplers
-                        lastUsedTextureSlot <- -1 // slotRange.Max // does glBindTextures internally modifies ActiveTexture to the last slot !?
                         icnt <- icnt + 1 
 
             // bind all top-level uniforms (if needed)

@@ -229,10 +229,6 @@ type TextureBinding =
 [<AllowNullLiteral>]
 type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, renderTaskInfo : Option<IFramebufferSignature * RenderTaskLock>, shareTextures : bool, shareBuffers : bool) =
     
-    // translation cache from FShade SamplerState to GL backend sampler description
-    static let _cache = ConcurrentDictionary<FShade.SamplerState, SamplerStateDescription>() 
-    static let _cache2 = ConcurrentDictionary<FShade.GLSL.GLSLProgramInterface, (FShade.GLSL.GLSLSampler * int * Symbol * SamplerStateDescription)[]>()
-
     let drawBufferManager = // ISSUE: leak? nobody frees those DrawBufferConfigs
         match renderTaskInfo with
             | Some (signature, _) -> DrawBufferManager(signature) |> Some
