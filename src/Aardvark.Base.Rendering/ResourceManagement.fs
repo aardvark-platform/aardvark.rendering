@@ -352,7 +352,7 @@ and ResourceCache<'h, 'v when 'v : unmanaged>(parent : Option<ResourceCache<'h, 
             | None -> 
                 x.GetOrCreateLocalWrapped(key, create, wrap)
 
-    member x.GetOrCreateWrapped<'a, 'x, 'y when 'y : unmanaged>(dataMod : IMod<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'x, 'y>, wrap : Resource<'x, 'y> -> Resource<'h, 'v>) =
+    member x.GetOrCreateWrapped<'a, 'x, 'y when 'y : unmanaged>(dataMod : IMod<'a>, additionalKeys : list<obj>, creator : unit -> ResourceDescription<'a, 'x, 'y>, wrap : Resource<'x, 'y> -> Resource<'h, 'v>) =
         let key = (dataMod :> obj)::additionalKeys
         match tryGetParent key with
             | Some v -> 
@@ -397,6 +397,7 @@ and ResourceCache<'h, 'v when 'v : unmanaged>(parent : Option<ResourceCache<'h, 
                         v :> IResource<_,_>
             | None ->
                 x.GetOrCreateLocal(key, fun _ -> 
+                    let desc = creator()
                     let mutable ownsHandle = false
                     let mutable oldData = None
                     let xNonPrimitive = not typeof<'x>.IsPrimitive && not typeof<'x>.IsEnum
@@ -461,8 +462,8 @@ and ResourceCache<'h, 'v when 'v : unmanaged>(parent : Option<ResourceCache<'h, 
                     wrap resource
                 )
 
-    member x.GetOrCreate<'a>(dataMod : IMod<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'h, 'v>) =
-        x.GetOrCreateWrapped<'a, 'h, 'v>(dataMod, additionalKeys, desc, id)
+    member x.GetOrCreate<'a>(dataMod : IMod<'a>, additionalKeys : list<obj>, creator : unit -> ResourceDescription<'a, 'h, 'v>) =
+        x.GetOrCreateWrapped<'a, 'h, 'v>(dataMod, additionalKeys, creator, id)
 
     member x.GetOrCreateDependent<'a, 'b when 'a : equality and 'b : unmanaged>(res : IResource<'a, 'b>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'h, 'v>) =
         let key = (res :> obj)::additionalKeys
@@ -523,8 +524,8 @@ and ResourceCache<'h, 'v when 'v : unmanaged>(parent : Option<ResourceCache<'h, 
                 )
 
 
-    member x.GetOrCreate<'a>(dataMod : IMod<'a>, desc : ResourceDescription<'a, 'h, 'v>) =
-        x.GetOrCreate(dataMod, [], desc)
+    member x.GetOrCreate<'a>(dataMod : IMod<'a>, creator : unit -> ResourceDescription<'a, 'h, 'v>) =
+        x.GetOrCreate(dataMod, [], creator)
 
     member x.Count = store.Count
     member x.Clear() = 

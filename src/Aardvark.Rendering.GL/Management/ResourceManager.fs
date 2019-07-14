@@ -367,7 +367,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 )
 
             | :? SingleValueBuffer as v ->
-                bufferCache.GetOrCreate(Mod.constant 0, {
+                bufferCache.GetOrCreate(Mod.constant 0, fun () -> {
                     create = fun b      -> new Buffer(ctx, 0n, 0)
                     update = fun h b    -> h
                     delete = fun h      -> ()
@@ -377,7 +377,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 })
 
             | _ ->
-                bufferCache.GetOrCreate<IBuffer>(data, {
+                bufferCache.GetOrCreate<IBuffer>(data, fun () -> {
                     create = fun b      -> bufferManager.Create b
                     update = fun h b    -> bufferManager.Update(h, b)
                     delete = fun h      -> bufferManager.Delete h
@@ -387,7 +387,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 })
 
     member x.CreateTexture(data : IMod<ITexture>) : IResource<Texture, V2i> =
-        textureCache.GetOrCreate<ITexture>(data, {
+        textureCache.GetOrCreate<ITexture>(data, fun () -> {
             create = fun b      -> textureManager.Create b
             update = fun h b    -> textureManager.Update(h, b)
             delete = fun h      -> textureManager.Delete h
@@ -397,7 +397,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         })
 
     member x.CreateTexture'(data : IMod<IBackendTexture>) : IResource<Texture, V2i> =
-        textureCache.GetOrCreate<IBackendTexture>(data, {
+        textureCache.GetOrCreate<IBackendTexture>(data, fun () -> {
             create = fun b      -> textureManager.Create b
             update = fun h b    -> textureManager.Update(h, b)
             delete = fun h      -> textureManager.Delete h
@@ -407,7 +407,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         })
 
     member x.CreateIndirectBuffer(indexed : bool, data : IMod<IIndirectBuffer>) =
-        indirectBufferCache.GetOrCreate<IIndirectBuffer>(data, [indexed :> obj], {
+        indirectBufferCache.GetOrCreate<IIndirectBuffer>(data, [indexed :> obj], fun () -> {
             create = fun b   -> ctx.CreateIndirect(indexed, b)
             update = fun h b -> ctx.UploadIndirect(h, indexed, b); h
             delete = fun h   -> ctx.Delete h
@@ -432,7 +432,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         let (iface, result) = ctx.CreateProgram(signature, surface, topology)
 
         let programHandle = 
-            programHandleCache.GetOrCreate<Program>(result, {
+            programHandleCache.GetOrCreate<Program>(result, fun () -> {
                 create = fun b      -> b
                 update = fun h b    -> b
                 delete = fun h      -> ()
@@ -452,7 +452,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             )
 
     member x.CreateSampler (sam : IMod<SamplerStateDescription>) =
-        samplerCache.GetOrCreate<SamplerStateDescription>(sam, {
+        samplerCache.GetOrCreate<SamplerStateDescription>(sam, fun () -> {
             create = fun b      -> ctx.CreateSampler b
             update = fun h b    -> ctx.Update(h,b); h
             delete = fun h      -> ctx.Delete h
@@ -727,7 +727,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
  
       
     member x.CreateIsActive(value : IMod<bool>) =
-        isActiveCache.GetOrCreate(value, {
+        isActiveCache.GetOrCreate(value, fun () -> {
             create = fun b      -> b
             update = fun h b    -> b
             delete = fun h      -> ()
@@ -738,7 +738,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
       
     member x.CreateBeginMode(prog : IMod<Program>, drawMode : IndexedGeometryMode) =
         let mode = getTessDrawModeCache(drawMode).Invoke(prog)
-        beginModeCache.GetOrCreate(mode, {
+        beginModeCache.GetOrCreate(mode, fun () -> {
             create = fun b      -> b
             update = fun h b    -> b
             delete = fun h      -> ()
@@ -748,7 +748,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         })
 
     member x.CreateDrawCallInfoList(value : IMod<list<DrawCallInfo>>) =
-        drawCallInfoCache.GetOrCreate(value, {
+        drawCallInfoCache.GetOrCreate(value, fun () -> {
             create = fun b      -> ctx.CreateDrawCallInfoList(List.toArray b)
             update = fun h b    -> ctx.Update(h,List.toArray b)
             delete = fun h      -> ctx.Delete h
@@ -758,7 +758,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         })
 
     member x.CreateDepthTest(value : IMod<DepthTestMode>) =
-        depthTestCache.GetOrCreate(value, {
+        depthTestCache.GetOrCreate(value, fun () -> {
             create = fun b      -> ctx.ToDepthTest b
             update = fun h b    -> ctx.ToDepthTest b
             delete = fun h      -> ()
@@ -768,7 +768,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         })
 
     member x.CreateDepthBias(value : IMod<DepthBiasState>) =
-        depthBiasCache.GetOrCreate(value, {
+        depthBiasCache.GetOrCreate(value, fun () -> {
             create = fun b      -> ctx.ToDepthBias b
             update = fun h b    -> ctx.ToDepthBias b
             delete = fun h      -> ()
@@ -778,7 +778,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         })
 
     member x.CreateCullMode(value : IMod<CullMode>) =
-        cullModeCache.GetOrCreate(value, {
+        cullModeCache.GetOrCreate(value, fun () -> {
             create = fun b      -> ctx.ToCullMode b
             update = fun h b    -> ctx.ToCullMode b
             delete = fun h      -> ()
@@ -788,7 +788,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         })
 
     member x.CreateFrontFace(mode : IMod<WindingOrder>) =
-        frontFaceCache.GetOrCreate(mode, {
+        frontFaceCache.GetOrCreate(mode, fun () -> {
             create = fun b      -> ctx.ToFrontFace b
             update = fun h b    -> ctx.ToFrontFace b
             delete = fun h      -> ()
@@ -798,7 +798,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         })
 
     member x.CreatePolygonMode(value : IMod<FillMode>) =
-        polygonModeCache.GetOrCreate(value, {
+        polygonModeCache.GetOrCreate(value, fun () -> {
             create = fun b      -> ctx.ToPolygonMode(b)
             update = fun h b    -> ctx.ToPolygonMode(b)
             delete = fun h      -> ()
@@ -808,7 +808,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         })
 
     member x.CreateBlendMode(value : IMod<BlendMode>) =
-        blendModeCache.GetOrCreate(value, {
+        blendModeCache.GetOrCreate(value, fun () -> {
             create = fun b      -> ctx.ToBlendMode b
             update = fun h b    -> ctx.ToBlendMode b
             delete = fun h      -> ()
@@ -818,7 +818,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         })
 
     member x.CreateStencilMode(value : IMod<StencilMode>) =
-        stencilModeCache.GetOrCreate(value, {
+        stencilModeCache.GetOrCreate(value, fun () -> {
             create = fun b      -> ctx.ToStencilMode b
             update = fun h b    -> ctx.ToStencilMode b
             delete = fun h      -> ()
@@ -828,7 +828,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         })
 
     member x.CreateFlag (value : IMod<bool>) =
-        flagCache.GetOrCreate(value, {
+        flagCache.GetOrCreate(value, fun () -> {
             create = fun b      -> b
             update = fun h b    -> b
             delete = fun h      -> ()
