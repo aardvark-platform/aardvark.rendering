@@ -409,6 +409,9 @@ module RenderTasks =
                     task
 
         let processDeltas (x : AdaptiveToken) (parent : AbstractOpenGlRenderTask) (t : RenderToken) =
+            
+            let sw = Stopwatch.StartNew()
+
             let deltas = preparedObjectReader.GetOperations x
 
             if not (HDeltaSet.isEmpty deltas) then
@@ -427,12 +430,9 @@ module RenderTasks =
                         let task = getSubTask v.Pass
                         removed <- removed + 1
                         task.Remove v      
-       
-
-
                         
             if added > 0 || removed > 0 then
-                Log.line "[GL] RenderObjects: +%d/-%d" added removed
+                Log.line "[GL] RenderObjects: +%d/-%d (%dms)" added removed sw.ElapsedMilliseconds
             t.RenderObjectDeltas(added, removed)
 
         let updateResources (x : AdaptiveToken) (t : RenderToken) =

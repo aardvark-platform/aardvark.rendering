@@ -285,8 +285,9 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     let textureArrayCache = UnaryCache<IMod<ITexture[]>, ConcurrentDictionary<int, List<IResource<Texture,V2i>>>>(fun ta -> ConcurrentDictionary<int, List<IResource<Texture,V2i>>>())
 
-    let samplerModifierCache = ConcurrentDictionary<Symbol * SamplerStateDescription, UnaryCache<IMod<(Symbol -> SamplerStateDescription -> SamplerStateDescription)>, IMod<SamplerStateDescription>>>()
-    let samplerDescriptionCache = UnaryCache(fun (samplerState : FShade.SamplerState) -> samplerState.SamplerStateDescription)
+    let staticSamplerStateCache = ConcurrentDictionary<FShade.SamplerState, IMod<SamplerStateDescription>>()
+    let dynamicSamplerStateCache = ConcurrentDictionary<Symbol * SamplerStateDescription, UnaryCache<IMod<(Symbol -> SamplerStateDescription -> SamplerStateDescription)>, IMod<SamplerStateDescription>>>()
+    let samplerDescriptionCache = ConcurrentDictionary<FShade.SamplerState, SamplerStateDescription>() 
     
     member private x.BufferManager = bufferManager
     member private x.TextureManager = textureManager
@@ -420,12 +421,15 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         })
 
     member x.GetSamplerStateDescription(samplerState : FShade.SamplerState) =
-        samplerDescriptionCache.Invoke(samplerState)
+        samplerDescriptionCache.GetOrAdd(samplerState, fun sam -> sam.SamplerStateDescription)
 
     member x.GetDynamicSamplerState(texName : Symbol, samplerState : SamplerStateDescription, modifier : IMod<(Symbol -> SamplerStateDescription -> SamplerStateDescription)>) : IMod<SamplerStateDescription> =
-        samplerModifierCache.GetOrAdd((texName, samplerState), fun (sym, sam) ->
+        dynamicSamplerStateCache.GetOrAdd((texName, samplerState), fun (sym, sam) ->
             UnaryCache(fun modi -> modi |> Mod.map (fun f -> f sym sam))
         ).Invoke(modifier)
+
+    member x.GetStaticSamplerState(samplerState : FShade.SamplerState) =
+        staticSamplerStateCache.GetOrAdd(samplerState, fun sam -> Mod.constant (sam.SamplerStateDescription))
 
     member x.CreateSurface(signature : IFramebufferSignature, surface : Aardvark.Base.Surface, topology : IndexedGeometryMode) =
 
@@ -448,7 +452,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         let slotCountCache = textureArrayCache.Invoke(texArr)
         slotCountCache.GetOrAdd(slotCount, fun slotCount -> 
                 List.init slotCount (fun i ->
-                        x.CreateTexture(texArr |> Mod.map (fun (t : ITexture[]) -> if t.Length < i then t.[i] else NullTexture() :> _)))
+                        x.CreateTexture(texArr |> Mod.map (fun (t : ITexture[]) -> if i < t.Length then t.[i] else NullTexture() :> _)))
             )
 
     member x.CreateSampler (sam : IMod<SamplerStateDescription>) =
