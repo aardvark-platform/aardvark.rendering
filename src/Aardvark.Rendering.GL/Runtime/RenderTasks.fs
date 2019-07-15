@@ -314,11 +314,13 @@ module RenderTasks =
                                                 let mutable i = 0
                                                 let texCnt = min ls.pTextureBindings.Length rs.pTextureBindings.Length
                                                 while cmp = 0 && i < texCnt do
-                                                    if (fst ls.pTextureBindings.[0]) <> (fst rs.pTextureBindings.[0]) then
+                                                    let struct (sltl, bndl) = ls.pTextureBindings.[i]
+                                                    let struct (sltr, bndr) = ls.pTextureBindings.[i]
+                                                    if (sltl <> sltr) then
                                                         cmp <- compare l.Id r.Id
                                                     else 
-                                                        let leftTexId = match (snd ls.pTextureBindings.[0]) with | ArrayBinding ab -> ab.Id; | SingleBinding (t, s) -> t.Id
-                                                        let rigthTexId = match (snd rs.pTextureBindings.[0]) with | ArrayBinding ab -> ab.Id; | SingleBinding (t, s) -> t.Id
+                                                        let leftTexId = match bndl with | ArrayBinding ab -> ab.Id; | SingleBinding (t, s) -> t.Id
+                                                        let rigthTexId = match bndr with | ArrayBinding ab -> ab.Id; | SingleBinding (t, s) -> t.Id
                                                         cmp <- compare leftTexId rigthTexId
                                                     i <- i + 1
                                                 if cmp <> 0 then cmp

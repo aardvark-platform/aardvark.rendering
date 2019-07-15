@@ -226,6 +226,14 @@ type TextureBinding =
         samplers : nativeptr<int>
     }
 
+type InterfaceSlots = 
+    {
+        // interface definition sorted by slot
+        samplers : (string * FShade.GLSL.GLSLSampler)[]
+        uniformBuffers : (string * FShade.GLSL.GLSLUniformBuffer)[]
+        storageBuffers : (string * FShade.GLSL.GLSLStorageBuffer)[]
+    }
+
 [<AllowNullLiteral>]
 type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, renderTaskInfo : Option<IFramebufferSignature * RenderTaskLock>, shareTextures : bool, shareBuffers : bool) =
     
@@ -278,6 +286,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         hasTessDrawModeCache.GetOrAdd(mode, fun mode ->
             UnaryCache(Mod.map (fun t -> ctx.ToBeginMode(mode, t.HasTessellation)))
         )
+
+    let ifaceSlotCache = ConcurrentDictionary<FShade.GLSL.GLSLProgramInterface, InterfaceSlots>()
 
     let textureArrayCache = UnaryCache<IMod<ITexture[]>, ConcurrentDictionary<int, List<IResource<Texture,V2i>>>>(fun ta -> ConcurrentDictionary<int, List<IResource<Texture,V2i>>>())
 
@@ -426,6 +436,13 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     member x.GetStaticSamplerState(samplerState : FShade.SamplerState) =
         staticSamplerStateCache.GetOrAdd(samplerState, fun sam -> Mod.constant (sam.SamplerStateDescription))
+
+    member x.GetInterfaceSlots(iface : FShade.GLSL.GLSLProgramInterface) = 
+        ifaceSlotCache.GetOrAdd(iface, (fun iface ->
+                { samplers = iface.samplers |> MapExt.toSeq |> Seq.sortBy (fun (_, sam) -> sam.samplerBinding) |> Seq.toArray
+                  uniformBuffers = iface.uniformBuffers |> MapExt.toSeq |> Seq.sortBy (fun (_, ub) -> ub.ubBinding) |> Seq.toArray
+                  storageBuffers = iface.storageBuffers |> MapExt.toSeq |> Seq.sortBy (fun (_, sb) -> sb.ssbBinding) |> Seq.toArray }
+            ))
 
     member x.CreateSurface(signature : IFramebufferSignature, surface : Aardvark.Base.Surface, topology : IndexedGeometryMode) =
 

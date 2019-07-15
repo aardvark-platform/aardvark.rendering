@@ -41,10 +41,10 @@ type PreparedPipelineState =
         pFramebufferSignature : IFramebufferSignature
         pProgram : IResource<Program, int>
         pProgramInterface : GLSLProgramInterface
-        pUniformBuffers : (int * IResource<UniformBufferView, int>)[] // sorted list of uniform buffers
-        pStorageBuffers : (int * IResource<Buffer, int>)[] // sorted list of storage buffers
-        pUniforms : (int * IResource<UniformLocation, nativeint>)[] // sorted list of uniforms
-        pTextureBindings : (Range1i * TextureBindingSlot)[] // sorted list of texture bindings
+        pUniformBuffers : (struct (int * IResource<UniformBufferView, int>))[] // sorted list of uniform buffers
+        pStorageBuffers : (struct (int * IResource<Buffer, int>))[] // sorted list of storage buffers
+        pUniforms : (struct (int * IResource<UniformLocation, nativeint>))[] // sorted list of uniforms
+        pTextureBindings : (struct (Range1i * TextureBindingSlot))[] // sorted list of texture bindings
                 
         pDepthTestMode : IResource<DepthTestInfo, DepthTestInfo>
         pDepthBias : IResource<DepthBiasInfo, DepthBiasInfo>
@@ -67,17 +67,17 @@ type PreparedPipelineState =
     member x.Resources =
         seq {
             yield x.pProgram :> IResource
-            for (_,b) in x.pUniformBuffers do
+            for struct (_,b) in x.pUniformBuffers do
                 yield b :> _
                 
-            for (_,b) in x.pStorageBuffers do
+            for struct (_,b) in x.pStorageBuffers do
                 yield b :> _
 
-            for (_,u) in x.pUniforms do
+            for struct (_,u) in x.pUniforms do
                 yield u :> _
 
-            for t in x.pTextureBindings do
-                match snd t with 
+            for struct (_, tb) in x.pTextureBindings do
+                match tb with 
                 | ArrayBinding ta -> yield ta :> _
                 | SingleBinding (tex, sam) -> yield tex :> _; yield sam :> _
             
@@ -135,14 +135,14 @@ type PreparedPipelineState =
                         | Some b -> b.RemoveRef()
                         | _ -> ()
 
-                    for (_, tb) in x.pTextureBindings do
+                    for struct (_, tb) in x.pTextureBindings do
                         match tb with
                         | SingleBinding (tex, sam) -> tex.Dispose(); sam.Dispose()
                         | ArrayBinding ta -> ta.Dispose()
 
-                    x.pUniforms |> Array.iter (fun (_, ul) -> ul.Dispose())
-                    x.pUniformBuffers |> Array.iter (fun (_, ub) -> ub.Dispose())
-                    x.pStorageBuffers |> Array.iter (fun (_, ub) -> ub.Dispose())
+                    x.pUniforms |> Array.iter (fun struct (_, ul) -> ul.Dispose())
+                    x.pUniformBuffers |> Array.iter (fun struct (_, ub) -> ub.Dispose())
+                    x.pStorageBuffers |> Array.iter (fun struct (_, sb) -> sb.Dispose())
                     x.pProgram.Dispose()
                     
                     x.pDepthTestMode.Dispose()
@@ -166,20 +166,15 @@ module PreparedPipelineState =
         static member NullTexture = nullTexture
 
     type ResourceManager with 
-        member x.createUniformBuffers(iface, uniforms : IUniformProvider, scope : Ag.Scope) = 
+        member x.CreateUniformBuffers(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) = 
             iface.uniformBuffers
-                |> MapExt.toSeq
-                |> Seq.map (fun (_,block) ->
-                    (block.ubBinding, x.CreateUniformBuffer(scope, block, uniforms))
+                |> Array.map (fun (_,block) ->
+                    struct (block.ubBinding, x.CreateUniformBuffer(scope, block, uniforms))
                    )
-                |> Seq.sortBy(fun (slot, _) -> slot)
-                |> Seq.toArray
          
-        member x.CreateStorageBuffers(iface, uniforms : IUniformProvider, scope : Ag.Scope) = 
+        member x.CreateStorageBuffers(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) = 
             iface.storageBuffers
-                |> MapExt.toList
-                |> Seq.map (fun (_,buf) ->
-                    
+                |> Array.map (fun (_,buf) ->
                     let buffer = 
                         match uniforms.TryGetUniform(scope, Symbol.Create buf.ssbName) with
                             | Some (:? IMod<IBuffer> as b) ->
@@ -190,12 +185,10 @@ module PreparedPipelineState =
                             | _ ->
                                 failwithf "[GL] could not find storage buffer %A" buf.ssbName
 
-                    buf.ssbBinding, buffer
+                    struct (buf.ssbBinding, buffer)
                 )
-                |> Seq.sortBy(fun (slot, _) -> slot)
-                |> Seq.toArray
 
-        member x.CreateTextureBindings(iface, uniforms : IUniformProvider, scope : Ag.Scope) = 
+        member x.CreateTextureBindings(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) = 
 
             let samplerModifier = 
                 match uniforms.TryGetUniform(scope, DefaultSemantic.SamplerStateModifier) with
@@ -216,130 +209,124 @@ module PreparedPipelineState =
 
                 x.CreateSampler(sammy)
 
-            let textureBindings =
-                iface.samplers
-                    |> MapExt.toSeq
-                    |> Seq.choose (fun (_,u) ->
+            iface.samplers
+                |> Array.choose (fun (_,u) ->
                          
-                            // check if sampler is an array 
-                            //  -> compose (Texture, SamplerState)[] resource
-                            //      * case 1: individual slots
-                            //      * case 2: dependent on IMod<ITexture[]> and single SamplerState
-                            // otherwise
-                            //  -> create singe (Texture, SamplerState) resource
+                        // check if sampler is an array 
+                        //  -> compose (Texture, SamplerState)[] resource
+                        //      * case 1: individual slots
+                        //      * case 2: dependent on IMod<ITexture[]> and single SamplerState
+                        // otherwise
+                        //  -> create singe (Texture, SamplerState) resource
                         
-                            if u.samplerCount = 0 || u.samplerTextures |> List.isEmpty then 
-                                None
-                            elif u.samplerCount = 1 then
+                        if u.samplerCount = 0 || u.samplerTextures |> List.isEmpty then 
+                            None
+                        elif u.samplerCount = 1 then
                                   
-                                let (tex, sam) = u.samplerTextures.Head
-                                let texSym = Symbol.Create tex
+                            let (tex, sam) = u.samplerTextures.Head
+                            let texSym = Symbol.Create tex
 
-                                let samRes = createSammy sam texSym
+                            let samRes = createSammy sam texSym
 
-                                let texRes = 
-                                    match uniforms.TryGetUniform(scope, texSym) with
-                                    | Some tex ->
-                                        match tex with
-                                        | :? IMod<ITexture> as value -> x.CreateTexture(value)
-                                        | :? IMod<IBackendTexture> as value -> x.CreateTexture'(value)
-                                        | _ -> x.CreateTexture(helper.NullTexture)
-                                    | None -> x.CreateTexture(helper.NullTexture)
+                            let texRes = 
+                                match uniforms.TryGetUniform(scope, texSym) with
+                                | Some tex ->
+                                    match tex with
+                                    | :? IMod<ITexture> as value -> x.CreateTexture(value)
+                                    | :? IMod<IBackendTexture> as value -> x.CreateTexture'(value)
+                                    | _ -> x.CreateTexture(helper.NullTexture)
+                                | None -> x.CreateTexture(helper.NullTexture)
 
-                                Some (Range1i(u.samplerBinding), (SingleBinding (texRes, samRes)))
+                            Some struct(Range1i(u.samplerBinding), (SingleBinding (texRes, samRes)))
 
-                            else
-                                // FShade allows each slot to be its own unique texture (uniform) and sampler state
-                                // check for special cases: 
-                                //  1. all the same sampler state
-                                //  2. texture uniform names of form TextureUniformName<[0..N-1]>
-                                //  && uniform of type ITexture[] is provided
+                        else
+                            // FShade allows each slot to be its own unique texture (uniform) and sampler state
+                            // check for special cases: 
+                            //  1. all the same sampler state
+                            //  2. texture uniform names of form TextureUniformName<[0..N-1]>
+                            //  && uniform of type ITexture[] is provided
                             
-                                let slotRange = Range1i.FromMinAndSize(u.samplerBinding, u.samplerCount - 1)
-                                let (tex0, sam0) = u.samplerTextures |> List.head
-                                let sameSam = u.samplerTextures |> List.skip 1 |> List.forall (fun s -> Object.ReferenceEquals(sam0, snd s))
+                            let slotRange = Range1i.FromMinAndSize(u.samplerBinding, u.samplerCount - 1)
+                            let (tex0, sam0) = u.samplerTextures |> List.head
+                            let sameSam = u.samplerTextures |> List.skip 1 |> List.forall (fun s -> Object.ReferenceEquals(sam0, snd s))
                             
-                                let arraySingle =
-                                    if sameSam && tex0.[tex0.Length - 1] = '0' then    
-                                        let pre = tex0.Substring(0, tex0.Length - 1)
-                                        let mutable arrayNames = true
-                                        let mutable i = 1
-                                        let mutable tt = u.samplerTextures.Tail // start with second item
-                                        while arrayNames && not tt.IsEmpty do
-                                            let t = fst tt.Head
-                                            arrayNames <- arrayNames && t.StartsWith(pre) && t.Substring(pre.Length) = i.ToString()
-                                            tt <- tt.Tail
-                                            i <- i + 1
+                            let arraySingle =
+                                if sameSam && tex0.[tex0.Length - 1] = '0' then    
+                                    let pre = tex0.Substring(0, tex0.Length - 1)
+                                    let mutable arrayNames = true
+                                    let mutable i = 1
+                                    let mutable tt = u.samplerTextures.Tail // start with second item
+                                    while arrayNames && not tt.IsEmpty do
+                                        let t = fst tt.Head
+                                        arrayNames <- arrayNames && t.StartsWith(pre) && t.Substring(pre.Length) = i.ToString()
+                                        tt <- tt.Tail
+                                        i <- i + 1
 
-                                        if i = u.samplerCount && arrayNames then
+                                    if i = u.samplerCount && arrayNames then
                                         
-                                            // try find array uniform
-                                            // otherwise try get individual uniforms
-                                            let texSym = Symbol.Create pre
-                                            match uniforms.TryGetUniform(scope, texSym) with
-                                            | Some texArr ->
-                                                match texArr with
-                                                | :? IMod<ITexture[]> as texArr ->
-                                                    // create single value (startSlot + count + sam + tex[])
+                                        // try find array uniform
+                                        // otherwise try get individual uniforms
+                                        let texSym = Symbol.Create pre
+                                        match uniforms.TryGetUniform(scope, texSym) with
+                                        | Some texArr ->
+                                            match texArr with
+                                            | :? IMod<ITexture[]> as texArr ->
+                                                // create single value (startSlot + count + sam + tex[])
 
-                                                    let samRes = createSammy sam0 texSym
+                                                let samRes = createSammy sam0 texSym
 
-                                                    let texArr = x.CreateTextureArray(u.samplerCount, texArr)
+                                                let texArr = x.CreateTextureArray(u.samplerCount, texArr)
 
-                                                    let arrayBinding = x.CreateTextureBinding'((slotRange, texArr, samRes))
+                                                let arrayBinding = x.CreateTextureBinding'((slotRange, texArr, samRes))
 
-                                                    Some arrayBinding
-                                                | _ -> 
-                                                    Log.warn "unexpected texture type %s: %A" pre (texArr.GetType())
-                                                    None
+                                                Some arrayBinding
+                                            | _ -> 
+                                                Log.warn "unexpected texture type %s: %A" pre (texArr.GetType())
+                                                None
 
-                                            | _ -> // could not find texture array uniform -> try individual
-                                                None 
-                                        else
-                                            None // samplerTextures description is not qualified for a single array uniform
+                                        | _ -> // could not find texture array uniform -> try individual
+                                            None 
                                     else
                                         None // samplerTextures description is not qualified for a single array uniform
+                                else
+                                    None // samplerTextures description is not qualified for a single array uniform
 
-                                if Option.isSome arraySingle then
-                                    Some (slotRange, ArrayBinding (arraySingle.Value))
-                                else 
+                            if Option.isSome arraySingle then
+                                Some struct(slotRange, ArrayBinding (arraySingle.Value))
+                            else 
                                 
-                                    // create array texture binding
-                                    let textures = u.samplerTextures |> List.mapi (fun i (texName, sam) ->
-                                            let texSym = Symbol.Create texName
+                                // create array texture binding
+                                let textures = u.samplerTextures |> List.mapi (fun i (texName, sam) ->
+                                        let texSym = Symbol.Create texName
                                     
-                                            let texRes =
-                                                match uniforms.TryGetUniform(scope, texSym) with
-                                                | Some tex ->
-                                                    match tex with
-                                                    | :? IMod<ITexture> as value -> Some (x.CreateTexture(value))
-                                                    | :? IMod<IBackendTexture> as value -> Some (x.CreateTexture'(value))
-                                                    | _ -> None
-                                                | None -> None
-
-                                            match texRes with
-                                            | Some texRes ->
-
-                                                let samRes = createSammy sam texSym
-
-                                                Some (texRes, samRes)
+                                        let texRes =
+                                            match uniforms.TryGetUniform(scope, texSym) with
+                                            | Some tex ->
+                                                match tex with
+                                                | :? IMod<ITexture> as value -> Some (x.CreateTexture(value))
+                                                | :? IMod<IBackendTexture> as value -> Some (x.CreateTexture'(value))
+                                                | _ -> None
                                             | None -> None
-                                        )
 
-                                    let binding = x.CreateTextureBinding(slotRange, textures)
+                                        match texRes with
+                                        | Some texRes ->
 
-                                    // fix texture ref-count
-                                    textures |> List.iter (fun v -> 
-                                        match v with
-                                        | Some (t, s) -> t.RemoveRef(); s.RemoveRef()
-                                        | None -> ())
+                                            let samRes = createSammy sam texSym
 
-                                    Some (slotRange, (ArrayBinding (binding)))
-                        ) 
-                    |> Seq.sortBy (fun (slot, _) -> slot.Min)
-                    |> Seq.toArray
-                
-            (textureBindings, None)
+                                            Some (texRes, samRes)
+                                        | None -> None
+                                    )
+
+                                let binding = x.CreateTextureBinding(slotRange, textures)
+
+                                // fix texture ref-count
+                                textures |> List.iter (fun v -> 
+                                    match v with
+                                    | Some (t, s) -> t.RemoveRef(); s.RemoveRef()
+                                    | None -> ())
+
+                                Some struct(slotRange, (ArrayBinding (binding)))
+                    )
 
         member x.CreateColorMasks(fboSignature : IFramebufferSignature, writeBuffers) = 
             let attachments = fboSignature.ColorAttachments |> Map.toList
@@ -370,17 +357,18 @@ module PreparedPipelineState =
         use token = x.Context.ResourceLock
         
         let iface, program = x.CreateSurface(fboSignature, rj.Surface, rj.Mode)
+        let slots = x.GetInterfaceSlots(iface)
 
         GL.Check "[Prepare] Create Surface"
         
         // create all UniformBuffers requested by the program
-        let uniformBuffers = x.createUniformBuffers(iface, rj.Uniforms, rj.AttributeScope)
+        let uniformBuffers = x.CreateUniformBuffers(slots, rj.Uniforms, rj.AttributeScope)
 
         GL.Check "[Prepare] Uniform Buffers"
 
-        let storageBuffers = x.CreateStorageBuffers(iface, rj.Uniforms, rj.AttributeScope)
+        let storageBuffers = x.CreateStorageBuffers(slots, rj.Uniforms, rj.AttributeScope)
                 
-        let (textureBindings, textureSlots) = x.CreateTextureBindings(iface, rj.Uniforms, rj.AttributeScope)
+        let textureBindings = x.CreateTextureBindings(slots, rj.Uniforms, rj.AttributeScope)
 
         GL.Check "[Prepare] Textures"
         
@@ -443,17 +431,18 @@ module PreparedPipelineState =
         use token = x.Context.ResourceLock
         
         let iface, program = x.CreateSurface(fboSignature, surface, rj.geometryMode)
+        let slots = x.GetInterfaceSlots(iface)
 
         GL.Check "[Prepare] Create Surface"
         
         // create all UniformBuffers requested by the program
-        let uniformBuffers = x.createUniformBuffers(iface, rj.globalUniforms, Ag.emptyScope)
+        let uniformBuffers = x.CreateUniformBuffers(slots, rj.globalUniforms, Ag.emptyScope)
 
         GL.Check "[Prepare] Uniform Buffers"
 
-        let storageBuffers = x.CreateStorageBuffers(iface, rj.globalUniforms, Ag.emptyScope)
+        let storageBuffers = x.CreateStorageBuffers(slots, rj.globalUniforms, Ag.emptyScope)
 
-        let (textureBindings, textureSlots) = x.CreateTextureBindings(iface, rj.globalUniforms, Ag.emptyScope)
+        let textureBindings = x.CreateTextureBindings(slots, rj.globalUniforms, Ag.emptyScope)
 
         GL.Check "[Prepare] Textures"
         
@@ -580,16 +569,16 @@ module PreparedPipelineStateAssembler =
             
 
             // bind all uniform-buffers (if needed)
-            for (id, ub) in me.pUniformBuffers do
+            for struct (id, ub) in me.pUniformBuffers do
                 x.BindUniformBufferView(id, ub)
                 icnt <- icnt + 1
 
-            for (id, ssb) in me.pStorageBuffers do
+            for struct (id, ssb) in me.pStorageBuffers do
                 x.BindStorageBuffer(id, ssb)
                 icnt <- icnt + 1
 
             // bind all textures/samplers (if needed)
-            for (slotRange, binding) in me.pTextureBindings do
+            for struct (slotRange, binding) in me.pTextureBindings do
                 match binding with 
                 | SingleBinding (tex, sam) ->
                     x.SetActiveTexture(slotRange.Min)
@@ -601,7 +590,7 @@ module PreparedPipelineStateAssembler =
                     icnt <- icnt + 1 
                     
             // bind all top-level uniforms (if needed)
-            for (id, u) in me.pUniforms do
+            for struct (id, u) in me.pUniforms do
                 x.BindUniformLocation(id, u)
                 icnt <- icnt + 1
 
@@ -684,12 +673,12 @@ module PreparedPipelineStateAssembler =
 
             // bind all uniform-buffers (if needed)
             let mutable j = 0
-            for (id, ub) in me.pUniformBuffers do
+            for struct (id, ub) in me.pUniformBuffers do
                 let mutable i = j
                 let mutable old = None
                 // compare with prev state in parallel / assuming bindings are sorted
                 while i < prev.pUniformBuffers.Length do
-                    let (slt, bnd) = prev.pUniformBuffers.[i]
+                    let struct (slt, bnd) = prev.pUniformBuffers.[i]
                     if slt = id then old <- Some bnd
                     if slt < id then i <- i + 1; j <- j + 1
                     else i <- 9999 // break
@@ -702,12 +691,12 @@ module PreparedPipelineStateAssembler =
                     icnt <- icnt + 1
 
             let mutable j = 0
-            for (id, ssb) in me.pStorageBuffers do
+            for struct (id, ssb) in me.pStorageBuffers do
                 let mutable i = j
                 let mutable old = None
                 // compare with prev state in parallel / assuming bindings are sorted
                 while i < prev.pStorageBuffers.Length do
-                    let (slt, bnd) = prev.pStorageBuffers.[i]
+                    let struct (slt, bnd) = prev.pStorageBuffers.[i]
                     if slt = id then old <- Some bnd
                     if slt < id then i <- i + 1; j <- j + 1
                     else i <- 9999 // break
@@ -722,15 +711,15 @@ module PreparedPipelineStateAssembler =
 
             // bind all textures/samplers (if needed)
             let mutable j = 0
-            for (slotRange, binding) in me.pTextureBindings do
+            for struct (slotRange, binding) in me.pTextureBindings do
                 let mutable i = j
                 let mutable old = None
                 // compare with prev state in parallel / assuming bindings are sorted
                 while i < prev.pTextureBindings.Length do
-                    let (slt, bnd) = prev.pTextureBindings.[i]
+                    let struct (slt, bnd) = prev.pTextureBindings.[i]
                     if slt = slotRange then old <- Some bnd // ranges must perfectly match / does not support overlap of arrays or single textures
                     if slt.Max < slotRange.Min then i <- i + 1; j <- j + 1
-                    else i <- 9999 // break
+                    else i <- Int32.MaxValue // break
                     
                 match old with
                 | Some old when old = binding -> () // could use more sophisticated compare to detect array overlaps 
@@ -753,15 +742,15 @@ module PreparedPipelineStateAssembler =
 
             // bind all top-level uniforms (if needed)
             let mutable j = 0
-            for (id, u) in me.pUniforms do
+            for struct (id, u) in me.pUniforms do
                 let mutable i = j
                 let mutable old = None
                 // compare with prev state in parallel / assuming bindings are sorted
                 while i < prev.pUniforms.Length do
-                    let (slt, bnd) = prev.pUniforms.[i]
+                    let struct (slt, bnd) = prev.pUniforms.[i]
                     if slt = id then old <- Some bnd
                     if slt < id then i <- i + 1; j <- j + 1
-                    else i <- 9999 // break
+                    else i <- Int32.MaxValue // break
 
                 match old with
                     | Some old when old = u -> ()
