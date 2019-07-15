@@ -44,7 +44,7 @@ type PreparedPipelineState =
         pUniformBuffers : Map<int, IResource<UniformBufferView, int>>
         pStorageBuffers : Map<int, IResource<Buffer, int>>
         pUniforms : Map<int, IResource<UniformLocation, nativeint>>
-        pTextureSlots : Map<int, TextureBindingSlot> // map of all used slots: ArrayBinding will be mapped to multiple slots
+        //pTextureSlots : Map<int, TextureBindingSlot> // map of all used slots: ArrayBinding will be mapped to multiple slots
         pTextureBindings : (Range1i * TextureBindingSlot)[] // list of texture bindings (unique entries of pTextureSlots)
                 
         pDepthTestMode : IResource<DepthTestInfo, DepthTestInfo>
@@ -337,20 +337,20 @@ module PreparedPipelineState =
                         ) 
                     |> Seq.toArray
                 
-            let textureSlots = 
-                textureBindings 
-                |> Array.toSeq 
-                |> Seq.collect (fun (slotRange, tb) ->
-                                seq {
-                                    match tb with
-                                    | SingleBinding (tex, sam) -> yield (slotRange.Min, SingleBinding (tex, sam))
-                                    | ArrayBinding ta -> 
-                                        for i in slotRange.Min..slotRange.Max do 
-                                            yield (i, ArrayBinding ta)
-                                }
-                    ) |> Map.ofSeq
+            //let textureSlots = 
+            //    textureBindings 
+            //    |> Array.toSeq 
+            //    |> Seq.collect (fun (slotRange, tb) ->
+            //                    seq {
+            //                        match tb with
+            //                        | SingleBinding (tex, sam) -> yield (slotRange.Min, SingleBinding (tex, sam))
+            //                        | ArrayBinding ta -> 
+            //                            for i in slotRange.Min..slotRange.Max do 
+            //                                yield (i, ArrayBinding ta)
+            //                    }
+            //        ) |> Map.ofSeq
 
-            (textureBindings, textureSlots)
+            (textureBindings, None)
 
         member x.CreateColorMasks(fboSignature : IFramebufferSignature, writeBuffers) = 
             let attachments = fboSignature.ColorAttachments |> Map.toList
@@ -432,7 +432,7 @@ module PreparedPipelineState =
             pStorageBuffers = storageBuffers
             pUniformBuffers = uniformBuffers
             pUniforms = Map.empty
-            pTextureSlots = textureSlots
+            //pTextureSlots = textureSlots
             pTextureBindings = textureBindings
             pColorAttachmentCount = attachmentCount
             pDrawBuffers = drawBuffers
@@ -507,7 +507,7 @@ module PreparedPipelineState =
             pStorageBuffers = storageBuffers
             pUniformBuffers = uniformBuffers
             pUniforms = Map.empty
-            pTextureSlots = textureSlots
+            //pTextureSlots = textureSlots
             pTextureBindings = textureBindings
             pColorAttachmentCount = attachmentCount
             pDrawBuffers = drawBuffers
@@ -721,10 +721,23 @@ module PreparedPipelineStateAssembler =
                 )
 
             // bind all textures/samplers (if needed)
+            let mutable j = 0
             for (slotRange, binding) in me.pTextureBindings do
-                let old = Map.tryFind (slotRange.Min) prev.pTextureSlots
+                let mutable i = j
+                let mutable old = None
+                // compare with prev state in parallel / assuming bindings are sorted
+                while i < prev.pTextureBindings.Length do
+                    let (slt, bnd) = prev.pTextureBindings.[i]
+                    if slt = slotRange then // ranges must perfectly match / does not support overlap of arrays or single textures
+                        old <- Some bnd
+                    if slt.Max < slotRange.Min then
+                        i <- i + 1
+                        j <- j + 1
+                    else
+                        i <- 9999 // break
+                    
                 match old with
-                | Some old when old = binding -> ()
+                | Some old when old = binding -> () // could use more sophisticated compare to detect array overlaps 
                 | _ -> 
                     match binding with 
                     | SingleBinding (tex, sam) ->
