@@ -1460,7 +1460,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
 
     let contents =
         state.pProgramInterface.storageBuffers |> MapExt.toSeq |> Seq.choose (fun (name, buffer) ->
-            if Map.containsKey buffer.ssbBinding state.pStorageBuffers then
+            if state.pStorageBuffers |> Array.tryFind (fun (id, _) -> id = buffer.ssbBinding) |> Option.isNone then
                 None
             else
                 let typ = GLSLType.toType buffer.ssbType

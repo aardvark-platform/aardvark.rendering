@@ -41,11 +41,10 @@ type PreparedPipelineState =
         pFramebufferSignature : IFramebufferSignature
         pProgram : IResource<Program, int>
         pProgramInterface : GLSLProgramInterface
-        pUniformBuffers : Map<int, IResource<UniformBufferView, int>>
-        pStorageBuffers : Map<int, IResource<Buffer, int>>
-        pUniforms : Map<int, IResource<UniformLocation, nativeint>>
-        //pTextureSlots : Map<int, TextureBindingSlot> // map of all used slots: ArrayBinding will be mapped to multiple slots
-        pTextureBindings : (Range1i * TextureBindingSlot)[] // list of texture bindings (unique entries of pTextureSlots)
+        pUniformBuffers : (int * IResource<UniformBufferView, int>)[] // sorted list of uniform buffers
+        pStorageBuffers : (int * IResource<Buffer, int>)[] // sorted list of storage buffers
+        pUniforms : (int * IResource<UniformLocation, nativeint>)[] // sorted list of uniforms
+        pTextureBindings : (Range1i * TextureBindingSlot)[] // sorted list of texture bindings
                 
         pDepthTestMode : IResource<DepthTestInfo, DepthTestInfo>
         pDepthBias : IResource<DepthBiasInfo, DepthBiasInfo>
@@ -68,13 +67,13 @@ type PreparedPipelineState =
     member x.Resources =
         seq {
             yield x.pProgram :> IResource
-            for (_,b) in Map.toSeq x.pUniformBuffers do
+            for (_,b) in x.pUniformBuffers do
                 yield b :> _
                 
-            for (_,b) in Map.toSeq x.pStorageBuffers do
+            for (_,b) in x.pStorageBuffers do
                 yield b :> _
 
-            for (_,u) in Map.toSeq x.pUniforms do
+            for (_,u) in x.pUniforms do
                 yield u :> _
 
             for t in x.pTextureBindings do
@@ -141,9 +140,9 @@ type PreparedPipelineState =
                         | SingleBinding (tex, sam) -> tex.Dispose(); sam.Dispose()
                         | ArrayBinding ta -> ta.Dispose()
 
-                    x.pUniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
-                    x.pUniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
-                    x.pStorageBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
+                    x.pUniforms |> Array.iter (fun (_, ul) -> ul.Dispose())
+                    x.pUniformBuffers |> Array.iter (fun (_, ub) -> ub.Dispose())
+                    x.pStorageBuffers |> Array.iter (fun (_, ub) -> ub.Dispose())
                     x.pProgram.Dispose()
                     
                     x.pDepthTestMode.Dispose()
@@ -169,16 +168,17 @@ module PreparedPipelineState =
     type ResourceManager with 
         member x.createUniformBuffers(iface, uniforms : IUniformProvider, scope : Ag.Scope) = 
             iface.uniformBuffers
-                |> MapExt.toList
-                |> List.map (fun (_,block) ->
-                    block.ubBinding, x.CreateUniformBuffer(scope, block, uniforms)
+                |> MapExt.toSeq
+                |> Seq.map (fun (_,block) ->
+                    (block.ubBinding, x.CreateUniformBuffer(scope, block, uniforms))
                    )
-                |> Map.ofList
+                |> Seq.sortBy(fun (slot, _) -> slot)
+                |> Seq.toArray
          
         member x.CreateStorageBuffers(iface, uniforms : IUniformProvider, scope : Ag.Scope) = 
             iface.storageBuffers
                 |> MapExt.toList
-                |> List.map (fun (_,buf) ->
+                |> Seq.map (fun (_,buf) ->
                     
                     let buffer = 
                         match uniforms.TryGetUniform(scope, Symbol.Create buf.ssbName) with
@@ -192,7 +192,8 @@ module PreparedPipelineState =
 
                     buf.ssbBinding, buffer
                 )
-                |> Map.ofList
+                |> Seq.sortBy(fun (slot, _) -> slot)
+                |> Seq.toArray
 
         member x.CreateTextureBindings(iface, uniforms : IUniformProvider, scope : Ag.Scope) = 
 
@@ -335,21 +336,9 @@ module PreparedPipelineState =
 
                                     Some (slotRange, (ArrayBinding (binding)))
                         ) 
+                    |> Seq.sortBy (fun (slot, _) -> slot.Min)
                     |> Seq.toArray
                 
-            //let textureSlots = 
-            //    textureBindings 
-            //    |> Array.toSeq 
-            //    |> Seq.collect (fun (slotRange, tb) ->
-            //                    seq {
-            //                        match tb with
-            //                        | SingleBinding (tex, sam) -> yield (slotRange.Min, SingleBinding (tex, sam))
-            //                        | ArrayBinding ta -> 
-            //                            for i in slotRange.Min..slotRange.Max do 
-            //                                yield (i, ArrayBinding ta)
-            //                    }
-            //        ) |> Map.ofSeq
-
             (textureBindings, None)
 
         member x.CreateColorMasks(fboSignature : IFramebufferSignature, writeBuffers) = 
@@ -431,8 +420,7 @@ module PreparedPipelineState =
             pProgramInterface = iface
             pStorageBuffers = storageBuffers
             pUniformBuffers = uniformBuffers
-            pUniforms = Map.empty
-            //pTextureSlots = textureSlots
+            pUniforms = Array.empty
             pTextureBindings = textureBindings
             pColorAttachmentCount = attachmentCount
             pDrawBuffers = drawBuffers
@@ -506,7 +494,7 @@ module PreparedPipelineState =
             pProgramInterface = iface
             pStorageBuffers = storageBuffers
             pUniformBuffers = uniformBuffers
-            pUniforms = Map.empty
+            pUniforms = Array.empty
             //pTextureSlots = textureSlots
             pTextureBindings = textureBindings
             pColorAttachmentCount = attachmentCount
@@ -592,15 +580,13 @@ module PreparedPipelineStateAssembler =
             
 
             // bind all uniform-buffers (if needed)
-            me.pUniformBuffers |> Map.iter (fun id ub ->
+            for (id, ub) in me.pUniformBuffers do
                 x.BindUniformBufferView(id, ub)
                 icnt <- icnt + 1
-                )
 
-            me.pStorageBuffers |> Map.iter (fun id ssb ->
+            for (id, ssb) in me.pStorageBuffers do
                 x.BindStorageBuffer(id, ssb)
                 icnt <- icnt + 1
-                )
 
             // bind all textures/samplers (if needed)
             for (slotRange, binding) in me.pTextureBindings do
@@ -615,10 +601,9 @@ module PreparedPipelineStateAssembler =
                     icnt <- icnt + 1 
                     
             // bind all top-level uniforms (if needed)
-            me.pUniforms |> Map.iter (fun id u ->
+            for (id, u) in me.pUniforms do
                 x.BindUniformLocation(id, u)
                 icnt <- icnt + 1
-                )
 
             NativeStats(InstructionCount = icnt + 14) // 14 fixed instruction 
             
@@ -698,27 +683,42 @@ module PreparedPipelineStateAssembler =
 
 
             // bind all uniform-buffers (if needed)
-            me.pUniformBuffers |> Map.iter (fun id ub ->
-                //do! useUniformBufferSlot id
-                
-                match Map.tryFind id prev.pUniformBuffers with
-                    | Some old when old = ub -> 
-                        // the same UniformBuffer has already been bound
-                        ()
-                    | _ -> 
-                        x.BindUniformBufferView(id, ub)
-                        icnt <- icnt + 1
-                )
+            let mutable j = 0
+            for (id, ub) in me.pUniformBuffers do
+                let mutable i = j
+                let mutable old = None
+                // compare with prev state in parallel / assuming bindings are sorted
+                while i < prev.pUniformBuffers.Length do
+                    let (slt, bnd) = prev.pUniformBuffers.[i]
+                    if slt = id then old <- Some bnd
+                    if slt < id then i <- i + 1; j <- j + 1
+                    else i <- 9999 // break
 
-            me.pStorageBuffers |> Map.iter (fun id ssb ->
-                match Map.tryFind id prev.pStorageBuffers with
-                    | Some old when old = ssb -> 
-                        // the same UniformBuffer has already been bound
-                        ()
-                    | _ -> 
-                        x.BindStorageBuffer(id, ssb)
-                        icnt <- icnt + 1
-                )
+                match old with
+                | Some old when old = ub -> 
+                    () // the same UniformBuffer has already been bound
+                | _ -> 
+                    x.BindUniformBufferView(id, ub)
+                    icnt <- icnt + 1
+
+            let mutable j = 0
+            for (id, ssb) in me.pStorageBuffers do
+                let mutable i = j
+                let mutable old = None
+                // compare with prev state in parallel / assuming bindings are sorted
+                while i < prev.pStorageBuffers.Length do
+                    let (slt, bnd) = prev.pStorageBuffers.[i]
+                    if slt = id then old <- Some bnd
+                    if slt < id then i <- i + 1; j <- j + 1
+                    else i <- 9999 // break
+
+                match old with
+                | Some old when old = ssb -> 
+                    // the same UniformBuffer has already been bound
+                    ()
+                | _ -> 
+                    x.BindStorageBuffer(id, ssb)
+                icnt <- icnt + 1
 
             // bind all textures/samplers (if needed)
             let mutable j = 0
@@ -728,13 +728,9 @@ module PreparedPipelineStateAssembler =
                 // compare with prev state in parallel / assuming bindings are sorted
                 while i < prev.pTextureBindings.Length do
                     let (slt, bnd) = prev.pTextureBindings.[i]
-                    if slt = slotRange then // ranges must perfectly match / does not support overlap of arrays or single textures
-                        old <- Some bnd
-                    if slt.Max < slotRange.Min then
-                        i <- i + 1
-                        j <- j + 1
-                    else
-                        i <- 9999 // break
+                    if slt = slotRange then old <- Some bnd // ranges must perfectly match / does not support overlap of arrays or single textures
+                    if slt.Max < slotRange.Min then i <- i + 1; j <- j + 1
+                    else i <- 9999 // break
                     
                 match old with
                 | Some old when old = binding -> () // could use more sophisticated compare to detect array overlaps 
@@ -756,11 +752,21 @@ module PreparedPipelineStateAssembler =
                         icnt <- icnt + 1 
 
             // bind all top-level uniforms (if needed)
-            me.pUniforms |> Map.iter (fun id u ->
-                match Map.tryFind id prev.pUniforms with
+            let mutable j = 0
+            for (id, u) in me.pUniforms do
+                let mutable i = j
+                let mutable old = None
+                // compare with prev state in parallel / assuming bindings are sorted
+                while i < prev.pUniforms.Length do
+                    let (slt, bnd) = prev.pUniforms.[i]
+                    if slt = id then old <- Some bnd
+                    if slt < id then i <- i + 1; j <- j + 1
+                    else i <- 9999 // break
+
+                match old with
                     | Some old when old = u -> ()
                     | _ -> x.BindUniformLocation(id, u); icnt <- icnt + 1
-                )
+                
 
             NativeStats(InstructionCount = icnt)
 
