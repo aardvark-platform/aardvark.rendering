@@ -577,7 +577,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
     let mutable count = 0
 
     let bufferHandles = NativePtr.allocArray [| V3i(buffer.Handle, bbuffer.Handle, count) |]
-    let indirectHandle = NativePtr.allocArray [| V2i(buffer.Handle, 0) |]
+    let indirectHandle = NativePtr.allocArray [| V2i(buffer.Handle, count) |]
     let computeSize = NativePtr.allocArray [| V3i.Zero |]
 
     let updatePointers() =
@@ -653,7 +653,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
         NativePtr.allocArray [| new DrawCallInfoList(1, pCall) |]
 
     let resize (newCount : int) =
-        let newCapacity = max initialCapacity (Fun.NextPowerOfTwo newCount)
+        let newCapacity = max initialCapacity (Fun.NextPowerOfTwo (max 1 newCount))
         if newCapacity <> capacity then
             let ess = if bounds then es + bs else es
             Interlocked.Add(&totalMemory.contents, int64 (ess * (newCapacity - capacity))) |> ignore
@@ -685,41 +685,55 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
     member x.Count = count
 
     member x.Add(call : DrawCallInfo, box : Box3d, cellBounds : Box3d, rootId : int) =
-        if drawIndices.ContainsKey call then
+        if call.FaceVertexCount <= 0 || call.InstanceCount <= 0 then
+            Log.warn "[IndirectBuffer] adding empty DrawCall: %A" call
+            true
+
+        elif drawIndices.ContainsKey call then
             false
-        else
-            if count < capacity then
-                let id = count
-                drawIndices.[call] <- id
-                NativePtr.set mem id (adjust call)
-                if bounds then
-                    let bounds =
-                        CullingShader.CullingInfo(
-                            Min = V4f(V3f box.Min, float32 call.InstanceCount),
-                            Max = V4f(V3f box.Max, float32 rootId),
-                            CellMin = V4f(V3f cellBounds.Min, 0.0f),
-                            CellMax = V4f(V3f cellBounds.Max, 0.0f)
-                        )
-                    NativePtr.set bmem id bounds
-                count <- count + 1
-                let ess = if bounds then es + bs else es
-                Interlocked.Add(&usedMemory.contents, int64 ess) |> ignore
-                dirty <- RangeSet.insert (Range1i(id,id)) dirty
+
+        elif count < capacity then
+            if call.FaceVertexCount > 32768 then
+                Log.warn "[IndirectBuffer] adding insane DrawCall: %A" call
+
+            let id = count
+            drawIndices.[call] <- id
+            NativePtr.set mem id (adjust call)
+            if bounds then
+                let bounds =
+                    CullingShader.CullingInfo(
+                        Min = V4f(V3f box.Min, float32 call.InstanceCount),
+                        Max = V4f(V3f box.Max, float32 rootId),
+                        CellMin = V4f(V3f cellBounds.Min, 0.0f),
+                        CellMax = V4f(V3f cellBounds.Max, 0.0f)
+                    )
+                NativePtr.set bmem id bounds
+            count <- count + 1
+            let ess = if bounds then es + bs else es
+            Interlocked.Add(&usedMemory.contents, int64 ess) |> ignore
+            dirty <- RangeSet.insert (Range1i(id,id)) dirty
                     
-                updatePointers()
-                true
-            else
-                resize (count + 1)
-                x.Add(call, box, cellBounds, rootId)
+            updatePointers()
+            true
+
+        else
+            resize (count + 1)
+            x.Add(call, box, cellBounds, rootId)
                  
     member x.Contains (call : DrawCallInfo) =
+        call.FaceVertexCount <= 0 || 
+        call.InstanceCount <= 0 || 
         drawIndices.ContainsKey call
 
     member x.Remove(call : DrawCallInfo) =
-        match drawIndices.TryRemove call with
+        if call.FaceVertexCount <= 0 || call.InstanceCount <= 0 then
+            Log.warn "[IndirectBuffer] removing empty DrawCall: %A" call
+            true
+        else
+            match drawIndices.TryRemove call with
             | (true, oid) ->
                 let last = count - 1
-                count <- count - 1
+                count <- last
                 let ess = if bounds then es + bs else es
                 Interlocked.Add(&usedMemory.contents, int64 -ess) |> ignore
 
@@ -742,38 +756,47 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
                 false
         
     member x.Flush() =
-        use __ = ctx.ResourceLock
+        
         let toUpload = dirty
         dirty <- RangeSet.empty
 
-        if not (Seq.isEmpty toUpload) then
+        let toUpload =
+            toUpload |> Seq.choose (fun r ->
+                if r.Max < 0 then
+                    Log.warn "bad dirty range: %A" r
+                    None
+                elif r.Min >= count then
+                    Log.warn "bad dirty range: %A" r
+                    None
+                else
+                    let mm = count - 1
+                    let c = Range1i(clamp 0 mm r.Min, clamp 0 mm r.Max)
+                    if c <> r then
+                        Log.warn "bad dirty range: %A" r
+                    if c.Max >= c.Min then
+                        Some c
+                    else
+                        None
+            ) |> Seq.toArray
+
+        if toUpload.Length > 0 then
+            use __ = ctx.ResourceLock
+            let ptr = ctx.MapBufferRange(buffer, 0n, nativeint (count * es), BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
+            for r in toUpload do
+                let o = r.Min * es |> nativeint
+                let s = (1 + r.Max - r.Min) * es |> nativeint
+                Marshal.Copy(NativePtr.toNativeInt mem + o, ptr + o, s)
+                GL.FlushMappedNamedBufferRange(buffer.Handle, o, s)
+            ctx.UnmapBuffer(buffer)
+
             if bounds then
-                let ptr = ctx.MapBufferRange(buffer, 0n, nativeint (count * es), BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
                 let bptr = ctx.MapBufferRange(bbuffer, 0n, nativeint (count * bs), BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
                 for r in toUpload do
-                    let r = Range1i(clamp 0 (count - 1) r.Min, clamp 0 (count - 1) r.Max)
-                    if r.Max >= r.Min then
-                        let o = r.Min * es |> nativeint
-                        let s = (1 + r.Max - r.Min) * es |> nativeint
-                        Marshal.Copy(NativePtr.toNativeInt mem + o, ptr + o, s)
-                        GL.FlushMappedNamedBufferRange(buffer.Handle, o, s)
-                        
-                        let o = r.Min * bs |> nativeint
-                        let s = (1 + r.Max - r.Min) * bs |> nativeint
-                        Marshal.Copy(NativePtr.toNativeInt bmem + o, bptr + o, s)
-                        GL.FlushMappedNamedBufferRange(bbuffer.Handle, o, s)
-
-                ctx.UnmapBuffer(buffer)
+                    let o = r.Min * bs |> nativeint
+                    let s = (1 + r.Max - r.Min) * bs |> nativeint
+                    Marshal.Copy(NativePtr.toNativeInt bmem + o, bptr + o, s)
+                    GL.FlushMappedNamedBufferRange(bbuffer.Handle, o, s)
                 ctx.UnmapBuffer(bbuffer)
-            else 
-                let size = count * es
-                let ptr = ctx.MapBufferRange(buffer, 0n, nativeint size, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
-                for r in toUpload do
-                    let o = r.Min * es |> nativeint
-                    let s = (1 + r.Max - r.Min) * es |> nativeint
-                    Marshal.Copy(NativePtr.toNativeInt mem + o, ptr + o, s)
-                    GL.FlushMappedNamedBufferRange(buffer.Handle, o, s)
-                ctx.UnmapBuffer(buffer)
 
 
     member x.Buffer =
