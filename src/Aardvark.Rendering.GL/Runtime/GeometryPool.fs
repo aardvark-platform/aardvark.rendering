@@ -573,7 +573,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
 
     let ub = ctx.CreateBuffer(128)
 
-    let mutable dirty = RangeSet.empty
+    let dirty = System.Collections.Generic.HashSet<int>()
     let mutable count = 0
 
     let bufferHandles = NativePtr.allocArray [| V3i(buffer.Handle, bbuffer.Handle, count) |]
@@ -674,7 +674,8 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
             buffer <- nb
             bbuffer <- nbb
             capacity <- newCapacity
-            dirty <- RangeSet.ofList [Range1i(0, count - 1)]
+            dirty.Clear()
+            dirty.UnionWith [0..count-1] 
                 
             NativePtr.free om
             ctx.Delete ob
@@ -711,7 +712,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
             count <- count + 1
             let ess = if bounds then es + bs else es
             Interlocked.Add(&usedMemory.contents, int64 ess) |> ignore
-            dirty <- RangeSet.insert (Range1i(id,id)) dirty
+            dirty.Add id |> ignore
                     
             updatePointers()
             true
@@ -745,10 +746,11 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
                     if bounds then
                         let lb = NativePtr.get bmem last
                         NativePtr.set bmem oid lb
-                    dirty <- RangeSet.remove (Range1i(last,last)) dirty
-                    dirty <- RangeSet.insert (Range1i(oid,oid)) dirty
+                    dirty.Add oid |> ignore
+                
+                dirty.Remove last |> ignore
                         
-                resize last
+                resize count
                 updatePointers()
 
                 true
@@ -757,34 +759,27 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
         
     member x.Flush() =
         
-        let toUpload = dirty
-        dirty <- RangeSet.empty
+        let toUpload = dirty |> Seq.toArray
+        dirty.Clear()
 
         let toUpload =
             toUpload |> Seq.choose (fun r ->
-                if r.Max < 0 then
-                    Log.warn "bad dirty range: %A" r
+                if r < 0 then
+                    Log.warn "bad dirty range: %A (count: %A)" r count
                     None
-                elif r.Min >= count then
-                    Log.warn "bad dirty range: %A" r
+                elif r >= count then
+                    Log.warn "bad dirty range: %A (count: %A)" r count
                     None
                 else
-                    let mm = count - 1
-                    let c = Range1i(clamp 0 mm r.Min, clamp 0 mm r.Max)
-                    if c <> r then
-                        Log.warn "bad dirty range: %A" r
-                    if c.Max >= c.Min then
-                        Some c
-                    else
-                        None
+                    Some r
             ) |> Seq.toArray
 
         if toUpload.Length > 0 then
             use __ = ctx.ResourceLock
             let ptr = ctx.MapBufferRange(buffer, 0n, nativeint (count * es), BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
             for r in toUpload do
-                let o = r.Min * es |> nativeint
-                let s = (1 + r.Max - r.Min) * es |> nativeint
+                let o = r * es |> nativeint
+                let s = es |> nativeint
                 Marshal.Copy(NativePtr.toNativeInt mem + o, ptr + o, s)
                 GL.FlushMappedNamedBufferRange(buffer.Handle, o, s)
             ctx.UnmapBuffer(buffer)
@@ -792,8 +787,8 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
             if bounds then
                 let bptr = ctx.MapBufferRange(bbuffer, 0n, nativeint (count * bs), BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
                 for r in toUpload do
-                    let o = r.Min * bs |> nativeint
-                    let s = (1 + r.Max - r.Min) * bs |> nativeint
+                    let o = r * bs |> nativeint
+                    let s = bs |> nativeint
                     Marshal.Copy(NativePtr.toNativeInt bmem + o, bptr + o, s)
                     GL.FlushMappedNamedBufferRange(bbuffer.Handle, o, s)
                 ctx.UnmapBuffer(bbuffer)
@@ -877,7 +872,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
         capacity <- 0
         mem <- NativePtr.zero
         buffer <- new Buffer(ctx, 0n, 0)
-        dirty <- RangeSet.empty
+        dirty.Clear()
         count <- 0
         NativePtr.free indirectHandle
         NativePtr.free computeSize

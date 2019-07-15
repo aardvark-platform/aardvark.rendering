@@ -728,7 +728,7 @@ module LodTreeHelpers =
                          
                 lock q (fun () -> q := AtomicQueue.enqueue op !q) 
             | Some o, Some n ->
-                assert (Unchecked.equals o.value n.value)
+                assert (Unchecked.equals o.original n.original)
                 match o.children, n.children with
                 | [], [] -> 
                     ()
