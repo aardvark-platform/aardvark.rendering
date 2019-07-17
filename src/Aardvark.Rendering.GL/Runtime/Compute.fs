@@ -207,7 +207,7 @@ and ComputeShader(prog : Program, localSize : V3i) =
     let mutable isDisposed = 0
 
     let ctx = prog.Context
-    let iface = prog.InterfaceNew
+    let iface = prog.Interface
 
     let bufferTypes =
         iface.storageBuffers |> MapExt.map (fun _ b -> 
@@ -434,7 +434,7 @@ module GLComputeExtensions =
             using x.ResourceLock (fun token ->
                 match x.TryCompileCompute(true, code) with
                     | Success prog ->
-                        let kernel = new ComputeShader({ prog with InterfaceNew = iface }, localSize)
+                        let kernel = new ComputeShader({ prog with Interface = iface }, localSize)
                         Success kernel
 
                     | Error err ->

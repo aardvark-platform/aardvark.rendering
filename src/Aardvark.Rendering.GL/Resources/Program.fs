@@ -60,12 +60,8 @@ type Program =
        Code : string
        Handle : int
        HasTessellation : bool
-       //ShadersNew : list<Shader>
-       UniformGetters : SymbolDict<IMod>
        SupportedModes : Option<Set<IndexedGeometryMode>>
-       Interface : ShaderReflection.ShaderInterface
-       TextureInfo : Map<string * int, SamplerDescription>
-       InterfaceNew : FShade.GLSL.GLSLProgramInterface
+       Interface : FShade.GLSL.GLSLProgramInterface
 
        [<DefaultValue>]
        mutable _inputs : Option<list<string * Type>>
@@ -76,55 +72,10 @@ type Program =
     } with
 
     member x.WritesPointSize =
-        FShade.GLSL.GLSLProgramInterface.usesPointSize x.InterfaceNew
+        FShade.GLSL.GLSLProgramInterface.usesPointSize x.Interface
 
     interface IBackendSurface with
         member x.Handle = x.Handle :> obj
-        member x.UniformGetters = x.UniformGetters
-        member x.Samplers = []
-
-        member x.Inputs = 
-            match x._inputs with
-                | None -> 
-                    let r = x.Interface.Inputs |> List.map (fun a -> ShaderPath.name a.Path, ShaderParameterType.getExpectedType a.Type)
-                    x._inputs <- Some r
-                    r
-                | Some r ->
-                    r
-
-        member x.Outputs = 
-            match x._outputs with
-                | None ->
-                    let r = x.Interface.Outputs |> List.map (fun a -> ShaderPath.name a.Path, ShaderParameterType.getExpectedType a.Type)
-                    x._outputs <- Some r
-                    r
-                | Some r ->
-                    r
-
-        member x.Uniforms =
-            match x._uniforms with
-                | None ->
-                    let bu = 
-                        x.Interface.UniformBlocks |> List.collect (fun b -> 
-                            b.Fields |> List.map (fun f -> 
-                                ShaderPath.name f.Path, ShaderParameterType.getExpectedType f.Type
-                            )
-                        )
-
-                    let uu = 
-                        x.Interface.Uniforms |> List.map (fun f -> 
-                            match f.Type with
-                                | Sampler _ -> 
-                                    ShaderPath.name f.Path, typeof<ITexture>
-                                | t ->
-                                    ShaderPath.name f.Path, ShaderParameterType.getExpectedType t
-                        )
-                    
-                    let res = bu @ uu 
-                    x._uniforms <- Some res
-                    res
-                | Some r ->
-                    r
 
 [<AutoOpen>]
 module ProgramExtensions =
@@ -375,11 +326,8 @@ module ProgramExtensions =
                                 Code = code
                                 Handle = handle
                                 HasTessellation = shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl || s.Stage = ShaderStage.TessEval)
-                                UniformGetters = SymDict.empty
                                 SupportedModes = supported
-                                Interface = ShaderInterface.empty
-                                TextureInfo = Map.empty
-                                InterfaceNew =
+                                Interface =
                                     {
                                         inputs          = []
                                         outputs         = []
@@ -418,12 +366,12 @@ module ProgramExtensions =
 
     open FShade.Imperative
     open FShade
-
+  
     // NOTE: shader caches no longer depending on Context. shaders objects can be shared between contexts, even if a context is using a different GL profile
     let private codeCache = ConcurrentDictionary<string * IFramebufferSignature, Error<Program>>()
     
-    let private staticShaderCache = ConcurrentDictionary<FShade.Effect * IFramebufferSignature, Error<FShade.GLSL.GLSLProgramInterface * IMod<Program>>>()
-    let private dynamicShaderCache = ConditionalWeakTable<(FShade.EffectConfig -> FShade.EffectInputLayout * IMod<FShade.Imperative.Module>), Error<FShade.GLSL.GLSLProgramInterface * IMod<Program>>>()
+    let private staticShaderCache = ConcurrentDictionary<FShade.Effect * IFramebufferSignature, Error<GLSL.GLSLProgramInterface * IMod<Program>>>()
+    let private dynamicShaderCache = ConditionalWeakTable<(FShade.EffectConfig -> FShade.EffectInputLayout * IMod<FShade.Imperative.Module>), Error<GLSL.GLSLProgramInterface * IMod<Program>>>()
     let private shaderPickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
 
 //    let private useDiskCache = true
@@ -453,7 +401,6 @@ module ProgramExtensions =
             hasTess     : bool
             modes       : Option<Set<IndexedGeometryMode>>
         }
-
 
     type Aardvark.Rendering.GL.Context with
 
@@ -594,7 +541,7 @@ module ProgramExtensions =
                             let outputs = code.iface.outputs |> List.map (fun p -> p.paramName, p.paramLocation) |> Map.ofList
                             match x.TryCompileProgramCode(outputs, true, code.code) with
                             | Success prog ->
-                                let prog = { prog with InterfaceNew = code.iface }
+                                let prog = { prog with Interface = code.iface }
                                 Success prog
                             | Error e ->
                                 Error e
@@ -606,13 +553,8 @@ module ProgramExtensions =
                                     Code = c.code
                                     Handle = prog
                                     HasTessellation = c.hasTess
-                                    //ShadersNew = []
                                     SupportedModes = c.modes
-                                    InterfaceNew = c.iface
-                                    // deprecated stuff
-                                    UniformGetters = SymDict.empty
-                                    Interface = ShaderReflection.ShaderInterface.empty
-                                    TextureInfo = Map.empty
+                                    Interface = c.iface
                                 }
 
                             Success program
@@ -622,7 +564,7 @@ module ProgramExtensions =
                         let outputs = code.iface.outputs |> List.map (fun p -> p.paramName, p.paramLocation) |> Map.ofList
                         match x.TryCompileProgramCode(outputs, true, code.code) with
                             | Success prog ->
-                                let prog = { prog with InterfaceNew = code.iface }
+                                let prog = { prog with Interface = code.iface }
                                 
                                 match x.ShaderCachePath with    
                                     | Some cachePath ->
@@ -661,7 +603,7 @@ module ProgramExtensions =
 
                         match x.TryCompileProgram(effect.Id, signature, glsl) with
                             | Success (prog) ->
-                                Success (prog.InterfaceNew, Mod.constant prog)
+                                Success (prog.Interface, Mod.constant prog)
                             | Error e ->
                                 Error e
                         )
@@ -676,10 +618,12 @@ module ProgramExtensions =
                     
                             let initial = Mod.force b
                             let effect = initial.userData |> unbox<Effect>
+                            let layoutHash = shaderPickler.ComputeHash(inputLayout).Hash |> Convert.ToBase64String
+                            
                             let iface =
-                                match x.TryCompileProgram(effect.Id + "TODO: InputLayoutHash", signature, lazy (ModuleCompiler.compileGLSL430 initial)) with  
+                                match x.TryCompileProgram(effect.Id + layoutHash, signature, lazy (ModuleCompiler.compileGLSL430 initial)) with  
                                     | Success prog -> 
-                                        let iface = prog.InterfaceNew
+                                        let iface = prog.Interface
                                         { iface with
                                             samplers = iface.samplers |> MapExt.map (fun _ sam ->
                                                 match MapExt.tryFind sam.samplerName inputLayout.eTextures with
@@ -693,8 +637,7 @@ module ProgramExtensions =
                             let changeableProgram = 
                                 b |> Mod.map (fun m ->
                                     let effect = m.userData |> unbox<Effect>
-
-                                    match x.TryCompileProgram(effect.Id + "TODO: InputLayoutHash", signature, lazy (ModuleCompiler.compileGLSL430 m)) with
+                                    match x.TryCompileProgram(effect.Id + layoutHash, signature, lazy (ModuleCompiler.compileGLSL430 m)) with
                                         | Success p -> p
                                         | Error e ->
                                             Log.error "[GL] shader compiler returned errors: %A" e
@@ -712,7 +655,7 @@ module ProgramExtensions =
                 | Surface.Backend surface ->
                     match surface with
                         | :? Program as p -> 
-                            Success (p.InterfaceNew, Mod.constant p)
+                            Success (p.Interface, Mod.constant p)
                         | _ ->
                             Error (sprintf "[GL] bad surface: %A (hi lui)" surface)
 

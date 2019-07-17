@@ -674,11 +674,6 @@ type SamplerDescription = { textureName : Symbol; samplerState : SamplerStateDes
 type IBackendSurface =
     inherit ISurface
     abstract member Handle : obj
-    abstract member UniformGetters : SymbolDict<IMod>
-    abstract member Samplers : list<string * int * SamplerDescription>
-    abstract member Inputs : list<string * Type>
-    abstract member Outputs : list<string * Type>
-    abstract member Uniforms : list<string * Type>
 
 type IPreparedRenderObject =
     inherit IRenderObject

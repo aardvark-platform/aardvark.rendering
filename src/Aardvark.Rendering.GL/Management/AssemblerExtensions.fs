@@ -900,8 +900,8 @@ module GLAssemblerExtensions =
             x.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, slot, view.Pointer)
 
         member inline x.BindTexture (texture : IResource<Texture, V2i>) = 
-            let targetPtr : nativeptr<TextureTarget> = NativePtr.ofNativeInt (NativePtr.toNativeInt texture.Pointer)
-            let texturePtr : nativeptr<int> = NativePtr.ofNativeInt (NativePtr.toNativeInt texture.Pointer + 4n)
+            let texturePtr : nativeptr<int> = NativePtr.ofNativeInt (NativePtr.toNativeInt texture.Pointer)
+            let targetPtr : nativeptr<TextureTarget> = NativePtr.ofNativeInt (NativePtr.toNativeInt texture.Pointer + 4n)
             x.BindTexture(targetPtr, texturePtr)
             
         member inline x.BindVertexAttributes(ctx : nativeptr<nativeint>, vao : IResource<VertexInputBindingHandle,_>) =

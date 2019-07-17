@@ -14,7 +14,7 @@ module Shader =
     
     let samplerArray = 
         sampler2d {
-            textureArray uniform?TextureArray 32
+            textureArray uniform?TextureArray 28
             filter Filter.MinMagMipLinear
             addressU WrapMode.Clamp
             addressV WrapMode.Clamp
@@ -32,8 +32,58 @@ module Shader =
             if cnt > 0 then
                 color <- color / float cnt
 
-            return V4d(color, 1.0)
+            return V4d(v.c.XYZ + color, 1.0)
+        }      
+
+    let samplerArraySeparate = 
+        [|
+            sampler2d {
+                texture uniform?TextureFoo
+                filter Filter.MinMagMipLinear
+                addressU WrapMode.Clamp
+                addressV WrapMode.Clamp
+            };
+            sampler2d {
+                texture uniform?TextureBar
+                filter Filter.MinMagMipLinear
+                addressU WrapMode.Wrap
+                addressV WrapMode.Wrap
+            };
+            sampler2d {
+                texture uniform?TextureFoobar
+                filter Filter.MinMagMipPoint
+                addressU WrapMode.Wrap
+                addressV WrapMode.Wrap
+            };
+        |]
+
+    let sampleTextureArray2 (v : Effects.Vertex) =
+        fragment {
+            
+            let mutable color = V3d.OOO
+            for i in 0..2 do
+                color <- color + samplerArraySeparate.[i].Sample(v.tc).XYZ
+                
+            color <- color / 3.0
+
+            return V4d(v.c.XYZ * 0.5 + color * 0.5, 1.0)
         }  
+
+    let singleSampler =
+        sampler2d {
+            texture uniform?SingleTexture
+            filter Filter.MinMagMipLinear
+            addressU WrapMode.Clamp
+            addressV WrapMode.Clamp
+        }
+    
+    let sampleSingleTexture (v : Effects.Vertex) =
+        fragment {
+            
+            let color = singleSampler.Sample(v.tc).XYZ
+
+            return V4d(v.c.XYZ * 0.5 + color * 0.5, 1.0)
+        } 
       
     type VertexIn = {
         [<WorldPosition>] wp : V4d
@@ -66,15 +116,21 @@ let main argv =
 
 
     let rand = RandomSystem(1)
-
-    let textures = Array.init 32 (fun i ->
-            let img = PixImage<byte>(Col.Format.RGBA, V2i(64, 64))
-            img.GetMatrix<C4b>().SetByIndex (fun (i : int64) ->
-                rand.UniformC3f().ToC4b()
-            ) |> ignore
+    let rndTex() =
+        let img = PixImage<byte>(Col.Format.RGBA, V2i(64, 64))
+        img.GetMatrix<C4b>().SetByIndex (fun (i : int64) ->
+            rand.UniformC3f().ToC4b()
+        ) |> ignore
             
-            PixTexture2d(PixImageMipMap([| img :> PixImage |]), TextureParams.mipmapped) :> ITexture
-        )
+        PixTexture2d(PixImageMipMap([| img :> PixImage |]), TextureParams.mipmapped) :> ITexture
+
+    let textures = Array.init 28 (fun i -> rndTex())
+
+    let textureFoo = rndTex()
+    let textureBar = rndTex()
+    let textureFoobar = rndTex()
+
+    let tetureSingleMod = Mod.init (rndTex())
 
     let scene = CSet.empty
 
@@ -111,6 +167,8 @@ let main argv =
                 let cur = case.GetValue();
                 transact(fun _ -> case.Value <- (cur + 1) % 5)
                 () 
+            | Keys.Z ->
+                transact(fun _ -> Mod.change tetureSingleMod (rndTex()))
             | _ ->
                 ()
     )
@@ -201,12 +259,19 @@ let main argv =
     let sg = Sg.set (cases)
                 |> Sg.shader {
                     do! DefaultSurfaces.trafo
+                    do! DefaultSurfaces.constantColor(C4f.Black)
                     do! Shader.clipVs
                     do! Shader.sampleTextureArray
+                    do! Shader.sampleTextureArray2
+                    do! Shader.sampleSingleTexture
                     }
 
                 |> Sg.simpleOverlay win
                 |> Sg.uniform "ClipPlaneCoefficients" (Mod.constant (V4d(0, 1, 0, 0)))
+                |> Sg.texture (Symbol.Create "TextureFoo") (Mod.constant textureFoo)
+                |> Sg.texture (Symbol.Create "TextureBar") (Mod.constant textureBar)
+                |> Sg.texture (Symbol.Create "TextureFoobar") (Mod.constant textureFoobar)
+                |> Sg.texture (Symbol.Create "SingleTexture") tetureSingleMod
 
 
     let rt = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.NativeOptimized, sg)

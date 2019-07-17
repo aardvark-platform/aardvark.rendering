@@ -309,8 +309,20 @@ module RenderTasks =
                                         | Some ls, Some rs ->
                                             let cmp = compare ls.pProgram.Id rs.pProgram.Id
                                             if cmp <> 0 then cmp
-                                            else
-                                                let cmp = compare ls.pTextures.Id rs.pTextures.Id
+                                            else // efficient texture sorting requires that slots are ordered [Global, PerMaterial, PerInstance] -> currently alphabetic based on SamplerName !
+                                                let mutable cmp = 0
+                                                let mutable i = 0
+                                                let texCnt = min ls.pTextureBindings.Length rs.pTextureBindings.Length
+                                                while cmp = 0 && i < texCnt do
+                                                    let struct (sltl, bndl) = ls.pTextureBindings.[i]
+                                                    let struct (sltr, bndr) = ls.pTextureBindings.[i]
+                                                    if (sltl <> sltr) then
+                                                        cmp <- compare l.Id r.Id
+                                                    else 
+                                                        let leftTexId = match bndl with | ArrayBinding ab -> ab.Id; | SingleBinding (t, s) -> t.Id
+                                                        let rigthTexId = match bndr with | ArrayBinding ab -> ab.Id; | SingleBinding (t, s) -> t.Id
+                                                        cmp <- compare leftTexId rigthTexId
+                                                    i <- i + 1
                                                 if cmp <> 0 then cmp
                                                 else compare l.Id r.Id
                     }
@@ -407,6 +419,9 @@ module RenderTasks =
                     task
 
         let processDeltas (x : AdaptiveToken) (parent : AbstractOpenGlRenderTask) (t : RenderToken) =
+            
+            let sw = Stopwatch.StartNew()
+
             let deltas = preparedObjectReader.GetOperations x
 
             if not (HDeltaSet.isEmpty deltas) then
@@ -425,12 +440,9 @@ module RenderTasks =
                         let task = getSubTask v.Pass
                         removed <- removed + 1
                         task.Remove v      
-       
-
-
                         
             if added > 0 || removed > 0 then
-                Log.line "[GL] RenderObjects: +%d/-%d" added removed
+                Log.line "[GL] RenderObjects: +%d/-%d (%dms)" added removed sw.ElapsedMilliseconds
             t.RenderObjectDeltas(added, removed)
 
         let updateResources (x : AdaptiveToken) (t : RenderToken) =
