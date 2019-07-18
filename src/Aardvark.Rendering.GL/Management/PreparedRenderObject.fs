@@ -173,20 +173,27 @@ module PreparedPipelineState =
                    )
          
         member x.CreateStorageBuffers(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) = 
-            iface.storageBuffers
-                |> Array.map (fun (_,buf) ->
-                    let buffer = 
-                        match uniforms.TryGetUniform(scope, Symbol.Create buf.ssbName) with
-                            | Some (:? IMod<IBuffer> as b) ->
-                                x.CreateBuffer(b)
-                            | Some m ->
-                                let o = toBufferCache.Invoke(m)
-                                x.CreateBuffer(o)
-                            | _ ->
-                                failwithf "[GL] could not find storage buffer %A" buf.ssbName
+            let mutable res = Array.zeroCreate iface.storageBuffers.Length
+            let mutable oi = 0
 
-                    struct (buf.ssbBinding, buffer)
-                )
+            for (_,buf) in iface.storageBuffers do
+                match uniforms.TryGetUniform(scope, Symbol.Create buf.ssbName) with
+                | Some (:? IMod<IBuffer> as b) ->
+                    let buffer = x.CreateBuffer(b)
+                    res.[oi] <- struct (buf.ssbBinding, buffer)
+                    oi <- oi + 1
+                | Some m ->
+                    let o = toBufferCache.Invoke(m)
+                    let buffer = x.CreateBuffer(o)
+                    res.[oi] <- struct (buf.ssbBinding, buffer)
+                    oi <- oi + 1
+                | _ ->
+                    // missing storage buffer
+                    ()
+
+            if oi <> res.Length then Array.Resize(&res, oi)
+            res
+
 
         member x.CreateTextureBindings(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) = 
 
