@@ -159,9 +159,9 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
 
         info <- i
 
-        let nTex = ctx.CreateTexture(V3i(info.framebufferSize, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 2, 1, samples)
-        let nDepth = ctx.CreateTexture(V3i(info.framebufferSize, 1), TextureDimension.Texture2D, TextureFormat.Depth24Stencil8, 2, 1, samples)
-        let nfTex = ctx.CreateTexture(V3i(info.framebufferSize * V2i(2,1), 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 1, 1, 1)
+        let nTex = ctx.CreateTexture2DArray(info.framebufferSize, 2, 1, TextureFormat.Rgba8, samples)
+        let nDepth = ctx.CreateTexture2DArray(info.framebufferSize, 2, 1, TextureFormat.Depth24Stencil8, samples)
+        let nfTex = ctx.CreateTexture2D(info.framebufferSize * V2i(2,1), 1, TextureFormat.Rgba8, 1)
 
         let nFbo =
             runtime.CreateFramebuffer(
