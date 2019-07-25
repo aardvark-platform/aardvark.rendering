@@ -192,11 +192,6 @@
           <Private>True</Private>
           <Paket>True</Paket>
         </Reference>
-        <Reference Include="FSharp.Core">
-          <HintPath>..\..\..\packages\Aardvark.Base.TypeProviders\lib\netstandard2.0\FSharp.Core.dll</HintPath>
-          <Private>True</Private>
-          <Paket>True</Paket>
-        </Reference>
       </ItemGroup>
     </When>
   </Choose>
