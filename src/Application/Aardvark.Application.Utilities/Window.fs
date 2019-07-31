@@ -188,7 +188,7 @@ module Utilities =
         let controllers, isVr = 
             match win with
                 | :? Aardvark.Application.OpenVR.VulkanVRApplicationLayered as w -> 
-                    w.Controllers |> Array.toList, true
+                    w.System.Controllers |> Seq.toList, true
                 | _ -> [], false
         
         abstract member WrapSg : IRenderWindow * ISg -> ISg
