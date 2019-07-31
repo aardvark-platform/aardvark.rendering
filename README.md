@@ -3,6 +3,7 @@
 [![Join the chat at https://gitter.im/aardvark-platform/Lobby](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/aardvark-platform/Lobby)
 [![license](https://img.shields.io/github/license/aardvark-platform/aardvark.rendering.svg)](https://github.com/aardvark-platform/aardvark.rendering/blob/master/LICENSE)
 
+[The aardvark platform](https://aardvarkians.com/) |
 [Wiki](https://github.com/aardvarkplatform/aardvark.docs/wiki) | [aardvark.rendering examples](%2Fsrc%2FExamples%20(netcore)) |
 [technical walkthrough and examples](https://github.com/aardvark-platform/walkthrough) |
 [platform examples](https://github.com/aardvark-platform/aardvark.docs/wiki/Examples) |
