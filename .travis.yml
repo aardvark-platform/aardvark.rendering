@@ -10,6 +10,4 @@ before_install:
   - sudo apt-get install -qq mono-devel dotnet-sdk-2.1.400 > /dev/null
   - mozroots --import --sync 
 script:
-  - mono .paket/paket.bootstrapper.exe
-  - mono .paket/paket.exe restore
   - ./build.sh
