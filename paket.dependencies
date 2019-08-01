@@ -1,22 +1,22 @@
 framework: netstandard2.0, net471, netcoreapp2.0
 source https://api.nuget.org/v3/index.json
 
-nuget FSharp.Core ~> 4.6.2
+nuget FSharp.Core                        ~> 4.6.2
 
-nuget Aardvark.Base.FSharp ~> 4.5.8
-nuget Aardvark.Base.IO ~> 4.5.8
-nuget Aardvark.Base.Incremental ~> 4.5.8
-nuget Aardvark.Base.Runtime ~> 4.5.8
-nuget Aardvark.Base.Essentials ~> 4.5.8
+nuget Aardvark.Base.FSharp               ~> 4.5.11
+nuget Aardvark.Base.IO                   ~> 4.5.11
+nuget Aardvark.Base.Incremental          ~> 4.5.11
+nuget Aardvark.Base.Runtime              ~> 4.5.11
+nuget Aardvark.Base.Essentials           ~> 4.5.11
                                   
-nuget FShade.Core ~> 4.3.8
-nuget FShade ~> 4.3.8
-nuget FShade.Debug ~> 4.3.8
+nuget FShade.Core                        ~> 4.3.9
+nuget FShade                             ~> 4.3.9
+nuget FShade.Debug                       ~> 4.3.9
 
 nuget Unofficial.OpenVR					 ~> 1.1.0 
-nuget Unofficial.Typography ~> 0.0.3
+nuget Unofficial.Typography              ~> 0.0.3
 nuget CommonMark.NET                     ~> 0.15.1
-nuget GLSLangSharp ~> 0.4.4
+nuget GLSLangSharp                       ~> 0.4.4
 
 nuget BruTile                            ~> 2.0.0-alpha1
 nuget Unofficial.LibTessDotNet           ~> 2.0.2
@@ -45,8 +45,6 @@ nuget SourceLink.Create.CommandLine copy_local: true ~> 2.8.2
 clitool dotnet-sourcelink
 
 group Build
-framework: net45
-content: none
 source https://api.nuget.org/v3/index.json
-github aardvark-platform/aardvark.fake:v4-temp
+github aardvark-platform/aardvark.fake:v5
 nuget FSharp.Data ~> 3.0.0

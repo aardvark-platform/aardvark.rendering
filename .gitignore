@@ -23,7 +23,7 @@ src/GLVM/*.dylib
 ~$*
 /paket-files
 .fake
-/.paket/paket.exe
+/.paket
 /src/Demo/Examples/polygons.dgml
 /src/Demo/Examples/tictactoe.dgml
 /perfTest.exe

@@ -1,12 +1,15 @@
+
+#r "paket: groupref Build //"
+#load ".fake/build.fsx/intellisense.fsx"
 #load @"paket-files/build/aardvark-platform/aardvark.fake/DefaultSetup.fsx"
 
-open Fake
 open System
 open System.IO
 open System.Diagnostics
 open Aardvark.Fake
-open Fake.AssemblyInfoFile
-
+open Fake.Core
+open Fake.Tools
+open Fake.IO.Globbing.Operators
 
 //do MSBuildDefaults <- { MSBuildDefaults with Verbosity = Some Minimal }
 do Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
@@ -19,91 +22,91 @@ do System.Diagnostics.Debugger.Launch() |> ignore
 
 
 
-Target "CreateAssemblyInfos" (fun () ->
-    let projects = !!"src/**/*.fsproj" ++ "src/**/*.csproj"
+//Target.create "CreateAssemblyInfos" (fun _ ->
+//    let projects = !!"src/**/*.fsproj" ++ "src/**/*.csproj"
 
-    let version = getGitTag()
-    let currentHash = Git.Information.getCurrentHash()
+//    let version = getGitTag()
+//    let currentHash = Git.Information.getCurrentHash()
 
-    for p in projects do
-        let dir = Path.GetDirectoryName(p)
-        let template = Path.Combine(dir, "paket.template")
-        if File.Exists template then
-            let create, infoFile =
-                match Path.GetExtension(p) with 
-                    | ".csproj" -> CreateCSharpAssemblyInfo, "AssemblyInfo.cs"
-                    | _ -> CreateFSharpAssemblyInfo, "AssemblyInfo.fs"
+//    for p in projects do
+//        let dir = Path.GetDirectoryName(p)
+//        let template = Path.Combine(dir, "paket.template")
+//        if File.Exists template then
+//            let create, infoFile =
+//                match Path.GetExtension(p) with 
+//                    | ".csproj" -> CreateCSharpAssemblyInfo, "AssemblyInfo.cs"
+//                    | _ -> CreateFSharpAssemblyInfo, "AssemblyInfo.fs"
 
-            let assDir = Path.Combine(dir, "Properties")
+//            let assDir = Path.Combine(dir, "Properties")
 
-            if not (Directory.Exists assDir) then
-                Directory.CreateDirectory assDir |> ignore
+//            if not (Directory.Exists assDir) then
+//                Directory.CreateDirectory assDir |> ignore
 
-            let ass = Path.Combine(assDir, infoFile)
+//            let ass = Path.Combine(assDir, infoFile)
             
 
-            let name = Path.GetFileNameWithoutExtension(p)
+//            let name = Path.GetFileNameWithoutExtension(p)
 
 
-            create ass [
-                Attribute.Title name
-                Attribute.Description "Aardvark Rendering"
-                Attribute.Version version
-                Attribute.Product "Aardvark.Rendering"
-                Attribute.FileVersion version
-                Attribute.Configuration (if Aardvark.Fake.Startup.config.debug then "Debug" else "Release")
-                Attribute.Metadata("githash", currentHash)
-                Attribute.Copyright "Aardvark Platform Team"
-            ]
-    ()
-)
+//            create ass [
+//                Attribute.Title name
+//                Attribute.Description "Aardvark Rendering"
+//                Attribute.Version version
+//                Attribute.Product "Aardvark.Rendering"
+//                Attribute.FileVersion version
+//                Attribute.Configuration (if Aardvark.Fake.Startup.config.debug then "Debug" else "Release")
+//                Attribute.Metadata("githash", currentHash)
+//                Attribute.Copyright "Aardvark Platform Team"
+//            ]
+//    ()
+//)
 
-Target "SourceLink.Test" (fun _ ->
-    !! "bin/*.nupkg" 
-    |> Seq.iter (fun nupkg ->
-        DotNetCli.RunCommand
-            (fun p -> { p with WorkingDir = __SOURCE_DIRECTORY__ @@ "src" @@ "Demo" @@ "SlimJim" } )
-            (sprintf "sourcelink test %s" nupkg)
-    )
-)
+//Target.create "SourceLink.Test" (fun _ ->
+//    !! "bin/*.nupkg" 
+//    |> Seq.iter (fun nupkg ->
+//        Fake.Core.
+//            (fun p -> { p with WorkingDir = __SOURCE_DIRECTORY__ @@ "src" @@ "Demo" @@ "SlimJim" } )
+//            (sprintf "sourcelink test %s" nupkg)
+//    )
+//)
 
 
-Target "PerfTest" (fun () ->
-    let exeFile = "bin/Release/perfTest.exe"
-    let exeModified =
-        if File.Exists exeFile then FileInfo(exeFile).LastWriteTime
-        else DateTime.MinValue
+//Target.create "PerfTest" (fun _ ->
+//    let exeFile = "bin/Release/perfTest.exe"
+//    let exeModified =
+//        if File.Exists exeFile then FileInfo(exeFile).LastWriteTime
+//        else DateTime.MinValue
 
-    let sourceModified = FileInfo("perfTest.fsx").LastWriteTime
+//    let sourceModified = FileInfo("perfTest.fsx").LastWriteTime
 
-    if sourceModified > exeModified then
+//    if sourceModified > exeModified then
         
-        let refs = 
-            List.map (fun p -> Path.Combine(Environment.CurrentDirectory, p))
-                [@"packages\FSharp.Charting\lib\net40\FSharp.Charting.dll"; @"packages\build\FAKE\tools\FakeLib.dll"]
+//        let refs = 
+//            List.map (fun p -> Path.Combine(Environment.CurrentDirectory, p))
+//                [@"packages\FSharp.Charting\lib\net40\FSharp.Charting.dll"; @"packages\build\FAKE\tools\FakeLib.dll"]
 
-        FscHelper.Compile 
-            (
-                (refs |> List.map FscHelper.FscParam.Reference) @
-                [
-                    FscHelper.FscParam.Out exeFile
-                    FscHelper.FscParam.Target FscHelper.TargetType.Exe
-                ]
-            )
-            ["perfTest.fsx"]
+//        Fsc.Compile 
+//            (
+//                (refs |> List.map FscHelper.FscParam.Reference) @
+//                [
+//                    FscHelper.FscParam.Out exeFile
+//                    FscHelper.FscParam.Target FscHelper.TargetType.Exe
+//                ]
+//            )
+//            ["perfTest.fsx"]
 
-        for r in refs do
-            let file = Path.GetFileName r
-            File.Copy(r, Path.Combine("bin", "Release", file), true)
+//        for r in refs do
+//            let file = Path.GetFileName r
+//            File.Copy(r, Path.Combine("bin", "Release", file), true)
 
-    else
-        tracefn "executable up-to-date"
-)
+//    else
+//        tracefn "executable up-to-date"
+//)
 
-"CreatePackage" ==> "SourceLink.Test"
+//"CreatePackage" ==> "SourceLink.Test"
 
 
-"Restore" ==> "PerfTest"
+//"Restore" ==> "PerfTest"
 
 
 entry()
