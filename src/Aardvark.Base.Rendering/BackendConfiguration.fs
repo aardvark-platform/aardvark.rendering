@@ -63,12 +63,12 @@ type RenderObjectSorting =
             | _ ->
                 false
 
-type BackendConfiguration = { 
-    execution : ExecutionEngine
-    redundancy : RedundancyRemoval
-    sharing : ResourceSharing
-    sorting : RenderObjectSorting
-    useDebugOutput : bool
+type BackendConfiguration = {
+    execution : ExecutionEngine // Deprecated: there is only Native -> TODO: Native / Debug? (not implemented atm)
+    redundancy : RedundancyRemoval // no longer used, always active -> TODO: remove?
+    sharing : ResourceSharing // current default "Texture" -> change to "Textures & Buffers"?
+    sorting : RenderObjectSorting // NOTE: not implemented / projections not used, always Arbitrary
+    useDebugOutput : bool // GL debug output / what about Vulkan?
 }
 
 module Projections =

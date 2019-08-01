@@ -248,7 +248,7 @@ module RenderTasks =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
-
+    // TODO: optional use of DebugCommandStream
     type NativeRenderProgram(cmp : IComparer<PreparedCommand>, scope : CompilerInfo, content : aset<PreparedCommand>) =
         inherit NativeProgram<PreparedCommand, NativeStats>(ASet.sortWith (curry cmp.Compare) content, (fun l r s -> r.Compile(scope, AssemblerCommandStream(s), l)), NativeStats.Zero, (+), (-))
         
