@@ -230,12 +230,11 @@ module Sg =
 
             trafosAndShapes 
                 |> Mod.map(fun l -> 
-                    let billboard = l |> Array.map(fun (_,s) -> s.renderStyle) |> Array.contains RenderStyle.Billboard
-                    if billboard then 
-                      shapes.Surface <- Surface.FShadeSimple cache.InstancedBillboardEffect
-                    else
-                      shapes.Surface <- Surface.FShadeSimple cache.InstancedEffect
-
+                    match l |> Array.tryFind (fun (_,s) -> s.renderStyle = RenderStyle.Billboard) with
+                    | Some x -> 
+                        shapes.Surface <- Surface.FShadeSimple cache.InstancedBillboardEffect
+                    | None -> 
+                        shapes.Surface <- Surface.FShadeSimple cache.InstancedEffect
                     shapes :> IRenderObject)
                 |> Mod.toASet
 
