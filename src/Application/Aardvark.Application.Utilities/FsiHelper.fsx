@@ -15,6 +15,8 @@ module InteractiveHelper =
             [
                 Assembly.Load("Aardvark.SceneGraph")
                 Assembly.Load("Aardvark.SceneGraph.IO")
+                Assembly.Load("AssimpNet") 
+                Assembly.Load("DevILSharp") 
             ] @ others
         for a in assemblies do
             Introspection.RegisterAssembly a
@@ -42,4 +44,6 @@ module InteractiveHelper =
             Aardvark.Init(currentDir)
             printfn "glvm ~> %A" (Aardvark.Base.DynamicLinker.tryLoadLibrary "glvm")
             printfn "vkvm ~> %A" (Aardvark.Base.DynamicLinker.tryLoadLibrary "vkvm")
+            Assimp.Unmanaged.AssimpLibrary.Instance.LoadLibrary "Assimp64"
+            DevILSharp.IL.Init()
         )
