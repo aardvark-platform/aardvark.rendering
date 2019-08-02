@@ -1,6 +1,7 @@
 ﻿
 (* SEE THIS DEMO IN ACTION https://www.youtube.com/watch?v=QjVRJworUOw
-
+this Examples folder is deprecated. a simple demo showing interactive setups is given here:
+https://github.com/aardvark-platform/walkthrough/blob/master/src/InteractiveNet471/InteractiveTest.fsx
 
 *)
 
