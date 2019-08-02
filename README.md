@@ -17,11 +17,12 @@ Aardvark.Rendering is part of the open-source [Aardvark platform](https://github
 [Wiki](https://github.com/aardvarkplatform/aardvark.docs/wiki) is the landing page for documentation and further information.
 
 
-The aardvark rendering engine was the vital spark, the aardvark platform built around. The engine was born in 2006. At that time, rather unusual the engine was written mostly in C#. Later we more and more moved  towards functional programming. In various rewrites we modernized the engine over and over again. Now most code is written in F#. The unique features of the engine are:
+The aardvark rendering engine was the vital spark which finally led to the complete ecosystem of libraries, we now call aardvark-platform. The engine as such was born in 2006. At that time, rather unusual the engine was written mostly in C#. Later we more and more moved  towards functional programming. In various rewrites we modernized the engine over and over again. Now most code is written in F#. The unique features of the engine are:
  - The engine tries to bridge the gap between efficiency and high-level easy to use abstractions. We used a lot of energy to get out good performance for a lot cases. We did a lot but we look forward to getting better and better in this regard.
  - It is used in applied research and industry but it is also used as vehicle for basic research.
  - Not like classic rendering engines, the aardvark rendering engine does not provide any tooling such as level editors etc. but lives from the aardvark platform as whole which provides tools to create customized tooling for various needs. 
  - Aardvark does not understand light, shadows or particular material workflows as in most game engines. Instead, the codebase provides a rich set of tools to customize those features to fit the needs.
+ - For application and UI programming we recommend to climb the abstraction ladder up towards [aardvark.media](https://github.com/aardvark-platform/aardvark.media) which provides easy-to-use ELM style API to both UI and high-performance computer graphics.
  
 We are constantly looking for cool contributions ideas etc! Meet us on [gitter](https://gitter.im/aardvark-platform/Lobby)
 
