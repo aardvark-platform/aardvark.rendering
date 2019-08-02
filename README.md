@@ -12,9 +12,9 @@
 [Quickstart](https://github.com/aardvarkplatform/aardvark.docs/wiki/Quickstart-Windows) | 
 [Status](https://github.com/aardvarkplatform/aardvark.docs/wiki/Status)
 
-Aardvark.Rendering is part of the open-source [Aardvark platform](https://github.com/aardvark-platform/aardvark.docs/wiki) for visual computing, real-time graphics and visualization.
+Aardvark.Rendering is part of the open-source [Aardvark platform](https://github.com/aardvark-platform/aardvark.docs/wiki) for visual computing, real-time graphics and visualization. This repository heavily builds on datastructures and tools from [aardvark.base](https://github.com/aardvark-platform/aardvark.rendering). The engine can be used standalone or using [aardvark.media](https://github.com/aardvark-platform/aardvark.media) which provides purely functional ELM style application abstraction.
 
-[Wiki](https://github.com/aardvarkplatform/aardvark.docs/wiki) is the landing page for documentation and further information.
+![Alt text](./data/context.svg)
 
 
 The aardvark rendering engine was the vital spark which finally led to the complete ecosystem of libraries, we now call aardvark-platform. The engine as such was born in 2006. At that time, the engine was written mostly in C# (which was rather unusual in a world of highly optimized C++ engines). Later we more and more moved  towards functional programming. In various rewrites we modernized the engine over and over again. Now most code is written in F#. The unique features of the engine are:
