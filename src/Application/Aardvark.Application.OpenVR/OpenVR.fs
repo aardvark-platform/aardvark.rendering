@@ -1044,9 +1044,7 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
     member x.IsRunning with get() = running
 
     member x.UpdateFrame(lTex : VrTexture, rTex : VrTexture) =
-
-        Log.line "UpdateFrame"
-
+    
         swTotal.Start()
         swProcessEvents.Start()
         let events = system.ProcessEvents()
