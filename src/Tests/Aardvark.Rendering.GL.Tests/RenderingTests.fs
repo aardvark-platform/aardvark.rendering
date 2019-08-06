@@ -718,7 +718,7 @@ module RenderingTests =
 
         let renderJobs = sg.RenderObjects()
         let clear = runtime.CompileClear(app.Value |> snd |> (fun s -> s.FramebufferSignature), ~~C4f.Black, ~~1.0)
-        let task = runtime.CompileRender(app.Value |> snd |> (fun s -> s.FramebufferSignature), BackendConfiguration.NativeOptimized, renderJobs)
+        let task = runtime.CompileRender(app.Value |> snd |> (fun s -> s.FramebufferSignature), BackendConfiguration.Native, renderJobs)
 
 //        win.Keyboard.KeyDown(Keys.P).Values.Subscribe(fun _ ->
 //            lock task (fun () ->
@@ -899,7 +899,7 @@ module RenderingTests =
 
         if useWindow then
              let clear = runtime.CompileClear(app.Value |> snd |> (fun s -> s.FramebufferSignature), ~~C4f.Black, ~~1.0)
-             let task = runtime.CompileRender(app.Value |> snd |> (fun s -> s.FramebufferSignature), BackendConfiguration.NativeOptimized, ASet.empty)
+             let task = runtime.CompileRender(app.Value |> snd |> (fun s -> s.FramebufferSignature), BackendConfiguration.Native, ASet.empty)
 
              app.Value |> snd |> (fun s -> s.RenderTask <- RenderTask.ofList [clear; task]; s.Run())
         else

@@ -449,7 +449,7 @@ module Playground =
                |> Sg.viewTrafo (viewTrafo   |> Mod.map CameraView.viewTrafo )
                |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
 
-        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.ManagedOptimized, sg.RenderObjects())
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, sg.RenderObjects())
 
         win.RenderTask <- task //|> DefaultOverlays.withStatistics
         win.Run()
@@ -636,7 +636,7 @@ module Playground =
                 |> Sg.projTrafo (perspective  |> Mod.map Frustum.projTrafo    )
                 //|> Sg.normalizeAdaptive
 
-        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.NativeOptimized, final)
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, final)
 
         win.RenderTask <- task
         win.Run()
@@ -729,7 +729,7 @@ module Playground =
                 |> Sg.projTrafo (perspective  |> Mod.map Frustum.projTrafo    )
                 //|> Sg.normalizeAdaptive
 
-        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.NativeOptimized, final)
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, final)
 
         win.RenderTask <- task
         win.Run()

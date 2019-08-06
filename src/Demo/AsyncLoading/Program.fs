@@ -104,7 +104,7 @@ let main argv =
             |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo)
 
-    let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.UnmanagedOptimized, sg)
+    let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, sg)
 
     win.Keyboard.Down.Values.Subscribe (fun k ->
         if k = Keys.Enter then

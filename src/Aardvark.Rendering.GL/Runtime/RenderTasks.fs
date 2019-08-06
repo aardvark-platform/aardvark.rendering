@@ -248,9 +248,15 @@ module RenderTasks =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
-    // TODO: optional use of DebugCommandStream
-    type NativeRenderProgram(cmp : IComparer<PreparedCommand>, scope : CompilerInfo, content : aset<PreparedCommand>) =
-        inherit NativeProgram<PreparedCommand, NativeStats>(ASet.sortWith (curry cmp.Compare) content, (fun l r s -> r.Compile(scope, AssemblerCommandStream(s), l)), NativeStats.Zero, (+), (-))
+    type NativeRenderProgram(cmp : IComparer<PreparedCommand>, scope : CompilerInfo, content : aset<PreparedCommand>, debug : bool) =
+        inherit NativeProgram<PreparedCommand, NativeStats>(
+                        ASet.sortWith (curry cmp.Compare) content, 
+                        (fun l r s -> 
+                                let asm =  AssemblerCommandStream(s) :> ICommandStream
+                                let stream = if debug then DebugCommandStream(asm) :> ICommandStream else asm
+                                r.Compile(scope, stream, l)
+                            ),
+                        NativeStats.Zero, (+), (-))
         
         let mutable stats = NativeProgramUpdateStatistics.Zero
         member x.Count = stats.Count
@@ -330,7 +336,7 @@ module RenderTasks =
                 // create the new program
                 let newProgram = 
                     Log.line "using optimized native program"
-                    new NativeRenderProgram(comparer, scope, objects) 
+                    new NativeRenderProgram(comparer, scope, objects, config.execution = ExecutionEngine.Debug) 
 
 
                 // finally we store the current config/ program and set hasProgram to true

@@ -1,176 +1,56 @@
 ﻿namespace Aardvark.Base
 
-
 open System
-open Aardvark.Base
-open Aardvark.Base.Incremental
-open System.Collections.Generic
 
-
+/// Execution engine performing the corresponding graphics API calls for the render commands
 type ExecutionEngine =
-    | Interpreter = -1
+    /// Wraps a debug layer around the native execution engine providing possibility 
+    /// to step through using the debugger and trace state changes
     | Debug = 0
-    | Managed = 1
-    | Unmanaged = 2
-    | Native = 3
-
-type RedundancyRemoval =
-    | None = 0
-    | Runtime = 1
-    | Static = 2
-
+    /// Performs graphics API calls using an executable memory with lowest possible overhead
+    | Native = 1
+   
+/// Resource sharing configuration
 [<Flags>]
 type ResourceSharing =
+    /// Each render task will build and manage its own resources
     | None      = 0x00
+    /// Buffers are shared globally between individual render tasks
     | Buffers   = 0x01
+    /// Textures are shared globally between individual render tasks
     | Textures  = 0x02
+    /// Buffers and textures are shared globally between individual render tasks
     | Full      = 0x03
 
-type RenderObjectOrder = 
-    | Unordered = 0
-    | FrontToBack = 1
-    | BackToFront = 2
-
-type IDynamicRenderObjectSorter =
-    abstract member Add : RenderObject -> unit
-    abstract member Remove : RenderObject -> unit
-    abstract member SortedList : IMod<list<RenderObject>> 
-    abstract member ToSortedRenderObject : RenderObject -> RenderObject
-
-[<CustomEquality; NoComparison>]
-type RenderObjectSorting =
-    | Arbitrary
-    | Dynamic of (Ag.Scope -> IDynamicRenderObjectSorter)
-    | Static of cmp : IComparer<IRenderObject>
-    | Grouping of projections : (list<RenderObject -> obj>) with
-
-    override x.GetHashCode() =
-        match x with
-            | Dynamic a -> (a :> obj).GetHashCode()
-            | Static a -> a.GetHashCode()
-            | Grouping l -> l |> List.fold (fun hc f -> hc ^^^ (f :> obj).GetHashCode()) 0
-            | Arbitrary -> 0
-
-    override x.Equals o =
-        match o with
-            | :? RenderObjectSorting as o ->
-                match x, o with
-                    | Dynamic x, Dynamic o -> System.Object.Equals(x,o)
-                    | Static x, Static o -> x.Equals o
-                    | Grouping x, Grouping o -> List.forall2 (fun l r -> System.Object.Equals(l,r)) x o
-                    | Arbitrary, Arbitrary -> true
-                    | _ -> false 
-            | _ ->
-                false
-
+/// Configuration of execution engine, resources sharing and debug output
 type BackendConfiguration = {
-    execution : ExecutionEngine // Deprecated: there is only Native -> TODO: Native / Debug? (not implemented atm)
-    redundancy : RedundancyRemoval // no longer used, always active -> TODO: remove?
-    sharing : ResourceSharing // current default "Texture" -> change to "Textures & Buffers"?
-    sorting : RenderObjectSorting // NOTE: not implemented / projections not used, always Arbitrary
-    useDebugOutput : bool // GL debug output / what about Vulkan?
+    /// Configuration of how graphics API calls are emitted
+    execution : ExecutionEngine
+    /// Configuration of resource sharing behavior
+    sharing : ResourceSharing
+    /// Enable additional debug output from the graphics API if possible (e.g. OpenGL Debug Output)
+    useDebugOutput : bool
 }
 
-module Projections =
-    let private empty = obj()
-
-    let surface (rj : RenderObject) =
-        rj.Surface :> obj
-
-    let diffuseTexture (rj : RenderObject) =
-        match rj.Uniforms.TryGetUniform (rj.AttributeScope, DefaultSemantic.DiffuseColorTexture) with
-            | Some t -> t :> obj
-            | _ -> empty
-
-    let indices (rj : RenderObject) =
-        match rj.Indices with
-            | Some i -> i.Buffer :> obj
-            | None -> empty
-
-    let standard = [ surface; diffuseTexture; indices ]
-
+/// Predefined backend configurations
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module BackendConfiguration =
 
-    let NativeOptimized = 
+    /// Configuration using Native execution engine and Full resources sharing
+    let Native = 
         { 
             execution       = ExecutionEngine.Native
-            redundancy      = RedundancyRemoval.Static
-            sharing         = ResourceSharing.Textures
-            sorting         = RenderObjectSorting.Grouping Projections.standard 
+            sharing         = ResourceSharing.Textures &&& ResourceSharing.Buffers
             useDebugOutput  = false
         }
-
-    let NativeUnoptimized = 
-        { 
-            execution       = ExecutionEngine.Native
-            redundancy      = RedundancyRemoval.None
-            sharing         = ResourceSharing.Textures
-            sorting         = RenderObjectSorting.Grouping Projections.standard 
-            useDebugOutput  = false
-        }
-
-    let UnmanagedOptimized = 
-        { 
-            execution       = ExecutionEngine.Unmanaged
-            redundancy      = RedundancyRemoval.Static
-            sharing         = ResourceSharing.Textures
-            sorting         = RenderObjectSorting.Grouping Projections.standard
-            useDebugOutput  = false
-        }
-
-    let UnmanagedRuntime = 
-        { 
-            execution       = ExecutionEngine.Unmanaged
-            redundancy      = RedundancyRemoval.Runtime
-            sharing         = ResourceSharing.Textures
-            sorting         = RenderObjectSorting.Grouping Projections.standard
-            useDebugOutput  = false 
-        }
-
-    let UnmanagedUnoptimized = 
-        { 
-            execution       = ExecutionEngine.Unmanaged
-            redundancy      = RedundancyRemoval.None
-            sharing         = ResourceSharing.Textures
-            sorting         = RenderObjectSorting.Grouping Projections.standard
-            useDebugOutput  = false 
-        }
-
-    let ManagedOptimized = 
-        { 
-            execution       = ExecutionEngine.Managed
-            redundancy      = RedundancyRemoval.Static
-            sharing         = ResourceSharing.Textures
-            sorting         = RenderObjectSorting.Grouping Projections.standard
-            useDebugOutput  = false 
-        }
-
-    let ManagedUnoptimized = 
-        { 
-            execution       = ExecutionEngine.Managed
-            redundancy      = RedundancyRemoval.None
-            sharing         = ResourceSharing.Textures
-            sorting         = RenderObjectSorting.Grouping Projections.standard
-            useDebugOutput  = false 
-        }
-
-    let Interpreted = 
-        { 
-            execution       = ExecutionEngine.Interpreter
-            redundancy      = RedundancyRemoval.Runtime
-            sharing         = ResourceSharing.Textures
-            sorting         = RenderObjectSorting.Arbitrary
-            useDebugOutput  = false 
-        }
-
+    
+    /// Configuration with full debug functionality 
     let Debug = 
         { 
             execution       = ExecutionEngine.Debug
-            redundancy      = RedundancyRemoval.None
-            sharing         = ResourceSharing.None
-            sorting         = RenderObjectSorting.Grouping []
+            sharing         = ResourceSharing.Textures  &&& ResourceSharing.Buffers
             useDebugOutput  = true
         }
 
-    let Default = NativeOptimized
+    /// Recommendation of the Aardvark core team
+    let Default = Native

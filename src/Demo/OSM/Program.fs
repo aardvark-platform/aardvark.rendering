@@ -331,14 +331,11 @@ let main argv =
     //let sg = Sg.VertexAttributeApplicator(Symbol.Create "Hugo", BufferView(Mod.constant (NullBuffer(V4f.IOII) :> IBuffer), typeof<V4f>), sg) :> ISg
     // compile the rendertask and pass it to the window
 
-    let engine = Mod.init BackendConfiguration.NativeOptimized
+    let engine = Mod.init BackendConfiguration.Native
     let engines = 
         ref [
-            BackendConfiguration.UnmanagedOptimized
-            BackendConfiguration.UnmanagedRuntime
-            BackendConfiguration.ManagedOptimized
-            BackendConfiguration.ManagedUnoptimized
-            BackendConfiguration.NativeOptimized
+            BackendConfiguration.Native
+            BackendConfiguration.Debug
         ]
 
     w.Keyboard.DownWithRepeats.Values.Subscribe (fun k ->

@@ -229,7 +229,7 @@ module CullingTest =
         let both = 
             RenderTask.ofList [
                 cullTask
-                app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.NativeOptimized, objects)
+                app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, objects)
             ]
 
         let task = both //app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.NativeOptimized, objects)
@@ -392,7 +392,7 @@ module CullingTest =
                |> Sg.projTrafo (frustum      |> Mod.map Frustum.projTrafo    )
 
        
-        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.NativeOptimized, sg.RenderObjects())
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, sg.RenderObjects())
 
         win.Keyboard.KeyDown(Keys.Space).Values.Subscribe(fun _ -> 
             transact (fun _ ->
@@ -546,7 +546,7 @@ module CullingTest =
                |> Sg.projTrafo (frustum      |> Mod.map Frustum.projTrafo    )
 
        
-        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.NativeOptimized, sg.RenderObjects())
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, sg.RenderObjects())
 
         win.Keyboard.KeyDown(Keys.Space).Values.Subscribe(fun _ -> 
             transact (fun _ ->

@@ -256,7 +256,7 @@ let main argv =
             createInstanced runtime win.FramebufferSignature config viewTrafo projTrafo geometry trafos
             createIndirect runtime win.FramebufferSignature config viewTrafo projTrafo geometry trafos
             renderObjectBased runtime win.FramebufferSignature config viewTrafo projTrafo geometry trafos
-            renderObjectBased runtime win.FramebufferSignature BackendConfiguration.UnmanagedOptimized viewTrafo projTrafo geometry trafos
+            renderObjectBased runtime win.FramebufferSignature BackendConfiguration.Native viewTrafo projTrafo geometry trafos
             // naive sg is slow for such big scenes:
             //createNaive app.Runtime win.FramebufferSignature BackendConfiguration.NativeOptimized viewTrafo projTrafo geometry trafos
         |]

@@ -53,7 +53,7 @@ module RandomCubesPerformanceTest =
                     DefaultSurfaces.constantColor (C4f(1.0,1.0,1.0,0.2)) |> toEffect 
                 ]
 
-        let config = BackendConfiguration.NativeOptimized
+        let config = BackendConfiguration.Native
 
         let signature =
             app.Runtime.CreateFramebufferSignature [
@@ -135,7 +135,7 @@ module RandomCubesPerformanceTest =
                     DefaultSurfaces.constantColor (C4f(1.0,1.0,1.0,0.2)) |> toEffect 
                 ]
 
-        let config = BackendConfiguration.NativeOptimized
+        let config = BackendConfiguration.Native
         win.RenderTask <- app.Runtime.CompileRender(win.FramebufferSignature, config, sg.RenderObjects())
 
         win.Run()
@@ -215,7 +215,7 @@ module RenderTaskPerformance =
                         )
              |]
 
-        let config = BackendConfiguration.NativeOptimized
+        let config = BackendConfiguration.Native
         let r = System.Random()
         let renderTasks = 
             [ for i in 0 .. 10 do
@@ -335,16 +335,16 @@ module StartupPerformance =
 
             sw.Elapsed.TotalSeconds
 
-        let config = BackendConfiguration.NativeOptimized
+        let config = BackendConfiguration.Native
         
         let config = 
             match wantedConfig with
-                | 0 -> BackendConfiguration.NativeOptimized
-                | 1 -> BackendConfiguration.NativeUnoptimized
-                | 2 -> BackendConfiguration.UnmanagedOptimized
-                | 3 -> BackendConfiguration.UnmanagedUnoptimized
-                | 4 -> BackendConfiguration.ManagedOptimized
-                | 5 -> BackendConfiguration.ManagedUnoptimized
+                | 0 -> BackendConfiguration.Native
+                //| 1 -> BackendConfiguration.NativeUnoptimized
+                //| 2 -> BackendConfiguration.UnmanagedOptimized
+                //| 3 -> BackendConfiguration.UnmanagedUnoptimized
+                //| 4 -> BackendConfiguration.ManagedOptimized
+                //| 5 -> BackendConfiguration.ManagedUnoptimized
                 | _ -> failwith "unknown config"
     
 
@@ -474,7 +474,7 @@ module IsActiveFlagPerformance =
 
         
         let n = 50000
-        let renderFrame,isActiveFlags = test (n, BackendConfiguration.NativeOptimized)
+        let renderFrame,isActiveFlags = test (n, BackendConfiguration.Native)
 
         let path = "isActivePerformance4.Managed.csv"
         if System.IO.File.Exists(path) |> not then

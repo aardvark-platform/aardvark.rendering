@@ -757,16 +757,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         let shareTextures = eng.sharing &&& ResourceSharing.Textures <> ResourceSharing.None
         let shareBuffers = eng.sharing &&& ResourceSharing.Buffers <> ResourceSharing.None
             
-        match eng.sorting with
-            | RenderObjectSorting.Arbitrary | RenderObjectSorting.Grouping _  -> 
-                new RenderTasks.RenderTask(manager, fboSignature, set, engine, shareTextures, shareBuffers) :> IRenderTask
-
-            | RenderObjectSorting.Dynamic _ -> 
-                failwith "[SortedRenderTask] not available atm."
-                //new SortedRenderTask.RenderTask(set, man, fboSignature, eng) :> IRenderTask
-
-            | RenderObjectSorting.Static _ -> 
-                failwith "[GL] static sorting not implemented"
+        new RenderTasks.RenderTask(manager, fboSignature, set, engine, shareTextures, shareBuffers) :> IRenderTask
 
     member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) : IPreparedRenderObject =
         PreparedCommand.ofRenderObject fboSignature manager rj :> IPreparedRenderObject

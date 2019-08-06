@@ -68,7 +68,7 @@ module NullBufferTest =
                |> Sg.viewTrafo (viewTrafo   |> Mod.map CameraView.viewTrafo )
                |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
 
-        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.NativeOptimized, sg.RenderObjects())
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, sg.RenderObjects())
 
         win.RenderTask <- task //|> DefaultOverlays.withStatistics
         win.Run()

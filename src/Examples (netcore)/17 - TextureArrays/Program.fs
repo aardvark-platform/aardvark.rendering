@@ -274,7 +274,7 @@ let main argv =
                 |> Sg.texture (Symbol.Create "SingleTexture") tetureSingleMod
 
 
-    let rt = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.NativeOptimized, sg)
+    let rt = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Native, sg)
 
     let sw = Stopwatch()
 

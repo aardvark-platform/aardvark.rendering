@@ -129,7 +129,7 @@ module TessellatedSphere =
         let clearTask = app.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.White, Mod.constant 1.0)
 
         let renderTask =
-            app.Runtime.CompileRender(win.FramebufferSignature,BackendConfiguration.NativeOptimized, sg)
+            app.Runtime.CompileRender(win.FramebufferSignature,BackendConfiguration.Default, sg)
                 //|> DefaultOverlays.withStatistics
         
 
