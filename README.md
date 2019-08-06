@@ -12,7 +12,7 @@
 [Quickstart](https://github.com/aardvarkplatform/aardvark.docs/wiki/Quickstart-Windows) | 
 [Status](https://github.com/aardvarkplatform/aardvark.docs/wiki/Status)
 
-Aardvark.Rendering is part of the open-source [Aardvark platform](https://github.com/aardvark-platform/aardvark.docs/wiki) for visual computing, real-time graphics and visualization. This repository heavily builds on datastructures and tools from [aardvark.base](https://github.com/aardvark-platform/aardvark.rendering). The engine can be used standalone or using [aardvark.media](https://github.com/aardvark-platform/aardvark.media) which provides purely functional ELM style application abstraction.
+Aardvark.Rendering is part of the open-source [Aardvark platform](https://github.com/aardvark-platform/aardvark.docs/wiki) for visual computing, real-time graphics and visualization. This repository heavily builds on datastructures and tools from [aardvark.base](https://github.com/aardvark-platform/aardvark.base). The engine can be used standalone or using [aardvark.media](https://github.com/aardvark-platform/aardvark.media) which provides purely functional ELM style application abstraction.
 
 ![Alt text](./data/context.svg)
 
