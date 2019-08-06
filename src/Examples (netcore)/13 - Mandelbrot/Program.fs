@@ -10,7 +10,7 @@ module Shader =
     type Vertex =
         {
             [<Position>] pos    : V4d
-            [<TexCoord>] tc     : V2d
+            [<TexCoord; Interpolation(InterpolationMode.Sample)>] tc     : V2d
             [<SamplePosition>] s     : V2d
         }
 
@@ -33,7 +33,7 @@ module Shader =
             let scale = uniform.Scale
             let center = uniform.Center
             let size = uniform.ViewportSize
-            let aspect = float size.X / float size.Y + 0.0001 * v.s.X
+            let aspect = float size.X / float size.Y
             let iter = uniform.Iterations
 
             let c = V2d(aspect * (2.0 * v.tc.X - 1.0), (2.0 * v.tc.Y - 1.0)) * scale - center
@@ -73,7 +73,7 @@ let main argv =
             backend Backend.GL
             display Display.Mono
             debug false
-            samples 9
+            samples 8
         }
 
     let texture = 
