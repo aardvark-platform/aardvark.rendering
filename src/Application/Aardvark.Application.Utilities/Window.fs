@@ -200,8 +200,8 @@ module Utilities =
         default x.Release() = ()
 
         member x.Dispose() =
-            x.Release()
-            win.TryDispose() |> ignore
+            win.TryDispose() |> ignore // Disposes OpenTK.GameWindow and OpenTK.GraphicsContext (depending on backend)
+            x.Release() // Application.Dispose / Runtime.Dispose + Context.Dispose
 
         member x.Runtime = win.Runtime
         member x.Sizes = win.Sizes
