@@ -116,7 +116,7 @@ module UnhateTest =
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module internal Trafo =
+module VrTrafo =
     
     let private flip = Trafo3d.Identity
 
@@ -162,15 +162,15 @@ type MotionState() =
 
     member x.Update(newPose : byref<TrackedDevicePose_t>) =
         if newPose.bDeviceIsConnected && newPose.bPoseIsValid && newPose.eTrackingResult = ETrackingResult.Running_OK then
-            let t = Trafo.ofHmdMatrix34 newPose.mDeviceToAbsoluteTracking
+            let t = VrTrafo.ofHmdMatrix34 newPose.mDeviceToAbsoluteTracking
             isValid.Value <- true
 
 //            let m = M44d.Identity
 //            let m = M44d.FromBasis(V3d.IOO, -V3d.OOI, V3d.OIO, V3d.Zero) * m * M44d.FromBasis(V3d.IOO, V3d.OOI, -V3d.OIO, V3d.Zero)
 
             pose.Value <- Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, V3d.OIO, V3d.Zero) * t * Trafo3d.FromBasis(V3d.IOO, V3d.OOI, -V3d.OIO, V3d.Zero)
-            angularVelocity.Value <- Trafo.angularVelocity newPose.vAngularVelocity
-            velocity.Value <- Trafo.velocity newPose.vVelocity
+            angularVelocity.Value <- VrTrafo.angularVelocity newPose.vAngularVelocity
+            velocity.Value <- VrTrafo.velocity newPose.vVelocity
         else
             isValid.Value <- false
 
@@ -439,12 +439,12 @@ type VrTexture =
         new(d,i,f,b) = { Data = d; Info = i; Flags = f; Bounds = b }
 
         static member OpenGL(handle : int) =
-            let i = Texture_t(eColorSpace = EColorSpace.Gamma, eType = ETextureType.OpenGL, handle = nativeint handle)
+            let i = Texture_t(eColorSpace = EColorSpace.Auto, eType = ETextureType.OpenGL, handle = nativeint handle)
             let b = VRTextureBounds_t(uMin = 0.0f, uMax = 1.0f, vMin = 0.0f, vMax = 1.0f)
             new VrTexture(0n, i, EVRSubmitFlags.Submit_Default, b)
             
         static member OpenGL(handle : int, bounds : Box2d) =
-            let i = Texture_t(eColorSpace = EColorSpace.Gamma, eType = ETextureType.OpenGL, handle = nativeint handle)
+            let i = Texture_t(eColorSpace = EColorSpace.Auto, eType = ETextureType.OpenGL, handle = nativeint handle)
             let b = VRTextureBounds_t(uMin = float32 bounds.Min.X, uMax = float32 bounds.Max.X, vMin = float32 bounds.Min.Y, vMax = float32 bounds.Max.Y)
             new VrTexture(0n, i, EVRSubmitFlags.Submit_Default, b)
 
@@ -589,26 +589,28 @@ module VrSystemStats =
         Sg.instanced' instanced baseBox
 
 
-
-
-
-
-
-
-
+type VrApplicationType =
+    | Scene = 1
+    | Overlay = 2
+    | Background = 3
+    | Utility = 4
+    | VRMonitor = 5
+    | SteamWatchdog = 6
+    | Bootstrapper = 7
     
+type VrSystem(appType : VrApplicationType) =
 
-[<AbstractClass>]
-type VrRenderer(adjustSize : V2i -> V2i) =
+    let mutable shutdown = false
+
     let system =
         let mutable err = EVRInitError.None
-        let sys = OpenVR.Init(&err)
+        let sys = OpenVR.Init(&err, unbox<_> appType)
         if err <> EVRInitError.None then
             Log.error "[OpenVR] %s" (OpenVR.GetStringForHmdError err)
             failwithf "[OpenVR] %s" (OpenVR.GetStringForHmdError err)
         sys
-    
-    let deviceCache =
+
+    let deviceCache = 
         [|
             for i in 0u .. OpenVR.k_unMaxTrackedDeviceCount-1u do
                 let deviceType = system.GetTrackedDeviceClass i
@@ -617,12 +619,12 @@ type VrRenderer(adjustSize : V2i -> V2i) =
                 else
                     yield None
         |]
-
+        
     let connectedDevices = Mod.custom (fun _ -> lock deviceCache (fun () -> Seq.choose id deviceCache |> HRefSet.ofSeq))
     let connectedAll = connectedDevices |> ASet.ofMod
     let connectedHmds = connectedAll |> ASet.filter (fun d -> d.Type = VrDeviceType.Hmd)
     let connectedControllers = connectedAll |> ASet.filter (fun d -> d.Type = VrDeviceType.Controller)
-
+    
     let updateDevice (i : uint32) =
         if i >= 0u && i < uint32 deviceCache.Length then
             lock deviceCache (fun () ->
@@ -658,9 +660,107 @@ type VrRenderer(adjustSize : V2i -> V2i) =
         else
             None
 
-    let getAllDevices() = 
-        Seq.init (int OpenVR.k_unMaxTrackedDeviceCount) uint32 |> Seq.choose tryGetDevice
+    let events = System.Collections.Generic.List<VREvent_t>()
+            
+    /// <summary>
+    /// Returns true if any Shutdown/ProcessQuit event has been received
+    /// </summary
+    member x.ShutdownRequested with get() = shutdown        
 
+    /// <summary>
+    /// OpenVR system
+    /// </summary
+    member x.System with get() = system
+
+    /// <summary>
+    /// Incremental view of all connected devices
+    /// </summary
+    member x.ConnectedAll with get() = connectedAll
+
+    /// <summary>
+    /// Incremental set of connected devices
+    /// </summary
+    member x.ConnectedDevices with get() = connectedDevices
+
+    /// <summary>
+    /// Incremental set of connected Hmd devices
+    /// </summary
+    member x.ConnectedHmds with get() = connectedHmds
+    
+    /// <summary>
+    /// Incremental set of connected controllers
+    /// </summary
+    member x.ConnectedControllers with get() = connectedControllers
+
+    /// <summary>
+    /// Enumeration of connected devices
+    /// </summary
+    member x.AllDevices
+        with get() = Seq.init (int OpenVR.k_unMaxTrackedDeviceCount) uint32 |> Seq.choose tryGetDevice
+
+    /// <summary>
+    /// Enumeration of controllers
+    /// </summary
+    member x.Controllers = x.AllDevices |> Seq.filter (fun d -> d.Type = VrDeviceType.Controller)
+
+    /// <summary>
+    /// Try get device by index
+    /// </summary 
+    member x.TryGetDevice(deviceIndex : int) =
+        tryGetDevice(uint32 deviceIndex)
+        
+    /// <summary>
+    /// Process events: poll system events and update device states and triggers
+    /// <returns>Returns new events to allow application side additional processing</returns>
+    /// </summary
+    member x.ProcessEvents() : seq<_> =
+        events.Clear()
+        let mutable evt : VREvent_t = Unchecked.defaultof<VREvent_t>
+        while system.PollNextEvent(&evt, uint32 sizeof<VREvent_t>) do
+            events.Add(evt)
+            
+            let t = unbox<EVREventType> (int evt.eventType)
+
+            //Log.line "%s" (system.GetEventTypeNameFromEnum(t))
+
+            let id = evt.trackedDeviceIndex
+            match t with
+            | EVREventType.VREvent_TrackedDeviceActivated 
+            | EVREventType.VREvent_TrackedDeviceDeactivated 
+            | EVREventType.VREvent_TrackedDeviceUpdated
+            | EVREventType.VREvent_TrackedDeviceRoleChanged ->
+                updateDevice id
+            | EVREventType.VREvent_ProcessQuit
+            | EVREventType.VREvent_ProcessDisconnected
+            | EVREventType.VREvent_DriverRequestedQuit
+            | EVREventType.VREvent_Quit
+                -> 
+                    system.AcknowledgeQuit_Exiting()
+                    shutdown <- true
+            | _ ->
+                match tryGetDevice id with
+                | Some device ->
+                    device.Trigger(&evt)
+                | None ->
+                    ()
+
+        events :> seq<_>
+
+    /// <summary>
+    /// Updates device poses
+    /// NOTE: requries transaction on application side
+    /// </summary 
+    member x.UpdatePoses(renderPoses: TrackedDevicePose_t[]) =
+        for i in 0 .. renderPoses.Length - 1 do
+            let mutable pose = renderPoses.[i]
+            match tryGetDevice (uint32 i) with
+            | Some device -> device.Update(&pose)
+            | None -> ()
+
+
+[<AbstractClass>]
+type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
+    
     static let sEyeIndex = Symbol.Create "EyeIndex"
     static let sRCoord = Symbol.Create "RCoord"
     static let sGCoord = Symbol.Create "GCoord"
@@ -668,8 +768,8 @@ type VrRenderer(adjustSize : V2i -> V2i) =
 
 
     let hiddenAreaMesh =
-        let lMesh = system.GetHiddenAreaMesh(EVREye.Eye_Left, EHiddenAreaMeshType.k_eHiddenAreaMesh_Standard)
-        let rMesh = system.GetHiddenAreaMesh(EVREye.Eye_Right, EHiddenAreaMeshType.k_eHiddenAreaMesh_Standard)
+        let lMesh = system.System.GetHiddenAreaMesh(EVREye.Eye_Left, EHiddenAreaMeshType.k_eHiddenAreaMesh_Standard)
+        let rMesh = system.System.GetHiddenAreaMesh(EVREye.Eye_Right, EHiddenAreaMeshType.k_eHiddenAreaMesh_Standard)
 
         let lFvc = int lMesh.unTriangleCount * 3
         let rFvc = int rMesh.unTriangleCount * 3
@@ -693,10 +793,8 @@ type VrRenderer(adjustSize : V2i -> V2i) =
                     sEyeIndex, eyeIndex :> System.Array
                 ]
         )
-
-    //let devices = devicesPerIndex |> Array.choose id
-        
-    let hmds = getAllDevices() |> Seq.filter (fun d -> d.Type = VrDeviceType.Hmd) |> Seq.toArray 
+                
+    let hmds() = system.AllDevices |> Seq.filter (fun d -> d.Type = VrDeviceType.Hmd)
 
     let getDistortionGeometry (gridSize : V2i) =
         
@@ -710,10 +808,7 @@ type VrRenderer(adjustSize : V2i -> V2i) =
         let rCoord      : V2f[] = Array.zeroCreate (2 * cnt)
         let gCoord      : V2f[] = Array.zeroCreate (2 * cnt)
         let bCoord      : V2f[] = Array.zeroCreate (2 * cnt)
-
-
-
-        
+                
         let mutable i = 0
         let mutable coords = DistortionCoordinates_t()
 
@@ -728,7 +823,7 @@ type VrRenderer(adjustSize : V2i -> V2i) =
                     position.[i] <- V3f(ndc.X, ndc.Y, -1.0)
                     eyeIndex.[i] <- ei
 
-                    if system.ComputeDistortion(eye, float32 c.X, float32 c.Y, &coords) then
+                    if system.System.ComputeDistortion(eye, float32 c.X, float32 c.Y, &coords) then
                         rCoord.[i] <- V2f(coords.rfRed0, coords.rfRed1)
                         gCoord.[i] <- V2f(coords.rfGreen0, coords.rfGreen1)
                         bCoord.[i] <- V2f(coords.rfBlue0, coords.rfBlue1)
@@ -812,11 +907,11 @@ type VrRenderer(adjustSize : V2i -> V2i) =
         //let headToEye = system.GetEyeToHeadTransform(EVREye.Eye_Right) |> Trafo.ofHmdMatrix34 |> Trafo.inverse
         //let headToEye = Trafo3d.Scale(1.0, 1.0, -1.0) * headToEye
         depthRange |> Mod.map (fun range ->
-            let proj = system.GetProjectionMatrix(EVREye.Eye_Left, float32 range.Min, float32 range.Max)
-            let lProj = Trafo.ofHmdMatrix44 proj
+            let proj = system.System.GetProjectionMatrix(EVREye.Eye_Left, float32 range.Min, float32 range.Max)
+            let lProj = VrTrafo.ofHmdMatrix44 proj
 
-            let proj = system.GetProjectionMatrix(EVREye.Eye_Right, float32 range.Min, float32 range.Max)
-            let rProj = Trafo.ofHmdMatrix44 proj
+            let proj = system.System.GetProjectionMatrix(EVREye.Eye_Right, float32 range.Min, float32 range.Max)
+            let rProj = VrTrafo.ofHmdMatrix44 proj
             [| lProj; rProj|]
         )
 
@@ -824,15 +919,15 @@ type VrRenderer(adjustSize : V2i -> V2i) =
         lazy (
             let mutable width = 0u
             let mutable height = 0u
-            system.GetRecommendedRenderTargetSize(&width,&height)
+            system.System.GetRecommendedRenderTargetSize(&width,&height)
             let s = adjustSize(V2i(int width, int height))
             V2i(max 1 s.X, max 1 s.Y)
         )
 
 
     let view (t : Trafo3d) =
-        let lHeadToEye = system.GetEyeToHeadTransform(EVREye.Eye_Left) |> Trafo.ofHmdMatrix34 |> Trafo.inverse
-        let rHeadToEye = system.GetEyeToHeadTransform(EVREye.Eye_Right) |> Trafo.ofHmdMatrix34 |> Trafo.inverse
+        let lHeadToEye = system.System.GetEyeToHeadTransform(EVREye.Eye_Left) |> VrTrafo.ofHmdMatrix34 |> VrTrafo.inverse
+        let rHeadToEye = system.System.GetEyeToHeadTransform(EVREye.Eye_Right) |> VrTrafo.ofHmdMatrix34 |> VrTrafo.inverse
 
         let view = t.Inverse * Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, V3d.OIO, V3d.Zero)
 
@@ -843,7 +938,7 @@ type VrRenderer(adjustSize : V2i -> V2i) =
 
     let infos =
         lazy (
-            hmds |> Array.map (fun hmd ->
+            hmds() |> Seq.toArray |> Array.map (fun hmd ->
                 {
                     framebufferSize = desiredSize.Value
                     viewTrafos = hmd.MotionState.Pose |> Mod.map view  //CameraView.lookAt (V3d(3,4,5)) V3d.Zero V3d.OOI |> CameraView.viewTrafo |> Mod.constant //hmd.MotionState.Pose |> Mod.map Trafo.inverse |> Unhate.register "viewTrafo"
@@ -872,28 +967,7 @@ type VrRenderer(adjustSize : V2i -> V2i) =
     static member RCoordSym = sRCoord
     static member GCoordSym = sGCoord
     static member BCoordSym = sBCoord
-
-    member private x.ProcessEvents(events : System.Collections.Generic.Queue<VREvent_t>) =
-        
-        let mutable evt : VREvent_t = Unchecked.defaultof<VREvent_t>
-        while system.PollNextEvent(&evt, uint32 sizeof<VREvent_t>) do
-            events.Enqueue evt
-            let id = evt.trackedDeviceIndex
-
-            let t = unbox<EVREventType> (int evt.eventType)
-            match t with
-            | EVREventType.VREvent_TrackedDeviceActivated 
-            | EVREventType.VREvent_TrackedDeviceDeactivated 
-            | EVREventType.VREvent_TrackedDeviceUpdated
-            | EVREventType.VREvent_TrackedDeviceRoleChanged ->
-                updateDevice id
-            | _ ->
-                match tryGetDevice id with
-                | Some device ->
-                    device.Trigger(&evt)
-                | None ->
-                    ()
-
+    
     member x.Chaperone = getChaperone()
 
     member x.BackgroundColor
@@ -967,22 +1041,20 @@ type VrRenderer(adjustSize : V2i -> V2i) =
 
     member x.Statistics = evtStatistics :> IEvent<_>
 
-    member x.Run () =
-        if isDisposed then raise <| ObjectDisposedException("VrRenderer")
-        running <- true
-        let (lTex, rTex) =
-            match textures with
-            | Some t -> t
-            | None ->
-                let t = x.OnLoad infos.Value.[0] 
-                textures <- Some t
-                t
+    member x.IsRunning with get() = running
 
-        while running do
-            swTotal.Start()
-            swProcessEvents.Start()
-            x.ProcessEvents(eventQueue)
-            swProcessEvents.Stop()
+    member x.UpdateFrame(lTex : VrTexture, rTex : VrTexture) =
+
+        Log.line "UpdateFrame"
+
+        swTotal.Start()
+        swProcessEvents.Start()
+        let events = system.ProcessEvents()
+        swProcessEvents.Stop()
+
+        if system.ShutdownRequested then
+            x.Shutdown()
+        else
 
             swWaitPoses.Start()
             let err = x.Use (fun () -> compositor.WaitGetPoses(renderPoses, gamePoses))
@@ -992,26 +1064,20 @@ type VrRenderer(adjustSize : V2i -> V2i) =
                 swUpdatePoses.Start()
                 // update all poses
                 transact (fun () ->
-                    for i in 0 .. renderPoses.Length - 1 do
-                        let mutable pose = renderPoses.[i]
-                        match tryGetDevice (uint32 i) with
-                        | Some device -> device.Update(&pose)
-                        | None -> ()
+                    system.UpdatePoses(renderPoses)
                 )
 
                 x.UpdatePoses(renderPoses)
                 swUpdatePoses.Stop()
 
                 swProcessEvents.Start()
-                while eventQueue.Count > 0 do
-                    let evt = eventQueue.Dequeue()
-                    x.ProcessEvent evt
+                for evt in events do
+                    x.ProcessEvent evt // user application event processing
                 swProcessEvents.Stop()
             
                 // render for all HMDs
-                for i in 0 .. hmds.Length - 1 do
-                    let hmd = hmds.[i]
-                     
+                for hmd in hmds() do
+                                         
                     if hmd.MotionState.IsValid.GetValue() then
                         swRender.Start()
                         x.Render()
@@ -1061,11 +1127,20 @@ type VrRenderer(adjustSize : V2i -> V2i) =
                 swTotal.Reset()
                 swRender.Reset()
                 frameCount <- 0
-                
-        //OpenVR.Shutdown()
-        //lTex.Dispose()
-        //rTex.Dispose()
-        //x.Release()
+
+    member x.Run () =
+        if isDisposed then raise <| ObjectDisposedException("VrRenderer")
+        running <- true
+        let (lTex, rTex) =
+            match textures with
+            | Some t -> t
+            | None ->
+                let t = x.OnLoad infos.Value.[0] 
+                textures <- Some t
+                t
+
+        while running do
+            x.UpdateFrame(lTex, rTex)
 
     member x.Dispose() =
         if not isDisposed then
@@ -1073,6 +1148,8 @@ type VrRenderer(adjustSize : V2i -> V2i) =
 
             if running then x.Shutdown()
 
+            Log.line "[OpenVR] Shutdown"
+            
             OpenVR.Shutdown()
             match textures with
             | Some (lTex, rTex) -> 
@@ -1083,15 +1160,12 @@ type VrRenderer(adjustSize : V2i -> V2i) =
                 ()
             x.Release()
 
-    member x.Hmd = hmds.[0]
-    member x.AllDevices = getAllDevices() |> Seq.toArray
-    member x.Controllers = getAllDevices() |> Seq.filter (fun d -> d.Type = VrDeviceType.Controller) |> Seq.toArray
-    
-    member x.ConnectedDevices = connectedAll
-    member x.ConnectedHmds = connectedHmds
-    member x.ConnectedControllers = connectedControllers
+
+    member x.Hmd = hmds() |> Seq.head
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-    new() = new VrRenderer(id)
+    new() = new VrRenderer(id, VrSystem(VrApplicationType.Scene))
+    new(adjustSize) = new VrRenderer(adjustSize, VrSystem(VrApplicationType.Scene))
+    new(system : VrSystem) = new VrRenderer(id, system)
