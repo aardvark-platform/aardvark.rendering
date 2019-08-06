@@ -7,3 +7,7 @@ FSharp.Core
 SharpDX.Direct3D9
 Unofficial.OpenTK
 Unofficial.OpenTK.GLControl
+Unofficial.Typography
+Unofficial.LibTessDotNet
+CommonMark.NET
+GLSLangSharp

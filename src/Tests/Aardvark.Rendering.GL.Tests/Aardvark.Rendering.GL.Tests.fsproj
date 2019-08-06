@@ -75,6 +75,7 @@
     <Compile Include="RenderingTests.fs" />
     <Compile Include="PerformanceTest.fs" />
     <Compile Include="Program.fs" />
+    <None Include="paket.references" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Aardvark.Rendering.Interactive\Aardvark.Rendering.Interactive.fsproj">
