@@ -127,7 +127,7 @@ module Stereo =
 
         let app = new VulkanVRApplicationLayered(true)
         
-        app.Controllers |> Array.iter (fun c ->
+        app.System.Controllers |> Seq.iter (fun c ->
             c.Axis |> Array.iter (fun a ->
                 a.Press.Add ( fun _ -> captain.WriteLine("arrrr {0}", string a))
             )
