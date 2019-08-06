@@ -477,6 +477,7 @@ module Markdown =
                 ShapeList.renderTrafo = Trafo3d.Translation(center,0.0,0.0)
                 ShapeList.flipViewDependent = true
                 ShapeList.zRange = Range1i(0,0)
+                ShapeList.renderStyle = RenderStyle.Normal
             }
 
 

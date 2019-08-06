@@ -12,11 +12,11 @@ open Aardvark.Base.Rendering
 [<Struct>]
 type ConcreteShape =
     {
-        offset  : V2d
-        scale   : V2d
-        color   : C4b
-        z       : int
-        shape   : Shape
+        offset      : V2d
+        scale       : V2d
+        color       : C4b
+        z           : int
+        shape       : Shape
     }
 
     member x.bounds =
@@ -361,6 +361,10 @@ module ConcreteShape =
     let fillArcPath (color : C4b) (lineWidth : float) (points : list<V2d>) = fillPathAux PathSegment.arcSegment color points
     let arcPath (color : C4b) (lineWidth : float) (points : list<V2d>) = pathAux PathSegment.arcSegment color lineWidth points
 
+type RenderStyle =
+    | Normal
+    | NoBoundary
+    | Billboard
 
 [<ReferenceEquality; NoComparison>]
 type ShapeList =
@@ -370,13 +374,13 @@ type ShapeList =
         zRange              : Range1i
         renderTrafo         : Trafo3d
         flipViewDependent   : bool
+        renderStyle         : RenderStyle
     }
     
     member x.offsets = x.concreteShapes |> List.map ConcreteShape.offset
     member x.scales = x.concreteShapes |> List.map ConcreteShape.scale
     member x.colors = x.concreteShapes |> List.map ConcreteShape.color
     member x.shapes = x.concreteShapes |> List.map ConcreteShape.shape
-
 
 module ShapeList =
 
@@ -396,7 +400,14 @@ module ShapeList =
             renderTrafo = Trafo3d.Translation(cx, 0.0, 0.0)
             zRange = range
             flipViewDependent = false
+            renderStyle = RenderStyle.Normal
         }
+
+    let ofListWithRenderStyle (renderStyle:RenderStyle) (shapes : list<ConcreteShape>) = 
+
+        let res = ofList shapes
+
+        { res with renderStyle = renderStyle }    
 
     let prepend (shape : ConcreteShape) (r : ShapeList) =
 
@@ -417,6 +428,7 @@ module ShapeList =
             renderTrafo = Trafo3d.Translation(newCenter.X, 0.0, 0.0)
             flipViewDependent = r.flipViewDependent
             zRange = Range1i(r.zRange.Min - 1, r.zRange.Max)
+            renderStyle = r.renderStyle
         }
         
     let add (shape : ConcreteShape) (r : ShapeList) =
@@ -438,6 +450,7 @@ module ShapeList =
             renderTrafo = Trafo3d.Translation(newCenter.X, 0.0, 0.0)
             flipViewDependent = r.flipViewDependent
             zRange = Range1i(r.zRange.Min, r.zRange.Max + 1)
+            renderStyle = r.renderStyle
         }
         
 
@@ -452,6 +465,7 @@ type TextConfig =
         color               : C4b
         align               : TextAlignment
         flipViewDependent   : bool
+        renderStyle         : RenderStyle
     }
     static member Default =
         {
@@ -459,6 +473,7 @@ type TextConfig =
             color = C4b.White
             align = TextAlignment.Center
             flipViewDependent = true
+            renderStyle = RenderStyle.Normal
         }
 
 
@@ -468,7 +483,7 @@ type Text private() =
     static let lineBreak = System.Text.RegularExpressions.Regex @"\r?\n|\r"
 
     [<Extension>]
-    static member Layout(font : Font, color : C4b, align : TextAlignment, bounds : Box2d, content : string) =
+    static member Layout(font : Font, color : C4b, align : TextAlignment, bounds : Box2d, content : string, renderStyle : RenderStyle) =
         let chars = List<float * Glyph>()
         //let offsets = List<V2d>()
         //let scales = List<V2d>()
@@ -551,19 +566,20 @@ type Text private() =
             renderTrafo         = Trafo3d.Translation(realCenter, 0.0, 0.0)
             flipViewDependent   = true
             zRange = Range1i(0,0)
+            renderStyle = renderStyle
         }
 
     [<Extension>]
     static member Layout(font : Font, align : TextAlignment, bounds : Box2d, content : string) =
-        Text.Layout(font, C4b.Black, align, bounds, content)
+        Text.Layout(font, C4b.Black, align, bounds, content, RenderStyle.Normal)
 
     [<Extension>]
     static member Layout(font : Font, content : string) =
-        Text.Layout(font, C4b.Black, TextAlignment.Left, Box2d(0.0, 0.0, Double.MaxValue, Double.MaxValue), content)
+        Text.Layout(font, C4b.Black, TextAlignment.Left, Box2d(0.0, 0.0, Double.MaxValue, Double.MaxValue), content, RenderStyle.Normal)
 
     [<Extension>]
     static member Layout(font : Font, color : C4b, content : string) =
-        Text.Layout(font, color, TextAlignment.Left, Box2d(0.0, 0.0, Double.MaxValue, Double.MaxValue), content)
+        Text.Layout(font, color, TextAlignment.Left, Box2d(0.0, 0.0, Double.MaxValue, Double.MaxValue), content, RenderStyle.Normal)
         
     [<Extension>]
     static member Layout(config : TextConfig, content : string) =
@@ -573,6 +589,6 @@ type Text private() =
                 | TextAlignment.Left -> Box2d(V2d(0.0, 0.0), V2d(1.0, 0.0))
                 | _ -> Box2d(V2d(-1.0, 0.0), V2d(0.0, 0.0))
 
-        { Text.Layout(config.font, config.color, config.align, bounds, content) with flipViewDependent = config.flipViewDependent }
+        { Text.Layout(config.font, config.color, config.align, bounds, content, config.renderStyle) with flipViewDependent = config.flipViewDependent }
 
 
