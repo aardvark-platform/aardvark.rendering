@@ -55,7 +55,7 @@ let main argv =
     let win =
         window {
             backend Backend.Vulkan
-            display Display.OpenVR
+            display Display.Mono
             debug true
             samples 1
         }
@@ -113,13 +113,14 @@ let main argv =
                 | Some o -> o.Dispose()
             Log.stop()
 
-    let text = IncrementalExtensions.throttled "ttext" 400000 prepare text
+    let prepare () = ()
+    //let text = IncrementalExtensions.throttled "ttext" 400000 prepare text
     let overlay = text |> Sg.shape // |> Sg.scale 0.02
 
     let changeThread =
         let f () =
             while true do
-                Thread.Sleep 1
+                Thread.Sleep 100
                 transact (fun _ -> inputText.Value <- System.Guid.NewGuid() |> string)
         let t = Thread(ThreadStart f)
         t.IsBackground <- true
@@ -127,14 +128,20 @@ let main argv =
         t
     
     let sw = System.Diagnostics.Stopwatch.StartNew()
-    let t = win.Time |> Mod.map (fun _ -> Trafo3d.RotationZ (sw.Elapsed.TotalSeconds * 0.1))
+    let mutable last = sw.Elapsed.TotalSeconds
+    let t = 
+        win.Time |> Mod.map (fun _ -> 
+            printfn "last frame took: %A" ((sw.Elapsed.TotalSeconds - last) * 1000.0)
+            last <- sw.Elapsed.TotalSeconds
+            Trafo3d.RotationZ (sw.Elapsed.TotalSeconds * 0.1)
+        )
 
     let sg = 
         // create a red box with a simple shader
         //Sg.box (Mod.constant color) (Mod.constant box)
-            Sg.fullScreenQuad
-            |> Sg.diffuseTexture (color :> ITexture |> Mod.constant)
-            //overlay
+            //Sg.fullScreenQuad
+            //|> Sg.diffuseTexture (color :> ITexture |> Mod.constant)
+            overlay
             |> Sg.trafo t
             |> Sg.shader {
                 do! DefaultSurfaces.trafo
