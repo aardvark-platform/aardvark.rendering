@@ -59,73 +59,75 @@ let main argv =
 
     // create an OpenGL/Vulkan application. Use the use keyword (using in C#) in order to
     // properly dipose resources on shutdown...
-    use app = new VulkanApplication()
+    use app = new OpenGlApplication()
     //use app = new OpenGlApplication()
     // SimpleRenderWindow is a System.Windows.Forms.Form which contains a render control
     // of course you can a custum form and add a control to it.
     // Note that there is also a WPF binding for OpenGL. For more complex GUIs however,
     // we recommend using aardvark-media anyways..
-    let win = app.CreateGameWindow(1)
+    //let win = app.CreateGameWindow(1)
+    let signature =
+        app.Runtime.CreateFramebufferSignature [
+            DefaultSemantic.Colors, RenderbufferFormat.Rgba8
+            DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
+        ]
+        
+    let sw = System.Diagnostics.Stopwatch.StartNew()
+    let trigger = Mod.custom (fun _ -> sw.Elapsed.TotalSeconds)
     
-
-    let runtime = app.Runtime :> IRuntime
-
-    let box = Box3d(-V3d.III, V3d.III)
-    let color = C4b.Red
-
 
     let cfg = { Aardvark.Rendering.Text.TextConfig.Default with color = C4b.Red; align = TextAlignment.Center; renderStyle = RenderStyle.NoBoundary }
 
-    let inputText = Mod.init "aaaa"
+    //let inputText = Mod.init "aaaa"
 
-    let text = inputText |> Mod.map (fun t -> cfg.Layout t)
+    //let text = inputText |> Mod.map (fun t -> cfg.Layout t)
 
 
-    let size = V2i(512,512)
-    let color = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1)
-    let prepare = 
+    //let size = V2i(512,512)
+    //let color = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1)
+    //let prepare = 
 
-        let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
+    //    let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
 
-        let signature =
-            runtime.CreateFramebufferSignature [
-                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
-                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
-            ]
+    //    let signature =
+    //        runtime.CreateFramebufferSignature [
+    //            DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+    //            DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+    //        ]
 
-        let fbo = 
-            runtime.CreateFramebuffer(
-                signature, 
-                Map.ofList [
-                    DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
-                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
-                ]
-            )
-        let mutable old : Option<IRenderTask> = None
-        let t = Mod.init (text |> Mod.force) |> Sg.shape |> Sg.applyRuntime runtime |> Sg.compile runtime signature
-        fun (s : ShapeList) ->
-            let o = old
-            Log.startTimed "compile text"
-            let s = Sg.shape (Mod.constant s) 
-            s?Runtime <- runtime
-            let task = 
-                s 
-                |> Sg.applyRuntime runtime 
-                |> Sg.scale 0.1
-                |> Sg.viewTrafo (Mod.constant Trafo3d.Identity)
-                |> Sg.projTrafo (Frustum.ortho (Box3d.Unit) |> Frustum.projTrafo |> Mod.constant)
-                |> Sg.compile runtime signature
-            old <- Some task
-            task.Run(RenderToken.Empty, fbo)
-            match o with
-                | None -> ()
-                | Some o -> o.Dispose()
-            Log.stop()
+    //    let fbo = 
+    //        runtime.CreateFramebuffer(
+    //            signature, 
+    //            Map.ofList [
+    //                DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+    //                DefaultSemantic.Depth, (depth :> IFramebufferOutput)
+    //            ]
+    //        )
+    //    let mutable old : Option<IRenderTask> = None
+    //    let t = Mod.init (text |> Mod.force) |> Sg.shape |> Sg.applyRuntime runtime |> Sg.compile runtime signature
+    //    fun (s : ShapeList) ->
+    //        let o = old
+    //        Log.startTimed "compile text"
+    //        let s = Sg.shape (Mod.constant s) 
+    //        s?Runtime <- runtime
+    //        let task = 
+    //            s 
+    //            |> Sg.applyRuntime runtime 
+    //            |> Sg.scale 0.1
+    //            |> Sg.viewTrafo (Mod.constant Trafo3d.Identity)
+    //            |> Sg.projTrafo (Frustum.ortho (Box3d.Unit) |> Frustum.projTrafo |> Mod.constant)
+    //            |> Sg.compile runtime signature
+    //        old <- Some task
+    //        task.Run(RenderToken.Empty, fbo)
+    //        match o with
+    //            | None -> ()
+    //            | Some o -> o.Dispose()
+    //        Log.stop()
 
     let prepare () = ()
 
 
-    let text = win.Time  |> Mod.map (fun _ -> 
+    let text = trigger  |> Mod.map (fun _ -> 
             //Log.startTimed "layout"
             let s = System.Guid.NewGuid() |> string 
             let r = cfg.Layout s
@@ -141,49 +143,55 @@ let main argv =
     //let text = IncrementalExtensions.throttled "ttext" 400000 prepare text
     let overlay = text |> Sg.shape // |> Sg.scale 0.02
 
-    let changeThread =
-        let f () =
-            while true do
-                Thread.Sleep 100
-                transact (fun _ -> inputText.Value <- System.Guid.NewGuid() |> string)
-        let t = Thread(ThreadStart f)
-        t.IsBackground <- true
-        t.Start()
-        t
-    
-    let sw = System.Diagnostics.Stopwatch.StartNew()
-    let mutable last = sw.Elapsed.TotalSeconds
+    //let changeThread =
+    //    let f () =
+    //        while true do
+    //            Thread.Sleep 100
+    //            transact (fun _ -> inputText.Value <- System.Guid.NewGuid() |> string)
+    //    let t = Thread(ThreadStart f)
+    //    t.IsBackground <- true
+    //    t.Start()
+    //    t
     let t = 
-        win.Time |> Mod.map (fun _ -> 
-            let took = (sw.Elapsed.TotalSeconds - last) * 1000.0
-            if took > 400.0 then
-                let a = String.Format( "last frame took: {0}", took)
-                Console.WriteLine(a)
-            //sw.Stop()
-            //System.Threading.Thread.Sleep 32
-            //sw.Start()
-            last <- sw.Elapsed.TotalSeconds
-            Trafo3d.RotationZ (sw.Elapsed.TotalSeconds * 0.1)
+        trigger |> Mod.map (fun time -> 
+            Trafo3d.RotationZ (time * 0.1)
         )
+    //let t = Mod.constant Trafo3d.Identity
 
     let sg = 
-        // create a red box with a simple shader
-        //Sg.box (Mod.constant color) (Mod.constant box)
-            //Sg.fullScreenQuad
-            //|> Sg.diffuseTexture (color :> ITexture |> Mod.constant)
-            overlay
-            |> Sg.trafo t
-            |> Sg.shader {
-                do! DefaultSurfaces.trafo
-                do! DefaultSurfaces.constantColor C4f.Red
-                do! DefaultSurfaces.diffuseTexture
-            }
+        let view = CameraView.lookAt V3d.III V3d.Zero V3d.OOI
+        let frustum = Frustum.perspective 60.0 0.1 100.0 1.0
+        overlay
+        |> Sg.trafo t
+        |> Sg.viewTrafo (Mod.constant (CameraView.viewTrafo view))
+        |> Sg.projTrafo (Mod.constant (Frustum.projTrafo frustum))
+
+
+    let res = 
+        RenderTask.ofList [
+            app.Runtime.CompileClear(signature,Mod.constant C4f.Black, Mod.constant 1.0)
+            Sg.compile app.Runtime signature sg
+        ]
+    let fbo = app.Runtime.CreateFramebuffer(signature, Mod.constant (V2i(1024, 768)))
+    fbo.Acquire()
+
+    let f = Mod.force fbo
+
+    let sw = System.Diagnostics.Stopwatch()
+    while true do
+        let took = sw.Elapsed.TotalMilliseconds
+        if took > 0.0 then
+            if took > 4.0 then
+                Console.WriteLine("\rlast frame took: {0}              ", took)
+            Console.Write("\rlast frame took: {0}              ", took)
+        sw.Restart()
+        res.Run(RenderToken.Empty, f)
+        transact (fun () -> trigger.MarkOutdated())
+
 
     
-    // show the window
-    win.RenderTask <- sg |> Sg.compile runtime win.FramebufferSignature 
-    win.Run()
-
-    0
+    //// show the window
+    //win.RenderTask <- sg |> Sg.compile runtime win.FramebufferSignature 
+    //win.Run()
 
     0
