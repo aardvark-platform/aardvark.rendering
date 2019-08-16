@@ -837,7 +837,7 @@ and CopyEngine(family : DeviceQueueFamily) =
 
         if wait then
             //trigger.Signal()
-            Monitor.PulseAll lockObj
+            lock lockObj (fun _ -> Monitor.PulseAll lockObj)
             threads |> List.iter (fun t -> t.Join())
 
     member x.Enqueue(commands : seq<CopyCommand>) =
