@@ -693,7 +693,9 @@ module RenderTask =
                         ]
                         |> sprintf "{ %s }"
 
-                    Log.line "[Vulkan] recompile commands: %s" cause
+                    if Config.showRecompile then
+                        Log.line "[Vulkan] recompile commands: %s" cause
+
                     cmdViewports <- vps
                     cmdScissors <- scs
                     cmdVersion <- 1

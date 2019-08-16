@@ -2217,8 +2217,9 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
                     if framebufferChanged then yield "framebuffer"
                 ]
                 |> sprintf "{ %s }"
-
-            Log.line "[Vulkan] recompile commands: %s" cause
+            
+            if Config.showRecompile then
+                Log.line "[Vulkan] recompile commands: %s" cause
 
             inner.Reset()
             inner.Begin(renderPass, fbo, CommandBufferUsage.RenderPassContinue)
