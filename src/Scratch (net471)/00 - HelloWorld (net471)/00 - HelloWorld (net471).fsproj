@@ -35,7 +35,7 @@
     <OutputPath>..\..\..\bin\Release</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <WarningLevel>3</WarningLevel>
-    <PlatformTarget>AnyCPU</PlatformTarget>
+    <PlatformTarget>x64</PlatformTarget>
     <DocumentationFile>
     </DocumentationFile>
     <Prefer32Bit>false</Prefer32Bit>
@@ -99,6 +99,21 @@
     <ProjectReference Include="..\..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj">
       <Name>Aardvark.SceneGraph</Name>
       <Project>{b9ef48e4-7e73-4ddf-805a-d7324d907cb8}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Application\Aardvark.Application.Slim.GL\Aardvark.Application.Slim.GL.fsproj">
+      <Name>Aardvark.Application.Slim.GL</Name>
+      <Project>{f8e2e201-39ec-4000-b3e7-e317016fa807}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Application\Aardvark.Application.Slim.Vulkan\Aardvark.Application.Slim.Vulkan.fsproj">
+      <Name>Aardvark.Application.Slim.Vulkan</Name>
+      <Project>{77af53b0-fe23-4de2-b218-5726b295f6bd}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Application\Aardvark.Application.Slim\Aardvark.Application.Slim.fsproj">
+      <Name>Aardvark.Application.Slim</Name>
+      <Project>{72a7471e-7bf7-41bd-a654-0dc904b49d1f}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj">

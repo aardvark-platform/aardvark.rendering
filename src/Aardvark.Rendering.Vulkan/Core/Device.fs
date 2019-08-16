@@ -628,13 +628,19 @@ and CopyEngine(family : DeviceQueueFamily) =
         let empty = List<CopyCommand>()
 
         while running do
-            trigger.Wait()
+            //trigger.Wait()
+
+            
 
             let copies, totalSize = 
                 lock lockObj (fun () ->
+
+                    
+
                     if not running then 
                         empty, 0L
                     else
+                        while pending.Count = 0 do Monitor.Wait lockObj |> ignore
                         if totalSize >= 0L then
                             let mine = pending
                             let s = totalSize
@@ -840,6 +846,8 @@ and CopyEngine(family : DeviceQueueFamily) =
                 //pending.AddRange commands
                 let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0L 
                 totalSize <- totalSize + s
+
+                Monitor.PulseAll lockObj
                 s
             )
 
@@ -854,6 +862,9 @@ and CopyEngine(family : DeviceQueueFamily) =
                 //pending.AddRange commands
                 let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0L 
                 totalSize <- totalSize + s
+
+                Monitor.PulseAll lockObj
+
                 s
             )
 

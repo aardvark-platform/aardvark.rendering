@@ -7,13 +7,48 @@ open Aardvark.Application
 open Aardvark.Application.WinForms
 open Aardvark.Application.WinForms.Vulkan
 
-// This example illustrates how to create a simple render window. 
-// In contrast to the rest of the examples (beginning from 01-Triangle), we use
-// the low level application API for creating a window and attaching 
-// mouse and keyboard inputs.
-// In your application you most likely want to use this API instead of the more abstract
-// show/window computation expression builders (which reduces code duplication
-// in this case) to setup applications.
+open System.Threading
+
+open Aardvark.Application.Slim
+
+open Aardvark.Base.Ag
+// This example illustrates how to render a simple triangle using aardvark.
+
+open Aardvark.Rendering.Text
+
+module IncrementalExtensions = 
+    open System.Threading
+
+    let throttled (name : string) (ms : int) (f : 'a -> unit) (m : IMod<'a>) : IMod<'a> = 
+        let v = MVar.empty()
+        let r = Mod.init (Mod.force m)
+        let f () = 
+            while true do
+                let () = MVar.take v
+                let v = Mod.force m
+                f v 
+                transact (fun _ -> r.Value <- v)
+                Thread.Sleep ms
+
+        let d = m.AddMarkingCallback(fun _ -> MVar.put v ())
+
+        let t = Thread(ThreadStart f)
+        t.IsBackground <- true
+        t.Name <- name
+        t.Start()
+        r :> IMod<_>
+
+
+type WtfRuntimeApplicator(r : IRuntime, child : ISg) =
+    inherit Sg.AbstractApplicator(child)
+    member x.Runtime = r
+
+[<Semantic>]
+type RuntimeSem() =
+    member x.Runtime(w : WtfRuntimeApplicator) = w.Child?Runtime <- w.Runtime
+
+module Sg = 
+    let applyRuntime (r : IRuntime) (sg : ISg) = WtfRuntimeApplicator(r,sg) :> ISg
 
 [<EntryPoint>]
 let main argv = 
@@ -25,65 +60,130 @@ let main argv =
     // create an OpenGL/Vulkan application. Use the use keyword (using in C#) in order to
     // properly dipose resources on shutdown...
     use app = new VulkanApplication()
+    //use app = new OpenGlApplication()
     // SimpleRenderWindow is a System.Windows.Forms.Form which contains a render control
     // of course you can a custum form and add a control to it.
     // Note that there is also a WPF binding for OpenGL. For more complex GUIs however,
     // we recommend using aardvark-media anyways..
-    let win = app.CreateSimpleRenderWindow(samples = 8)
-    //win.Title <- "Hello Aardvark"
+    let win = app.CreateGameWindow(1)
+    
 
-    // Given eye, target and sky vector we compute our initial camera pose
-    let initialView = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
-    // the class Frustum describes camera frusta, which can be used to compute a projection matrix.
-    let frustum = 
-        // the frustum needs to depend on the window size (in oder to get proper aspect ratio)
-        win.Sizes 
-            // construct a standard perspective frustum (60 degrees horizontal field of view,
-            // near plane 0.1, far plane 50.0 and aspect ratio x/y.
-            |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
+    let runtime = app.Runtime :> IRuntime
 
-    // create a controlled camera using the window mouse and keyboard input devices
-    // the window also provides a so called time mod, which serves as tick signal to create
-    // animations - seealso: https://github.com/aardvark-platform/aardvark.docs/wiki/animation
-    let cameraView = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
+    let box = Box3d(-V3d.III, V3d.III)
+    let color = C4b.Red
 
-    // create a quad using low level primitives (IndexedGeometry is our base type for specifying
-    // geometries using vertices etc)
-    let quadSg =
-        let quad =
-            IndexedGeometry(
-                Mode = IndexedGeometryMode.TriangleList,
-                IndexArray = ([|0;1;2; 0;2;3|] :> System.Array),
-                IndexedAttributes =
-                    SymDict.ofList [
-                        DefaultSemantic.Positions,                  [| V3f(-1,-1,0); V3f(1,-1,0); V3f(1,1,0); V3f(-1,1,0) |] :> Array
-                        DefaultSemantic.Normals,                    [| V3f.OOI; V3f.OOI; V3f.OOI; V3f.OOI |] :> Array
-                        DefaultSemantic.DiffuseColorCoordinates,    [| V2f.OO; V2f.IO; V2f.II; V2f.OI |] :> Array
-                    ]
-            )
-                
-        // create a scenegraph, given a IndexedGeometry instance...
-        quad |> Sg.ofIndexedGeometry
 
-    let sg =
-        Sg.box' C4b.White Box3d.Unit 
-            // here we use fshade to construct a shader: https://github.com/aardvark-platform/aardvark.docs/wiki/FShadeOverview
-            |> Sg.effect [
-                    DefaultSurfaces.trafo                 |> toEffect
-                    DefaultSurfaces.constantColor C4f.Red |> toEffect
-                    DefaultSurfaces.simpleLighting        |> toEffect
+    let cfg = { Aardvark.Rendering.Text.TextConfig.Default with color = C4b.Red; align = TextAlignment.Center; renderStyle = RenderStyle.NoBoundary }
+
+    let inputText = Mod.init "aaaa"
+
+    let text = inputText |> Mod.map (fun t -> cfg.Layout t)
+
+
+    let size = V2i(512,512)
+    let color = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1)
+    let prepare = 
+
+        let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
+
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+            ]
+
+        let fbo = 
+            runtime.CreateFramebuffer(
+                signature, 
+                Map.ofList [
+                    DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
                 ]
-            // extract our viewTrafo from the dynamic cameraView and attach it to the scene graphs viewTrafo 
-            |> Sg.viewTrafo (cameraView  |> Mod.map CameraView.viewTrafo )
-            // compute a projection trafo, given the frustum contained in frustum
-            |> Sg.projTrafo (frustum |> Mod.map Frustum.projTrafo    )
+            )
+        let mutable old : Option<IRenderTask> = None
+        let t = Mod.init (text |> Mod.force) |> Sg.shape |> Sg.applyRuntime runtime |> Sg.compile runtime signature
+        fun (s : ShapeList) ->
+            let o = old
+            Log.startTimed "compile text"
+            let s = Sg.shape (Mod.constant s) 
+            s?Runtime <- runtime
+            let task = 
+                s 
+                |> Sg.applyRuntime runtime 
+                |> Sg.scale 0.1
+                |> Sg.viewTrafo (Mod.constant Trafo3d.Identity)
+                |> Sg.projTrafo (Frustum.ortho (Box3d.Unit) |> Frustum.projTrafo |> Mod.constant)
+                |> Sg.compile runtime signature
+            old <- Some task
+            task.Run(RenderToken.Empty, fbo)
+            match o with
+                | None -> ()
+                | Some o -> o.Dispose()
+            Log.stop()
+
+    let prepare () = ()
 
 
-    let renderTask = 
-        // compile the scene graph into a render task
-        app.Runtime.CompileRender(win.FramebufferSignature, sg)
+    let text = win.Time  |> Mod.map (fun _ -> 
+            //Log.startTimed "layout"
+            let s = System.Guid.NewGuid() |> string 
+            let r = cfg.Layout s
+            //Log.stop()
+           
+            r
+          )
 
-    // assign the render task to our window...
-    win.RenderTask <- renderTask
+    //let text = "jsdfjdsfj"
+    //let c = cfg.Layout text
+    //let text = Mod.constant c
+
+    //let text = IncrementalExtensions.throttled "ttext" 400000 prepare text
+    let overlay = text |> Sg.shape // |> Sg.scale 0.02
+
+    let changeThread =
+        let f () =
+            while true do
+                Thread.Sleep 100
+                transact (fun _ -> inputText.Value <- System.Guid.NewGuid() |> string)
+        let t = Thread(ThreadStart f)
+        t.IsBackground <- true
+        t.Start()
+        t
+    
+    let sw = System.Diagnostics.Stopwatch.StartNew()
+    let mutable last = sw.Elapsed.TotalSeconds
+    let t = 
+        win.Time |> Mod.map (fun _ -> 
+            let took = (sw.Elapsed.TotalSeconds - last) * 1000.0
+            if took > 400.0 then
+                let a = String.Format( "last frame took: {0}", took)
+                Console.WriteLine(a)
+            //sw.Stop()
+            //System.Threading.Thread.Sleep 32
+            //sw.Start()
+            last <- sw.Elapsed.TotalSeconds
+            Trafo3d.RotationZ (sw.Elapsed.TotalSeconds * 0.1)
+        )
+
+    let sg = 
+        // create a red box with a simple shader
+        //Sg.box (Mod.constant color) (Mod.constant box)
+            //Sg.fullScreenQuad
+            //|> Sg.diffuseTexture (color :> ITexture |> Mod.constant)
+            overlay
+            |> Sg.trafo t
+            |> Sg.shader {
+                do! DefaultSurfaces.trafo
+                do! DefaultSurfaces.constantColor C4f.Red
+                do! DefaultSurfaces.diffuseTexture
+            }
+
+    
+    // show the window
+    win.RenderTask <- sg |> Sg.compile runtime win.FramebufferSignature 
     win.Run()
+
+    0
+
     0

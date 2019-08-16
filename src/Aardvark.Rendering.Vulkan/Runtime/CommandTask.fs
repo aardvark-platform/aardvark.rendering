@@ -2218,7 +2218,7 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
                 ]
                 |> sprintf "{ %s }"
 
-            Log.line "[Vulkan] recompile commands: %s" cause
+            //Log.line "[Vulkan] recompile commands: %s" cause
 
             inner.Reset()
             inner.Begin(renderPass, fbo, CommandBufferUsage.RenderPassContinue)
