@@ -114,6 +114,16 @@ let main argv =
             Log.stop()
 
     let prepare () = ()
+
+
+    let text = win.Time  |> Mod.map (fun _ -> 
+            Log.startTimed "layout"
+            let s = System.Guid.NewGuid() |> string 
+            let r = cfg.Layout s
+            Log.stop()
+            r
+          )
+
     //let text = IncrementalExtensions.throttled "ttext" 400000 prepare text
     let overlay = text |> Sg.shape // |> Sg.scale 0.02
 
@@ -131,7 +141,8 @@ let main argv =
     let mutable last = sw.Elapsed.TotalSeconds
     let t = 
         win.Time |> Mod.map (fun _ -> 
-            printfn "last frame took: %A" ((sw.Elapsed.TotalSeconds - last) * 1000.0)
+            let took = (sw.Elapsed.TotalSeconds - last) * 1000.0
+            if took > 6.0 then printfn "last frame took: %A" took
             last <- sw.Elapsed.TotalSeconds
             Trafo3d.RotationZ (sw.Elapsed.TotalSeconds * 0.1)
         )
