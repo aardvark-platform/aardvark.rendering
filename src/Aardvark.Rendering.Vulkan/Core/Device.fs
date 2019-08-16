@@ -596,7 +596,7 @@ and CopyEngine(family : DeviceQueueFamily) =
     let graphicsFamily = device.GraphicsFamily.Index
     let familyIndex = family.Index
 
-    let trigger = new MultimediaTimer.Trigger(1)
+    //let trigger = new MultimediaTimer.Trigger(1)  // was for batching, introduces latency
    
     let maxCommandSize = 16L <<< 30
 
@@ -628,14 +628,21 @@ and CopyEngine(family : DeviceQueueFamily) =
         let empty = List<CopyCommand>()
 
         while running do
-            trigger.Wait()
+            // now: latency or batch updates. how to allow both
+            //trigger.Wait()
+
+            
 
             let copies, totalSize = 
                 lock lockObj (fun () ->
+
                     if not running then 
                         empty, 0L
                     else
-                        if totalSize >= 0L then
+                        while pending.Count = 0 do Monitor.Wait lockObj |> ignore
+                        if not running then
+                            empty, 0L
+                        elif totalSize >= 0L then
                             let mine = pending
                             let s = totalSize
                             pending <- List()
@@ -829,7 +836,8 @@ and CopyEngine(family : DeviceQueueFamily) =
             )
 
         if wait then
-            trigger.Signal()
+            //trigger.Signal()
+            Monitor.PulseAll lockObj
             threads |> List.iter (fun t -> t.Join())
 
     member x.Enqueue(commands : seq<CopyCommand>) =
@@ -840,6 +848,8 @@ and CopyEngine(family : DeviceQueueFamily) =
                 //pending.AddRange commands
                 let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0L 
                 totalSize <- totalSize + s
+
+                Monitor.PulseAll lockObj
                 s
             )
 
@@ -854,6 +864,9 @@ and CopyEngine(family : DeviceQueueFamily) =
                 //pending.AddRange commands
                 let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0L 
                 totalSize <- totalSize + s
+
+                Monitor.PulseAll lockObj
+
                 s
             )
 
