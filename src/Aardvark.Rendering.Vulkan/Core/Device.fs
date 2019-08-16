@@ -639,7 +639,7 @@ and CopyEngine(family : DeviceQueueFamily) =
                     if not running then 
                         empty, 0L
                     else
-                        while pending.Count = 0 do Monitor.Wait lockObj |> ignore
+                        while pending.Count = 0 && running do Monitor.Wait lockObj |> ignore
                         if not running then
                             empty, 0L
                         elif totalSize >= 0L then
@@ -830,6 +830,7 @@ and CopyEngine(family : DeviceQueueFamily) =
             lock lockObj (fun () ->
                 if running then
                     running <- false
+                    Monitor.PulseAll lockObj
                     true
                 else
                     false
@@ -837,7 +838,6 @@ and CopyEngine(family : DeviceQueueFamily) =
 
         if wait then
             //trigger.Signal()
-            lock lockObj (fun _ -> Monitor.PulseAll lockObj)
             threads |> List.iter (fun t -> t.Join())
 
     member x.Enqueue(commands : seq<CopyCommand>) =
