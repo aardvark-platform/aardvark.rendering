@@ -59,7 +59,7 @@ let main argv =
 
     // create an OpenGL/Vulkan application. Use the use keyword (using in C#) in order to
     // properly dipose resources on shutdown...
-    use app = new OpenGlApplication()
+    use app = new VulkanApplication()
     //use app = new OpenGlApplication()
     // SimpleRenderWindow is a System.Windows.Forms.Form which contains a render control
     // of course you can a custum form and add a control to it.
@@ -139,7 +139,7 @@ let main argv =
     //let text = "jsdfjdsfj"
     //let c = cfg.Layout text
     //let text = Mod.constant c
-
+    //let text = Mod.constant (cfg.Layout "")
     //let text = IncrementalExtensions.throttled "ttext" 400000 prepare text
     let overlay = text |> Sg.shape // |> Sg.scale 0.02
 
@@ -156,11 +156,40 @@ let main argv =
         trigger |> Mod.map (fun time -> 
             Trafo3d.RotationZ (time * 0.1)
         )
-    //let t = Mod.constant Trafo3d.Identity
+    let t = Mod.constant Trafo3d.Identity
+
+ 
+    let rand = Random()
+
+
+
+    let pointCount = 10000
+    
+    let positions = 
+        let randomV3f() = V3d(rand.NextDouble(), rand.NextDouble(), rand.NextDouble()) |> V3f.op_Explicit
+        let pts =  Array.init pointCount (fun _ -> randomV3f()) :> Array
+        trigger |> Mod.map (fun time -> 
+            ArrayBuffer(pts.Copy()) :> IBuffer
+        )
+
+
+        
+    let vertices = BufferView(positions,typeof<V3f>)
+    //let normals = BufferView(ArrayBuffer(packedGeometry.normals) :> IBuffer |> Mod.constant,typeof<V3f>)
+
+    let dyncGen = 
+        Sg.draw IndexedGeometryMode.PointList
+        |> 
+        Sg.vertexBuffer DefaultSemantic.Positions vertices
+        |> Sg.shader {
+            do! DefaultSurfaces.trafo
+            do! DefaultSurfaces.constantColor C4f.White
+            }
 
     let sg = 
         let view = CameraView.lookAt V3d.III V3d.Zero V3d.OOI
         let frustum = Frustum.perspective 60.0 0.1 100.0 1.0
+        //dyncGen
         overlay
         |> Sg.trafo t
         |> Sg.viewTrafo (Mod.constant (CameraView.viewTrafo view))

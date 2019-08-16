@@ -457,6 +457,7 @@ module Buffer =
                 if size = buffer.Size then
                     let gc = GCHandle.Alloc(ab.Data, GCHandleType.Pinned)
                     buffer |> updateWriter (fun ptr -> Marshal.Copy(gc.AddrOfPinnedObject(), ptr, size) )
+                    gc.Free()
                     true
                 else
                     false
