@@ -1164,10 +1164,17 @@ DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding
 		auto currentContext = *contextHandle;
 		if (currentContext != binding->VAOContext)
 		{
-			if (binding->VAO >= 0)
+			if (binding->VAO > 0)
 			{
-				uint32_t vao = binding->VAO;
-				hglDeleteVAO(binding->VAOContext, vao);
+				if (binding->VAOContext != 0)
+				{
+					uint32_t vao = binding->VAO;
+					hglDeleteVAO(binding->VAOContext, vao);
+				}
+				else
+				{
+					printf("invalid VAOContext\n");
+				}
 			}
 
 			uint32_t vao = 0u;

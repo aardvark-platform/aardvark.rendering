@@ -278,15 +278,24 @@ module PointerContextExtensions =
                 value.ValueBindingCount <- values.Length
                 value.ValueBindings <- pValues
 
+            if value.VAO > 0 then
+                if value.VAOContext <> IntPtr.Zero then
+                    GLVM.hglDeleteVAO(value.VAOContext, value.VAO)
+                    value.VAOContext <- 0n
+                    value.VAO <- 0
+                else
+                    Log.warn "[GL] VertexInputBindingHandle.Update: Invalid VAOContext"
 
             value.IndexBuffer <- index
-            value.VAOContext <- 0n
             NativePtr.write ptr.Pointer value
 
         member x.Delete(ptr : VertexInputBindingHandle) =
             let v = NativePtr.read ptr.Pointer
             if v.VAO > 0 then
-                GLVM.hglDeleteVAO(v.VAOContext, v.VAO)
+                if v.VAOContext <> IntPtr.Zero then
+                    GLVM.hglDeleteVAO(v.VAOContext, v.VAO)
+                else
+                     Log.warn "[GL] VertexInputBindingHandle.Delete: Invalid VAOContext"
             NativePtr.free v.BufferBindings
             NativePtr.free v.ValueBindings
             NativePtr.free ptr.Pointer
