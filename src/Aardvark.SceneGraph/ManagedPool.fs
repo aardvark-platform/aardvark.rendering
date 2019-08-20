@@ -421,6 +421,9 @@ type ManagedPool(runtime : IRuntime, signature : GeometrySignature) =
 
     member x.Runtime = runtime
 
+    member x.Count
+        with get() = count
+
     member x.Add(g : AdaptiveGeometry) =
         lock x (fun () ->
             let ds = List()
