@@ -119,6 +119,7 @@ module RenderTasks =
         abstract member ProcessDeltas : AdaptiveToken * RenderToken -> unit
         abstract member UpdateResources : AdaptiveToken * RenderToken -> unit
         abstract member Perform : AdaptiveToken * RenderToken * Framebuffer * OutputDescription -> unit
+        abstract member Update :  AdaptiveToken * RenderToken -> unit
         abstract member Release2 : unit -> unit
 
 
@@ -133,6 +134,11 @@ module RenderTasks =
             use ct = ctx.ResourceLock
             x.ProcessDeltas(token, t)
             x.UpdateResources(token, t)
+
+            renderTaskLock.Run (fun () ->
+                x.Update(token, t)
+            )
+
 
         override x.Release() =
             if not isDisposed then
@@ -487,7 +493,9 @@ module RenderTasks =
                 runStats |> List.iter (fun l -> l.Value)
                 rt.AddPrimitiveCount(primitivesGenerated.Value)
 
-
+        override x.Update(token, rt) = 
+            for (_,t) in Map.toSeq subtasks do
+                t.Update(token, rt)
 
         override x.Release2() =
             for ro in preparedObjectReader.State do
