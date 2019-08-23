@@ -1862,13 +1862,13 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         //let roots = readers |> HMap.keys |> Seq.map string |> String.concat ", "
                         //Log.line "%s" roots
 
-                        Log.line "q: %.2f m: %A (%A) r: %A l : %s mq: %A e: %A u: %A c: %d s: %d t: %d d: %A" 
-                                    lastQ 
-                                    (pool.UsedMemory + inner.UsedMemory) 
-                                    (pool.TotalMemory + inner.TotalMemory) 
-                                    inner.AverageRenderTime 
-                                    loads q e u 
-                                    collapses splits tasks points
+                        //Log.line "q: %.2f m: %A (%A) r: %A l : %s mq: %A e: %A u: %A c: %d s: %d t: %d d: %A" 
+                        //            lastQ 
+                        //            (pool.UsedMemory + inner.UsedMemory) 
+                        //            (pool.TotalMemory + inner.TotalMemory) 
+                        //            inner.AverageRenderTime 
+                        //            loads q e u 
+                        //            collapses splits tasks points
 
             )
                 
