@@ -255,7 +255,8 @@ module PreparedPipelineState =
                             
                             let slotRange = Range1i.FromMinAndSize(u.samplerBinding, u.samplerCount - 1)
                             let (tex0, sam0) = u.samplerTextures |> List.head
-                            let sameSam = u.samplerTextures |> List.skip 1 |> List.forall (fun s -> Object.ReferenceEquals(sam0, snd s))
+                            // NOTE: shaderPickler.UnPickle does not always return reference equal SamplerStates if the original SamplerStates where reference equal
+                            let sameSam = u.samplerTextures |> List.skip 1 |> List.forall (fun s -> Object.Equals(sam0, snd s))
                             
                             let arraySingle =
                                 if sameSam && tex0.[tex0.Length - 1] = '0' then    
@@ -288,7 +289,7 @@ module PreparedPipelineState =
 
                                                 Some arrayBinding
                                             | _ -> 
-                                                Log.warn "unexpected texture type %s: %A" pre (texArr.GetType())
+                                                Log.warn "[GL] invalid texture type %s: %s -> expecting IMod<ITexture[]>" pre (texArr.GetType().Name)
                                                 None
 
                                         | _ -> // could not find texture array uniform -> try individual
@@ -312,8 +313,12 @@ module PreparedPipelineState =
                                                 match tex with
                                                 | :? IMod<ITexture> as value -> Some (x.CreateTexture(value))
                                                 | :? IMod<IBackendTexture> as value -> Some (x.CreateTexture'(value))
-                                                | _ -> None
-                                            | None -> None
+                                                | _ -> 
+                                                    Log.line "[GL] invalid texture type: %s %s -> expecting IMod<ITexture> or IMod<IBackendTexture>" texName (tex.GetType().Name)
+                                                    None
+                                            | None -> 
+                                                    Log.line "[GL] texture uniform \"%s\" not found" texName
+                                                    None
 
                                         match texRes with
                                         | Some texRes ->
