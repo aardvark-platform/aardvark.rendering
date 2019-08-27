@@ -581,6 +581,42 @@ module ProgramExtensions =
                                                     }
                                                 File.writeAllBytes file entry
 
+                                                #if PICKLERTEST
+                                                let test = shaderPickler.UnPickle (File.readAllBytes file)
+
+                                                Log.line "TEST"
+
+                                                let file = test.iface.samplers |> MapExt.toArray |> Array.choose (fun (x, y) ->
+                                                                if y.samplerTextures |> List.length > 1 then
+                                                                    let sam0 = y.samplerTextures |> List.head |> snd
+                                                                    let samEqual = y.samplerTextures |> List.skip 1 |> List.forall (fun s -> Object.ReferenceEquals(sam0, snd s))
+                                                                    Log.line "ArraySampler Equal=%A (Deserialize)" samEqual
+                                                                    Some samEqual
+                                                                else
+                                                                    None
+                                                            )
+
+                                                let orig = code.iface.samplers |> MapExt.toArray |> Array.choose (fun (x, y)->
+                                                                if y.samplerTextures |> List.length > 1 then
+                                                                    let sam0 = y.samplerTextures |> List.head |> snd
+                                                                    let samEqual = y.samplerTextures |> List.skip 1 |> List.forall (fun s -> Object.ReferenceEquals(sam0, snd s))
+                                                                    Log.line "ArraySampler Equal=%A (Original)" samEqual
+                                                                    Some samEqual
+                                                                else
+                                                                    None
+                                                    )
+
+                                                if orig.Length <> file.Length then
+                                                    failwith "FAILFAIL"
+                                                else
+                                                    let passt = Array.compareWith (fun x y -> if x = y then 0 else 1) orig file
+                                                    if passt <> 0 then
+                                                        Log.warn "No longer same reference equality !!"
+
+                                                #endif
+
+                                                ()
+
                                             | None ->
                                                 ()
                                     | _ ->
