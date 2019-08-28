@@ -2,6 +2,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.28307.572
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "08 - DerivedAttributePerformance", "Scratch (net471)\08 - DerivedAttributePerformance\08 - DerivedAttributePerformance.fsproj", "{627A635E-2C40-49EE-BBBF-46FABA90C941}"
+EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "05 - HickupTest", "Scratch (net471)\05 - HickupTest\05 - HickupTest.fsproj", "{333848F1-0D67-4D85-8EA3-814253A0E47C}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "08 - TextUpdateTest", "Scratch (netcore)\08 - TextUpdateTest\08 - TextUpdateTest.fsproj", "{DFEF8B29-F9BF-4186-B87C-EA261E24C10F}"
@@ -172,6 +174,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{627A635E-2C40-49EE-BBBF-46FABA90C941}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{627A635E-2C40-49EE-BBBF-46FABA90C941}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{627A635E-2C40-49EE-BBBF-46FABA90C941}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{627A635E-2C40-49EE-BBBF-46FABA90C941}.Release|Any CPU.Build.0 = Release|Any CPU
 		{333848F1-0D67-4D85-8EA3-814253A0E47C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{333848F1-0D67-4D85-8EA3-814253A0E47C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{333848F1-0D67-4D85-8EA3-814253A0E47C}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -445,6 +451,7 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{627A635E-2C40-49EE-BBBF-46FABA90C941} = {ACAD9454-10F3-4673-BC50-BD1B50A04D3B}
 		{333848F1-0D67-4D85-8EA3-814253A0E47C} = {ACAD9454-10F3-4673-BC50-BD1B50A04D3B}
 		{DFEF8B29-F9BF-4186-B87C-EA261E24C10F} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{B869D116-33D0-48E1-9C62-79D9AFFC7F65} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}

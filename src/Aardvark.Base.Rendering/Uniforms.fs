@@ -19,18 +19,53 @@ module TrafoOperators =
 
         let normalMatrixArr : IMod<Trafo3d[]> -> IMod<M33d[]> = 
             UnaryCache<IMod<Trafo3d[]>, IMod<M33d[]>>(Mod.map (Array.map (fun t -> t.Backward.Transposed.UpperLeftM33()))).Invoke
+    
+    type internal Map2ModWeak<'a, 'b, 'c>(a : IMod<'a>, b : IMod<'b>, f : 'a -> 'b -> 'c) =
+        inherit Mod.AbstractMod<'c>()
 
-    let (<*>) : IMod<Trafo3d> -> IMod<Trafo3d> -> IMod<Trafo3d> = 
-        BinaryCache<IMod<Trafo3d>, IMod<Trafo3d>, IMod<Trafo3d>>(Mod.map2 (*)).Invoke
+        let a = WeakReference<_>(a)
+        let b = WeakReference<_>(b)
+
+        member x.Left = a
+        member x.Right = b
+        member x.F = f
+
+        override x.Inputs = 
+            seq {
+                match a.TryGetTarget() with
+                | (true, x) -> yield (x :> IAdaptiveObject)
+                | _ -> ()
+                match b.TryGetTarget() with
+                | (true, x) -> yield (x :> IAdaptiveObject)
+                | _ -> ()
+            }
         
+        override x.Compute(token) =
+            match a.TryGetTarget(), b.TryGetTarget() with
+                | ((true, x), (true, y)) -> f (x.GetValue token) (y.GetValue token)
+                | _ -> failwith "input no longer alive"
+      
+    module Mod =
+        
+        let map2weak f a b =
+            Map2ModWeak<_,_,_>(a, b, f) :> IMod<_>
+
+    let (<*>) : IMod<Trafo3d> -> IMod<Trafo3d> -> IMod<Trafo3d> =
+        //Mod.map2 (*)
+        //BinaryCache<IMod<Trafo3d>, IMod<Trafo3d>, IMod<Trafo3d>>(Mod.map2 (*)).Invoke
+        BinaryCache<IMod<Trafo3d>, IMod<Trafo3d>, IMod<Trafo3d>>(Mod.map2weak (*)).Invoke
+                
     let (<.*.>) : IMod<Trafo3d[]> -> IMod<Trafo3d[]> -> IMod<Trafo3d[]> = 
-        BinaryCache<IMod<Trafo3d[]>, IMod<Trafo3d[]>, IMod<Trafo3d[]>>(Mod.map2 (Array.map2 (*))).Invoke
+        //Mod.map2 (Array.map2 (*))
+        BinaryCache<IMod<Trafo3d[]>, IMod<Trafo3d[]>, IMod<Trafo3d[]>>(Mod.map2weak (Array.map2 (*))).Invoke
         
     let (<*.>) : IMod<Trafo3d> -> IMod<Trafo3d[]> -> IMod<Trafo3d[]> = 
-        BinaryCache<IMod<Trafo3d>, IMod<Trafo3d[]>, IMod<Trafo3d[]>>(Mod.map2 (fun l r -> r |> Array.map (fun r -> l * r ))).Invoke
+        //Mod.map2 (fun l r -> r |> Array.map (fun r -> l * r ))
+        BinaryCache<IMod<Trafo3d>, IMod<Trafo3d[]>, IMod<Trafo3d[]>>(Mod.map2weak (fun l r -> r |> Array.map (fun r -> l * r ))).Invoke
         
     let (<.*>) : IMod<Trafo3d[]> -> IMod<Trafo3d> -> IMod<Trafo3d[]> = 
-        BinaryCache<IMod<Trafo3d[]>, IMod<Trafo3d>, IMod<Trafo3d[]>>(Mod.map2 (fun l r -> l |> Array.map (fun l -> l * r ))).Invoke
+        //Mod.map2 (fun l r -> l |> Array.map (fun l -> l * r ))
+        BinaryCache<IMod<Trafo3d[]>, IMod<Trafo3d>, IMod<Trafo3d[]>>(Mod.map2weak (fun l r -> l |> Array.map (fun l -> l * r ))).Invoke
         
 [<AbstractClass>]
 type DefaultingModTable() =
@@ -122,11 +157,11 @@ module Uniforms =
 
             "ModelViewTrafo",           fun u -> (u?ModelTrafo <*> u?ViewTrafo).Value
             "ViewProjTrafo",            fun u -> (u?ViewTrafo <*> u?ProjTrafo).Value
-            "ModelViewProjTrafo",       fun u -> (u?ModelTrafo <*> u?ViewTrafo <*> u?ProjTrafo).Value
+            "ModelViewProjTrafo",       fun u -> (u?ModelTrafo <*> (u?ViewTrafo <*> u?ProjTrafo)).Value
 
             "ModelViewTrafoInv",        fun u -> (u?ModelTrafo <*> u?ViewTrafo).Inverse.Value
             "ViewProjTrafoInv",         fun u -> (u?ViewTrafo <*> u?ProjTrafo).Inverse.Value 
-            "ModelViewProjTrafoInv",    fun u -> (u?ModelTrafo <*> u?ViewTrafo <*> u?ProjTrafo).Inverse.Value
+            "ModelViewProjTrafoInv",    fun u -> (u?ModelTrafo <*> (u?ViewTrafo <*> u?ProjTrafo)).Inverse.Value
 
             "NormalMatrix",             fun u -> u?ModelTrafo.NormalMatrix
         ]
@@ -134,6 +169,7 @@ module Uniforms =
     let tryGetDerivedUniform (name : string) (p : IUniformProvider) =
         match table.TryGetValue name with
             | (true, getter) ->
+                //Log.line "Provider %d: %s" (p.GetHashCode()) name
                 try getter p |> Some
                 with NotFoundException f -> None
             | _ ->
