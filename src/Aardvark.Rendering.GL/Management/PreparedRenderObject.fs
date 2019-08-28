@@ -255,7 +255,8 @@ module PreparedPipelineState =
                             
                             let slotRange = Range1i.FromMinAndSize(u.samplerBinding, u.samplerCount - 1)
                             let (tex0, sam0) = u.samplerTextures |> List.head
-                            // NOTE: shaderPickler.UnPickle does not always return reference equal SamplerStates if the original SamplerStates where reference equal
+                            // NOTE: shaderPickler.UnPickle (shader cache) does not preserve reference equal SamplerStates
+                            // NOTE2: when using shader modules (switches) the samplerTextures are replaced by the one from the module and thereby will have reference equality
                             let sameSam = u.samplerTextures |> List.skip 1 |> List.forall (fun s -> Object.Equals(sam0, snd s))
                             
                             let arraySingle =
