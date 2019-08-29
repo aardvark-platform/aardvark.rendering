@@ -1,0 +1,12 @@
+4.11.4:
+ - [Base] moved Caches (UnaryCache, BinaryCache) to Base.FSharp
+ - [Sg] fixed memory leak when using derived attirbutes (e.g. ModelViewTrafo, ModelViewProjTrafo)
+ - [GL] fixed texture array uniforms 
+
+4.11.3:
+ - LoD Render: removed debug ouput
+
+4.11.2:
+ - [GL] fixed buffer resource stats
+ - [GL] fixed unmanaged memory leak of VAO
+ 
