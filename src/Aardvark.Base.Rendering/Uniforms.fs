@@ -43,7 +43,8 @@ module TrafoOperators =
         override x.Compute(token) =
             match a.TryGetTarget(), b.TryGetTarget() with
                 | ((true, x), (true, y)) -> f (x.GetValue token) (y.GetValue token)
-                | _ -> failwith "input no longer alive"
+                | _ -> //failwith "input no longer alive"
+                        x.cache
       
     module Mod =
         

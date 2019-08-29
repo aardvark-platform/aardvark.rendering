@@ -67,10 +67,16 @@ let main argv =
                     // clear old geometry and create new
                     stuff.Clear() 
                     let sphere = IndexedGeometryPrimitives.Sphere.solidPhiThetaSphere Sphere3d.Unit 16 C4b.White
-                    let trafo = Trafo3d.Identity
-                    let leak = Mod.init (sphere, trafo) // this computation will leak forever due to "hook"
+                    // this input and trafo computation will leak forever due to BinaryCache holding Mod2Map of Model*View 
+                    // -> fixed in 39a811d
+                    // remaining pseudo leak:
+                    // global inputs like "CameraLocation" will hold WeakReferences to already collected 
+                    // temporary short living runtime outputs as long as the input does not change
+                    // after 1m of not moving the camera 1k WeakReference
+                    let leak = Mod.init (sphere, Trafo3d.Identity) 
+                    let trafo = leak |> Mod.map (fun (_, t) -> t)
                     let sg = Sg.ofIndexedGeometry sphere
-                                    |> Sg.trafo (leak |> Mod.map (fun (_, t) -> t))
+                                    |> Sg.trafo trafo
                     stuff.Add(sg) |> ignore
                 )
             

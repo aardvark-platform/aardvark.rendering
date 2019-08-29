@@ -522,11 +522,11 @@ type RuntimeFramebufferExtensions private() =
 type AbstractRenderTask() =
     inherit AdaptiveObject()
 
-    static let dynamicUniforms = 
-        Set.ofList [
-            "ViewTrafo"
-            "ProjTrafo"
-        ]
+    //static let dynamicUniforms = 
+    //    Set.ofList [
+    //        "ViewTrafo"
+    //        "ProjTrafo"
+    //    ]
 
     static let runtimeUniforms =
         Map.ofList [
@@ -551,21 +551,21 @@ type AbstractRenderTask() =
         )
 
         
-    let hooks : Dictionary<string, DefaultingModTable> = Dictionary.empty
-    let hook (name : string) (m : IMod) : IMod =
-        if Set.contains name dynamicUniforms then
-            match hooks.TryGetValue(name) with
-                | (true, table) -> 
-                    table.Hook m
+    //let hooks : Dictionary<string, DefaultingModTable> = Dictionary.empty
+    //let hook (name : string) (m : IMod) : IMod =
+        //if Set.contains name dynamicUniforms then
+        //    match hooks.TryGetValue(name) with
+        //        | (true, table) -> 
+        //            table.Hook m
 
-                | _ ->
-                    let tValue = m.GetType().GetInterface(typedefof<IMod<_>>.Name).GetGenericArguments().[0]
-                    let tTable = typedefof<DefaultingModTable<_>>.MakeGenericType [| tValue |]
-                    let table = Activator.CreateInstance(tTable) |> unbox<DefaultingModTable>
-                    hooks.[name] <- table 
-                    table.Hook m
-        else 
-            m
+        //        | _ ->
+        //            let tValue = m.GetType().GetInterface(typedefof<IMod<_>>.Name).GetGenericArguments().[0]
+        //            let tTable = typedefof<DefaultingModTable<_>>.MakeGenericType [| tValue |]
+        //            let table = Activator.CreateInstance(tTable) |> unbox<DefaultingModTable>
+        //            hooks.[name] <- table 
+        //            table.Hook m
+        //else 
+        //    m
 
     let hookProvider (provider : IUniformProvider) =
         { new IUniformProvider with
@@ -573,42 +573,44 @@ type AbstractRenderTask() =
                 match tryGetRuntimeValue (string name)  with
                     | Some v -> Some v
                     | _ -> 
-                        let res = provider.TryGetUniform(scope, name)
-                        match res with
-                            | Some res -> hook (string name) res |> Some
-                            | None -> None
+                        provider.TryGetUniform(scope, name)
+                        //let res = provider.TryGetUniform(scope, name)
+                        //match res with
+                        //    | Some res -> hook (string name) res |> Some
+                        //    | None -> None
 
             member x.Dispose() = 
                 provider.Dispose()
         }
 
     member private x.UseValues (token : AdaptiveToken, output : OutputDescription, f : AdaptiveToken -> 'a) =
-        let toReset = List()
+        //let toReset = List()
         transact (fun () -> 
             currentOutput.Value <- output
 
-            output.overrides |> Map.iter (fun name value ->
-                match hooks.TryGetValue(name) with
-                    | (true, table) ->
-                        table.Set(value)
-                        toReset.Add table
-                    | _ ->
-                        ()
-                )
+            //output.overrides |> Map.iter (fun name value ->
+            //    match hooks.TryGetValue(name) with
+            //        | (true, table) ->
+            //            table.Set(value)
+            //            toReset.Add table
+            //        | _ ->
+            //            ()
+            //    )
         )
 
-        if toReset.Count = 0 then
-            f(token)
-        else
-            let innerToken = token.Isolated //AdaptiveToken(token.Depth, token.Caller, System.Collections.Generic.HashSet())
-            try
-                f(innerToken)
-            finally
-                innerToken.Release()
-                transact (fun () ->
-                    for r in toReset do r.Reset()
-                )
-                x.PerformUpdate(token, RenderToken.Empty)
+        f(token)
+        //if toReset.Count = 0 then
+        //    f(token)
+        //else
+        //    let innerToken = token.Isolated //AdaptiveToken(token.Depth, token.Caller, System.Collections.Generic.HashSet())
+        //    try
+        //        f(innerToken)
+        //    finally
+        //        innerToken.Release()
+        //        transact (fun () ->
+        //            for r in toReset do r.Reset()
+        //        )
+        //        x.PerformUpdate(token, RenderToken.Empty)
     
     member x.HookProvider (uniforms : IUniformProvider) =
         hookProvider uniforms

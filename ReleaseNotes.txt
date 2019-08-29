@@ -1,4 +1,5 @@
 4.11.4:
+ - [Base] rmeoved hooking mechanism of dynamic uniforms (no need anymore, allowed overwrite of view/proj trafo)
  - [Base] moved Caches (UnaryCache, BinaryCache) to Base.FSharp
  - [Sg] fixed memory leak when using derived attirbutes (e.g. ModelViewTrafo, ModelViewProjTrafo)
  - [GL] fixed texture array uniforms 
