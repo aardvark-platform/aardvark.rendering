@@ -20,91 +20,17 @@ module TrafoOperators =
         let normalMatrixArr : IMod<Trafo3d[]> -> IMod<M33d[]> = 
             UnaryCache<IMod<Trafo3d[]>, IMod<M33d[]>>(Mod.map (Array.map (fun t -> t.Backward.Transposed.UpperLeftM33()))).Invoke
     
-    type internal MapModWeak<'a, 'b>(a : IMod<'a>, f : 'a -> 'b) =
-        inherit Mod.AbstractMod<'b>()
-
-        let a = WeakReference<_>(a)
-
-        member x.Inner = a
-        member x.F = f
-
-        override x.Inputs = 
-            match a.TryGetTarget() with
-            | (true, x) -> Seq.singleton (x :> IAdaptiveObject)
-            | _ -> Seq.empty<_>
-        
-        override x.Compute(token) =
-            match a.TryGetTarget() with
-                | (true, x) -> f (x.GetValue token)
-                | _ -> //failwith "input no longer alive"
-                       x.cache
-
-    type internal Map2ModWeak<'a, 'b, 'c>(a : IMod<'a>, b : IMod<'b>, f : 'a -> 'b -> 'c) =
-        inherit Mod.AbstractMod<'c>()
-
-        let a = WeakReference<_>(a)
-        let b = WeakReference<_>(b)
-
-        member x.Left = a
-        member x.Right = b
-        member x.F = f
-
-        override x.Inputs = 
-            seq {
-                match a.TryGetTarget() with
-                | (true, x) -> yield (x :> IAdaptiveObject)
-                | _ -> ()
-                match b.TryGetTarget() with
-                | (true, x) -> yield (x :> IAdaptiveObject)
-                | _ -> ()
-            }
-        
-        override x.Compute(token) =
-            match a.TryGetTarget(), b.TryGetTarget() with
-                | ((true, x), (true, y)) -> f (x.GetValue token) (y.GetValue token)
-                | _ -> //failwith "input no longer alive"
-                       x.cache
-      
-    module Mod =
-        
-        let private scoped (f : 'a -> 'b) =
-            let scope = Ag.getContext()
-            fun v -> Ag.useScope scope (fun () -> f v)
-
-        let mapWeak (f : 'a -> 'b) (m : IMod<'a>) =
-            if m.IsConstant then
-                let f = scoped f
-                Mod.delay (fun () -> m.GetValue(AdaptiveToken.Empty) |> f)
-            else
-                MapModWeak(m, f) :> IMod<_>
-
-        let map2weak (f : 'a -> 'b -> 'c) (m1 : IMod<'a>) (m2 : IMod<'b>) =
-            match m1.IsConstant, m2.IsConstant with
-            | (true, true) -> 
-                Mod.delay (fun () -> f (m1.GetValue(AdaptiveToken.Empty)) (m2.GetValue(AdaptiveToken.Empty))) 
-            | (true, false) -> 
-                MapModWeak(m2, fun b -> f (m1.GetValue(AdaptiveToken.Empty)) b) :> IMod<_>
-            | (false, true) -> 
-                MapModWeak(m1, fun a -> f a (m2.GetValue(AdaptiveToken.Empty))) :> IMod<_>
-            | (false, false) ->
-                Map2ModWeak(m1, m2, f) :> IMod<_>
-
-
     let (<*>) : IMod<Trafo3d> -> IMod<Trafo3d> -> IMod<Trafo3d> =
-        //Mod.map2 (*)
-        BinaryCache<IMod<Trafo3d>, IMod<Trafo3d>, IMod<Trafo3d>>(Mod.map2weak (*)).Invoke
+        BinaryCache<IMod<Trafo3d>, IMod<Trafo3d>, IMod<Trafo3d>>(Mod.map2 (*)).Invoke
                 
     let (<.*.>) : IMod<Trafo3d[]> -> IMod<Trafo3d[]> -> IMod<Trafo3d[]> = 
-        //Mod.map2 (Array.map2 (*))
-        BinaryCache<IMod<Trafo3d[]>, IMod<Trafo3d[]>, IMod<Trafo3d[]>>(Mod.map2weak (Array.map2 (*))).Invoke
+        BinaryCache<IMod<Trafo3d[]>, IMod<Trafo3d[]>, IMod<Trafo3d[]>>(Mod.map2 (Array.map2 (*))).Invoke
         
     let (<*.>) : IMod<Trafo3d> -> IMod<Trafo3d[]> -> IMod<Trafo3d[]> = 
-        //Mod.map2 (fun l r -> r |> Array.map (fun r -> l * r ))
-        BinaryCache<IMod<Trafo3d>, IMod<Trafo3d[]>, IMod<Trafo3d[]>>(Mod.map2weak (fun l r -> r |> Array.map (fun r -> l * r ))).Invoke
+        BinaryCache<IMod<Trafo3d>, IMod<Trafo3d[]>, IMod<Trafo3d[]>>(Mod.map2 (fun l r -> r |> Array.map (fun r -> l * r ))).Invoke
         
     let (<.*>) : IMod<Trafo3d[]> -> IMod<Trafo3d> -> IMod<Trafo3d[]> = 
-        //Mod.map2 (fun l r -> l |> Array.map (fun l -> l * r ))
-        BinaryCache<IMod<Trafo3d[]>, IMod<Trafo3d>, IMod<Trafo3d[]>>(Mod.map2weak (fun l r -> l |> Array.map (fun l -> l * r ))).Invoke
+        BinaryCache<IMod<Trafo3d[]>, IMod<Trafo3d>, IMod<Trafo3d[]>>(Mod.map2 (fun l r -> l |> Array.map (fun l -> l * r ))).Invoke
         
 [<AbstractClass>]
 type DefaultingModTable() =
