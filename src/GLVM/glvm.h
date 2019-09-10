@@ -1,5 +1,14 @@
 #pragma once
 
+#ifndef AMD_INTEGRATED
+extern "C"
+{
+	__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+}
+#define AMD_INTEGRATED
+#endif // !AMD_INTEGRATED
+
+
 #ifdef __APPLE__
 #include <opengl/gl3.h>
 #define DllExport(t) extern "C" t
