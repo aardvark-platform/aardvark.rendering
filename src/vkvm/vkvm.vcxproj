@@ -79,6 +79,8 @@
     <OutDir>$(SolutionDir)..\bin\Debug\</OutDir>
     <IntDir>$(SolutionDir)..\bin\Debug\AMD64\vkvm\</IntDir>
     <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
+    <IncludePath>C:\VulkanSDK\1.1.114.0\Include\vulkan;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\VulkanSDK\1.1.114.0\Lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -91,6 +93,8 @@
     <OutDir>$(SolutionDir)..\lib\Native\Aardvark.Rendering.Vulkan\windows\AMD64\</OutDir>
     <IntDir>$(SolutionDir)..\bin\Release\AMD64\vkvm\</IntDir>
     <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
+    <IncludePath>C:\VulkanSDK\1.1.114.0\Include\vulkan;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\VulkanSDK\1.1.114.0\Lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
