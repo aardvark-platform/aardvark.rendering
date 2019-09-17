@@ -216,7 +216,6 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
-    let useVulkan = true
     // uncomment/comment to switch between the backends
     //use app = new VulkanApplication() 
     use app = new OpenGlApplication()

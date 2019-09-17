@@ -15,9 +15,9 @@ let main argv =
     // and may show it later.
     let win =
         window {
-            backend Backend.Vulkan
-            display Display.Stereo
-            debug true
+            backend Backend.GL
+            display Display.Mono
+            debug false
             samples 8
         }
 

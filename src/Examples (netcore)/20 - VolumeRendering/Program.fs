@@ -158,10 +158,9 @@ let main argv =
 
     // show the scene in a simple window
     let win = window {
-        backend Backend.Vulkan
+        backend Backend.GL
         display Display.Mono
-        debug true
-        verbosity DebugVerbosity.Warning
+        debug false
         samples 1
     }
 

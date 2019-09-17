@@ -18,7 +18,7 @@ let main argv =
             display Display.Mono
             samples 8
             backend Backend.GL
-            debug true
+            debug false
         }
     let runtime = win.Runtime
 

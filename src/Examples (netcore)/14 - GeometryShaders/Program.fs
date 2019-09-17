@@ -267,7 +267,7 @@ let main argv =
     show {
         backend Backend.GL
         display Display.Mono
-        debug true
+        debug false
         samples 8
         scene sg
     }

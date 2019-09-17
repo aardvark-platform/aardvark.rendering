@@ -28,7 +28,7 @@ let main argv =
     let win =
         window {
             backend Backend.GL
-            display Display.Stereo
+            display Display.Mono
             debug false
             samples 8
         }

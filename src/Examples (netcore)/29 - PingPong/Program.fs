@@ -14,7 +14,7 @@ let main argv =
     printfn "press [Space] to increment texture id."
    
 
-    use app = new OpenGlApplication(true)
+    use app = new OpenGlApplication()
     let win = app.CreateGameWindow(samples = 1)
 
     let runtime = app.Runtime

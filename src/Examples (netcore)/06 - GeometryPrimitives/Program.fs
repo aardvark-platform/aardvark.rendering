@@ -105,9 +105,9 @@ let main argv =
         window {
             display Display.Mono
             samples 8
-            backend Backend.Vulkan
+            backend Backend.GL
             initialCamera (CameraView.lookAt (V3d.III * 20.0) V3d.OOO V3d.OOI)
-            debug true
+            debug false
         }
 
     // quick and dirty keyboard bindings (Values is an Event, which is similar to observables)

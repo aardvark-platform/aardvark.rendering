@@ -40,7 +40,6 @@ let main argv =
         backend Backend.GL
         display Display.Mono
         debug false
-        verbosity DebugVerbosity.Warning
         samples 8
         scene sg
     }

@@ -11,9 +11,11 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
+    
+
     let sg = 
         // load the scene and wrap it in an adapter
-        Loader.Assimp.load (Path.combine ["..";"..";"..";"data";"aardvark";"aardvark.obj"])
+        Loader.Assimp.load (Path.combine [__SOURCE_DIRECTORY__; "..";"..";"..";"data";"aardvark";"aardvark.obj"])
             |> Sg.adapter
 
             // flip the z coordinates (since the model is upside down)
@@ -30,7 +32,7 @@ let main argv =
 
     // show the scene in a simple window
     show {
-        backend Backend.Vulkan
+        backend Backend.GL
         display Display.Mono
         debug false
         samples 8
