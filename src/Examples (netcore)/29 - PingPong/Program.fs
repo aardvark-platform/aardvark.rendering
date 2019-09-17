@@ -45,7 +45,7 @@ let main argv =
         )
 
     let box = Box3d(-V3d.III, V3d.III)
-    let size = V2i(512,512) 
+    let size = V2i(1024,1024) 
 
     // Signatures are required to compile render tasks. Signatures can be seen as the `type` of a framebuffer
     // It describes the instances which can be used to exectute the render task (in other words
@@ -95,11 +95,12 @@ let main argv =
             |> Sg.viewTrafo (cameraView  |> Mod.map CameraView.viewTrafo )
             // compute a projection trafo, given the frustum contained in frustum
             |> Sg.projTrafo (frustum |> Mod.map Frustum.projTrafo    )
-            |> Sg.depthTest (Mod.init DepthTestMode.None)
+            //|> Sg.depthTest (Mod.init DepthTestMode.None)
             |> Sg.compile runtime signature
 
     // clear current target
-    let clear = runtime.CompileClear(signature, Mod.constant C4f.Green, Mod.constant 1.0)
+    let rand = RandomSystem()
+    let clear = runtime.CompileClear(signature, currentTexture |> Mod.map (fun _ -> rand.UniformC3f().ToC4f()), Mod.constant 1.0)
 
     // this a custom render task which call others and can be chained with outer render tasks
     // we need this to control where to render to
@@ -109,8 +110,8 @@ let main argv =
             let target = fbos.[(currentTexture.Value+1)%2]
             // manually clear and render to target
             let output = OutputDescription.ofFramebuffer target
-            clear.Run(token, output)
-            task.Run(token,output)
+            clear.Run(self, token, output)
+            task.Run(self, token,output)
         )
 
     // just visualize using fullscreen quad
@@ -122,9 +123,13 @@ let main argv =
         |> Sg.diffuseTexture currentState
         |> Sg.compile runtime win.FramebufferSignature
 
-    win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ -> 
-        transact (fun _ -> currentTexture.Value <- (currentTexture.Value + 1) % 2 )
-        printfn "current id: %d" currentTexture.Value
+    win.Keyboard.DownWithRepeats.Values.Add(fun k -> 
+        match k with
+        | Keys.Space -> 
+            transact (fun _ -> currentTexture.Value <- (currentTexture.Value + 1) % 2 )
+            printfn "current id: %d" currentTexture.Value
+        | _ ->
+            ()
     )
 
     win.RenderTask <- 
