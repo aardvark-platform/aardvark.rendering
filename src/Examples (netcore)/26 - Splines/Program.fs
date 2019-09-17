@@ -426,6 +426,7 @@ let main argv =
         window {
             backend Backend.GL
             display Display.Mono
+            debug false
             samples 8
         }
 
