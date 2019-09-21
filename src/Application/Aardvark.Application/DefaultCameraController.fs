@@ -114,14 +114,15 @@ module DefaultCameraController =
             else
                 return AdaptiveFunc.Identity
         }
+
     /// <summary> Gives a camera an option to move around laterally from
     /// the direction of the camera.
     /// A middle mouse button controls the functionality.</summary>
     /// <param name="mouse"> the mouse inputs (this is often pulled from the parent window)</param>
     /// <returns>An incremental function that takes a CameraView</returns>    
-    let controlPan (m : IMouse) =
-        let down = m.IsDown(MouseButtons.Middle)
-        let location = m.Position |> Mod.map (fun pp -> pp.Position)
+    let controlPan (mouse : IMouse) =
+        let down = mouse.IsDown(MouseButtons.Middle)
+        let location = mouse.Position |> Mod.map (fun pp -> pp.Position)
 
         adaptive {
             let! d = down
@@ -137,6 +138,7 @@ module DefaultCameraController =
             else
                 return AdaptiveFunc.Identity
         }  
+
     /// <summary> Gives a camera an option to move towards or away from the facing direction.
     /// right mouse button with mouse y axis movement controls the functionality.</summary>
     /// <param name="mouse"> the mouse inputs (this is often pulled from the parent window)</param>
@@ -158,16 +160,17 @@ module DefaultCameraController =
             else
                 return AdaptiveFunc.Identity
         }  
+
     /// <summary> Gives a camera an option to move towards or away from the facing direction.
     /// middle mouse wheel controls the functionality.</summary>
     /// <param name="mouse"> the mouse inputs (this is often pulled from the parent window)</param>
     /// <param name="time"> the time to use as reference (this is often pulled from the parent window)</param>
     /// <returns>An incremental function that takes a CameraView</returns> 
-    let controllScroll (m : IMouse) (time : IMod<DateTime>) =
+    let controllScroll (mouse : IMouse) (time : IMod<DateTime>) =
         let active = Mod.init false
 
         let speed = ref 0.0
-        let s = m.Scroll.Values.Subscribe(fun d ->
+        let s = mouse.Scroll.Values.Subscribe(fun d ->
             speed := !speed + d
             if not <| active.GetValue() then
                 transact (fun () -> Mod.change active true)
@@ -191,7 +194,8 @@ module DefaultCameraController =
                 )
             else
                 return AdaptiveFunc.Identity
-        }  
+        } 
+        
     /// <summary> Implement common control functions for movement, looking, panning, and zooming 
     /// for a given camera.</summary>
     /// <param name="mouse"> the mouse inputs (this is often pulled from the parent window)</param>
@@ -249,6 +253,7 @@ module DefaultCameraController =
             else
                 return AdaptiveFunc.Identity
         } |> Mod.onPush
+
     /// <summary> Gives a camera an option to move around laterally from
     /// the direction of the camera.
     /// A middle mouse button controls the functionality.</summary>
@@ -273,13 +278,14 @@ module DefaultCameraController =
             else
                 return AdaptiveFunc.Identity
         }
+
     /// <summary> Gives a camera the ability to reset to it's initial state.
     /// F9 is the default button for resetting.</summary>
     /// <param name="keyboard"> the keyboard inputs (this is often pulled from the parent window)</param>
     /// <returns>An incremental function that takes a CameraView</returns>    
-    let controlReset (initial : CameraView) (k : IKeyboard) =
+    let controlReset (initial : CameraView) (keyboard : IKeyboard) =
         adaptive {
-            let! t = k.IsDown Keys.F9
+            let! t = keyboard.IsDown Keys.F9
             if t then
                 return Mod.constant 0 |> Mod.step (fun _ _ _ -> initial )
             else
@@ -321,14 +327,15 @@ module DefaultCameraController =
             else
                 return AdaptiveFunc.Identity
         }
+
     /// <summary> Gives a camera an option to move towards or away from the facing direction.
     /// right mouse button with mouse y axis movement controls the functionality.</summary>
     /// <param name="moveSpeed"> the rate at which the zooming occurs</param>
     /// <param name="mouse"> the mouse inputs (this is often pulled from the parent window)</param>
     /// <returns>An incremental function that takes a CameraView</returns> 
-    let controlZoomWithSpeed (moveSpeed : ModRef<float>) (m : IMouse) =
-        let down = m.IsDown(MouseButtons.Right)
-        let location = m.Position |> Mod.map (fun pp -> pp.Position)
+    let controlZoomWithSpeed (moveSpeed : ModRef<float>) (mouse : IMouse) =
+        let down = mouse.IsDown(MouseButtons.Right)
+        let location = mouse.Position |> Mod.map (fun pp -> pp.Position)
 
         adaptive {
             let! d = down
@@ -342,7 +349,8 @@ module DefaultCameraController =
                 )
             else
                 return AdaptiveFunc.Identity
-        }      
+        } 
+        
     /// <summary> Implement common control functions for movement, looking, panning, and zooming 
     /// for a given camera.</summary>
     /// <param name="moveSpeed"> the rate at which all movement occurs</param>
