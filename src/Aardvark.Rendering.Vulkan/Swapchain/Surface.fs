@@ -243,7 +243,8 @@ module Surface =
                         |> check "could not create wayland surface"
 
                 | Mir info ->
-                    let! pInfo =
+                    failwith "TODO: MIR"
+                    (*let! pInfo =
                         VkMirSurfaceCreateInfoKHR(
                             VkStructureType.MirSurfaceCreateInfoKhr, 0n,
                             VkMirSurfaceCreateFlagsKHR.MinValue,
@@ -251,7 +252,7 @@ module Surface =
                             info.mirSurface
                         )
                     VkRaw.vkCreateMirSurfaceKHR(instance.Handle, pInfo, NativePtr.zero, pHandle)
-                        |> check "could not create mir surface"
+                        |> check "could not create mir surface"*)
 
                 | Android info ->
                     let! pInfo =
