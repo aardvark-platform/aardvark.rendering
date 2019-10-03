@@ -874,11 +874,11 @@ module RenderTask =
             lock this (fun () -> processDeltas(AdaptiveToken.Top))
             runtime
 
-    type private CustomRenderTask(f : afun<IRenderTask * RenderToken * OutputDescription, unit>) as this =
+    type private CustomRenderTask(f : afun<AdaptiveToken * RenderToken * OutputDescription, unit>) as this =
         inherit AbstractRenderTask()
 
         override x.FramebufferSignature = None
-        override x.Perform(token, t, fbo) = f.Evaluate (token,(x :> IRenderTask,t,fbo))
+        override x.Perform(token, t, fbo) = f.Evaluate (token,(token,t,fbo))
         override x.Release() = f.RemoveOutput this 
         override x.PerformUpdate(token, t) = ()
         override x.Runtime = None
@@ -942,10 +942,10 @@ module RenderTask =
 
     let empty = EmptyRenderTask.Instance
 
-    let ofAFun (f : afun<IRenderTask * RenderToken * OutputDescription, unit>) =
+    let ofAFun (f : afun<AdaptiveToken * RenderToken * OutputDescription, unit>) =
         new CustomRenderTask(f) :> IRenderTask
 
-    let custom (f : IRenderTask * RenderToken * OutputDescription -> unit) =
+    let custom (f : AdaptiveToken * RenderToken * OutputDescription -> unit) =
         new CustomRenderTask(AFun.create f) :> IRenderTask
 
     let before (f : unit -> unit) (t : IRenderTask) =

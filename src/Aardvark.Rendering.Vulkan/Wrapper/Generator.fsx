@@ -67,9 +67,9 @@ module XmlStuff =
                 1000000000 + (e - 1) * 1000 + offset
 
 
-    let (|Enum|BitMask|Ext|Failure|) (e : XElement) = 
+    let rec (|Enum|BitMask|Ext|Failure|) (e : XElement) = 
         match attrib e "value", attrib e "bitpos" with
-              | Some v,_ ->
+              | Some v, _ ->
                     let v =  toInt32 v 10
 //                            if v.Contains "x" then System.Convert.ToInt32(v, 16)
 //                            elif v.EndsWith "f" then System.Convert.ToSingle(v.Substring(0, v.Length-1)) |> int
@@ -92,7 +92,24 @@ module XmlStuff =
                         Ext (extensionEnumValue (attrib e "dir") en on)
 
                     | _ ->
-                        Failure
+                        match attrib e "alias" with
+                            | Some a ->
+                                let ref = xname "enum" |> e.Parent.Elements 
+                                                       |> Seq.filter (fun e -> "name" |> attrib e |> Option.contains a)
+                                                       |> Seq.head
+                    
+                                match attrib ref "value", attrib ref "extnumber", attrib ref "offset" with
+                                    | Some v, _, _ ->
+                                        e.SetAttributeValue(xname "value", v)
+                                    | _, Some en, Some on -> 
+                                        e.SetAttributeValue(xname "extnumber", en)
+                                        e.SetAttributeValue(xname "offset", on)
+                                    | _ -> ()
+
+                                e.SetAttributeValue(xname "alias", null)
+                                (|Enum|BitMask|Ext|Failure|) e
+
+                            | _ -> Failure
 
 
 type Type =
@@ -772,8 +789,16 @@ module FSharpWriter =
 
         printfn "type VkDebugUtilsMessengerCallbackDataFlagsEXT = | MinValue = 0"
         printfn "type VkDebugUtilsMessengerCreateFlagsEXT = | MinValue = 0"
-        //printfn "type VkDebugUtilsMessageSeverityFlagsEXT = | MinValue = 0"
-        //printfn "type VkDebugUtilsMessageTypeFlagsEXT = | MinValue = 0"
+
+        printfn "type VkHeadlessSurfaceCreateFlagsEXT = | MinValue = 0"
+        printfn "type VkPipelineCompilerControlFlagsAMD = | MinValue = 0"
+        printfn "type VkShaderCorePropertiesFlagsAMD = | MinValue = 0"
+        printfn "type VkPipelineRasterizationDepthClipStateCreateFlagsEXT = | MinValue = 0"
+        printfn "type VkMetalSurfaceCreateFlagsEXT = | MinValue = 0"
+        printfn "type VkPipelineRasterizationStateStreamCreateFlagsEXT = | MinValue = 0"
+        printfn "type VkImagePipeSurfaceCreateFlagsFUCHSIA = | MinValue = 0"
+        printfn "type VkStreamDescriptorSurfaceCreateFlagsGGP = | MinValue = 0"
+        printfn "type VkPipelineCoverageReductionStateCreateFlagsNV = | MinValue = 0"
 //    let extendedEnums() =
 //        printfn "[<AutoOpen>]"
 //        printfn "module WSIEnums = "
@@ -1041,6 +1066,7 @@ module FSharpWriter =
         inlineArray "uint32" 4 32
         inlineArray "byte" 1 8
         inlineArray "VkPhysicalDevice" 8 32
+        inlineArray "VkDeviceSize" 8 16
         structs "" s
 
     let aliases (l : list<Alias>) =
@@ -1294,6 +1320,15 @@ module FSharpWriter =
         let extensions = extensions |> List.map substituteNames
         
         let mapping = extensions |> List.map (fun e -> e.name, e.requires) |> Map.ofList
+        
+        let rec traverse (name : string) =
+            match Map.tryFind name mapping with
+            | Some others ->
+                others |> Seq.map traverse |> Seq.concat |> Set.ofSeq
+            | None ->
+                Set.ofList [ name ]
+
+        let mapping = mapping |> Map.map (fun name _ -> traverse name |> Set.remove name |> Set.toList)
         let mapping = mapping |> Map.map (fun _ req -> List.filter (fun e -> Map.containsKey e mapping) req)
 
 

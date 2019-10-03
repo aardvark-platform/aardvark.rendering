@@ -40,7 +40,7 @@ let main argv =
         window {
             backend Backend.GL
             display Display.Mono
-            debug true
+            debug false
             samples 8
         }
 

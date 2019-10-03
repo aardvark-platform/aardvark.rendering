@@ -101,14 +101,11 @@ module Sg =
             let trafoBuffer =
                 trafosAndShapes |> Mod.map (fun state ->
                     state |> Array.mapi (fun i (trafo,shapes) ->
-                        let depthOffset = M44d.Identity 
-                            //M44d.Translation(0.0, 0.0, float i / 100.0) // WHY?
-
+                        
                         let trafo = 
                             M34d.op_Explicit (
                                 trafo.Forward *
-                                shapes.renderTrafo.Forward *
-                                depthOffset
+                                shapes.renderTrafo.Forward
                             )
                                 
                         let len = List.length shapes.concreteShapes 
