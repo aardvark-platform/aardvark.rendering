@@ -68,6 +68,9 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
     let mutable task = RenderTask.empty
     let mutable taskSub = noDispose
 
+    let mutable invalidSize = false
+    let mutable resizeSub = noDispose
+
     let mutable swapchainDesc : SwapchainDescription = Unchecked.defaultof<_>
     let mutable surface : Surface = Unchecked.defaultof<_>
     let mutable swapchain : Option<Swapchain> = None
@@ -141,6 +144,18 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
             if Mod.force k.Alt && Mod.force k.Shift then
                 x.Fullscreen <- not x.Fullscreen
         )
+
+        // We can only render if we have a surface with a valid size > (0, 0)
+        // Invalidate the window if it changes from an invalid to a valid
+        // state, so we can continue rendering again
+        resizeSub <- x.Resize.Subscribe(fun ev ->
+            let newInvalidSize = ev.Size.AnySmallerOrEqual 0
+
+            if invalidSize && not newInvalidSize then
+                x.Invalidate()
+
+            invalidSize <- newInvalidSize
+        )
         
         let sw = System.Diagnostics.Stopwatch()
         eBeforeRender.Publish.Add sw.Restart
@@ -162,6 +177,8 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
         task.Dispose()
         task <- RenderTask.empty
 
+        resizeSub.Dispose()
+        resizeSub <- noDispose
 
         ()
 
@@ -169,23 +186,26 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
         transact time.MarkOutdated
         eBeforeRender.Trigger()
         let s = surface.Size
-        let swapchain = 
-            match swapchain with
-                | Some c when c.Size = s ->
-                    c
-                | None ->
-                    let c = device.CreateSwapchain(swapchainDesc)
-                    swapchain <- Some c
-                    c
-                | Some o ->
-                    o.Dispose()
-                    let c = device.CreateSwapchain(swapchainDesc)
-                    swapchain <- Some c
-                    c
 
-        swapchain.RenderFrame(fun framebuffer ->
-            task.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer framebuffer)
-        )
+        if s.AllGreater 0 then
+            let swapchain =
+                match swapchain with
+                    | Some c when c.Size = s ->
+                        c
+                    | None ->
+                        let c = device.CreateSwapchain(swapchainDesc)
+                        swapchain <- Some c
+                        c
+                    | Some o ->
+                        o.Dispose()
+                        let c = device.CreateSwapchain(swapchainDesc)
+                        swapchain <- Some c
+                        c
+
+            swapchain.RenderFrame(fun framebuffer ->
+                task.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer framebuffer)
+            )
+
         eAfterRender.Trigger()
         transact time.MarkOutdated
         if rafap then x.Invalidate()

@@ -201,11 +201,12 @@ module private DebugReportHelpers =
                             ptr, 123n
                         )
 
-                    let! pCallback = callback
+                    let! pCallback = VkDebugUtilsMessengerEXT.Null
 
                     VkRaw.vkCreateDebugUtilsMessengerEXT(instance.Handle, pInfo, NativePtr.zero, pCallback)
                         |> check "vkCreateDebugUtilsMessengerEXT"
                     
+                    callback <- !!pCallback
                     instance.BeforeDispose.AddHandler(instanceDisposedHandler)
                 }
 

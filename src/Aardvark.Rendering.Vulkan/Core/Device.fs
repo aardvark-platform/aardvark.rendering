@@ -2702,7 +2702,7 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
             | :? OperationCanceledException -> ()
             | e -> Log.error "[Vulkan] DeviceQueueThread faulted: %A" e
 
-        //fence.Dispose()
+        fence.Dispose()
         pool.Dispose()
 
     let threads = 
