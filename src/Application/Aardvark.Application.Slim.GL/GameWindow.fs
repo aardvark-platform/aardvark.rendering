@@ -314,19 +314,11 @@ module DefaultText =
     [<Literal>]
     let baseText = "Aardvark rocks \\o/ - OpenGL GameWindow"
 
-type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
+type GameWindow(runtime : Runtime, enableDebug : bool, samples : int, graphicsMode : Graphics.GraphicsMode) as this =
     inherit OpenTK.GameWindow(
         1024,
         768,
-        Graphics.GraphicsMode(
-            OpenTK.Graphics.ColorFormat(Config.BitsPerPixel), 
-            Config.DepthBits, 
-            Config.StencilBits, 
-            samples, 
-            OpenTK.Graphics.ColorFormat.Empty,
-            Config.Buffers, 
-            false
-        ),
+        graphicsMode,
         DefaultText.baseText,
         GameWindowFlags.Default,
         DisplayDevice.Default,
@@ -354,14 +346,30 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
             | _ -> failwith "invalid depth-stencil mode"
 
     let fboSignature =
+        let set =
+            if graphicsMode.Stereo then 
+                Set.ofList [
+                    "ProjTrafo"; 
+                    "ViewTrafo"; 
+                    "ModelViewTrafo"; 
+                    "ViewProjTrafo"; 
+                    "ModelViewProjTrafo"
+                       
+                    "ProjTrafoInv"; 
+                    "ViewTrafoInv"; 
+                    "ModelViewTrafoInv"; 
+                    "ViewProjTrafoInv"; 
+                    "ModelViewProjTrafoInv"
+                ]
+            else Set.empty
         FramebufferSignature(
             runtime,
             Map.ofList [0, (DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples })],
             Map.empty,
             depthSignature,
             None,
-            1,
-            Set.empty
+            (if graphicsMode.Stereo then 2 else 1),
+            set
         )
 
 
@@ -376,6 +384,9 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
             [0, DefaultSemantic.Colors, Renderbuffer(ctx, 0, V2i.Zero, RenderbufferFormat.Rgba8, samples, 0L) :> IFramebufferOutput], None
         ) 
     let mutable defaultOutput = defaultFramebuffer |> OutputDescription.ofFramebuffer
+
+    let mutable stereoFramebuffer : Option<OutputDescription * Framebuffer * Texture * Texture> = None
+    let clearTask = runtime.CompileClear(fboSignature, Mod.constant C4f.Black, Mod.constant 1.0)
 
     let avgFrameTime = RunningMean(3)
     let sizes = Mod.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
@@ -495,18 +506,63 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
                 if size <> sizes.Value then
                     transact (fun () -> Mod.change sizes size)
 
-                defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
-                defaultOutput <- { defaultOutput with viewport = Box2i(V2i.OO, defaultFramebuffer.Size - V2i.II) }
+                if graphicsMode.Stereo then
+                    let outputDesc, colorTex = 
+                        match stereoFramebuffer with    
+                        | Some (outputDesc, _, c, _) when c.Size.XY = size -> 
+                            outputDesc, c
+                        | _ -> 
+                            match stereoFramebuffer with
+                            | Some (_, f, c, d) -> 
+                                ctx.Delete f
+                                ctx.Delete c
+                                ctx.Delete d
+                            | _ -> ()
+                            let c = ctx.CreateTexture(V3i(size,1), TextureDimension.Texture2D, TextureFormat.Rgba8, 2, 1, samples)
+                            let d = ctx.CreateTexture(V3i(size,1), TextureDimension.Texture2D, TextureFormat.Depth24Stencil8, 2, 1, samples)
+                            let f = 
+                                runtime.CreateFramebuffer(
+                                    fboSignature,
+                                    [   
+                                        DefaultSemantic.Colors, c.[TextureAspect.Color,0,*] :> IFramebufferOutput
+                                        DefaultSemantic.Depth,  d.[TextureAspect.Depth,0,*] :> IFramebufferOutput
+                                    ]
+                                ) |> unbox<Framebuffer>
+                            let o = OutputDescription.ofFramebuffer f
+                            stereoFramebuffer <- Some (o,f,c,d)
+                            o, c
+                    
+                    clearTask.Run(AdaptiveToken.Top, RenderToken.Empty, outputDesc)
+                    task.Run(AdaptiveToken.Top, RenderToken.Empty, outputDesc)
 
-                GL.ColorMask(true, true, true, true)
-                GL.DepthMask(true)
-                GL.Viewport(0,0,x.ClientSize.Width, x.ClientSize.Height)
-                GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
-                GL.ClearDepth(1.0)
-                GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+                    let fSrc = GL.GenFramebuffer()
+                    GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
+                    GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fSrc)
+                    
+                    GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, colorTex.Handle, 0, 0)
+                    GL.DrawBuffer(DrawBufferMode.BackLeft)
+                    GL.BlitFramebuffer(0, 0, colorTex.Size.X, colorTex.Size.Y, 0, 0, colorTex.Size.X, colorTex.Size.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest)
 
-                let desc = OutputDescription.ofFramebuffer defaultFramebuffer
-                task.Run(AdaptiveToken.Top, RenderToken.Empty, defaultOutput)
+                    GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, colorTex.Handle, 0, 1)
+                    GL.DrawBuffer(DrawBufferMode.BackRight)
+                    GL.BlitFramebuffer(0, 0, colorTex.Size.X, colorTex.Size.Y, 0, 0, colorTex.Size.X, colorTex.Size.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest)
+
+                    GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
+                    GL.DeleteFramebuffer(fSrc)
+
+                else
+                    defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
+                    defaultOutput <- { defaultOutput with viewport = Box2i(V2i.OO, defaultFramebuffer.Size - V2i.II) }
+
+                    GL.ColorMask(true, true, true, true)
+                    GL.DepthMask(true)
+                    GL.Viewport(0,0,x.ClientSize.Width, x.ClientSize.Height)
+                    GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+                    GL.ClearDepth(1.0)
+                    GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+
+                    let desc = OutputDescription.ofFramebuffer defaultFramebuffer
+                    task.Run(AdaptiveToken.Top, RenderToken.Empty, defaultOutput)
                         
 
                 x.SwapBuffers()
@@ -550,3 +606,19 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
 
     interface IRenderWindow with
         member x.Run() = x.Run()
+
+    new(runtime : Runtime, enableDebug : bool, samples : int, stereo : bool) =
+        let graphicsMode = 
+            Graphics.GraphicsMode(
+                OpenTK.Graphics.ColorFormat(Config.BitsPerPixel), 
+                Config.DepthBits, 
+                Config.StencilBits, 
+                samples, 
+                OpenTK.Graphics.ColorFormat.Empty,
+                Config.Buffers, 
+                stereo
+            )
+        new GameWindow(runtime,enableDebug,samples,graphicsMode)
+
+    new(runtime : Runtime, enableDebug : bool, samples : int) =
+        new GameWindow(runtime, enableDebug, samples, false)
