@@ -333,7 +333,11 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
     member x.Runtime = runtime
 
     member x.CreateGameWindow(samples : int) =
-        new VulkanRenderWindow(instance, runtime, V2i(100,100), V2i(1024, 768), GraphicsMode(Col.Format.RGBA, 8, 24, 8, 2, samples, ImageTrafo.MirrorY))
+        new VulkanRenderWindow(instance, runtime, V2i(100,100), V2i(1024, 768), GraphicsMode(Col.Format.RGBA, 8, 24, 8, 2, samples, ImageTrafo.MirrorY, true))
+
+    member x.CreateGameWindow(samples : int, vsync : bool) =
+        new VulkanRenderWindow(instance, runtime, V2i(100,100), V2i(1024, 768), GraphicsMode(Col.Format.RGBA, 8, 24, 8, 2, samples, ImageTrafo.MirrorY, vsync))
+
 
     member x.Dispose() =
         runtime.Dispose()

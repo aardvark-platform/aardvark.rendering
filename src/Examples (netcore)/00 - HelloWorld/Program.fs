@@ -28,7 +28,7 @@ let main argv =
     // of course you can a custum form and add a control to it.
     // Note that there is also a WPF binding for OpenGL. For more complex GUIs however,
     // we recommend using aardvark-media anyways..
-    let win = app.CreateGameWindow(samples = 8)
+    let win = app.CreateGameWindow(samples = 8, vsync = false)
     //win.Title <- "Hello Aardvark"
 
     // Given eye, target and sky vector we compute our initial camera pose
