@@ -75,7 +75,7 @@ module ResizeBufferImplementation =
             if handle <> 0n then
                 match GL.ClientWaitSync(handle, ClientWaitSyncFlags.None, GL_TIMEOUT_IGNORED) with
                     | WaitSyncStatus.WaitFailed -> failwith "[GL] failed to wait for fence"
-                    | WaitSyncStatus.TimeoutExpired -> failwith "[GL] fance timeout"
+                    | WaitSyncStatus.TimeoutExpired -> failwith "[GL] fence timeout"
                     | _ -> ()
                 GL.Check "could not wait for fence"
             else
