@@ -12,6 +12,7 @@ open Aardvark.Rendering.Vulkan
 
 #nowarn "9"
 // #nowarn "51"
+#nowarn "44"
 
 [<AllowNullLiteral>]
 type private SparseBlock =
@@ -245,6 +246,8 @@ type SparseBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
                     )
         )
 
+// Remove "nowarn 44" when deleting this
+[<Obsolete>]
 type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer, virtualSize : int64) =
     inherit Buffer(device, handle, new DevicePtr(DeviceMemory.Null, 0L, 2L <<< 30), virtualSize, usage)
 
@@ -394,6 +397,7 @@ type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ResizeBuffer =
+    [<Obsolete>]
     let create (usage : VkBufferUsageFlags) (device : Device) =
         native {
             let usage = usage ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.TransferSrcBit
@@ -418,5 +422,6 @@ module ResizeBuffer =
             return new ResizeBuffer(device, usage, !!pHandle, virtualSize)
         }
 
+    [<Obsolete>]
     let delete (b : ResizeBuffer) (d : Device) =
         b.Dispose()

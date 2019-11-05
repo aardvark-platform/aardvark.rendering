@@ -15,7 +15,9 @@ open Aardvark.Base.Runtime
 open FShade
 #nowarn "9"
 // #nowarn "51"
+#nowarn "44"
 
+[<Obsolete>] // TODO remove "nowarn 44" when deleting this
 type private MappedBuffer(d : Device, store : ResizeBuffer) =
     inherit ConstantMod<IBuffer>(store)
 
@@ -40,6 +42,7 @@ type private MappedBuffer(d : Device, store : ResizeBuffer) =
         member x.UseRead(offset, size, f) = store.UseRead(int64 offset, int64 size, f)
         member x.UseWrite(offset, size, f) = store.UseWrite(int64 offset, int64 size, f)
 
+[<Obsolete>] // TODO remove "nowarn 44" when deleting this
 type private MappedIndirectBuffer private(device : Device, indexed : bool, store : ResizeBuffer, indirect : IndirectBuffer) =
     inherit ConstantMod<IIndirectBuffer>(indirect)
     static let drawCallSize = int64 sizeof<DrawCallInfo>
@@ -185,10 +188,12 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = failf "not implemented"
     member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = failf "not implemented"
 
+    [<Obsolete>] // TODO remove "nowarn 44" when deleting this
     member x.CreateMappedBuffer() =
         let store = device |> ResizeBuffer.create VkBufferUsageFlags.VertexBufferBit
         new MappedBuffer(device, store) :> IMappedBuffer
 
+    [<Obsolete>] // TODO remove "nowarn 44" when deleting this
     member x.CreateMappedIndirectBuffer(indexed : bool) =
         let store = device |> ResizeBuffer.create VkBufferUsageFlags.IndirectBufferBit
         new MappedIndirectBuffer(device, indexed, store) :> IMappedIndirectBuffer
@@ -714,7 +719,9 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
         member x.CreateRenderbuffer(size, format, samples) = x.CreateRenderbuffer(size, format, samples)
+        [<Obsolete>] // TODO remove "nowarn 44" when deleting this
         member x.CreateMappedBuffer() = x.CreateMappedBuffer()
+        [<Obsolete>] // TODO remove "nowarn 44" when deleting this
         member x.CreateMappedIndirectBuffer(indexed) = x.CreateMappedIndirectBuffer(indexed)
         member x.CreateGeometryPool(types) = new GeometryPoolUtilities.GeometryPool(device, types) :> IGeometryPool
 

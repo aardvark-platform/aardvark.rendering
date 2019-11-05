@@ -8,6 +8,7 @@ open System.Collections.Generic
 open Aardvark.Base.Rendering
 open System.Runtime.CompilerServices
 
+#nowarn "44"
 
 module Management =
     
@@ -849,7 +850,10 @@ and IRuntime =
     abstract member CreateSparseTexture<'a when 'a : unmanaged> : size : V3i * levels : int * slices : int * dim : TextureDimension * format : Col.Format * brickSize : V3i * maxMemory : int64 -> ISparseTexture<'a>
     
     abstract member CreateFramebuffer : signature : IFramebufferSignature * attachments : Map<Symbol, IFramebufferOutput> -> IFramebuffer
+
+    [<Obsolete>] // remove "nowarn 44" when deleting this
     abstract member CreateMappedBuffer : unit -> IMappedBuffer
+    [<Obsolete>] // remove "nowarn 44" when deleting this
     abstract member CreateMappedIndirectBuffer : indexed : bool -> IMappedIndirectBuffer
 
     abstract member CreateGeometryPool : Map<Symbol, Type> -> IGeometryPool

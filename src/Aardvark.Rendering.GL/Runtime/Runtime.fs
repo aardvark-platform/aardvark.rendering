@@ -13,6 +13,7 @@ open Microsoft.FSharp.NativeInterop
 open Aardvark.Rendering.GL
 
 #nowarn "9"
+#nowarn "44"
 
 type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * AttachmentSignature>, images : Map<int, Symbol>, depth : Option<AttachmentSignature>, stencil : Option<AttachmentSignature>, layers : int, perLayer : Set<string>) =
    
@@ -502,12 +503,14 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : IRenderbuffer =
             x.CreateRenderbuffer(size, format, samples) :> IRenderbuffer
 
+        // Remove "nowarn 44" when deleting this
         member x.CreateMappedBuffer()  =
             x.CreateMappedBuffer ()
 
         member x.CreateGeometryPool(types : Map<Symbol, Type>) =
             x.CreateGeometryPool(types)
 
+        // Remove "nowarn 44" when deleting this
         member x.CreateMappedIndirectBuffer(indexed)  =
             x.CreateMappedIndirectBuffer (indexed)
             
@@ -984,12 +987,14 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : Renderbuffer =
         ctx.CreateRenderbuffer(size, format, samples)
 
+    // Remove "nowarn 44" when deleting this
     member x.CreateMappedBuffer() : IMappedBuffer =
         ctx.CreateMappedBuffer()
         
     member x.CreateGeometryPool(types : Map<Symbol, Type>) =
         new SparseBufferGeometryPool(ctx, types) :> IGeometryPool
 
+    // Remove "nowarn 44" when deleting this
     member x.CreateMappedIndirectBuffer(indexed : bool) : IMappedIndirectBuffer =
         ctx.CreateMappedIndirectBuffer(indexed)
 

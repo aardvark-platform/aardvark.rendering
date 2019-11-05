@@ -483,6 +483,7 @@ module Buffer =
 
 
 // obsolete
+[<Obsolete>]
 type IResizeBuffer =
     inherit IBackendBuffer
     inherit ILockedResource
@@ -491,6 +492,7 @@ type IResizeBuffer =
     abstract member UseRead : offset : nativeint * size : nativeint * reader : (nativeint -> 'x) -> 'x
     abstract member UseWrite : offset : nativeint * size : nativeint * writer : (nativeint -> 'x) -> 'x
 
+[<Obsolete>]
 type IMappedIndirectBuffer =
     inherit IMod<IIndirectBuffer>
     inherit IDisposable
@@ -502,6 +504,7 @@ type IMappedIndirectBuffer =
     abstract member Item : int -> DrawCallInfo with get, set
     abstract member Resize : int -> unit
 
+[<Obsolete>]
 type IMappedBuffer =
     inherit IMod<IBuffer>
     inherit IDisposable
