@@ -527,6 +527,19 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
     let locked x (f : unit -> 'a) =
         lock x f
 
+    // make indexed
+    let prepareForUpload(call : DrawCallInfo) =
+        if indexed then 
+            DrawCallInfo(
+                FaceVertexCount = call.FaceVertexCount,
+                InstanceCount = call.InstanceCount,
+                FirstIndex = call.FirstIndex,
+                BaseVertex = call.FirstInstance,
+                FirstInstance = call.BaseVertex
+            )
+        else
+            call
+
     let add x (call : DrawCallInfo) =
         locked x (fun () ->
             if indices.ContainsKey call then 
@@ -535,7 +548,7 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
                 let index = calls.Count
                 indices.[call] <- calls.Count
                 calls.Add call
-                store.Set(index, call)
+                store.Set(index, prepareForUpload call)
                 true
         )
 
@@ -553,7 +566,7 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
                         let last = calls.[lastIndex]
                         indices.[last] <- index
                         calls.[index] <- last
-                        store.Set(index, last)
+                        store.Set(index, prepareForUpload last)
                         calls.RemoveAt lastIndex
                         
                     true
@@ -577,85 +590,11 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
             
     override x.Compute(token) =
         let inner = store.GetValue(token)
-        IndirectBuffer(inner, calls.Count) :> IIndirectBuffer
+        BackendIndirectBuffer(inner :?> IBackendBuffer, calls.Count, sizeof<DrawCallInfo>, indexed) :> IIndirectBuffer
 
     override x.Finalize() =
         try store.Dispose()
         with _ -> ()    
-
-
-//type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
-//    inherit Mod.AbstractMod<IIndirectBuffer>()
-
-//    let indices = Dict<DrawCallInfo, int>()
-//    let calls = List<DrawCallInfo>()
-//    let store = runtime.CreateMappedIndirectBuffer(indexed)
-
-//    let locked x (f : unit -> 'a) =
-//        lock x f
-
-//    let add x (call : DrawCallInfo) =
-//        locked x (fun () ->
-//            if indices.ContainsKey call then 
-//                false
-//            else
-//                store.Resize(Fun.NextPowerOfTwo (calls.Count + 1))
-//                let count = calls.Count
-//                indices.[call] <- count
-//                calls.Add call
-//                store.Count <- calls.Count
-//                store.[count] <- call
-//                true
-//        )
-
-//    let remove x (call : DrawCallInfo) =
-//        locked x (fun () ->
-//            match indices.TryRemove call with
-//                | (true, index) ->
-//                    if calls.Count = 1 then
-//                        calls.Clear()
-//                        store.Resize(0)
-//                    elif index = calls.Count-1 then
-//                        calls.RemoveAt index
-//                    else
-//                        let lastIndex = calls.Count - 1
-//                        let last = calls.[lastIndex]
-//                        indices.[last] <- index
-//                        calls.[index] <- last
-//                        store.[index] <- last
-//                        calls.RemoveAt lastIndex
-                        
-//                    store.Count <- calls.Count
-//                    true
-//                | _ ->
-//                    false
-//        )
-
-//    member x.Add (call : DrawCallInfo) =
-//        if add x call then
-//            transact (fun () -> x.MarkOutdated())
-//            true
-//        else
-//            false
-
-//    member x.Remove(call : DrawCallInfo) =
-//        if remove x call then
-//            transact (fun () -> x.MarkOutdated())
-//            true
-//        else
-//            false
-
-//    interface ILockedResource with
-//        member x.Lock = store.Lock
-//        member x.OnLock u = ()
-//        member x.OnUnlock u = ()
-
-//    override x.Compute(token) =
-//        store.GetValue()
-
-//    override x.Finalize() =
-//        try store.Dispose()
-//        with _ -> ()    
 
 [<AbstractClass; Sealed; Extension>]
 type IRuntimePoolExtensions private() =

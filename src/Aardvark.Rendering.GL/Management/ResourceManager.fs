@@ -304,7 +304,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     member private x.BufferCache            : ResourceCache<Buffer, int>                    = bufferCache
     member private x.TextureCache           : ResourceCache<Texture, V2i>                   = textureCache
-    member private x.IndirectBufferCache    : ResourceCache<IndirectBuffer, V2i>            = indirectBufferCache
+    member private x.IndirectBufferCache    : ResourceCache<BackendIndirectBuffer, V2i>     = indirectBufferCache
     member private x.SamplerCache           : ResourceCache<Sampler, int>                   = samplerCache
     member private x.VertexInputCache       : ResourceCache<VertexInputBindingHandle, int>  = vertexInputCache
     member private x.UniformLocationCache   : ResourceCache<UniformLocation, nativeint>     = uniformLocationCache
@@ -426,7 +426,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             update = fun h b -> ctx.UploadIndirect(h, indexed, b); h
             delete = fun h   -> ctx.Delete h
             info =   fun h   -> h.Buffer.SizeInBytes |> Mem |> ResourceInfo
-            view =   fun h   -> V2i(h.Buffer.Handle, h.Count)
+            view =   fun h   -> V2i((h.Buffer :?> Buffer).Handle, h.Count)
             kind = ResourceKind.IndirectBuffer
         })
 

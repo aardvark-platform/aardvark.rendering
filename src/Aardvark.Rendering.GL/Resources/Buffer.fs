@@ -557,19 +557,21 @@ module IndirectBufferExtensions =
 
         callCount
 
-    type IndirectBuffer =
-        class
-            val mutable public Buffer : Buffer
-            val mutable public Count : int
-            val mutable public Stride : int
-            val mutable public Indexed : bool
+    //type IndirectBuffer =
+    //    class
+    //        val mutable public Buffer : Buffer
+    //        val mutable public Count : int
+    //        val mutable public Stride : int
+    //        val mutable public Indexed : bool
 
-            interface IIndirectBuffer with
-                member x.Buffer = x.Buffer :> IBuffer
-                member x.Count = x.Count
+    //        interface IBackendIndirectBuffer with
+    //            member x.Buffer = x.Buffer :> IBuffer
+    //            member x.Count = x.Count
+    //            member x.Stride = x.Stride
+    //            member x.Indexed = x.Indexed
 
-            new(b, count, stride, indexed) = { Buffer = b; Count = count; Stride = stride; Indexed = indexed }
-        end 
+    //        new(b, count, stride, indexed) = { Buffer = b; Count = count; Stride = stride; Indexed = indexed }
+    //    end 
 
     type Context with
 
@@ -599,27 +601,29 @@ module IndirectBufferExtensions =
 
         member x.Clone(b : Buffer) = x.Clone(b, 0n, b.SizeInBytes)
 
+        member x.Delete(buffer : BackendIndirectBuffer) =
+            x.Delete(buffer.Buffer :?> Buffer) // by convention
 
-        member x.Delete(buffer : IndirectBuffer) =
-            x.Delete(buffer.Buffer)
-
-        member x.UploadIndirect(indirect : IndirectBuffer, indexed : bool, data : IIndirectBuffer) =
+        member x.UploadIndirect(indirect : BackendIndirectBuffer, indexed : bool, data : IIndirectBuffer) =
             using x.ResourceLock (fun _ ->
+                let buffer = indirect.Buffer :?> Buffer // by convention
                 match data.Buffer with
                     | :? Buffer as b ->
-                        if indirect.Buffer.SizeInBytes <> b.SizeInBytes then
-                            x.Clear(indirect.Buffer, b.SizeInBytes)
-                        x.Copy(b, 0n, indirect.Buffer, 0n, b.SizeInBytes)
+                        if buffer.SizeInBytes <> b.SizeInBytes then
+                            x.Clear(buffer, b.SizeInBytes)
+                        x.Copy(b, 0n, buffer, 0n, b.SizeInBytes)
 
                     | b -> 
-                        x.Upload(indirect.Buffer, b, false)
+                        x.Upload(buffer, b, false)
 
-                let callCount = postProcessDrawCallBuffer indexed indirect.Buffer
+                let callCount = postProcessDrawCallBuffer indexed buffer
                 indirect.Indexed <- indexed
                 indirect.Count <- data.Count
             )
 
         member x.CreateIndirect(indexed : bool, data : IIndirectBuffer) =
+            
+            // TODO: rework this broken implementation -> ArrayBuffer is uploaded then mapped and updated again !!
             using x.ResourceLock (fun _ ->
                 let buffer = 
                     match data.Buffer with
@@ -627,11 +631,8 @@ module IndirectBufferExtensions =
                         | _ -> x.CreateBuffer(data.Buffer)
 
                 let callCount = postProcessDrawCallBuffer indexed buffer
-                IndirectBuffer(buffer, data.Count, sizeof<DrawCallInfo>, indexed)
+                BackendIndirectBuffer(buffer :> IBackendBuffer, data.Count, sizeof<DrawCallInfo>, indexed)
             )
-
-
-
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Buffer =

@@ -13,7 +13,7 @@ open Microsoft.FSharp.NativeInterop
 type IBuffer = interface end
 
 type IIndirectBuffer =
-    abstract member Buffer : IBuffer
+    abstract member Buffer : IBuffer // only makes sense with ArrayBuffers -> IBackendBuffer will be copied and post-processed
     abstract member Count : int
 
 type INativeBuffer =
@@ -29,6 +29,11 @@ type IBackendBuffer =
     abstract member Runtime : IBufferRuntime
     abstract member Handle : obj
     abstract member SizeInBytes : nativeint
+    
+and IBackendIndirectBuffer = 
+    inherit IIndirectBuffer // Buffer must be IBackendBuffer by convention
+    abstract member Stride : int
+    abstract member Indexed : bool
 
 and IBufferRuntime =
     abstract member DeleteBuffer : IBackendBuffer -> unit
@@ -39,6 +44,14 @@ and IBufferRuntime =
     abstract member Copy : srcBuffer : IBackendBuffer * srcOffset : nativeint * dstBuffer : IBackendBuffer * dstOffset : nativeint * size : nativeint -> unit
 
     abstract member CopyAsync : srcBuffer : IBackendBuffer * srcOffset : nativeint * dstData : nativeint * size : nativeint -> (unit -> unit)
+
+    //abstract member CreateIndiretBuffer : data : IBackendBuffer * indexed : bool * stride : int * count : int -> IBackendIndirectBuffer
+
+    //abstract member CreateIndirectBuffer : size : nativeint * indexed : bool -> INativeIndirectBuffer
+    //abstract member Copy : srcData : DrawCallInfo[] * dst : IBackendIndirectBuffer * dstOffsetCount : nativeint * count : nativeint -> unit
+    //abstract member Copy : srcData : DrawCallInfo[] * srcOffsetCount : nativeint * dst : IBackendIndirectBuffer * dstOffsetCount : nativeint * count : nativeint -> unit
+    
+
 
 type ArrayBuffer(data : Array) =
     let elementType = data.GetType().GetElementType()
@@ -112,6 +125,25 @@ type IndirectBuffer(b : IBuffer, count : int) =
     interface IIndirectBuffer with
         member x.Buffer = b
         member x.Count = count
+
+type BackendIndirectBuffer =
+    class
+        val mutable public Buffer : IBackendBuffer
+        val mutable public Count : int
+        val mutable public Stride : int
+        val mutable public Indexed : bool
+
+        //member x.BackendBuffer
+        //    with get() = x.Buffer 
+
+        interface IBackendIndirectBuffer with
+            member x.Buffer = x.Buffer :> IBuffer
+            member x.Count = x.Count
+            member x.Stride = x.Stride
+            member x.Indexed = x.Indexed
+
+        new(b : IBackendBuffer, count, stride, indexed) = { Buffer = b; Count = count; Stride = stride; Indexed = indexed }
+    end 
 
 
 type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : int) =

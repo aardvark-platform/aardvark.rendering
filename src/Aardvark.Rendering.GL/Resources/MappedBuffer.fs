@@ -996,7 +996,7 @@ type MappedIndirectBuffer(ctx : Context, indexed : bool) =
                 gc.Free()
     override x.Compute(token) =
         let inner = buffer.GetValue(token) |> unbox<Buffer>
-        IndirectBuffer(inner, x.Count, 20, indexed) :> IIndirectBuffer
+        BackendIndirectBuffer(inner, x.Count, 20, indexed) :> IIndirectBuffer
 
     interface ILockedResource with
         member x.Lock = buffer.Lock
