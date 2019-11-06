@@ -795,7 +795,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
 
 
     member x.Buffer =
-        BackendIndirectBuffer(buffer :> IBackendBuffer, count, sizeof<DrawCallInfo>, false)
+        Aardvark.Base.IndirectBuffer(buffer :> IBuffer, count, sizeof<DrawCallInfo>, false)
 
     member x.BoundsBuffer =
         bbuffer

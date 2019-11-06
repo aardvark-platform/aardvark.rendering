@@ -518,7 +518,7 @@ type ManagedPool(runtime : IRuntime, signature : GeometrySignature) =
         BufferView(indexBuffer, indexBuffer.ElementType)
 
 type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
-    inherit Mod.AbstractMod<IIndirectBuffer>()
+    inherit Mod.AbstractMod<IndirectBuffer>()
 
     let indices = Dict<DrawCallInfo, int>()
     let calls = List<DrawCallInfo>()
@@ -590,7 +590,7 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
             
     override x.Compute(token) =
         let inner = store.GetValue(token)
-        BackendIndirectBuffer(inner :?> IBackendBuffer, calls.Count, sizeof<DrawCallInfo>, indexed) :> IIndirectBuffer
+        IndirectBuffer(inner, calls.Count, sizeof<DrawCallInfo>, indexed)
 
     override x.Finalize() =
         try store.Dispose()

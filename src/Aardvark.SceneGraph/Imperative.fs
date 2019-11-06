@@ -27,7 +27,7 @@ type AirState =
         stencilMode         : IMod<StencilMode>
         
         indices             : Option<BufferView>
-        indirect            : Option<IMod<IIndirectBuffer>>
+        indirect            : Option<IMod<IndirectBuffer>>
         instanceAttributes  : Map<Symbol, BufferView>
         vertexAttributes    : Map<Symbol, BufferView>
         
@@ -595,7 +595,7 @@ type Air private() =
             do! emit
         }
 
-    static member DrawIndirect(b : IMod<IIndirectBuffer>) =
+    static member DrawIndirect(b : IMod<IndirectBuffer>) =
         air {
             do! modify (fun s -> { s with indirect = Some b; drawCallInfos = null })
             do! emit

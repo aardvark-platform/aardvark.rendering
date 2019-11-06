@@ -557,21 +557,16 @@ module IndirectBufferExtensions =
 
         callCount
 
-    //type IndirectBuffer =
-    //    class
-    //        val mutable public Buffer : Buffer
-    //        val mutable public Count : int
-    //        val mutable public Stride : int
-    //        val mutable public Indexed : bool
-
-    //        interface IBackendIndirectBuffer with
-    //            member x.Buffer = x.Buffer :> IBuffer
-    //            member x.Count = x.Count
-    //            member x.Stride = x.Stride
-    //            member x.Indexed = x.Indexed
-
-    //        new(b, count, stride, indexed) = { Buffer = b; Count = count; Stride = stride; Indexed = indexed }
-    //    end 
+    type GLIndirectBuffer =
+        class
+            val mutable public Buffer : Buffer
+            val mutable public Count : int
+            val mutable public Stride : int
+            val mutable public Indexed : bool
+            val mutable public OwnResource : bool
+            
+            new(b, count, stride, indexed, ownResource) = { Buffer = b; Count = count; Stride = stride; Indexed = indexed; OwnResource = ownResource }
+        end
 
     type Context with
 
@@ -601,38 +596,72 @@ module IndirectBufferExtensions =
 
         member x.Clone(b : Buffer) = x.Clone(b, 0n, b.SizeInBytes)
 
-        member x.Delete(buffer : BackendIndirectBuffer) =
-            x.Delete(buffer.Buffer :?> Buffer) // by convention
+        //member x.Delete(buffer : BackendIndirectBuffer) =
+        //    x.Delete(buffer.Buffer :?> Buffer) // by convention
 
-        member x.UploadIndirect(indirect : BackendIndirectBuffer, indexed : bool, data : IIndirectBuffer) =
-            using x.ResourceLock (fun _ ->
-                let buffer = indirect.Buffer :?> Buffer // by convention
-                match data.Buffer with
-                    | :? Buffer as b ->
-                        if buffer.SizeInBytes <> b.SizeInBytes then
-                            x.Clear(buffer, b.SizeInBytes)
-                        x.Copy(b, 0n, buffer, 0n, b.SizeInBytes)
+        //member x.UploadIndirect(indirect : GLIndirectBuffer, indexed : bool, data : IndirectBuffer) =
+        //    match data.Buffer with
+        //    | :? Buffer as b -> 
+        //        if data.Indexed <> indexed then
+        //            failwith "[GL] incompatible IndirectBuffer: indexed option does not match"
+        //        GLIndirectBuffer(b, data.Count, data.Stride, data.Indexed) // OwnHandle !?
+        //    | _ ->
+        //        using x.ResourceLock (fun _ ->
+                    
+        //            let layoutedData = 
+        //                match data.Buffer with
+        //                | :? ArrayBuffer as ab -> failwith "" 
+        //                | :? SingleValueBuffer as sb -> failwith ""
+        //                | _ -> data.Buffer // Native or other -> assume data is compatible
 
-                    | b -> 
-                        x.Upload(buffer, b, false)
+        //            // TODO
+        //            failwith 
+        //            //if indirect.Buffer.SizeInBytes <> layoutedData.SizeInBytes then
+        //            //    x.Clear(indirect.Buffer, layoutedData.SizeInBytes)
+        //            //x.Copy(indirect.Buffer, 0n, buffer, 0n, b.SizeInBytes)
+                    
+        //            //let buffer = indirect.Buffer :?> Buffer // by convention
+        //            //match data.Buffer with
+        //            //    | :? Buffer as b ->
+        //            //        if buffer.SizeInBytes <> b.SizeInBytes then
+        //            //            x.Clear(buffer, b.SizeInBytes)
+        //            //        x.Copy(b, 0n, buffer, 0n, b.SizeInBytes)
 
-                let callCount = postProcessDrawCallBuffer indexed buffer
-                indirect.Indexed <- indexed
-                indirect.Count <- data.Count
-            )
+        //            //    | b -> 
+        //            //        x.Upload(buffer, b, false)
 
-        member x.CreateIndirect(indexed : bool, data : IIndirectBuffer) =
-            
-            // TODO: rework this broken implementation -> ArrayBuffer is uploaded then mapped and updated again !!
-            using x.ResourceLock (fun _ ->
-                let buffer = 
-                    match data.Buffer with
-                        | :? Buffer as b -> x.Clone(b)
-                        | _ -> x.CreateBuffer(data.Buffer)
+        //            //let callCount = postProcessDrawCallBuffer indexed buffer
+        //            //indirect.Indexed <- indexed
+        //            //indirect.Count <- data.Count
+        //        )
 
-                let callCount = postProcessDrawCallBuffer indexed buffer
-                BackendIndirectBuffer(buffer :> IBackendBuffer, data.Count, sizeof<DrawCallInfo>, indexed)
-            )
+        //member x.CreateIndirect(indexed : bool, data : IndirectBuffer) =
+        //    match data.Buffer with
+        //    | :? Buffer as b -> 
+        //        if data.Indexed <> indexed then
+        //            failwith "[GL] incompatible IndirectBuffer: indexed option does not match"
+        //        GLIndirectBuffer(b, data.Count, data.Stride, data.Indexed) // OwnHandle !?
+        //    | _ ->
+        //        using x.ResourceLock (fun _ ->
+                    
+        //            // transform data array to indexed/non-indexed layout
+        //            let layoutedData = 
+        //                match data.Buffer with
+        //                | :? ArrayBuffer as ab -> failwith "" 
+        //                | :? SingleValueBuffer as sb -> failwith ""
+        //                | _ -> data.Buffer // Native or other -> assume data is compatible
+
+        //            let buffer = x.CreateBuffer(layoutedData)
+        //            GLIndirectBuffer(buffer, data.Count, data.Stride, data.Indexed)
+
+        //            //let buffer = 
+        //            //    match data.Buffer with
+        //            //        | :? Buffer as b -> x.Clone(b)
+        //            //        | _ -> x.CreateBuffer(data.Buffer)
+
+        //            //let callCount = postProcessDrawCallBuffer indexed buffer
+        //            //BackendIndirectBuffer(buffer :> IBackendBuffer, data.Count, sizeof<DrawCallInfo>, indexed)
+        //        )
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Buffer =

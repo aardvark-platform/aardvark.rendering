@@ -228,6 +228,11 @@ type Surface =
     | Backend of ISurface
     | None
 
+// TODO:
+// instead of DrawCallInfos and IndirectBuffer use union type
+//type DrawCalls =
+//| Direct of IMod<list<DrawCallInfo>> // F# list seriously !?
+//| Indirect of IMod<IndirectBuffer>
 
 [<CustomEquality>]
 [<CustomComparison>]
@@ -240,7 +245,7 @@ type RenderObject =
         mutable RenderPass          : RenderPass
                 
         mutable DrawCallInfos       : IMod<list<DrawCallInfo>>
-        mutable IndirectBuffer      : IMod<IIndirectBuffer>
+        mutable IndirectBuffer      : IMod<IndirectBuffer>
         mutable Mode                : IndexedGeometryMode
         
 

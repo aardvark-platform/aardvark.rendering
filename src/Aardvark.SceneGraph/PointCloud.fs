@@ -623,7 +623,7 @@ module PointCloudRenderObjectSemantics =
                     |> ASet.foldGroup add sub RangeSet.empty
                     |> Mod.map (fun ranges ->
                         let calls = ranges |> RangeSet.toSeq |> Seq.map call |> Seq.toArray
-                        IndirectBuffer(ArrayBuffer calls, calls.Length) :> IIndirectBuffer
+                        IndirectBuffer.ofArray false calls 
                     )
 
             ro.IndirectBuffer <- drawCallBuffer

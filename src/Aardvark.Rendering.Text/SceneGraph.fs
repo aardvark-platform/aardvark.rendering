@@ -169,7 +169,7 @@ module Sg =
                         )
                     )
                     |> Seq.toArray
-                    |> IndirectBuffer.ofArray
+                    |> IndirectBuffer.ofArray false
                 )
 
             let trafos = BufferView(trafoBuffer, typeof<M34f>)
@@ -267,7 +267,7 @@ module Sg =
                                     BaseVertex = 0
                                 )
                                 )
-                            |> IndirectBuffer.ofArray
+                            |> IndirectBuffer.ofArray false
 
                     let offsets = 
                         renderText.concreteShapes 

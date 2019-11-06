@@ -937,7 +937,7 @@ module ``MappedBuffer Context Extensions`` =
 
 [<Obsolete>]
 type MappedIndirectBuffer(ctx : Context, indexed : bool) =
-    inherit Mod.AbstractMod<IIndirectBuffer>()
+    inherit Mod.AbstractMod<IndirectBuffer>()
     
     static let sd = sizeof<DrawCallInfo> |> nativeint
     let buffer = ctx.CreateMappedBuffer()
@@ -996,7 +996,7 @@ type MappedIndirectBuffer(ctx : Context, indexed : bool) =
                 gc.Free()
     override x.Compute(token) =
         let inner = buffer.GetValue(token) |> unbox<Buffer>
-        BackendIndirectBuffer(inner, x.Count, 20, indexed) :> IIndirectBuffer
+        IndirectBuffer(inner, x.Count, 20, indexed)
 
     interface ILockedResource with
         member x.Lock = buffer.Lock

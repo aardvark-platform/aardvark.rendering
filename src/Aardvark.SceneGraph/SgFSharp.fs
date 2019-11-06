@@ -251,7 +251,7 @@ module SgFSharp =
         let render (mode : IndexedGeometryMode) (call : DrawCallInfo) =
             Sg.RenderNode(call,mode) 
             
-        let indirectDraw (mode : IndexedGeometryMode) (buffer : IMod<IIndirectBuffer>) =
+        let indirectDraw (mode : IndexedGeometryMode) (buffer : IMod<IndirectBuffer>) =
             Sg.IndirectRenderNode(buffer, mode) :> ISg
 
         let ofIndexedGeometry (g : IndexedGeometry) =

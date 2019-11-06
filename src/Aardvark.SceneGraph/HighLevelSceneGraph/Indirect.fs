@@ -253,7 +253,7 @@ module Indirect =
                                 ()
 
                     let instanceBuffers = uniformCache.GetBuffers(token)
-                    let indirect = callCache.Values |> Seq.toArray |> IndirectBuffer.ofArray
+                    let indirect = callCache.Values |> Seq.toArray |> IndirectBuffer.ofArray false
                     
                     indirect, instanceBuffers
                 )

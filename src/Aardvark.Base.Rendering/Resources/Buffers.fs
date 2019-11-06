@@ -12,9 +12,11 @@ open Microsoft.FSharp.NativeInterop
 
 type IBuffer = interface end
 
-type IIndirectBuffer =
-    abstract member Buffer : IBuffer // only makes sense with ArrayBuffers -> IBackendBuffer will be copied and post-processed
-    abstract member Count : int
+//type IIndirectBuffer =
+//    abstract member Buffer : IBuffer // only makes sense with ArrayBuffers -> IBackendBuffer will be copied and post-processed
+//    abstract member Count : int
+//    abstract member Stride : int
+//    abstract member Indexed : bool
 
 type INativeBuffer =
     inherit IBuffer
@@ -30,10 +32,10 @@ type IBackendBuffer =
     abstract member Handle : obj
     abstract member SizeInBytes : nativeint
     
-and IBackendIndirectBuffer = 
-    inherit IIndirectBuffer // Buffer must be IBackendBuffer by convention
-    abstract member Stride : int
-    abstract member Indexed : bool
+//and IBackendIndirectBuffer = 
+//    inherit IIndirectBuffer // Buffer must be IBackendBuffer by convention
+//    abstract member Stride : int
+//    abstract member Indexed : bool
 
 and IBufferRuntime =
     abstract member DeleteBuffer : IBackendBuffer -> unit
@@ -45,8 +47,7 @@ and IBufferRuntime =
 
     abstract member CopyAsync : srcBuffer : IBackendBuffer * srcOffset : nativeint * dstData : nativeint * size : nativeint -> (unit -> unit)
 
-    //abstract member CreateIndiretBuffer : data : IBackendBuffer * indexed : bool * stride : int * count : int -> IBackendIndirectBuffer
-
+    //abstract member CreateIndirectBuffer : data : IBackendBuffer * indexed : bool * stride : int * count : int -> IBackendIndirectBuffer
     //abstract member CreateIndirectBuffer : size : nativeint * indexed : bool -> INativeIndirectBuffer
     //abstract member Copy : srcData : DrawCallInfo[] * dst : IBackendIndirectBuffer * dstOffsetCount : nativeint * count : nativeint -> unit
     //abstract member Copy : srcData : DrawCallInfo[] * srcOffsetCount : nativeint * dst : IBackendIndirectBuffer * dstOffsetCount : nativeint * count : nativeint -> unit
@@ -118,32 +119,30 @@ type NativeMemoryBuffer(ptr : nativeint, sizeInBytes : int) =
                 n.Ptr = ptr && n.SizeInBytes = sizeInBytes
             | _ -> false
 
-type IndirectBuffer(b : IBuffer, count : int) =
+type IndirectBuffer(b : IBuffer, count : int, stride : int, indexed : bool) =
     member x.Buffer = b
     member x.Count = count
+    member x.Stride = stride
+    member x.Indexed = indexed
 
-    interface IIndirectBuffer with
-        member x.Buffer = b
-        member x.Count = count
+//type BackendIndirectBuffer =
+//    class
+//        val mutable public Buffer : IBackendBuffer
+//        val mutable public Count : int
+//        val mutable public Stride : int
+//        val mutable public Indexed : bool
 
-type BackendIndirectBuffer =
-    class
-        val mutable public Buffer : IBackendBuffer
-        val mutable public Count : int
-        val mutable public Stride : int
-        val mutable public Indexed : bool
+//        //member x.BackendBuffer
+//        //    with get() = x.Buffer 
 
-        //member x.BackendBuffer
-        //    with get() = x.Buffer 
+//        interface IBackendIndirectBuffer with
+//            member x.Buffer = x.Buffer :> IBuffer
+//            member x.Count = x.Count
+//            member x.Stride = x.Stride
+//            member x.Indexed = x.Indexed
 
-        interface IBackendIndirectBuffer with
-            member x.Buffer = x.Buffer :> IBuffer
-            member x.Count = x.Count
-            member x.Stride = x.Stride
-            member x.Indexed = x.Indexed
-
-        new(b : IBackendBuffer, count, stride, indexed) = { Buffer = b; Count = count; Stride = stride; Indexed = indexed }
-    end 
+//        new(b : IBackendBuffer, count, stride, indexed) = { Buffer = b; Count = count; Stride = stride; Indexed = indexed }
+//    end 
 
 
 type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : int) =
@@ -175,17 +174,15 @@ type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : in
             | _ -> false
 
 
-
-
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module IndirectBuffer =
-    let ofArray (arr : DrawCallInfo[]) =
-        IndirectBuffer(ArrayBuffer arr, arr.Length) :> IIndirectBuffer
+    let ofArray (indexed : bool) (arr : DrawCallInfo[]) =
+        IndirectBuffer(ArrayBuffer arr, arr.Length, sizeof<DrawCallInfo>, indexed)
 
-    let ofList (l : list<DrawCallInfo>) =
-        l |> List.toArray |> ofArray
+    let ofList (indexed : bool) (l : list<DrawCallInfo>) =
+        l |> List.toArray |> ofArray indexed
 
-    let count (b : IIndirectBuffer) = b.Count
+    //let count (b : IIndirectBuffer) = b.Count
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module BufferView =
@@ -526,7 +523,7 @@ type IResizeBuffer =
 
 [<Obsolete>]
 type IMappedIndirectBuffer =
-    inherit IMod<IIndirectBuffer>
+    inherit IMod<IndirectBuffer>
     inherit IDisposable
     inherit ILockedResource
 
