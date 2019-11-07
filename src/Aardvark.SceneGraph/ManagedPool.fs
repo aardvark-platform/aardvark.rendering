@@ -67,6 +67,7 @@ type IManagedBuffer =
     inherit IMod<IBuffer>
     abstract member Clear : unit -> unit
     abstract member Capacity : int
+    abstract member Set : nativeint * IntPtr * nativeint -> unit
     abstract member Set : Range1l * byte[] -> unit
     abstract member Add : Range1l * BufferView -> IDisposable
     abstract member Add : int * IMod -> IDisposable
@@ -187,6 +188,7 @@ module private ManagedBufferImplementation =
 
             x.Store.Upload(byteOffset, src, byteCount)
 
+        /// allows to set the provided value-array repeated if the range is larger than the value-array
         member x.Set(range : Range1l, value : byte[]) =
             let count = range.Size + 1L
             let e = nativeint(range.Min + count) * asize
@@ -266,6 +268,7 @@ module private ManagedBufferImplementation =
             member x.Clear() = x.Clear()
             member x.Add(range : Range1l, view : BufferView) = x.Add(range, view)
             member x.Add(index : int, data : IMod) = x.Add(index, data)
+            member x.Set(byteOffset : nativeint, src : IntPtr, byteCount : nativeint) = x.Set(byteOffset, src, byteCount)
             member x.Set(range : Range1l, value : byte[]) = x.Set(range, value)
             member x.Capacity = x.Capacity |> int
             member x.ElementType = typeof<'a>
