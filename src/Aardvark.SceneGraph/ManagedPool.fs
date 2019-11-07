@@ -180,6 +180,13 @@ module private ManagedBufferImplementation =
                 transact (fun () -> x.MarkOutdated ())
             res
 
+        member x.Set(byteOffset : nativeint, src : IntPtr, byteCount : nativeint) =
+            let e = byteOffset + byteCount
+            if x.Store.SizeInBytes < e then
+                x.Resize(Fun.NextPowerOfTwo(int64 e) |> nativeint)
+
+            x.Store.Upload(byteOffset, src, byteCount)
+
         member x.Set(range : Range1l, value : byte[]) =
             let count = range.Size + 1L
             let e = nativeint(range.Min + count) * asize
@@ -522,23 +529,41 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
 
     let indices = Dict<DrawCallInfo, int>()
     let calls = List<DrawCallInfo>()
-    let store = new ManagedBuffer<DrawCallInfo>(runtime)
+    let store = new ManagedBuffer<int>(runtime)
     
     let locked x (f : unit -> 'a) =
         lock x f
+    
+    // https://www.khronos.org/opengl/wiki/Vertex_Rendering#Indirect_rendering
 
-    // make indexed
-    let prepareForUpload(call : DrawCallInfo) =
-        if indexed then 
-            DrawCallInfo(
-                FaceVertexCount = call.FaceVertexCount,
-                InstanceCount = call.InstanceCount,
-                FirstIndex = call.FirstIndex,
-                BaseVertex = call.FirstInstance,
-                FirstInstance = call.BaseVertex
-            )
-        else
-            call
+    // non-indexed
+    //typedef  struct {
+    //   GLuint  count;
+    //   GLuint  instanceCount;
+    //   GLuint  first;
+    //   GLuint  baseInstance;
+    //} DrawArraysIndirectCommand;
+
+    // indexed
+    //typedef  struct {
+    //    uint  count;
+    //    uint  instanceCount;
+    //    uint  firstIndex;
+    //    uint  baseVertex;
+    //    uint  baseInstance;
+    //} DrawElementsIndirectCommand;
+
+    let stride = if indexed then 20 else 16
+    let upload (call : DrawCallInfo) (index : int) =
+        let mutable c = call
+        if indexed then
+            Fun.Swap(&c.BaseVertex, &c.FirstInstance)
+        let gc = GCHandle.Alloc(c, GCHandleType.Pinned)
+        try
+            let ptr = gc.AddrOfPinnedObject()
+            store.Set(nativeint(stride * index), ptr, nativeint stride)
+        finally
+            gc.Free()
 
     let add x (call : DrawCallInfo) =
         locked x (fun () ->
@@ -548,7 +573,7 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
                 let index = calls.Count
                 indices.[call] <- calls.Count
                 calls.Add call
-                store.Set(index, prepareForUpload call)
+                upload call index
                 true
         )
 
@@ -566,7 +591,7 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
                         let last = calls.[lastIndex]
                         indices.[last] <- index
                         calls.[index] <- last
-                        store.Set(index, prepareForUpload last)
+                        upload last index
                         calls.RemoveAt lastIndex
                         
                     true
@@ -590,7 +615,7 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
             
     override x.Compute(token) =
         let inner = store.GetValue(token)
-        IndirectBuffer(inner, calls.Count, sizeof<DrawCallInfo>, indexed)
+        IndirectBuffer(inner, calls.Count, stride, indexed)
 
     override x.Finalize() =
         try store.Dispose()
