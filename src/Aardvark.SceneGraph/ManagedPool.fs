@@ -84,13 +84,25 @@ module private ManagedBufferImplementation =
     type ManagedBuffer<'a when 'a : unmanaged>(runtime : IRuntime) =
         inherit DirtyTrackingAdaptiveObject<ManagedBufferWriter>()
         static let asize = sizeof<'a> |> nativeint
-        let store = runtime.CreateMappedBuffer()
+
+        let mutable store = runtime.CreateBuffer(0n)
 
         let bufferWriters = Dict<BufferView, ManagedBufferWriter<'a>>()
         let uniformWriters = Dict<IMod, ManagedBufferSingleWriter<'a>>()
 
+        member x.Resize (sz : nativeint) =
+            let newStore = runtime.CreateBuffer(sz)
+            if sz > 0n && store.SizeInBytes > 0n then
+                (runtime :> IBufferRuntime).Copy(store, 0n, newStore, 0n, min sz store.SizeInBytes)
+            runtime.DeleteBuffer store
+            store <- newStore
+            transact (fun () -> x.MarkOutdated())
+
         member x.Clear() =
-            store.Resize 0n
+            x.Resize(0n)
+            
+        member x.Store
+            with get() = store
 
         member x.Add(range : Range1l, view : BufferView) =
             let mutable isNew = false
@@ -107,7 +119,7 @@ module private ManagedBufferImplementation =
                             bufferWriters.Remove view |> ignore
                             view.Buffer.Outputs.Remove(real) |> ignore // remove converter from Output of data Mod (in case there is no converter remove will do nothing, but Release of ManagedBufferSingleWriter will)
 
-                        let w = new ManagedBufferWriter<'a>(remove, real, store)
+                        let w = new ManagedBufferWriter<'a>(remove, real, x)
                         x.Dirty.Add w |> ignore
                         w
                     )
@@ -115,8 +127,8 @@ module private ManagedBufferImplementation =
 
                 if writer.AddRef range then
                     let min = nativeint(range.Min + count) * asize
-                    if store.Capacity < min then
-                        store.Resize(Fun.NextPowerOfTwo(int64 min) |> nativeint)
+                    if x.Store.SizeInBytes < min then
+                        x.Resize(Fun.NextPowerOfTwo(int64 min) |> nativeint)
        
                     lock writer (fun () -> 
                         if not writer.OutOfDate then
@@ -143,7 +155,7 @@ module private ManagedBufferImplementation =
                             uniformWriters.Remove data |> ignore
                             data.Outputs.Remove(real) |> ignore // remove converter from Output of data Mod (in case there is no converter remove will do nothing, but Release of ManagedBufferSingleWriter will)
 
-                        let w = new ManagedBufferSingleWriter<'a>(remove, real, store)
+                        let w = new ManagedBufferSingleWriter<'a>(remove, real, x)
                         x.Dirty.Add w |> ignore
                         w
                     )
@@ -151,17 +163,14 @@ module private ManagedBufferImplementation =
                 let range = Range1l(int64 index, int64 index)
                 if writer.AddRef range then
                     let min = nativeint (index + 1) * asize
-                    if store.Capacity < min then
-                        store.Resize(Fun.NextPowerOfTwo(int64 min) |> nativeint)
+                    if x.Store.SizeInBytes < min then
+                        x.Resize(Fun.NextPowerOfTwo(int64 min) |> nativeint)
                             
                     lock writer (fun () -> 
                         if not writer.OutOfDate then
                             writer.Write(AdaptiveToken.Top, range)
                     )
-
-
-
-                        
+                                            
                 { new IDisposable with
                     member x.Dispose() =
                         writer.RemoveRef range |> ignore
@@ -174,8 +183,8 @@ module private ManagedBufferImplementation =
         member x.Set(range : Range1l, value : byte[]) =
             let count = range.Size + 1L
             let e = nativeint(range.Min + count) * asize
-            if store.Capacity < e then
-                store.Resize(Fun.NextPowerOfTwo(int64 e) |> nativeint)
+            if x.Store.SizeInBytes < e then
+                x.Resize(Fun.NextPowerOfTwo(int64 e) |> nativeint)
 
             let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
             try
@@ -184,51 +193,57 @@ module private ManagedBufferImplementation =
                 let mutable remaining = nativeint count * asize
                 let mutable offset = nativeint range.Min * asize
                 while remaining >= lv do
-                    store.Write(ptr, offset, lv)
+                    x.Store.Upload(offset, ptr, lv)
                     offset <- offset + lv
                     remaining <- remaining - lv
 
                 if remaining > 0n then
-                    store.Write(ptr, offset, remaining)
+                    x.Store.Upload(offset, ptr, remaining)
 
             finally
                 gc.Free()
 
         member x.Set(index : int, value : 'a) =
             let e = nativeint (index + 1) * asize
-            if store.Capacity < e then
-                store.Resize(Fun.NextPowerOfTwo(int64 e) |> nativeint)
+            if x.Store.SizeInBytes < e then
+                x.Resize(Fun.NextPowerOfTwo(int64 e) |> nativeint)
 
+            let offset = nativeint index * asize
             let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
-            try store.Write(gc.AddrOfPinnedObject(), nativeint index * asize, asize)
+            try x.Store.Upload(offset, gc.AddrOfPinnedObject(), asize)
             finally gc.Free()
 
         member x.Get(index : int) =
+            let offset = nativeint index * asize
             let mutable res = Unchecked.defaultof<'a>
-            store.Read(&&res |> NativePtr.toNativeInt, nativeint index * asize, asize)
+            x.Store.Download(offset, &&res |> NativePtr.toNativeInt, asize)
             res
 
         member x.Set(range : Range1l, value : 'a[]) =
             let e = nativeint(range.Max + 1L) * asize
-            if store.Capacity < e then
-                store.Resize(Fun.NextPowerOfTwo(int64 e) |> nativeint)
+            if x.Store.SizeInBytes < e then
+                x.Resize(Fun.NextPowerOfTwo(int64 e) |> nativeint)
 
+            let offset = nativeint range.Min * asize
+            let size = nativeint(range.Size + 1L) * asize
             let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
-            try store.Write(gc.AddrOfPinnedObject(), nativeint range.Min * asize, nativeint(range.Size + 1L) * asize)
+            try x.Store.Upload(offset, gc.AddrOfPinnedObject(), size)
             finally gc.Free()
 
         member x.GetValue(token : AdaptiveToken) =
             x.EvaluateAlways' token (fun token dirty ->
-                for d in dirty do
-                    d.Write(token)
-                store.GetValue(token)
-            )
+                    for d in dirty do
+                        d.Write(token)
+                    x.Store :> IBuffer
+                )
 
-        member x.Capacity = store.Capacity
-        member x.Count = store.Capacity / asize |> int
+        member x.Capacity = store.SizeInBytes
+        member x.Count = store.SizeInBytes / asize |> int
 
         member x.Dispose() =
-            store.Dispose()
+            runtime.DeleteBuffer store
+            store <- Unchecked.defaultof<_>
+            x.MarkOutdated()
 
         interface IDisposable with
             member x.Dispose() = x.Dispose()
@@ -239,12 +254,7 @@ module private ManagedBufferImplementation =
 
         interface IMod<IBuffer> with
             member x.GetValue c = x.GetValue c
-
-        interface ILockedResource with
-            member x.Lock = store.Lock
-            member x.OnLock u = ()
-            member x.OnUnlock u = ()
-
+            
         interface IManagedBuffer with
             member x.Clear() = x.Clear()
             member x.Add(range : Range1l, view : BufferView) = x.Add(range, view)
@@ -295,7 +305,7 @@ module private ManagedBufferImplementation =
         interface IManagedBufferWriter with
             member x.Write c = x.Write c
 
-    and ManagedBufferWriter<'a when 'a : unmanaged>(remove : ManagedBufferWriter -> unit, data : IMod<'a[]>, store : IMappedBuffer) =
+    and ManagedBufferWriter<'a when 'a : unmanaged>(remove : ManagedBufferWriter -> unit, data : IMod<'a[]>, buffer : ManagedBuffer<'a>) =
         inherit ManagedBufferWriter(remove)
         static let asize = sizeof<'a> |> nativeint
 
@@ -308,11 +318,11 @@ module private ManagedBufferImplementation =
             let v = data.GetValue(token)
             let gc = GCHandle.Alloc(v, GCHandleType.Pinned)
             try 
-                store.Write(gc.AddrOfPinnedObject(), nativeint target.Min * asize, nativeint v.Length * asize)
+                buffer.Store.Upload(nativeint target.Min * asize, gc.AddrOfPinnedObject(), nativeint v.Length * asize)
             finally 
                 gc.Free()
 
-    and ManagedBufferSingleWriter<'a when 'a : unmanaged>(remove : ManagedBufferWriter -> unit, data : IMod<'a>, store : IMappedBuffer) =
+    and ManagedBufferSingleWriter<'a when 'a : unmanaged>(remove : ManagedBufferWriter -> unit, data : IMod<'a>, buffer : ManagedBuffer<'a>) =
         inherit ManagedBufferWriter(remove)
         static let asize = sizeof<'a> |> nativeint
             
@@ -324,7 +334,7 @@ module private ManagedBufferImplementation =
         override x.Write(token, target) =
             let v = data.GetValue(token)
             let gc = GCHandle.Alloc(v, GCHandleType.Pinned)
-            try store.Write(gc.AddrOfPinnedObject(), nativeint target.Min * asize, asize)
+            try buffer.Store.Upload(nativeint target.Min * asize, gc.AddrOfPinnedObject(), asize)
             finally gc.Free()
 
 module ManagedBuffer =
@@ -439,8 +449,6 @@ type ManagedPool(runtime : IRuntime, signature : GeometrySignature) =
                     | Some v -> target.Add(vertexRange, v) |> ds.Add
                     | None -> target.Set(vertexRange, zero)
             
-
-
             let instancePtr = instanceManager.Alloc(g.uniforms, 1)
             let instanceIndex = int instancePtr.Offset
             for (k,t) in uniformTypes do
@@ -514,8 +522,8 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
 
     let indices = Dict<DrawCallInfo, int>()
     let calls = List<DrawCallInfo>()
-    let store = runtime.CreateMappedIndirectBuffer(indexed)
-
+    let store = new ManagedBuffer<DrawCallInfo>(runtime)
+    
     let locked x (f : unit -> 'a) =
         lock x f
 
@@ -524,12 +532,10 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
             if indices.ContainsKey call then 
                 false
             else
-                store.Resize(Fun.NextPowerOfTwo (calls.Count + 1))
-                let count = calls.Count
-                indices.[call] <- count
+                let index = calls.Count
+                indices.[call] <- calls.Count
                 calls.Add call
-                store.Count <- calls.Count
-                store.[count] <- call
+                store.Set(index, call)
                 true
         )
 
@@ -539,7 +545,7 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
                 | (true, index) ->
                     if calls.Count = 1 then
                         calls.Clear()
-                        store.Resize(0)
+                        store.Resize(0n)
                     elif index = calls.Count-1 then
                         calls.RemoveAt index
                     else
@@ -547,10 +553,9 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
                         let last = calls.[lastIndex]
                         indices.[last] <- index
                         calls.[index] <- last
-                        store.[index] <- last
+                        store.Set(index, last)
                         calls.RemoveAt lastIndex
                         
-                    store.Count <- calls.Count
                     true
                 | _ ->
                     false
@@ -569,18 +574,88 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
             true
         else
             false
-
-    interface ILockedResource with
-        member x.Lock = store.Lock
-        member x.OnLock u = ()
-        member x.OnUnlock u = ()
-
+            
     override x.Compute(token) =
-        store.GetValue()
+        let inner = store.GetValue(token)
+        IndirectBuffer(inner, calls.Count) :> IIndirectBuffer
 
     override x.Finalize() =
         try store.Dispose()
         with _ -> ()    
+
+
+//type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
+//    inherit Mod.AbstractMod<IIndirectBuffer>()
+
+//    let indices = Dict<DrawCallInfo, int>()
+//    let calls = List<DrawCallInfo>()
+//    let store = runtime.CreateMappedIndirectBuffer(indexed)
+
+//    let locked x (f : unit -> 'a) =
+//        lock x f
+
+//    let add x (call : DrawCallInfo) =
+//        locked x (fun () ->
+//            if indices.ContainsKey call then 
+//                false
+//            else
+//                store.Resize(Fun.NextPowerOfTwo (calls.Count + 1))
+//                let count = calls.Count
+//                indices.[call] <- count
+//                calls.Add call
+//                store.Count <- calls.Count
+//                store.[count] <- call
+//                true
+//        )
+
+//    let remove x (call : DrawCallInfo) =
+//        locked x (fun () ->
+//            match indices.TryRemove call with
+//                | (true, index) ->
+//                    if calls.Count = 1 then
+//                        calls.Clear()
+//                        store.Resize(0)
+//                    elif index = calls.Count-1 then
+//                        calls.RemoveAt index
+//                    else
+//                        let lastIndex = calls.Count - 1
+//                        let last = calls.[lastIndex]
+//                        indices.[last] <- index
+//                        calls.[index] <- last
+//                        store.[index] <- last
+//                        calls.RemoveAt lastIndex
+                        
+//                    store.Count <- calls.Count
+//                    true
+//                | _ ->
+//                    false
+//        )
+
+//    member x.Add (call : DrawCallInfo) =
+//        if add x call then
+//            transact (fun () -> x.MarkOutdated())
+//            true
+//        else
+//            false
+
+//    member x.Remove(call : DrawCallInfo) =
+//        if remove x call then
+//            transact (fun () -> x.MarkOutdated())
+//            true
+//        else
+//            false
+
+//    interface ILockedResource with
+//        member x.Lock = store.Lock
+//        member x.OnLock u = ()
+//        member x.OnUnlock u = ()
+
+//    override x.Compute(token) =
+//        store.GetValue()
+
+//    override x.Finalize() =
+//        try store.Dispose()
+//        with _ -> ()    
 
 [<AbstractClass; Sealed; Extension>]
 type IRuntimePoolExtensions private() =
