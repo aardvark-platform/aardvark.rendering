@@ -206,10 +206,10 @@ type UniformProvider private() =
 
 
 
-module private RenderObjectIds =
-    open System.Threading
-    let mutable private currentId = 0
-    let newId() = Interlocked.Increment &currentId
+//module private RenderObjectIds =
+//    open System.Threading
+//    let mutable private currentId = 0
+//    let newId() = Interlocked.Increment &currentId
 
 [<AutoOpen>]
 module private RenderObjectHelpers =
@@ -278,7 +278,7 @@ type RenderObject =
         else x.AttributeScope.Path
 
     static member Create() =
-        { Id = RenderObjectIds.newId()
+        { Id = newId()
           AttributeScope = Ag.emptyScope
           IsActive = null
           RenderPass = RenderPass.main
@@ -305,7 +305,7 @@ type RenderObject =
         }
 
     static member Clone(org : RenderObject) =
-        { org with Id = RenderObjectIds.newId() }
+        { org with Id = newId() }
 
     override x.GetHashCode() = x.Id
     override x.Equals o =
