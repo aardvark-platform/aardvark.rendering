@@ -21,20 +21,24 @@ type UniformBufferManager(ctx : Context) =
     let bufferMemory : Management.Memory<Buffer> =
 
         let alloc (size : nativeint) =
-            use __ = ctx.ResourceLock
-            let handle = GL.GenBuffer()
+            if size = 0n then
+                new Buffer(ctx, 0n, 0)
+            else
+                use __ = ctx.ResourceLock
+                let handle = GL.GenBuffer()
 
-            BufferMemoryUsage.addUniformBuffer ctx (int64 size)
+                BufferMemoryUsage.addUniformBuffer ctx (int64 size)
 
-            GL.NamedBufferStorage(handle, size, 0n, BufferStorageFlags.DynamicStorageBit)
-            GL.Check "could not allocate uniform buffer"
+                GL.NamedBufferStorage(handle, size, 0n, BufferStorageFlags.DynamicStorageBit)
+                GL.Check "could not allocate uniform buffer"
 
-            new Buffer(ctx, size, handle)
+                new Buffer(ctx, size, handle)
 
         let free (buffer : Buffer) (size : nativeint) =
-            GL.DeleteBuffer(buffer.Handle)
-            BufferMemoryUsage.removeUniformBuffer ctx (int64 size)
-            GL.Check "could not free uniform buffer"
+            if buffer.Handle <> 0 then
+                GL.DeleteBuffer(buffer.Handle)
+                BufferMemoryUsage.removeUniformBuffer ctx (int64 size)
+                GL.Check "could not free uniform buffer"
 
         {
             malloc = alloc

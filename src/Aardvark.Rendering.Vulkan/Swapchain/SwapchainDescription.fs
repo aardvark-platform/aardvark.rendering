@@ -23,7 +23,7 @@ type AbstractGraphicsMode() =
     abstract member ChooseBufferCount               : int * int -> int
     abstract member Samples                         : int
 
-type GraphicsMode(format : Col.Format, bits : int, depthBits : int, stencilBits : int, buffers : int, samples : int, imageTrafo : ImageTrafo) =
+type GraphicsMode(format : Col.Format, bits : int, depthBits : int, stencilBits : int, buffers : int, samples : int, imageTrafo : ImageTrafo, vsync : bool) =
     inherit AbstractGraphicsMode()
     let bitType =
         match bits with
@@ -87,9 +87,10 @@ type GraphicsMode(format : Col.Format, bits : int, depthBits : int, stencilBits 
         
         match mode with
             | VkPresentModeKHR.VkPresentModeMailboxKhr -> 16
-            | VkPresentModeKHR.VkPresentModeFifoKhr -> 8
-            | VkPresentModeKHR.VkPresentModeImmediateKhr -> 4
-            | VkPresentModeKHR.VkPresentModeFifoRelaxedKhr -> 2
+            | VkPresentModeKHR.VkPresentModeFifoKhr -> 4
+            | VkPresentModeKHR.VkPresentModeImmediateKhr when not vsync -> 400
+            | VkPresentModeKHR.VkPresentModeImmediateKhr -> 2
+            | VkPresentModeKHR.VkPresentModeFifoRelaxedKhr -> 8
             | _ -> 0
 
     member x.Format = format

@@ -141,7 +141,7 @@ module Stereo =
             d.WindowState <- FormWindowState.Maximized
             d.FormBorderStyle <- FormBorderStyle.None
 
-            let mode = GraphicsMode(Col.Format.RGBA, 8, 24, 8, 2, 8, ImageTrafo.MirrorY)
+            let mode = GraphicsMode(Col.Format.RGBA, 8, 24, 8, 2, 8, ImageTrafo.MirrorY, false)
             let impl = new VulkanRenderControl(app.Runtime, mode)
 
 
