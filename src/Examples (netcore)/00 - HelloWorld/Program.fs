@@ -71,23 +71,31 @@ let main argv =
 
     let d = 
         Mod.init (Some lines)
+
+
+
+
     win.Keyboard.KeyDown(Keys.G).Values.Add(fun _ -> 
-        for i in 0 .. 1000 do
-            transact (fun _ -> 
-                d.Value <- 
-                    match d.Value with
-                        | None -> Some lines
-                        | Some v -> None
-            )
+        startThread (fun _ -> 
+            for i in 0 .. 1000 do
+                transact (fun _ -> 
+                    d.Value <- 
+                        match d.Value with
+                            | None -> Some lines
+                            | Some v -> None
+                )
+        ) |> ignore
     )
 
     win.Keyboard.KeyDown(Keys.E).Values.Add(fun _ -> 
-        for i in 0 .. 1000 do
-            transact (fun _ -> 
-                if lines.Value.Length = 0 then  
-                    lines.Value <- [|Line3d()|]
-                else lines.Value <- Array.init 1000 (fun _-> Line3d())
-            )
+        startThread (fun _ -> 
+            for i in 0 .. 1000 do
+                transact (fun _ -> 
+                    if lines.Value.Length = 0 then  
+                        lines.Value <- [|Line3d()|]
+                    else lines.Value <- Array.init 1000 (fun _-> Line3d())
+                )
+        ) |> ignore
     )
 
     let sg = 
