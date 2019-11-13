@@ -16,6 +16,7 @@ open Management
 
 #nowarn "9"
 #nowarn "51"
+#nowarn "44"
 
 
 [<AutoOpen>]
@@ -75,7 +76,7 @@ module ResizeBufferImplementation =
             if handle <> 0n then
                 match GL.ClientWaitSync(handle, ClientWaitSyncFlags.None, GL_TIMEOUT_IGNORED) with
                     | WaitSyncStatus.WaitFailed -> failwith "[GL] failed to wait for fence"
-                    | WaitSyncStatus.TimeoutExpired -> failwith "[GL] fance timeout"
+                    | WaitSyncStatus.TimeoutExpired -> failwith "[GL] fence timeout"
                     | _ -> ()
                 GL.Check "could not wait for fence"
             else
@@ -91,7 +92,7 @@ module ResizeBufferImplementation =
             member x.Dispose() = x.Dispose()
 
 
-    [<AbstractClass>]
+    [<AbstractClass>] [<Obsolete>]
     type AbstractResizeBuffer(ctx : Context, handle : int, pageSize : int64) =
         inherit Buffer(ctx, 0n, handle)
 
@@ -225,6 +226,7 @@ module ResizeBufferImplementation =
             member x.UseRead(off, size, reader) = x.UseRead(off, size, reader)
             member x.UseWrite(off, size, reader) = x.UseRead(off, size, reader)
 
+    [<Obsolete>]
     type internal SparseMemoryResizeBuffer(ctx : Context, pageSize : int64, handle : int) =
         inherit AbstractResizeBuffer(ctx, handle, pageSize)
 
@@ -258,7 +260,7 @@ module ResizeBufferImplementation =
             Marshal.FreeHGlobal data
             res
 
-
+    [<Obsolete>]
     type internal CopyResizeBuffer(ctx : Context, handle : int) =
         inherit AbstractResizeBuffer(ctx, handle, 1L)
 
@@ -870,6 +872,7 @@ module ManagedBufferImplementation =
 
 module MappedBufferImplementations = 
 
+    [<Obsolete>]
     type FakeMappedBuffer(ctx : Context) =
         inherit Mod.AbstractMod<IBuffer>()
         let buffer = ctx.CreateResizeBuffer()
@@ -926,11 +929,13 @@ module MappedBufferImplementations =
 [<AutoOpen>]
 module ``MappedBuffer Context Extensions`` =
     type Context with
+        [<Obsolete>]
         member x.CreateMappedBuffer() =
             using x.ResourceLock (fun _ ->
                 new MappedBufferImplementations.FakeMappedBuffer(x) :> IMappedBuffer
             )
 
+[<Obsolete>]
 type MappedIndirectBuffer(ctx : Context, indexed : bool) =
     inherit Mod.AbstractMod<IIndirectBuffer>()
     
@@ -1015,6 +1020,7 @@ type MappedIndirectBuffer(ctx : Context, indexed : bool) =
 [<AutoOpen>]
 module ``MappedIndirectBuffer Context Extensions`` =
     type Context with
+        [<Obsolete>]
         member x.CreateMappedIndirectBuffer(indexed : bool) =
             new MappedIndirectBuffer(x, indexed) :> IMappedIndirectBuffer
 

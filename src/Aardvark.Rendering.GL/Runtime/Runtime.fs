@@ -13,6 +13,7 @@ open Microsoft.FSharp.NativeInterop
 open Aardvark.Rendering.GL
 
 #nowarn "9"
+#nowarn "44"
 
 type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * AttachmentSignature>, images : Map<int, Symbol>, depth : Option<AttachmentSignature>, stencil : Option<AttachmentSignature>, layers : int, perLayer : Set<string>) =
    
@@ -502,12 +503,14 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : IRenderbuffer =
             x.CreateRenderbuffer(size, format, samples) :> IRenderbuffer
 
+        // Remove "nowarn 44" when deleting this
         member x.CreateMappedBuffer()  =
             x.CreateMappedBuffer ()
 
         member x.CreateGeometryPool(types : Map<Symbol, Type>) =
             x.CreateGeometryPool(types)
 
+        // Remove "nowarn 44" when deleting this
         member x.CreateMappedIndirectBuffer(indexed)  =
             x.CreateMappedIndirectBuffer (indexed)
             
@@ -656,30 +659,28 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
 
     member x.CreateBuffer(size : nativeint) =
-        use __ = ctx.ResourceLock
-        let handle = GL.GenBuffer()
-        GL.Check "could not create buffer"
-        GL.NamedBufferData(handle, size, 0n, BufferUsageHint.StaticDraw)
-        GL.Check "could not allocate buffer"
-        new Aardvark.Rendering.GL.Buffer(ctx, size, handle)
+        ctx.CreateBuffer(int size)
 
     member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
         use __ = ctx.ResourceLock
         GL.NamedBufferSubData(unbox<int> dst.Handle, dstOffset, size, src)
         GL.Check "could not upload buffer data"
-        GL.Sync()
+        if RuntimeConfig.SyncUploadsAndFrames then
+            GL.Sync()
 
     member x.Download(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
         use __ = ctx.ResourceLock
         GL.GetNamedBufferSubData(unbox<int> src.Handle, srcOffset, size, dst)
         GL.Check "could not download buffer data"
-        GL.Sync()
+        if RuntimeConfig.SyncUploadsAndFrames then
+            GL.Sync()
 
     member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
         use __ = ctx.ResourceLock
         GL.CopyNamedBufferSubData(unbox<int> src.Handle, srcOffset, unbox<int> dst.Handle, dstOffset, size)
         GL.Check "could not copy buffer data"
-        GL.Sync()
+        if RuntimeConfig.SyncUploadsAndFrames then
+            GL.Sync()
 
     member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>, layers : int, perLayer : Set<string>) =
         let attachments = Map.ofSeq (SymDict.toSeq attachments)
@@ -986,12 +987,14 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : Renderbuffer =
         ctx.CreateRenderbuffer(size, format, samples)
 
+    // Remove "nowarn 44" when deleting this
     member x.CreateMappedBuffer() : IMappedBuffer =
         ctx.CreateMappedBuffer()
         
     member x.CreateGeometryPool(types : Map<Symbol, Type>) =
         new SparseBufferGeometryPool(ctx, types) :> IGeometryPool
 
+    // Remove "nowarn 44" when deleting this
     member x.CreateMappedIndirectBuffer(indexed : bool) : IMappedIndirectBuffer =
         ctx.CreateMappedIndirectBuffer(indexed)
 

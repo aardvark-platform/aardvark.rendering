@@ -577,6 +577,7 @@ module IndirectBufferExtensions =
             using x.ResourceLock (fun _ ->
                 GL.NamedBufferData(b.Handle, size, 0n, BufferUsageHint.StaticDraw)
                 GL.Check "could not clear buffer"
+                b.SizeInBytes <- size
             )
 
         member x.Copy(source : Buffer, sourceOffset : nativeint, target : Buffer, targetOffset : nativeint, size : nativeint) =

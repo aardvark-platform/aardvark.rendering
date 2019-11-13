@@ -137,6 +137,9 @@ EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "17 - TextureArrays", "Examples (netcore)\17 - TextureArrays\17 - TextureArrays.fsproj", "{2C25EACD-8E56-4BE5-8BB7-0CB9ED004096}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{21DE79CD-4706-473E-9655-ACD9A7A3D5D3}"
+	ProjectSection(SolutionItems) = preProject
+		Performance1.psess = Performance1.psess
+	EndProjectSection
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.SceneGraph.Opc", "Aardvark.SceneGraph.Opc\Aardvark.SceneGraph.Opc.fsproj", "{97CF1A7D-9858-4552-8EBF-ADBD6FF68FFA}"
 EndProject
@@ -173,6 +176,9 @@ EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "09 - MappedBufferPerformance", "Scratch (net471)\09 - MappedBufferPerformance\09 - MappedBufferPerformance.fsproj", "{FEB14F7F-7746-444B-A0F1-E5DE9992F7ED}"
 EndProject
 Global
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
+	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
@@ -527,5 +533,8 @@ Global
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C41172B9-09C3-4327-8CE2-CB47CBAA29AC}
+	EndGlobalSection
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
 	EndGlobalSection
 EndGlobal
