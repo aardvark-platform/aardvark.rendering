@@ -844,13 +844,17 @@ module Resources =
                           multisample : MultisampleState,
                           depthStencil : INativeResourceLocation<VkPipelineDepthStencilStateCreateInfo>
                          ) =
-        inherit AbstractPointerResource<VkPipeline>(owner, key)
+        inherit AbstractResourceLocation<VkPipeline>(owner, key)
+
+        let mutable pipe : nativeptr<VkPipeline> = 
+            let ptr = NativePtr.alloc 1
+            NativePtr.write ptr VkPipeline.Null
+            ptr
 
         static let check str err =
             if err <> VkResult.VkSuccess then failwithf "[Vulkan] %s" str
 
         override x.Create() =
-            base.Create()
             program.Acquire()
             inputState.Acquire()
             inputAssembly.Acquire()
@@ -859,7 +863,6 @@ module Resources =
             depthStencil.Acquire()
 
         override x.Destroy() =
-            base.Destroy()
             program.Release()
             inputState.Release()
             inputAssembly.Release()
@@ -867,8 +870,14 @@ module Resources =
             colorBlendState.Release()
             depthStencil.Release()
             
+            if not (NativePtr.isNull pipe) then
+                let p = !!pipe
+                if p.IsValid then
+                    VkRaw.vkDestroyPipeline(renderPass.Device.Handle, p, NativePtr.zero)
+                NativePtr.free pipe
+                pipe <- NativePtr.zero
 
-        override x.Compute(token : AdaptiveToken) =
+        override x.GetHandle(token : AdaptiveToken) =
             let program = program.Update token
                 
             let prog = program.handle
@@ -960,20 +969,21 @@ module Resources =
                             prog.PipelineLayout.Handle,
                             renderPass.Handle,
                             0u,
-                            VkPipeline.Null,
+                            !!pipe,
                             0
                         )
 
                     VkRaw.vkCreateGraphicsPipelines(device.Handle, VkPipelineCache.Null, 1u, pDesc, NativePtr.zero, pHandle)
                         |> check "could not create pipeline"
 
+                    NativePtr.write pipe !!pHandle
                     return Pipeline(device, !!pHandle, Unchecked.defaultof<_>)
                 }
 
-            pipeline.Handle
-    
-        override x.Free(p : VkPipeline) =
-            VkRaw.vkDestroyPipeline(renderPass.Device.Handle, p, NativePtr.zero)
+            { handle = pipeline.Handle; version = 666 }
+
+        interface INativeResourceLocation<VkPipeline> with
+            member x.Pointer = pipe
 
     type IndirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, calls : IResourceLocation<IndirectBuffer>) =
         inherit AbstractPointerResourceWithEquality<DrawCall>(owner, key)
