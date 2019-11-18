@@ -307,6 +307,8 @@ type AbstractPointerResource<'a when 'a : unmanaged>(owner : IResourceCache, key
 
     member x.Pointer = ptr
 
+    member x.HasHandle = hasHandle
+
     member x.NoChange() =
         dec &version
 
@@ -844,17 +846,13 @@ module Resources =
                           multisample : MultisampleState,
                           depthStencil : INativeResourceLocation<VkPipelineDepthStencilStateCreateInfo>
                          ) =
-        inherit AbstractResourceLocation<VkPipeline>(owner, key)
-
-        let mutable pipe : nativeptr<VkPipeline> = 
-            let ptr = NativePtr.alloc 1
-            NativePtr.write ptr VkPipeline.Null
-            ptr
+        inherit AbstractPointerResource<VkPipeline>(owner, key)
 
         static let check str err =
             if err <> VkResult.VkSuccess then failwithf "[Vulkan] %s" str
 
         override x.Create() =
+            base.Create()
             program.Acquire()
             inputState.Acquire()
             inputAssembly.Acquire()
@@ -863,6 +861,7 @@ module Resources =
             depthStencil.Acquire()
 
         override x.Destroy() =
+            base.Destroy()
             program.Release()
             inputState.Release()
             inputAssembly.Release()
@@ -870,14 +869,8 @@ module Resources =
             colorBlendState.Release()
             depthStencil.Release()
             
-            if not (NativePtr.isNull pipe) then
-                let p = !!pipe
-                if p.IsValid then
-                    VkRaw.vkDestroyPipeline(renderPass.Device.Handle, p, NativePtr.zero)
-                NativePtr.free pipe
-                pipe <- NativePtr.zero
 
-        override x.GetHandle(token : AdaptiveToken) =
+        override x.Compute(token : AdaptiveToken) =
             let program = program.Update token
                 
             let prog = program.handle
@@ -950,11 +943,17 @@ module Resources =
                     let depthStencil = depthStencil.Update(token) |> ignore; depthStencil.Pointer
                     let colorBlendState = colorBlendState.Update(token) |> ignore; colorBlendState.Pointer
 
+                    let basePipeline, derivativeFlag =
+                        if not x.HasHandle then
+                            VkPipeline.Null, VkPipelineCreateFlags.None
+                        else
+                            !!x.Pointer, VkPipelineCreateFlags.DerivativeBit
+
                     let! pHandle = VkPipeline.Null
                     let! pDesc =
                         VkGraphicsPipelineCreateInfo(
                             VkStructureType.GraphicsPipelineCreateInfo, 0n,
-                            VkPipelineCreateFlags.None,
+                            VkPipelineCreateFlags.AllowDerivativesBit ||| derivativeFlag,
                             uint32 prog.ShaderCreateInfos.Length,
                             pShaderCreateInfos,
                             inputState,
@@ -969,21 +968,20 @@ module Resources =
                             prog.PipelineLayout.Handle,
                             renderPass.Handle,
                             0u,
-                            !!pipe,
+                            basePipeline,
                             0
                         )
 
                     VkRaw.vkCreateGraphicsPipelines(device.Handle, VkPipelineCache.Null, 1u, pDesc, NativePtr.zero, pHandle)
                         |> check "could not create pipeline"
 
-                    NativePtr.write pipe !!pHandle
                     return Pipeline(device, !!pHandle, Unchecked.defaultof<_>)
                 }
 
-            { handle = pipeline.Handle; version = 666 }
-
-        interface INativeResourceLocation<VkPipeline> with
-            member x.Pointer = pipe
+            pipeline.Handle
+    
+        override x.Free(p : VkPipeline) =
+            VkRaw.vkDestroyPipeline(renderPass.Device.Handle, p, NativePtr.zero)
 
     type IndirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, calls : IResourceLocation<IndirectBuffer>) =
         inherit AbstractPointerResourceWithEquality<DrawCall>(owner, key)
