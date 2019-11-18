@@ -116,24 +116,12 @@ type SceneGraphExtensions =
 
     [<Extension>]
     static member WithEffects(sg : ISg, effects : seq<FShadeEffect>) : ISg = Sg.effect effects sg
-    
-    [<Extension>]
-    static member Uniform<'a>(sg : ISg, name : Symbol, value : IMod<'a>) : ISg = Sg.UniformApplicator(name, value, sg) :> ISg
 
     [<Extension>]
-    static member Uniform<'a>(sg : ISg, name : Symbol, value : 'a) : ISg = Sg.UniformApplicator(name, Mod.constant value, sg) :> ISg
+    static member Uniform(sg : ISg, name : Symbol, value : IMod) : ISg = Sg.UniformApplicator(name, value, sg) :> ISg
 
     [<Extension>]
     static member Uniform<'a>(sg : ISg, name : TypedSymbol<'a>, value : IMod<'a>) : ISg = Sg.UniformApplicator(name.Symbol, value, sg) :> ISg
-
-    [<Extension>]
-    static member Uniform<'a>(sg : ISg, name : TypedSymbol<'a>, value : 'a) : ISg = Sg.UniformApplicator(name.Symbol, Mod.constant value, sg) :> ISg
-
-    [<Extension>]
-    static member Uniform<'a>(sg : ISg, name : string, value : IMod<'a>) : ISg = Sg.UniformApplicator(Symbol.Create name, value, sg) :> ISg
-
-    [<Extension>]
-    static member Uniform<'a>(sg : ISg, name : string, value : 'a) : ISg = Sg.UniformApplicator(Symbol.Create name, Mod.constant value, sg) :> ISg
     
     [<Extension>]
     static member Uniform(sg : ISg, uniforms : IUniformProvider) : ISg = Sg.UniformApplicator(uniforms, sg) :> ISg
