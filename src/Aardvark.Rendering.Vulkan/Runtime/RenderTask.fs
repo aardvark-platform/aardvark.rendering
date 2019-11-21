@@ -176,7 +176,7 @@ module RenderCommands =
                                 failf "geometry does not have buffer %A" sem
                     )
 
-            let dsb = x.CreateDescriptorSetBinding(layout, Array.toList descriptorSets)
+            let dsb = x.CreateDescriptorSetBinding(layout, descriptorSets)
             let vbb = x.CreateVertexBufferBinding(vertexBuffers)
 
             let isIndexed, ibo =

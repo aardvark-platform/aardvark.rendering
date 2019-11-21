@@ -165,7 +165,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                 
                     )
 
-                let res = this.CreateDescriptorSet(ds, Array.toList descriptors)
+                let res = this.CreateDescriptorSet(ds, descriptors)
 
                 res
             )
@@ -255,7 +255,7 @@ type DevicePreparedRenderObjectExtensions private() =
         resources.Add bindings
 
         let descriptorBindings =
-            this.CreateDescriptorSetBinding(programLayout, Array.toList descriptorSets)
+            this.CreateDescriptorSetBinding(programLayout, descriptorSets)
             
         resources.Add(descriptorBindings)
 
@@ -345,7 +345,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                 
                     )
 
-                let res = this.CreateDescriptorSet(ds, Array.toList descriptors)
+                let res = this.CreateDescriptorSet(ds, descriptors)
 
                 res
             )

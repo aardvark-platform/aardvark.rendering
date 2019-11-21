@@ -117,7 +117,7 @@ type ResourceManagerExtensions private() =
                             failf "geometry does not have buffer %A" sem
                 )
 
-        let dsb = this.CreateDescriptorSetBinding(layout, Array.toList descriptorSets)
+        let dsb = this.CreateDescriptorSetBinding(layout, descriptorSets)
         let vbb = this.CreateVertexBufferBinding(vertexBuffers)
 
         let isIndexed, ibo =
@@ -1746,7 +1746,7 @@ module private RuntimeCommands =
 
         let descritorSet, descritorSetResources =
             let sets, resources = compiler.manager.CreateDescriptorSets(pipeline.ppLayout, compiler.task.HookProvider state.globalUniforms)
-            compiler.manager.CreateDescriptorSetBinding(pipeline.ppLayout, Array.toList sets), resources
+            compiler.manager.CreateDescriptorSetBinding(pipeline.ppLayout, sets), resources
 
         let pipelineInfo = pipeline.ppLayout.PipelineInfo
 
