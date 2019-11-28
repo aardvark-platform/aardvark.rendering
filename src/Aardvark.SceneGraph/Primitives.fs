@@ -550,10 +550,19 @@ module SgPrimitives =
                 triangles |> Mod.map (fun l ->
                     l |> Array.collect (fun l -> [|V3f l.P0; V3f l.P1; V3f l.P2|])
                 )
+
+            let normals =
+                triangles |> Mod.map (fun l ->
+                    l |> Array.collect (fun l -> [|V3f l.Normal; V3f l.Normal; V3f l.Normal|])
+                )
             
             Sg.RenderNode(call, IndexedGeometryMode.TriangleList)
                 |> Sg.vertexAttribute DefaultSemantic.Positions positions
+                |> Sg.vertexAttribute DefaultSemantic.Normals normals
                 |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> Mod.map (fun c -> c.ToC4f().ToV4f()))
+
+        let triangles' (color : C4b) (tris : Triangle3d[]) =
+            triangles (Mod.constant color) (Mod.constant tris)
 
         /// creates a subdivision sphere, where level is the subdivision level
         let unitSphere (level : int) (color : IMod<C4b>) =

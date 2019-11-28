@@ -15,7 +15,9 @@ module ``Sg Picking Extensions`` =
         | Box of Box3d
         | Sphere of Sphere3d
         | Cylinder of Cylinder3d
+        | Triangle of Triangle3d
         | Triangles of KdTree<Triangle3d>
+        | TriangleArray of Triangle3d[]
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module PickShape =
@@ -24,7 +26,9 @@ module ``Sg Picking Extensions`` =
                 | Box b -> b
                 | Sphere s -> s.BoundingBox3d
                 | Cylinder c -> c.BoundingBox3d
+                | Triangle t -> t.BoundingBox3d
                 | Triangles b -> b.Bounds
+                | TriangleArray ts -> Box3d(ts |> Array.map ( fun t -> t.BoundingBox3d ))
 
     type Pickable = { trafo : Trafo3d; shape : PickShape }
     
@@ -52,10 +56,15 @@ module ``Sg Picking Extensions`` =
                 | Box b -> RayPart.Intersects(part, b)
                 | Sphere s -> RayPart.Intersects(part, s)
                 | Cylinder c -> RayPart.Intersects(part, c)
+                | Triangle t -> RayPart.Intersects(part, t)
                 | Triangles kdtree ->
                     match KdTree.intersect intersectTriangle part kdtree with
                         | Some hit -> Some hit.T
                         | None -> None
+                | TriangleArray arr -> 
+                    match arr |> Array.choose ( fun t -> RayPart.Intersects(part, t) ) with
+                    | [||] -> None
+                    | ts -> ts |> Array.min |> Some
 
     type PickObject(scope : Ag.Scope, pickable : IMod<Pickable>) =
         member x.Scope = scope
