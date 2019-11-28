@@ -332,6 +332,7 @@ module Buffer =
 
             device.OnDispose.Add (fun () ->
                 VkRaw.vkDestroyBuffer(device.Handle, handle, NativePtr.zero)
+                mem.Dispose()
                 emptyBuffers.TryRemove(key) |> ignore
             )   
 
