@@ -245,25 +245,25 @@ let picking() =
 
     let cylinder = 
         Sg.cylinder' 16 C4b.Blue 0.5 1.0
-            |> Sg.pickable (PickShape.Cylinder(Cylinder3d(V3d.Zero, V3d.OOI, 0.5)))
+            //|> Sg.pickable (PickShape.Cylinder(Cylinder3d(V3d.Zero, V3d.OOI, 0.5)))
             |> Sg.requirePicking
 
     let sphere =
         Sg.unitSphere' 5 C4b.Yellow
-            |> Sg.pickable (PickShape.Sphere(Sphere3d(V3d.Zero, 1.0)))
+            //|> Sg.pickable (PickShape.Sphere(Sphere3d(V3d.Zero, 1.0)))
             |> Sg.requirePicking
             |> Sg.scale 0.5
 
     let box =
         Sg.box' C4b.Green bounds
-            |> Sg.pickable (PickShape.Box bounds)
+            //|> Sg.pickable (PickShape.Box bounds)
             |> Sg.requirePicking
 
     let tri =
-        let tri1 = Triangle3d(V3d.NNN * 0.5, V3d.III * 0.5, V3d.OOI * 0.5)
-        let tri2 = Triangle3d(V3d.NNN * 0.5, V3d.III * 0.5, V3d.OON * 0.5)
+        let tri1 = Triangle3d(V3d.NNO * 0.5, V3d.IIO * 0.5, V3d.NPO * 0.5)
+        let tri2 = Triangle3d(V3d.NNO * 0.5, V3d.IIO * 0.5, V3d.PNO * 0.5)
         Sg.triangles' C4b.Magenta [|tri1;tri2|]
-            |> Sg.pickable (PickShape.TriangleArray [|tri1;tri2|])
+            //|> Sg.pickable (PickShape.TriangleArray [|tri1;tri2|])
             |> Sg.requirePicking
 
     let rand = System.Random()
