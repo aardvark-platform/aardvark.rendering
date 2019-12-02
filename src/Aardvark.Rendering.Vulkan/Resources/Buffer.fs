@@ -298,48 +298,50 @@ module Buffer =
 
     let empty (usage : VkBufferUsageFlags) (device : Device) =
         let key = (device, usage)
-        emptyBuffers.GetOrAdd(key, fun (device, usage) ->
-            let info =
-                VkBufferCreateInfo(
-                    VkStructureType.BufferCreateInfo, 0n,
-                    VkBufferCreateFlags.None,
-                    256UL,
-                    usage,
-                    device.AllSharingMode,
-                    device.AllQueueFamiliesCnt,
-                    device.AllQueueFamiliesPtr
-                )
-
-            let handle = 
-                info |> pin (fun pInfo ->
-                    temporary (fun pHandle ->
-                        VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
-                            |> check "could not create empty buffer"
-                        NativePtr.read pHandle
+        let buffer =
+            emptyBuffers.GetOrAdd(key, fun (device, usage) ->
+                let info =
+                    VkBufferCreateInfo(
+                        VkStructureType.BufferCreateInfo, 0n,
+                        VkBufferCreateFlags.None,
+                        256UL,
+                        usage,
+                        device.AllSharingMode,
+                        device.AllQueueFamiliesCnt,
+                        device.AllQueueFamiliesPtr
                     )
-                )
 
-            let reqs = 
-                temporary (fun ptr ->
-                    VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, ptr)
-                    NativePtr.read ptr
-                )
+                let handle = 
+                    info |> pin (fun pInfo ->
+                        temporary (fun pHandle ->
+                            VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
+                                |> check "could not create empty buffer"
+                            NativePtr.read pHandle
+                        )
+                    )
 
-            let mem = device.Alloc(reqs, true)
-            VkRaw.vkBindBufferMemory(device.Handle, handle, mem.Memory.Handle, uint64 mem.Offset)
-                |> check "could not bind empty buffer memory"
+                let reqs = 
+                    temporary (fun ptr ->
+                        VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, ptr)
+                        NativePtr.read ptr
+                    )
+
+                let mem = device.Alloc(reqs, true)
+                VkRaw.vkBindBufferMemory(device.Handle, handle, mem.Memory.Handle, uint64 mem.Offset)
+                    |> check "could not bind empty buffer memory"
 
 
-            device.OnDispose.Add (fun () ->
-                VkRaw.vkDestroyBuffer(device.Handle, handle, NativePtr.zero)
-                mem.Dispose()
-                emptyBuffers.TryRemove(key) |> ignore
-            )   
+                device.OnDispose.Add (fun () ->
+                    VkRaw.vkDestroyBuffer(device.Handle, handle, NativePtr.zero)
+                    mem.Dispose()
+                    emptyBuffers.TryRemove(key) |> ignore
+                )   
 
-            let buffer = new Buffer(device, handle, mem, 256L, usage)
-            buffer.AddReference()
-            buffer
-        )
+                new Buffer(device, handle, mem, 256L, usage)
+            )
+
+        buffer.AddReference()
+        buffer
 
     let createConcurrent (conc : bool) (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
         let device = memory.Device
