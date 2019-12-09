@@ -1216,7 +1216,10 @@ module FSharpWriter =
                 printfn "    let Number = %d" e.number
                 printfn "    "
 
-            let required = requires mapping e.name |> Set.ofList
+            let required =
+                requires mapping e.name
+                |> List.append e.requires
+                |> Set.ofList
 
             if not (Set.isEmpty required) then
                 if e.number >= 0 then

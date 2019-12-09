@@ -1,7 +1,6 @@
 namespace Aardvark.Rendering.Vulkan
 
 #nowarn "1337"
-#nowarn "49"
 
 open System
 open System.Runtime.InteropServices
@@ -9202,6 +9201,8 @@ module KHRGetSurfaceCapabilities2 =
     let Name = "VK_KHR_get_surface_capabilities2"
     let Number = 120
     
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
     open EXTDebugReport
     
     
@@ -9305,6 +9306,8 @@ module KHRSwapchain =
     let Name = "VK_KHR_swapchain"
     let Number = 2
     
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
     open EXTDebugReport
     
     
@@ -9357,6 +9360,10 @@ module AMDDisplayNativeHdr =
     let Name = "VK_AMD_display_native_hdr"
     let Number = 214
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name; KHRGetSurfaceCapabilities2.Name; KHRSwapchain.Name ]
+    open KHRGetPhysicalDeviceProperties2
+    open KHRGetSurfaceCapabilities2
+    open KHRSwapchain
     open EXTDebugReport
     
     
@@ -9677,6 +9684,8 @@ module AMDShaderCoreProperties =
     let Name = "VK_AMD_shader_core_properties"
     let Number = 186
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -9765,6 +9774,8 @@ module AMDShaderCoreProperties2 =
     let Name = "VK_AMD_shader_core_properties2"
     let Number = 228
     
+    let Required = [ AMDShaderCoreProperties.Name ]
+    open AMDShaderCoreProperties
     open EXTDebugReport
     
     
@@ -9944,6 +9955,8 @@ module AMDTextureGatherBiasLod =
     let Name = "VK_AMD_texture_gather_bias_lod"
     let Number = 42
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -10017,6 +10030,11 @@ module KHRSamplerYcbcrConversion =
     let Name = "VK_KHR_sampler_ycbcr_conversion"
     let Number = 157
     
+    let Required = [ KHRBindMemory2.Name; KHRGetMemoryRequirements2.Name; KHRGetPhysicalDeviceProperties2.Name; KHRMaintenance1.Name ]
+    open KHRBindMemory2
+    open KHRGetMemoryRequirements2
+    open KHRGetPhysicalDeviceProperties2
+    open KHRMaintenance1
     open EXTDebugReport
     
     
@@ -10040,6 +10058,8 @@ module KHRExternalMemoryCapabilities =
     let Name = "VK_KHR_external_memory_capabilities"
     let Number = 72
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -10056,6 +10076,8 @@ module KHRExternalMemory =
     let Name = "VK_KHR_external_memory"
     let Number = 73
     
+    let Required = [ KHRExternalMemoryCapabilities.Name ]
+    open KHRExternalMemoryCapabilities
     open EXTDebugReport
     
     
@@ -10069,6 +10091,8 @@ module EXTQueueFamilyForeign =
     let Name = "VK_EXT_queue_family_foreign"
     let Number = 127
     
+    let Required = [ KHRExternalMemory.Name ]
+    open KHRExternalMemory
     open EXTDebugReport
     
     
@@ -10079,6 +10103,10 @@ module ANDROIDExternalMemoryAndroidHardwareBuffer =
     let Name = "VK_ANDROID_external_memory_android_hardware_buffer"
     let Number = 130
     
+    let Required = [ EXTQueueFamilyForeign.Name; KHRExternalMemory.Name; KHRSamplerYcbcrConversion.Name ]
+    open EXTQueueFamilyForeign
+    open KHRExternalMemory
+    open KHRSamplerYcbcrConversion
     open EXTDebugReport
     
     
@@ -10445,6 +10473,8 @@ module KHRDisplay =
     let Name = "VK_KHR_display"
     let Number = 3
     
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
     open EXTDebugReport
     
     [<Flags>]
@@ -10739,6 +10769,8 @@ module EXTDirectModeDisplay =
     let Name = "VK_EXT_direct_mode_display"
     let Number = 89
     
+    let Required = [ KHRDisplay.Name ]
+    open KHRDisplay
     open EXTDebugReport
     
     
@@ -10761,6 +10793,8 @@ module EXTAcquireXlibDisplay =
     let Name = "VK_EXT_acquire_xlib_display"
     let Number = 90
     
+    let Required = [ EXTDirectModeDisplay.Name ]
+    open EXTDirectModeDisplay
     open EXTDebugReport
     
     
@@ -10788,6 +10822,8 @@ module EXTAstcDecodeMode =
     let Name = "VK_EXT_astc_decode_mode"
     let Number = 68
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -11017,6 +11053,8 @@ module EXTBufferDeviceAddress =
     let Name = "VK_EXT_buffer_device_address"
     let Number = 245
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -11315,6 +11353,8 @@ module EXTConservativeRasterization =
     let Name = "VK_EXT_conservative_rasterization"
     let Number = 102
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     type VkConservativeRasterizationModeEXT = 
@@ -11421,6 +11461,8 @@ module EXTDebugMarker =
     let Name = "VK_EXT_debug_marker"
     let Number = 23
     
+    let Required = [ EXTDebugReport.Name ]
+    open EXTDebugReport
     open EXTDebugReport
     
     
@@ -11922,6 +11964,8 @@ module KHRMaintenance3 =
     let Name = "VK_KHR_maintenance3"
     let Number = 169
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -11934,6 +11978,9 @@ module EXTDescriptorIndexing =
     let Name = "VK_EXT_descriptor_indexing"
     let Number = 162
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name; KHRMaintenance3.Name ]
+    open KHRGetPhysicalDeviceProperties2
+    open KHRMaintenance3
     open EXTDebugReport
     
     
@@ -12248,6 +12295,8 @@ module EXTDiscardRectangles =
     let Name = "VK_EXT_discard_rectangles"
     let Number = 100
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     type VkDiscardRectangleModeEXT = 
@@ -12339,6 +12388,8 @@ module EXTDisplaySurfaceCounter =
     let Name = "VK_EXT_display_surface_counter"
     let Number = 91
     
+    let Required = [ KHRDisplay.Name ]
+    open KHRDisplay
     open EXTDebugReport
     
     [<Flags>]
@@ -12432,6 +12483,9 @@ module EXTDisplayControl =
     let Name = "VK_EXT_display_control"
     let Number = 92
     
+    let Required = [ EXTDisplaySurfaceCounter.Name; KHRSwapchain.Name ]
+    open EXTDisplaySurfaceCounter
+    open KHRSwapchain
     open EXTDebugReport
     
     type VkDisplayPowerStateEXT = 
@@ -12581,6 +12635,8 @@ module KHRExternalMemoryFd =
     let Name = "VK_KHR_external_memory_fd"
     let Number = 75
     
+    let Required = [ KHRExternalMemory.Name ]
+    open KHRExternalMemory
     open EXTDebugReport
     
     
@@ -12692,6 +12748,8 @@ module EXTExternalMemoryDmaBuf =
     let Name = "VK_EXT_external_memory_dma_buf"
     let Number = 126
     
+    let Required = [ KHRExternalMemoryFd.Name ]
+    open KHRExternalMemoryFd
     open EXTDebugReport
     
     
@@ -12704,6 +12762,8 @@ module EXTExternalMemoryHost =
     let Name = "VK_EXT_external_memory_host"
     let Number = 179
     
+    let Required = [ KHRExternalMemory.Name ]
+    open KHRExternalMemory
     open EXTDebugReport
     
     
@@ -12823,6 +12883,8 @@ module EXTFilterCubic =
     let Name = "VK_EXT_filter_cubic"
     let Number = 171
     
+    let Required = [ IMGFilterCubic.Name ]
+    open IMGFilterCubic
     open EXTDebugReport
     
     
@@ -12888,6 +12950,8 @@ module EXTFragmentDensityMap =
     let Name = "VK_EXT_fragment_density_map"
     let Number = 219
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -13007,6 +13071,8 @@ module EXTFragmentShaderInterlock =
     let Name = "VK_EXT_fragment_shader_interlock"
     let Number = 252
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -13051,9 +13117,13 @@ module EXTFullScreenExclusive =
     let Name = "VK_EXT_full_screen_exclusive"
     let Number = 256
     
-    open EXTDebugReport
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name; KHRGetSurfaceCapabilities2.Name; KHRSurface.Name; KHRSwapchain.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open KHRGetSurfaceCapabilities2
-
+    open KHRSurface
+    open KHRSwapchain
+    open EXTDebugReport
+    
     type VkFullScreenExclusiveEXT = 
         | VkFullScreenExclusiveDefaultExt = 0
         | VkFullScreenExclusiveAllowedExt = 1
@@ -13239,6 +13309,8 @@ module EXTHdrMetadata =
     let Name = "VK_EXT_hdr_metadata"
     let Number = 106
     
+    let Required = [ KHRSwapchain.Name ]
+    open KHRSwapchain
     open EXTDebugReport
     
     
@@ -13335,6 +13407,8 @@ module EXTHeadlessSurface =
     let Name = "VK_EXT_headless_surface"
     let Number = 257
     
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
     open EXTDebugReport
     
     
@@ -13383,6 +13457,8 @@ module EXTHostQueryReset =
     let Name = "VK_EXT_host_query_reset"
     let Number = 262
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -13471,6 +13547,11 @@ module EXTImageDrmFormatModifier =
     let Name = "VK_EXT_image_drm_format_modifier"
     let Number = 159
     
+    let Required = [ KHRBindMemory2.Name; KHRGetPhysicalDeviceProperties2.Name; KHRImageFormatList.Name; KHRSamplerYcbcrConversion.Name ]
+    open KHRBindMemory2
+    open KHRGetPhysicalDeviceProperties2
+    open KHRImageFormatList
+    open KHRSamplerYcbcrConversion
     open EXTDebugReport
     
     
@@ -13719,6 +13800,9 @@ module EXTInlineUniformBlock =
     let Name = "VK_EXT_inline_uniform_block"
     let Number = 139
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name; KHRMaintenance1.Name ]
+    open KHRGetPhysicalDeviceProperties2
+    open KHRMaintenance1
     open EXTDebugReport
     
     
@@ -13856,6 +13940,8 @@ module EXTLineRasterization =
     let Name = "VK_EXT_line_rasterization"
     let Number = 260
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     type VkLineRasterizationModeEXT = 
@@ -13994,6 +14080,8 @@ module EXTMemoryBudget =
     let Name = "VK_EXT_memory_budget"
     let Number = 238
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -14034,6 +14122,8 @@ module EXTMemoryPriority =
     let Name = "VK_EXT_memory_priority"
     let Number = 239
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -14095,6 +14185,8 @@ module EXTMetalSurface =
     let Name = "VK_EXT_metal_surface"
     let Number = 218
     
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
     open EXTDebugReport
     
     
@@ -14147,6 +14239,8 @@ module EXTPciBusInfo =
     let Name = "VK_EXT_pci_bus_info"
     let Number = 213
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -14276,6 +14370,8 @@ module EXTSampleLocations =
     let Name = "VK_EXT_sample_locations"
     let Number = 144
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -14537,6 +14633,8 @@ module EXTSamplerFilterMinmax =
     let Name = "VK_EXT_sampler_filter_minmax"
     let Number = 131
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     type VkSamplerReductionModeEXT = 
@@ -14609,6 +14707,8 @@ module EXTScalarBlockLayout =
     let Name = "VK_EXT_scalar_block_layout"
     let Number = 222
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -14681,6 +14781,8 @@ module EXTShaderDemoteToHelperInvocation =
     let Name = "VK_EXT_shader_demote_to_helper_invocation"
     let Number = 277
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -14862,6 +14964,8 @@ module EXTSwapchainColorspace =
     let Name = "VK_EXT_swapchain_colorspace"
     let Number = 105
     
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
     open EXTDebugReport
     
     
@@ -14887,6 +14991,8 @@ module EXTTexelBufferAlignment =
     let Name = "VK_EXT_texel_buffer_alignment"
     let Number = 282
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -14960,6 +15066,8 @@ module EXTTextureCompressionAstcHdr =
     let Name = "VK_EXT_texture_compression_astc_hdr"
     let Number = 67
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -15011,6 +15119,8 @@ module EXTTransformFeedback =
     let Name = "VK_EXT_transform_feedback"
     let Number = 29
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -15378,6 +15488,8 @@ module EXTVertexAttributeDivisor =
     let Name = "VK_EXT_vertex_attribute_divisor"
     let Number = 191
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -15492,6 +15604,8 @@ module EXTYcbcrImageArrays =
     let Name = "VK_EXT_ycbcr_image_arrays"
     let Number = 253
     
+    let Required = [ KHRSamplerYcbcrConversion.Name ]
+    open KHRSamplerYcbcrConversion
     open EXTDebugReport
     
     
@@ -15528,6 +15642,8 @@ module FUCHSIAImagepipeSurface =
     let Name = "VK_FUCHSIA_imagepipe_surface"
     let Number = 215
     
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
     open EXTDebugReport
     
     
@@ -15580,6 +15696,8 @@ module GGPStreamDescriptorSurface =
     let Name = "VK_GGP_stream_descriptor_surface"
     let Number = 50
     
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
     open EXTDebugReport
     
     
@@ -15632,6 +15750,9 @@ module GGPFrameToken =
     let Name = "VK_GGP_frame_token"
     let Number = 192
     
+    let Required = [ GGPStreamDescriptorSurface.Name; KHRSwapchain.Name ]
+    open GGPStreamDescriptorSurface
+    open KHRSwapchain
     open EXTDebugReport
     
     
@@ -15678,6 +15799,8 @@ module GOOGLEDisplayTiming =
     let Name = "VK_GOOGLE_display_timing"
     let Number = 93
     
+    let Required = [ KHRSwapchain.Name ]
+    open KHRSwapchain
     open EXTDebugReport
     
     
@@ -16131,6 +16254,8 @@ module INTELShaderIntegerFunctions2 =
     let Name = "VK_INTEL_shader_integer_functions2"
     let Number = 210
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -16177,6 +16302,9 @@ module KHR16bitStorage =
     let Name = "VK_KHR_16bit_storage"
     let Number = 84
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name; KHRStorageBufferStorageClass.Name ]
+    open KHRGetPhysicalDeviceProperties2
+    open KHRStorageBufferStorageClass
     open EXTDebugReport
     
     
@@ -16188,6 +16316,9 @@ module KHR8bitStorage =
     let Name = "VK_KHR_8bit_storage"
     let Number = 178
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name; KHRStorageBufferStorageClass.Name ]
+    open KHRGetPhysicalDeviceProperties2
+    open KHRStorageBufferStorageClass
     open EXTDebugReport
     
     
@@ -16232,6 +16363,8 @@ module KHRAndroidSurface =
     let Name = "VK_KHR_android_surface"
     let Number = 9
     
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
     open EXTDebugReport
     
     
@@ -16284,6 +16417,8 @@ module KHRMultiview =
     let Name = "VK_KHR_multiview"
     let Number = 54
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -16312,6 +16447,9 @@ module KHRCreateRenderpass2 =
     let Name = "VK_KHR_create_renderpass2"
     let Number = 110
     
+    let Required = [ KHRMaintenance2.Name; KHRMultiview.Name ]
+    open KHRMaintenance2
+    open KHRMultiview
     open EXTDebugReport
     
     
@@ -16357,6 +16495,8 @@ module KHRDedicatedAllocation =
     let Name = "VK_KHR_dedicated_allocation"
     let Number = 128
     
+    let Required = [ KHRGetMemoryRequirements2.Name ]
+    open KHRGetMemoryRequirements2
     open EXTDebugReport
     
     
@@ -16369,6 +16509,8 @@ module KHRDepthStencilResolve =
     let Name = "VK_KHR_depth_stencil_resolve"
     let Number = 200
     
+    let Required = [ KHRCreateRenderpass2.Name ]
+    open KHRCreateRenderpass2
     open EXTDebugReport
     
     [<Flags>]
@@ -16501,6 +16643,8 @@ module KHRDeviceGroup =
     let Name = "VK_KHR_device_group"
     let Number = 61
     
+    let Required = [ KHRDeviceGroupCreation.Name ]
+    open KHRDeviceGroupCreation
     open EXTDebugReport
     
     
@@ -16767,6 +16911,9 @@ module KHRDisplaySwapchain =
     let Name = "VK_KHR_display_swapchain"
     let Number = 4
     
+    let Required = [ KHRDisplay.Name; KHRSwapchain.Name ]
+    open KHRDisplay
+    open KHRSwapchain
     open EXTDebugReport
     
     
@@ -16852,6 +16999,8 @@ module KHRDriverProperties =
     let Name = "VK_KHR_driver_properties"
     let Number = 197
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     type VkDriverIdKHR = 
@@ -16954,6 +17103,8 @@ module KHRExternalFenceCapabilities =
     let Name = "VK_KHR_external_fence_capabilities"
     let Number = 113
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -16966,6 +17117,8 @@ module KHRExternalFence =
     let Name = "VK_KHR_external_fence"
     let Number = 114
     
+    let Required = [ KHRExternalFenceCapabilities.Name ]
+    open KHRExternalFenceCapabilities
     open EXTDebugReport
     
     
@@ -16977,6 +17130,8 @@ module KHRExternalFenceFd =
     let Name = "VK_KHR_external_fence_fd"
     let Number = 116
     
+    let Required = [ KHRExternalFence.Name ]
+    open KHRExternalFence
     open EXTDebugReport
     
     
@@ -17071,6 +17226,8 @@ module KHRExternalFenceWin32 =
     let Name = "VK_KHR_external_fence_win32"
     let Number = 115
     
+    let Required = [ KHRExternalFence.Name ]
+    open KHRExternalFence
     open EXTDebugReport
     
     
@@ -17202,6 +17359,8 @@ module KHRExternalMemoryWin32 =
     let Name = "VK_KHR_external_memory_win32"
     let Number = 74
     
+    let Required = [ KHRExternalMemory.Name ]
+    open KHRExternalMemory
     open EXTDebugReport
     
     
@@ -17350,6 +17509,8 @@ module KHRExternalSemaphoreCapabilities =
     let Name = "VK_KHR_external_semaphore_capabilities"
     let Number = 77
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -17362,6 +17523,8 @@ module KHRExternalSemaphore =
     let Name = "VK_KHR_external_semaphore"
     let Number = 78
     
+    let Required = [ KHRExternalSemaphoreCapabilities.Name ]
+    open KHRExternalSemaphoreCapabilities
     open EXTDebugReport
     
     
@@ -17373,6 +17536,8 @@ module KHRExternalSemaphoreFd =
     let Name = "VK_KHR_external_semaphore_fd"
     let Number = 80
     
+    let Required = [ KHRExternalSemaphore.Name ]
+    open KHRExternalSemaphore
     open EXTDebugReport
     
     
@@ -17467,6 +17632,8 @@ module KHRExternalSemaphoreWin32 =
     let Name = "VK_KHR_external_semaphore_win32"
     let Number = 79
     
+    let Required = [ KHRExternalSemaphore.Name ]
+    open KHRExternalSemaphore
     open EXTDebugReport
     
     
@@ -17635,8 +17802,10 @@ module KHRGetDisplayProperties2 =
     let Name = "VK_KHR_get_display_properties2"
     let Number = 122
     
-    open EXTDebugReport
+    let Required = [ KHRDisplay.Name ]
     open KHRDisplay
+    open EXTDebugReport
+    
     
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDisplayModeProperties2KHR = 
@@ -17802,6 +17971,9 @@ module KHRImagelessFramebuffer =
     let Name = "VK_KHR_imageless_framebuffer"
     let Number = 109
     
+    let Required = [ KHRImageFormatList.Name; KHRMaintenance2.Name ]
+    open KHRImageFormatList
+    open KHRMaintenance2
     open EXTDebugReport
     
     
@@ -17899,6 +18071,8 @@ module KHRIncrementalPresent =
     let Name = "VK_KHR_incremental_present"
     let Number = 85
     
+    let Required = [ KHRSwapchain.Name ]
+    open KHRSwapchain
     open EXTDebugReport
     
     
@@ -17983,6 +18157,8 @@ module KHRMirSurface =
     let Name = "VK_KHR_mir_surface"
     let Number = 8
     
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
     open EXTDebugReport
     
     
@@ -18249,6 +18425,8 @@ module KHRPushDescriptor =
     let Name = "VK_KHR_push_descriptor"
     let Number = 81
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -18319,6 +18497,8 @@ module KHRShaderAtomicInt64 =
     let Name = "VK_KHR_shader_atomic_int64"
     let Number = 181
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -18369,6 +18549,8 @@ module KHRShaderFloat16Int8 =
     let Name = "VK_KHR_shader_float16_int8"
     let Number = 83
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -18410,6 +18592,8 @@ module KHRShaderFloatControls =
     let Name = "VK_KHR_shader_float_controls"
     let Number = 198
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     type VkShaderFloatControlsIndependenceKHR = 
@@ -18551,6 +18735,10 @@ module KHRSharedPresentableImage =
     let Name = "VK_KHR_shared_presentable_image"
     let Number = 112
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name; KHRGetSurfaceCapabilities2.Name; KHRSwapchain.Name ]
+    open KHRGetPhysicalDeviceProperties2
+    open KHRGetSurfaceCapabilities2
+    open KHRSwapchain
     open EXTDebugReport
     
     
@@ -18604,6 +18792,8 @@ module KHRSurfaceProtectedCapabilities =
     let Name = "VK_KHR_surface_protected_capabilities"
     let Number = 240
     
+    let Required = [ KHRGetSurfaceCapabilities2.Name ]
+    open KHRGetSurfaceCapabilities2
     open EXTDebugReport
     
     
@@ -18640,6 +18830,10 @@ module KHRSwapchainMutableFormat =
     let Name = "VK_KHR_swapchain_mutable_format"
     let Number = 201
     
+    let Required = [ KHRImageFormatList.Name; KHRMaintenance2.Name; KHRSwapchain.Name ]
+    open KHRImageFormatList
+    open KHRMaintenance2
+    open KHRSwapchain
     open EXTDebugReport
     
     
@@ -18652,6 +18846,8 @@ module KHRUniformBufferStandardLayout =
     let Name = "VK_KHR_uniform_buffer_standard_layout"
     let Number = 254
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -18688,6 +18884,9 @@ module KHRVariablePointers =
     let Name = "VK_KHR_variable_pointers"
     let Number = 121
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name; KHRStorageBufferStorageClass.Name ]
+    open KHRGetPhysicalDeviceProperties2
+    open KHRStorageBufferStorageClass
     open EXTDebugReport
     
     
@@ -18744,6 +18943,8 @@ module KHRWaylandSurface =
     let Name = "VK_KHR_wayland_surface"
     let Number = 7
     
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
     open EXTDebugReport
     
     
@@ -18805,6 +19006,8 @@ module KHRWin32KeyedMutex =
     let Name = "VK_KHR_win32_keyed_mutex"
     let Number = 76
     
+    let Required = [ KHRExternalMemoryWin32.Name ]
+    open KHRExternalMemoryWin32
     open EXTDebugReport
     
     
@@ -18865,6 +19068,8 @@ module KHRWin32Surface =
     let Name = "VK_KHR_win32_surface"
     let Number = 10
     
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
     open EXTDebugReport
     
     
@@ -18926,6 +19131,8 @@ module KHRXcbSurface =
     let Name = "VK_KHR_xcb_surface"
     let Number = 6
     
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
     open EXTDebugReport
     
     
@@ -18987,6 +19194,8 @@ module KHRXlibSurface =
     let Name = "VK_KHR_xlib_surface"
     let Number = 5
     
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
     open EXTDebugReport
     
     
@@ -19048,6 +19257,8 @@ module MVKIosSurface =
     let Name = "VK_MVK_ios_surface"
     let Number = 123
     
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
     open EXTDebugReport
     
     
@@ -19100,6 +19311,8 @@ module MVKMacosSurface =
     let Name = "VK_MVK_macos_surface"
     let Number = 124
     
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
     open EXTDebugReport
     
     
@@ -19162,6 +19375,8 @@ module NNViSurface =
     let Name = "VK_NN_vi_surface"
     let Number = 63
     
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
     open EXTDebugReport
     
     
@@ -19292,6 +19507,8 @@ module NVComputeShaderDerivatives =
     let Name = "VK_NV_compute_shader_derivatives"
     let Number = 202
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -19332,6 +19549,8 @@ module NVCooperativeMatrix =
     let Name = "VK_NV_cooperative_matrix"
     let Number = 250
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     type VkScopeNV = 
@@ -19481,6 +19700,8 @@ module NVCornerSampledImage =
     let Name = "VK_NV_corner_sampled_image"
     let Number = 51
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -19577,6 +19798,8 @@ module NVCoverageReductionMode =
     let Name = "VK_NV_coverage_reduction_mode"
     let Number = 251
     
+    let Required = [ NVFramebufferMixedSamples.Name ]
+    open NVFramebufferMixedSamples
     open EXTDebugReport
     
     type VkCoverageReductionModeNV = 
@@ -19785,6 +20008,8 @@ module NVDedicatedAllocationImageAliasing =
     let Name = "VK_NV_dedicated_allocation_image_aliasing"
     let Number = 241
     
+    let Required = [ KHRDedicatedAllocation.Name ]
+    open KHRDedicatedAllocation
     open EXTDebugReport
     
     
@@ -19821,6 +20046,8 @@ module NVDeviceDiagnosticCheckpoints =
     let Name = "VK_NV_device_diagnostic_checkpoints"
     let Number = 207
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -19982,6 +20209,8 @@ module NVExternalMemory =
     let Name = "VK_NV_external_memory"
     let Number = 57
     
+    let Required = [ NVExternalMemoryCapabilities.Name ]
+    open NVExternalMemoryCapabilities
     open EXTDebugReport
     
     
@@ -20043,6 +20272,8 @@ module NVExternalMemoryWin32 =
     let Name = "VK_NV_external_memory_win32"
     let Number = 58
     
+    let Required = [ NVExternalMemory.Name ]
+    open NVExternalMemory
     open EXTDebugReport
     
     
@@ -20180,6 +20411,8 @@ module NVFragmentShaderBarycentric =
     let Name = "VK_NV_fragment_shader_barycentric"
     let Number = 204
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -20238,6 +20471,8 @@ module NVMeshShader =
     let Name = "VK_NV_mesh_shader"
     let Number = 203
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -20399,8 +20634,10 @@ module NVRayTracing =
     let Name = "VK_NV_ray_tracing"
     let Number = 166
     
-    open EXTDebugReport
+    let Required = [ KHRGetMemoryRequirements2.Name; KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetMemoryRequirements2
+    open KHRGetPhysicalDeviceProperties2
+    open EXTDebugReport
     
     type VkAccelerationStructureTypeNV = 
         | VkAccelerationStructureTypeTopLevelNv = 0
@@ -21098,6 +21335,8 @@ module NVScissorExclusive =
     let Name = "VK_NV_scissor_exclusive"
     let Number = 206
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -21177,6 +21416,8 @@ module NVShaderImageFootprint =
     let Name = "VK_NV_shader_image_footprint"
     let Number = 205
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     
@@ -21290,6 +21531,8 @@ module NVShadingRateImage =
     let Name = "VK_NV_shading_rate_image"
     let Number = 165
     
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open EXTDebugReport
     
     type VkShadingRatePaletteEntryNV = 
@@ -21646,6 +21889,8 @@ module NVWin32KeyedMutex =
     let Name = "VK_NV_win32_keyed_mutex"
     let Number = 59
     
+    let Required = [ NVExternalMemoryWin32.Name ]
+    open NVExternalMemoryWin32
     open EXTDebugReport
     
     
@@ -22322,6 +22567,8 @@ module NVXMultiviewPerViewAttributes =
     let Name = "VK_NVX_multiview_per_view_attributes"
     let Number = 98
     
+    let Required = [ KHRMultiview.Name ]
+    open KHRMultiview
     open EXTDebugReport
     
     
