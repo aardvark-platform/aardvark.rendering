@@ -349,9 +349,10 @@ module TextureFormat =
 
             PixFormat(typeof<float32>, Col.Format.None), (fun _ -> TextureFormat.DepthComponent32)
             
-            PixFormat(typeof<float32>, Col.Format.RGBA), (fun _ -> TextureFormat.Rgba32f)   
-            PixFormat(typeof<float32>, Col.Format.RGB), (fun _ -> TextureFormat.Rgb32f)
             PixFormat(typeof<float32>, Col.Format.Gray), (fun _ -> TextureFormat.R32f)
+            PixFormat(typeof<float32>, Col.Format.NormalUV), (fun _ -> TextureFormat.Rg32f)
+            PixFormat(typeof<float32>, Col.Format.RGB), (fun _ -> TextureFormat.Rgb32f)
+            PixFormat(typeof<float32>, Col.Format.RGBA), (fun _ -> TextureFormat.Rgba32f)   
 
             PixFormat(typeof<int32>, Col.Format.Gray), (fun _ -> TextureFormat.R32i)
             PixFormat(typeof<int32>, Col.Format.NormalUV), (fun _ -> TextureFormat.Rg32i)
