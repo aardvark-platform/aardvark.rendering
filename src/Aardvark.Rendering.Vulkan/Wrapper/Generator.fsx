@@ -67,49 +67,64 @@ module XmlStuff =
                 1000000000 + (e - 1) * 1000 + offset
 
 
-    let rec (|Enum|BitMask|Ext|Failure|) (e : XElement) = 
-        match attrib e "value", attrib e "bitpos" with
-              | Some v, _ ->
-                    let v =  toInt32 v 10
-//                            if v.Contains "x" then System.Convert.ToInt32(v, 16)
-//                            elif v.EndsWith "f" then System.Convert.ToSingle(v.Substring(0, v.Length-1)) |> int
-//                            elif v.[0] = '(' && v.[v.Length-1] = ')' then
-//                                let v = v.Substring(1, v.Length-2)
-//                                if v.StartsWith "~" then 
-//                                    ~~~System.Convert.ToInt32(v.Substring(1), 16)
-//                                else
-//                                    System.Convert.ToInt32(v.Substring(1), 16)
-//                                    
-//                            else System.Convert.ToInt32(v, 10)
-                    Enum v
-              | _, Some bp -> 
-                    BitMask (System.Int32.Parse bp)
-              | _ -> 
+    let (|Enum|BitMask|Ext|Failure|) (e : XElement) =
+        let rec f e =
+            match attrib e "value", attrib e "bitpos" with
+            | Some v, _ ->
+                Enum (toInt32 v 10)
+
+            | _, Some bp -> 
+                BitMask (System.Int32.Parse bp)
+
+            | _ -> 
                 match attrib e "extnumber", attrib e "offset" with
-                    | Some en, Some on ->
-                        let en = toInt32 en 10
-                        let on = toInt32 on 10
-                        Ext (extensionEnumValue (attrib e "dir") en on)
+                | Some en, Some on ->
+                    let en = toInt32 en 10
+                    let on = toInt32 on 10
+                    Ext (extensionEnumValue (attrib e "dir") en on)
 
-                    | _ ->
-                        match attrib e "alias" with
-                            | Some a ->
-                                let ref = xname "enum" |> e.Parent.Elements 
-                                                       |> Seq.filter (fun e -> "name" |> attrib e |> Option.contains a)
-                                                       |> Seq.head
+                | _ ->
+                    match attrib e "alias" with
+                    | Some a ->
+                        let ref =
+                            xname "enum"
+                            |> e.Parent.Elements 
+                            |> Seq.filter (fun e -> "name" |> attrib e |> Option.contains a)
+                            |> Seq.head
+
+                        // Find the reference element and set its relevant values to the current alias element, delete
+                        // the alias attribute and simply repeat the match
+                        let attributes = ["value"; "bitpos"; "extnumber"; "offset"]
+
+                        attributes
+                        |> List.map (fun name -> name, attrib ref name)
+                        |> List.iter (fun (name, value) ->
+                            value |> Option.iter (fun v -> e.SetAttributeValue(xname name, v))
+                        )
+
+                        e.SetAttributeValue(xname "alias", null)
+                        f e
+
+                        (*let value, bitpos, extnumber, offset =
+                            attrib ref "value", attrib ref "bitpos",
+                            attrib ref "extnumber", attrib ref "offset"
+
+                        value |> Option.iter (fun v -> e.SetAttributeValue(xname "value", v))
                     
-                                match attrib ref "value", attrib ref "extnumber", attrib ref "offset" with
-                                    | Some v, _, _ ->
-                                        e.SetAttributeValue(xname "value", v)
-                                    | _, Some en, Some on -> 
-                                        e.SetAttributeValue(xname "extnumber", en)
-                                        e.SetAttributeValue(xname "offset", on)
-                                    | _ -> ()
+                        match attrib ref "value", attrib ref "extnumber", attrib ref "offset" with
+                        | Some v, _, _ ->
+                            e.SetAttributeValue(xname "value", v)
+                        | _, Some en, Some on -> 
+                            e.SetAttributeValue(xname "extnumber", en)
+                            e.SetAttributeValue(xname "offset", on)
+                        | _ -> ()
 
-                                e.SetAttributeValue(xname "alias", null)
-                                (|Enum|BitMask|Ext|Failure|) e
+                        e.SetAttributeValue(xname "alias", null)*)
+                        //f e
 
-                            | _ -> Failure
+                    | _ -> Failure
+
+        f e
 
 
 type Type =
@@ -335,6 +350,18 @@ module Extension =
         dummyRx.IsMatch e.name && Map.isEmpty e.enumExtensions && List.isEmpty e.enums && List.isEmpty e.structs && List.isEmpty e.commands
 
 module XmlReader =
+    let vendorTags (d : XElement) =
+        d.Descendants(xname "tags")
+            |> Seq.collect (fun e ->
+                e.Descendants(xname "tag")
+                |> Seq.choose (fun c ->
+                    match attrib c "name" with
+                    | Some name -> Some name
+                    | _ -> None
+                )
+            )
+            |> List.ofSeq
+
     let defines (d : XElement) =
         d.Descendants(xname "enums") 
             |> Seq.filter (fun e -> attrib e "name" = Some "API Constants") 
@@ -637,17 +664,22 @@ module FSharpWriter =
         if str.StartsWith p then str.Substring(p.Length)
         else str
 
+    let private removeSuffix (s : string) (str : string) =
+        if str.EndsWith s then str.Substring(0, str.Length - s.Length)
+        else str
+
     let private avoidStartWithNumer (str : string) =
         if startsWithNumber.IsMatch str then "D" + str
         else str
 
-    let capsToCamelCase (prefix : string) (str : string) =
+    let capsToCamelCase (prefix : string) (suffix : string) (str : string) =
         let matchCollection = uppercase.Matches str
         let matches = seq { for m in matchCollection do yield m.Value }
         matches
             |> Seq.map (fun m -> m.Substring(0, 1) + m.Substring(1).ToLower())
             |> String.concat ""
             |> removePrefix prefix
+            |> removeSuffix suffix
             |> avoidStartWithNumer
 
     let addNoneCase (cases : list<string * EnumValue>) =
@@ -680,6 +712,7 @@ module FSharpWriter =
         printfn "namespace Aardvark.Rendering.Vulkan"
         printfn ""
         printfn "#nowarn \"1337\""
+        printfn "#nowarn \"49\""
         printfn ""
         printfn "open System"
         printfn "open System.Runtime.InteropServices"
@@ -769,6 +802,7 @@ module FSharpWriter =
         printfn "type VkExternalMemoryFeatureFlagsKHR = | MinValue = 0"
         printfn "type VkExternalFenceFeatureFlagsKHR = | MinValue = 0"
         printfn "type VkExternalSemaphoreFeatureFlagsKHR = | MinValue = 0"
+        printfn "type VkAcquireProfilingLockFlagsKHR = | MinValue = 0"
         printfn "type VkIOSSurfaceCreateFlagsMVK = | MinValue = 0"
         printfn "type VkFenceImportFlagsKHR = | MinValue = 0"
         printfn "type VkSemaphoreImportFlagsKHR = | MinValue = 0"
@@ -840,21 +874,36 @@ module FSharpWriter =
             if name.EndsWith "Flags" then name.Substring(0,name.Length-5)
             else name
 
-        let exts = exts |> List.map (fun (n,v) -> (capsToCamelCase prefix n, v))
+        let exts = exts |> List.map (fun (n,v) -> (capsToCamelCase prefix "" n, v))
 
         printfn "type %s with" name
         for (n,v) in exts do
             printfn "     static member inline %s = unbox<%s> %d" n name v
 
-    let enums (indent : string) (enums : list<Enum>) =
+    let enums (indent : string) (vendorTags : list<string>) (enums : list<Enum>) =
         for e in enums do
             let name = cleanEnumName e.name
 
-            let prefix =
-                if name.EndsWith "Flags" then name.Substring(0,name.Length-5)
-                else name
+            let prefixAndTag =
+                vendorTags
+                |> List.collect (fun tag ->
+                    let t = capsToCamelCase "" "" tag
+                    [
+                        tag, t
+                        "Flags" + tag, t
+                    ]
+                )
+                |> List.append ["Flags", ""]
+                |> List.sortByDescending (fun (p, _) -> p.Length)
+                |> List.tryFind (fun (suffix, _) -> name.EndsWith suffix)
+                |> Option.map (fun (suffix, tag) -> name.Substring(0, name.Length - suffix.Length), tag)
 
-            let alternatives = e.alternatives |> List.map (fun (n,v) -> (capsToCamelCase prefix n, v))
+            let prefix, suffix =
+                match prefixAndTag with
+                | Some (prefix, tag) -> prefix, tag
+                | _ -> name, ""
+
+            let alternatives = e.alternatives |> List.map (fun (n,v) -> (capsToCamelCase prefix suffix n, v))
 
             let isFlag = isFlags alternatives
             let alternatives = 
@@ -1198,7 +1247,7 @@ module FSharpWriter =
             | None ->
                 []
 
-    let rec extension (mapping : Map<string, list<string>>) (indent : string) (e : Extension) =
+    let rec extension (mapping : Map<string, list<string>>) (indent : string) (vendorTags : list<string>) (e : Extension) =
         
         if not (List.isEmpty e.commands) || not (List.isEmpty e.structs) || not (List.isEmpty e.enums) || not (Map.isEmpty e.enumExtensions) || not (List.isEmpty e.subExtensions) || e.number >= 0 then
 
@@ -1233,7 +1282,7 @@ module FSharpWriter =
                 printfn "    open EXTDebugReport"
                 printfn "    "
 
-            enums subindent e.enums
+            enums subindent vendorTags e.enums
             printfn "    "
 
             structs subindent (Struct.topologicalSort e.structs)
@@ -1277,7 +1326,7 @@ module FSharpWriter =
                         printfn "        let %s(%s) = Loader<unit>.%s.Invoke(%s)" c.name argDef c.name argUse
 
             for s in e.subExtensions do
-                extension mapping (indent + "    ") s
+                extension mapping (indent + "    ") vendorTags s
 
     let topoExtensions (s : list<Extension>) : list<Extension> =
         let typeMap = s |> List.map (fun s -> s.name, s) |> Map.ofList
@@ -1302,7 +1351,7 @@ module FSharpWriter =
         
 
 
-    let extensions (extensions : list<Extension>) =
+    let extensions (vendorTags : list<string>) (extensions : list<Extension>) =
 
         let extensions = extensions |> List.filter (not << Extension.isEmpty)
 
@@ -1337,7 +1386,7 @@ module FSharpWriter =
 
 
         for e in topoExtensions extensions do
-            extension mapping "" e
+            extension mapping "" vendorTags e
 
 //
 //                    let args = c.parameters |> List.map (fun (t,n) -> sprintf "%s %s" (externTypeName t) (fsharpName n)) |> String.concat ", "
@@ -1358,6 +1407,7 @@ let run () =
 //    let s = response.GetResponseStream()
     let path = Path.Combine(__SOURCE_DIRECTORY__, "vk.xml")
     let vk = XElement.Load(path)
+    let vendorTags = XmlReader.vendorTags vk
     let defines = XmlReader.defines vk
     let aliases = XmlReader.aliases defines vk
     let handles = XmlReader.handles vk
@@ -1375,10 +1425,10 @@ let run () =
     FSharpWriter.missing()
     FSharpWriter.handles handles
     FSharpWriter.aliases aliases
-    FSharpWriter.enums "" enums
+    FSharpWriter.enums "" vendorTags enums
     FSharpWriter.globalStructs (Struct.topologicalSort structs)
     FSharpWriter.commands commands
-    FSharpWriter.extensions exts
+    FSharpWriter.extensions vendorTags exts
 
     
 

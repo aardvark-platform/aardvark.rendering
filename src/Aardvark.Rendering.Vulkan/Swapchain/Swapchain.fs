@@ -108,7 +108,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                         0u, NativePtr.zero,
 
                         presentTrafo,
-                        VkCompositeAlphaFlagsKHR.VkCompositeAlphaOpaqueBitKhr,
+                        VkCompositeAlphaFlagsKHR.OpaqueBit,
                         description.presentMode,
                         1u,
                         old
