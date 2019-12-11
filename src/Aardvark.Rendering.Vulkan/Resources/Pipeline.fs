@@ -87,7 +87,6 @@ module Pipeline =
 
             let! pVertexInputState =
                 VkPipelineVertexInputStateCreateInfo(
-                    VkStructureType.PipelineVertexInputStateCreateInfo, 0n, 
                     VkPipelineVertexInputStateCreateFlags.MinValue,
 
                     uint32 inputBindings.Length,
@@ -99,7 +98,6 @@ module Pipeline =
 
             let! pInputAssemblyState =
                 VkPipelineInputAssemblyStateCreateInfo(
-                    VkStructureType.PipelineInputAssemblyStateCreateInfo, 0n, 
                     VkPipelineInputAssemblyStateCreateFlags.MinValue,
 
                     desc.inputAssembly.topology,
@@ -109,7 +107,6 @@ module Pipeline =
             let! pRasterizerState =
                 let rs = desc.rasterizerState
                 VkPipelineRasterizationStateCreateInfo(
-                    VkStructureType.PipelineRasterizationStateCreateInfo, 0n,
                     VkPipelineRasterizationStateCreateFlags.MinValue,
                 
                     vkbool rs.depthClampEnable,
@@ -138,7 +135,6 @@ module Pipeline =
             let! pColorBlendState =
                 let cb = desc.colorBlendState
                 VkPipelineColorBlendStateCreateInfo(
-                    VkStructureType.PipelineColorBlendStateCreateInfo, 0n,
                     VkPipelineColorBlendStateCreateFlags.MinValue,
 
                     vkbool cb.logicOpEnable,
@@ -158,7 +154,6 @@ module Pipeline =
                     else 1u
 
                 VkPipelineViewportStateCreateInfo(
-                    VkStructureType.PipelineViewportStateCreateInfo, 0n,
                     VkPipelineViewportStateCreateFlags.MinValue,
                 
                     uint32 vp,
@@ -172,7 +167,6 @@ module Pipeline =
             let! pMultisampleState =
                 let ms = desc.multisampleState
                 VkPipelineMultisampleStateCreateInfo(
-                    VkStructureType.PipelineMultisampleStateCreateInfo, 0n,
                     VkPipelineMultisampleStateCreateFlags.MinValue,
                 
                     unbox ms.samples,
@@ -188,7 +182,6 @@ module Pipeline =
                 let d = desc.depthState
                 let s = desc.stencilState
                 VkPipelineDepthStencilStateCreateInfo(
-                    VkStructureType.PipelineDepthStencilStateCreateInfo, 0n,
                     VkPipelineDepthStencilStateCreateFlags.MinValue,
                 
                     vkbool d.testEnabled,
@@ -209,7 +202,6 @@ module Pipeline =
 
             let! pDynamicStates =
                 VkPipelineDynamicStateCreateInfo(
-                    VkStructureType.PipelineDynamicStateCreateInfo, 0n,
                     VkPipelineDynamicStateCreateFlags.MinValue, 
 
                     uint32 desc.dynamicStates.Length,
@@ -218,15 +210,13 @@ module Pipeline =
 
             let! pTess =
                 VkPipelineTessellationStateCreateInfo(
-                    VkStructureType.PipelineTessellationStateCreateInfo, 0n,
                     VkPipelineTessellationStateCreateFlags.MinValue,
                     10u
                 )
 
             let! pPipelineCreateInfo =
                 VkGraphicsPipelineCreateInfo(
-                    VkStructureType.GraphicsPipelineCreateInfo,
-                    0n, VkPipelineCreateFlags.None,
+                    VkPipelineCreateFlags.None,
                     uint32 shaderCreateInfos.Length,
                     pShaderCreateInfos,
                     pVertexInputState,

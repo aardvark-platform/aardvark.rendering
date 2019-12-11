@@ -192,7 +192,6 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
     let createInfos =
         shaders |> Array.map (fun shader ->
             VkPipelineShaderStageCreateInfo(
-                VkStructureType.PipelineShaderStageCreateInfo, 0n,
                 VkPipelineShaderStageCreateFlags.MinValue,
                 VkShaderStageFlags.ofShaderStage shader.Stage,
                 shader.Module.Handle,

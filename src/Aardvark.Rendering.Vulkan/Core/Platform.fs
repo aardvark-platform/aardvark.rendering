@@ -95,7 +95,6 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
                 
                 let! pApplicationInfo =
                     VkApplicationInfo(
-                        VkStructureType.ApplicationInfo, 0n,
                         appName,
                         0u,
                         appName,
@@ -105,7 +104,6 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
                     
                 let! pInfo =
                     VkInstanceCreateInfo(
-                        VkStructureType.InstanceCreateInfo, 0n,
                         VkInstanceCreateFlags.MinValue,
                         pApplicationInfo,
                         uint32 layers.Length, pLayers,
@@ -348,13 +346,10 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
     let maxAllocationSize, maxPerSetDescriptors =
         if apiVersion >= Version(1,1,0) || hasExtension KHRMaintenance3.Name then
             let main3 = 
-                VkPhysicalDeviceMaintenance3Properties(
-                    VkStructureType.PhysicalDeviceMaintenance3Properties, 0n, 10u, 10UL
-                )
+                VkPhysicalDeviceMaintenance3Properties(10u, 10UL)
             main3 |> pin (fun pMain3 ->
                 let props = 
                     VkPhysicalDeviceProperties2(
-                        VkStructureType.PhysicalDeviceProperties2,
                         NativePtr.toNativeInt pMain3,
                         VkPhysicalDeviceProperties()
                     )
@@ -376,8 +371,6 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
         if apiVersion >= Version(1,1,0) || hasInstanceExtension "VK_KHR_get_physical_device_properties2" then
             let id =
                 KHRExternalMemoryCapabilities.VkPhysicalDeviceIDPropertiesKHR(
-                    VkStructureType.PhysicalDeviceIdProperties,
-                    0n,
                     Guid.Empty,
                     Guid.Empty,
                     byte_8 (),
@@ -387,7 +380,6 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
             id |> pin (fun pId ->
                 let khrProps = 
                     VkPhysicalDeviceProperties2KHR(
-                        VkStructureType.PhysicalDeviceProperties2,
                         NativePtr.toNativeInt pId,
                         VkPhysicalDeviceProperties()
                     )

@@ -190,7 +190,6 @@ module private DebugReportHelpers =
                 native {
                     let! pInfo =
                         VkDebugUtilsMessengerCreateInfoEXT(
-                            VkStructureType.DebugUtilsMessengerCreateInfoExt, 0n,
                             VkDebugUtilsMessengerCreateFlagsEXT.MinValue,
                             VkDebugUtilsMessageSeverityFlagsEXT.All,
 
@@ -244,14 +243,12 @@ module private DebugReportHelpers =
                 
                 let! pObjectName =
                     VkDebugUtilsObjectNameInfoEXT(
-                        VkStructureType.DebugUtilsObjectNameInfoExt, 0n,
                         VkObjectType.Instance, uint64 instance.Handle,
                         NativePtr.zero
                     )
 
                 let! pInfo = 
                     VkDebugUtilsMessengerCallbackDataEXT(
-                        VkStructureType.DebugUtilsMessengerCallbackDataExt, 0n,
                         VkDebugUtilsMessengerCallbackDataFlagsEXT.MinValue,
                         layer, 0,
                         str, 

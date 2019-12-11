@@ -32,7 +32,6 @@ module QueryPool =
         native {
             let! pInfo = 
                 VkQueryPoolCreateInfo(
-                    VkStructureType.QueryPoolCreateInfo, 0n,
                     VkQueryPoolCreateFlags.MinValue,
                     VkQueryType.Timestamp,
                     uint32 cnt,
@@ -247,7 +246,6 @@ module StopwatchPool =
             let stampCount = 2 * count
             let! pInfo = 
                 VkQueryPoolCreateInfo(
-                    VkStructureType.QueryPoolCreateInfo, 0n,
                     VkQueryPoolCreateFlags.MinValue,
                     VkQueryType.Timestamp,
                     uint32 stampCount,

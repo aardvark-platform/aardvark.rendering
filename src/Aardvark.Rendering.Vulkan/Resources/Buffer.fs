@@ -126,7 +126,6 @@ module BufferCommands =
 
                     let mutable barrier =
                         VkBufferMemoryBarrier(
-                            VkStructureType.BufferMemoryBarrier, 0n,
                             VkAccessFlags.None,
                             access,
                             uint32 buffer.Device.TransferFamily.Index,
@@ -161,7 +160,6 @@ module BufferCommands =
                     cmd.AppendCommand()
                     let barrier =
                         VkBufferMemoryBarrier(
-                            VkStructureType.BufferMemoryBarrier, 0n,
                             src,
                             dst,
                             VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
@@ -219,7 +217,6 @@ module BufferCommands =
                     cmd.AppendCommand()
                     let barrier =
                         VkBufferMemoryBarrier(
-                            VkStructureType.BufferMemoryBarrier, 0n,
                             VkAccessFlags.TransferWriteBit ||| VkAccessFlags.HostWriteBit ||| VkAccessFlags.MemoryWriteBit ||| VkAccessFlags.ShaderWriteBit,
                             VkAccessFlags.TransferReadBit ||| VkAccessFlags.ShaderReadBit ||| VkAccessFlags.IndexReadBit ||| VkAccessFlags.VertexAttributeReadBit ||| VkAccessFlags.UniformReadBit,
                             VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
@@ -302,7 +299,6 @@ module Buffer =
             emptyBuffers.GetOrAdd(key, fun (device, usage) ->
                 let info =
                     VkBufferCreateInfo(
-                        VkStructureType.BufferCreateInfo, 0n,
                         VkBufferCreateFlags.None,
                         256UL,
                         usage,
@@ -347,7 +343,6 @@ module Buffer =
         let device = memory.Device
         let info =
             VkBufferCreateInfo(
-                VkStructureType.BufferCreateInfo, 0n,
                 VkBufferCreateFlags.None,
                 uint64 size, 
                 flags,
@@ -523,7 +518,6 @@ module BufferView =
         else
             let info = 
                 VkBufferViewCreateInfo(
-                    VkStructureType.BufferViewCreateInfo, 0n,
                     VkBufferViewCreateFlags.MinValue,
                     b.Handle, 
                     fmt,

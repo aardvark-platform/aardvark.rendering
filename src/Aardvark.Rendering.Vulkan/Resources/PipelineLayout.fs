@@ -233,7 +233,6 @@ module PipelineLayout =
             let! pHandles = handles
             let! pInfo =
                 VkPipelineLayoutCreateInfo(
-                    VkStructureType.PipelineLayoutCreateInfo, 0n,
                     VkPipelineLayoutCreateFlags.MinValue,
                     uint32 handles.Length, pHandles,
                     0u, NativePtr.zero

@@ -211,7 +211,6 @@ module Surface =
                 | XLib info ->
                     let! pInfo = 
                         VkXlibSurfaceCreateInfoKHR(
-                            VkStructureType.XlibSurfaceCreateInfoKhr, 0n,
                             VkXlibSurfaceCreateFlagsKHR.MinValue,
                             info.dpy,
                             info.window
@@ -223,7 +222,6 @@ module Surface =
                 | Xcb info ->
                     let! pInfo =
                         VkXcbSurfaceCreateInfoKHR(
-                            VkStructureType.XcbSurfaceCreateInfoKhr, 0n,
                             VkXcbSurfaceCreateFlagsKHR.MinValue,
                             info.connection,
                             info.window
@@ -234,7 +232,6 @@ module Surface =
                 | Wayland info ->
                     let! pInfo =
                         VkWaylandSurfaceCreateInfoKHR(
-                            VkStructureType.WaylandSurfaceCreateInfoKhr, 0n,
                             VkWaylandSurfaceCreateFlagsKHR.MinValue,
                             info.display,
                             info.surface
@@ -257,7 +254,6 @@ module Surface =
                 | Android info ->
                     let! pInfo =
                         VkAndroidSurfaceCreateInfoKHR(
-                            VkStructureType.AndroidSurfaceCreateInfoKhr, 0n,
                             VkAndroidSurfaceCreateFlagsKHR.MinValue,
                             info.window
                         )
@@ -266,8 +262,7 @@ module Surface =
 
                 | Win32 info ->
                     let! pInfo =
-                        VkWin32SurfaceCreateInfoKHR(
-                            VkStructureType.Win32SurfaceCreateInfoKhr, 0n, 
+                        VkWin32SurfaceCreateInfoKHR( 
                             VkWin32SurfaceCreateFlagsKHR.MinValue,
                             info.hinstance,
                             info.hwnd
