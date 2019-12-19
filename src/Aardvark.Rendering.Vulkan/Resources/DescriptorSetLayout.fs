@@ -65,7 +65,6 @@ module DescriptorSetLayout =
             let! pArr = bindings |> Array.map (fun b -> b.Handle)
             let! pInfo =
                 VkDescriptorSetLayoutCreateInfo(
-                    VkStructureType.DescriptorSetLayoutCreateInfo, 0n,
                     VkDescriptorSetLayoutCreateFlags.MinValue,
                     uint32 bindings.Length,
                     pArr

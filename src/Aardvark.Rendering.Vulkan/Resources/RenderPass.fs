@@ -183,7 +183,6 @@ module RenderPass =
             let! pAttachmentDescriptions = attachmentDescriptions
             let! pInfo =
                 VkRenderPassCreateInfo(
-                    VkStructureType.RenderPassCreateInfo, 0n, 
                     VkRenderPassCreateFlags.MinValue,
                     uint32 attachmentDescriptions.Length, pAttachmentDescriptions,
                     1u, pSubpassDescription,

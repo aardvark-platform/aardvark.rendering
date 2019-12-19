@@ -41,7 +41,6 @@ module DescriptorSet =
                     let! pLayoutHandle = layout.Handle
                     let! pInfo =
                         VkDescriptorSetAllocateInfo(
-                            VkStructureType.DescriptorSetAllocateInfo, 0n, 
                             pool.Handle, 
                             1u, 
                             pLayoutHandle
@@ -105,7 +104,6 @@ module DescriptorSet =
 
                             [|
                                 VkWriteDescriptorSet(
-                                    VkStructureType.WriteDescriptorSet, 0n,
                                     set.Handle,
                                     uint32 binding,
                                     0u, 1u, VkDescriptorType.StorageBuffer,
@@ -129,7 +127,6 @@ module DescriptorSet =
 
                             [|
                                 VkWriteDescriptorSet(
-                                    VkStructureType.WriteDescriptorSet, 0n,
                                     set.Handle,
                                     uint32 binding,
                                     0u, 1u, VkDescriptorType.UniformBuffer,
@@ -156,7 +153,6 @@ module DescriptorSet =
 
                                         let write = 
                                             VkWriteDescriptorSet(
-                                                VkStructureType.WriteDescriptorSet, 0n,
                                                 set.Handle,
                                                 uint32 binding,
                                                 uint32 i, 1u, VkDescriptorType.CombinedImageSampler,
@@ -183,7 +179,6 @@ module DescriptorSet =
                             
                             let write = 
                                 VkWriteDescriptorSet(
-                                    VkStructureType.WriteDescriptorSet, 0n,
                                     set.Handle,
                                     uint32 binding,
                                     0u, 1u, VkDescriptorType.StorageImage,

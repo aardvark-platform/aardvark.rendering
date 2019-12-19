@@ -36,7 +36,6 @@ module DescriptorPool =
             let! pDescriptorCounts = descriptorCounts
             let! pInfo =
                 VkDescriptorPoolCreateInfo(
-                    VkStructureType.DescriptorPoolCreateInfo, 0n,
                     VkDescriptorPoolCreateFlags.FreeDescriptorSetBit,
                     uint32 setCount,
                     uint32 descriptorCounts.Length,

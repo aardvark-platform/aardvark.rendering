@@ -405,7 +405,6 @@ module ResizeBuffer =
             let virtualSize = 2L <<< 30
             let! pInfo =
                 VkBufferCreateInfo(
-                    VkStructureType.BufferCreateInfo, 0n,
                     VkBufferCreateFlags.SparseBindingBit ||| VkBufferCreateFlags.SparseResidencyBit,
                     uint64 virtualSize,
                     usage,

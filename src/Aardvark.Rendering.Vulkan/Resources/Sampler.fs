@@ -76,8 +76,7 @@ module Sampler =
 
             let! pInfo =
                 VkSamplerCreateInfo(
-                    VkStructureType.SamplerCreateInfo,
-                    0n, VkSamplerCreateFlags.MinValue,
+                    VkSamplerCreateFlags.MinValue,
                     VkFilter.ofTextureFilterMode desc.Filter.Mag,
                     VkFilter.ofTextureFilterMode desc.Filter.Min,
                     VkSamplerMipmapMode.ofTextureFilterMode desc.Filter.Mip,
