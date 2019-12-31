@@ -37,6 +37,20 @@ module ``Sg Picking Extensions`` =
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module Pickable =
 
+        let private transformBounds (trafo : Trafo3d) (bounds : Box3d) =
+            if bounds.IsInvalid then
+                Box3d.Invalid
+            else
+                bounds.ComputeCorners() 
+                |> Array.map (fun p -> trafo.Forward.TransformPosProj p)
+                |> Box3d
+
+        let private transformRay (trafo : Trafo3d) (ray : Ray3d) =
+            let o = trafo.Forward.TransformPosProj ray.Origin
+            let d = trafo.Forward.TransformPosProj (ray.Origin + ray.Direction) - o
+            Ray3d(o, d)
+
+
         let ofShape (shape : PickShape) =
             { trafo = Trafo3d.Identity; shape = shape }
 
@@ -44,7 +58,7 @@ module ``Sg Picking Extensions`` =
             { p with trafo = p.trafo * t }
 
         let bounds (p : Pickable) =
-            PickShape.bounds(p.shape).Transformed(p.trafo)
+            PickShape.bounds(p.shape) |> transformBounds p.trafo
 
         let private intersectTriangle (part : RayPart) (tri : Triangle3d) =
             match RayPart.Intersects(part, tri) with
@@ -52,22 +66,32 @@ module ``Sg Picking Extensions`` =
                 | None -> None
 
         let intersect (part : RayPart) (p : Pickable) =
-            let part = RayPart(part.Ray.Ray.Transformed(p.trafo.Backward) |> FastRay3d, part.TMin, part.TMax)
+            let local = RayPart(part.Ray.Ray |> transformRay p.trafo.Inverse |> FastRay3d, part.TMin, part.TMax)
+
+            let inline getRealT (localT : Option<float>) =
+                match localT with
+                | Some localT ->
+                    let localPoint = local.Ray.Ray.GetPointOnRay localT
+                    let worldPoint = p.trafo.Forward.TransformPosProj localPoint
+                    let real = Vec.dot (worldPoint - part.Ray.Ray.Origin) part.Ray.Ray.Direction / Vec.lengthSquared part.Ray.Ray.Direction
+                    Some real
+                | None ->
+                    None
 
             match p.shape with
-                | Box b -> RayPart.Intersects(part, b)
-                | Sphere s -> RayPart.Intersects(part, s)
-                | Cylinder c -> RayPart.Intersects(part, c)
-                | Triangle t -> RayPart.Intersects(part, t)
+                | Box b -> RayPart.Intersects(local, b) |> getRealT
+                | Sphere s -> RayPart.Intersects(local, s) |> getRealT
+                | Cylinder c -> RayPart.Intersects(local, c) |> getRealT
+                | Triangle t -> RayPart.Intersects(local, t) |> getRealT
                 | Triangles kdtree ->
-                    match KdTree.intersect intersectTriangle part kdtree with
-                        | Some hit -> Some hit.T
-                        | None -> None
+                    match KdTree.intersect intersectTriangle local kdtree with
+                    | Some hit -> Some hit.T |> getRealT
+                    | None -> None
                 | TriangleArray arr -> 
-                    match arr |> Array.choose ( fun t -> RayPart.Intersects(part, t) ) with
+                    match arr |> Array.choose ( fun t -> RayPart.Intersects(local, t) ) with
                     | [||] -> None
-                    | ts -> ts |> Array.min |> Some
-                | Custom(_,intersect) -> intersect part 
+                    | ts -> ts |> Array.min |> Some |> getRealT
+                | Custom(_,intersect) -> intersect local |> getRealT
 
     type PickObject(scope : Ag.Scope, pickable : IMod<Pickable>) =
         member x.Scope = scope
@@ -79,6 +103,20 @@ module ``Sg Picking Extensions`` =
             p.Pickable |> Mod.map Pickable.bounds
 
     type PickTree(objects : aset<PickObject>) =
+        
+        let objects =
+            objects |> ASet.filterM (fun o ->
+                PickObject.bounds o |> Mod.map (fun b -> b.IsValid)
+            )
+
+        //let objects =
+        //    objects |> ASet.chooseM (fun o ->
+        //        PickObject.bounds o |> Mod.map (fun b ->
+        //            if b.IsInvalid then None
+        //            else Some (b.EnlargedBy(1E-8), o)
+        //        )
+        //    )
+
         let bvh = 
             BvhTree.ofASet (fun a -> PickObject.bounds a |> Mod.map ( fun b -> b.EnlargedBy(1E-8))) objects
 
@@ -88,7 +126,8 @@ module ``Sg Picking Extensions`` =
                 | Some t -> 
                     let pt = part.Ray.Ray.GetPointOnRay t
                     Some (RayHit(t, (p, pt)))
-                | None -> None
+                | None -> 
+                    None
                 
         member x.Dispose() =
             bvh.Dispose()
