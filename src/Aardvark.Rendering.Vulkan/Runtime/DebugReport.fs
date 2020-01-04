@@ -66,18 +66,18 @@ module private DebugReportHelpers =
     module VkDebugUtilsMessageSeverityFlagsEXT =
         let toMessageSeverity =
             LookupTable.lookupTable [
-                VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityErrorBitExt, MessageSeverity.Error  
-                VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityWarningBitExt, MessageSeverity.Warning  
-                VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityInfoBitExt, MessageSeverity.Information  
-                VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityVerboseBitExt, MessageSeverity.Debug   
+                VkDebugUtilsMessageSeverityFlagsEXT.ErrorBit, MessageSeverity.Error  
+                VkDebugUtilsMessageSeverityFlagsEXT.WarningBit, MessageSeverity.Warning  
+                VkDebugUtilsMessageSeverityFlagsEXT.InfoBit, MessageSeverity.Information  
+                VkDebugUtilsMessageSeverityFlagsEXT.VerboseBit, MessageSeverity.Debug   
             ]
 
         let ofMessageSeverity =
             LookupTable.lookupTable [
-                MessageSeverity.Error, VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityErrorBitExt 
-                MessageSeverity.Warning, VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityWarningBitExt 
-                MessageSeverity.Information, VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityInfoBitExt  
-                MessageSeverity.Debug, VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityVerboseBitExt   
+                MessageSeverity.Error, VkDebugUtilsMessageSeverityFlagsEXT.ErrorBit 
+                MessageSeverity.Warning, VkDebugUtilsMessageSeverityFlagsEXT.WarningBit 
+                MessageSeverity.Information, VkDebugUtilsMessageSeverityFlagsEXT.InfoBit  
+                MessageSeverity.Debug, VkDebugUtilsMessageSeverityFlagsEXT.VerboseBit   
             ]
             
 
@@ -85,21 +85,21 @@ module private DebugReportHelpers =
     module EnumExtensions =
         type VkDebugReportFlagsEXT with
             static member All =
-                VkDebugReportFlagsEXT.VkDebugReportDebugBitExt |||
-                VkDebugReportFlagsEXT.VkDebugReportErrorBitExt |||
-                VkDebugReportFlagsEXT.VkDebugReportInformationBitExt |||
-                VkDebugReportFlagsEXT.VkDebugReportPerformanceWarningBitExt |||
-                VkDebugReportFlagsEXT.VkDebugReportWarningBitExt
+                VkDebugReportFlagsEXT.DebugBit |||
+                VkDebugReportFlagsEXT.ErrorBit |||
+                VkDebugReportFlagsEXT.InformationBit |||
+                VkDebugReportFlagsEXT.PerformanceWarningBit |||
+                VkDebugReportFlagsEXT.WarningBit
 
     type VkDebugUtilsMessengerCallbackEXTDelegate =
         delegate of VkDebugUtilsMessageSeverityFlagsEXT * VkDebugUtilsMessageTypeFlagsEXT * nativeptr<VkDebugUtilsMessengerCallbackDataEXT> * nativeint -> int
 
     type VkDebugUtilsMessageSeverityFlagsEXT with
         static member All =
-            VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityErrorBitExt |||
-            VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityWarningBitExt |||
-            VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityInfoBitExt |||
-            VkDebugUtilsMessageSeverityFlagsEXT.VkDebugUtilsMessageSeverityVerboseBitExt
+            VkDebugUtilsMessageSeverityFlagsEXT.ErrorBit |||
+            VkDebugUtilsMessageSeverityFlagsEXT.WarningBit |||
+            VkDebugUtilsMessageSeverityFlagsEXT.InfoBit |||
+            VkDebugUtilsMessageSeverityFlagsEXT.VerboseBit
 
     type DebugReportAdapter internal(instance : Instance) =
         let flags = VkDebugReportFlagsEXT.All
@@ -154,7 +154,7 @@ module private DebugReportHelpers =
 
                 raise {
                     id              = hash
-                    performance     = messageType.HasFlag(VkDebugUtilsMessageTypeFlagsEXT.VkDebugUtilsMessageTypePerformanceBitExt)
+                    performance     = messageType.HasFlag(VkDebugUtilsMessageTypeFlagsEXT.PerformanceBit)
                     severity        = severity
                     layerPrefix     = messageIdName
                     message         = msg
@@ -190,13 +190,12 @@ module private DebugReportHelpers =
                 native {
                     let! pInfo =
                         VkDebugUtilsMessengerCreateInfoEXT(
-                            VkStructureType.DebugUtilsMessengerCreateInfoExt, 0n,
                             VkDebugUtilsMessengerCreateFlagsEXT.MinValue,
                             VkDebugUtilsMessageSeverityFlagsEXT.All,
 
-                            VkDebugUtilsMessageTypeFlagsEXT.VkDebugUtilsMessageTypeGeneralBitExt ||| 
-                            VkDebugUtilsMessageTypeFlagsEXT.VkDebugUtilsMessageTypeValidationBitExt ||| 
-                            VkDebugUtilsMessageTypeFlagsEXT.VkDebugUtilsMessageTypePerformanceBitExt,
+                            VkDebugUtilsMessageTypeFlagsEXT.GeneralBit ||| 
+                            VkDebugUtilsMessageTypeFlagsEXT.ValidationBit ||| 
+                            VkDebugUtilsMessageTypeFlagsEXT.PerformanceBit,
 
                             ptr, 123n
                         )
@@ -244,14 +243,12 @@ module private DebugReportHelpers =
                 
                 let! pObjectName =
                     VkDebugUtilsObjectNameInfoEXT(
-                        VkStructureType.DebugUtilsObjectNameInfoExt, 0n,
                         VkObjectType.Instance, uint64 instance.Handle,
                         NativePtr.zero
                     )
 
                 let! pInfo = 
                     VkDebugUtilsMessengerCallbackDataEXT(
-                        VkStructureType.DebugUtilsMessengerCallbackDataExt, 0n,
                         VkDebugUtilsMessengerCallbackDataFlagsEXT.MinValue,
                         layer, 0,
                         str, 
@@ -263,7 +260,7 @@ module private DebugReportHelpers =
                 VkRaw.vkSubmitDebugUtilsMessageEXT(
                     instance.Handle,
                     flags,
-                    VkDebugUtilsMessageTypeFlagsEXT.VkDebugUtilsMessageTypeGeneralBitExt,
+                    VkDebugUtilsMessageTypeFlagsEXT.GeneralBit,
                     pInfo
                 )
             }

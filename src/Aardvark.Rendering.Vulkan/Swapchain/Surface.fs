@@ -49,26 +49,26 @@ type SurfaceInfo =
 module VkSurfaceTransformFlagsKHR =
     let ofImageTrafo =
         LookupTable.lookupTable [
-            ImageTrafo.Rot0,            VkSurfaceTransformFlagsKHR.VkSurfaceTransformIdentityBitKhr
-            ImageTrafo.Rot90,           VkSurfaceTransformFlagsKHR.VkSurfaceTransformRotate90BitKhr
-            ImageTrafo.Rot180,          VkSurfaceTransformFlagsKHR.VkSurfaceTransformRotate180BitKhr
-            ImageTrafo.Rot270,          VkSurfaceTransformFlagsKHR.VkSurfaceTransformRotate270BitKhr
-            ImageTrafo.MirrorX,         VkSurfaceTransformFlagsKHR.VkSurfaceTransformHorizontalMirrorBitKhr
-            ImageTrafo.MirrorY,         VkSurfaceTransformFlagsKHR.VkSurfaceTransformHorizontalMirrorRotate180BitKhr
-            ImageTrafo.Transpose,       VkSurfaceTransformFlagsKHR.VkSurfaceTransformHorizontalMirrorRotate90BitKhr
-            ImageTrafo.Transverse,      VkSurfaceTransformFlagsKHR.VkSurfaceTransformHorizontalMirrorRotate270BitKhr
+            ImageTrafo.Rot0,            VkSurfaceTransformFlagsKHR.IdentityBit
+            ImageTrafo.Rot90,           VkSurfaceTransformFlagsKHR.Rotate90Bit
+            ImageTrafo.Rot180,          VkSurfaceTransformFlagsKHR.Rotate180Bit
+            ImageTrafo.Rot270,          VkSurfaceTransformFlagsKHR.Rotate270Bit
+            ImageTrafo.MirrorX,         VkSurfaceTransformFlagsKHR.HorizontalMirrorBit
+            ImageTrafo.MirrorY,         VkSurfaceTransformFlagsKHR.HorizontalMirrorRotate180Bit
+            ImageTrafo.Transpose,       VkSurfaceTransformFlagsKHR.HorizontalMirrorRotate90Bit
+            ImageTrafo.Transverse,      VkSurfaceTransformFlagsKHR.HorizontalMirrorRotate270Bit
         ]
 
     let toImageTrafo =
         LookupTable.lookupTable [
-           VkSurfaceTransformFlagsKHR.VkSurfaceTransformIdentityBitKhr,                      ImageTrafo.Rot0
-           VkSurfaceTransformFlagsKHR.VkSurfaceTransformRotate90BitKhr,                      ImageTrafo.Rot90
-           VkSurfaceTransformFlagsKHR.VkSurfaceTransformRotate180BitKhr,                     ImageTrafo.Rot180
-           VkSurfaceTransformFlagsKHR.VkSurfaceTransformRotate270BitKhr,                     ImageTrafo.Rot270
-           VkSurfaceTransformFlagsKHR.VkSurfaceTransformHorizontalMirrorBitKhr,              ImageTrafo.MirrorX
-           VkSurfaceTransformFlagsKHR.VkSurfaceTransformHorizontalMirrorRotate180BitKhr,     ImageTrafo.MirrorY
-           VkSurfaceTransformFlagsKHR.VkSurfaceTransformHorizontalMirrorRotate90BitKhr,      ImageTrafo.Transpose
-           VkSurfaceTransformFlagsKHR.VkSurfaceTransformHorizontalMirrorRotate270BitKhr,     ImageTrafo.Transverse
+           VkSurfaceTransformFlagsKHR.IdentityBit,                      ImageTrafo.Rot0
+           VkSurfaceTransformFlagsKHR.Rotate90Bit,                      ImageTrafo.Rot90
+           VkSurfaceTransformFlagsKHR.Rotate180Bit,                     ImageTrafo.Rot180
+           VkSurfaceTransformFlagsKHR.Rotate270Bit,                     ImageTrafo.Rot270
+           VkSurfaceTransformFlagsKHR.HorizontalMirrorBit,              ImageTrafo.MirrorX
+           VkSurfaceTransformFlagsKHR.HorizontalMirrorRotate180Bit,     ImageTrafo.MirrorY
+           VkSurfaceTransformFlagsKHR.HorizontalMirrorRotate90Bit,      ImageTrafo.Transpose
+           VkSurfaceTransformFlagsKHR.HorizontalMirrorRotate270Bit,     ImageTrafo.Transverse
         ]
 
     let toImageTrafos (flags : VkSurfaceTransformFlagsKHR) =
@@ -211,7 +211,6 @@ module Surface =
                 | XLib info ->
                     let! pInfo = 
                         VkXlibSurfaceCreateInfoKHR(
-                            VkStructureType.XlibSurfaceCreateInfoKhr, 0n,
                             VkXlibSurfaceCreateFlagsKHR.MinValue,
                             info.dpy,
                             info.window
@@ -223,7 +222,6 @@ module Surface =
                 | Xcb info ->
                     let! pInfo =
                         VkXcbSurfaceCreateInfoKHR(
-                            VkStructureType.XcbSurfaceCreateInfoKhr, 0n,
                             VkXcbSurfaceCreateFlagsKHR.MinValue,
                             info.connection,
                             info.window
@@ -234,7 +232,6 @@ module Surface =
                 | Wayland info ->
                     let! pInfo =
                         VkWaylandSurfaceCreateInfoKHR(
-                            VkStructureType.WaylandSurfaceCreateInfoKhr, 0n,
                             VkWaylandSurfaceCreateFlagsKHR.MinValue,
                             info.display,
                             info.surface
@@ -257,7 +254,6 @@ module Surface =
                 | Android info ->
                     let! pInfo =
                         VkAndroidSurfaceCreateInfoKHR(
-                            VkStructureType.AndroidSurfaceCreateInfoKhr, 0n,
                             VkAndroidSurfaceCreateFlagsKHR.MinValue,
                             info.window
                         )
@@ -266,8 +262,7 @@ module Surface =
 
                 | Win32 info ->
                     let! pInfo =
-                        VkWin32SurfaceCreateInfoKHR(
-                            VkStructureType.Win32SurfaceCreateInfoKhr, 0n, 
+                        VkWin32SurfaceCreateInfoKHR( 
                             VkWin32SurfaceCreateFlagsKHR.MinValue,
                             info.hinstance,
                             info.hwnd

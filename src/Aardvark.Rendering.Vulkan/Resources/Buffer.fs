@@ -126,7 +126,6 @@ module BufferCommands =
 
                     let mutable barrier =
                         VkBufferMemoryBarrier(
-                            VkStructureType.BufferMemoryBarrier, 0n,
                             VkAccessFlags.None,
                             access,
                             uint32 buffer.Device.TransferFamily.Index,
@@ -161,7 +160,6 @@ module BufferCommands =
                     cmd.AppendCommand()
                     let barrier =
                         VkBufferMemoryBarrier(
-                            VkStructureType.BufferMemoryBarrier, 0n,
                             src,
                             dst,
                             VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
@@ -219,7 +217,6 @@ module BufferCommands =
                     cmd.AppendCommand()
                     let barrier =
                         VkBufferMemoryBarrier(
-                            VkStructureType.BufferMemoryBarrier, 0n,
                             VkAccessFlags.TransferWriteBit ||| VkAccessFlags.HostWriteBit ||| VkAccessFlags.MemoryWriteBit ||| VkAccessFlags.ShaderWriteBit,
                             VkAccessFlags.TransferReadBit ||| VkAccessFlags.ShaderReadBit ||| VkAccessFlags.IndexReadBit ||| VkAccessFlags.VertexAttributeReadBit ||| VkAccessFlags.UniformReadBit,
                             VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
@@ -298,53 +295,54 @@ module Buffer =
 
     let empty (usage : VkBufferUsageFlags) (device : Device) =
         let key = (device, usage)
-        emptyBuffers.GetOrAdd(key, fun (device, usage) ->
-            let info =
-                VkBufferCreateInfo(
-                    VkStructureType.BufferCreateInfo, 0n,
-                    VkBufferCreateFlags.None,
-                    256UL,
-                    usage,
-                    device.AllSharingMode,
-                    device.AllQueueFamiliesCnt,
-                    device.AllQueueFamiliesPtr
-                )
-
-            let handle = 
-                info |> pin (fun pInfo ->
-                    temporary (fun pHandle ->
-                        VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
-                            |> check "could not create empty buffer"
-                        NativePtr.read pHandle
+        let buffer =
+            emptyBuffers.GetOrAdd(key, fun (device, usage) ->
+                let info =
+                    VkBufferCreateInfo(
+                        VkBufferCreateFlags.None,
+                        256UL,
+                        usage,
+                        device.AllSharingMode,
+                        device.AllQueueFamiliesCnt,
+                        device.AllQueueFamiliesPtr
                     )
-                )
 
-            let reqs = 
-                temporary (fun ptr ->
-                    VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, ptr)
-                    NativePtr.read ptr
-                )
+                let handle = 
+                    info |> pin (fun pInfo ->
+                        temporary (fun pHandle ->
+                            VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
+                                |> check "could not create empty buffer"
+                            NativePtr.read pHandle
+                        )
+                    )
 
-            let mem = device.Alloc(reqs, true)
-            VkRaw.vkBindBufferMemory(device.Handle, handle, mem.Memory.Handle, uint64 mem.Offset)
-                |> check "could not bind empty buffer memory"
+                let reqs = 
+                    temporary (fun ptr ->
+                        VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, ptr)
+                        NativePtr.read ptr
+                    )
+
+                let mem = device.Alloc(reqs, true)
+                VkRaw.vkBindBufferMemory(device.Handle, handle, mem.Memory.Handle, uint64 mem.Offset)
+                    |> check "could not bind empty buffer memory"
 
 
-            device.OnDispose.Add (fun () ->
-                VkRaw.vkDestroyBuffer(device.Handle, handle, NativePtr.zero)
-                emptyBuffers.TryRemove(key) |> ignore
-            )   
+                device.OnDispose.Add (fun () ->
+                    VkRaw.vkDestroyBuffer(device.Handle, handle, NativePtr.zero)
+                    mem.Dispose()
+                    emptyBuffers.TryRemove(key) |> ignore
+                )   
 
-            let buffer = new Buffer(device, handle, mem, 256L, usage)
-            buffer.AddReference()
-            buffer
-        )
+                new Buffer(device, handle, mem, 256L, usage)
+            )
+
+        buffer.AddReference()
+        buffer
 
     let createConcurrent (conc : bool) (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
         let device = memory.Device
         let info =
             VkBufferCreateInfo(
-                VkStructureType.BufferCreateInfo, 0n,
                 VkBufferCreateFlags.None,
                 uint64 size, 
                 flags,
@@ -520,7 +518,6 @@ module BufferView =
         else
             let info = 
                 VkBufferViewCreateInfo(
-                    VkStructureType.BufferViewCreateInfo, 0n,
                     VkBufferViewCreateFlags.MinValue,
                     b.Handle, 
                     fmt,

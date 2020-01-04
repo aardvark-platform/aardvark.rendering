@@ -33,7 +33,6 @@ module ``Graphics Commands`` =
                     native {
                         let! pInfo =
                             VkRenderPassBeginInfo(
-                                VkStructureType.RenderPassBeginInfo, 0n,
                                 renderPass.Handle,
                                 framebuffer.Handle,
                                 VkRect2D(VkOffset2D(bounds.Min.X, bounds.Min.Y), VkExtent2D(1 + bounds.SizeX, 1 + bounds.SizeY)),

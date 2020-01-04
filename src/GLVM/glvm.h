@@ -1,5 +1,6 @@
 #pragma once
 
+#ifndef __GNUC__
 #ifndef AMD_INTEGRATED
 extern "C"
 {
@@ -7,7 +8,7 @@ extern "C"
 }
 #define AMD_INTEGRATED
 #endif // !AMD_INTEGRATED
-
+#endif
 
 #ifdef __APPLE__
 #include <opengl/gl3.h>
