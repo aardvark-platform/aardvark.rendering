@@ -190,7 +190,6 @@ module ImageView =
             let viewType = viewType slices samplerType.isArray samplerType.dimension
             let! pInfo = 
                 VkImageViewCreateInfo(
-                    VkStructureType.ImageViewCreateInfo, 0n,
                     VkImageViewCreateFlags.MinValue,
                     img.Handle,
                     viewType, 
@@ -249,7 +248,6 @@ module ImageView =
         native {
             let! pInfo = 
                 VkImageViewCreateInfo(
-                    VkStructureType.ImageViewCreateInfo, 0n,
                     VkImageViewCreateFlags.MinValue,
                     img.Handle,
                     viewType, 
@@ -282,7 +280,6 @@ module ImageView =
         native {
             let! pInfo = 
                 VkImageViewCreateInfo(
-                    VkStructureType.ImageViewCreateInfo, 0n,
                     VkImageViewCreateFlags.MinValue,
                     img.Handle,
                     viewType, 

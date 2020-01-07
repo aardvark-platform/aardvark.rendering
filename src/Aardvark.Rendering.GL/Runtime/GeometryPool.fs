@@ -694,9 +694,6 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
             false
 
         elif count < capacity then
-            if call.FaceVertexCount > 32768 then
-                Log.warn "[IndirectBuffer] adding insane DrawCall: %A" call
-
             let id = count
             drawIndices.[call] <- id
             NativePtr.set mem id (adjust call)

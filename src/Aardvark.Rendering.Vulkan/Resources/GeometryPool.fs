@@ -294,7 +294,6 @@ module GeometryPoolUtilities =
                 let! pHandle = VkBuffer.Null
                 let! pInfo =
                     VkBufferCreateInfo(
-                        VkStructureType.BufferCreateInfo, 0n,
                         VkBufferCreateFlags.None,
                         uint64 size, 
                         VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit,
@@ -350,7 +349,6 @@ module GeometryPoolUtilities =
                             ranges.[i] <- r
                             let range =
                                 VkMappedMemoryRange(
-                                    VkStructureType.MappedMemoryRange, 0n,
                                     hm.Handle,
                                     uint64 r.Min,
                                     uint64 (1L + r.Max - r.Min)
@@ -438,7 +436,6 @@ module GeometryPoolUtilities =
                     let! pBuffer = VkBuffer.Null
                     let! pInfo =
                         VkBufferCreateInfo(
-                            VkStructureType.BufferCreateInfo, 0n,
                             VkBufferCreateFlags.None,
                             uint64 streamSize,
                             VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit,
@@ -550,7 +547,6 @@ module GeometryPoolUtilities =
                         native {
                             let! pRegion =
                                 VkMappedMemoryRange(
-                                    VkStructureType.MappedMemoryRange, 0n,
                                     scratchMem.Handle, 
                                     uint64 scratchOffset, uint64 size
                                 )
@@ -593,7 +589,6 @@ module GeometryPoolUtilities =
                     let! pBuffer = VkBuffer.Null
                     let! pInfo =
                         VkBufferCreateInfo(
-                            VkStructureType.BufferCreateInfo, 0n,
                             VkBufferCreateFlags.None,
                             uint64 streamSize,
                             VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit,

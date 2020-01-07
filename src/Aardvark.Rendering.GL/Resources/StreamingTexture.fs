@@ -16,7 +16,7 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
     inherit Mod.AbstractMod<ITexture>()
 
     let expectedLevels (size : V2i) = 
-        if mipMap then Fun.Min(size.X, size.Y) |> Fun.Log2 |> Fun.Ceiling |> int
+        if mipMap then 1 + max size.X size.Y |> Fun.Log2 |> Fun.Floor |> int
         else 1
 
     let mutable pbo = 0
@@ -322,7 +322,7 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
     inherit Mod.AbstractMod<ITexture>()
 
     let expectedLevels (size : V2i) = 
-        if mipMap then Fun.Min(size.X, size.Y) |> Fun.Log2 |> Fun.Ceiling |> int
+        if mipMap then 1 + max size.X size.Y |> Fun.Log2 |> Fun.Floor |> int
         else 1
 
 

@@ -496,8 +496,8 @@ module LodTreeHelpers =
                 if node.ShouldSplit(splitfactor, quality, view, proj) then
                     let qs = node.SplitQuality(splitfactor, view, proj)
                     queue.HeapEnqueue(cmp, (qs, TSplit x))
-                elif node.Level = 0 then
-                    Log.warn "happy with root %A %A" view.Backward.C3.XYZ (node.WorldBoundingBox.Transformed(node.DataTrafo.Inverse))
+                //elif node.Level = 0 then
+                //    Log.warn "happy with root %A %A" view.Backward.C3.XYZ (node.WorldBoundingBox.Transformed(node.DataTrafo.Inverse))
             | o ->
                 let collapse =
                     if collapseIfNotSplit then not (node.ShouldSplit(splitfactor, quality, view, proj))
@@ -758,9 +758,9 @@ module LodTreeHelpers =
         let traverse (q : ref<AtomicQueue<ILodTreeNode, 'a>>) (o : Option<TreeNode<'a>>) (n : Option<TaskTreeNode<'a>>) =
             let snap = n |> Option.bind snap
 
-            match snap, n with
-            | None, Some t -> Log.warn "empty snap: %A" t.Original
-            | _ -> ()
+            //match snap, n with
+            //| None, Some t -> Log.warn "empty snap: %A" t.Original
+            //| _ -> ()
 
             traverse2 q o snap
             snap
@@ -1782,7 +1782,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                 |> Seq.map (fun (_,b) -> b.ssbName, GLSLType.toType b.ssbType)
                 |> MapExt.ofSeq
         let res = MapExt.union inputs perTreeUniforms |> filterInputs
-        Log.warn "%A" res
+        //Log.warn "%A" res
         res
 
     let cameraPrediction, puller, thread =
@@ -1940,7 +1940,6 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                                 | None -> mm.Value <- mm.Value |> HMap.remove root
                             )
                         | None ->
-                            Log.warn "empty tree: %A" root
                             ()
                     
 

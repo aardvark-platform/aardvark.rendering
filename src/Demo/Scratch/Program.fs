@@ -245,18 +245,25 @@ let picking() =
 
     let cylinder = 
         Sg.cylinder' 16 C4b.Blue 0.5 1.0
-            |> Sg.pickable (PickShape.Cylinder(Cylinder3d(V3d.Zero, V3d.OOI, 0.5)))
+            //|> Sg.pickable (PickShape.Cylinder(Cylinder3d(V3d.Zero, V3d.OOI, 0.5)))
             |> Sg.requirePicking
 
     let sphere =
         Sg.unitSphere' 5 C4b.Yellow
-            |> Sg.pickable (PickShape.Sphere(Sphere3d(V3d.Zero, 1.0)))
+            //|> Sg.pickable (PickShape.Sphere(Sphere3d(V3d.Zero, 1.0)))
             |> Sg.requirePicking
             |> Sg.scale 0.5
 
     let box =
         Sg.box' C4b.Green bounds
-            |> Sg.pickable (PickShape.Box bounds)
+            //|> Sg.pickable (PickShape.Box bounds)
+            |> Sg.requirePicking
+
+    let tri =
+        let tri1 = Triangle3d(V3d.NNO * 0.5, V3d.IIO * 0.5, V3d.NPO * 0.5)
+        let tri2 = Triangle3d(V3d.NNO * 0.5, V3d.IIO * 0.5, V3d.PNO * 0.5)
+        Sg.triangles' C4b.Magenta [|tri1;tri2|]
+            //|> Sg.pickable (PickShape.TriangleArray [|tri1;tri2|])
             |> Sg.requirePicking
 
     let rand = System.Random()
@@ -266,11 +273,13 @@ let picking() =
             for x in -size .. 2.0 .. size do 
                 for y in -size .. 2.0 .. size do
                     for z in -size .. 2.0 .. size do 
-                        match rand.Next(3) with
+                        match rand.Next(4) with
                             | 0 -> 
                                 yield box |> Sg.translate x y z 
                             | 1 ->
                                 yield cylinder |> Sg.translate x y z 
+                            | 2 -> 
+                                yield tri |> Sg.translate x y z
                             | _ ->
                                 yield sphere |> Sg.translate x y z 
         ]
@@ -846,136 +855,138 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
     
-    //App.run(Aardvark.SceneGraph.Pool.``Shader Switch``.sg())
+//    //App.run(Aardvark.SceneGraph.Pool.``Shader Switch``.sg())
 
-    App.run(Aardvark.SceneGraph.Pool.``Pool Tests``.sg2())
+//    App.run(Aardvark.SceneGraph.Pool.``Pool Tests``.sg2())
     
-    //OpcDemo.OpcDemo.startLoading()
+//    //OpcDemo.OpcDemo.startLoading()
 
-    Environment.Exit 0
+//    Environment.Exit 0
 
-    use app = new VulkanApplication(false)
+    App.run(picking())
 
-    let win = app.CreateSimpleRenderWindow()
+    //use app = new VulkanApplication(false)
 
-    let projTrafo = 
-        win.Sizes 
-            |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
-            |> Mod.map Frustum.projTrafo
+    //let win = app.CreateSimpleRenderWindow()
 
-    let viewTrafo = 
-        CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
-            |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
-            |> Mod.map CameraView.viewTrafo
+    //let projTrafo = 
+    //    win.Sizes 
+    //        |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
+    //        |> Mod.map Frustum.projTrafo
+
+    //let viewTrafo = 
+    //    CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
+    //        |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
+    //        |> Mod.map CameraView.viewTrafo
 
 
-    let rotor =
-        let startTime = System.DateTime.Now
-        win.Time |> Mod.map (fun t ->
-            let t = (t - startTime).TotalSeconds
-            Trafo3d.RotationZ (0.5 * t)
-        )
+//    let rotor =
+//        let startTime = System.DateTime.Now
+//        win.Time |> Mod.map (fun t ->
+//            let t = (t - startTime).TotalSeconds
+//            Trafo3d.RotationZ (0.5 * t)
+//        )
 
-    let viewTrafo =
-        Mod.map2 (*) rotor viewTrafo
+//    let viewTrafo =
+//        Mod.map2 (*) rotor viewTrafo
 
-    let realObjects = CSet.empty
+//    let realObjects = CSet.empty
 
-    let effect =
-        FShade.Effect.compose [
-            FShade.Effect.ofFunction <| fun (v : Effects.Vertex) ->
-                vertex {
-                    let n = 0.5 * (Vec.normalize v.pos.XYZ + V3d.III)
-                    return { v with c = V4d(n, 1.0) }
-                }
-            FShade.Effect.ofFunction DefaultSurfaces.trafo
-        ]
+//    let effect =
+//        FShade.Effect.compose [
+//            FShade.Effect.ofFunction <| fun (v : Effects.Vertex) ->
+//                vertex {
+//                    let n = 0.5 * (Vec.normalize v.pos.XYZ + V3d.III)
+//                    return { v with c = V4d(n, 1.0) }
+//                }
+//            FShade.Effect.ofFunction DefaultSurfaces.trafo
+//        ]
 
-    let prepared = System.Collections.Generic.List<PreparedMultiRenderObject>()
+//    let prepared = System.Collections.Generic.List<PreparedMultiRenderObject>()
     
-    let sphere = IndexedGeometryPrimitives.solidPhiThetaSphere (Sphere3d(V3d.Zero, 0.1)) 16 C4b.Red
-    let index = sphere.IndexArray |> unbox<int[]>
-    let vertices = sphere.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
-    let normals = sphere.IndexedAttributes.[DefaultSemantic.Normals] |> unbox<V3f[]>
+//    let sphere = IndexedGeometryPrimitives.solidPhiThetaSphere (Sphere3d(V3d.Zero, 0.1)) 16 C4b.Red
+//    let index = sphere.IndexArray |> unbox<int[]>
+//    let vertices = sphere.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+//    let normals = sphere.IndexedAttributes.[DefaultSemantic.Normals] |> unbox<V3f[]>
 
-    let addThing(pos : V3d) =
-        //let sphere = IndexedGeometryPrimitives.solidPhiThetaSphere (Sphere3d(V3d.Zero, 0.1)) 1024 C4b.Red
+//    let addThing(pos : V3d) =
+//        //let sphere = IndexedGeometryPrimitives.solidPhiThetaSphere (Sphere3d(V3d.Zero, 0.1)) 1024 C4b.Red
 
-        let call = DrawCallInfo(FaceVertexCount = sphere.IndexArray.Length, InstanceCount = 1)
-        let sg =
-            Sg.render IndexedGeometryMode.TriangleList call
-                |> Sg.vertexAttribute DefaultSemantic.Positions (Mod.init vertices)
-                |> Sg.vertexAttribute DefaultSemantic.Normals (Mod.init normals)
-                |> Sg.index (Mod.init index)
-                |> Sg.effect [effect]
-                |> Sg.translate pos.X pos.Y pos.Z
-                |> Sg.viewTrafo viewTrafo
-                |> Sg.projTrafo projTrafo
-                //|> Sg.fillMode (Mod.constant FillMode.Line)
+//        let call = DrawCallInfo(FaceVertexCount = sphere.IndexArray.Length, InstanceCount = 1)
+//        let sg =
+//            Sg.render IndexedGeometryMode.TriangleList call
+//                |> Sg.vertexAttribute DefaultSemantic.Positions (Mod.init vertices)
+//                |> Sg.vertexAttribute DefaultSemantic.Normals (Mod.init normals)
+//                |> Sg.index (Mod.init index)
+//                |> Sg.effect [effect]
+//                |> Sg.translate pos.X pos.Y pos.Z
+//                |> Sg.viewTrafo viewTrafo
+//                |> Sg.projTrafo projTrafo
+//                //|> Sg.fillMode (Mod.constant FillMode.Line)
 
 
-        let objects = sg.RenderObjects() |> ASet.toList
+//        let objects = sg.RenderObjects() |> ASet.toList
     
 
-        for o in objects do
-            let test = app.Runtime.ResourceManager.PrepareRenderObjectAsync(unbox win.FramebufferSignature, o, id)
-            test.ContinueWith(fun (t : Task<PreparedMultiRenderObject>) ->
-                lock prepared (fun () -> prepared.Add t.Result)
-                transact (fun () -> lock realObjects (fun () -> realObjects.UnionWith (Seq.cast t.Result.Children)))
-            ) |> ignore
+//        for o in objects do
+//            let test = app.Runtime.ResourceManager.PrepareRenderObjectAsync(unbox win.FramebufferSignature, o, id)
+//            test.ContinueWith(fun (t : Task<PreparedMultiRenderObject>) ->
+//                lock prepared (fun () -> prepared.Add t.Result)
+//                transact (fun () -> lock realObjects (fun () -> realObjects.UnionWith (Seq.cast t.Result.Children)))
+//            ) |> ignore
 
-    let removeThing() =
-        let last = 
-            lock prepared (fun () ->
-                if prepared.Count > 0 then
-                    let res = prepared.[prepared.Count - 1]
-                    prepared.RemoveAt(prepared.Count - 1)
-                    Some res
-                else
-                    None
-            )
-        match last with
-            | Some l ->
-                transact (fun () -> lock realObjects (fun () -> realObjects.ExceptWith (Seq.cast l.Children)))
-                for r in l.Children do
-                    for r in r.resources do r.Release()
-            | None ->
-                ()
+//    let removeThing() =
+//        let last = 
+//            lock prepared (fun () ->
+//                if prepared.Count > 0 then
+//                    let res = prepared.[prepared.Count - 1]
+//                    prepared.RemoveAt(prepared.Count - 1)
+//                    Some res
+//                else
+//                    None
+//            )
+//        match last with
+//            | Some l ->
+//                transact (fun () -> lock realObjects (fun () -> realObjects.ExceptWith (Seq.cast l.Children)))
+//                for r in l.Children do
+//                    for r in r.resources do r.Release()
+//            | None ->
+//                ()
 
-    Async.Start <| 
-        async {
-            while true do
-                do! Async.Sleep 500
-                Log.line "count: %A" realObjects.Count
-        }
+//    Async.Start <| 
+//        async {
+//            while true do
+//                do! Async.Sleep 500
+//                Log.line "count: %A" realObjects.Count
+//        }
 
-    addThing V3d.Zero
+//    addThing V3d.Zero
 
 
-    let rand = RandomSystem()
-    let box = Box3d(-V3d.III * 5.0, V3d.III * 5.0)
-    win.Keyboard.DownWithRepeats.Values.Add (fun k ->
-        if k = Keys.Space then
-            Task.Factory.StartNew (fun () ->
-                Parallel.For(0, 400, fun _ ->
-                    rand.UniformV3dDirection() * 5.0 |> addThing
-                ) |> ignore
-            ) |> ignore
-//            for i in 1 .. 5 do
-//                Task.Factory.StartNew(fun () ->
+//    let rand = RandomSystem()
+//    let box = Box3d(-V3d.III * 5.0, V3d.III * 5.0)
+//    win.Keyboard.DownWithRepeats.Values.Add (fun k ->
+//        if k = Keys.Space then
+//            Task.Factory.StartNew (fun () ->
+//                Parallel.For(0, 400, fun _ ->
 //                    rand.UniformV3dDirection() * 5.0 |> addThing
 //                ) |> ignore
+//            ) |> ignore
+////            for i in 1 .. 5 do
+////                Task.Factory.StartNew(fun () ->
+////                    rand.UniformV3dDirection() * 5.0 |> addThing
+////                ) |> ignore
 
-        elif k = Keys.Enter then
-            Task.Factory.StartNew (fun () ->
-                Parallel.For(0, 400, fun _ ->
-                    removeThing()
-                ) |> ignore
-            ) |> ignore
-    )
+//        elif k = Keys.Enter then
+//            Task.Factory.StartNew (fun () ->
+//                Parallel.For(0, 400, fun _ ->
+//                    removeThing()
+//                ) |> ignore
+//            ) |> ignore
+//    )
 
 
-    let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, realObjects)
+    //let task = picking() //app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, realObjects)
 
 //
 //    let filter =
@@ -994,8 +1005,8 @@ let main argv =
 //    System.Windows.Forms.Application.AddMessageFilter filter
 
 
-    win.RenderTask <- task
-    win.Run()
+    //win.RenderTask <- task
+    //win.Run()
     Environment.Exit 0
 
 

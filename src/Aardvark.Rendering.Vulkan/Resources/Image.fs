@@ -207,15 +207,6 @@ module ``Image Format Extensions`` =
                             | _ ->
                                 failf "bad format"
 
-
-    type VkStructureType with
-        static member SwapChainCreateInfoKHR = 1000001000 |> unbox<VkStructureType>
-        static member PresentInfoKHR = 1000001001 |> unbox<VkStructureType>
-
-    type VkImageLayout with
-        static member PresentSrcKhr = unbox<VkImageLayout> 1000001002
-
-
     module VkComponentMapping =
         let Identity = VkComponentMapping(VkComponentSwizzle.R, VkComponentSwizzle.G, VkComponentSwizzle.B, VkComponentSwizzle.A)
 
@@ -1615,7 +1606,6 @@ module DeviceTensorCommandExtensions =
 
                     let imageMemoryBarrier =
                         VkImageMemoryBarrier(
-                            VkStructureType.ImageMemoryBarrier, 0n,
                             VkAccessFlags.None,
                             VkImageLayout.toAccessFlags dstLayout ,
                             srcLayout,
@@ -1804,6 +1794,7 @@ module DeviceTensorCommandExtensions =
 [<AutoOpen>]
 module ``Image Command Extensions`` =
 
+    open KHRSwapchain
 
     let private srcMasks =
         LookupTable.lookupTable [
@@ -2077,7 +2068,6 @@ module ``Image Command Extensions`` =
 
                     let image =
                         VkImageMemoryBarrier(
-                            VkStructureType.ImageMemoryBarrier, 0n,
                             src, dst, 
                             layout, layout,
                             VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
@@ -2173,7 +2163,6 @@ module ``Image Command Extensions`` =
 
                         let barrier =
                             VkImageMemoryBarrier(
-                                VkStructureType.ImageMemoryBarrier, 0n, 
                                 src,
                                 dst,
                                 source,
@@ -2268,7 +2257,6 @@ module ``Image Command Extensions`` =
 
                         let mem =
                             VkMemoryBarrier(
-                                VkStructureType.MemoryBarrier, 0n,
                                 VkAccessFlags.TransferWriteBit,
                                 VkAccessFlags.TransferReadBit ||| VkAccessFlags.ShaderReadBit
                             )
@@ -2300,7 +2288,6 @@ module Image =
     let allocLinear (size : V2i) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
         let info =
             VkImageCreateInfo(
-                VkStructureType.ImageCreateInfo, 0n,
                 VkImageCreateFlags.None,
                 VkImageType.D2d,
                 fmt,
@@ -2395,7 +2382,6 @@ module Image =
                 
             let info =
                 VkImageCreateInfo(
-                    VkStructureType.ImageCreateInfo, 0n,
                     flags,
                     VkImageType.ofTextureDimension dim,
                     fmt,
@@ -2454,14 +2440,13 @@ module Image =
                         let! pDeviceIndices = deviceIndices
                         let groupInfo =
                             VkBindImageMemoryDeviceGroupInfo(
-                                VkStructureType.BindImageMemoryDeviceGroupInfo, 0n,
                                 uint32 deviceIndices.Length, pDeviceIndices,
                                 0u, NativePtr.zero
                             )
                         let! pGroup = groupInfo
                         let! pInfo =  
                             VkBindImageMemoryInfo(
-                                VkStructureType.BindImageMemoryInfo, NativePtr.toNativeInt pGroup,
+                                NativePtr.toNativeInt pGroup,
                                 handles.[off],
                                 ptr.Memory.Handle,
                                 uint64 ptr.Offset

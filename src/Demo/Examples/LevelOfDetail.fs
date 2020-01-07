@@ -426,7 +426,6 @@ module LevelOfDetail =
         let createLinearImage (size : V2i) (format : VkFormat) =
             let mutable info =
                 VkImageCreateInfo(
-                    VkStructureType.ImageCreateInfo, 0n,
                     VkImageCreateFlags.None,
                     VkImageType.D2d,
                     format,
@@ -455,7 +454,6 @@ module LevelOfDetail =
         let createOptimalImage (size : V2i) (levels : int) (format : VkFormat) =
             let mutable info =
                 VkImageCreateInfo(
-                    VkStructureType.ImageCreateInfo, 0n,
                     VkImageCreateFlags.None,
                     VkImageType.D2d,
                     format,

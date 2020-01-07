@@ -307,6 +307,8 @@ type AbstractPointerResource<'a when 'a : unmanaged>(owner : IResourceCache, key
 
     member x.Pointer = ptr
 
+    member x.HasHandle = hasHandle
+
     member x.NoChange() =
         dec &version
 
@@ -559,7 +561,6 @@ module Resources =
                 else InputAssemblyState.ofIndexedGeometryMode m
 
             VkPipelineInputAssemblyStateCreateInfo(
-                VkStructureType.PipelineInputAssemblyStateCreateInfo, 0n,
                 VkPipelineInputAssemblyStateCreateFlags.MinValue,
                 res.topology,
                 (if res.restartEnable then 1u else 0u)
@@ -620,7 +621,6 @@ module Resources =
                 NativePtr.set pInputAttributes i inputAttributes.[i]
 
             VkPipelineVertexInputStateCreateInfo(
-                VkStructureType.PipelineVertexInputStateCreateInfo, 0n, 
                 VkPipelineVertexInputStateCreateFlags.MinValue,
 
                 uint32 inputBindings.Length,
@@ -642,7 +642,6 @@ module Resources =
             let stencil = StencilState.create stencil
 
             VkPipelineDepthStencilStateCreateInfo(
-                VkStructureType.PipelineDepthStencilStateCreateInfo, 0n,
                 VkPipelineDepthStencilStateCreateFlags.MinValue,
                 (if depth.testEnabled then 1u else 0u),
                 (if depth.writeEnabled then 1u else 0u),
@@ -667,7 +666,6 @@ module Resources =
             let state = RasterizerState.create false depth bias cull front fill
 
             VkPipelineRasterizationStateCreateInfo(
-                VkStructureType.PipelineRasterizationStateCreateInfo, 0n,
                 VkPipelineRasterizationStateCreateFlags.MinValue,
                 (if state.depthClampEnable then 1u else 0u),
                 0u,
@@ -709,7 +707,6 @@ module Resources =
 
 
             VkPipelineColorBlendStateCreateInfo(
-                VkStructureType.PipelineColorBlendStateCreateInfo, 0n,
                 VkPipelineColorBlendStateCreateFlags.MinValue,
                 (if state.logicOpEnable then 1u else 0u),
                 state.logicOp,
@@ -729,7 +726,7 @@ module Resources =
             DrawCall.Direct(indexed, List.toArray calls)
 
 
-    type DescriptorSetResource(owner : IResourceCache, key : list<obj>, layout : DescriptorSetLayout, bindings : list<AdaptiveDescriptor>) =
+    type DescriptorSetResource(owner : IResourceCache, key : list<obj>, layout : DescriptorSetLayout, bindings : AdaptiveDescriptor[]) =
         inherit AbstractResourceLocation<DescriptorSet>(owner, key)
 
         let mutable handle : Option<DescriptorSet> = None
@@ -783,7 +780,7 @@ module Resources =
             if x.OutOfDate then
                 
                 let bindings =
-                    bindings |> List.toArray |> Array.map (fun b ->
+                    bindings |> Array.map (fun b ->
                         match b with
                             | AdaptiveUniformBuffer(slot, b) ->
                                 let handle =
@@ -885,7 +882,6 @@ module Resources =
                                 else device.AllCount
                             else 1u
                         VkPipelineViewportStateCreateInfo(
-                            VkStructureType.PipelineViewportStateCreateInfo, 0n,
                             VkPipelineViewportStateCreateFlags.MinValue,
                 
                             uint32 vp,
@@ -899,7 +895,6 @@ module Resources =
                     let! pMultisampleState =
                         let ms = multisample
                         VkPipelineMultisampleStateCreateInfo(
-                            VkStructureType.PipelineMultisampleStateCreateInfo, 0n,
                             VkPipelineMultisampleStateCreateFlags.MinValue,
                 
                             unbox ms.samples,
@@ -915,7 +910,6 @@ module Resources =
         
                     let! pTessStateInfo = 
                         VkPipelineTessellationStateCreateInfo(
-                            VkStructureType.PipelineTessellationStateCreateInfo, 0n,
                             VkPipelineTessellationStateCreateFlags.MinValue,
                             uint32 prog.TessellationPatchSize
                         )
@@ -926,7 +920,6 @@ module Resources =
 
                     let! pDynamicStates =
                         VkPipelineDynamicStateCreateInfo(
-                            VkStructureType.PipelineDynamicStateCreateInfo, 0n,
                             VkPipelineDynamicStateCreateFlags.MinValue, 
 
                             uint32 dynamicStates.Length,
@@ -941,11 +934,16 @@ module Resources =
                     let depthStencil = depthStencil.Update(token) |> ignore; depthStencil.Pointer
                     let colorBlendState = colorBlendState.Update(token) |> ignore; colorBlendState.Pointer
 
+                    let basePipeline, derivativeFlag =
+                        if not x.HasHandle then
+                            VkPipeline.Null, VkPipelineCreateFlags.None
+                        else
+                            !!x.Pointer, VkPipelineCreateFlags.DerivativeBit
+
                     let! pHandle = VkPipeline.Null
                     let! pDesc =
                         VkGraphicsPipelineCreateInfo(
-                            VkStructureType.GraphicsPipelineCreateInfo, 0n,
-                            VkPipelineCreateFlags.None,
+                            VkPipelineCreateFlags.AllowDerivativesBit ||| derivativeFlag,
                             uint32 prog.ShaderCreateInfos.Length,
                             pShaderCreateInfos,
                             inputState,
@@ -960,7 +958,7 @@ module Resources =
                             prog.PipelineLayout.Handle,
                             renderPass.Handle,
                             0u,
-                            VkPipeline.Null,
+                            basePipeline,
                             0
                         )
 
@@ -1019,10 +1017,9 @@ module Resources =
         override x.Free(b : VertexBufferBinding) =
             b.Dispose()
 
-    type DescriptorSetBindingResource(owner : IResourceCache, key : list<obj>, layout : PipelineLayout, sets : list<IResourceLocation<DescriptorSet>>) =
+    type DescriptorSetBindingResource(owner : IResourceCache, key : list<obj>, layout : PipelineLayout, sets : IResourceLocation<DescriptorSet>[]) =
         inherit AbstractPointerResource<DescriptorSetBinding>(owner, key)
 
-        let sets = List.toArray sets
         let mutable setVersions = Array.init sets.Length (fun _ -> -1)
         let mutable target : Option<DescriptorSetBinding> = None
 
@@ -1407,7 +1404,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
         let key = (layout :> obj) :: (values |> List.map (fun (_,v) -> v :> obj))
         uniformBufferCache.GetOrCreate(key, fun cache key -> UniformBufferResource(cache, key, device, layout, writers))
 
-    member x.CreateDescriptorSet(layout : DescriptorSetLayout, bindings : list<AdaptiveDescriptor>) =
+    member x.CreateDescriptorSet(layout : DescriptorSetLayout, bindings : AdaptiveDescriptor[]) =
         descriptorSetCache.GetOrCreate([layout :> obj; bindings :> obj], fun cache key -> new DescriptorSetResource(cache, key, layout, bindings))
         
     member x.CreateVertexInputState(program : PipelineInfo, mode : IMod<Map<Symbol, VertexInputDescription>>) =
@@ -1490,7 +1487,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateVertexBufferBinding(buffers : list<IResourceLocation<Buffer> * int64>) =
         bufferBindingCache.GetOrCreate([buffers :> obj], fun cache key -> new BufferBindingResource(cache, key, buffers))
 
-    member x.CreateDescriptorSetBinding(layout : PipelineLayout, bindings : list<IResourceLocation<DescriptorSet>>) =
+    member x.CreateDescriptorSetBinding(layout : PipelineLayout, bindings : IResourceLocation<DescriptorSet>[]) =
         descriptorBindingCache.GetOrCreate([layout :> obj; bindings :> obj], fun cache key -> new DescriptorSetBindingResource(cache, key, layout, bindings))
         
     member x.CreateIndexBufferBinding(binding : IResourceLocation<Buffer>, t : VkIndexType) =

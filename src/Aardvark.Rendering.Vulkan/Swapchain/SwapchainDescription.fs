@@ -86,11 +86,11 @@ type GraphicsMode(format : Col.Format, bits : int, depthBits : int, stencilBits 
     let presentModeScore (mode : VkPresentModeKHR) =
         
         match mode with
-            | VkPresentModeKHR.VkPresentModeMailboxKhr -> 16
-            | VkPresentModeKHR.VkPresentModeFifoKhr -> 4
-            | VkPresentModeKHR.VkPresentModeImmediateKhr when not vsync -> 400
-            | VkPresentModeKHR.VkPresentModeImmediateKhr -> 2
-            | VkPresentModeKHR.VkPresentModeFifoRelaxedKhr -> 8
+            | VkPresentModeKHR.Mailbox -> 16
+            | VkPresentModeKHR.Fifo -> 4
+            | VkPresentModeKHR.Immediate when not vsync -> 400
+            | VkPresentModeKHR.Immediate -> 2
+            | VkPresentModeKHR.FifoRelaxed -> 8
             | _ -> 0
 
     member x.Format = format

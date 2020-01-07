@@ -469,6 +469,8 @@ module ProgramExtensions =
                             | Success program ->
                                 Success program
                             | Error err ->
+                                let numberdLines = ShaderCompiler.withLineNumbers code
+                                Report.Line("Failed to link shader:\n{0}", numberdLines)
                                 Error err
 
                     

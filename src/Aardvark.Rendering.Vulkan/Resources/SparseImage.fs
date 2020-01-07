@@ -189,7 +189,6 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
 
                     let bind = 
                         VkBindSparseInfo(
-                            VkStructureType.BindSparseInfo, 0n,
                             0u, NativePtr.zero,
                             0u, NativePtr.zero,
                             1u, pImages,
@@ -305,7 +304,6 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
 
                     let info =
                         VkBindSparseInfo(
-                            VkStructureType.BindSparseInfo, 0n,
                             0u, NativePtr.zero,
                             0u, NativePtr.zero,
                             0u, NativePtr.zero,
@@ -348,7 +346,6 @@ type SparseImageDeviceExtensions private() =
 
             let! pInfo =
                 VkImageCreateInfo(
-                    VkStructureType.ImageCreateInfo, 0n,
                     VkImageCreateFlags.SparseBindingBit ||| VkImageCreateFlags.SparseResidencyBit ||| VkImageCreateFlags.SparseAliasedBit,
                     imageType,
                     format,

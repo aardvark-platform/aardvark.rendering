@@ -27,8 +27,7 @@ module private EnumExtensions =
                         native {
                             let familyIndex = cmd.QueueFamily.Index
                             let! pPrePresentBarrier =
-                                VkImageMemoryBarrier(
-                                    VkStructureType.ImageMemoryBarrier, 0n, 
+                                VkImageMemoryBarrier( 
                                     VkAccessFlags.ColorAttachmentWriteBit,
                                     VkAccessFlags.MemoryReadBit,
                                     VkImageLayout.ColorAttachmentOptimal,
@@ -92,7 +91,6 @@ type Swapchain(device : Device, description : SwapchainDescription) =
 
                 let! pInfo =
                     VkSwapchainCreateInfoKHR(
-                        VkStructureType.SwapChainCreateInfoKHR, 0n, 
                         VkSwapchainCreateFlagsKHR.MinValue,
 
                         surface.Handle,
@@ -108,7 +106,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                         0u, NativePtr.zero,
 
                         presentTrafo,
-                        VkCompositeAlphaFlagsKHR.VkCompositeAlphaOpaqueBitKhr,
+                        VkCompositeAlphaFlagsKHR.OpaqueBit,
                         description.presentMode,
                         1u,
                         old
