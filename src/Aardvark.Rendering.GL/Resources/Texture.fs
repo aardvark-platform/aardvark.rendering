@@ -1593,15 +1593,14 @@ module TextureUploadExtensions =
                 let levels = data.LevelCount
                 let level0 = data.[0]
                 let size = level0.Size
-                let expectedLevels = min size.X size.Y |> Fun.Log2 |> ceil |> int 
+                let expectedLevels = 1 + max size.X size.Y |> Fun.Log2 |> Fun.Floor |> int
                 let generateMipMaps = data.LevelCount = 1 && config.wantMipMaps
 
                 for level in 0 .. levels - 1 do
                     let image = data.[level]
                     ()
 
-
-                ()
+                failwith "not implemented"
             )
 
 
@@ -2148,7 +2147,7 @@ module TextureExtensions =
                 failwith "cannot upload texture having 0 levels"
 
             let size = data.[0].Size
-            let expectedLevels = Fun.Min(size.X, size.Y) |> Fun.Log2 |> Fun.Ceiling |> int //int(Fun.Ceiling(Fun.Log2(Fun.Min(size.X, size.Y))))
+            let expectedLevels = 1 + max size.X size.Y |> Fun.Log2 |> Fun.Floor |> int
             let uploadLevels = if textureParams.wantMipMaps then data.LevelCount else 1
             let generateMipMap = textureParams.wantMipMaps && data.LevelCount < expectedLevels
             
@@ -2283,7 +2282,7 @@ module TextureExtensions =
 
         let uploadTexture3D (t : Texture) (textureParams : TextureParams) (data : PixVolume) =
             let size = data.Size
-            let expectedLevels = Fun.Min(size.X, size.Y, size.Z) |> Fun.Log2 |> Fun.Ceiling |> int //int(Fun.Ceiling(Fun.Log2(Fun.Min(size.X, size.Y))))
+            let expectedLevels = 1 + max size.X size.Y |> Fun.Log2 |> Fun.Floor |> int
             let generateMipMap = textureParams.wantMipMaps
             let newFormat = TextureFormat.ofPixFormat data.PixFormat textureParams
             let formatChanged = t.Format <> newFormat
