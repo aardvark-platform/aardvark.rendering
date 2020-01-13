@@ -900,7 +900,7 @@ type PreparedObjectInfo =
 
         x.oVertexInputBinding.Dispose()
 
-        oActivation.Dispose()
+        x.oActivation.Dispose()
 
     member x.Resources =
         seq {
