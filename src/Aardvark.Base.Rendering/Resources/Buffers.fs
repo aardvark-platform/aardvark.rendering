@@ -48,14 +48,6 @@ and IBufferRuntime =
 
     abstract member CopyAsync : srcBuffer : IBackendBuffer * srcOffset : nativeint * dstData : nativeint * size : nativeint -> (unit -> unit)
         
-    // creates an indirect buffer
-    //abstract member CreateIndirectBuffer : count : nativeint * indexed : bool * stride : int -> IBackendIndirectBuffer // could be IBackend and user has to know Stride and Indexed type ?! // NOTE: only DX11 seems to require stride at creation time VK and GL in DrawIndirect // 'Indexed' no necessarily require at creation time
-    
-    // upload indirect buffer data
-    //abstract member Copy : srcData : DrawCallInfo[] * dst : IBackendIndirectBuffer * dstOffsetCount : nativeint * count : nativeint -> unit
-
-    // creates an index buffer 
-    //abstract member CreateIndexBuffer : count : nativeint * indexType : IndexType -> IBackendBuffer
         
 type ArrayBuffer(data : Array) =
     let elementType = data.GetType().GetElementType()
@@ -161,7 +153,7 @@ type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : in
 type IndirectBuffer(b : IBuffer, count : int, stride : int, indexed : bool) =
     member x.Buffer = b
     member x.Count = count
-    member x.Stride = stride
+    member x.Stride = stride /// not supported, hardcoded to 20 in execution
     member x.Indexed = indexed
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -171,8 +163,6 @@ module IndirectBuffer =
 
     let ofList (indexed : bool) (l : list<DrawCallInfo>) =
         l |> List.toArray |> ofArray indexed
-
-    //let count (b : IIndirectBuffer) = b.Count
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module BufferView =

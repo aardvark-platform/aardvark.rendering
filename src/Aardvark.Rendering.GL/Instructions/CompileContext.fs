@@ -12,25 +12,28 @@ open Aardvark.Base
 /// </summary>
 module ExecutionContext =
 
+    // NOT USED !? is OpenGL 3.0
     ///// <summary>
     ///// determines whether the current OpenGL implementation supports VAOs
     ///// </summary>
     //let vertexArrayObjectsSupported = 
     //    Config.enableVertexArrayObjectsIfPossible && OpenGl.Pointers.BindVertexArray <> 0n
 
+    // is OpenGL 3.2 -> do we want to support a fallback !?
     /// <summary>
     /// determines whether the current OpenGL implementation supports sampler objects
     /// </summary>
     let samplersSupported = 
         Config.enableSamplersIfPossible && OpenGl.Pointers.BindSampler <> 0n
-
+    
+    // NOT USED !? is OpenGL 3.0
     ///// <summary>
     ///// determines whether the current OpenGL implementation supports uniform buffers
     ///// </summary>
     //let uniformBuffersSupported = 
     //    Config.enableUniformBuffersIfPossible && OpenGl.Pointers.BindBufferRange <> 0n
 
-    // NOT IMPLEMENTED
+    // NOT USED !? is OpenGL 3.3
     ///// <summary>
     ///// determines whether the current OpenGL implementation supports hardware instancing
     ///// </summary>
@@ -47,7 +50,8 @@ module ExecutionContext =
     let syncSupported = 
         let s = OpenGl.getProcAddress "glFenceSync" <> 0n
         s
-    // NOT IMPLEMENTED
+
+    // NOT USED !? is OpenGL 4.4
     ///// <summary>
     ///// determines whether the current OpenGL implementation supports buffer storage (persistently mappable)
     ///// </summary>
