@@ -221,7 +221,7 @@ module Sg =
             shapes.RenderPass <- RenderPass.shapes
             shapes.BlendMode <- Mod.constant BlendMode.Blend
             shapes.VertexAttributes <- cache.VertexBuffers
-            shapes.IndirectBuffer <- indirect
+            shapes.DrawCalls <- Indirect(indirect)
             shapes.InstanceAttributes <- instanceAttributes
             shapes.Mode <- IndexedGeometryMode.TriangleList
 
@@ -349,7 +349,7 @@ module Sg =
             shapes.RenderPass <- RenderPass.shapes
             shapes.BlendMode <- Mod.constant BlendMode.Blend
             shapes.VertexAttributes <- cache.VertexBuffers
-            shapes.IndirectBuffer <- indirectAndOffsets |> Mod.map (fun (i,_,_) -> i)
+            shapes.DrawCalls <- Indirect (indirectAndOffsets |> Mod.map (fun (i,_,_) -> i))
             shapes.InstanceAttributes <- instanceAttributes
             shapes.Mode <- IndexedGeometryMode.TriangleList
             shapes.DepthBias <- Mod.constant (DepthBiasState(0.0, 0.0, 0.0))
@@ -371,7 +371,7 @@ module Sg =
                     BaseVertex = 0
                 )
 
-            boundary.DrawCallInfos <- [drawCall] |> Mod.constant
+            boundary.DrawCalls <- Direct ([drawCall] |> Mod.constant)
             boundary.Mode <- IndexedGeometryMode.TriangleList
 
             let bounds = 

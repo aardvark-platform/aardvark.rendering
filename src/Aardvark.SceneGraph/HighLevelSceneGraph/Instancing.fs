@@ -173,23 +173,44 @@ module Instancing =
                             | s ->
                                 failwithf "[Sg] cannot instance object with surface: %A" s
 
-                    let newCall =
-                        match o.IndirectBuffer with
-                            | null ->
-                                Mod.map2 (fun l cnt -> 
-                                    l |> List.map (fun (c : DrawCallInfo) ->
-                                        if c.InstanceCount > 1 || c.FirstInstance <> 0 then
-                                            failwithf "[Sg] cannot instance drawcall with %d instances" c.InstanceCount
+                    //let newCall =
+                    //    match o.IndirectBuffer with
+                    //        | null ->
+                    //            Mod.map2 (fun l cnt -> 
+                    //                l |> List.map (fun (c : DrawCallInfo) ->
+                    //                    if c.InstanceCount > 1 || c.FirstInstance <> 0 then
+                    //                        failwithf "[Sg] cannot instance drawcall with %d instances" c.InstanceCount
                                             
-                                        DrawCallInfo(
-                                            FaceVertexCount = c.FaceVertexCount,
-                                            FirstIndex = c.FirstIndex,
-                                            FirstInstance = 0,
-                                            InstanceCount = cnt,
-                                            BaseVertex = c.BaseVertex
+                    //                    DrawCallInfo(
+                    //                        FaceVertexCount = c.FaceVertexCount,
+                    //                        FirstIndex = c.FirstIndex,
+                    //                        FirstInstance = 0,
+                    //                        InstanceCount = cnt,
+                    //                        BaseVertex = c.BaseVertex
+                    //                    )
+                    //                )
+                    //            ) o.DrawCallInfos cnt
+                    //        | _ ->
+                    //            failwith "[Sg] cannot instance object with indirect buffer"
+
+                    let newCall =
+                        match o.DrawCalls with
+                            | Direct dir -> 
+                                Direct(
+                                    Mod.map2 (fun l cnt -> 
+                                        l |> List.map (fun (c : DrawCallInfo) ->
+                                            if c.InstanceCount > 1 || c.FirstInstance <> 0 then
+                                                failwithf "[Sg] cannot instance drawcall with %d instances" c.InstanceCount
+                                            
+                                            DrawCallInfo(
+                                                FaceVertexCount = c.FaceVertexCount,
+                                                FirstIndex = c.FirstIndex,
+                                                FirstInstance = 0,
+                                                InstanceCount = cnt,
+                                                BaseVertex = c.BaseVertex
+                                            )
                                         )
-                                    )
-                                ) o.DrawCallInfos cnt
+                                    ) dir cnt)
                             | _ ->
                                 failwith "[Sg] cannot instance object with indirect buffer"
                                 
@@ -249,7 +270,7 @@ module Instancing =
                         Surface = Surface.FShadeSimple newEffect
                         InstanceAttributes = att  
                         VertexAttributes = vatt  
-                        DrawCallInfos = newCall
+                        DrawCalls = newCall
                         Uniforms = UniformProvider.union newUniforms o.Uniforms
                     } :> IRenderObject
 

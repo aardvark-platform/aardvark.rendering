@@ -30,7 +30,7 @@ type PreparedRenderObject =
         isActive                : INativeResourceLocation<int>
         activation              : IDisposable
     }
-    member x.DrawCallInfos = x.original.DrawCallInfos
+    member x.DrawCalls = x.original.DrawCalls
     member x.RenderPass = x.original.RenderPass
     member x.AttributeScope = x.original.AttributeScope
 
@@ -242,11 +242,11 @@ type DevicePreparedRenderObjectExtensions private() =
             
 
         let calls =
-            match ro.IndirectBuffer with
-                | null -> 
-                    this.CreateDrawCall(indexed, ro.DrawCallInfos)
-                | b -> 
-                    let indirect = this.CreateIndirectBuffer(indexed, b)
+            match ro.DrawCalls with
+                | Direct dir -> 
+                    this.CreateDrawCall(indexed, dir)
+                | Indirect indir -> 
+                    let indirect = this.CreateIndirectBuffer(indexed, indir)
                     this.CreateDrawCall(indexed, indirect)
         resources.Add calls
         let bindings =

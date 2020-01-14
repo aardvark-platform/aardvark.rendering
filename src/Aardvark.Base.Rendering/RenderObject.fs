@@ -222,11 +222,9 @@ type Surface =
     | Backend of ISurface
     | None
 
-// TODO:
-// instead of DrawCallInfos and IndirectBuffer use union type
-//type DrawCalls =
-//| Direct of IMod<list<DrawCallInfo>> // F# list seriously !?
-//| Indirect of IMod<IndirectBuffer>
+type DrawCalls =
+    | Direct of IMod<list<DrawCallInfo>> // F# list seriously !?
+    | Indirect of IMod<IndirectBuffer>
 
 [<CustomEquality>]
 [<CustomComparison>]
@@ -238,8 +236,7 @@ type RenderObject =
         mutable IsActive            : IMod<bool>
         mutable RenderPass          : RenderPass
                 
-        mutable DrawCallInfos       : IMod<list<DrawCallInfo>>
-        mutable IndirectBuffer      : IMod<IndirectBuffer>
+        mutable DrawCalls           : DrawCalls
         mutable Mode                : IndexedGeometryMode
         
 
@@ -281,8 +278,7 @@ type RenderObject =
           AttributeScope = Ag.emptyScope
           IsActive = null
           RenderPass = RenderPass.main
-          DrawCallInfos = null
-          IndirectBuffer = null
+          DrawCalls = Unchecked.defaultof<_>
 
           Mode = IndexedGeometryMode.TriangleList
           Surface = Surface.None
@@ -339,8 +335,7 @@ module RenderObjectExtensions =
           AttributeScope = Ag.emptyScope
           IsActive = null
           RenderPass = RenderPass.main
-          DrawCallInfos = null
-          IndirectBuffer = null
+          DrawCalls = Unchecked.defaultof<_>
           Mode = IndexedGeometryMode.TriangleList
           Surface = Surface.None
           DepthTest = null

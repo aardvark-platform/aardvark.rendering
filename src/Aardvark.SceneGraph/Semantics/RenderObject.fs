@@ -130,7 +130,7 @@ module RenderObjectSemantics =
         member x.RenderObjects(r : Sg.IndirectRenderNode) : aset<IRenderObject> =
             let scope = Ag.getContext()
             let rj = RenderObject.ofScope scope
-            rj.IndirectBuffer <- r.Indirect
+            rj.DrawCalls <- Indirect r.Indirect
             rj.Mode <- r.Mode
 
             ASet.single (rj :> IRenderObject)
@@ -159,7 +159,7 @@ module RenderObjectSemantics =
                         return [info]
                 }
 
-            rj.DrawCallInfos <- callInfos
+            rj.DrawCalls <- Direct callInfos
             rj.Mode <- r.Mode
 
             ASet.single (rj :> IRenderObject)
@@ -231,8 +231,7 @@ module RenderObjectSemantics =
                 }
 
             rj.VertexAttributes <- vertexAttributes
-            rj.IndirectBuffer <- indirect |> Mod.map (IndirectBuffer.ofArray false)
-            //rj.IndirectCount <- indirect |> Mod.map Array.length
+            rj.DrawCalls <- Indirect (indirect |> Mod.map (IndirectBuffer.ofArray false))
             rj.Mode <- r.Mode
             rj.Activate <- activate
 

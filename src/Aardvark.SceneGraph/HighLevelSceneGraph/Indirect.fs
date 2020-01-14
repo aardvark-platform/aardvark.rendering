@@ -271,7 +271,7 @@ module Indirect =
                     member x.TryGetAttribute(sem) = geometryCache.TryGetBufferView sem
                 }
 
-            obj.IndirectBuffer <- Mod.map fst indirectAndInstanceBuffers
+            obj.DrawCalls <- Indirect (Mod.map fst indirectAndInstanceBuffers)
             obj.InstanceAttributes <- instanceProvider
             obj.VertexAttributes <- vertexProvider
             obj.Mode <- node.Signature.mode

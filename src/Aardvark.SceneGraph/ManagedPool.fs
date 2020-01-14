@@ -689,7 +689,7 @@ module ``Pool Semantics`` =
                         ro.Indices <- Some pool.IndexBuffer
                         ro.VertexAttributes <- pool.VertexAttributes
                         ro.InstanceAttributes <- pool.InstanceAttributes
-                        ro.IndirectBuffer <- calls
+                        ro.DrawCalls <- Indirect calls
                     yield (ro :> IRenderObject)
                 else
                     ro <- Unchecked.defaultof<RenderObject>

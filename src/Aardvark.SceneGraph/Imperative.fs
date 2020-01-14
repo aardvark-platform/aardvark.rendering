@@ -125,7 +125,7 @@ module AirState =
 
         {
             isActive            = ro.IsActive
-            drawCallInfos       = ro.DrawCallInfos
+            drawCallInfos       = match ro.DrawCalls with | Direct dir -> dir | _ -> null
             mode                = ro.Mode
             surface             = ro.Surface
                               
@@ -137,7 +137,7 @@ module AirState =
             fillMode            = ro.FillMode
             stencilMode         = ro.StencilMode
                   
-            indirect            = if isNull ro.IndirectBuffer then None else Some ro.IndirectBuffer
+            indirect            = match ro.DrawCalls with | Indirect indir -> Some indir | _ -> None
             indices             = ro.Indices
             instanceAttributes  = Map.empty
             vertexAttributes    = Map.empty
@@ -218,10 +218,10 @@ type Air private() =
                 match state.drawCallInfos with
                     | null -> 
                         match state.indirect with
-                            | Some b -> ro.IndirectBuffer <- b
+                            | Some b -> ro.DrawCalls <- Indirect b
                             | None -> failwith "sadasdas"
                     | infos ->
-                        ro.DrawCallInfos <- infos
+                        ro.DrawCalls <- Direct infos
 
                 ro.Mode <- state.mode
                 ro.Surface <- state.surface

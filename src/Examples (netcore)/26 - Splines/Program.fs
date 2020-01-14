@@ -400,7 +400,7 @@ module Sg =
                 
 
             let o = RenderObject.create()
-            o.DrawCallInfos <- count |> Mod.map (fun c -> [DrawCallInfo(FaceVertexCount = c, InstanceCount = 1)])
+            o.DrawCalls <- Direct(count |> Mod.map (fun c -> [DrawCallInfo(FaceVertexCount = c, InstanceCount = 1)]))
             o.Mode <- IndexedGeometryMode.LineList
             o.VertexAttributes <-
                 let oa = o.VertexAttributes
