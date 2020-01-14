@@ -86,13 +86,13 @@ module private ManagedBufferImplementation =
         inherit DirtyTrackingAdaptiveObject<ManagedBufferWriter>()
         static let asize = sizeof<'a> |> nativeint
 
-        let mutable store = runtime.CreateBuffer(0n)
+        let mutable store = runtime.CreateBuffer(0n, BufferUsage.Default)
 
         let bufferWriters = Dict<BufferView, ManagedBufferWriter<'a>>()
         let uniformWriters = Dict<IMod, ManagedBufferSingleWriter<'a>>()
 
         member x.Resize (sz : nativeint) =
-            let newStore = runtime.CreateBuffer(sz)
+            let newStore = runtime.CreateBuffer(sz, BufferUsage.Default)
             if sz > 0n && store.SizeInBytes > 0n then
                 (runtime :> IBufferRuntime).Copy(store, 0n, newStore, 0n, min sz store.SizeInBytes)
             runtime.DeleteBuffer store
@@ -556,7 +556,8 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
     //    uint  baseInstance;
     //} DrawElementsIndirectCommand;
 
-    let stride = if indexed then 20 else 16
+    //let stride = if indexed then 20 else 16
+    let stride = 20
     let upload (call : DrawCallInfo) (index : int) =
         let mutable c = call
         if indexed then

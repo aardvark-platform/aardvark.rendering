@@ -10,13 +10,19 @@ open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
 
+[<Flags>]
+type BufferUsage = // Buffer usage 
+    | None = 0
+    | Index = 1
+    | Indirect = 2
+    | Vertex = 4
+    | Uniform = 8
+    | Storage = 16
+    | Read = 256
+    | Write = 512
+    | Default = 0x031f
+            
 type IBuffer = interface end
-
-//type IIndirectBuffer =
-//    abstract member Buffer : IBuffer // only makes sense with ArrayBuffers -> IBackendBuffer will be copied and post-processed
-//    abstract member Count : int
-//    abstract member Stride : int
-//    abstract member Indexed : bool
 
 type INativeBuffer =
     inherit IBuffer
@@ -26,34 +32,31 @@ type INativeBuffer =
     abstract member Unpin : unit -> unit
 
 type IBackendBuffer =
-    inherit IBuffer
+    inherit IBuffer // ISSUE: this allows a backend buffer to be used everywhere even if it is restricted to a specific type -> HOWEVER buffers can have multiple mixed usage flags -> interface restriction not possible
     inherit IDisposable
     abstract member Runtime : IBufferRuntime
     abstract member Handle : obj
     abstract member SizeInBytes : nativeint
-    
-//and IBackendIndirectBuffer = 
-//    inherit IIndirectBuffer // Buffer must be IBackendBuffer by convention
-//    abstract member Stride : int
-//    abstract member Indexed : bool
-
+        
 and IBufferRuntime =
     abstract member DeleteBuffer : IBackendBuffer -> unit
-    abstract member PrepareBuffer : data : IBuffer -> IBackendBuffer
-    abstract member CreateBuffer : size : nativeint -> IBackendBuffer
+    abstract member PrepareBuffer : data : IBuffer * usage : BufferUsage -> IBackendBuffer
+    abstract member CreateBuffer : size : nativeint * usage : BufferUsage -> IBackendBuffer
     abstract member Copy : srcData : nativeint * dst : IBackendBuffer * dstOffset : nativeint * size : nativeint -> unit
     abstract member Copy : srcBuffer : IBackendBuffer * srcOffset : nativeint * dstData : nativeint * size : nativeint -> unit
     abstract member Copy : srcBuffer : IBackendBuffer * srcOffset : nativeint * dstBuffer : IBackendBuffer * dstOffset : nativeint * size : nativeint -> unit
 
     abstract member CopyAsync : srcBuffer : IBackendBuffer * srcOffset : nativeint * dstData : nativeint * size : nativeint -> (unit -> unit)
-
-    //abstract member CreateIndirectBuffer : data : IBackendBuffer * indexed : bool * stride : int * count : int -> IBackendIndirectBuffer
-    //abstract member CreateIndirectBuffer : size : nativeint * indexed : bool -> INativeIndirectBuffer
-    //abstract member Copy : srcData : DrawCallInfo[] * dst : IBackendIndirectBuffer * dstOffsetCount : nativeint * count : nativeint -> unit
-    //abstract member Copy : srcData : DrawCallInfo[] * srcOffsetCount : nativeint * dst : IBackendIndirectBuffer * dstOffsetCount : nativeint * count : nativeint -> unit
+        
+    // creates an indirect buffer
+    //abstract member CreateIndirectBuffer : count : nativeint * indexed : bool * stride : int -> IBackendIndirectBuffer // could be IBackend and user has to know Stride and Indexed type ?! // NOTE: only DX11 seems to require stride at creation time VK and GL in DrawIndirect // 'Indexed' no necessarily require at creation time
     
+    // upload indirect buffer data
+    //abstract member Copy : srcData : DrawCallInfo[] * dst : IBackendIndirectBuffer * dstOffsetCount : nativeint * count : nativeint -> unit
 
-
+    // creates an index buffer 
+    //abstract member CreateIndexBuffer : count : nativeint * indexType : IndexType -> IBackendBuffer
+        
 type ArrayBuffer(data : Array) =
     let elementType = data.GetType().GetElementType()
     let mutable gchandle = Unchecked.defaultof<_>
@@ -119,32 +122,6 @@ type NativeMemoryBuffer(ptr : nativeint, sizeInBytes : int) =
                 n.Ptr = ptr && n.SizeInBytes = sizeInBytes
             | _ -> false
 
-type IndirectBuffer(b : IBuffer, count : int, stride : int, indexed : bool) =
-    member x.Buffer = b
-    member x.Count = count
-    member x.Stride = stride
-    member x.Indexed = indexed
-
-//type BackendIndirectBuffer =
-//    class
-//        val mutable public Buffer : IBackendBuffer
-//        val mutable public Count : int
-//        val mutable public Stride : int
-//        val mutable public Indexed : bool
-
-//        //member x.BackendBuffer
-//        //    with get() = x.Buffer 
-
-//        interface IBackendIndirectBuffer with
-//            member x.Buffer = x.Buffer :> IBuffer
-//            member x.Count = x.Count
-//            member x.Stride = x.Stride
-//            member x.Indexed = x.Indexed
-
-//        new(b : IBackendBuffer, count, stride, indexed) = { Buffer = b; Count = count; Stride = stride; Indexed = indexed }
-//    end 
-
-
 type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : int) =
     let singleValue =
         match b with
@@ -173,6 +150,19 @@ type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : in
                 o.Buffer = b && o.ElementType = elementType && o.Offset = offset && o.Stride = stride
             | _ -> false
 
+
+/// native indirect buffers are supposed to have data layout as required by the graphics API, currently this is equal for OpenGL, Vulkan (and DX11)
+/// Indexed:     { uint count; uint primCount; uint firstIndex; uint baseVertex; uint baseInstance; }
+/// Non-indexed: { uint count; uint primCount; uint first; uint baseInstance; }
+/// NOTE: 
+///  1. indexed or non-indexed only matters if directly an IBackendBuffer is used, ArrayBuffers will be uploaded according to if there are indirect present
+///   -> constructor intended to be used with IBackendBuffer, other should use IndirectBuffer module
+///  2. stride is actually hard-coded to 20 in glvm and vkvm
+type IndirectBuffer(b : IBuffer, count : int, stride : int, indexed : bool) =
+    member x.Buffer = b
+    member x.Count = count
+    member x.Stride = stride
+    member x.Indexed = indexed
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module IndirectBuffer =
@@ -483,12 +473,12 @@ type IBufferRuntimeExtensions private() =
 
     [<Extension>]
     static member CreateBuffer<'a when 'a : unmanaged>(this : IBufferRuntime, count : int) =
-        let buffer = this.CreateBuffer(nsa<'a> * nativeint count)
+        let buffer = this.CreateBuffer(nsa<'a> * nativeint count, BufferUsage.Default)
         new RuntimeBuffer<'a>(buffer, count) :> IBuffer<'a>
         
     [<Extension>]
     static member CreateBuffer<'a when 'a : unmanaged>(this : IBufferRuntime, data : 'a[]) =
-        let buffer = this.CreateBuffer(nsa<'a> * nativeint data.Length)
+        let buffer = this.CreateBuffer(nsa<'a> * nativeint data.Length, BufferUsage.Default)
         let res = new RuntimeBuffer<'a>(buffer, data.Length) :> IBuffer<'a>
         IBufferRuntimeExtensions.Upload(res, data)
         res

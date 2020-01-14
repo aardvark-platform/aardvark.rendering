@@ -334,7 +334,7 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.PrepareRenderObject(fboSignature, rj) =failwith ""
         member x.PrepareTexture(t) = failwith ""
         member x.DeleteTexture(t) = failwith ""
-        member x.PrepareBuffer(b) = failwith ""
+        member x.PrepareBuffer(b, u) = failwith ""
         member x.DeleteBuffer(b) = failwith ""
 
         member x.DeleteRenderbuffer(b) = failwith ""
@@ -368,7 +368,7 @@ and MultiRuntime(runtimes : IRuntime[]) =
 
 
 
-        member x.CreateBuffer(size : nativeint) = failwith ""
+        member x.CreateBuffer(size : nativeint, usage : BufferUsage) = failwith ""
 
         member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) : unit =
             failwith ""

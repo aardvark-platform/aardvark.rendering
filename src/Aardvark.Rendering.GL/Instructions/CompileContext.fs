@@ -12,11 +12,11 @@ open Aardvark.Base
 /// </summary>
 module ExecutionContext =
 
-    /// <summary>
-    /// determines whether the current OpenGL implementation supports VAOs
-    /// </summary>
-    let vertexArrayObjectsSupported = 
-        Config.enableVertexArrayObjectsIfPossible && OpenGl.Pointers.BindVertexArray <> 0n
+    ///// <summary>
+    ///// determines whether the current OpenGL implementation supports VAOs
+    ///// </summary>
+    //let vertexArrayObjectsSupported = 
+    //    Config.enableVertexArrayObjectsIfPossible && OpenGl.Pointers.BindVertexArray <> 0n
 
     /// <summary>
     /// determines whether the current OpenGL implementation supports sampler objects
@@ -24,16 +24,17 @@ module ExecutionContext =
     let samplersSupported = 
         Config.enableSamplersIfPossible && OpenGl.Pointers.BindSampler <> 0n
 
-    /// <summary>
-    /// determines whether the current OpenGL implementation supports uniform buffers
-    /// </summary>
-    let uniformBuffersSupported = 
-        Config.enableUniformBuffersIfPossible && OpenGl.Pointers.BindBufferRange <> 0n
+    ///// <summary>
+    ///// determines whether the current OpenGL implementation supports uniform buffers
+    ///// </summary>
+    //let uniformBuffersSupported = 
+    //    Config.enableUniformBuffersIfPossible && OpenGl.Pointers.BindBufferRange <> 0n
 
-    /// <summary>
-    /// determines whether the current OpenGL implementation supports hardware instancing
-    /// </summary>
-    let instancingSupported = OpenGl.Pointers.VertexAttribDivisor <> 0n
+    // NOT IMPLEMENTED
+    ///// <summary>
+    ///// determines whether the current OpenGL implementation supports hardware instancing
+    ///// </summary>
+    //let instancingSupported = OpenGl.Pointers.VertexAttribDivisor <> 0n
 
     /// <summary>
     /// determines whether the current OpenGL implementation supports framebuffer objects
@@ -46,10 +47,11 @@ module ExecutionContext =
     let syncSupported = 
         let s = OpenGl.getProcAddress "glFenceSync" <> 0n
         s
-    /// <summary>
-    /// determines whether the current OpenGL implementation supports buffer storage (persistently mappable)
-    /// </summary>
-    let bufferStorageSupported = OpenGl.getProcAddress "glBufferStorage" <> 0n
+    // NOT IMPLEMENTED
+    ///// <summary>
+    ///// determines whether the current OpenGL implementation supports buffer storage (persistently mappable)
+    ///// </summary>
+    //let bufferStorageSupported = OpenGl.getProcAddress "glBufferStorage" <> 0n
 
 
 

@@ -301,8 +301,9 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.DeletRenderbuffer(t : IRenderbuffer) =
         device.Delete(unbox<Image> t)
 
-    member x.PrepareBuffer (t : IBuffer) =
-        device.CreateBuffer(VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit, t) :> IBackendBuffer
+    member x.PrepareBuffer (t : IBuffer, usage : BufferUsage) =
+        let flags = Buffer.toVkUsage usage
+        device.CreateBuffer(flags, t) :> IBackendBuffer
 
     member x.DeleteBuffer(t : IBackendBuffer) =
         device.Delete(unbox<Buffer> t)
@@ -482,16 +483,9 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     interface IDisposable with
         member x.Dispose() = x.Dispose() 
 
-    member x.CreateBuffer(size : nativeint) =
-        let usage =
-            VkBufferUsageFlags.TransferSrcBit ||| 
-            VkBufferUsageFlags.TransferDstBit ||| 
-            VkBufferUsageFlags.StorageBufferBit ||| 
-            VkBufferUsageFlags.VertexBufferBit |||
-            VkBufferUsageFlags.IndexBufferBit ||| 
-            VkBufferUsageFlags.IndirectBufferBit 
-
-        device.CreateBuffer(usage, int64 size)
+    member x.CreateBuffer(size : nativeint, usage : BufferUsage) =
+        let flags = Buffer.toVkUsage usage
+        device.CreateBuffer(flags, int64 size)
 
     member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
         let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit (int64 size)
@@ -696,7 +690,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.PrepareRenderObject(fboSignature, rj) = x.PrepareRenderObject(fboSignature, rj)
         member x.PrepareTexture(t) = x.PrepareTexture(t)
         member x.DeleteTexture(t) = x.DeleteTexture(t)
-        member x.PrepareBuffer(b) = x.PrepareBuffer(b)
+        member x.PrepareBuffer(b, u) = x.PrepareBuffer(b, u)
         member x.DeleteBuffer(b) = x.DeleteBuffer(b)
 
         member x.DeleteRenderbuffer(b) = x.DeletRenderbuffer(b)
@@ -728,7 +722,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
 
-        member x.CreateBuffer(size : nativeint) = x.CreateBuffer(size) :> IBackendBuffer
+        member x.CreateBuffer(size : nativeint, usage : BufferUsage) = x.CreateBuffer(size, usage) :> IBackendBuffer
 
         member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
             x.Copy(src, dst, dstOffset, size)

@@ -60,7 +60,7 @@ type ICommandStream =
     
     abstract member BindBufferRangeFixed : target : BufferRangeTarget * slot : int * b : nativeptr<int> * offset : nativeint * size : nativeint -> unit 
 
-    abstract member NamedBufferData : buffer : int * size : nativeint * data : nativeint * usage : BufferUsageHint -> unit 
+    abstract member NamedBufferData : buffer : int * size : nativeint * data : nativeint * usage : OpenTK.Graphics.OpenGL4.BufferUsageHint -> unit 
     abstract member NamedBufferSubData : buffer : int * offset : nativeint * size : nativeint * data : nativeint -> unit 
     
 
@@ -407,7 +407,7 @@ module GLAssemblerExtensions =
             s.PushArg(int target)
             s.Call(OpenGl.Pointers.BindBufferRange)
 
-        member this.NamedBufferData(buffer : int, size : nativeint, data : nativeint, usage : BufferUsageHint) =
+        member this.NamedBufferData(buffer : int, size : nativeint, data : nativeint, usage : OpenTK.Graphics.OpenGL4.BufferUsageHint) =
             s.BeginCall(4)
             s.PushArg (int usage)
             s.PushArg data
@@ -738,7 +738,7 @@ module GLAssemblerExtensions =
             member this.Get(pname: GetIndexedPName, index: int, ptr: nativeptr<'a>) = this.Get(pname, index, ptr)
             member this.GetQueryObject(query: nativeptr<int>, param: GetQueryObjectParam, ptr: nativeptr<'a>) = this.GetQueryObject(query, param, ptr)
             member this.GetQueryObject(query: int, param: GetQueryObjectParam, ptr: nativeptr<'a>) = this.GetQueryObject(query, param, ptr)
-            member this.NamedBufferData(buffer: int, size: nativeint, data: nativeint, usage: BufferUsageHint) = this.NamedBufferData(buffer, size, data, usage)
+            member this.NamedBufferData(buffer: int, size: nativeint, data: nativeint, usage: OpenTK.Graphics.OpenGL4.BufferUsageHint) = this.NamedBufferData(buffer, size, data, usage)
             member this.NamedBufferSubData(buffer: int, offset: nativeint, size: nativeint, data: nativeint) = this.NamedBufferSubData(buffer, offset, size, data)
             member this.QueryCounter(target: QueryCounterTarget, id: int) = this.QueryCounter(target, id)
             member this.QueryCounter(target: QueryCounterTarget, id: nativeptr<int>) = this.QueryCounter(target, id)
@@ -836,7 +836,7 @@ module GLAssemblerExtensions =
             member x.Get(pname: GetIndexedPName, index: int, ptr: nativeptr<'a>) = inner.Get(pname, index, ptr); x.Append("Get", pname, index, ptr)
             member x.GetQueryObject(query: nativeptr<int>, param: GetQueryObjectParam, ptr: nativeptr<'a>) = inner.GetQueryObject(query, param, ptr); x.Append("GetQueryObject", query, param, ptr)
             member x.GetQueryObject(query: int, param: GetQueryObjectParam, ptr: nativeptr<'a>) = inner.GetQueryObject(query, param, ptr); x.Append("GetQueryObject", query, param, ptr)
-            member x.NamedBufferData(buffer: int, size: nativeint, data: nativeint, usage: BufferUsageHint) = inner.NamedBufferData(buffer, size, data, usage); x.Append("NamedBufferData", buffer, size, data, usage)
+            member x.NamedBufferData(buffer: int, size: nativeint, data: nativeint, usage: OpenTK.Graphics.OpenGL4.BufferUsageHint) = inner.NamedBufferData(buffer, size, data, usage); x.Append("NamedBufferData", buffer, size, data, usage)
             member x.NamedBufferSubData(buffer: int, offset: nativeint, size: nativeint, data: nativeint) = inner.NamedBufferSubData(buffer, offset, size, data); x.Append("NamedBufferSubData", buffer, offset, size, data)
             member x.QueryCounter(target: QueryCounterTarget, id: int) = inner.QueryCounter(target, id); x.Append("QueryCounter", target, id)
             member x.QueryCounter(target: QueryCounterTarget, id: nativeptr<int>) = inner.QueryCounter(target, id); x.Append("QueryCounter", target, id)

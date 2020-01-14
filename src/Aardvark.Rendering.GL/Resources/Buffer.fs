@@ -18,7 +18,7 @@ open Aardvark.Rendering.GL
 /// defines usage hints for buffers. Note that these 
 /// hints can (but must not) be respected by the backend implementation.
 /// </summary>
-type BufferUsage = Static | Dynamic
+type BufferUsageHint = Static | Dynamic
 
 /// <summary>
 /// Buffer simply wraps an OpenGL buffer object and
@@ -60,10 +60,10 @@ module BufferExtensions =
     /// helper function translating our self-defined BufferUsage
     /// to OpenTK's BufferUsageHints
     /// </summary>   
-    let private usageHint (usage : BufferUsage) =
+    let private glUsageHint (usage : BufferUsageHint) =
         match usage with
-            | Static -> BufferUsageHint.StaticDraw
-            | Dynamic -> BufferUsageHint.StaticDraw
+            | Static -> OpenTK.Graphics.OpenGL4.BufferUsageHint.StaticDraw
+            | Dynamic -> OpenTK.Graphics.OpenGL4.BufferUsageHint.DynamicDraw
 
     /// <summary>
     /// extends Context with functions for creating, modifying and deleting buffers.
@@ -75,16 +75,16 @@ module BufferExtensions =
         /// the usage given is just a hint for the OpenGL implementation how
         /// to treat the buffer internally
         /// </summary>
-        member x.CreateBuffer(size : int, usage : BufferUsage) =
+        member x.CreateBuffer(size : int, usageHint : BufferUsageHint) =
             assert(size >= 0)
-            
+
             addBuffer x (int64 size)
             
             let handle = 
                 using x.ResourceLock (fun _ ->
                     let handle = GL.GenBuffer()
                     
-                    GL.NamedBufferData(handle, (nativeint size), 0n, usageHint usage)
+                    GL.NamedBufferData(handle, (nativeint size), 0n, glUsageHint usageHint)
                     GL.Check "failed to upload buffer"
                     
                     handle
@@ -103,15 +103,15 @@ module BufferExtensions =
         /// the usage given is just a hint for the OpenGL implementation how
         /// to treat the buffer internally
         /// </summary>
-        member x.CreateBuffer(data : Array, usage : BufferUsage) =
+        member x.CreateBuffer(data : Array, usageHint : BufferUsageHint) =
             let size = data.GetType().GetElementType().GLSize * data.Length
             let gcHandle = GCHandle.Alloc(data, GCHandleType.Pinned)
-            let result = x.CreateBuffer(gcHandle.AddrOfPinnedObject(), size, usage)     
+            let result = x.CreateBuffer(gcHandle.AddrOfPinnedObject(), size, usageHint)     
             gcHandle.Free()
             result
 
 
-        member x.CreateBuffer(data : nativeint, sizeInBytes : int, usage : BufferUsage) =
+        member x.CreateBuffer(data : nativeint, sizeInBytes : int, usage : BufferUsageHint) =
             
             addBuffer x (int64 sizeInBytes)
             
@@ -119,7 +119,7 @@ module BufferExtensions =
                 using x.ResourceLock (fun _ ->
                     let handle = GL.GenBuffer()
 
-                    EXT_direct_state_access.GL.NamedBufferData(handle, (nativeint sizeInBytes), data, usageHint usage)
+                    EXT_direct_state_access.GL.NamedBufferData(handle, (nativeint sizeInBytes), data, glUsageHint usage)
                     GL.Check "failed to upload buffer"
 
                     handle
@@ -590,7 +590,7 @@ module IndirectBufferExtensions =
             GL.Check "could not copy buffer"
 
         member x.Clone(b : Buffer, offset : nativeint, size : nativeint) =
-            let mine = x.CreateBuffer(0n, int size, BufferUsage.Dynamic)
+            let mine = x.CreateBuffer(0n, int size, BufferUsageHint.Dynamic)
             x.Copy(b, offset, mine, 0n, size)
             mine
 

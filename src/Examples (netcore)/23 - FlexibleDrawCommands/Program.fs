@@ -148,7 +148,7 @@ let main argv =
         |]
 
     // put draw call infos into buffer
-    let indirectBuffer = IndirectBuffer(ArrayBuffer drawCallInfos, drawCallInfos.Length) :> IIndirectBuffer
+    let indirectBuffer = IndirectBuffer.ofArray false drawCallInfos
 
     // we use per mesh data here. each geometry range gets specific mesh info here.
     let objectColors = Mod.init [| C4f.Red; C4f.DarkGreen |]

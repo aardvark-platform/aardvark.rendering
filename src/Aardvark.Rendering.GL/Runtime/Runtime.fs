@@ -96,8 +96,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     new(ctx) = new Runtime(ctx, true, true)
 
-    member x.SupportsUniformBuffers =
-        ExecutionContext.uniformBuffersSupported
+    //member x.SupportsUniformBuffers =
+    //    ExecutionContext.uniformBuffersSupported
 
     member x.Context
         with get() = ctx
@@ -435,8 +435,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CompileRender (signature, engine : BackendConfiguration, set : aset<IRenderObject>) = x.CompileRender(signature, engine,set)
         member x.CompileClear(signature, color, depth) = x.CompileClear(signature, color, depth)
       
-            
-        member x.CreateBuffer(size : nativeint) = x.CreateBuffer(size) :> IBackendBuffer
+        ///NOTE: OpenGL does not care about 
+        member x.CreateBuffer(size : nativeint, usage : BufferUsage) = x.CreateBuffer(size) :> IBackendBuffer
         member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = x.Upload(src, dst, dstOffset, size)
         member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) = x.Download(src, srcOffset, dst, size)
         member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = 
@@ -460,7 +460,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 | :? Texture as t -> x.DeleteTexture t
                 | _ -> failwithf "unsupported texture-type: %A" t
 
-        member x.PrepareBuffer (b : IBuffer) = x.PrepareBuffer b :> IBackendBuffer
+        member x.PrepareBuffer (b : IBuffer, usage : BufferUsage) = x.PrepareBuffer b :> IBackendBuffer
         member x.DeleteBuffer (b : IBackendBuffer) = 
             match b with
                 | :? Aardvark.Rendering.GL.Buffer as b -> x.DeleteBuffer b

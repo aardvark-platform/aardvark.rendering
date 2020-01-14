@@ -74,7 +74,7 @@ module Sems =
 
             o.IndirectBuffer <- 
                 b.Calls 
-                    |> Mod.map ( fun arr -> IndirectBuffer(ArrayBuffer(arr), arr.Length ) :> IIndirectBuffer )
+                    |> Mod.map ( fun arr -> IndirectBuffer.ofArray false arr)
 
             ASet.single (o :> IRenderObject)
 
