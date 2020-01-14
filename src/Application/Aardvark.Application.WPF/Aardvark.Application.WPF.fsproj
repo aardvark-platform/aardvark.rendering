@@ -15,6 +15,7 @@
     <OperatingSystem Condition="Exists('/usr')">UNIX</OperatingSystem>
     <OperatingSystem Condition="Exists('C:\Windows\')">WINDOWS</OperatingSystem>
     <TargetFrameworkProfile />
+	<DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
