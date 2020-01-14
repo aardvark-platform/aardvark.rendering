@@ -8,7 +8,6 @@ open System.Collections.Generic
 open Aardvark.Base.Rendering
 open System.Runtime.CompilerServices
 
-#nowarn "44"
 
 module Management =
     
@@ -808,7 +807,6 @@ and IRuntime =
     abstract member PrepareSurface : IFramebufferSignature * ISurface -> IBackendSurface
     abstract member PrepareRenderObject : IFramebufferSignature * IRenderObject -> IPreparedRenderObject
 
-    // type LodNode(quality : IModRef<float>, maxQuality : IModRef<float>, budget : IMod<int64>, culling : bool, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<DateTime>, clouds : aset<LodTreeInstance>) =
     abstract member CreateLodRenderer : config : LodRendererConfig * data : aset<LodTreeInstance> -> IPreparedRenderObject
 
 //    abstract member MaxLocalSize : V3i
@@ -818,43 +816,11 @@ and IRuntime =
 //    abstract member Invoke : shader : IComputeShader * groupCount : V3i * input : IComputeShaderInputBinding -> unit
 
     abstract member DeleteSurface : IBackendSurface -> unit
-
-
-//    abstract member PrepareBuffer : IBuffer -> IBackendBuffer
-//    abstract member DeleteBuffer : IBackendBuffer -> unit
-//    abstract member CreateBuffer : size : nativeint -> IBackendBuffer
-//    abstract member Copy : srcData : nativeint * dst : IBackendBuffer * dstOffset : nativeint * size : nativeint -> unit
-//    abstract member Copy : srcBuffer : IBackendBuffer * srcOffset : nativeint * dstData : nativeint * size : nativeint -> unit
-
-
-//    abstract member PrepareTexture : ITexture -> IBackendTexture
-//    abstract member CreateTexture : size : V3i * dim : TextureDimension * format : TextureFormat * slices : int * levels : int * samples : int -> IBackendTexture
-//    abstract member CreateRenderbuffer : size : V2i * format : RenderbufferFormat * samples : int -> IRenderbuffer
-//    abstract member DeleteTexture : IBackendTexture -> unit
     
-//    abstract member CreateTexture : size : V2i * format : TextureFormat * levels : int * samples : int -> IBackendTexture
-//    abstract member CreateTextureArray : size : V2i * format : TextureFormat * levels : int * samples : int * count : int -> IBackendTexture
-//    abstract member CreateTextureCube : size : V2i * format : TextureFormat * levels : int * samples : int -> IBackendTexture
-   
-//    abstract member GenerateMipMaps : IBackendTexture -> unit
-//    abstract member ResolveMultisamples : src : IFramebufferOutput * target : IBackendTexture * imgTrafo : ImageTrafo -> unit
-//    abstract member Upload : texture : IBackendTexture * level : int * slice : int * source : PixImage -> unit
-//    abstract member Download : texture : IBackendTexture * level : int * slice : int * target : PixImage -> unit
-//    abstract member DownloadStencil : texture : IBackendTexture * level : int * slice : int * target : Matrix<int> -> unit
-//    abstract member DownloadDepth : texture : IBackendTexture * level : int * slice : int * target : Matrix<float32> -> unit
-//    abstract member Copy : src : IBackendTexture * srcBaseSlice : int * srcBaseLevel : int * dst : IBackendTexture * dstBaseSlice : int * dstBaseLevel : int * slices : int * levels : int -> unit
-//
-
-
     abstract member CreateStreamingTexture : mipMaps : bool -> IStreamingTexture
     abstract member CreateSparseTexture<'a when 'a : unmanaged> : size : V3i * levels : int * slices : int * dim : TextureDimension * format : Col.Format * brickSize : V3i * maxMemory : int64 -> ISparseTexture<'a>
     
     abstract member CreateFramebuffer : signature : IFramebufferSignature * attachments : Map<Symbol, IFramebufferOutput> -> IFramebuffer
-
-    [<Obsolete>] // remove "nowarn 44" when deleting this
-    abstract member CreateMappedBuffer : unit -> IMappedBuffer
-    [<Obsolete>] // remove "nowarn 44" when deleting this
-    abstract member CreateMappedIndirectBuffer : indexed : bool -> IMappedIndirectBuffer
 
     abstract member CreateGeometryPool : Map<Symbol, Type> -> IGeometryPool
 

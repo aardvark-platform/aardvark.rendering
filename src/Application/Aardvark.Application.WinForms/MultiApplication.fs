@@ -362,12 +362,10 @@ and MultiRuntime(runtimes : IRuntime[]) =
 
         member x.CreateRenderbuffer(size, format, samples) =
             failwith ""
-        member x.CreateMappedBuffer() = failwith ""
-        member x.CreateMappedIndirectBuffer(indexed) = failwith ""
+
         member x.CreateGeometryPool(types) = failwith ""
 
-
-
+        
         member x.CreateBuffer(size : nativeint, usage : BufferUsage) = failwith ""
 
         member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) : unit =

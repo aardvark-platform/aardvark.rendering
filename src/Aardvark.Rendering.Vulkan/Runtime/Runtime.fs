@@ -14,76 +14,6 @@ open System.Collections.Generic
 open Aardvark.Base.Runtime
 open FShade
 #nowarn "9"
-// #nowarn "51"
-#nowarn "44"
-
-[<Obsolete>] // TODO remove "nowarn 44" when deleting this
-type private MappedBuffer(d : Device, store : ResizeBuffer) =
-    inherit ConstantMod<IBuffer>(store)
-
-    let onDispose = Event<_>()
-
-    interface IDisposable with
-        member x.Dispose() = 
-            onDispose.Trigger()
-            d |> ResizeBuffer.delete store
-
-    interface ILockedResource with
-        member x.Lock = store.Lock
-        member x.OnLock u = ()
-        member x.OnUnlock u = ()
-
-    interface IMappedBuffer with
-        member x.Write(sourcePtr, offset, size) = store.UseWrite(int64 offset, int64 size, fun dst -> Marshal.Copy(sourcePtr, dst, size))
-        member x.Read(targetPtr, offset, size) = store.UseWrite(int64 offset, int64 size, fun src -> Marshal.Copy(src, targetPtr, size))
-        member x.Capacity = nativeint store.Capacity
-        member x.Resize(newCapacity) = store.Resize(int64 newCapacity) 
-        member x.OnDispose = onDispose.Publish :> IObservable<_>
-        member x.UseRead(offset, size, f) = store.UseRead(int64 offset, int64 size, f)
-        member x.UseWrite(offset, size, f) = store.UseWrite(int64 offset, int64 size, f)
-
-//[<Obsolete>] // TODO remove "nowarn 44" when deleting this
-//type private MappedIndirectBuffer private(device : Device, indexed : bool, store : ResizeBuffer, indirect : IndirectBuffer) =
-//    inherit ConstantMod<IndirectBuffer>(indirect)
-//    static let drawCallSize = int64 sizeof<DrawCallInfo>
-
-//    let transform (c : DrawCallInfo) =
-//        if indexed then 
-//            let mutable c = c
-//            Fun.Swap(&c.BaseVertex, &c.FirstInstance)
-//            c
-//        else
-//            c
-
-//    new(device : Device, indexed : bool, store : ResizeBuffer) = new MappedIndirectBuffer(device, indexed, store, new VkIndirectBuffer(device, store.Handle, Unchecked.defaultof<_>, 0))
-
-//    interface IDisposable with
-//        member x.Dispose() = 
-//            device |> ResizeBuffer.delete store
-
-//    interface ILockedResource with
-//        member x.Lock = store.Lock
-//        member x.OnLock u = ()
-//        member x.OnUnlock u = ()
-
-//    interface IMappedIndirectBuffer with
-//        member x.Indexed = indexed
-//        member x.Resize cnt = store.Resize (int64 cnt * drawCallSize)
-//        member x.Capacity = store.Capacity / drawCallSize |> int
-//        member x.Count 
-//            with get() = indirect.Count
-//            and set c = indirect.Count <- c
-
-//        member x.Item
-//            with get (i : int) =
-//                let res = store.UseRead(int64 i * drawCallSize, drawCallSize, NativeInt.read<DrawCallInfo>)
-//                transform res
-
-//            and set (i : int) (v : DrawCallInfo) =
-//                let v = transform v
-//                store.UseWrite(int64 i * drawCallSize, drawCallSize, fun ptr -> NativeInt.write ptr v)
-
-
 
 
 type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug : bool) as this =
@@ -187,17 +117,6 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = failf "not implemented"
     member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = failf "not implemented"
-
-    [<Obsolete>] // TODO remove "nowarn 44" when deleting this
-    member x.CreateMappedBuffer() =
-        let store = device |> ResizeBuffer.create VkBufferUsageFlags.VertexBufferBit
-        new MappedBuffer(device, store) :> IMappedBuffer
-
-    [<Obsolete>] // TODO remove "nowarn 44" when deleting this
-    member x.CreateMappedIndirectBuffer(indexed : bool) =
-        failwith "Obsolete"
-        //let store = device |> ResizeBuffer.create VkBufferUsageFlags.IndirectBufferBit
-        //new MappedIndirectBuffer(device, indexed, store) :> IMappedIndirectBuffer
 
     member x.CreateStreamingTexture (mipMaps : bool) = failf "not implemented"
     member x.DeleteStreamingTexture (texture : IStreamingTexture) = failf "not implemented"
@@ -714,10 +633,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
         member x.CreateRenderbuffer(size, format, samples) = x.CreateRenderbuffer(size, format, samples)
-        [<Obsolete>] // TODO remove "nowarn 44" when deleting this
-        member x.CreateMappedBuffer() = x.CreateMappedBuffer()
-        [<Obsolete>] // TODO remove "nowarn 44" when deleting this
-        member x.CreateMappedIndirectBuffer(indexed) = x.CreateMappedIndirectBuffer(indexed)
+        
         member x.CreateGeometryPool(types) = new GeometryPoolUtilities.GeometryPool(device, types) :> IGeometryPool
 
 
