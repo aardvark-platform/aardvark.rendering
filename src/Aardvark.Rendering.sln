@@ -1,6 +1,6 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.28307.572
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29609.76
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "08 - DerivedAttributePerformance", "Scratch (net471)\08 - DerivedAttributePerformance\08 - DerivedAttributePerformance.fsproj", "{627A635E-2C40-49EE-BBBF-46FABA90C941}"
 EndProject
@@ -176,9 +176,6 @@ EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "09 - MappedBufferPerformance", "Scratch (net471)\09 - MappedBufferPerformance\09 - MappedBufferPerformance.fsproj", "{FEB14F7F-7746-444B-A0F1-E5DE9992F7ED}"
 EndProject
 Global
-	GlobalSection(Performance) = preSolution
-		HasPerformanceSessions = true
-	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
@@ -533,8 +530,5 @@ Global
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C41172B9-09C3-4327-8CE2-CB47CBAA29AC}
-	EndGlobalSection
-	GlobalSection(Performance) = preSolution
-		HasPerformanceSessions = true
 	EndGlobalSection
 EndGlobal

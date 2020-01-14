@@ -900,6 +900,8 @@ type PreparedObjectInfo =
 
         x.oVertexInputBinding.Dispose()
 
+        x.oActivation.Dispose()
+
     member x.Resources =
         seq {
             yield x.oBeginMode :> IResource
