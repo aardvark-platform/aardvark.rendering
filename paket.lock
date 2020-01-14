@@ -116,10 +116,8 @@ NUGET
       FSharp.Core (>= 4.2.3)
       NETStandard.Library (>= 2.0.1) - restriction: || (&& (== net471) (< net46)) (== netcoreapp2.0) (== netstandard2.0)
       NUnit (>= 3.9 < 4.0)
-    GLSLangSharp (0.4.5)
-      Aardvark.Base (>= 4.5.8)
-      Aardvark.Base.FSharp (>= 4.5.8)
-      FSharp.Core (>= 4.6.2 < 4.7)
+    GLSLangSharp (0.4.6)
+      FSharp.Core (>= 4.6.2)
     Microsoft.Extensions.CommandLineUtils (1.1.1) - restriction: || (&& (== net471) (>= netcoreapp1.0)) (== netcoreapp2.0) (&& (== netstandard2.0) (>= netcoreapp1.0))
       NETStandard.Library (>= 1.6.1) - restriction: || (&& (== net471) (< net451)) (== netcoreapp2.0) (== netstandard2.0)
     Microsoft.NETCore.App (2.2.8) - restriction: || (&& (== net471) (>= netcoreapp2.0)) (== netcoreapp2.0) (&& (== netstandard2.0) (>= netcoreapp2.0))
@@ -1298,7 +1296,7 @@ NUGET
       System.Drawing.Common (>= 4.7) - restriction: >= netcoreapp3.0
 GITHUB
   remote: aardvark-platform/aardvark.fake
-    FULLPROJECT (9853e55ac7555ff958cad720a51260b40a6a7a55)
+    FULLPROJECT (693df9bf48d87b146b3b4039b816cdb029177dc6)
       Argu (>= 5.5 < 5.6)
       fake-cli (>= 5.19 < 5.20)
       Fake.Core.Target (>= 5.19 < 5.20)
