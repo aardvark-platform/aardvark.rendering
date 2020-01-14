@@ -3,21 +3,21 @@ source https://api.nuget.org/v3/index.json
 
 nuget FSharp.Core                        ~> 4.6.2
 
-nuget Aardvark.Base.TypeProviders        ~> 4.5.14
-nuget Aardvark.Base.FSharp               ~> 4.5.21
-nuget Aardvark.Base.IO                   ~> 4.5.21
-nuget Aardvark.Base.Incremental          ~> 4.5.21
-nuget Aardvark.Base.Runtime              ~> 4.5.21
-nuget Aardvark.Base.Essentials           ~> 4.5.21
+nuget Aardvark.Base.TypeProviders        ~> 4.5.15
+nuget Aardvark.Base.FSharp               ~> 5.0.0-prerelease0001
+nuget Aardvark.Base.IO                   ~> 5.0.0-prerelease0001
+nuget Aardvark.Base.Incremental          ~> 5.0.0-prerelease0001
+nuget Aardvark.Base.Runtime              ~> 5.0.0-prerelease0001
+nuget Aardvark.Base.Essentials           ~> 5.0.0-prerelease0001
                                   
-nuget FShade.Core                        ~> 4.3.9
-nuget FShade                             ~> 4.3.9
-nuget FShade.Debug                       ~> 4.3.9
+nuget FShade.Core                        ~> 5.0.0-prerelease0001
+nuget FShade                             ~> 5.0.0-prerelease0001
+nuget FShade.Debug                       ~> 5.0.0-prerelease0001
 
 nuget Unofficial.OpenVR					 ~> 1.1.0 
 nuget Unofficial.Typography              ~> 0.0.3
 nuget CommonMark.NET                     ~> 0.15.1
-nuget GLSLangSharp                       ~> 0.4.4
+nuget GLSLangSharp                       ~> 0.4.6
 
 nuget BruTile                            ~> 2.0.0-alpha1
 nuget Unofficial.LibTessDotNet           ~> 2.0.2
