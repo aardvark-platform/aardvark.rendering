@@ -881,7 +881,7 @@ type PreparedObjectInfo =
         oIndexBuffer : Option<OpenGl.Enums.IndexType * IResource<Buffer, int>>
         oIsActive : IResource<bool, int>
         oDrawCallInfos : IResource<DrawCallInfoList, DrawCallInfoList>
-        oIndirectBuffer : Option<IResource<GLIndirectBuffer, V2i>>
+        oIndirectBuffer : Option<IResource<GLIndirectBuffer, IndirectDrawArgs>>
         oVertexInputBinding : IResource<VertexInputBindingHandle, int>  
     }
     

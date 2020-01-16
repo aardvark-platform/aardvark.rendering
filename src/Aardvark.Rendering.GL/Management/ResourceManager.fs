@@ -304,7 +304,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     member private x.BufferCache            : ResourceCache<Buffer, int>                    = bufferCache
     member private x.TextureCache           : ResourceCache<Texture, V2i>                   = textureCache
-    member private x.IndirectBufferCache    : ResourceCache<GLIndirectBuffer, V2i>          = indirectBufferCache
+    member private x.IndirectBufferCache    : ResourceCache<GLIndirectBuffer, IndirectDrawArgs> = indirectBufferCache
     member private x.SamplerCache           : ResourceCache<Sampler, int>                   = samplerCache
     member private x.VertexInputCache       : ResourceCache<VertexInputBindingHandle, int>  = vertexInputCache
     member private x.UniformLocationCache   : ResourceCache<UniformLocation, nativeint>     = uniformLocationCache
@@ -476,7 +476,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
             delete = fun h   -> if h.OwnResource then bufferManager.Delete(h.Buffer)
             info =   fun h   -> h.Buffer.SizeInBytes |> Mem |> ResourceInfo
-            view =   fun h   -> V2i(h.Buffer.Handle, h.Count)
+            view =   fun h   -> IndirectDrawArgs(h.Buffer.Handle, h.Count, h.Stride)
             kind = ResourceKind.IndirectBuffer
         })
 

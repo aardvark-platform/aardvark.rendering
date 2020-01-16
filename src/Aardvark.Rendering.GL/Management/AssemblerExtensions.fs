@@ -90,8 +90,8 @@ type ICommandStream =
 
     abstract member DrawArrays : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * calls : nativeptr<DrawCallInfoList> -> unit 
     abstract member DrawElements : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indexType : int * calls : nativeptr<DrawCallInfoList> -> unit 
-    abstract member DrawArraysIndirect : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indirect : nativeptr<V2i> -> unit 
-    abstract member DrawElementsIndirect : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indexType : int * indirect : nativeptr<V2i> -> unit 
+    abstract member DrawArraysIndirect : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indirect : nativeptr<IndirectDrawArgs> -> unit 
+    abstract member DrawElementsIndirect : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indexType : int * indirect : nativeptr<IndirectDrawArgs> -> unit 
     
     abstract member ClearColor : c : nativeptr<C4f> -> unit 
     abstract member ClearDepth : c : nativeptr<float> -> unit 
@@ -596,7 +596,7 @@ module GLAssemblerExtensions =
             s.PushArg(NativePtr.toNativeInt stats)
             s.Call(OpenGl.Pointers.HDrawElements)
 
-        member this.DrawArraysIndirect(stats : nativeptr<V2i>, isActive : nativeptr<int>, beginMode : nativeptr<GLBeginMode>, indirect : nativeptr<V2i>) =
+        member this.DrawArraysIndirect(stats : nativeptr<V2i>, isActive : nativeptr<int>, beginMode : nativeptr<GLBeginMode>, indirect : nativeptr<IndirectDrawArgs>) =
             s.BeginCall(4)
             s.PushArg(NativePtr.toNativeInt indirect)
             s.PushArg(NativePtr.toNativeInt beginMode)
@@ -604,7 +604,7 @@ module GLAssemblerExtensions =
             s.PushArg(NativePtr.toNativeInt stats)
             s.Call(OpenGl.Pointers.HDrawArraysIndirect)
             
-        member this.DrawElementsIndirect(stats : nativeptr<V2i>, isActive : nativeptr<int>, beginMode : nativeptr<GLBeginMode>, indexType : int, indirect : nativeptr<V2i>) =
+        member this.DrawElementsIndirect(stats : nativeptr<V2i>, isActive : nativeptr<int>, beginMode : nativeptr<GLBeginMode>, indexType : int, indirect : nativeptr<IndirectDrawArgs>) =
             s.BeginCall(5)
             s.PushArg(NativePtr.toNativeInt indirect)
             s.PushArg(indexType)
@@ -727,9 +727,9 @@ module GLAssemblerExtensions =
             member this.DispatchCompute(gx: int, gy: int, gz: int) = this.DispatchCompute(gx, gy, gz)
             member this.DispatchCompute(groups: nativeptr<V3i>) = this.DispatchCompute(groups)
             member this.DrawArrays(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, calls: nativeptr<DrawCallInfoList>) = this.DrawArrays(stats, isActive, beginMode, calls)
-            member this.DrawArraysIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indirect: nativeptr<V2i>) = this.DrawArraysIndirect(stats, isActive, beginMode, indirect)
+            member this.DrawArraysIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indirect: nativeptr<IndirectDrawArgs>) = this.DrawArraysIndirect(stats, isActive, beginMode, indirect)
             member this.DrawElements(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indexType: int, calls: nativeptr<DrawCallInfoList>) = this.DrawElements(stats, isActive, beginMode, indexType, calls)
-            member this.DrawElementsIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indexType: int, indirect: nativeptr<V2i>) = this.DrawElementsIndirect(stats, isActive, beginMode, indexType, indirect)
+            member this.DrawElementsIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indexType: int, indirect: nativeptr<IndirectDrawArgs>) = this.DrawElementsIndirect(stats, isActive, beginMode, indexType, indirect)
             member this.Enable(v: int) = this.Enable(v)
             member this.Enable(v: nativeptr<int>) = this.Enable(v)
             member this.EndQuery(target: QueryTarget) = this.EndQuery(target)
@@ -825,9 +825,9 @@ module GLAssemblerExtensions =
             member x.DispatchCompute(gx: int, gy: int, gz: int) = inner.DispatchCompute(gx, gy, gz); x.Append("DispatchCompute", gx, gy, gz)
             member x.DispatchCompute(groups: nativeptr<V3i>) = inner.DispatchCompute(groups); x.Append("DispatchCompute", groups)
             member x.DrawArrays(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, calls: nativeptr<DrawCallInfoList>) = inner.DrawArrays(stats, isActive, beginMode, calls); x.Append("DrawArrays", stats, isActive, beginMode, calls)
-            member x.DrawArraysIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indirect: nativeptr<V2i>) = inner.DrawArraysIndirect(stats, isActive, beginMode, indirect); x.Append("DrawArraysIndirect", stats, isActive, beginMode, indirect)
+            member x.DrawArraysIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indirect: nativeptr<IndirectDrawArgs>) = inner.DrawArraysIndirect(stats, isActive, beginMode, indirect); x.Append("DrawArraysIndirect", stats, isActive, beginMode, indirect)
             member x.DrawElements(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indexType: int, calls: nativeptr<DrawCallInfoList>) = inner.DrawElements(stats, isActive, beginMode, indexType, calls); x.Append("DrawElements", stats, isActive, beginMode, indexType, calls)
-            member x.DrawElementsIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indexType: int, indirect: nativeptr<V2i>) = inner.DrawElementsIndirect(stats, isActive, beginMode, indexType, indirect); x.Append("DrawElementsIndirect", stats, isActive, beginMode, indexType, indirect)
+            member x.DrawElementsIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indexType: int, indirect: nativeptr<IndirectDrawArgs>) = inner.DrawElementsIndirect(stats, isActive, beginMode, indexType, indirect); x.Append("DrawElementsIndirect", stats, isActive, beginMode, indexType, indirect)
             member x.Enable(v: int) = inner.Enable(v); x.Append("Enable", v)
             member x.Enable(v: nativeptr<int>) = inner.Enable(v); x.Append("Enable", v)
             member x.EndQuery(target: QueryTarget) = inner.EndQuery(target); x.Append("EndQuery", target)
@@ -928,7 +928,7 @@ module GLAssemblerExtensions =
                 calls.Pointer
             )
 
-        member inline x.DrawArraysIndirect(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, indirect : IResource<_, V2i>) =
+        member inline x.DrawArraysIndirect(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, indirect : IResource<_, IndirectDrawArgs>) =
             x.DrawArraysIndirect(
                 stats,
                 isActive.Pointer,
@@ -936,7 +936,7 @@ module GLAssemblerExtensions =
                 indirect.Pointer
             )
          
-        member inline x.DrawElementsIndirect(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, indexType : int, indirect : IResource<_, V2i>) =
+        member inline x.DrawElementsIndirect(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, indexType : int, indirect : IResource<_, IndirectDrawArgs>) =
             x.DrawElementsIndirect(
                 stats,
                 isActive.Pointer,
