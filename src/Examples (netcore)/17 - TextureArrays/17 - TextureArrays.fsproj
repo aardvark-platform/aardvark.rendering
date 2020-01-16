@@ -5,6 +5,7 @@
     <TargetFramework>netcoreapp2.0</TargetFramework>
     <EnableUnmanagedDebugging>true</EnableUnmanagedDebugging>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <OutputPath>..\..\..\bin\Debug</OutputPath>

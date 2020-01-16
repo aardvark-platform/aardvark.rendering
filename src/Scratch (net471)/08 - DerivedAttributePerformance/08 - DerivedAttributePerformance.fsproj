@@ -14,6 +14,7 @@
     <UseStandardResourceNames>true</UseStandardResourceNames>
     <Name>08 - DerivedAttributePerformance (net471)</Name>
     <TargetFrameworkProfile />
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
