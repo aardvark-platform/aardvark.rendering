@@ -4,11 +4,11 @@ open System
 open System.Threading
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Application
 open Aardvark.Application.WinForms
 open Aardvark.SceneGraph
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 
 
 type App private() =
@@ -23,7 +23,7 @@ type App private() =
     let mutable initialized = 0
     let app = new VulkanApplication(true)
     let win = app.CreateSimpleRenderWindow()
-    let sg = Mod.init emptySg
+    let sg = AVal.init emptySg
     let mutable clear = Unchecked.defaultof<IRenderTask>
     let mutable render = Unchecked.defaultof<IRenderTask>
     
@@ -32,14 +32,14 @@ type App private() =
         initial |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
 
     let proj = 
-        win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y))
+        win.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y))
 
     let init() =
         if Interlocked.Exchange(&initialized, 1) = 0 then
             let sg =
                 Sg.dynamic sg
-                    |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
-                    |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
+                    |> Sg.viewTrafo (view |> AVal.map CameraView.viewTrafo)
+                    |> Sg.projTrafo (proj |> AVal.map Frustum.projTrafo)
 
             clear <- app.Runtime.CompileClear(win.FramebufferSignature, ~~C4f.Gray30, ~~1.0)
             render <- app.Runtime.CompileRender(win.FramebufferSignature, sg)
@@ -104,7 +104,7 @@ module Simple =
         //let tex = PixTexture2d(PixImageMipMap [|red :> PixImage|], true) :> ITexture
 
 
-        let mode = Mod.init FillMode.Fill
+        let mode = AVal.init FillMode.Fill
 
 
 //        let surf =
@@ -117,14 +117,14 @@ module Simple =
             quadGeometry
                 |> Sg.ofIndexedGeometry
                 //|> Sg.diffuseTexture ~~tex
-                //|> Sg.surface (surf :> ISurface |> Mod.constant)
+                //|> Sg.surface (surf :> ISurface |> AVal.constant)
                 |> Sg.effect [
                     DefaultSurfaces.trafo |> toEffect
                     //DefaultSurfaces.diffuseTexture |> toEffect
                     DefaultSurfaces.constantColor C4f.White |> toEffect
                     DefaultSurfaces.simpleLighting |> toEffect
                    ]
-                |> Sg.depthTest (Mod.constant DepthTestMode.None)
+                |> Sg.depthTest (AVal.constant DepthTestMode.None)
                 |> Sg.fillMode mode
 
         app.Control.Keyboard.DownWithRepeats.Values.Add(fun k ->  
@@ -259,8 +259,8 @@ module Lod =
 
             )
 
-        let frustum (f : IMod<CameraView>) (proj : IMod<Frustum>) =
-            let invViewProj = Mod.map2 (fun v p -> (CameraView.viewTrafo v * Frustum.projTrafo p).Inverse) f proj
+        let frustum (f : aval<CameraView>) (proj : aval<Frustum>) =
+            let invViewProj = AVal.map2 (fun v p -> (CameraView.viewTrafo v * Frustum.projTrafo p).Inverse) f proj
 
             let positions = 
                 [|
@@ -373,7 +373,7 @@ module Lod =
             | Main
             | Test
 
-        let mode = Mod.init Main
+        let mode = AVal.init Main
 
         let currentMain = ref (CameraView.lookAt (V3d(3,3,3)) V3d.Zero V3d.OOI)
         let currentTest = ref (CameraView.lookAt (V3d(3,3,3)) V3d.Zero V3d.OOI)
@@ -413,8 +413,8 @@ module Lod =
         win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ ->
             transact (fun () ->
                 match mode.Value with
-                    | Main -> Mod.change mode Test
-                    | Test -> Mod.change mode Main
+                    | Main -> AVal.change mode Test
+                    | Test -> AVal.change mode Main
 
                 printfn "mode: %A" mode.Value
             )
@@ -427,8 +427,8 @@ module Lod =
             printfn "%A" view
         )
 
-        let mainProj = win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y)) 
-        let gridProj = Frustum.perspective 60.0 1.0 50.0 1.0 |> Mod.constant
+        let mainProj = win.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y)) 
+        let gridProj = Frustum.perspective 60.0 1.0 50.0 1.0 |> AVal.constant
 
         let proj =
             adaptive {
@@ -451,18 +451,18 @@ module Lod =
         win.Runtime.PrepareSurface(
             win.FramebufferSignature,
             eff
-        ) :> ISurface |> Mod.constant
+        ) :> ISurface |> AVal.constant
 
 
     let cloud =
         Sg.pointCloud data {
-            lodRasterizer           = Mod.constant (LodData.defaultRasterizeSet 40.0)
-            freeze                  = Mod.constant false
+            lodRasterizer           = AVal.constant (LodData.defaultRasterizeSet 40.0)
+            freeze                  = AVal.constant false
             maxReuseRatio           = 0.5
             minReuseCount           = 1L <<< 20
             pruneInterval           = 500
-            customView              = Some (gridCam |> Mod.map CameraView.viewTrafo)
-            customProjection        = Some (gridProj |> Mod.map Frustum.projTrafo)
+            customView              = Some (gridCam |> AVal.map CameraView.viewTrafo)
+            customProjection        = Some (gridProj |> AVal.map Frustum.projTrafo)
             attributeTypes =
                 Map.ofList [
                     DefaultSemantic.Positions, typeof<V3f>
@@ -494,9 +494,9 @@ module Lod =
                 DefaultSurfaces.trafo |> toEffect                  
                 DefaultSurfaces.vertexColor  |> toEffect 
                 ]
-            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo ) 
-            |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo    )
-            |> Sg.uniform "PointSize" (Mod.constant 4.0)
+            |> Sg.viewTrafo (view |> AVal.map CameraView.viewTrafo ) 
+            |> Sg.projTrafo (proj |> AVal.map Frustum.projTrafo    )
+            |> Sg.uniform "PointSize" (AVal.constant 4.0)
     
     let run() =
         app.SceneGraph <- final

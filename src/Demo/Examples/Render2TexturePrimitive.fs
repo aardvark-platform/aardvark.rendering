@@ -20,10 +20,10 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Interactive
 
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.Base.Incremental.Operators // loads operators such as ~~ and %+ for conveniently creating and modifying mods
+open FSharp.Data.Adaptive.Operators // loads operators such as ~~ and %+ for conveniently creating and modifying mods
 
 
 module Render2TexturePrimitive = 

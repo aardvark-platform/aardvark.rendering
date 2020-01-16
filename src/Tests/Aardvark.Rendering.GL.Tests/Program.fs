@@ -2,7 +2,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 open OpenTK.Graphics.OpenGL4
@@ -38,8 +38,8 @@ let testCompile() =
 
     let uniforms (t : V3d) =
         UniformProvider.ofList [
-            Symbol.Create "ModelTrafo", Mod.constant (Trafo3d.Translation t) :> IMod
-            Symbol.Create "ViewProjTrafo", Mod.constant Trafo3d.Identity :> IMod
+            Symbol.Create "ModelTrafo", AVal.constant (Trafo3d.Translation t) :> IAdaptiveValue
+            Symbol.Create "ViewProjTrafo", AVal.constant Trafo3d.Identity :> IAdaptiveValue
         ]
 
     let attributes =
@@ -52,23 +52,23 @@ let testCompile() =
             Id = newId()
             AttributeScope = Ag.emptyScope
             
-            IsActive            = Mod.constant true
+            IsActive            = AVal.constant true
             RenderPass          = RenderPass.main
             
-            DrawCallInfos       = Mod.constant [ callInfo ]
+            DrawCallInfos       = AVal.constant [ callInfo ]
             IndirectBuffer      = null
             Mode                = IndexedGeometryMode.TriangleList
         
 
             Surface             = Surface.Backend (surface :> ISurface)
                       
-            DepthTest           = Mod.constant DepthTestMode.LessOrEqual
-            DepthBias           = Mod.constant (DepthBiasState(0.0, 0.0, 0.0))
-            CullMode            = Mod.constant CullMode.None
-            FrontFace           = Mod.constant WindingOrder.CounterClockwise
-            BlendMode           = Mod.constant BlendMode.None
-            FillMode            = Mod.constant FillMode.Fill
-            StencilMode         = Mod.constant StencilMode.Disabled
+            DepthTest           = AVal.constant DepthTestMode.LessOrEqual
+            DepthBias           = AVal.constant (DepthBiasState(0.0, 0.0, 0.0))
+            CullMode            = AVal.constant CullMode.None
+            FrontFace           = AVal.constant WindingOrder.CounterClockwise
+            BlendMode           = AVal.constant BlendMode.None
+            FillMode            = AVal.constant FillMode.Fill
+            StencilMode         = AVal.constant StencilMode.Disabled
             
             Indices             = None
             InstanceAttributes  = AttributeProvider.Empty
@@ -76,14 +76,14 @@ let testCompile() =
             
             Uniforms            = uniforms V3d.Zero
 
-            ConservativeRaster  = Mod.constant false
-            Multisample         = Mod.constant true
+            ConservativeRaster  = AVal.constant false
+            Multisample         = AVal.constant true
 
             Activate            = fun () -> { new IDisposable with member x.Dispose() = () }
             WriteBuffers        = None
         }
 
-    let framebuffer = runtime.CreateFramebuffer(signature, Mod.constant(V2i(1024, 1024)))
+    let framebuffer = runtime.CreateFramebuffer(signature, AVal.constant(V2i(1024, 1024)))
     framebuffer.Acquire()
 
     let objects =

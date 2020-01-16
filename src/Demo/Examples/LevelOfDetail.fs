@@ -4,12 +4,12 @@
 open System
 open System.IO
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection
 open Aardvark.Rendering.Text
@@ -59,22 +59,22 @@ module LevelOfDetail =
 
         let tree = Octree(Box3d(-V3d.III, V3d.III))
 
-        let desiredLen = Mod.init 1.0
+        let desiredLen = AVal.init 1.0
 
         let visible (b : Octree) = true
         let descend (l : float) (b : Octree) = b.Bounds.Size.Length > l
         
 
-        let root = Mod.constant (Some tree)
+        let root = AVal.constant (Some tree)
 
         let existing = System.Collections.Concurrent.ConcurrentHashSet<Box3d>()
         let boxes = System.Collections.Generic.HashSet<Box3d>()
 
         let view =
             {
-                root = Mod.constant (Some tree)
-                visible = Mod.constant visible
-                descend = desiredLen |> Mod.map descend
+                root = AVal.constant (Some tree)
+                visible = AVal.constant visible
+                descend = desiredLen |> AVal.map descend
                 showInner = false
             }
 
@@ -152,7 +152,7 @@ module LevelOfDetail =
                 do! Async.SwitchToThreadPool()
                 let color = rand.UniformC3f().ToV4d()
                 let trafo = Trafo3d.Scale(0.5 * bounds.Size) * Trafo3d.Translation(bounds.Center)
-                let uniforms = Map.ofList ["ModelTrafo", Mod.constant trafo :> IMod; "NodeColor", Mod.constant color :> IMod]
+                let uniforms = Map.ofList ["ModelTrafo", AVal.constant trafo :> IAdaptiveValue; "NodeColor", AVal.constant color :> IAdaptiveValue]
 
                 return Geometry.ofIndexedGeometry uniforms sphere
             }
@@ -189,12 +189,12 @@ module LevelOfDetail =
         let view =
             CameraView.lookAt (V3d(60,60,60)) V3d.Zero V3d.OOI
                 |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
-                |> Mod.map CameraView.viewTrafo
+                |> AVal.map CameraView.viewTrafo
 
         let proj =
             win.Sizes 
-                |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
-                |> Mod.map Frustum.projTrafo
+                |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
+                |> AVal.map Frustum.projTrafo
 
         let sg = 
             Sg.box' C4b.Red Box3d.Unit
@@ -311,7 +311,7 @@ module LevelOfDetail =
 //
 //        let sg =
 //            Sg.fullScreenQuad
-//                |> Sg.diffuseTexture (Mod.constant (tgl :> ITexture))
+//                |> Sg.diffuseTexture (AVal.constant (tgl :> ITexture))
 //                |> Sg.shader {
 //                    do! DefaultSurfaces.diffuseTexture
 //                }
@@ -319,7 +319,7 @@ module LevelOfDetail =
 //        
 //        let sg =
 //            Sg.fullScreenQuad
-//                |> Sg.diffuseTexture (Mod.constant (tvk :> ITexture))
+//                |> Sg.diffuseTexture (AVal.constant (tvk :> ITexture))
 //                |> Sg.shader {
 //                    do! DefaultSurfaces.diffuseTexture
 //                }
@@ -339,17 +339,17 @@ module LevelOfDetail =
         let view =
             CameraView.lookAt (V3d(60,60,60)) V3d.Zero V3d.OOI
                 |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
-                |> Mod.map CameraView.viewTrafo
+                |> AVal.map CameraView.viewTrafo
 
         let proj =
             win.Sizes 
-                |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
-                |> Mod.map Frustum.projTrafo
+                |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
+                |> AVal.map Frustum.projTrafo
 
 
         let mutable frozen = false
-        let views = DefaultingModRef (view |> Mod.map Array.singleton)
-        let projs = DefaultingModRef (proj |> Mod.map Array.singleton)
+        let views = DefaultingModRef (view |> AVal.map Array.singleton)
+        let projs = DefaultingModRef (proj |> AVal.map Array.singleton)
 
         let toggleFreeze() =
             transact (fun () ->
@@ -357,8 +357,8 @@ module LevelOfDetail =
                     views.Reset()
                     projs.Reset()
                 else
-                    views.Value <- Mod.force views
-                    projs.Value <- Mod.force projs
+                    views.Value <- AVal.force views
+                    projs.Value <- AVal.force projs
                 frozen <- not frozen
             )
 
@@ -369,16 +369,16 @@ module LevelOfDetail =
         let tree = GeometryTree(Box3d(-10.0 * V3d.III, 10.0 * V3d.III))
 
 
-        let viewProj = Mod.map2 (Array.map2 (*)) views projs
+        let viewProj = AVal.map2 (Array.map2 (*)) views projs
 
 
         let visible =
-            viewProj |> Mod.map (fun (vps : Trafo3d[]) (node : GeometryTree) ->
+            viewProj |> AVal.map (fun (vps : Trafo3d[]) (node : GeometryTree) ->
                 vps |> Array.exists (ViewProjection.intersects node.Bounds)
             )
 
         let descend =
-            viewProj |> Mod.map (fun (vps : Trafo3d[]) (node : GeometryTree) ->
+            viewProj |> AVal.map (fun (vps : Trafo3d[]) (node : GeometryTree) ->
                 let projectedLength (b : Box3d) (t : Trafo3d) =
                     let ssb = b.ComputeCorners() |> Array.map (t.Forward.TransformPosProj) |> Box3d
                     max ssb.Size.X ssb.Size.Y
@@ -413,7 +413,7 @@ module LevelOfDetail =
         
         let treeView = 
             { 
-                root = Mod.constant (Some tree)
+                root = AVal.constant (Some tree)
                 visible = visible
                 descend = descend
                 showInner = false
@@ -512,7 +512,7 @@ module LevelOfDetail =
 
         device.Delete hostVisible
 
-        let tex = Mod.constant (img :> ITexture)
+        let tex = AVal.constant (img :> ITexture)
 
         //let tex = DefaultTextures.checkerboard
 
@@ -552,22 +552,22 @@ module LevelOfDetail =
 
         let state =
             {
-                depthTest           = Mod.constant DepthTestMode.LessOrEqual
-                depthBias           = Mod.constant (DepthBiasState(0.0, 0.0, 0.0))
-                cullMode            = Mod.constant CullMode.None
-                frontFace           = Mod.constant WindingOrder.CounterClockwise
-                blendMode           = Mod.constant BlendMode.None
-                fillMode            = Mod.constant FillMode.Fill
-                stencilMode         = Mod.constant StencilMode.Disabled
-                multisample         = Mod.constant true
+                depthTest           = AVal.constant DepthTestMode.LessOrEqual
+                depthBias           = AVal.constant (DepthBiasState(0.0, 0.0, 0.0))
+                cullMode            = AVal.constant CullMode.None
+                frontFace           = AVal.constant WindingOrder.CounterClockwise
+                blendMode           = AVal.constant BlendMode.None
+                fillMode            = AVal.constant FillMode.Fill
+                stencilMode         = AVal.constant StencilMode.Disabled
+                multisample         = AVal.constant true
                 writeBuffers        = None
                 globalUniforms      = 
                     UniformProvider.ofList [
-                        "DiffuseColorTexture", tex :> IMod
-                        "ViewTrafo", view :> IMod
-                        "ProjTrafo", proj :> IMod
-                        "LightLocation", view |> Mod.map (fun v -> v.Backward.C3.XYZ) :> IMod
-                        "CameraLocation", view |> Mod.map (fun v -> v.Backward.C3.XYZ) :> IMod
+                        "DiffuseColorTexture", tex :> IAdaptiveValue
+                        "ViewTrafo", view :> IAdaptiveValue
+                        "ProjTrafo", proj :> IAdaptiveValue
+                        "LightLocation", view |> AVal.map (fun v -> v.Backward.C3.XYZ) :> IAdaptiveValue
+                        "CameraLocation", view |> AVal.map (fun v -> v.Backward.C3.XYZ) :> IAdaptiveValue
                     ]
 
                 geometryMode        = IndexedGeometryMode.TriangleList

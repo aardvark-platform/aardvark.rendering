@@ -9,6 +9,7 @@ open System.Collections.Concurrent
 open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Application
+open FSharp.Data.Adaptive
 
 type IControl =
     abstract member Paint : unit -> unit
@@ -77,13 +78,13 @@ type IControl =
 //            let newValue = update oldValue
 //            ex <- Interlocked.CompareExchange(&location, newValue, oldValue)
 //
-//    let mutable q : hset<IControl> = HSet.empty
+//    let mutable q : HashSet<IControl> = HashSet.empty
 //    let mutable timer : MyTimer = null
 //    let periodic = ConcurrentHashSet<Periodic>()
 //
 //    let rec processAll() =
-//        let mine = Interlocked.Exchange(&q, HSet.empty)
-//        let mine = mine |> HSet.toList
+//        let mine = Interlocked.Exchange(&q, HashSet.empty)
+//        let mine = mine |> HashSet.toList
 //        for ctrl in mine do
 //            try 
 //                if not ctrl.IsInvalid then
@@ -105,7 +106,7 @@ type IControl =
 //        timer <- new MyTimer((fun _ -> this.Process()), 0L, 2L)
 //
 //    member x.Draw(c : IControl) =
-//        interlockedChange &q (fun q -> HSet.add c q)
+//        interlockedChange &q (fun q -> HashSet.add c q)
 //
 //    member x.EnqueuePeriodic (f : float -> unit, intervalInMilliseconds : int) =
 //        let p = Periodic(intervalInMilliseconds, f)
@@ -131,13 +132,13 @@ type private MessageLoopImpl() =
     let mean = RunningMean(10)
 
     [<VolatileField>]
-    let mutable dirty : ref<hset<Control>> = ref HSet.empty
+    let mutable dirty : ref<HashSet<Control>> = ref HashSet.empty
 
     let run() =
         while running do
             trigger.Wait()
-            let set = !Interlocked.Exchange(&dirty, ref HSet.empty)
-            if not (HSet.isEmpty set) then
+            let set = !Interlocked.Exchange(&dirty, ref HashSet.empty)
+            if not (HashSet.isEmpty set) then
                 let controls = set |> Seq.filter (fun c -> not c.IsDisposed && c.IsHandleCreated) |> Seq.toList
                 match controls with
                     | h :: _ ->
@@ -163,10 +164,10 @@ type private MessageLoopImpl() =
     member x.Invalidate(ctrl : Control) =
         let mutable contained = false
         let mutable o = dirty
-        let mutable n = ref <| HSet.alter ctrl (fun c -> contained <- c; true) !o
+        let mutable n = ref <| HashSet.alter ctrl (fun c -> contained <- c; true) !o
         while Interlocked.CompareExchange(&dirty, n, o) != o do
             o <- dirty
-            n <- ref <| HSet.alter ctrl (fun c -> contained <- c; true) !o
+            n <- ref <| HashSet.alter ctrl (fun c -> contained <- c; true) !o
 
         not contained
 

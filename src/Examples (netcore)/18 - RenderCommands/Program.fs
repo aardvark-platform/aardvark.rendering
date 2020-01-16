@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Application
 open Aardvark.SceneGraph
 
@@ -66,7 +66,7 @@ let main argv =
     let box = Box3d(-0.7 * V3d.III, 0.7 * V3d.III)
     let color = C4b.Red
 
-    let clear = Mod.init false
+    let clear = AVal.init false
 
     win.Keyboard.DownWithRepeats.Values.Add(fun k ->
         match k with
@@ -78,7 +78,7 @@ let main argv =
 
     let box = 
         // thankfully aardvark defines a primitive box
-        Sg.box (Mod.constant color) (Mod.constant box)
+        Sg.box (AVal.constant color) (AVal.constant box)
 
             // apply the texture as "DiffuseTexture"
             |> Sg.diffuseTexture DefaultTextures.checkerboard
@@ -105,18 +105,18 @@ let main argv =
                 do! DefaultSurfaces.simpleLighting
             }
 
-    let desiredLen = Mod.init 1.0
+    let desiredLen = AVal.init 1.0
     let lod = 
         let tree = Octree(Box3d(-V3d.III, V3d.III))
         let visible (b : Octree) = true
         let descend (l : float) (b : Octree) = b.Bounds.Size.Length > l
-        let root = Mod.constant (Some tree)
+        let root = AVal.constant (Some tree)
 
         let view =
             {
-                root = Mod.constant (Some tree)
-                visible = Mod.constant visible
-                descend = desiredLen |> Mod.map descend
+                root = AVal.constant (Some tree)
+                visible = AVal.constant visible
+                descend = desiredLen |> AVal.map descend
                 showInner = true
             }   
 
@@ -149,7 +149,7 @@ let main argv =
             do! DefaultSurfaces.trafo
             do! DefaultSurfaces.thickLine
         }  
-        |> Sg.uniform "LineWidth" (Mod.constant 3.0)
+        |> Sg.uniform "LineWidth" (AVal.constant 3.0)
         //|> Sg.uniform "ViewportSize" win.Sizes
 
 

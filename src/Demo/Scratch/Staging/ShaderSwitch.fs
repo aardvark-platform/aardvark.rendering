@@ -8,7 +8,7 @@ open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
@@ -73,7 +73,7 @@ module ``Shader Switch`` =
             ]
 
         let effects = [| effectRed; effectGreen; effectBlue |]
-        let effectId = Mod.init 0
+        let effectId = AVal.init 0
 
         let prepare = r.PrepareEffect(fboSig, effectBlue)
 
@@ -84,7 +84,7 @@ module ``Shader Switch`` =
 
             let modules = modules |> Array.map (EffectInputLayout.apply layout)
 
-            let currentModule = effectId |> Mod.map (fun i -> modules.[i % modules.Length])
+            let currentModule = effectId |> AVal.map (fun i -> modules.[i % modules.Length])
 
             layout, currentModule
 
@@ -136,7 +136,7 @@ module ``Shader Switch`` =
                 
         )
 
-        let mode = Mod.init FillMode.Fill
+        let mode = AVal.init FillMode.Fill
         App.Keyboard.KeyDown(Keys.K).Values.Add (fun () ->
             transact (fun () ->
                 mode.Value <- 
@@ -159,10 +159,10 @@ module ``Shader Switch`` =
             PixTexture2d(PixImageMipMap(img), TextureParams.empty) :> ITexture
 
         let sg = 
-            Sg.set(geometries |> ASet.map (fun (vg,t) -> Sg.ofIndexedGeometry vg |> Sg.trafo (Mod.constant t)))
+            Sg.set(geometries |> ASet.map (fun (vg,t) -> Sg.ofIndexedGeometry vg |> Sg.trafo (AVal.constant t)))
                 |> Sg.fillMode mode
-                |> Sg.uniform "LightLocation" (Mod.constant (10.0 * V3d.III))
+                |> Sg.uniform "LightLocation" (AVal.constant (10.0 * V3d.III))
                 //|> Sg.surface (prepare :> ISurface)
-                |> Sg.texture DefaultSemantic.DiffuseColorTexture (Mod.constant randomColors)
+                |> Sg.texture DefaultSemantic.DiffuseColorTexture (AVal.constant randomColors)
                 |> surface
         sg

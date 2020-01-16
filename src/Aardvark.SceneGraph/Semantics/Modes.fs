@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.SceneGraph.Semantics
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
 open Aardvark.Base.Rendering
@@ -12,19 +12,19 @@ open Aardvark.SceneGraph.Internal
 module ModeSemantics =
 
     type ISg with
-        member x.DepthTestMode : IMod<DepthTestMode> = x?DepthTestMode
-        member x.DepthBias     : IMod<DepthBiasState> = x?DepthBias
-        member x.CullMode      : IMod<CullMode>      = x?CullMode
-        member x.FrontFace     : IMod<WindingOrder>  = x?FrontFace
-        member x.FillMode      : IMod<FillMode>      = x?FillMode
-        member x.StencilMode   : IMod<StencilMode>   = x?StencilMode
-        member x.BlendMode     : IMod<BlendMode>     = x?BlendMode
+        member x.DepthTestMode : aval<DepthTestMode> = x?DepthTestMode
+        member x.DepthBias     : aval<DepthBiasState> = x?DepthBias
+        member x.CullMode      : aval<CullMode>      = x?CullMode
+        member x.FrontFace     : aval<WindingOrder>  = x?FrontFace
+        member x.FillMode      : aval<FillMode>      = x?FillMode
+        member x.StencilMode   : aval<StencilMode>   = x?StencilMode
+        member x.BlendMode     : aval<BlendMode>     = x?BlendMode
 
         member x.WriteBuffers   : Option<Set<Symbol>>       = x?WriteBuffers
-        member x.ColorWriteMask : IMod<bool*bool*bool*bool> = x?ColorWriteMask
-        member x.DepthWriteMask : IMod<bool>                = x?ColorWriteMask
-        member x.ConservativeRaster : IMod<bool>            = x?ConservativeRaster
-        member x.Multisample : IMod<bool>                   = x?Multisample
+        member x.ColorWriteMask : aval<bool*bool*bool*bool> = x?ColorWriteMask
+        member x.DepthWriteMask : aval<bool>                = x?ColorWriteMask
+        member x.ConservativeRaster : aval<bool>            = x?ConservativeRaster
+        member x.Multisample : aval<bool>                   = x?Multisample
 
     module Semantic =
         let depthTestMode  (s : ISg) = s.DepthTestMode
@@ -42,18 +42,18 @@ module ModeSemantics =
         
     [<Semantic>]
     type ModeSem() =
-        let defaultDepth   = Mod.constant DepthTestMode.LessOrEqual
-        let defaultCull    = Mod.constant CullMode.None
-        let defaultFill    = Mod.constant FillMode.Fill
-        let defaultStencil = Mod.constant StencilMode.Disabled
-        let defaultBlend   = Mod.constant BlendMode.None
+        let defaultDepth   = AVal.constant DepthTestMode.LessOrEqual
+        let defaultCull    = AVal.constant CullMode.None
+        let defaultFill    = AVal.constant FillMode.Fill
+        let defaultStencil = AVal.constant StencilMode.Disabled
+        let defaultBlend   = AVal.constant BlendMode.None
         let defaultWriteBuffers   = Option<Set<Symbol>>.None
-        let defaultColorWriteMask = Mod.constant (true,true,true,true)
-        let defaultDepthWriteMask = Mod.constant true
-        let defaultConservativeRaster = Mod.constant false
-        let defaultMultisample = Mod.constant true
-        let defaultDepthBias = Mod.constant (DepthBiasState(0.0, 0.0, 0.0))
-        let defaultFrontFace = Mod.constant WindingOrder.Clockwise
+        let defaultColorWriteMask = AVal.constant (true,true,true,true)
+        let defaultDepthWriteMask = AVal.constant true
+        let defaultConservativeRaster = AVal.constant false
+        let defaultMultisample = AVal.constant true
+        let defaultDepthBias = AVal.constant (DepthBiasState(0.0, 0.0, 0.0))
+        let defaultFrontFace = AVal.constant WindingOrder.Clockwise
 
         member x.DepthTestMode(e : Root<ISg>) =
             e.Child?DepthTestMode <- defaultDepth

@@ -2,7 +2,7 @@
 
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.IO
 open Aardvark.Application
@@ -32,6 +32,6 @@ module RecordUniforms =
         let sg = 
             Sg.fullScreenQuad
             |> Sg.effect [ Shader.shader |> toEffect ]
-            |> Sg.uniform "Hugo" (Mod.constant [| { r = 1.0; g = 0.0; b = 1.0; }; { r = 1.0; g = 1.0; b = 0.0; } |])
+            |> Sg.uniform "Hugo" (AVal.constant [| { r = 1.0; g = 0.0; b = 1.0; }; { r = 1.0; g = 1.0; b = 0.0; } |])
 
         sg

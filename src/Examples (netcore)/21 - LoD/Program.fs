@@ -1,7 +1,7 @@
 ﻿open System
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -26,8 +26,8 @@ module Helpers =
     let randomColor2 ()  =
         C4b(rand.Next(255) |> byte, rand.Next(255) |> byte, rand.Next(255) |> byte, 255uy)
 
-    let frustum (f : IMod<CameraView>) (proj : IMod<Frustum>) =
-        let invViewProj = Mod.map2 (fun v p -> (CameraView.viewTrafo v * Frustum.projTrafo p).Inverse) f proj
+    let frustum (f : aval<CameraView>) (proj : aval<Frustum>) =
+        let invViewProj = AVal.map2 (fun v p -> (CameraView.viewTrafo v * Frustum.projTrafo p).Inverse) f proj
 
         let positions = 
             [|
@@ -220,7 +220,7 @@ let main argv =
         samples 1
     }
 
-    let mode = Mod.init Main
+    let mode = AVal.init Main
 
     let currentMain = ref (CameraView.lookAt (V3d(3,3,3)) V3d.Zero V3d.OOI)
     let currentTest = ref (CameraView.lookAt (V3d(3,3,3)) V3d.Zero V3d.OOI)
@@ -260,16 +260,16 @@ let main argv =
     win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ ->
         transact (fun () ->
             match mode.Value with
-                | Main -> Mod.change mode Test
-                | Test -> Mod.change mode Main
+                | Main -> AVal.change mode Test
+                | Test -> AVal.change mode Main
 
             printfn "mode: %A" mode.Value
         )
     )
 
 
-    let mainProj = win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.01 10.0 (float s.X / float s.Y))
-    let gridProj = Frustum.perspective 60.0 1.0 50.0 1.0 |> Mod.constant
+    let mainProj = win.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.01 10.0 (float s.X / float s.Y))
+    let gridProj = Frustum.perspective 60.0 1.0 50.0 1.0 |> AVal.constant
 
     let proj =
         adaptive {
@@ -281,13 +281,13 @@ let main argv =
 
     let cloud =
         pointCloud data {
-            lodRasterizer           = Mod.constant (LodData.defaultRasterizeSet 5.0)
-            freeze                  = Mod.constant false
+            lodRasterizer           = AVal.constant (LodData.defaultRasterizeSet 5.0)
+            freeze                  = AVal.constant false
             maxReuseRatio           = 0.5
             minReuseCount           = 1L <<< 20
             pruneInterval           = 500
-            customView              = Some (gridCam |> Mod.map CameraView.viewTrafo)
-            customProjection        = Some (gridProj |> Mod.map Frustum.projTrafo)
+            customView              = Some (gridCam |> AVal.map CameraView.viewTrafo)
+            customProjection        = Some (gridProj |> AVal.map Frustum.projTrafo)
             attributeTypes =
                 Map.ofList [
                     DefaultSemantic.Positions, typeof<V3f>
@@ -317,9 +317,9 @@ let main argv =
                 DefaultSurfaces.trafo |> toEffect                
                 DefaultSurfaces.vertexColor  |> toEffect 
                 ]
-            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo ) 
-            |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo    )
-            |> Sg.uniform "PointSize" (Mod.constant 4.0)
+            |> Sg.viewTrafo (view |> AVal.map CameraView.viewTrafo ) 
+            |> Sg.projTrafo (proj |> AVal.map Frustum.projTrafo    )
+            |> Sg.uniform "PointSize" (AVal.constant 4.0)
             |> Sg.uniform "ViewportSize" win.Sizes
 
     let cnt = 100000000
@@ -329,7 +329,7 @@ let main argv =
     
     let buffer = win.Runtime.PrepareBuffer(ArrayBuffer(points)) :> IBuffer
 
-    let drawCallsCnt = Mod.init 1
+    let drawCallsCnt = AVal.init 1
 
     win.Keyboard.KeyDown(Keys.G).Values.Add ( fun _ ->
         transact ( fun _ -> drawCallsCnt.Value <- drawCallsCnt.Value + 10000 )
@@ -338,7 +338,7 @@ let main argv =
 
     let final = 
         drawCallsCnt 
-        |> Mod.map (fun drawCallsCnt ->
+        |> AVal.map (fun drawCallsCnt ->
             let pointsPerCall = cnt / drawCallsCnt
             [| 
                 for c in 0 .. drawCallsCnt - 1 do
@@ -351,13 +351,13 @@ let main argv =
             |] |> Sg.ofArray
         ) 
         |> Sg.dynamic 
-        |> Sg.vertexBuffer DefaultSemantic.Positions (BufferView(Mod.constant buffer, typeof<V3f>))
+        |> Sg.vertexBuffer DefaultSemantic.Positions (BufferView(AVal.constant buffer, typeof<V3f>))
         |> Sg.shader {
             do! DefaultSurfaces.trafo
             do! DefaultSurfaces.constantColor C4f.Red
             }
-        |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
-        |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
+        |> Sg.viewTrafo (view |> AVal.map CameraView.viewTrafo)
+        |> Sg.projTrafo (proj |> AVal.map Frustum.projTrafo)
  
 
     win.Scene <- final

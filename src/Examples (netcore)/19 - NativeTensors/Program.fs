@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -117,7 +117,7 @@ let main argv =
         samples 8
         scene (
             Sg.fullScreenQuad
-                |> Sg.diffuseTexture (Mod.constant (texture :> ITexture))
+                |> Sg.diffuseTexture (AVal.constant (texture :> ITexture))
                 |> Sg.shader {
                     do! DefaultSurfaces.diffuseTexture
                 }

@@ -7,13 +7,12 @@ open Aardvark.Base.Rendering
 open Aardvark.Rendering
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open FShade
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Rendering.GL
 
 #nowarn "9"
-#nowarn "44"
 
 type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * AttachmentSignature>, images : Map<int, Symbol>, depth : Option<AttachmentSignature>, stencil : Option<AttachmentSignature>, layers : int, perLayer : Set<string>) =
    
@@ -90,7 +89,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     let shaderCache = System.Collections.Concurrent.ConcurrentDictionary<string*list<int*Symbol>,BackendSurface>()
     let onDispose = Event<unit>()    
-    do if not (isNull ctx) then using ctx.ResourceLock (fun _ -> GLVM.vmInit())
+    do if not (isNull ctx) then Operators.using ctx.ResourceLock (fun _ -> GLVM.vmInit())
 
     let compute = lazy ( new GLCompute(ctx) )
 
@@ -104,7 +103,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         and set c = 
             ctx <- c
             manager <- ResourceManager(ctx, None, shareTextures, shareBuffers)
-            using ctx.ResourceLock (fun _ -> GLVM.vmInit())
+            Operators.using ctx.ResourceLock (fun _ -> GLVM.vmInit())
 
             //compiler <- Compiler.Compiler(x, c)
             //currentRuntime <- Some (x :> IRuntime)
@@ -503,17 +502,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : IRenderbuffer =
             x.CreateRenderbuffer(size, format, samples) :> IRenderbuffer
 
-        // Remove "nowarn 44" when deleting this
-        member x.CreateMappedBuffer()  =
-            x.CreateMappedBuffer ()
-
         member x.CreateGeometryPool(types : Map<Symbol, Type>) =
             x.CreateGeometryPool(types)
 
-        // Remove "nowarn 44" when deleting this
-        member x.CreateMappedIndirectBuffer(indexed)  =
-            x.CreateMappedIndirectBuffer (indexed)
-            
         member x.MaxLocalSize = compute.Value.WorkGroupSize
         member x.CreateComputeShader (c : FShade.ComputeShader) = ctx.CompileKernel c :> IComputeShader
         member x.NewInputBinding(c : IComputeShader) = new ComputeShaderInputBinding(unbox c) :> IComputeShaderInputBinding
@@ -531,7 +522,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.Clear(fbo : IFramebuffer, clearColors : Map<Symbol, C4f>, depth : Option<float>, stencil : Option<int>) =
             use __ = ctx.ResourceLock
 
-            let handle = fbo.GetHandle(null) |> unbox<int>
+            let handle = fbo.GetHandle(Unchecked.defaultof<_>) |> unbox<int>
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, handle)
             GL.Check "could not bind framebuffer"
             
@@ -715,7 +706,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)
     member x.PrepareSurface (signature : IFramebufferSignature, s : ISurface) : IBackendSurface = 
-        using ctx.ResourceLock (fun d -> 
+        Operators.using ctx.ResourceLock (fun d -> 
             let surface =
                 match s with
                     | :? FShadeSurface as f -> Aardvark.Base.Surface.FShadeSimple f.Effect
@@ -726,7 +717,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
             let iface, program = ctx.CreateProgram(signature, surface, IndexedGeometryMode.TriangleList)
 
-            Mod.force program :> IBackendSurface
+            AVal.force program :> IBackendSurface
 
         )
 
@@ -752,7 +743,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             | _ ->
                 failwithf "unsupported streaming texture: %A" t
 
-    member private x.CompileRenderInternal (fboSignature : IFramebufferSignature, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) =
+    member private x.CompileRenderInternal (fboSignature : IFramebufferSignature, engine : aval<BackendConfiguration>, set : aset<IRenderObject>) =
         let set = EffectDebugger.Hook set
         let eng = engine.GetValue()
         let shareTextures = eng.sharing &&& ResourceSharing.Textures <> ResourceSharing.None
@@ -779,19 +770,19 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         //     | :? PreparedRenderObject | :? PreparedMultiRenderObject -> failwith "tried to prepare prepared render object"
         //     | _ -> failwith "unknown render object type"
 
-    member x.CompileRender(fboSignature : IFramebufferSignature, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) : IRenderTask =
+    member x.CompileRender(fboSignature : IFramebufferSignature, engine : aval<BackendConfiguration>, set : aset<IRenderObject>) : IRenderTask =
         x.CompileRenderInternal(fboSignature, engine, set)
 
     member x.CompileRender(fboSignature : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) : IRenderTask =
-        x.CompileRenderInternal(fboSignature, Mod.constant engine, set)
+        x.CompileRenderInternal(fboSignature, AVal.constant engine, set)
         
     member x.Compile (signature : IFramebufferSignature, commands : alist<RenderCommand>) =
         failwith "[GL] no commands"
-        //new CommandRenderTask(manager, signature, commands, Mod.constant BackendConfiguration.Default, true, true) :> ICommandRenderTask
+        //new CommandRenderTask(manager, signature, commands, AVal.constant BackendConfiguration.Default, true, true) :> ICommandRenderTask
 
-    member x.CompileClear(fboSignature : IFramebufferSignature, color : IMod<Map<Symbol, C4f>>, depth : IMod<Option<float>>) : IRenderTask =
+    member x.CompileClear(fboSignature : IFramebufferSignature, color : aval<Map<Symbol, C4f>>, depth : aval<Option<float>>) : IRenderTask =
         let clearValues =
-            color |> Mod.map (fun clearColors ->
+            color |> AVal.map (fun clearColors ->
                 fboSignature.ColorAttachments
                     |> Map.toList
                     |> List.map (fun (_,(s,_)) -> Map.tryFind s clearColors)
@@ -800,7 +791,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         new RenderTasks.ClearTask(x, fboSignature, clearValues, depth, ctx) :> IRenderTask
 
     member x.ResolveMultisamples(ms : IFramebufferOutput, srcOffset : V2i, ss : IBackendTexture, dstOffset : V2i, dstLayer : int, size : V2i, trafo : ImageTrafo) =
-        using ctx.ResourceLock (fun _ ->
+        Operators.using ctx.ResourceLock (fun _ ->
             let mutable oldFbo = 0
             OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo);
 
@@ -899,7 +890,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             | :? Texture as t ->
                 if t.MipMapLevels > 1 then
                     let target = Uploads.getTextureTarget t
-                    using ctx.ResourceLock (fun _ ->
+                    Operators.using ctx.ResourceLock (fun _ ->
                         GL.BindTexture(target, t.Handle)
                         GL.Check "could not bind texture"
 
@@ -987,15 +978,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : Renderbuffer =
         ctx.CreateRenderbuffer(size, format, samples)
 
-    // Remove "nowarn 44" when deleting this
-    member x.CreateMappedBuffer() : IMappedBuffer =
-        ctx.CreateMappedBuffer()
-        
     member x.CreateGeometryPool(types : Map<Symbol, Type>) =
         new SparseBufferGeometryPool(ctx, types) :> IGeometryPool
-
-    // Remove "nowarn 44" when deleting this
-    member x.CreateMappedIndirectBuffer(indexed : bool) : IMappedIndirectBuffer =
-        ctx.CreateMappedIndirectBuffer(indexed)
 
     new() = new Runtime(null)

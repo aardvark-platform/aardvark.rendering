@@ -25,10 +25,10 @@ open Aardvark.Base
 open Aardvark.Rendering.Interactive
 
 
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Base.Rendering
 
 [<AutoOpen>]
@@ -36,17 +36,17 @@ module EffectStack =
     open Aardvark.Base.Ag
 
     module Sg =
-        type ComposeEffects(child : IMod<ISg>) =
+        type ComposeEffects(child : aval<ISg>) =
             inherit Sg.AbstractApplicator(child)
             member x.Child = child
 
-        type AttachEffects(child : IMod<ISg>, effects : list<FShadeEffect>) =
+        type AttachEffects(child : aval<ISg>, effects : list<FShadeEffect>) =
             inherit Sg.AbstractApplicator(child)
             member x.Effects : list<FShadeEffect> = effects
             member x.Child  = child
 
-        let composeEffects (s : ISg) = ComposeEffects(Mod.constant s) :> ISg
-        let attachEffects (e : list<FShadeEffect>) (s : ISg) = AttachEffects(Mod.constant s, e)
+        let composeEffects (s : ISg) = ComposeEffects(AVal.constant s) :> ISg
+        let attachEffects (e : list<FShadeEffect>) (s : ISg) = AttachEffects(AVal.constant s, e)
 
     type ISg with
         member x.EffectStack : list<FShadeEffect> = x?EffectStack
@@ -57,7 +57,7 @@ module EffectStack =
         type ComposeEffectsSemantics() =
             member x.Surface(sg : Sg.ComposeEffects) =
                 let e = FShade.Effect.compose sg.EffectStack
-                let s = Mod.constant (FShadeSurface.Get(e) :> ISurface)
+                let s = AVal.constant (FShadeSurface.Get(e) :> ISurface)
                 sg.Child?Surface <- s
 
             member x.EffectStack(s : Sg.AttachEffects) =
@@ -162,27 +162,27 @@ module Shadows =
 
     let win = Interactive.Window
 
-    let shadowMapSize = Mod.init (V2i(4096, 4096))
+    let shadowMapSize = AVal.init (V2i(4096, 4096))
 
     let shadowCam = CameraView.lookAt (V3d.III * 2.0) V3d.Zero V3d.OOI
     let shadowProj = Frustum.perspective 60.0 0.1 10.0 1.0
 
 
-    //let angle = Mod.init 0.0
+    //let angle = AVal.init 0.0
     let rotation =
         controller {
-            let! dt = differentiate Mod.time
+            let! dt = differentiate AVal.time
             return fun f -> f + dt.TotalSeconds * 0.6
         }
   
-    let angle = Mod.constant 0.0 //AFun.integrate rotation 0.0
+    let angle = AVal.constant 0.0 //AFun.integrate rotation 0.0
     let lightSpaceView =
-        angle |> Mod.map (fun angle -> Trafo3d.RotationZ(angle) * (shadowCam |> CameraView.viewTrafo))
-    let lightSpaceViewProjTrafo = lightSpaceView |> Mod.map (fun view -> view * (shadowProj |> Frustum.projTrafo))
-    let lightPos = lightSpaceView |> Mod.map (fun t -> t.GetViewPosition())
+        angle |> AVal.map (fun angle -> Trafo3d.RotationZ(angle) * (shadowCam |> CameraView.viewTrafo))
+    let lightSpaceViewProjTrafo = lightSpaceView |> AVal.map (fun view -> view * (shadowProj |> Frustum.projTrafo))
+    let lightPos = lightSpaceView |> AVal.map (fun t -> t.GetViewPosition())
 
 
-    let pointSize = Mod.init 14.0
+    let pointSize = AVal.init 14.0
     let pointCount = 1000
 
 
@@ -248,7 +248,7 @@ module Shadows =
     let pointSg = 
         let rand = Random()
         let randomV3f() = V3f(rand.NextDouble(), rand.NextDouble(), rand.NextDouble())
-        Sg.instancedGeometry (Mod.constant <| Array.init pointCount (fun _ -> randomV3f() |> V3d.op_Explicit |> Trafo3d.Translation)) (box C4b.Red (Box3d.FromCenterAndSize(V3d.OOO, 0.04 * V3d.III)))
+        Sg.instancedGeometry (AVal.constant <| Array.init pointCount (fun _ -> randomV3f() |> V3d.op_Explicit |> Trafo3d.Translation)) (box C4b.Red (Box3d.FromCenterAndSize(V3d.OOO, 0.04 * V3d.III)))
 
 
     let sceneSg (fragmentShader : list<FShadeEffect>) =
@@ -258,7 +258,7 @@ module Shadows =
                         |> Sg.effect (toEffect Shader.instanceTrafo :: toEffect Shader.trafo :: fragmentShader)
                       )
         |> Sg.uniform "LightViewMatrix" lightSpaceViewProjTrafo
-        |> Sg.trafo ( Trafo3d.Translation(V3d(0.0,0.0,0.3)) |> Mod.constant )
+        |> Sg.trafo ( Trafo3d.Translation(V3d(0.0,0.0,0.3)) |> AVal.constant )
 
     let signature = 
         win.Runtime.CreateFramebufferSignature [
@@ -268,7 +268,7 @@ module Shadows =
     let shadowDepth =
         sceneSg [ DefaultSurfaces.vertexColor |> toEffect ]
             |> Sg.viewTrafo lightSpaceView
-            |> Sg.projTrafo (shadowProj |> Frustum.projTrafo |> Mod.constant)
+            |> Sg.projTrafo (shadowProj |> Frustum.projTrafo |> AVal.constant)
             |> Sg.compile win.Runtime signature   
             |> RenderTask.renderToDepth shadowMapSize
 
@@ -278,7 +278,7 @@ module Shadows =
             |> Sg.texture DefaultSemantic.DiffuseColorTexture shadowDepth
 
             |> Sg.andAlso (
-                Sg.cone' 32 C4b.Red 0.1 0.5 |> Sg.trafo (lightPos |> Mod.map Trafo3d.Translation)
+                Sg.cone' 32 C4b.Red 0.1 0.5 |> Sg.trafo (lightPos |> AVal.map Trafo3d.Translation)
                  |> Sg.effect [ DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.Red |> toEffect; DefaultSurfaces.simpleLighting |> toEffect ]
              )
 
@@ -293,7 +293,7 @@ module Shadows =
 
     let setShadowSize (w : int) (h : int) =
         transact (fun () ->
-            Mod.change shadowMapSize (V2i(w,h))
+            AVal.change shadowMapSize (V2i(w,h))
         )
 
 open Shadows

@@ -350,7 +350,7 @@ module TermPatterns =
 
 
     let internal findCommon (l : list<list<Term<'c>>>) =
-        let terms = l |> List.collect id |> HSet.ofList
+        let terms = l |> List.collect id |> HashSet.ofList
 
         let rec tryRemove (e : Term<'c>) (l : list<Term<'c>>) =
             match l with
@@ -376,7 +376,7 @@ module TermPatterns =
                                     | None -> None
 
         let mutable l = l
-        let mutable common = HSet.empty
+        let mutable common = HashSet.empty
         for t in terms do
             let mutable failed = false
             let nl =
@@ -387,13 +387,13 @@ module TermPatterns =
                 )
 
             if not failed then
-                common <- HSet.add t common
+                common <- HashSet.add t common
                 l <- nl
 
-        if HSet.isEmpty common then
+        if HashSet.isEmpty common then
             None
         else
-            Some (HSet.toList common, l)
+            Some (HashSet.toList common, l)
 
 
     let rec (|Factorize|_|) (e : Term<'c>) =
@@ -618,15 +618,15 @@ module Term =
         usedUniforms Set.empty e
 
     let parameters (e : Term<'c>) =
-        let rec usedParameters (acc : hmap<string, hset<'c>>) (e : Term<'c>) =
+        let rec usedParameters (acc : HashMap<string, HashSet<'c>>) (e : Term<'c>) =
             match e with
                 | Parameter(name, i) ->
-                    acc |> HMap.alter name (Option.defaultValue HSet.empty >> HSet.add i >> Some)
+                    acc |> HashMap.alter name (Option.defaultValue HashSet.empty >> HashSet.add i >> Some)
                 | Combination(_, args) ->
                     args |> List.fold usedParameters acc
                 | _ ->
                     acc
-        usedParameters HMap.empty e
+        usedParameters HashMap.empty e
         
     let parameterNames (e : Term<'c>) =
         let rec usedParameterNames (acc : Set<string>) (e : Term<'c>) =
@@ -710,13 +710,13 @@ module Term =
 
     let allDerivatives (name : string) (e : Term<'c>) =
         let used = parameters e
-        match HMap.tryFind name used with
+        match HashMap.tryFind name used with
             | None ->
-                HMap.empty
+                HashMap.empty
             | Some cs ->    
                 cs 
                 |> Seq.map (fun i -> i, derivative name i e)
-                |> HMap.ofSeq
+                |> HashMap.ofSeq
                 
     let toString (e : Term<'a>) = e.ToString()
        

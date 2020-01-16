@@ -3,12 +3,12 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection
 open Aardvark.Rendering.Text
@@ -34,12 +34,12 @@ module HarwareFeatures =
         let view =
             CameraView.lookAt (V3d(6,6,6)) V3d.Zero V3d.OOI
                 |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
-                |> Mod.map CameraView.viewTrafo
+                |> AVal.map CameraView.viewTrafo
 
         let proj =
             win.Sizes 
-                |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
-                |> Mod.map Frustum.projTrafo
+                |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
+                |> AVal.map Frustum.projTrafo
 
         win, view, proj
 
@@ -103,7 +103,7 @@ module HarwareFeatures =
 
 
         let sg =    
-            Sg.indirectDraw IndexedGeometryMode.TriangleList (Mod.constant indirect)
+            Sg.indirectDraw IndexedGeometryMode.TriangleList (AVal.constant indirect)
                 |> Sg.vertexArray DefaultSemantic.Positions cube.IndexedAttributes.[DefaultSemantic.Positions]
                 |> Sg.vertexArray DefaultSemantic.Normals cube.IndexedAttributes.[DefaultSemantic.Normals]
                 |> Sg.instanceArray DefaultSemantic.InstanceTrafo trafos
@@ -142,15 +142,15 @@ module HarwareFeatures =
 
         let win, view, proj = newWin()
 
-        let cam = view |> Mod.map (fun v -> v.Backward.TransformPosProj V3d.Zero)
+        let cam = view |> AVal.map (fun v -> v.Backward.TransformPosProj V3d.Zero)
 
         let uniforms (t : Trafo3d) =
             UniformProvider.ofList [
-                "ModelTrafo", Mod.constant t :> IMod
-                "ViewTrafo", view :> IMod
-                "CameraLocation", cam :> IMod
-                "LightLocation", cam :> IMod
-                "ProjTrafo", proj :> IMod
+                "ModelTrafo", AVal.constant t :> IAdaptiveValue
+                "ViewTrafo", view :> IAdaptiveValue
+                "CameraLocation", cam :> IAdaptiveValue
+                "LightLocation", cam :> IAdaptiveValue
+                "ProjTrafo", proj :> IAdaptiveValue
             ]
 
         let objs =

@@ -2,7 +2,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 
 [<AutoOpen>]
@@ -55,11 +55,11 @@ module RenderTask =
                 member x.Dispose() = ()
             }
 
-        let private uniformProvider (color : IMod<ITexture>) (depth : IMod<ITexture>) =
+        let private uniformProvider (color : aval<ITexture>) (depth : aval<ITexture>) =
             { new IUniformProvider with
                 member x.TryGetUniform(scope : Ag.Scope, semantic : Symbol) =
-                    if semantic = DefaultSemantic.ColorTexture then Some (color :> IMod)
-                    elif semantic = DefaultSemantic.DepthTexture then Some (depth :> IMod)
+                    if semantic = DefaultSemantic.ColorTexture then Some (color :> IAdaptiveValue)
+                    elif semantic = DefaultSemantic.DepthTexture then Some (depth :> IAdaptiveValue)
                     else None
 
                 member x.Dispose() =
@@ -78,8 +78,8 @@ module RenderTask =
             let positions =  ArrayBuffer ([|V3f(-1.0f, -1.0f, 1.0f); V3f(1.0f, -1.0f, 1.0f); V3f(1.0f, 1.0f, 1.0f); V3f(-1.0f, 1.0f, 1.0f)|] :> Array)
             let texCoords = ArrayBuffer ([|V2f.OO; V2f.IO; V2f.II; V2f.OI|] :> Array)
 
-            let pView = BufferView(Mod.constant (positions :> IBuffer), typeof<V3f>)
-            let tcView = BufferView(Mod.constant (texCoords :> IBuffer), typeof<V2f>)
+            let pView = BufferView(AVal.constant (positions :> IBuffer), typeof<V3f>)
+            let tcView = BufferView(AVal.constant (texCoords :> IBuffer), typeof<V2f>)
 
             { new IAttributeProvider with
                 member x.All = 
@@ -97,23 +97,23 @@ module RenderTask =
         let baseObject =
             { RenderObject.Create() with
                 AttributeScope = Ag.emptyScope
-                IsActive = Mod.constant true
+                IsActive = AVal.constant true
                 RenderPass = RenderPass.main
-                DrawCallInfos = Mod.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)]
+                DrawCallInfos = AVal.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)]
                 Mode = IndexedGeometryMode.TriangleList
                 Surface = Shaders.fs |> toEffect |> Surface.FShadeSimple
-                DepthTest = Mod.constant DepthTestMode.LessOrEqual
-                CullMode = Mod.constant CullMode.None
-                BlendMode = Mod.constant BlendMode.Blend
-                FillMode = Mod.constant FillMode.Fill
-                StencilMode = Mod.constant StencilMode.Disabled
-                Indices = BufferView(Mod.constant (ArrayBuffer [|0;1;2; 0;2;3|] :> IBuffer), typeof<int>) |> Some
+                DepthTest = AVal.constant DepthTestMode.LessOrEqual
+                CullMode = AVal.constant CullMode.None
+                BlendMode = AVal.constant BlendMode.Blend
+                FillMode = AVal.constant FillMode.Fill
+                StencilMode = AVal.constant StencilMode.Disabled
+                Indices = BufferView(AVal.constant (ArrayBuffer [|0;1;2; 0;2;3|] :> IBuffer), typeof<int>) |> Some
                 InstanceAttributes = emptyAttributes
                 VertexAttributes = attributeProvider
                 Uniforms = emptyUniforms
             }
 
-        let create (color : IMod<ITexture>) (depth : IMod<ITexture>) =
+        let create (color : aval<ITexture>) (depth : aval<ITexture>) =
             { RenderObject.Clone(baseObject) with
                 Uniforms = uniformProvider color depth
             }
@@ -123,7 +123,7 @@ module RenderTask =
         match t.Runtime, t.FramebufferSignature with
             | Some runtime, Some signature ->
                 
-                let size = Mod.init V2i.II
+                let size = AVal.init V2i.II
 
                 let color, depth =
                     t |> RenderTask.renderToColorAndDepth size
@@ -139,7 +139,7 @@ module RenderTask =
                 RenderTask.ofList [
                     RenderTask.custom (fun (self, token, target) ->
                         if target.framebuffer.Size <> size.Value then
-                            transact (fun () -> Mod.change size target.framebuffer.Size)
+                            transact (fun () -> size.Value <- target.framebuffer.Size)
 
                     )
                     composeTask
@@ -153,7 +153,7 @@ module RenderTask =
         match t.Runtime, t.FramebufferSignature with
             | Some runtime, Some signature ->
                 
-                let size = Mod.init V2i.II
+                let size = AVal.init V2i.II
 
                 let color, depth =
                     t |> RenderTask.renderToColorAndDepth size
@@ -171,7 +171,7 @@ module RenderTask =
                 RenderTask.ofList [
                     RenderTask.custom (fun (self, token, target) ->
                         if target.framebuffer.Size <> size.Value then
-                            transact (fun () -> Mod.change size target.framebuffer.Size)
+                            transact (fun () -> size.Value <- target.framebuffer.Size)
 
                     )
                     composeTask

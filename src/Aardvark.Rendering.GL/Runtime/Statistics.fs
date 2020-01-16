@@ -2,7 +2,7 @@
 
 open System.Threading
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL

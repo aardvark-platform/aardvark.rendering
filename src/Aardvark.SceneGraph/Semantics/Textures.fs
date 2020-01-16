@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.SceneGraph.Semantics
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
 open Aardvark.Base.Rendering
@@ -10,13 +10,13 @@ open Aardvark.Base.Rendering
 module TextureSemantics =
 
     type ISg with
-        member x.HasDiffuseColorTexture : IMod<bool> = x?HasDiffuseColorTexture()
+        member x.HasDiffuseColorTexture : aval<bool> = x?HasDiffuseColorTexture()
 
     [<Semantic>]
     type DerivedSem() =
 
-        let trueM = Mod.constant true
-        let falseM = Mod.constant false
+        let trueM = AVal.constant true
+        let falseM = AVal.constant false
 
         member x.HasDiffuseColorTexture(sg : ISg) = 
             let uniforms : IUniformProvider list = sg?Uniforms 

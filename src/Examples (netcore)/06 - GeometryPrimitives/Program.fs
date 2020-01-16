@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -36,9 +36,9 @@ let main argv =
     // now let us use the dynamic box (in order to change vertex attributes)
     let colors = [ C4b.Yellow; C4b.Green; C4b.Blue ]
     let mutable currentIndex = 0
-    let boxColor = Mod.init colors.[currentIndex]
+    let boxColor = AVal.init colors.[currentIndex]
     
-    let dynamicBox = Sg.box boxColor (Box3d.FromMinAndSize(new V3d(2, 1, 1), new V3d(3, 4, 2)) |> Mod.constant)
+    let dynamicBox = Sg.box boxColor (Box3d.FromMinAndSize(new V3d(2, 1, 1), new V3d(3, 4, 2)) |> AVal.constant)
 
     // create a simple subdivision sphere (as with box the tick' version of the function 
     // can be used to generate a static sphere

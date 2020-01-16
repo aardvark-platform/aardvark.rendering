@@ -3,12 +3,12 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection
 open Aardvark.Rendering.Vulkan
@@ -186,16 +186,16 @@ module GeometryComposition =
 //        let win = app.CreateSimpleRenderWindow(8) 
 //        let run() = win.Run()
 //        let cameraView  = DefaultCameraController.control win.Mouse win.Keyboard win.Time (CameraView.LookAt(V3d(2.5, -3.0, 1.5), V3d(2.5, 0.0, 0.0), V3d.OOI))    
-//        let frustum     = win.Sizes     |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))       
-//        let viewTrafo   = cameraView    |> Mod.map CameraView.viewTrafo :> IMod
-//        let projTrafo   = frustum       |> Mod.map Frustum.projTrafo :> IMod
+//        let frustum     = win.Sizes     |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))       
+//        let viewTrafo   = cameraView    |> AVal.map CameraView.viewTrafo :> IAdaptiveValue
+//        let projTrafo   = frustum       |> AVal.map Frustum.projTrafo :> IAdaptiveValue
 //        let win = win:> IRenderTarget
 
 
 //        let app = new VulkanVRApplicationLayered(false)
 //        let win = app :> IRenderTarget
-//        let viewTrafo = app.Info.viewTrafos :> IMod
-//        let projTrafo = app.Info.projTrafos :> IMod
+//        let viewTrafo = app.Info.viewTrafos :> IAdaptiveValue
+//        let projTrafo = app.Info.projTrafos :> IAdaptiveValue
 //        let run () = app.Run()
         //app.ShowWindow()
 
@@ -254,7 +254,7 @@ module GeometryComposition =
 
         let font = Font("Consolas")
 
-        let u (n : String) (m : IMod) (s : ISg) =
+        let u (n : String) (m : IAdaptiveValue) (s : ISg) =
             Sg.UniformApplicator(n, m, s) :> ISg
 
         let sg =
@@ -266,7 +266,7 @@ module GeometryComposition =
                             let (name, effect) = combinations.[id]
      
                             let label = 
-                                Sg.text font C4b.White (Mod.constant name)
+                                Sg.text font C4b.White (AVal.constant name)
                                     |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero) * Trafo3d.Scale(0.1))
                                     |> Sg.translate 0.0 0.0 1.0
 
@@ -282,10 +282,10 @@ module GeometryComposition =
                                 Sg.ofList [
                                     Sg.sphere' 3 C4b.Red 0.5
                                         |> Sg.translate 0.5 0.5 0.5
-                                        |> Sg.uniform "Color" (Mod.constant V4d.IOOI)
+                                        |> Sg.uniform "Color" (AVal.constant V4d.IOOI)
 
                                     Sg.box' C4b.Blue Box3d.Unit
-                                        |> Sg.uniform "Color" (Mod.constant V4d.IIOI)
+                                        |> Sg.uniform "Color" (AVal.constant V4d.IIOI)
                                         |> Sg.translate 1.6 0.0 0.0
                                 ]   
                                     |> Sg.scale 0.5
@@ -302,19 +302,19 @@ module GeometryComposition =
 
                                         do! DefaultSurfaces.stableHeadlight
                                     }
-                                    //|> Sg.fillMode (Mod.constant FillMode.Line)
-//                                    |> Sg.cullMode (Mod.constant CullMode.Clockwise)
+                                    //|> Sg.fillMode (AVal.constant FillMode.Line)
+//                                    |> Sg.cullMode (AVal.constant CullMode.Clockwise)
                             yield 
                                 Sg.ofList [
                                     inner
                                     label
                                 ]
-                                //|> Sg.depthTest (Mod.constant DepthTestMode.None)
+                                //|> Sg.depthTest (AVal.constant DepthTestMode.None)
                                 |> Sg.translate (2.0 * float i) 0.0 (1.5 * float j)
 
             ]
             |> Sg.scale 0.5
-            //|> Sg.fillMode (Mod.constant FillMode.Line)
+            //|> Sg.fillMode (AVal.constant FillMode.Line)
 //            |> u "ViewTrafo" viewTrafo
 //            |> u "ProjTrafo" projTrafo
 //            |> Sg.compile app.Runtime win.FramebufferSignature

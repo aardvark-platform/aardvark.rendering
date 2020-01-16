@@ -6,9 +6,9 @@ open FsUnit
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Application
 open System.Diagnostics
 open Aardvark.SceneGraph.Semantics
@@ -43,7 +43,7 @@ module ``Rendering Tests`` =
         img
 
     let checkerBoardTexture =
-        PixTexture2d(PixImageMipMap [|checkerBoardImage :> PixImage|], true) :> ITexture |> Mod.constant
+        PixTexture2d(PixImageMipMap [|checkerBoardImage :> PixImage|], true) :> ITexture |> AVal.constant
 
 
     [<Test>]
@@ -480,7 +480,7 @@ module RenderingTests =
         let cam = CameraView.lookAt (0.5 * V3d.OOI) V3d.Zero V3d.OIO
         let frustum = Frustum.perspective 60.0 0.1 1000.0 (float screen.X / float screen.Y)
 
-        let rootTrafo = Mod.init Trafo3d.Identity
+        let rootTrafo = AVal.init Trafo3d.Identity
 
         let sg =
             buildGrid 3
@@ -552,7 +552,7 @@ module RenderingTests =
         let sw = Stopwatch()
         sw.Start()
         while sw.Elapsed.TotalSeconds < 20.0 || iterations < 50 do
-            transact(fun () -> Mod.change rootTrafo (rootTrafo.Value * Trafo3d.Scale(1.00001)))
+            transact(fun () -> AVal.change rootTrafo (rootTrafo.Value * Trafo3d.Scale(1.00001)))
             clear.Run(RenderToken.Empty, fbo) |> ignore
             task.Run(RenderToken.Empty, fbo) |> ignore
             iterations <- iterations + 1
@@ -595,7 +595,7 @@ module RenderingTests =
         let cam = CameraView.lookAt (0.5 * V3d.OOI) V3d.Zero V3d.OIO
         let frustum = Frustum.perspective 60.0 0.1 1000.0 (float screen.X / float screen.Y)
 
-        let rootTrafo = Mod.init Trafo3d.Identity
+        let rootTrafo = AVal.init Trafo3d.Identity
 
         let sg =
             buildGrid 3
@@ -816,11 +816,11 @@ module RenderingTests =
                 member x.Dispose() = ()
             }
 
-        let uniformProvider (color : IMod<ITexture>) (depth : IMod<ITexture>) =
+        let uniformProvider (color : aval<ITexture>) (depth : aval<ITexture>) =
             { new IUniformProvider with
                 member x.TryGetUniform(scope : Ag.Scope, semantic : Symbol) =
-                    if semantic = DefaultSemantic.ColorTexture then Some (color :> IMod)
-                    elif semantic = DefaultSemantic.DepthTexture then Some (depth :> IMod)
+                    if semantic = DefaultSemantic.ColorTexture then Some (color :> IAdaptiveValue)
+                    elif semantic = DefaultSemantic.DepthTexture then Some (depth :> IAdaptiveValue)
                     else None
 
                 member x.Dispose() =
@@ -839,8 +839,8 @@ module RenderingTests =
             let positions =  ArrayBuffer ([|V3f(-1.0f, -1.0f, 1.0f); V3f(1.0f, -1.0f, 1.0f); V3f(1.0f, 1.0f, 1.0f); V3f(-1.0f, 1.0f, 1.0f)|] :> Array)
             let texCoords = ArrayBuffer ([|V2f.OO; V2f.IO; V2f.II; V2f.OI|] :> Array)
 
-            let pView = BufferView(Mod.constant (positions :> IBuffer), typeof<V3f>)
-            let tcView = BufferView(Mod.constant (texCoords :> IBuffer), typeof<V2f>)
+            let pView = BufferView(AVal.constant (positions :> IBuffer), typeof<V3f>)
+            let tcView = BufferView(AVal.constant (texCoords :> IBuffer), typeof<V2f>)
 
             { new IAttributeProvider with
                 member x.All = 
@@ -858,16 +858,16 @@ module RenderingTests =
         let baseObject =
             { RenderObject.Create() with
                 AttributeScope = Ag.emptyScope
-                IsActive = Mod.constant true
+                IsActive = AVal.constant true
                 RenderPass = RenderPass.main
-                DrawCallInfos = Mod.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)]
+                DrawCallInfos = AVal.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)]
                 Mode = IndexedGeometryMode.TriangleList
                 Surface = DefaultSurfaces.constantColor C4f.Gray |> toEffect |> Surface.FShadeSimple
-                DepthTest = Mod.constant Aardvark.Base.Rendering.DepthTestMode.LessOrEqual
-                CullMode = Mod.constant Aardvark.Base.Rendering.CullMode.None
-                BlendMode = Mod.constant Aardvark.Base.Rendering.BlendMode.Blend
-                FillMode = Mod.constant Aardvark.Base.Rendering.FillMode.Fill
-                StencilMode = Mod.constant Aardvark.Base.Rendering.StencilMode.Disabled
+                DepthTest = AVal.constant Aardvark.Base.Rendering.DepthTestMode.LessOrEqual
+                CullMode = AVal.constant Aardvark.Base.Rendering.CullMode.None
+                BlendMode = AVal.constant Aardvark.Base.Rendering.BlendMode.Blend
+                FillMode = AVal.constant Aardvark.Base.Rendering.FillMode.Fill
+                StencilMode = AVal.constant Aardvark.Base.Rendering.StencilMode.Disabled
                 Indices = BufferView.ofArray [|0;1;2; 0;2;3|] |> Some
                 InstanceAttributes = emptyAttributes
                 VertexAttributes = attributeProvider
@@ -975,8 +975,8 @@ module UseTest =
 
 
         let cam = CameraView.lookAt (V3d.III * 3.0) V3d.Zero V3d.OOI
-        let model = Mod.init Trafo3d.Identity
-        let view = Mod.init cam
+        let model = AVal.init Trafo3d.Identity
+        let view = AVal.init cam
         let sg =
             Sg.box' C4b.White (Box3d(-V3d.III, V3d.III))
                 |> Sg.effect [
@@ -984,8 +984,8 @@ module UseTest =
                     DefaultSurfaces.constantColor C4f.White |> toEffect
                 ]
                 |> Sg.trafo model
-                |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
-                |> Sg.projTrafo (Frustum.perspective 60.0 0.1 100.0 1.0 |> Frustum.projTrafo |> Mod.constant)
+                |> Sg.viewTrafo (view |> AVal.map CameraView.viewTrafo)
+                |> Sg.projTrafo (Frustum.perspective 60.0 0.1 100.0 1.0 |> Frustum.projTrafo |> AVal.constant)
 
         
         use clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)

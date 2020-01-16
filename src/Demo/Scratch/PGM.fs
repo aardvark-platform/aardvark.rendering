@@ -3,7 +3,7 @@
 //open System
 //open Aardvark.Base
 //open Aardvark.Base.Rendering
-//open Aardvark.Base.Incremental
+//open FSharp.Data.Adaptive
 //open Aardvark.SceneGraph
 //open Aardvark.Application
 //
@@ -604,10 +604,10 @@
 //    [<Demo("PGM")>]
 //    let run() =
 //        let h = PixImage.Create @"C:\Users\Schorsch\Desktop\ps_height_1k.png"
-//        let tex = PixTexture2d(PixImageMipMap [|h|], { TextureParams.empty with wantMipMaps = true }) :> ITexture |> Mod.constant
-//        let color = FileTexture(@"C:\Users\Schorsch\Desktop\ps_texture_1k.png",  { TextureParams.empty with wantMipMaps = true }) :> ITexture |> Mod.constant
+//        let tex = PixTexture2d(PixImageMipMap [|h|], { TextureParams.empty with wantMipMaps = true }) :> ITexture |> AVal.constant
+//        let color = FileTexture(@"C:\Users\Schorsch\Desktop\ps_texture_1k.png",  { TextureParams.empty with wantMipMaps = true }) :> ITexture |> AVal.constant
 //        
-//        let mode = Mod.init FillMode.Fill
+//        let mode = AVal.init FillMode.Fill
 //
 //        App.Keyboard.KeyDown(Keys.X).Values.Add(fun _ ->
 //            transact (fun () ->
@@ -637,10 +637,10 @@
 //    [<Demo("Height")>]
 //    let run2() =
 //        let h = PixImage.Create @"C:\Aardwork\ps_height_1k.png"
-//        let tex = PixTexture2d(PixImageMipMap [|h|], { TextureParams.empty with wantMipMaps = true }) :> ITexture |> Mod.constant
-//        let color = FileTexture(@"C:\Aardwork\ps_texture_1k.png",  { TextureParams.empty with wantMipMaps = true }) :> ITexture |> Mod.constant
+//        let tex = PixTexture2d(PixImageMipMap [|h|], { TextureParams.empty with wantMipMaps = true }) :> ITexture |> AVal.constant
+//        let color = FileTexture(@"C:\Aardwork\ps_texture_1k.png",  { TextureParams.empty with wantMipMaps = true }) :> ITexture |> AVal.constant
 //        
-//        let mode = Mod.init FillMode.Fill
+//        let mode = AVal.init FillMode.Fill
 //
 //        App.Keyboard.KeyDown(Keys.X).Values.Add(fun _ ->
 //            transact (fun () ->

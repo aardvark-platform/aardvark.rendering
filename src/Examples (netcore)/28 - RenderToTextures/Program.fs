@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -62,14 +62,14 @@ let main argv =
     // will be evaluated when rendering the scene
     let dynamicTrafo =
         let startTime = System.DateTime.Now
-        win.Time |> Mod.map (fun t ->
+        win.Time |> AVal.map (fun t ->
             let t = (t - startTime).TotalSeconds
             Trafo3d.RotationZ (0.5 * t)
         )
 
     let box = Box3d(-V3d.III, V3d.III)
     let color = C4b.Red
-    let size = V2i(512,512) |> Mod.constant
+    let size = V2i(512,512) |> AVal.constant
 
     let signature = 
         win.Runtime.CreateFramebufferSignature(
@@ -81,7 +81,7 @@ let main argv =
 
     let pass0 = 
         // create a red box with a simple shader
-        Sg.box (Mod.constant color) (Mod.constant box)
+        Sg.box (AVal.constant color) (AVal.constant box)
             |> Sg.shader {
                 do! DefaultSurfaces.trafo
                 do! DefaultSurfaces.vertexColor
@@ -90,8 +90,8 @@ let main argv =
 
             // apply the dynamic transformation to the box
             |> Sg.trafo dynamicTrafo
-            |> Sg.viewTrafo (win.View |> Mod.map (Array.item 0))
-            |> Sg.projTrafo (win.Proj |> Mod.map (Array.item 0))
+            |> Sg.viewTrafo (win.View |> AVal.map (Array.item 0))
+            |> Sg.projTrafo (win.Proj |> AVal.map (Array.item 0))
             |> Sg.compile win.Runtime signature
             |> RenderTask.renderSemantics (
                     Set.ofList [
@@ -100,7 +100,7 @@ let main argv =
                         Sym.ofString "WPos"]
                ) size
 
-    let mode = Mod.init 0
+    let mode = AVal.init 0
 
     win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ -> 
         transact (fun _ -> mode.Value <- (mode.Value + 1) % 2)

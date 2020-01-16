@@ -7,7 +7,7 @@ open System.Windows
 open System.Windows.Controls
 open System.Windows.Media
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Application
 open System.Windows.Forms.Integration
 
@@ -21,7 +21,7 @@ type RenderControl() as self =
 
     let keyboard = new Aardvark.Application.WinForms.Keyboard()
     let mouse = new Aardvark.Application.WinForms.Mouse()
-    let sizes = Mod.init (V2i(base.ActualWidth, base.ActualHeight))
+    let sizes = AVal.init (V2i(base.ActualWidth, base.ActualHeight))
     
     let beforeRender = Event<unit>()
     let afterRender = Event<unit>()
@@ -36,9 +36,9 @@ type RenderControl() as self =
              | None -> return s
         }
 
-    let mutable inner : Option<IMod<DateTime>> = None
+    let mutable inner : Option<aval<DateTime>> = None
     let time = 
-        Mod.custom (fun s -> 
+        AVal.custom (fun s -> 
             match inner with
                 | Some m -> m.GetValue s
                 | None -> DateTime.Now
@@ -87,15 +87,15 @@ type RenderControl() as self =
         ctrl <- Some c
         impl <- Some cr
         transact(fun () ->
-            cr.Time.AddOutput(time)
+            cr.Time.Outputs.Add time |> ignore
             inner <- Some cr.Time
 
-            Mod.change sizes V2i.OO
+            sizes.Value <- V2i.OO
         )
 
     override x.OnRenderSizeChanged(e) =
         base.OnRenderSizeChanged(e)
-        transact (fun () -> Mod.change sizes (V2i(x.ActualWidth, x.ActualHeight)))
+        transact (fun () -> sizes.Value <- (V2i(x.ActualWidth, x.ActualHeight)))
 
     override x.HitTestCore (hitTestParameters : PointHitTestParameters) =
         PointHitTestResult(x, hitTestParameters.HitPoint) :> HitTestResult

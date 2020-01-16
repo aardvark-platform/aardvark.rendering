@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.SceneGraph
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 
 [<AutoOpen>]
@@ -11,35 +11,35 @@ module Instancing =
         let private convert (t : Trafo3d[]) =
             t |> Array.map (fun t -> M44f.op_Explicit t.Forward)
 
-        type InstancingNode(count : IMod<int>, uniforms : Map<string, BufferView>, child : IMod<ISg>) =
+        type InstancingNode(count : aval<int>, uniforms : Map<string, BufferView>, child : aval<ISg>) =
             interface ISg
             member x.Count = count
             member x.Child = child
             member x.Uniforms = uniforms
 
-        let instanced' (attributes : Map<string, System.Type * IMod<System.Array>>) (sg : ISg) : ISg =
+        let instanced' (attributes : Map<string, System.Type * aval<System.Array>>) (sg : ISg) : ISg =
             if Map.isEmpty attributes then
                 sg
             else
-                let cnt = attributes |> Map.toSeq |> Seq.head |> snd |> snd |> Mod.map (fun a -> a.Length)
+                let cnt = attributes |> Map.toSeq |> Seq.head |> snd |> snd |> AVal.map (fun a -> a.Length)
                 let bufferViews = 
                     attributes |> Map.map (fun name (t,att) ->
-                        let buffer = att |> Mod.map (fun a -> ArrayBuffer a :> IBuffer)
+                        let buffer = att |> AVal.map (fun a -> ArrayBuffer a :> IBuffer)
                         BufferView(buffer, t)
                     )
-                InstancingNode(cnt, bufferViews, Mod.constant sg) :> ISg
+                InstancingNode(cnt, bufferViews, AVal.constant sg) :> ISg
 
-        let instanced (trafos : IMod<Trafo3d[]>) (sg : ISg) : ISg =
-            let cnt = trafos |> Mod.map Array.length
-            let view = BufferView(trafos |> Mod.map (fun t -> ArrayBuffer t :> IBuffer), typeof<Trafo3d>)
-            InstancingNode(cnt, Map.ofList ["ModelTrafo", view], Mod.constant sg) :> ISg
+        let instanced (trafos : aval<Trafo3d[]>) (sg : ISg) : ISg =
+            let cnt = trafos |> AVal.map Array.length
+            let view = BufferView(trafos |> AVal.map (fun t -> ArrayBuffer t :> IBuffer), typeof<Trafo3d>)
+            InstancingNode(cnt, Map.ofList ["ModelTrafo", view], AVal.constant sg) :> ISg
             
 
 namespace Aardvark.SceneGraph.Semantics
 open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Base.Ag
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 
 
@@ -153,13 +153,13 @@ module Instancing =
             :> IBuffer
 
         static let instanceTrafoCache = 
-            Cache2<IMod<Trafo3d>, IMod<IBuffer>, BufferView * BufferView>(Ag.emptyScope, fun inner instances ->
-                let fw = Mod.map2 mergeFW inner instances
-                let bw = Mod.map2 mergeBW inner instances
+            BinaryCache<aval<Trafo3d>, aval<IBuffer>, BufferView * BufferView>(fun inner instances ->
+                let fw = AVal.map2 mergeFW inner instances
+                let bw = AVal.map2 mergeBW inner instances
                 BufferView(fw, typeof<M44f>), BufferView(bw, typeof<M44f>)
             )
 
-        static let rec applyTrafos (uniforms : Map<string,BufferView>) (model : IMod<Trafo3d>) (cnt : IMod<int>) (o : IRenderObject) =
+        static let rec applyTrafos (uniforms : Map<string,BufferView>) (model : aval<Trafo3d>) (cnt : aval<int>) (o : IRenderObject) =
             
             match o with
                 | :? RenderObject as o ->
@@ -174,9 +174,9 @@ module Instancing =
                                 failwithf "[Sg] cannot instance object with surface: %A" s
 
                     let newCall =
-                        match o.IndirectBuffer with
+                        match o.IndirectBuffer :> obj with
                             | null ->
-                                Mod.map2 (fun l cnt -> 
+                                AVal.map2 (fun l cnt -> 
                                     l |> List.map (fun (c : DrawCallInfo) ->
                                         if c.InstanceCount > 1 || c.FirstInstance <> 0 then
                                             failwithf "[Sg] cannot instance drawcall with %d instances" c.InstanceCount
@@ -196,8 +196,8 @@ module Instancing =
 
                     let objectModel =
                         match o.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "ModelTrafo") with
-                            | Some (:? IMod<Trafo3d> as inner) -> inner
-                            | _ -> Mod.constant Trafo3d.Identity
+                            | Some (:? aval<Trafo3d> as inner) -> inner
+                            | _ -> AVal.constant Trafo3d.Identity
 
                     let uniforms =
                         match Map.tryFind "ModelTrafo" uniforms with
@@ -239,7 +239,7 @@ module Instancing =
                     let newUniforms =
                         if hasTrafo then
                             UniformProvider.ofList [
-                                "ModelTrafo", model :> IMod
+                                "ModelTrafo", model :> IAdaptiveValue
                             ]
                         else 
                             UniformProvider.Empty
@@ -260,7 +260,7 @@ module Instancing =
                     failwithf "[Sg] cannot instance object: %A" o
 
         member x.RenderObjects(n : Sg.InstancingNode) : aset<IRenderObject> =
-            let model : list<IMod<Trafo3d>> = n?ModelTrafoStack
+            let model : list<aval<Trafo3d>> = n?ModelTrafoStack
             let model = TrafoSemantics.flattenStack model
 
             n.Child |> ASet.bind (fun c ->
@@ -271,5 +271,5 @@ module Instancing =
             )
 
         member x.ModelTrafoStack(n : Sg.InstancingNode) : unit =
-            n.Child?ModelTrafoStack <- List.empty<IMod<Trafo3d>>
+            n.Child?ModelTrafoStack <- List.empty<aval<Trafo3d>>
 

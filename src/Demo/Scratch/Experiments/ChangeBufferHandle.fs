@@ -3,7 +3,7 @@
 open System
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -20,8 +20,8 @@ module ChangeBufferHandle =
         let t0 = runtime.PrepareTexture (FileTexture(@"C:\Users\Schorsch\Development\WorkDirectory\pattern.jpg",true)) :> ITexture
         let t1 = runtime.PrepareTexture (FileTexture(@"C:\Users\Schorsch\Development\WorkDirectory\grass_color.jpg",true)) :> ITexture
 
-        let b = Mod.init b0
-        let t = Mod.init t0
+        let b = AVal.init b0
+        let t = AVal.init t0
 
         let call =
             DrawCallInfo(
@@ -46,8 +46,8 @@ module ChangeBufferHandle =
 
         Sg.render IndexedGeometryMode.TriangleList call
             |> Sg.vertexBuffer DefaultSemantic.Positions (BufferView(b, typeof<V3f>))
-            |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (Mod.constant [| V2f.OO; V2f.IO; V2f.II; V2f.OI |])
-            |> Sg.index (Mod.constant [| 0;1;2; 0;2;3 |])
+            |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (AVal.constant [| V2f.OO; V2f.IO; V2f.II; V2f.OI |])
+            |> Sg.index (AVal.constant [| 0;1;2; 0;2;3 |])
             |> Sg.diffuseTexture t
             |> Sg.shader {
                 do! DefaultSurfaces.trafo

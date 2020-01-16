@@ -5,7 +5,7 @@ open Aardvark.Application
 open Aardvark.Application.WinForms
 open System.Windows.Forms
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Aardvark.Application.WinForms.Vulkan
@@ -65,9 +65,9 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
         if loaded then
             let invalidate = 
                 swapchain.RenderFrame(fun framebuffer ->
-                    Aardvark.Base.Incremental.EvaluationUtilities.evaluateTopLevel (fun () ->
-                        x.OnRenderFrame(swapchainDescription.renderPass, framebuffer)
-                    )
+                    //FSharp.Data.Adaptive.EvaluationUtilities.evaluateTopLevel (fun () ->
+                    x.OnRenderFrame(swapchainDescription.renderPass, framebuffer)
+                    //)
                 )
             isInvalid <- invalidate
             if invalidate then 
@@ -91,7 +91,7 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
 
     let mutable renderTask : IRenderTask = RenderTask.empty
     let mutable taskSubscription : IDisposable = null
-    let mutable sizes = Mod.init (V2i.II)
+    let mutable sizes = AVal.init (V2i.II)
     let mutable needsRedraw = false
     let mutable renderContiuously = false
 
@@ -118,7 +118,7 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
 //                Log.line "frame-time: %.2fms" (1000.0 * frameTime.Average)
 //        }
 
-    let time = Mod.init (now()) //Mod.custom(fun _ -> now())
+    let time = AVal.init (now()) //AVal.custom(fun _ -> now())
 
     let beforeRender = Event<unit>()
     let afterRender = Event<unit>()
@@ -142,7 +142,7 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
         needsRedraw <- false
         let s = V2i(x.ClientSize.Width, x.ClientSize.Height)
         if s <> sizes.Value then
-            transact (fun () -> Mod.change sizes s)
+            transact (fun () -> sizes.Value <- s)
 
 
         frameWatch.Restart()
@@ -171,7 +171,7 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
         ()
 
     member x.Time = time
-    member x.Sizes = sizes :> IMod<_>
+    member x.Sizes = sizes :> aval<_>
 
     member x.FramebufferSignature = x.RenderPass :> IFramebufferSignature
 
@@ -201,8 +201,8 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
             and set t = x.RenderTask <- unbox t
 
         member x.Samples = 1
-        member x.Sizes = sizes :> IMod<_>
-        member x.Time = time :> IMod<_>
+        member x.Sizes = sizes :> aval<_>
+        member x.Time = time :> aval<_>
         member x.BeforeRender = beforeRender.Publish
         member x.AfterRender = afterRender.Publish
 

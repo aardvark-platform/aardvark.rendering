@@ -6,7 +6,7 @@ open System.Collections.Generic
 open System.Threading
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Microsoft.FSharp.NativeInterop
 
 
@@ -76,7 +76,7 @@ type GeometryPool2(runtime : IRuntime, attributes : Map<Symbol, Type>) =
 //        inherit IDisposable
 //        abstract member Write : data : Array * offset : nativeint * size : nativeint -> unit
 //        abstract member AdjustToCount : nativeint -> unit
-//        abstract member Buffer : IMod<IBuffer>
+//        abstract member Buffer : aval<IBuffer>
 //
 //    type TypedCBuffer(runtime : IRuntime, release : unit -> unit)  =
 //        let lockObj = obj()
@@ -126,7 +126,7 @@ type GeometryPool2(runtime : IRuntime, attributes : Map<Symbol, Type>) =
 //        interface ITypedBuffer with
 //            member x.Write(data, off, cnt) = x.Write(data, off, cnt)
 //            member x.AdjustToCount(cnt) = x.AdjustToCount(cnt)
-//            member x.Buffer = buffer :> IMod<IBuffer>
+//            member x.Buffer = buffer :> aval<IBuffer>
 //
 //    type TypedMappedBuffer(runtime : IRuntime, release : unit -> unit) =
 //        let lockObj = new ReaderWriterLockSlim()
@@ -184,7 +184,7 @@ type GeometryPool2(runtime : IRuntime, attributes : Map<Symbol, Type>) =
 //            finally 
 //                arr.Free()
 //
-//        member x.Buffer = buffer :> IMod<IBuffer>
+//        member x.Buffer = buffer :> aval<IBuffer>
 //
 //        member x.Dispose() =
 //            elementTypeAndSize <- None
@@ -198,7 +198,7 @@ type GeometryPool2(runtime : IRuntime, attributes : Map<Symbol, Type>) =
 //        interface ITypedBuffer with
 //            member x.Write(data, off, cnt) = x.Write(data, off, cnt)
 //            member x.AdjustToCount(cnt) = x.AdjustToCount(cnt)
-//            member x.Buffer = buffer :> IMod<IBuffer>
+//            member x.Buffer = buffer :> aval<IBuffer>
 //
 //type GeometryPool(runtime : IRuntime, asyncWrite : bool) =
 //    let mutable manager = MemoryManager.createNop()

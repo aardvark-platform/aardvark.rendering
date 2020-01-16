@@ -1,14 +1,14 @@
 ﻿namespace Aardvark.Application
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive
+open FSharp.Data.Adaptive.Operators
 open System.Runtime.CompilerServices
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open System.Collections.Concurrent
 
 type IKeyboard =
-    abstract member IsDown : Keys -> IMod<bool>
+    abstract member IsDown : Keys -> aval<bool>
     abstract member KeyDown : Keys -> IEvent<unit>
     abstract member KeyUp : Keys -> IEvent<unit>
 
@@ -19,14 +19,14 @@ type IKeyboard =
 
     abstract member ClaimsKeyEvents : bool with get, set
 
-    abstract member Alt : IMod<bool>
-    abstract member Shift : IMod<bool>
-    abstract member Control : IMod<bool>
+    abstract member Alt : aval<bool>
+    abstract member Shift : aval<bool>
+    abstract member Control : aval<bool>
 
 
 type EventKeyboard() =
-    let downKeys = CSet.empty
-    let isDown = ConcurrentDictionary<Keys, ModRef<bool>>()
+    let downKeys = cset()
+    let isDown = ConcurrentDictionary<Keys, cval<bool>>()
     let downEvents = ConcurrentDictionary<Keys, EventSource<unit>>()
     let upEvents = ConcurrentDictionary<Keys, EventSource<unit>>()
     let downEvent = EventSource<Keys>()
@@ -35,16 +35,16 @@ type EventKeyboard() =
     let input = EventSource<char>()
     let mutable claimEvents = true
 
-    let lAlt = lazy (isDown.GetOrAdd(Keys.LeftAlt, fun k -> Mod.init (downKeys.Contains k)))
-    let rAlt = lazy (isDown.GetOrAdd(Keys.RightAlt, fun k -> Mod.init (downKeys.Contains k)))
+    let lAlt = lazy (isDown.GetOrAdd(Keys.LeftAlt, fun k -> AVal.init (downKeys.Contains k)))
+    let rAlt = lazy (isDown.GetOrAdd(Keys.RightAlt, fun k -> AVal.init (downKeys.Contains k)))
     let alt = lazy (lAlt.Value %|| rAlt.Value)
     
-    let lShift = lazy (isDown.GetOrAdd(Keys.LeftShift, fun k -> Mod.init (downKeys.Contains k)))
-    let rShift = lazy (isDown.GetOrAdd(Keys.RightShift, fun k -> Mod.init (downKeys.Contains k)))
+    let lShift = lazy (isDown.GetOrAdd(Keys.LeftShift, fun k -> AVal.init (downKeys.Contains k)))
+    let rShift = lazy (isDown.GetOrAdd(Keys.RightShift, fun k -> AVal.init (downKeys.Contains k)))
     let shift = lazy (lShift.Value %|| rShift.Value)
     
-    let lCtrl = lazy (isDown.GetOrAdd(Keys.LeftCtrl, fun k -> Mod.init (downKeys.Contains k)))
-    let rCtrl = lazy (isDown.GetOrAdd(Keys.RightCtrl, fun k -> Mod.init (downKeys.Contains k)))
+    let lCtrl = lazy (isDown.GetOrAdd(Keys.LeftCtrl, fun k -> AVal.init (downKeys.Contains k)))
+    let rCtrl = lazy (isDown.GetOrAdd(Keys.RightCtrl, fun k -> AVal.init (downKeys.Contains k)))
     let ctrl = lazy (lCtrl.Value %|| rCtrl.Value)
 
     abstract member KeyDown : Keys -> unit
@@ -54,7 +54,7 @@ type EventKeyboard() =
 
     default x.KeyDown(k : Keys) =
         downWithRepeats.Emit k
-        if CSet.add k downKeys then
+        if downKeys.Add k then
             downEvent.Emit k
 
             match downEvents.TryGetValue k with
@@ -62,11 +62,11 @@ type EventKeyboard() =
                 | _ -> ()     
                 
             match isDown.TryGetValue k with
-                | (true, e) -> transact (fun () -> Mod.change e true)
+                | (true, e) -> transact (fun () -> e.Value <- true)
                 | _ -> ()      
 
     default x.KeyUp(k : Keys) =
-        if CSet.remove k downKeys then
+        if downKeys.Remove k then
             upEvent.Emit k
 
             match upEvents.TryGetValue k with
@@ -74,7 +74,7 @@ type EventKeyboard() =
                 | _ -> ()     
                 
             match isDown.TryGetValue k with
-                | (true, e) -> transact (fun () -> Mod.change e false)
+                | (true, e) -> transact (fun () -> e.Value <- false)
                 | _ -> ()   
 
     default x.KeyPress(c : char) =
@@ -106,8 +106,8 @@ type EventKeyboard() =
         member x.Control = ctrl.Value
 
         member x.IsDown (k : Keys) =
-            let r = isDown.GetOrAdd(k, fun k -> Mod.init (downKeys.Contains k))
-            r :> IMod<_>
+            let r = isDown.GetOrAdd(k, fun k -> AVal.init (downKeys.Contains k))
+            r :> aval<_>
 
         member x.KeyDown (k : Keys) =
             let e = downEvents.GetOrAdd(k, fun k -> EventSource())

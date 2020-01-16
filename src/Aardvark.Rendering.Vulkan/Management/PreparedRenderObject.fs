@@ -8,7 +8,7 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 #nowarn "9"
 // #nowarn "51"
@@ -130,11 +130,11 @@ type DevicePreparedRenderObjectExtensions private() =
                                                 let samplerState = samplerState.SamplerStateDescription
 
                                                 match ro.Uniforms.TryGetUniform(Ag.emptyScope, textureName) with
-                                                | Some (:? IMod<ITexture> as tex) ->
+                                                | Some (:? aval<ITexture> as tex) ->
 
                                                     let tex = this.CreateImage(tex)
                                                     let view = this.CreateImageView(sam.samplerType, tex)
-                                                    let sam = this.CreateSampler(Mod.constant samplerState)
+                                                    let sam = this.CreateSampler(AVal.constant samplerState)
 
                                                     Some(view, sam)
 
@@ -150,7 +150,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                 let viewSam = 
                                     let textureName = Symbol.Create img.imageName
                                     match ro.Uniforms.TryGetUniform(Ag.emptyScope, textureName) with
-                                    | Some (:? IMod<ITexture> as tex) ->
+                                    | Some (:? aval<ITexture> as tex) ->
 
                                         let tex = this.CreateImage(tex)
                                         let view = this.CreateImageView(img.imageType, tex)
@@ -209,7 +209,7 @@ type DevicePreparedRenderObjectExtensions private() =
 
 
         let inputAssembly = this.CreateInputAssemblyState(ro.Mode, program)
-        let inputState = this.CreateVertexInputState(programLayout.PipelineInfo, Mod.constant (VertexInputState.create bufferFormats))
+        let inputState = this.CreateVertexInputState(programLayout.PipelineInfo, AVal.constant (VertexInputState.create bufferFormats))
         let rasterizerState = this.CreateRasterizerState(ro.DepthTest, ro.DepthBias, ro.CullMode, ro.FrontFace, ro.FillMode)
         let colorBlendState = this.CreateColorBlendState(renderPass, ro.WriteBuffers, ro.BlendMode)
         let depthStencilState = this.CreateDepthStencilState(writeDepth, ro.DepthTest, ro.StencilMode)
@@ -242,11 +242,11 @@ type DevicePreparedRenderObjectExtensions private() =
             
 
         let calls =
-            match ro.IndirectBuffer with
+            match ro.IndirectBuffer :> obj with
                 | null -> 
                     this.CreateDrawCall(indexed, ro.DrawCallInfos)
-                | b -> 
-                    let indirect = this.CreateIndirectBuffer(indexed, b)
+                | _ -> 
+                    let indirect = this.CreateIndirectBuffer(indexed, ro.IndirectBuffer)
                     this.CreateDrawCall(indexed, indirect)
         resources.Add calls
         let bindings =
@@ -311,11 +311,11 @@ type DevicePreparedRenderObjectExtensions private() =
                                                 let samplerState = samplerState.SamplerStateDescription
 
                                                 match uniforms.TryGetUniform(Ag.emptyScope, textureName) with
-                                                | Some (:? IMod<ITexture> as tex) ->
+                                                | Some (:? aval<ITexture> as tex) ->
 
                                                     let tex = this.CreateImage(tex)
                                                     let view = this.CreateImageView(sam.samplerType, tex)
-                                                    let sam = this.CreateSampler(Mod.constant samplerState)
+                                                    let sam = this.CreateSampler(AVal.constant samplerState)
 
                                                     Some(view, sam)
 
@@ -331,7 +331,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                 let viewSam = 
                                     let textureName = Symbol.Create img.imageName
                                     match uniforms.TryGetUniform(Ag.emptyScope, textureName) with
-                                    | Some (:? IMod<ITexture> as tex) ->
+                                    | Some (:? aval<ITexture> as tex) ->
 
                                         let tex = this.CreateImage(tex)
                                         let view = this.CreateImageView(img.imageType, tex)

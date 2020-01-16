@@ -8,7 +8,7 @@ open System.Collections.Generic
 open System.Collections.Concurrent
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection
 open OpenTK
@@ -120,7 +120,7 @@ module ProgramExtensions =
 
     module ShaderCompiler = 
         let tryCompileShader (stage : ShaderStage) (code : string) (entryPoint : string) (x : Context) =
-            using x.ResourceLock (fun _ ->
+            Operators.using x.ResourceLock (fun _ ->
                 let code = code.Replace(sprintf "%s(" entryPoint, "main(")
                 
                 let handle = GL.CreateShader(getShaderType stage)
@@ -242,7 +242,7 @@ module ProgramExtensions =
                 let numberdLines = withLineNumbers codeWithDefine
                 Report.Line("Compiling shader:\n{0}", numberdLines)
 
-            using x.ResourceLock (fun _ ->
+            Operators.using x.ResourceLock (fun _ ->
                 let results =
                     stages |> List.map (fun (def, entry, stage) ->
                         let codeWithDefine = addPreprocessorDefine def code
@@ -263,7 +263,7 @@ module ProgramExtensions =
             )
 
         let setFragDataLocations (fboSignature : Map<string, int>) (handle : int) (x : Context) =
-            using x.ResourceLock (fun _ ->
+            Operators.using x.ResourceLock (fun _ ->
                 fboSignature 
                     |> Map.toList
                     |> List.map (fun (name, location) ->
@@ -370,8 +370,8 @@ module ProgramExtensions =
     // NOTE: shader caches no longer depending on Context. shaders objects can be shared between contexts, even if a context is using a different GL profile
     let private codeCache = ConcurrentDictionary<string * IFramebufferSignature, Error<Program>>()
     
-    let private staticShaderCache = ConcurrentDictionary<FShade.Effect * IFramebufferSignature, Error<GLSL.GLSLProgramInterface * IMod<Program>>>()
-    let private dynamicShaderCache = ConditionalWeakTable<(FShade.EffectConfig -> FShade.EffectInputLayout * IMod<FShade.Imperative.Module>), Error<GLSL.GLSLProgramInterface * IMod<Program>>>()
+    let private staticShaderCache = ConcurrentDictionary<FShade.Effect * IFramebufferSignature, Error<GLSL.GLSLProgramInterface * aval<Program>>>()
+    let private dynamicShaderCache = ConditionalWeakTable<(FShade.EffectConfig -> FShade.EffectInputLayout * aval<FShade.Imperative.Module>), Error<GLSL.GLSLProgramInterface * aval<Program>>>()
     let private shaderPickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
 
 //    let private useDiskCache = true
@@ -453,7 +453,7 @@ module ProgramExtensions =
 
 
         member x.TryCompileProgramCode(fboSignature : Map<string, int>, expectsRowMajorMatrices : bool, code : string) =
-            using x.ResourceLock (fun _ ->
+            Operators.using x.ResourceLock (fun _ ->
                 match x |> ShaderCompiler.tryCompileShaders true code with
                     | Success shaders ->
                         let firstTexture = 0
@@ -485,7 +485,7 @@ module ProgramExtensions =
                     failwithf "[GL] shader compiler returned errors: %s" e
 
         member x.Delete(p : Program) =
-            using x.ResourceLock (fun _ ->
+            Operators.using x.ResourceLock (fun _ ->
                 removeProgram x
                 GL.DeleteProgram(p.Handle)
                 GL.Check "could not delete program"
@@ -629,7 +629,7 @@ module ProgramExtensions =
                                 Error e
             )
 
-        member x.TryCreateProgram(signature : IFramebufferSignature, surface : Surface, topology : IndexedGeometryMode) : Error<GLSL.GLSLProgramInterface * IMod<Program>> =
+        member x.TryCreateProgram(signature : IFramebufferSignature, surface : Surface, topology : IndexedGeometryMode) : Error<GLSL.GLSLProgramInterface * aval<Program>> =
             match surface with
                 | Surface.FShadeSimple effect ->
                     staticShaderCache.GetOrAdd((effect, signature), fun (effect, signature) ->
@@ -641,7 +641,7 @@ module ProgramExtensions =
 
                         match x.TryCompileProgram(effect.Id, signature, glsl) with
                             | Success (prog) ->
-                                Success (prog.Interface, Mod.constant prog)
+                                Success (prog.Interface, AVal.constant prog)
                             | Error e ->
                                 Error e
                         )
@@ -654,7 +654,7 @@ module ProgramExtensions =
                         | _ ->
                             let (inputLayout,b) = create (signature.EffectConfig(Range1d(-1.0, 1.0), false))
                     
-                            let initial = Mod.force b
+                            let initial = AVal.force b
                             let effect = initial.userData |> unbox<Effect>
                             let layoutHash = shaderPickler.ComputeHash(inputLayout).Hash |> Convert.ToBase64String
                             
@@ -673,7 +673,7 @@ module ProgramExtensions =
                                         failwithf "[GL] shader compiler returned errors: %s" e
 
                             let changeableProgram = 
-                                b |> Mod.map (fun m ->
+                                b |> AVal.map (fun m ->
                                     let effect = m.userData |> unbox<Effect>
                                     match x.TryCompileProgram(effect.Id + layoutHash, signature, lazy (ModuleCompiler.compileGLSL430 m)) with
                                         | Success p -> p
@@ -693,11 +693,11 @@ module ProgramExtensions =
                 | Surface.Backend surface ->
                     match surface with
                         | :? Program as p -> 
-                            Success (p.Interface, Mod.constant p)
+                            Success (p.Interface, AVal.constant p)
                         | _ ->
                             Error (sprintf "[GL] bad surface: %A (hi lui)" surface)
 
-        member x.CreateProgram(signature : IFramebufferSignature, surface : Surface, topology : IndexedGeometryMode) : GLSL.GLSLProgramInterface * IMod<Program> =
+        member x.CreateProgram(signature : IFramebufferSignature, surface : Surface, topology : IndexedGeometryMode) : GLSL.GLSLProgramInterface * aval<Program> =
             match x.TryCreateProgram(signature, surface, topology) with
                 | Success t -> t
                 | Error e ->

@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open System.IO
@@ -179,7 +179,7 @@ let main argv =
 
 
     let texture = PixTexture3d(volume, false) :> ITexture
-    let texture = win.Runtime.PrepareTexture(texture) :> ITexture |> Mod.constant
+    let texture = win.Runtime.PrepareTexture(texture) :> ITexture |> AVal.constant
 
 
     let fvc = int64 volume.Size.X * int64 volume.Size.Y * int64 volume.Size.Z
@@ -223,7 +223,7 @@ let main argv =
             do! Shader.vertex
             do! Shader.fragment
             }
-        |> Sg.cullMode (Mod.constant CullMode.Back)
+        |> Sg.cullMode (AVal.constant CullMode.Back)
 
     win.Scene <- sg
     win.Run()

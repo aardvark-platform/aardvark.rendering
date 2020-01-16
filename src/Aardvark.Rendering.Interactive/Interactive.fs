@@ -2,7 +2,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
@@ -21,7 +21,7 @@ type Interactive private() =
     static let mutable samples = 1
     static let mutable config = { BackendConfiguration.Default with useDebugOutput = true }
 
-    static let sg = Mod.init emptySg
+    static let sg = AVal.init emptySg
     static let window = new SimpleRenderWindow()
     static let mutable initialized = false
 
@@ -131,16 +131,16 @@ type Interactive private() =
         Interactive.ControlledViewTrafo (V3d.III * 3.0) V3d.Zero
 
     static member ControlledViewTrafo  (eye : V3d) (lookAt : V3d) =
-        Interactive.ControlledCameraView eye lookAt |> Mod.map CameraView.viewTrafo
+        Interactive.ControlledCameraView eye lookAt |> AVal.map CameraView.viewTrafo
 
     static member DefaultFrustum =
-        window.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.01 100.0 (float s.X / float s.Y))
+        window.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.01 100.0 (float s.X / float s.Y))
 
     static member DefaultProjTrafo =
-        window.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.01 100.0 (float s.X / float s.Y) |> Frustum.projTrafo)
+        window.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.01 100.0 (float s.X / float s.Y) |> Frustum.projTrafo)
 
     static member DefaultCamera =
-        Mod.map2 (fun c f -> { cameraView = c; frustum = f }) Interactive.DefaultCameraView Interactive.DefaultFrustum
+        AVal.map2 (fun c f -> { cameraView = c; frustum = f }) Interactive.DefaultCameraView Interactive.DefaultFrustum
 
 
     static member RunMainLoop() =

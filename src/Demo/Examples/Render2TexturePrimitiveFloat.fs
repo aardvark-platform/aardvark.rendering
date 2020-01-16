@@ -21,10 +21,10 @@ open System
 open Aardvark.Base
 open Aardvark.Rendering.Interactive
 
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.Base.Incremental.Operators 
+open FSharp.Data.Adaptive.Operators 
 open Aardvark.Base.Rendering
 
 module Render2TexturePrimitiveFloat = 
@@ -66,9 +66,9 @@ module Render2TexturePrimitiveFloat =
             DestinationFactor = BlendFactor.One,
             SourceFactor = BlendFactor.One,
             Operation = BlendOperation.Add
-        ) |> Mod.constant
+        ) |> AVal.constant
 
-    let cnt = Mod.init 300
+    let cnt = AVal.init 300
 
     // Default scene graph setup with static camera
     let render2TextureSg =
@@ -76,13 +76,13 @@ module Render2TexturePrimitiveFloat =
             let! cnt = cnt
             for i in 0 .. cnt - 1 do 
                 yield Sg.fullScreenQuad 
-                    |> Sg.trafo (Mod.constant Trafo3d.Identity)
+                    |> Sg.trafo (AVal.constant Trafo3d.Identity)
         } |> Sg.set
             |> Sg.viewTrafo ~~(CameraView.lookAt (V3d(3,3,3)) V3d.OOO V3d.OOI                   |> CameraView.viewTrafo )
             |> Sg.projTrafo ~~(Frustum.perspective 60.0 0.01 10.0 (float size.X / float size.Y) |> Frustum.projTrafo    )
             |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
             |> Sg.blendMode blendMode
-            |> Sg.depthTest (Mod.constant DepthTestMode.None)
+            |> Sg.depthTest (AVal.constant DepthTestMode.None)
 
     // Create render tasks given the signature and concrete buffers        
     let task = runtime.CompileRender(signature, render2TextureSg)
@@ -120,12 +120,12 @@ module Render2TexturePrimitiveFloat =
             |> Sg.projTrafo Interactive.DefaultProjTrafo
 
     win.Keyboard.KeyDown(Keys.Add).Values.Subscribe(fun _ ->
-        transact (fun _ -> Mod.change cnt (cnt.Value + 1))
+        transact (fun _ -> AVal.change cnt (cnt.Value + 1))
         printfn "%A" cnt
     ) |> ignore
 
     win.Keyboard.KeyDown(Keys.OemMinus).Values.Subscribe(fun _ ->
-        transact (fun _ -> Mod.change cnt (cnt.Value - 1))
+        transact (fun _ -> AVal.change cnt (cnt.Value - 1))
         printfn "%A" cnt
     ) |> ignore
 

@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.SceneGraph
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
@@ -25,7 +25,7 @@ type LodSem() =
 
             let! camera = node.CameraLocation
 
-            if node.ViewDecider { cameraPosition = camera; bb = Mod.force bb } then 
+            if node.ViewDecider { cameraPosition = camera; bb = AVal.force bb } then 
                 yield! highJobs
             else    
                 yield! lowJobs

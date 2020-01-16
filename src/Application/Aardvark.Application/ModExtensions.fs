@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.Application
 
 open System
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 type AdaptiveFunc<'a>(func : AdaptiveToken -> 'a -> 'a) =
     inherit AdaptiveObject()
@@ -17,9 +17,9 @@ type AdaptiveFunc<'a>(func : AdaptiveToken -> 'a -> 'a) =
                 v
         )
 
-[<CompiledName("ApplicationModModule")>]
-module Mod =
-    let withLast (f : 's -> 's -> 'a -> 'a) (state : IMod<'s>)  : AdaptiveFunc<'a> =
+[<CompiledName("ApplicationAValModule")>]
+module AVal =
+    let withLast (f : 's -> 's -> 'a -> 'a) (state : aval<'s>)  : AdaptiveFunc<'a> =
 
         let oldState = ref Unchecked.defaultof<_> 
         let res =
@@ -32,15 +32,14 @@ module Mod =
         oldState := state.GetValue()
         lock state (fun () ->
             state.Outputs.Add res |> ignore
-            state.AddOutput res
         )
 
         res
 
-    let inline step (f : 's -> 'sd -> 'a -> 'a) (state : IMod<'s>) : AdaptiveFunc<'a> =
+    let inline step (f : 's -> 'sd -> 'a -> 'a) (state : aval<'s>) : AdaptiveFunc<'a> =
         withLast (fun o n a -> f o (n - o) a) state
 
-    let withTime (f : DateTime -> DateTime -> 'a -> 'a) (state : IMod<DateTime>)  : AdaptiveFunc<'a> =
+    let withTime (f : DateTime -> DateTime -> 'a -> 'a) (state : aval<DateTime>)  : AdaptiveFunc<'a> =
 
         let oldState = ref <| DateTime.Now
 
@@ -53,22 +52,21 @@ module Mod =
             )
         lock state (fun () ->
             state.Outputs.Add res |> ignore
-            state.AddOutput res
         )
 
         res       
 
-    let inline stepTime (f : DateTime -> TimeSpan -> 'a -> 'a) (state : IMod<DateTime>) : AdaptiveFunc<'a> =
+    let inline stepTime (f : DateTime -> TimeSpan -> 'a -> 'a) (state : aval<DateTime>) : AdaptiveFunc<'a> =
         withTime (fun o n a -> f o (n - o) a) state
 
-    let rec private int (initial : IMod<'a>) (controllers : list<IMod<AdaptiveFunc<'a>>>): IMod<'a> =
+    let rec private int (initial : aval<'a>) (controllers : list<aval<AdaptiveFunc<'a>>>): aval<'a> =
         match controllers with
             | c::cs ->
                 
                 
                 let result = 
-                    c |> Mod.bind (fun f ->
-                        Mod.custom (fun t ->
+                    c |> AVal.bind (fun f ->
+                        AVal.custom (fun t ->
                             f.Run(t,(initial.GetValue t))
                         )
                     )
@@ -78,37 +76,29 @@ module Mod =
 
             | [] -> initial
 
-    let integrate (initial : 'a) (time : IMod<DateTime>) (controllers : list<IMod<AdaptiveFunc<'a>>>) =
+    let integrate (initial : 'a) (time : aval<DateTime>) (controllers : list<aval<AdaptiveFunc<'a>>>) =
         let currentValue = ref initial
-        let current = Mod.custom (fun _ -> !currentValue)
+        let current = AVal.custom (fun _ -> !currentValue)
         //let isSubscribed = ref false
         //time.AddOutput current
-        //time |> Mod.registerCallback (fun _ -> current.MarkOutdated()) |> ignore
+        //time |> AVal.registerCallback (fun _ -> current.MarkOutdated()) |> ignore
         
         let result = int current controllers
         //time.AddOutput current
 
 
-        Mod.custom (fun token ->
+        AVal.custom (fun token ->
             let v = result.GetValue token
             if !currentValue <> v then
                 currentValue := v
-                let time = AdaptiveObject.Time
-                lock time (fun () ->
-                    time.Outputs.Add current |> ignore
-                )
-//                if not !isSubscribed then
-//                    isSubscribed := true
-//                    time.AddVolatileMarkingCallback (fun () ->
-//                        isSubscribed := false
-//                        transact (fun () -> current.MarkOutdated())
-//                    ) |> ignore
-//                    time.GetValue(AdaptiveToken(token.Depth, null, System.Collections.Generic.HashSet())) |> ignore
 
+                AdaptiveObject.RunAfterEvaluate(fun () ->
+                    current.MarkOutdated()
+                )
             v
         )
 
-//        result |> Mod.map (fun v ->
+//        result |> AVal.map (fun v ->
 //            if !currentValue <> v then
 //                currentValue := v
 //                if not !isSubscribed then

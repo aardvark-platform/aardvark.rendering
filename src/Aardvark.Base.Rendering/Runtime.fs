@@ -3,12 +3,10 @@
 open System
 open System.Threading
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open System.Collections.Generic
 open Aardvark.Base.Rendering
 open System.Runtime.CompilerServices
-
-#nowarn "44"
 
 module Management =
     
@@ -664,7 +662,7 @@ module Management =
 
 
 type IStreamingTexture =
-    inherit IMod<ITexture>
+    inherit aval<ITexture>
     abstract member Update : format : PixFormat * size : V2i * data : nativeint -> unit
     abstract member UpdateAsync : format : PixFormat * size : V2i * data : nativeint -> Transaction
     abstract member ReadPixel : pos : V2i -> C4f
@@ -713,7 +711,7 @@ module ShaderStage =
             ShaderStage.Fragment,       FShade.ShaderStage.Fragment
             ShaderStage.Compute,        FShade.ShaderStage.Compute
         ]
-type BackendSurface(code : string, entryPoints : Dictionary<ShaderStage, string>, builtIns : Map<ShaderStage, Map<FShade.Imperative.ParameterKind, Set<string>>>, uniforms : SymbolDict<IMod>, samplers : Dictionary<string * int, SamplerDescription>, expectsRowMajorMatrices : bool, iface : obj) =
+type BackendSurface(code : string, entryPoints : Dictionary<ShaderStage, string>, builtIns : Map<ShaderStage, Map<FShade.Imperative.ParameterKind, Set<string>>>, uniforms : SymbolDict<IAdaptiveValue>, samplers : Dictionary<string * int, SamplerDescription>, expectsRowMajorMatrices : bool, iface : obj) =
     interface ISurface
     member x.Code = code
     member x.EntryPoints = entryPoints
@@ -755,9 +753,9 @@ type IGeometryPoolExtensions private() =
 
 [<AllowNullLiteral>]
 type IResourceManager =
-    abstract member CreateSurface : signature : IFramebufferSignature * surface : IMod<ISurface> -> IResource<IBackendSurface>
-    abstract member CreateBuffer : buffer : IMod<IBuffer> -> IResource<IBackendBuffer>
-    abstract member CreateTexture : texture : IMod<ITexture> -> IResource<IBackendTexture>
+    abstract member CreateSurface : signature : IFramebufferSignature * surface : aval<ISurface> -> IResource<IBackendSurface>
+    abstract member CreateBuffer : buffer : aval<IBuffer> -> IResource<IBackendBuffer>
+    abstract member CreateTexture : texture : aval<ITexture> -> IResource<IBackendTexture>
 
 and [<Struct>] LodRendererStats =
     {
@@ -773,19 +771,19 @@ and [<Struct>] LodRendererStats =
 and LodRendererConfig =
     {
         fbo : IFramebufferSignature
-        time : IMod<DateTime>
+        time : aval<DateTime>
         surface : Surface
         state : PipelineState
         pass : RenderPass
-        model : IMod<Trafo3d>
-        view : IMod<Trafo3d>
-        proj : IMod<Trafo3d>
-        budget : IMod<int64>
-        splitfactor : IMod<float>
-        renderBounds : IMod<bool>
-        maxSplits : IMod<int>
-        stats : IModRef<LodRendererStats>
-        pickTrees : Option<mmap<ILodTreeNode,SimplePickTree>>
+        model : aval<Trafo3d>
+        view : aval<Trafo3d>
+        proj : aval<Trafo3d>
+        budget : aval<int64>
+        splitfactor : aval<float>
+        renderBounds : aval<bool>
+        maxSplits : aval<int>
+        stats : cval<LodRendererStats>
+        pickTrees : Option<cmap<ILodTreeNode,SimplePickTree>>
         alphaToCoverage : bool
     }
 
@@ -808,7 +806,7 @@ and IRuntime =
     abstract member PrepareSurface : IFramebufferSignature * ISurface -> IBackendSurface
     abstract member PrepareRenderObject : IFramebufferSignature * IRenderObject -> IPreparedRenderObject
 
-    // type LodNode(quality : IModRef<float>, maxQuality : IModRef<float>, budget : IMod<int64>, culling : bool, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<DateTime>, clouds : aset<LodTreeInstance>) =
+    // type LodNode(quality : IModRef<float>, maxQuality : IModRef<float>, budget : aval<int64>, culling : bool, renderBounds : aval<bool>, maxSplits : aval<int>, time : aval<DateTime>, clouds : aset<LodTreeInstance>) =
     abstract member CreateLodRenderer : config : LodRendererConfig * data : aset<LodTreeInstance> -> IPreparedRenderObject
 
 //    abstract member MaxLocalSize : V3i
@@ -851,18 +849,13 @@ and IRuntime =
     
     abstract member CreateFramebuffer : signature : IFramebufferSignature * attachments : Map<Symbol, IFramebufferOutput> -> IFramebuffer
 
-    [<Obsolete>] // remove "nowarn 44" when deleting this
-    abstract member CreateMappedBuffer : unit -> IMappedBuffer
-    [<Obsolete>] // remove "nowarn 44" when deleting this
-    abstract member CreateMappedIndirectBuffer : indexed : bool -> IMappedIndirectBuffer
-
     abstract member CreateGeometryPool : Map<Symbol, Type> -> IGeometryPool
 
     abstract member DeleteStreamingTexture : IStreamingTexture -> unit
     abstract member DeleteRenderbuffer : IRenderbuffer -> unit
     abstract member DeleteFramebuffer : IFramebuffer -> unit
 
-    abstract member CompileClear : fboSignature : IFramebufferSignature * clearColors : IMod<Map<Symbol, C4f>> * clearDepth : IMod<Option<double>> -> IRenderTask
+    abstract member CompileClear : fboSignature : IFramebufferSignature * clearColors : aval<Map<Symbol, C4f>> * clearDepth : aval<Option<double>> -> IRenderTask
     abstract member CompileRender : fboSignature : IFramebufferSignature * BackendConfiguration * aset<IRenderObject> -> IRenderTask
 
     abstract member Clear : fbo : IFramebuffer * clearColors : Map<Symbol, C4f> * depth : Option<float> * stencil : Option<int> -> unit
@@ -880,6 +873,7 @@ and ICustomRenderObject =
 and IRenderTask =
     inherit IDisposable
     inherit IAdaptiveObject
+    abstract member Id : int
     abstract member FramebufferSignature : Option<IFramebufferSignature>
     abstract member Runtime : Option<IRuntime>
     abstract member Update : AdaptiveToken * RenderToken -> unit
@@ -1017,10 +1011,10 @@ module NullResources =
          | :? NullTexture -> true
          | _ -> false
          
-    let isValidResourceAdaptive (m : IMod) =
+    let isValidResourceAdaptive (m : IAdaptiveValue) =
         match m with
-            | :? SingleValueBuffer -> Mod.constant false
+            | :? SingleValueBuffer -> AVal.constant false
             | _ -> 
-                Mod.custom (fun t ->
-                    not <| isNullResource (m.GetValue t)
+                AVal.custom (fun t ->
+                    not <| isNullResource (m.GetValueUntyped t)
                 )

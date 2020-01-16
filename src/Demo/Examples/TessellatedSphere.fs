@@ -3,12 +3,12 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Rendering.Vulkan
 open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection
@@ -101,10 +101,10 @@ module TessellatedSphere =
 
 
         let cameraView  =  DefaultCameraController.control win.Mouse win.Keyboard win.Time (CameraView.LookAt(V3d.III, V3d.OOO, V3d.OOI))    
-        let frustum     =  win.Sizes    |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))       
+        let frustum     =  win.Sizes    |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))       
             
-        let viewTrafo   = cameraView    |> Mod.map CameraView.viewTrafo
-        let projTrafo   = frustum       |> Mod.map Frustum.projTrafo        
+        let viewTrafo   = cameraView    |> AVal.map CameraView.viewTrafo
+        let projTrafo   = frustum       |> AVal.map Frustum.projTrafo        
 
         
         let model = Sg.unitSphere' 4 C4b.DarkBlue
@@ -116,17 +116,17 @@ module TessellatedSphere =
                             DefaultSurfaces.vertexColor     |> toEffect
                             DefaultSurfaces.simpleLighting  |> toEffect
                                 ]
-                    |> Sg.blendMode (Rendering.BlendMode.Blend |> Mod.constant )
-                    |> Sg.fillMode  (FillMode.Line |> Mod.constant)
-                    |> Sg.cullMode  (CullMode.Back |> Mod.constant)
-                    |> Sg.trafo     (Trafo3d.Identity |> Mod.constant)
+                    |> Sg.blendMode (Rendering.BlendMode.Blend |> AVal.constant )
+                    |> Sg.fillMode  (FillMode.Line |> AVal.constant)
+                    |> Sg.cullMode  (CullMode.Back |> AVal.constant)
+                    |> Sg.trafo     (Trafo3d.Identity |> AVal.constant)
                     |> Sg.viewTrafo viewTrafo
                     |> Sg.projTrafo projTrafo
                     |> Sg.uniform   "ViewportSize" win.Sizes
-                    |> Sg.uniform   "MaxEdgeLengthInPixel" (50 |> Mod.constant )
+                    |> Sg.uniform   "MaxEdgeLengthInPixel" (50 |> AVal.constant )
                     
     
-        let clearTask = app.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.White, Mod.constant 1.0)
+        let clearTask = app.Runtime.CompileClear(win.FramebufferSignature, AVal.constant C4f.White, AVal.constant 1.0)
 
         let renderTask =
             app.Runtime.CompileRender(win.FramebufferSignature,BackendConfiguration.Default, sg)

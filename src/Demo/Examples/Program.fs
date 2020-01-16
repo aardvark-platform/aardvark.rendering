@@ -9,7 +9,7 @@ open System.Diagnostics
 open System.Threading
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 
 #nowarn "9"
@@ -112,7 +112,7 @@ module TreeDiff =
 
         override x.Compute(token : AdaptiveToken) =
             let mutable old = reader.State
-            let ops = reader.GetOperations token
+            let ops = reader.GetChanges token
 
             let self = Node id
             ops |> PDeltaList.toList |> List.collect (fun (i,op) ->
@@ -161,7 +161,7 @@ module TreeDiff =
         member x.Update(token) =
             x.EvaluateIfNeeded token m.mempty (fun token ->
                 let mutable old = reader.State
-                let ops = reader.GetOperations token
+                let ops = reader.GetChanges token
 
                 let ops =
                     ops |> PDeltaList.toList |> List.map (fun (i,op) ->
@@ -171,7 +171,7 @@ module TreeDiff =
                         let r = r |> Option.map snd
                         match op with
                             | Set v -> 
-                                old <- PList.set i v old
+                                old <- IndexList.set i v old
                                 let op, updater = x.Invoke({ prev = l; self = s; next = r }, v)
 
                                 match updaters.TryRemove i with
@@ -186,7 +186,7 @@ module TreeDiff =
 
                                 op
                             | Remove -> 
-                                old <- PList.remove i old
+                                old <- IndexList.remove i old
                                 x.Revoke { prev = l; self = s; next = r }
                     )
 
@@ -201,7 +201,7 @@ module TreeDiff =
             member x.Update t = x.Update t
     
     [<AbstractClass>]
-    type ValueUpdater<'a, 'op>(input : IMod<'a>, m : Monoid<'op>) =
+    type ValueUpdater<'a, 'op>(input : aval<'a>, m : Monoid<'op>) =
         inherit AdaptiveObject()
         let mutable last = None
 
@@ -230,8 +230,8 @@ module TreeDiff =
     type NodeDescription =
         {
             key         : string
-            title       : IMod<string>
-            isFolder    : IMod<bool>
+            title       : aval<string>
+            isFolder    : aval<bool>
         }
 
     type Node(desc : NodeDescription, children : alist<Node>) =
@@ -302,7 +302,7 @@ module TreeDiff =
         member x.Update(token : AdaptiveToken) =
             x.EvaluateIfNeeded token [] (fun token ->
                 let old = reader.State.AsMap
-                let ops = reader.GetOperations token
+                let ops = reader.GetChanges token
 
                 let deltas =
                     ops |> PDeltaList.toList |> List.collect (fun (i, op) ->
@@ -330,7 +330,7 @@ module TreeDiff =
                                     | None -> []
                     )
 
-                deltas @ (reader.State |> PList.toList |> List.collect (fun n -> n.Update(token)))
+                deltas @ (reader.State |> IndexList.toList |> List.collect (fun n -> n.Update(token)))
 
             )
 
@@ -888,9 +888,9 @@ module AdaptiveResources9000 =
             private new(v) = { Value = v }
         end
 
-    type ResourceInfo(v : ResourceVersion, h : obj, l : hset<ILockedResource>) =
+    type ResourceInfo(v : ResourceVersion, h : obj, l : HashSet<ILockedResource>) =
 
-        static let empty = ResourceInfo(ResourceVersion.Zero, null, HSet.empty)
+        static let empty = ResourceInfo(ResourceVersion.Zero, null, HashSet.empty)
 
         static member Empty = empty
 
@@ -898,7 +898,7 @@ module AdaptiveResources9000 =
         member x.Handle = h
         member x.Locked = l
 
-    type ResourceInfo<'h>(v : ResourceVersion, h : 'h, l : hset<ILockedResource>) =
+    type ResourceInfo<'h>(v : ResourceVersion, h : 'h, l : HashSet<ILockedResource>) =
         inherit ResourceInfo(v, h :> obj, l)
         member x.Handle = h
 
@@ -970,7 +970,7 @@ module AdaptiveResources9000 =
 
             member x.UpdateInfo(info : ResourceInfo) =
                 if info.Version > x.ResourceInfo.Version then
-                    let delta = HSet.computeDelta x.ResourceInfo.Locked info.Locked
+                    let delta = HashSet.computeDelta x.ResourceInfo.Locked info.Locked
                     x.ResourceInfo <- info
                     Some delta
                 else
@@ -1052,7 +1052,7 @@ module AdaptiveResources9000 =
                         if store.Reference.Release() then
                             lock res (fun () ->
                                 res.Outputs.Remove x |> ignore
-                                let deltas = HSet.computeDelta store.ResourceInfo.Locked HSet.empty
+                                let deltas = HashSet.computeDelta store.ResourceInfo.Locked HashSet.empty
                                 let (l', _) = lockedResources.ApplyDelta(deltas)
                                 lockedResources <- l'
                                 remDirty store |> ignore
@@ -1121,7 +1121,7 @@ module AdaptiveResourcesEager =
 
         let mutable updateTime = -1L
         let mutable currentHandle : Option<'h> = None
-        let mutable outputs : hset<IResource> = HSet.empty
+        let mutable outputs : HashSet<IResource> = HashSet.empty
 
         abstract member Create : unit -> 'h
         abstract member Update : 'h -> bool * 'h
@@ -1153,11 +1153,11 @@ module AdaptiveResourcesEager =
 
         member x.AddOutput (r : IResource) =
             assert(r.Level > x.Level)
-            outputs <- HSet.add r outputs
+            outputs <- HashSet.add r outputs
 
         member x.RemoveOutput (r : IResource) =
             assert(r.Level > x.Level)
-            outputs <- HSet.remove r outputs
+            outputs <- HashSet.remove r outputs
 
         member x.Update() =
             lock x (fun () ->

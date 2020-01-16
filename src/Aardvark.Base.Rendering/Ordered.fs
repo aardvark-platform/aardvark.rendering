@@ -2,7 +2,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 
 type ICustomRenderCommand =
@@ -31,50 +31,50 @@ type private FunCustomCommand(run : IRuntime -> AdaptiveToken -> RenderToken -> 
 [<RequireQualifiedAccess>]
 type RenderCommand =
     | RenderC of o : IRenderObject
-    | ClearC of colors : Map<Symbol, IMod<C4f>> * depth : Option<IMod<float>> * stencil : Option<IMod<int>>
+    | ClearC of colors : Map<Symbol, aval<C4f>> * depth : Option<aval<float>> * stencil : Option<aval<int>>
     | CallC of task : IRenderTask
-    | IfThenElseC of condition : IMod<bool> * ifTrue : list<RenderCommand> * ifFalse : list<RenderCommand>
+    | IfThenElseC of condition : aval<bool> * ifTrue : list<RenderCommand> * ifFalse : list<RenderCommand>
     | CustomC of command : ICustomRenderCommand
     
-    static member inline Clear(color : Map<Symbol, IMod<C4f>>, depth : Option<IMod<float>>, stencil : Option<IMod<int>>) =
+    static member inline Clear(color : Map<Symbol, aval<C4f>>, depth : Option<aval<float>>, stencil : Option<aval<int>>) =
         RenderCommand.ClearC(color, depth, stencil)
         
-    static member inline Clear(color : Map<Symbol, IMod<C4f>>, depth : IMod<float>, stencil : IMod<int>) =
+    static member inline Clear(color : Map<Symbol, aval<C4f>>, depth : aval<float>, stencil : aval<int>) =
         RenderCommand.ClearC(color, Some depth, Some stencil)
         
-    static member inline Clear(color : Map<Symbol, IMod<C4f>>, depth : IMod<float>) =
+    static member inline Clear(color : Map<Symbol, aval<C4f>>, depth : aval<float>) =
         RenderCommand.ClearC(color, Some depth, None)
         
-    static member inline Clear(color : Map<Symbol, IMod<C4f>>) =
+    static member inline Clear(color : Map<Symbol, aval<C4f>>) =
         RenderCommand.ClearC(color, None, None)
 
 
-    static member inline Clear(color : list<Symbol * IMod<C4f>>, depth : IMod<float>, stencil : IMod<int>) =
+    static member inline Clear(color : list<Symbol * aval<C4f>>, depth : aval<float>, stencil : aval<int>) =
         RenderCommand.ClearC(Map.ofList color, Some depth, Some stencil)
 
-    static member inline Clear(color : list<Symbol * IMod<C4f>>, depth : IMod<float>) =
+    static member inline Clear(color : list<Symbol * aval<C4f>>, depth : aval<float>) =
         RenderCommand.ClearC(Map.ofList color, Some depth, None)
 
-    static member inline Clear(color : list<Symbol * IMod<C4f>>) =
+    static member inline Clear(color : list<Symbol * aval<C4f>>) =
         RenderCommand.ClearC(Map.ofList color, None, None)
 
 
-    static member inline Clear(color : IMod<C4f>, depth : IMod<float>, stencil : IMod<int>) =
+    static member inline Clear(color : aval<C4f>, depth : aval<float>, stencil : aval<int>) =
         RenderCommand.ClearC(Map.ofList [DefaultSemantic.Colors, color], Some depth, Some stencil)
 
-    static member inline Clear(color : IMod<C4f>, depth : IMod<float>) =
+    static member inline Clear(color : aval<C4f>, depth : aval<float>) =
         RenderCommand.ClearC(Map.ofList [DefaultSemantic.Colors, color], Some depth, None)
 
-    static member inline Clear(color : IMod<C4f>) =
+    static member inline Clear(color : aval<C4f>) =
         RenderCommand.ClearC(Map.ofList [DefaultSemantic.Colors, color], None, None)
 
-    static member inline Clear(depth : IMod<float>, stencil : IMod<int>) =
+    static member inline Clear(depth : aval<float>, stencil : aval<int>) =
         RenderCommand.ClearC(Map.empty, Some depth, Some stencil)
 
-    static member inline Clear(depth : IMod<float>) =
+    static member inline Clear(depth : aval<float>) =
         RenderCommand.ClearC(Map.empty, Some depth, None)
 
-    static member inline Clear(stencil : IMod<int>) =
+    static member inline Clear(stencil : aval<int>) =
         RenderCommand.ClearC(Map.empty, None, Some stencil)
 
 
@@ -87,22 +87,22 @@ type RenderCommand =
     static member Call(t : IRenderTask) =
         RenderCommand.CallC t
 
-    static member IfThenElse(cond : IMod<bool>, ifTrue : list<RenderCommand>, ifFalse : list<RenderCommand>) =
+    static member IfThenElse(cond : aval<bool>, ifTrue : list<RenderCommand>, ifFalse : list<RenderCommand>) =
         RenderCommand.IfThenElseC(cond, ifTrue, ifFalse)
 
-    static member IfThenElse(cond : IMod<bool>, ifTrue : RenderCommand, ifFalse : RenderCommand) =
+    static member IfThenElse(cond : aval<bool>, ifTrue : RenderCommand, ifFalse : RenderCommand) =
         RenderCommand.IfThenElseC(cond, [ ifTrue ], [ ifFalse ])
 
-    static member When(cond : IMod<bool>, ifTrue : list<RenderCommand>) =
+    static member When(cond : aval<bool>, ifTrue : list<RenderCommand>) =
         RenderCommand.IfThenElseC(cond, ifTrue, [])
 
-    static member When(cond : IMod<bool>, ifTrue : RenderCommand) =
+    static member When(cond : aval<bool>, ifTrue : RenderCommand) =
         RenderCommand.IfThenElseC(cond, [ ifTrue ], [])
         
-    static member WhenNot(cond : IMod<bool>, ifFalse : list<RenderCommand>) =
+    static member WhenNot(cond : aval<bool>, ifFalse : list<RenderCommand>) =
         RenderCommand.IfThenElseC(cond, [], ifFalse)
 
-    static member WhenNot(cond : IMod<bool>, ifFalse : RenderCommand) =
+    static member WhenNot(cond : aval<bool>, ifFalse : RenderCommand) =
         RenderCommand.IfThenElseC(cond, [], [ ifFalse ])
           
           
@@ -151,7 +151,7 @@ module RenderProgram =
                 set |> ASet.choose (fun s ->
                         let o = toCommandList projections s
                         if o.IsConstant then
-                            match o.Content |> Mod.force |> PList.toList with
+                            match o.Content |> AVal.force |> IndexList.toList with
                                 | [] -> None
                                 | RenderCommand.RenderC h :: _ -> Some (0 :: projections h,o)
                                 | _ -> Some([1; o.GetHashCode()], o)

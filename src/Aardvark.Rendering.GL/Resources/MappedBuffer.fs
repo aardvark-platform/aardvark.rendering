@@ -5,7 +5,7 @@ open System.Threading
 open System.Collections.Concurrent
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open OpenTK
 open OpenTK.Platform
 open OpenTK.Graphics
@@ -98,14 +98,14 @@ module ResizeBufferImplementation =
 
         let resourceLock = new ResourceLock()
 
-        let mutable pendingWrites : hmap<ContextHandle, Fence> = HMap.empty
+        let mutable pendingWrites : HashMap<ContextHandle, Fence> = HashMap.empty
 
         let afterWrite() =
             lock resourceLock (fun () ->
                 let f = Fence.Create()
 
                 pendingWrites <- 
-                    pendingWrites |> HMap.update f.Context (fun old ->
+                    pendingWrites |> HashMap.update f.Context (fun old ->
                         match old with 
                             | Some o -> o.Dispose()
                             | None -> ()
@@ -114,12 +114,12 @@ module ResizeBufferImplementation =
             )
 
         let beforeResize() =
-            if not (HMap.isEmpty pendingWrites) then
-                for (_,f) in pendingWrites |> HMap.toSeq do 
+            if not (HashMap.isEmpty pendingWrites) then
+                for (_,f) in pendingWrites |> HashMap.toSeq do 
                     f.WaitCPU()
                     f.Dispose()
 
-                pendingWrites <- HMap.empty
+                pendingWrites <- HashMap.empty
 
         let afterResize() =
             use f = Fence.Create()
@@ -127,7 +127,7 @@ module ResizeBufferImplementation =
 
         let beforeRead() =
             lock resourceLock (fun () ->
-                if not (HMap.isEmpty pendingWrites) then
+                if not (HashMap.isEmpty pendingWrites) then
                     let handle = ctx.CurrentContextHandle |> Option.get
                     pendingWrites |> Seq.iter (fun (_, f) -> f.WaitGPU(handle))
             )
@@ -156,19 +156,19 @@ module ResizeBufferImplementation =
             let newCapacity = Fun.NextPowerOfTwo(int64 newCapacity) |> Alignment.next pageSize |> nativeint
             let oldCapacity = x.SizeInBytes
             if oldCapacity <> newCapacity then
-                using ctx.ResourceLock (fun _ ->
+                Operators.using ctx.ResourceLock (fun _ ->
                     x.Realloc(oldCapacity, newCapacity)
                 )
                 x.SizeInBytes <- newCapacity
                 updateBuffer ctx (int64 oldCapacity) (int64 newCapacity)
 
         member x.UseReadUnsafe(offset : nativeint, size : nativeint, reader : nativeint -> 'x) =
-            using ctx.ResourceLock (fun _ ->
+            Operators.using ctx.ResourceLock (fun _ ->
                 x.MapRead(offset, size, reader)
             )
 
         member x.UseWriteUnsafe(offset : nativeint, size : nativeint, writer : nativeint -> 'x) =
-            using ctx.ResourceLock (fun _ ->
+            Operators.using ctx.ResourceLock (fun _ ->
                 x.MapWrite(offset, size, writer)
             )
 
@@ -178,7 +178,7 @@ module ResizeBufferImplementation =
                 let newCapacity = Fun.NextPowerOfTwo(int64 newCapacity) |> Alignment.next pageSize |> nativeint
                 let oldCapacity = x.SizeInBytes
                 if oldCapacity <> newCapacity then
-                    using ctx.ResourceLock (fun _ ->
+                    Operators.using ctx.ResourceLock (fun _ ->
                         beforeResize()
                         x.Realloc(oldCapacity, newCapacity)
                         afterResize()
@@ -196,7 +196,7 @@ module ResizeBufferImplementation =
                     if size < 0n then failwith "negative size"
                     if size + offset > x.SizeInBytes then failwith "insufficient buffer size"
 
-                    using ctx.ResourceLock (fun _ ->
+                    Operators.using ctx.ResourceLock (fun _ ->
                         beforeRead()
                         let res = x.MapRead(offset, size, reader)
                         res
@@ -212,7 +212,7 @@ module ResizeBufferImplementation =
                     if size < 0n then failwith "negative size"
                     if size + offset > x.SizeInBytes then failwith "insufficient buffer size"
 
-                    using ctx.ResourceLock (fun _ ->
+                    Operators.using ctx.ResourceLock (fun _ ->
                         let res = x.MapWrite(offset, size, writer)
                         afterWrite()
                         res
@@ -389,13 +389,13 @@ module ManagedBufferImplementation =
             else align + v - r       
 
     type Fences(ctx : Context) =
-        let mutable store : hmap<ContextHandle, Fence> = HMap.empty
+        let mutable store : HashMap<ContextHandle, Fence> = HashMap.empty
 
 
         member x.WaitCPU() =
             lock x (fun () ->
                 let all = store
-                store <- HMap.empty
+                store <- HashMap.empty
 
                 for (_,f) in all do 
                     f.WaitCPU()
@@ -412,7 +412,7 @@ module ManagedBufferImplementation =
             let f = Fence.Create()
             lock x (fun () ->
                 store <-
-                    store |> HMap.alter f.Context (fun o ->
+                    store |> HashMap.alter f.Context (fun o ->
                         match o with
                             | Some o -> o.Dispose()
                             | None -> ()
@@ -566,7 +566,7 @@ module ManagedBufferImplementation =
 
         member x.TryGetBufferView(sem : Symbol) =
             match Map.tryFind sem handles with
-                | Some (b,t,_) -> BufferView(Mod.constant (b :> IBuffer), t) |> Some
+                | Some (b,t,_) -> BufferView(AVal.constant (b :> IBuffer), t) |> Some
                 | _ -> None
 
         member x.Dispose() =
@@ -785,7 +785,7 @@ module ManagedBufferImplementation =
 
         member x.TryGetBufferView(sem : Symbol) =
             match Map.tryFind sem handles with
-                | Some (b,s,t) -> BufferView(Mod.constant (b :> IBuffer), t) |> Some
+                | Some (b,s,t) -> BufferView(AVal.constant (b :> IBuffer), t) |> Some
                 | _ -> None
 
         member x.Dispose() =
@@ -874,7 +874,7 @@ module MappedBufferImplementations =
 
     [<Obsolete>]
     type FakeMappedBuffer(ctx : Context) =
-        inherit Mod.AbstractMod<IBuffer>()
+        inherit AVal.AbstractVal<IBuffer>()
         let buffer = ctx.CreateResizeBuffer()
         let onDispose = new System.Reactive.Subjects.Subject<unit>()
 
@@ -905,7 +905,7 @@ module MappedBufferImplementations =
 
         member x.Dispose() =
             if buffer.Handle <> 0 then
-                using ctx.ResourceLock (fun _ ->
+                Operators.using ctx.ResourceLock (fun _ ->
                     ctx.Delete buffer
                 )
                 onDispose.OnNext()
@@ -931,13 +931,13 @@ module ``MappedBuffer Context Extensions`` =
     type Context with
         [<Obsolete>]
         member x.CreateMappedBuffer() =
-            using x.ResourceLock (fun _ ->
+            Operators.using x.ResourceLock (fun _ ->
                 new MappedBufferImplementations.FakeMappedBuffer(x) :> IMappedBuffer
             )
 
 [<Obsolete>]
 type MappedIndirectBuffer(ctx : Context, indexed : bool) =
-    inherit Mod.AbstractMod<IIndirectBuffer>()
+    inherit AVal.AbstractVal<IIndirectBuffer>()
     
     static let sd = sizeof<DrawCallInfo> |> nativeint
     let buffer = ctx.CreateMappedBuffer()

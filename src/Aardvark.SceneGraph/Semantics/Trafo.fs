@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.SceneGraph.Semantics
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
 
@@ -10,31 +10,31 @@ open Aardvark.SceneGraph.Internal
 [<AutoOpen>]
 module TrafoExtensions =
 
-    let inline private trafo v : IMod<Trafo3d> = v 
+    let inline private trafo v : aval<Trafo3d> = v 
     type System.Object with
-        member x.ModelTrafoStack : list<IMod<Trafo3d>> = x?ModelTrafoStack         
+        member x.ModelTrafoStack : list<aval<Trafo3d>> = x?ModelTrafoStack         
         member x.ModelTrafo             = x?ModelTrafo()            |> trafo
         member x.ViewTrafo              = x?ViewTrafo               |> trafo
         member x.ProjTrafo              = x?ProjTrafo               |> trafo
              
     module Semantic =
-        let modelTrafo            (s : ISg) : IMod<Trafo3d> = s?ModelTrafo()
-        let viewTrafo             (s : ISg) : IMod<Trafo3d> = s?ViewTrafo
-        let projTrafo             (s : ISg) : IMod<Trafo3d> = s?ProjTrafo
+        let modelTrafo            (s : ISg) : aval<Trafo3d> = s?ModelTrafo()
+        let viewTrafo             (s : ISg) : aval<Trafo3d> = s?ViewTrafo
+        let projTrafo             (s : ISg) : aval<Trafo3d> = s?ProjTrafo
 
 module TrafoSemantics =
     open TrafoOperators
 
-    let rootTrafo = Mod.constant Trafo3d.Identity
-    let inline private (~%) (l : list<IMod<Trafo3d>>) = l
+    let rootTrafo = AVal.constant Trafo3d.Identity
+    let inline private (~%) (l : list<aval<Trafo3d>>) = l
 
 
-    let flattenStack (stack : list<IMod<Trafo3d>>) =
-        let rec foldConstants (l : list<IMod<Trafo3d>>) =
+    let flattenStack (stack : list<aval<Trafo3d>>) =
+        let rec foldConstants (l : list<aval<Trafo3d>>) =
             match l with
                 | [] -> []
                 | a::b::rest when a.IsConstant && b.IsConstant ->
-                    let n = (Mod.constant (a.GetValue() * b.GetValue()))::rest
+                    let n = (AVal.constant (a.GetValue() * b.GetValue()))::rest
                     foldConstants n
                 | a::rest ->
                     a::foldConstants rest

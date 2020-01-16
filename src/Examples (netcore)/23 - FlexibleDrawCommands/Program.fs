@@ -9,7 +9,7 @@ and efficient instancing.
 
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -125,8 +125,8 @@ let main argv =
 
 
     // manually create buffers for packed vertex data
-    let vertices = BufferView(ArrayBuffer(packedGeometry.vertices) :> IBuffer |> Mod.constant,typeof<V3f>)
-    let normals = BufferView(ArrayBuffer(packedGeometry.normals) :> IBuffer |> Mod.constant,typeof<V3f>)
+    let vertices = BufferView(ArrayBuffer(packedGeometry.vertices) :> IBuffer |> AVal.constant,typeof<V3f>)
+    let normals = BufferView(ArrayBuffer(packedGeometry.normals) :> IBuffer |> AVal.constant,typeof<V3f>)
 
     // adjust this size for testing different problem sizes.
     let size = 7
@@ -151,20 +151,20 @@ let main argv =
     let indirectBuffer = IndirectBuffer(ArrayBuffer drawCallInfos, drawCallInfos.Length) :> IIndirectBuffer
 
     // we use per mesh data here. each geometry range gets specific mesh info here.
-    let objectColors = Mod.init [| C4f.Red; C4f.DarkGreen |]
+    let objectColors = AVal.init [| C4f.Red; C4f.DarkGreen |]
 
     // additionally to per mesh colors, we use special model trafo for each mesh type.
     // this way we automatcially adjust trafo for all instances of the range.
     let perKindAnimation = 
         let sw = System.Diagnostics.Stopwatch.StartNew()
-        win.Time |> Mod.map (fun t -> 
+        win.Time |> AVal.map (fun t -> 
             let t = sw.Elapsed.TotalMilliseconds
             [| M44f.RotationX(float32 (t * 0.001)); M44f.Identity |]
         )
 
     let sg = 
         // standard scene graph construction for indirect buffer based rendering
-        Sg.indirectDraw IndexedGeometryMode.TriangleList (Mod.constant indirectBuffer)
+        Sg.indirectDraw IndexedGeometryMode.TriangleList (AVal.constant indirectBuffer)
         |> Sg.vertexBuffer DefaultSemantic.Positions vertices
         |> Sg.vertexBuffer DefaultSemantic.Normals   normals
         // attach storage buffers to uniform slots

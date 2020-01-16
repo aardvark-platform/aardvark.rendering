@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Rendering.Text
 open Aardvark.Application
@@ -30,13 +30,13 @@ let main argv =
 
     let fnt = Font("Arial")
 
-    let inputText = win.Time |> Mod.map (fun t -> 
+    let inputText = win.Time |> AVal.map (fun t -> 
                 let str = t.ToString()
                 let cnt = int ((t.TimeOfDay.TotalMilliseconds / 100.0) % 17.0)
                 Log.line "str.Sub(3, %d)" cnt
                 str.Substring(3, min cnt (str.Length - 3)))
 
-    let textTrafo = win.Sizes |> Mod.map (fun size -> 
+    let textTrafo = win.Sizes |> AVal.map (fun size -> 
     
          let ar = float size.X / float size.Y
          let relHeight = 0.1
@@ -49,7 +49,7 @@ let main argv =
     )
 
     let sg = Sg.text fnt C4b.White inputText
-               |> Sg.viewTrafo (Mod.constant Trafo3d.Identity)
+               |> Sg.viewTrafo (AVal.constant Trafo3d.Identity)
                |> Sg.projTrafo textTrafo
     
     // show the window

@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.Rendering.GL
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.ShaderReflection
 open Aardvark.Base.Rendering
 open Aardvark.Base.Runtime
@@ -9,6 +9,7 @@ open Microsoft.FSharp.NativeInterop
 open OpenTK
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
+open FSharp.Data.Traceable
 
 #nowarn "9"
 
@@ -1016,13 +1017,13 @@ type CompilerInfo =
     {
         contextHandle           : nativeptr<nativeint>
         runtimeStats            : nativeptr<V2i>
-        currentContext          : IMod<ContextHandle>
+        currentContext          : aval<ContextHandle>
         drawBuffers             : nativeint
         drawBufferCount         : int
         
-        structuralChange        : IMod<unit>
-        usedTextureSlots        : RefRef<hrefset<int>>
-        usedUniformBufferSlots  : RefRef<hrefset<int>>
+        structuralChange        : aval<unit>
+        usedTextureSlots        : RefRef<CountingHashSet<int>>
+        usedUniformBufferSlots  : RefRef<CountingHashSet<int>>
 
         task                    : IRenderTask
         tags                    : Map<string, obj>

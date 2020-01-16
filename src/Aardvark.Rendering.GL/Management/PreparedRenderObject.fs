@@ -3,7 +3,7 @@
 #nowarn "9"
 
 open System
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection
@@ -19,9 +19,9 @@ open System.Threading
 module private Hacky =
 
     let toBufferCache = 
-        UnaryCache<IMod, IMod<IBuffer>>(fun m ->
-            Mod.custom (fun t -> 
-                match m.GetValue t with
+        UnaryCache<IAdaptiveValue, aval<IBuffer>>(fun m ->
+            AVal.custom (fun t -> 
+                match m.GetValueUntyped t with
                     | :? Array as a -> ArrayBuffer(a) :> IBuffer
                     | :? IBuffer as b -> b
                     | _ -> failwith "invalid storage buffer content"
@@ -162,7 +162,7 @@ type PreparedPipelineState =
 module PreparedPipelineState =
 
     type helper() =
-        static let nullTexture = Mod.constant (NullTexture() :> ITexture)
+        static let nullTexture = AVal.constant (NullTexture() :> ITexture)
         static member NullTexture = nullTexture
 
     type ResourceManager with 
@@ -178,7 +178,7 @@ module PreparedPipelineState =
 
             for (_,buf) in iface.storageBuffers do
                 match uniforms.TryGetUniform(scope, Symbol.Create buf.ssbName) with
-                | Some (:? IMod<IBuffer> as b) ->
+                | Some (:? aval<IBuffer> as b) ->
                     let buffer = x.CreateBuffer(b)
                     res.[oi] <- struct (buf.ssbBinding, buffer)
                     oi <- oi + 1
@@ -199,7 +199,7 @@ module PreparedPipelineState =
 
             let samplerModifier = 
                 match uniforms.TryGetUniform(scope, DefaultSemantic.SamplerStateModifier) with
-                    | Some(:? IMod<Symbol -> SamplerStateDescription -> SamplerStateDescription> as mode) ->
+                    | Some(:? aval<Symbol -> SamplerStateDescription -> SamplerStateDescription> as mode) ->
                         Some mode
                     | _ ->
                         None
@@ -222,7 +222,7 @@ module PreparedPipelineState =
                         // check if sampler is an array 
                         //  -> compose (Texture, SamplerState)[] resource
                         //      * case 1: individual slots
-                        //      * case 2: dependent on IMod<ITexture[]> and single SamplerState
+                        //      * case 2: dependent on aval<ITexture[]> and single SamplerState
                         // otherwise
                         //  -> create singe (Texture, SamplerState) resource
                         
@@ -239,8 +239,8 @@ module PreparedPipelineState =
                                 match uniforms.TryGetUniform(scope, texSym) with
                                 | Some tex ->
                                     match tex with
-                                    | :? IMod<ITexture> as value -> x.CreateTexture(value)
-                                    | :? IMod<IBackendTexture> as value -> x.CreateTexture'(value)
+                                    | :? aval<ITexture> as value -> x.CreateTexture(value)
+                                    | :? aval<IBackendTexture> as value -> x.CreateTexture'(value)
                                     | _ -> x.CreateTexture(helper.NullTexture)
                                 | None -> x.CreateTexture(helper.NullTexture)
 
@@ -279,7 +279,7 @@ module PreparedPipelineState =
                                         match uniforms.TryGetUniform(scope, texSym) with
                                         | Some texArr ->
                                             match texArr with
-                                            | :? IMod<ITexture[]> as texArr ->
+                                            | :? aval<ITexture[]> as texArr ->
                                                 // create single value (startSlot + count + sam + tex[])
 
                                                 let samRes = createSammy sam0 texSym
@@ -290,7 +290,7 @@ module PreparedPipelineState =
 
                                                 Some arrayBinding
                                             | _ -> 
-                                                Log.warn "[GL] invalid texture type %s: %s -> expecting IMod<ITexture[]>" pre (texArr.GetType().Name)
+                                                Log.warn "[GL] invalid texture type %s: %s -> expecting aval<ITexture[]>" pre (texArr.GetType().Name)
                                                 None
 
                                         | _ -> // could not find texture array uniform -> try individual
@@ -312,10 +312,10 @@ module PreparedPipelineState =
                                             match uniforms.TryGetUniform(scope, texSym) with
                                             | Some tex ->
                                                 match tex with
-                                                | :? IMod<ITexture> as value -> Some (x.CreateTexture(value))
-                                                | :? IMod<IBackendTexture> as value -> Some (x.CreateTexture'(value))
+                                                | :? aval<ITexture> as value -> Some (x.CreateTexture(value))
+                                                | :? aval<IBackendTexture> as value -> Some (x.CreateTexture'(value))
                                                 | _ -> 
-                                                    Log.line "[GL] invalid texture type: %s %s -> expecting IMod<ITexture> or IMod<IBackendTexture>" texName (tex.GetType().Name)
+                                                    Log.line "[GL] invalid texture type: %s %s -> expecting aval<ITexture> or aval<IBackendTexture>" texName (tex.GetType().Name)
                                                     None
                                             | None -> 
                                                     Log.line "[GL] texture uniform \"%s\" not found" texName
@@ -484,7 +484,7 @@ module PreparedPipelineState =
         let polygonMode = x.CreatePolygonMode rj.fillMode
         let blendMode = x.CreateBlendMode rj.blendMode
         let stencilMode = x.CreateStencilMode rj.stencilMode
-        let conservativeRaster = x.CreateFlag (Mod.constant false)
+        let conservativeRaster = x.CreateFlag (AVal.constant false)
         let multisample = x.CreateFlag rj.multisample
         
         
@@ -1013,7 +1013,7 @@ module PreparedObjectInfo =
         GL.Check "[Prepare] Indices"
 
         let indirect =
-            if isNull rj.IndirectBuffer then None
+            if isNull (rj.IndirectBuffer :> obj) then None
             else x.CreateIndirectBuffer(Option.isSome rj.Indices, rj.IndirectBuffer) |> Some
 
         GL.Check "[Prepare] Indirect Buffer"
@@ -1029,7 +1029,7 @@ module PreparedObjectInfo =
 
         let isActive = x.CreateIsActive rj.IsActive
         let beginMode = x.CreateBeginMode(program.Handle, rj.Mode)
-        let drawCalls = if isNull rj.DrawCallInfos then Unchecked.defaultof<_> else x.CreateDrawCallInfoList rj.DrawCallInfos
+        let drawCalls = if isNull (rj.DrawCallInfos :> obj) then Unchecked.defaultof<_> else x.CreateDrawCallInfoList rj.DrawCallInfos
 
 
         // finally return the PreparedRenderObject

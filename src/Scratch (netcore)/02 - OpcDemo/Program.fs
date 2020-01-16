@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.SceneGraph.Opc
@@ -67,7 +67,7 @@ let main argv =
 
     let sg = 
         // thankfully aardvark defines a primitive box
-        Sg.box (Mod.constant color) (Mod.constant box)
+        Sg.box (AVal.constant color) (AVal.constant box)
 
             // apply the texture as "DiffuseTexture"
             |> Sg.diffuseTexture DefaultTextures.checkerboard
@@ -105,7 +105,7 @@ let main argv =
                 do! DefaultSurfaces.diffuseTexture
                // do! DefaultSurfaces.simpleLighting
             }
-         |> Sg.trafo (Mod.constant trafos.[0].Inverse)
+         |> Sg.trafo (AVal.constant trafos.[0].Inverse)
 
     // show the scene in a simple window
     show {

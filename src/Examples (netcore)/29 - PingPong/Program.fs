@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.Slim
@@ -27,7 +27,7 @@ let main argv =
         win.Sizes 
             // construct a standard perspective frustum (60 degrees horizontal field of view,
             // near plane 0.1, far plane 50.0 and aspect ratio x/y.
-            |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
+            |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
 
     // create a controlled camera using the window mouse and keyboard input devices
     // the window also provides a so called time mod, which serves as tick signal to create
@@ -39,7 +39,7 @@ let main argv =
     // will be evaluated when rendering the scene
     let dynamicTrafo =
         let startTime = System.DateTime.Now
-        win.Time |> Mod.map (fun t ->
+        win.Time |> AVal.map (fun t ->
             let t = (t - startTime).TotalSeconds
             Trafo3d.RotationZ (0.5 * t)
         )
@@ -72,17 +72,17 @@ let main argv =
         )
 
     // mapped to texture/fbo using `mod` 2
-    let currentTexture = Mod.init 0
+    let currentTexture = AVal.init 0
 
     // history 
-    let texture = currentTexture |> Mod.map (fun i -> color.[i % 2] :> ITexture)
+    let texture = currentTexture |> AVal.map (fun i -> color.[i % 2] :> ITexture)
     // current 
-    let currentState = currentTexture |> Mod.map (fun i -> color.[(i+1) % 2] :> ITexture)
+    let currentState = currentTexture |> AVal.map (fun i -> color.[(i+1) % 2] :> ITexture)
 
     // you could use classical ping pong variables as well (as mod) and just change them as needed.
 
     let task = 
-        Sg.box (Mod.constant C4b.Red) (Mod.constant box)
+        Sg.box (AVal.constant C4b.Red) (AVal.constant box)
             |> Sg.shader {
                 do! DefaultSurfaces.trafo
                 do! DefaultSurfaces.vertexColor
@@ -92,15 +92,15 @@ let main argv =
             // apply the dynamic transformation to the box
             |> Sg.trafo dynamicTrafo
             // extract our viewTrafo from the dynamic cameraView and attach it to the scene graphs viewTrafo 
-            |> Sg.viewTrafo (cameraView  |> Mod.map CameraView.viewTrafo )
+            |> Sg.viewTrafo (cameraView  |> AVal.map CameraView.viewTrafo )
             // compute a projection trafo, given the frustum contained in frustum
-            |> Sg.projTrafo (frustum |> Mod.map Frustum.projTrafo    )
-            //|> Sg.depthTest (Mod.init DepthTestMode.None)
+            |> Sg.projTrafo (frustum |> AVal.map Frustum.projTrafo    )
+            //|> Sg.depthTest (AVal.init DepthTestMode.None)
             |> Sg.compile runtime signature
 
     // clear current target
     let rand = RandomSystem()
-    let clear = runtime.CompileClear(signature, currentTexture |> Mod.map (fun _ -> rand.UniformC3f().ToC4f()), Mod.constant 1.0)
+    let clear = runtime.CompileClear(signature, currentTexture |> AVal.map (fun _ -> rand.UniformC3f().ToC4f()), AVal.constant 1.0)
 
     // this a custom render task which call others and can be chained with outer render tasks
     // we need this to control where to render to

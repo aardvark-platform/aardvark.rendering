@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -52,13 +52,13 @@ let main argv =
             uniformTypes = Map.ofList ["Offset", typeof<V4f>]
         }
 
-    let showScene = Mod.init true
-    let scale = Mod.init 1.0f
+    let showScene = AVal.init true
+    let scale = AVal.init 1.0f
 
     let rnd = RandomSystem()
     let set : cset<IndexedGeometry * V4f> = CSet.empty
 
-    let node = Sg.indirect signature (set |> ASet.map (fun (ig,pos) -> ig,Map.ofList ["Offset", scale |> Mod.map (fun s -> (pos * s * V4f.One)) :> IMod]))
+    let node = Sg.indirect signature (set |> ASet.map (fun (ig,pos) -> ig,Map.ofList ["Offset", scale |> AVal.map (fun s -> (pos * s * V4f.One)) :> IAdaptiveValue]))
 
     let sg =
         node 
@@ -70,7 +70,7 @@ let main argv =
            }
     
     let sg =
-        Sg.dynamic (showScene |> Mod.map (function true -> sg | _ -> Sg.empty))
+        Sg.dynamic (showScene |> AVal.map (function true -> sg | _ -> Sg.empty))
 
 
     let win = window {

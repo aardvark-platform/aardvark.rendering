@@ -3,7 +3,7 @@
 open System
 open System.Collections.Generic
 open System.Threading
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
@@ -70,8 +70,8 @@ type ArrayBuffer(data : Array) =
             | :? ArrayBuffer as o -> System.Object.ReferenceEquals(o.Data,data)
             | _ -> false
 
-type SingleValueBuffer(value : IMod<V4f>) =
-    inherit Mod.AbstractMod<IBuffer>()
+type SingleValueBuffer(value : aval<V4f>) =
+    inherit AVal.AbstractVal<IBuffer>()
 
     member x.Value = value
 
@@ -85,7 +85,7 @@ type SingleValueBuffer(value : IMod<V4f>) =
             | :? SingleValueBuffer as o -> value = o.Value
             | _ -> false
 
-    new() = SingleValueBuffer(Mod.constant V4f.Zero)
+    new() = SingleValueBuffer(AVal.constant V4f.Zero)
 
 
 type NativeMemoryBuffer(ptr : nativeint, sizeInBytes : int) =
@@ -114,7 +114,7 @@ type IndirectBuffer(b : IBuffer, count : int) =
         member x.Count = count
 
 
-type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : int) =
+type BufferView(b : aval<IBuffer>, elementType : Type, offset : int, stride : int) =
     let singleValue =
         match b with
             | :? SingleValueBuffer as nb -> Some nb.Value
@@ -127,10 +127,10 @@ type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : in
     member x.SingleValue = singleValue
     member x.IsSingleValue = Option.isSome singleValue
 
-    new(b : IMod<IBuffer>, elementType : Type, offset : int) =
+    new(b : aval<IBuffer>, elementType : Type, offset : int) =
         BufferView(b, elementType, offset, 0)
 
-    new(b : IMod<IBuffer>, elementType : Type) =
+    new(b : aval<IBuffer>, elementType : Type) =
         BufferView(b, elementType, 0, 0)
 
     override x.GetHashCode() =
@@ -160,7 +160,7 @@ module BufferView =
     
     let ofArray (arr : Array) =
         let t = arr.GetType().GetElementType()
-        BufferView(Mod.constant (ArrayBuffer arr :> IBuffer), t)
+        BufferView(AVal.constant (ArrayBuffer arr :> IBuffer), t)
 
 
     [<AbstractClass>]
@@ -213,9 +213,9 @@ module BufferView =
 
         match view.SingleValue with
             | Some value ->
-                value |> Mod.map (fun v -> reader.Initialize(v, count))
+                value |> AVal.map (fun v -> reader.Initialize(v, count))
             | _ -> 
-                view.Buffer |> Mod.map (fun b -> 
+                view.Buffer |> AVal.map (fun b -> 
                     match b with
                         | :? ArrayBuffer as a when stride = elementSize && offset = 0 ->
                             if count = a.Data.Length then 
@@ -494,7 +494,7 @@ type IResizeBuffer =
 
 [<Obsolete>]
 type IMappedIndirectBuffer =
-    inherit IMod<IIndirectBuffer>
+    inherit aval<IIndirectBuffer>
     inherit IDisposable
     inherit ILockedResource
 
@@ -506,7 +506,7 @@ type IMappedIndirectBuffer =
 
 [<Obsolete>]
 type IMappedBuffer =
-    inherit IMod<IBuffer>
+    inherit aval<IBuffer>
     inherit IDisposable
     inherit ILockedResource
 

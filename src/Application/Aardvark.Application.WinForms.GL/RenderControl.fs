@@ -9,7 +9,7 @@ open System.Windows.Forms
 
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Rendering.GL
 open Aardvark.Application
 
@@ -69,7 +69,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
         )
     let mutable defaultOutput = OutputDescription.ofFramebuffer defaultFramebuffer
 
-    let sizes = Mod.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
+    let sizes = AVal.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
 
     let frameTime = RunningMean(10)
     let frameWatch = System.Diagnostics.Stopwatch()
@@ -84,7 +84,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
             now() + TimeSpan.FromSeconds frameTime.Average
         else
             now()
-    let time = Mod.init (now())
+    let time = AVal.init (now())
 
 
     let mutable needsRedraw = false
@@ -143,7 +143,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
             task <- Some t
             taskSubscription <- t.AddMarkingCallback x.ForceRedraw
 
-    member x.Sizes = sizes :> IMod<_>
+    member x.Sizes = sizes :> aval<_>
     member x.Samples = samples
 
 
@@ -187,7 +187,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
             match task with
                 | Some t ->
-                    using (ctx.RenderingLock contextHandle) (fun _ ->
+                    Operators.using (ctx.RenderingLock contextHandle) (fun _ ->
                         if initial then
                             GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
                             let ms = GL.IsEnabled(EnableCap.Multisample)
@@ -203,7 +203,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
                         transact (fun () -> time.Value <- nextFrameTime())
 
                         if size <> sizes.Value then
-                            transact (fun () -> Mod.change sizes size)
+                            transact (fun () -> sizes.Value <- size)
 
                         defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
                         defaultOutput <- { defaultOutput with viewport = Box2i(V2i.OO, defaultFramebuffer.Size - V2i.II) }
@@ -216,9 +216,10 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
                         GL.ClearDepth(1.0)
                         GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
 
-                        EvaluationUtilities.evaluateTopLevel(fun () ->
-                            t.Run(AdaptiveToken.Top, RenderToken.Empty, defaultOutput)
-                        )
+
+                        //EvaluationUtilities.evaluateTopLevel(fun () ->
+                        t.Run(AdaptiveToken.Top, RenderToken.Empty, defaultOutput)
+                        //)
                         
 //                        let sw = System.Diagnostics.Stopwatch()
 //                        sw.Start()
@@ -250,7 +251,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
                 | None ->
                     if size <> sizes.Value then
-                        transact (fun () -> Mod.change sizes size)
+                        transact (fun () -> sizes.Value <- size)
 
                     needsRedraw <- false
 
@@ -270,7 +271,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 //        base.OnResize(e)
 //        sizes.Emit <| V2i(base.ClientSize.Width, base.ClientSize.Height)
 
-    member x.Time = time :> IMod<_>
+    member x.Time = time :> aval<_>
     member x.FramebufferSignature = fboSignature :> IFramebufferSignature
     
     member x.BeforeRender = beforeRender.Publish
@@ -279,11 +280,11 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
     interface IRenderTarget with
         member x.FramebufferSignature = fboSignature :> IFramebufferSignature
         member x.Runtime = runtime :> IRuntime
-        member x.Time = time :> IMod<_>
+        member x.Time = time :> aval<_>
         member x.RenderTask
             with get() = x.RenderTask
             and set t = x.RenderTask <- t
-        member x.Sizes = sizes :> IMod<_>
+        member x.Sizes = sizes :> aval<_>
         member x.Samples = samples
         member x.BeforeRender = beforeRender.Publish
         member x.AfterRender = afterRender.Publish

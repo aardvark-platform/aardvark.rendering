@@ -504,7 +504,7 @@ module DDSTest =
     open Aardvark.SceneGraph
     open Aardvark.Base
     open Aardvark.Base.Rendering
-    open Aardvark.Base.Incremental
+    open FSharp.Data.Adaptive
 
     module DiffuseTexture = 
         open FShade
@@ -634,7 +634,7 @@ module DDSTest =
                 display Display.Mono
             }
 
-        let level = Mod.init 0
+        let level = AVal.init 0
         win.Keyboard.KeyDown(Keys.Space).Values.Add (fun () ->
             transact (fun () ->
                 let n = (level.Value + 1) % img.MipMapLevels
@@ -646,11 +646,11 @@ module DDSTest =
         let cubes =
             Sg.ofList [
                 Sg.box' C4b.White Box3d.Unit
-                    |> Sg.diffuseTexture (Mod.constant (img :> ITexture))
+                    |> Sg.diffuseTexture (AVal.constant (img :> ITexture))
 
                 Sg.box' C4b.White Box3d.Unit
                     |> Sg.translate 2.0 0.0 0.0
-                    |> Sg.diffuseTexture (Mod.constant (FileTexture(file, TextureParams.mipmapped) :> ITexture))
+                    |> Sg.diffuseTexture (AVal.constant (FileTexture(file, TextureParams.mipmapped) :> ITexture))
             ]
 
         let sg =

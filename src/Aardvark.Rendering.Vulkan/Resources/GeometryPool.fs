@@ -7,7 +7,7 @@ open System.Runtime.InteropServices
 open System.Collections.Generic
 open System.Collections.Concurrent
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 open Management
@@ -717,7 +717,7 @@ module GeometryPoolUtilities =
                 let s = capacity * elemSize
                 let handle = device.CreateStreamingBuffer(lock, usage, s)
             
-                elemSize, t, Mod.init (handle :> IBuffer)
+                elemSize, t, AVal.init (handle :> IBuffer)
             )
 
         let views =
@@ -750,7 +750,12 @@ module GeometryPoolUtilities =
                                     token.Enqueue(copy)
                                     n.IsEmpty <- false
 
-                                b.UnsafeCache <- n
+                                Operators.lock b (fun () ->
+                                    let wasOutdated = b.OutOfDate
+                                    b.OutOfDate <- true
+                                    b.Value <- n
+                                    b.OutOfDate <- wasOutdated
+                                )
                                 t.Enqueue(b)
                                 deleteBuffers.Add old
 

@@ -900,7 +900,7 @@ module NewestImpl =
 
 
 module VolumeTest =
-    open Aardvark.Base.Incremental
+    open FSharp.Data.Adaptive
     open Aardvark.SceneGraph
     open Aardvark.Application
     open Aardvark.Application.WinForms
@@ -1504,7 +1504,7 @@ module VolumeTest =
 
         win.Width <- 1024
         win.Height <- 1024
-        let slice = Mod.init 500
+        let slice = AVal.init 500
 
         let stepSlice (step : int) =
             let newValue = 
@@ -1651,18 +1651,18 @@ module VolumeTest =
 
 
         let input =
-            slice |> Mod.map (fun slice ->
+            slice |> AVal.map (fun slice ->
                 let img = PixImage<uint16>(Col.Format.Gray, store.GetSlice(0,slice))
                 img
             )
 
         let inputTexture =
-            input |> Mod.map (fun pi ->
+            input |> AVal.map (fun pi ->
                 PixTexture2d(PixImageMipMap [| pi :> PixImage |], TextureParams.mipmapped) :> ITexture
             )
 
         let resultTexture =
-            input |> Mod.map (fun img ->
+            input |> AVal.map (fun img ->
                 let res = assignRegions 0.025 10 1000 img
                 PixTexture2d(PixImageMipMap [| res :> PixImage |], TextureParams.mipmapped) :> ITexture
 
@@ -1740,7 +1740,7 @@ module VolumeTest =
         let task = app.Runtime.CompileRender(win.FramebufferSignature, sg)
 
 
-        let color = task |> RenderTask.renderToColor (Mod.constant store.Size.XY) 
+        let color = task |> RenderTask.renderToColor (AVal.constant store.Size.XY) 
         color.Acquire()
 
         let colorImage = app.Runtime.Download(color.GetValue() |> unbox<IBackendTexture>)
@@ -1773,11 +1773,11 @@ module VolumeTest =
         win.Width <- 1024
         win.Height <- 1024
 
-        let baseLevel = Mod.init 0.0
-        let slice = Mod.init 500
-        let filter = Mod.init 0
-        let showLevels = Mod.init false
-        let magick = Mod.init 1.05
+        let baseLevel = AVal.init 0.0
+        let slice = AVal.init 500
+        let filter = AVal.init 0
+        let showLevels = AVal.init false
+        let magick = AVal.init 1.05
         let setLevel (l : float) =
             let l = clamp 0.0 10.0 l
             Log.line "level: %f" l
@@ -1814,7 +1814,7 @@ module VolumeTest =
             uint16 ((1.0 - t) * float a + t * float b)
 
         let texture =
-            Mod.map2 (fun slice filter ->
+            AVal.map2 (fun slice filter ->
                 let img = PixImage<uint16>(Col.Format.Gray, store.GetSlice(0,slice))
                 
                 let levels = int(floor(Fun.Log2(max img.Size.X img.Size.Y))) + 1
@@ -1923,7 +1923,7 @@ module VolumeTest =
                 |> Sg.uniform "Magick" magick
                 |> Sg.uniform "ShowLevels" showLevels
                 |> Sg.uniform "BaseLevel" baseLevel
-                |> Sg.uniform "MipMapLevels" (Mod.constant (float store.MipMapLevels))
+                |> Sg.uniform "MipMapLevels" (AVal.constant (float store.MipMapLevels))
                 |> Sg.diffuseTexture texture
                 |> Sg.shader {
                     do! Shader.bla
@@ -1932,7 +1932,7 @@ module VolumeTest =
         let task = app.Runtime.CompileRender(win.FramebufferSignature, sg)
 
 
-        let color = task |> RenderTask.renderToColor (Mod.constant store.Size.XY) 
+        let color = task |> RenderTask.renderToColor (AVal.constant store.Size.XY) 
         color.Acquire()
 
         let colorImage = app.Runtime.Download(color.GetValue() |> unbox<IBackendTexture>)
@@ -1966,11 +1966,11 @@ module VolumeTest =
         win.Width <- 1024
         win.Height <- 1024
 
-        let baseLevel = Mod.init 0.0
-        let slice = Mod.init 500
-        let filter = Mod.init 0
-        let showLevels = Mod.init false
-        let magick = Mod.init 1.05
+        let baseLevel = AVal.init 0.0
+        let slice = AVal.init 500
+        let filter = AVal.init 0
+        let showLevels = AVal.init false
+        let magick = AVal.init 1.05
         let setLevel (l : float) =
             let l = clamp 0.0 10.0 l
             Log.line "level: %f" l
@@ -2007,7 +2007,7 @@ module VolumeTest =
 
 
         let input =
-            slice |> Mod.map (fun slice ->
+            slice |> AVal.map (fun slice ->
                 let img = PixImage<uint16>(Col.Format.Gray, store.GetSlice(0,slice))
                 img
             )
@@ -2028,21 +2028,21 @@ module VolumeTest =
 
             dst :> ITexture
 
-        let texture = input |> Mod.map test
+        let texture = input |> AVal.map test
 
         let sg = 
             Sg.fullScreenQuad
                 |> Sg.uniform "Magick" magick
                 |> Sg.uniform "ShowLevels" showLevels
                 |> Sg.uniform "BaseLevel" baseLevel
-                |> Sg.uniform "MipMapLevels" (Mod.constant (float store.MipMapLevels))
+                |> Sg.uniform "MipMapLevels" (AVal.constant (float store.MipMapLevels))
                 |> Sg.diffuseTexture texture
                 |> Sg.effect effect
 
         let task = app.Runtime.CompileRender(win.FramebufferSignature, sg)
 
 
-        let color = task |> RenderTask.renderToColor (Mod.constant store.Size.XY) 
+        let color = task |> RenderTask.renderToColor (AVal.constant store.Size.XY) 
         color.Acquire()
 
         let colorImage = app.Runtime.Download(color.GetValue() |> unbox<IBackendTexture>)
@@ -2119,7 +2119,7 @@ module VolumeTest =
 
         let size = V3d store.Size / float store.Size.NormMax
         let view = CameraView.lookAt (V3d(6,6,6)) V3d.Zero V3d.OOI
-        let proj = win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y))
+        let proj = win.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y))
         let view = view |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
 
 
@@ -2139,7 +2139,7 @@ module VolumeTest =
         //app.Runtime.Context.CreateTexture(NativeTe
         
 
-        let factor = Mod.init 0.5
+        let factor = AVal.init 0.5
 
 
         win.Keyboard.KeyDown(Keys.OemPlus).Values.Add(fun _ ->
@@ -2150,7 +2150,7 @@ module VolumeTest =
         )
 
 
-        let should = Mod.init true
+        let should = AVal.init true
 
         win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ ->
             transact (fun () -> should.Value <- not should.Value)
@@ -2160,18 +2160,18 @@ module VolumeTest =
             Sg.box' C4b.Red (Box3d(-size, size))
                 |> Sg.scale 5.0
                 |> Sg.uniform "ScaleFactor" factor
-                |> Sg.uniform "VolumeTexture" (Mod.constant (texture :> ITexture))
+                |> Sg.uniform "VolumeTexture" (AVal.constant (texture :> ITexture))
                 |> Sg.shader {
                     do! Shader.vertex
                     do! Shader.fragment
                    }
-                |> Sg.depthTest (Mod.constant DepthTestMode.None)
-                |> Sg.cullMode (Mod.constant CullMode.Back)
-                |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
-                |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
+                |> Sg.depthTest (AVal.constant DepthTestMode.None)
+                |> Sg.cullMode (AVal.constant CullMode.Back)
+                |> Sg.viewTrafo (view |> AVal.map CameraView.viewTrafo)
+                |> Sg.projTrafo (proj |> AVal.map Frustum.projTrafo)
 
         let sg =
-            should |> Mod.map (function | true -> sg_() | false -> Sg.ofList []) |> Sg.dynamic
+            should |> AVal.map (function | true -> sg_() | false -> Sg.ofList []) |> Sg.dynamic
 
         let sg = sg
 

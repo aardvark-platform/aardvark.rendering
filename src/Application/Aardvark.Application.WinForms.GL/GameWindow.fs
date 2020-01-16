@@ -8,7 +8,7 @@ open System.Windows.Forms
 
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Rendering.GL
 open Aardvark.Application
 open Aardvark.Application.WinForms
@@ -377,8 +377,8 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
     let mutable defaultOutput = defaultFramebuffer |> OutputDescription.ofFramebuffer
 
     let avgFrameTime = RunningMean(3)
-    let sizes = Mod.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
-    let time = Mod.custom (fun s -> DateTime.Now + TimeSpan.FromSeconds(avgFrameTime.Average))
+    let sizes = AVal.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
+    let time = AVal.custom (fun s -> DateTime.Now + TimeSpan.FromSeconds(avgFrameTime.Average))
     let mutable first = true
 
     let mouse = new GameWindowIO.Mouse()
@@ -414,9 +414,9 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
         with get() = task.Value
         and set t = task <- Some t
             
-    member x.Sizes = sizes :> IMod<_>
+    member x.Sizes = sizes :> aval<_>
 
-    member x.Time = time :> IMod<_>
+    member x.Time = time :> aval<_>
 
     member x.AverageFrameTime = MicroTime(TimeSpan.FromSeconds avgFrameTime.Average)
 
@@ -457,11 +457,11 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
 
             match task with
                 | Some t ->
-                    using (ctx.RenderingLock contextHandle) (fun _ ->
+                    Operators.using (ctx.RenderingLock contextHandle) (fun _ ->
                         
 
                         if size <> sizes.Value then
-                            transact (fun () -> Mod.change sizes size)
+                            transact (fun () -> sizes.Value <- size)
 
                         defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
                         defaultOutput <- { defaultOutput with viewport = Box2i(V2i.OO, defaultFramebuffer.Size - V2i.II) }
@@ -486,7 +486,7 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
 
                 | None ->
                     if size <> sizes.Value then
-                        transact (fun () -> Mod.change sizes size)
+                        transact (fun () -> sizes.Value <- size)
    
             if not first then
                 avgFrameTime.Add(frameWatch.Elapsed.TotalSeconds)
@@ -511,7 +511,7 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
         member x.RenderTask
             with get() = x.RenderTask
             and set t = x.RenderTask <- t
-        member x.Sizes = sizes :> IMod<_>
+        member x.Sizes = sizes :> aval<_>
         member x.Samples = samples
         member x.BeforeRender = beforeRender.Publish
         member x.AfterRender = afterRender.Publish

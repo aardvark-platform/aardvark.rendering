@@ -4,7 +4,7 @@ open System
 open System.Reflection
 open System.Windows.Forms
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.IO
 open Aardvark.Application
@@ -79,10 +79,10 @@ type App private () =
         let win = getWin()
         let cam = CameraView.lookAt (V3d(6,6,6)) V3d.Zero V3d.OOI
         let view = cam |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
-        let proj = win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
+        let proj = win.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
 
-        sg |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
-           |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
+        sg |> Sg.viewTrafo (view |> AVal.map CameraView.viewTrafo)
+           |> Sg.projTrafo (proj |> AVal.map Frustum.projTrafo)
 
     static member Config 
         with get () = config

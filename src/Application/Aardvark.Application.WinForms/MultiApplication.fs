@@ -5,7 +5,7 @@ open Aardvark.Application
 open System.Drawing
 open System.Windows.Forms
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open System.Threading
 
@@ -22,9 +22,12 @@ type MultiFramebuffer(signature : IFramebufferSignature, framebuffers : IFramebu
 type MultiRenderTask(runtime : MultiRuntime, signature : IFramebufferSignature, tasks : IRenderTask[]) =
     inherit AdaptiveObject()
 
+    let id = newId()
+
     member x.Tasks = tasks
 
     interface IRenderTask with
+        member x.Id = id
         member x.Dispose() = tasks |> Array.iter (fun t -> t.Dispose())
         member x.Update(t,rt) =
             x.EvaluateIfNeeded t () (fun t ->
@@ -93,18 +96,24 @@ and MultiFramebufferSignature(runtime : IRuntime, signatures : IFramebufferSigna
 
 
 
-and private NAryTimeMod(inputs : IMod<DateTime>[]) =
-    inherit Mod.AbstractMod<DateTime>()
+and private NAryTimeMod(inputs : aval<DateTime>[]) =
+    inherit AVal.AbstractVal<DateTime>()
 
-    let all = inputs |> Seq.map (fun m -> m.Id) |> Set.ofSeq
-    let mutable missing = all
+    let all = inputs |> HashSet.ofSeq
+    let mutable missing = ref all
 
-    override x.InputChanged(_,o) =
-        Interlocked.Change(&missing, Set.remove o.Id) |> ignore
-        
-    override x.Mark() =
-        if Set.isEmpty missing then
-            missing <- all
+    override x.InputChangedObject(_,o) =
+        match o with
+        | :? aval<DateTime> as o -> 
+            let inline change (r : ref<HashSet<aval<DateTime>>>) =
+                ref (HashSet.remove o !r)
+            Interlocked.Change(&missing, change) |> ignore
+        | _ ->
+            ()
+
+    override x.MarkObject() =
+        if HashSet.isEmpty !missing then
+            missing <- ref all
             true
         else
             x.OutOfDate <- false
@@ -142,7 +151,7 @@ and SplitControl(runtime : IRuntime, count : int, samples : int) as this =
         )
     )
 
-    let time = lazy (NAryTimeMod (controls |> Array.map (fun c -> c.Time)) :> IMod<_>)
+    let time = lazy (NAryTimeMod (controls |> Array.map (fun c -> c.Time)) :> aval<_>)
 
     let signature = lazy (MultiFramebufferSignature(runtime, controls |> Array.map (fun c -> c.FramebufferSignature)))
 
@@ -362,8 +371,7 @@ and MultiRuntime(runtimes : IRuntime[]) =
 
         member x.CreateRenderbuffer(size, format, samples) =
             failwith ""
-        member x.CreateMappedBuffer() = failwith ""
-        member x.CreateMappedIndirectBuffer(indexed) = failwith ""
+
         member x.CreateGeometryPool(types) = failwith ""
 
 

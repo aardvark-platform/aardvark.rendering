@@ -1,7 +1,7 @@
 ﻿open System
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
@@ -44,7 +44,7 @@ let main argv =
     let initialView = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
     let frustum = 
         win.Sizes 
-            |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
+            |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
 
     let cameraView = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
 
@@ -76,7 +76,7 @@ let main argv =
                         rnd.NextDouble() * 10.0 - 5.0 )
             let trafo = Trafo3d.RotationZ(360.0 * rnd.NextDouble()) * Trafo3d.Scale 0.1 * Trafo3d.Translation pos
             let ig = IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.OOO, V3d.III)) C4b.Red
-            let trafo = Mod.init(trafo)
+            let trafo = AVal.init(trafo)
             (ig, trafo)
         )
 
@@ -91,21 +91,21 @@ let main argv =
 
     let pooledGeometries = 
         geometries |> ASet.map (fun (g, t) -> 
-                                        let ntr = t|> Mod.map(fun t -> t.Backward.Transposed |> M33d.op_Explicit)
-                                        g |> AdaptiveGeometry.ofIndexedGeometry [ (Sem.InstanceTrafo, (t :> IMod)); (Sem.InstanceNormalTrafo, (ntr :> IMod)) ])
+                                        let ntr = t|> AVal.map(fun t -> t.Backward.Transposed |> M33d.op_Explicit)
+                                        g |> AdaptiveGeometry.ofIndexedGeometry [ (Sem.InstanceTrafo, (t :> IAdaptiveValue)); (Sem.InstanceNormalTrafo, (ntr :> IAdaptiveValue)) ])
                     |> ASet.mapUse (fun ag -> addToPool ag)
                     
     let sg = 
         Sg.PoolNode(pool, pooledGeometries, IndexedGeometryMode.TriangleList)
-            |> Sg.uniform "LightLocation" (Mod.constant (10.0 * V3d.III))
+            |> Sg.uniform "LightLocation" (AVal.constant (10.0 * V3d.III))
             |> Sg.effect [
                 Shader.instanceShade |> toEffect
                 DefaultSurfaces.trafo |> toEffect
                 DefaultSurfaces.constantColor C4f.Red |> toEffect
                 DefaultSurfaces.simpleLighting |> toEffect
             ]
-            |> Sg.viewTrafo (cameraView  |> Mod.map CameraView.viewTrafo )
-            |> Sg.projTrafo (frustum |> Mod.map Frustum.projTrafo    )
+            |> Sg.viewTrafo (cameraView  |> AVal.map CameraView.viewTrafo )
+            |> Sg.projTrafo (frustum |> AVal.map Frustum.projTrafo    )
 
     let renderTask = 
         app.Runtime.CompileRender(win.FramebufferSignature, sg)

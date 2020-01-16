@@ -4,7 +4,7 @@ open System
 open System.Collections.Generic
 open System.Linq
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 
 module IndexedGeometryPrimitives =
@@ -335,7 +335,7 @@ module IndexedGeometryPrimitives =
                 SymDict.empty
             )
 
-        let cameraFrustum (v : IMod<CameraView>) (p : IMod<Frustum>) (c : IMod<C4b>) =
+        let cameraFrustum (v : aval<CameraView>) (p : aval<Frustum>) (c : aval<C4b>) =
             adaptive {
                 let! v = v
                 let! p = p

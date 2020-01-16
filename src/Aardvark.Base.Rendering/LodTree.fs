@@ -4,7 +4,7 @@ open Aardvark.Base.Rendering
 open System
 open System.Threading
 open System.Threading.Tasks
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 
 type LodTreeNode<'a> =
@@ -16,9 +16,9 @@ type LodTreeNode<'s, 'a when 's :> LodTreeNode<'s, 'a>> =
 
 type LodTreeView<'s, 'a when 's :> LodTreeNode<'s, 'a>> =
     {
-        root        : IMod<Option<'s>>
-        visible     : IMod<'s -> bool>
-        descend     : IMod<'s -> bool>
+        root        : aval<Option<'s>>
+        visible     : aval<'s -> bool>
+        descend     : aval<'s -> bool>
         showInner   : bool
     }
 
@@ -207,7 +207,7 @@ module LodTreeLoader =
 
 
             type LoadedTree<'s, 'a, 'b when 's :> LodTreeNode<'s, 'a> and 's : not struct>(create : 'a -> Task<'b>, destroy : 'b -> unit, tree : LodTreeView<'s, 'a>) =
-                inherit Mod.AbstractMod<Option<LoadedNode<'s, 'a, 'b>>>()
+                inherit AVal.AbstractVal<Option<LoadedNode<'s, 'a, 'b>>>()
 
                 let mutable current = None
 
@@ -229,7 +229,7 @@ module LodTreeLoader =
                         inc &readyCount
                     )
 
-                override x.Mark() =
+                override x.MarkObject() =
                     trigger()
                     //MVar.put readyState ()
                     true
@@ -431,7 +431,7 @@ type ILodTreeNode =
 type SimplePickTree(  _original : ILodTreeNode,
                       _bounds : Box3d,
                       _positions : V3f[],
-                      _trafo : IMod<Trafo3d>,
+                      _trafo : aval<Trafo3d>,
                       _dataTrafo : Trafo3d,
                       _attributes : MapExt<Symbol, Array>,
                       _uniforms : MapExt<string, Array>,
@@ -451,5 +451,5 @@ type SimplePickTree(  _original : ILodTreeNode,
 type LodTreeInstance =
     {
         root        : ILodTreeNode
-        uniforms    : MapExt<string, IMod>
+        uniforms    : MapExt<string, IAdaptiveValue>
     }

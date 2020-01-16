@@ -8,7 +8,7 @@ open FShade
 open FShade.GLSL
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open Aardvark.Base.Management
 open Aardvark.Base.Runtime
@@ -1081,11 +1081,11 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
 
         let viewProj =
             match Uniforms.tryGetDerivedUniform "ModelViewProjTrafo" s.pUniformProvider with
-            | Some (:? IMod<Trafo3d> as mvp) -> mvp
+            | Some (:? aval<Trafo3d> as mvp) -> mvp
             | _ -> 
                 match s.pUniformProvider.TryGetUniform(Ag.emptyScope, Symbol.Create "ModelViewProjTrafo") with
-                | Some (:? IMod<Trafo3d> as mvp) -> mvp
-                | _ -> Mod.constant Trafo3d.Identity
+                | Some (:? aval<Trafo3d> as mvp) -> mvp
+                | _ -> AVal.constant Trafo3d.Identity
 
         let res = 
             { new Resource<Trafo3d, M44f>(ResourceKind.UniformLocation) with
@@ -1124,7 +1124,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
     let program = new ChangeableNativeProgram<_, _>((fun a s -> compile a (AssemblerCommandStream s)), NativeStats.Zero, (+), (-))
     let puller = 
         { new AdaptiveObject() with
-            override x.Mark() =
+            override x.MarkObject() =
                 NativePtr.write isOutdated 1
                 true
         }
@@ -1289,7 +1289,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
         lock puller (fun () ->
             if tasks.Add info.task then
                 assert (info.task.OutOfDate)
-                puller.AddOutput(info.task) |> ignore
+                puller.Outputs.Add(info.task) |> ignore
         )
             
         let mvpRes = mvpResource

@@ -5,7 +5,7 @@ open System
 open FShade
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Rendering
 open Aardvark.Application
 open Aardvark.Application.WinForms
@@ -52,7 +52,7 @@ type CameraMode =
     | Rotate
 
 
-type BlaNode(calls : IMod<DrawCallInfo[]>, mode : IndexedGeometryMode) =
+type BlaNode(calls : aval<DrawCallInfo[]>, mode : IndexedGeometryMode) =
     interface ISg
 
     member x.Mode = mode
@@ -74,7 +74,7 @@ module Sems =
 
             o.IndirectBuffer <- 
                 b.Calls 
-                    |> Mod.map ( fun arr -> IndirectBuffer(ArrayBuffer(arr), arr.Length ) :> IIndirectBuffer )
+                    |> AVal.map ( fun arr -> IndirectBuffer(ArrayBuffer(arr), arr.Length ) :> IIndirectBuffer )
 
             ASet.single (o :> IRenderObject)
 
@@ -141,7 +141,7 @@ module VulkanTests =
 
 
         let renderResult =
-            img.Texture |> Mod.map (fun t ->
+            img.Texture |> AVal.map (fun t ->
                 let img = unbox<Image> t
                 let size = brickSize
 
@@ -237,7 +237,7 @@ module VulkanTests =
                 while true do
                     ct.ThrowIfCancellationRequested()
 //                    sw.Start()
-//                    Mod.force img.Texture |> ignore
+//                    AVal.force img.Texture |> ignore
 //                    sw.Stop()
 //                    Interlocked.Increment(&count) |> ignore
 //
@@ -252,7 +252,7 @@ module VulkanTests =
 //                    Thread.Sleep(16)
     
     
-                    let errors = Mod.force renderResult
+                    let errors = AVal.force renderResult
 
                     match errors with
                         | [] -> 
@@ -416,19 +416,19 @@ let main argv =
                     yield Trafo3d.Translation(2.0 * float x - 0.5, 2.0 * float y - 0.5, 0.0)
         |]
 
-    let trafos = trafos |> Mod.constant
+    let trafos = trafos |> AVal.constant
 
     let cam = CameraView.lookAt (V3d.III * 6.0) V3d.Zero V3d.OOI
 
-    let mode = Mod.init Fly
-    let controllerActive = Mod.init true
+    let mode = AVal.init Fly
+    let controllerActive = AVal.init true
 
-    let flyTo = Mod.init Box3d.Invalid
+    let flyTo = AVal.init Box3d.Invalid
 
-    let chainM (l : IMod<list<afun<'a, 'a>>>) =
-        l |> Mod.map AFun.chain |> AFun.bind id
+    let chainM (l : aval<list<afun<'a, 'a>>>) =
+        l |> AVal.map AFun.chain |> AFun.bind id
 
-    let controller (loc : IMod<V3d>) (target : IMod<DateTime * V3d>) = 
+    let controller (loc : aval<V3d>) (target : aval<DateTime * V3d>) = 
         adaptive {
             let! active = controllerActive
 
@@ -476,8 +476,8 @@ let main argv =
 
         } |> chainM
 
-    let resetPos = Mod.init (6.0 * V3d.III)
-    let resetDir = Mod.init (DateTime.MaxValue, V3d.Zero)
+    let resetPos = AVal.init (6.0 * V3d.III)
+    let resetDir = AVal.init (DateTime.MaxValue, V3d.Zero)
 
     let cam = DefaultCameraController.control win.Mouse win.Keyboard win.Time cam // |> AFun.integrate controller
     //let cam = cam |> AFun.integrate (controller resetPos resetDir)
@@ -527,7 +527,7 @@ let main argv =
             let! parentFill = AirState.fillMode
 
             // modes can be modified by simply calling the respective setters.
-            // Note that these setters are overloaded with and without IMod<Mode>
+            // Note that these setters are overloaded with and without aval<Mode>
             do! Air.DepthTest    DepthTestMode.LessOrEqual
             do! Air.CullMode     CullMode.None
             do! Air.BlendMode    BlendMode.None
@@ -541,7 +541,7 @@ let main argv =
                     do! DefaultSurfaces.trafo               
                     
                     // if the parent fillmode is not filled make the quad red.
-                    let fill = parentFill |> Mod.force
+                    let fill = parentFill |> AVal.force
                     match fill with
                         | FillMode.Fill -> do! DefaultSurfaces.diffuseTexture
                         | _ -> do! DefaultSurfaces.constantColor C4f.Red 
@@ -602,7 +602,7 @@ let main argv =
         }
 
 
-    let mode = Mod.init FillMode.Fill
+    let mode = AVal.init FillMode.Fill
     let font = Font "Comic Sans"
 
 
@@ -613,14 +613,14 @@ let main argv =
         }
 
     let label1 =
-        Sg.markdown config (Mod.constant md)
+        Sg.markdown config (AVal.constant md)
             |> Sg.scale 0.1
             |> Sg.billboard
 
 
     let f = Font "Consolas"
 
-    let message = Mod.init message
+    let message = AVal.init message
     let label2 =
         //Sg.text f C4b.Green message
         Sg.markdown MarkdownConfig.light message
@@ -628,7 +628,7 @@ let main argv =
             |> Sg.billboard
             |> Sg.translate 5.0 0.0 0.0
 
-    let aa = Mod.init true
+    let aa = AVal.init true
 
     
     let f = Aardvark.Rendering.Text.Font("Consolas")
@@ -637,15 +637,15 @@ let main argv =
             |> Sg.scale 0.1
             |> Sg.transform (Trafo3d.FromBasis(-V3d.IOO, V3d.OOI, V3d.OIO, V3d(0.0, 0.0, 0.0)))
 
-    let active = Mod.init true
+    let active = AVal.init true
 
     let sg = 
-        active |> Mod.map (fun a ->
+        active |> AVal.map (fun a ->
             if a then
                 Sg.group [label3; label2; label1]
                     //|> Sg.andAlso quad
-                    |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
-                    |> Sg.projTrafo (win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
+                    |> Sg.viewTrafo (cam |> AVal.map CameraView.viewTrafo)
+                    |> Sg.projTrafo (win.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
                     |> Sg.fillMode mode
                     |> Sg.uniform "Antialias" aa
             else
@@ -676,7 +676,7 @@ let main argv =
 
     let config = { BackendConfiguration.Default with useDebugOutput = true }
 
-    let calls = Mod.init 999
+    let calls = AVal.init 999
     
     let randomCalls(cnt : int) =
         [|
@@ -690,7 +690,7 @@ let main argv =
                     )
         |]
 
-    let calls = Mod.init (randomCalls 990)
+    let calls = AVal.init (randomCalls 990)
 
     win.Keyboard.DownWithRepeats.Values.Add (function
         | Keys.Add ->
@@ -719,7 +719,7 @@ let main argv =
         let rand = RandomSystem()
         Array.init 1000 (ignore >> rand.UniformV3d >> V3f)
 
-    let trafo = win.Time |> Mod.map (fun t -> Trafo3d.RotationZ (float t.Ticks / float TimeSpan.TicksPerSecond))
+    let trafo = win.Time |> AVal.map (fun t -> Trafo3d.RotationZ (float t.Ticks / float TimeSpan.TicksPerSecond))
 
     let blasg = 
         BlaNode(calls, IndexedGeometryMode.PointList)
@@ -729,12 +729,12 @@ let main argv =
                 do! DefaultSurfaces.constantColor C4f.White
             }
             |> Sg.trafo trafo
-            |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
-            |> Sg.projTrafo (win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
+            |> Sg.viewTrafo (cam |> AVal.map CameraView.viewTrafo)
+            |> Sg.projTrafo (win.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
 
 
     let main = app.Runtime.CompileRender(win.FramebufferSignature, config, sg) //|> DefaultOverlays.withStatistics
-    //let clear = app.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.Black)
+    //let clear = app.Runtime.CompileClear(win.FramebufferSignature, AVal.constant C4f.Black)
 
     win.Keyboard.Press.Values.Add (fun c ->
         if c = '\b' then

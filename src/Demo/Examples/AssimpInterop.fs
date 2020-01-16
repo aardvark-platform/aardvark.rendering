@@ -13,7 +13,7 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Interactive
 
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -36,10 +36,10 @@ module Assimp =
 
         member x.RenderObjects() : aset<IRenderObject> = x?RenderObjects()
 
-        member x.LocalBoundingBox() : IMod<Box3d> = x?LocalBoundingBox()
+        member x.LocalBoundingBox() : aval<Box3d> = x?LocalBoundingBox()
 
     type Scene with
-        member x.LocalBoundingBox() : IMod<Box3d> = x?LocalBoundingBox()
+        member x.LocalBoundingBox() : aval<Box3d> = x?LocalBoundingBox()
         member x.RenderObjects() : aset<IRenderObject> = x?RenderObjects()
 
 
@@ -59,7 +59,7 @@ module Assimp =
         let cache = ConditionalWeakTable<Mesh, ISg>()
 
 
-        let textureCache = Dictionary<string, IMod<ITexture>>()
+        let textureCache = Dictionary<string, aval<ITexture>>()
 
         // mapAttribute takes attributes as defined by assimp and converts 
         // them using a given function. Furthermore the result is upcasted to
@@ -67,14 +67,14 @@ module Assimp =
         // Note that the conversion is applied lazily
         let mapAttribute (f : 'a -> 'b) (l : List<'a>) =
             let data = 
-                Mod.delay(fun () ->
+                AVal.delay(fun () ->
                     let arr = Array.zeroCreate l.Count
                     for i in 0..l.Count-1 do
                         arr.[i] <- f l.[i]
 
                     arr :> Array
                 )
-            BufferView(data |> Mod.map (fun data -> ArrayBuffer data :> IBuffer), typeof<'b>)
+            BufferView(data |> AVal.map (fun data -> ArrayBuffer data :> IBuffer), typeof<'b>)
 
         // try to find the Mesh's diffuse texture
         // and convert it into a file-texture.
@@ -107,7 +107,7 @@ module Assimp =
                             Some tex
                         | _ ->
                             let tex = FileTexture(path, true)
-                            let m = Mod.constant (tex :> ITexture)
+                            let m = AVal.constant (tex :> ITexture)
                             textureCache.[path] <- m
                             Some m
                 else
@@ -148,7 +148,7 @@ module Assimp =
                                     if m.Normals.Count = m.Vertices.Count then
                                         yield DefaultSemantic.Normals, m.Normals |> mapAttribute (fun v -> V3f(v.X, v.Y, v.Z))
                                     else
-                                        yield DefaultSemantic.Normals, BufferView(SingleValueBuffer(Mod.constant V4f.OOOO), typeof<V4f>)
+                                        yield DefaultSemantic.Normals, BufferView(SingleValueBuffer(AVal.constant V4f.OOOO), typeof<V4f>)
                                 
                                 if m.TextureCoordinateChannelCount > 0 then
                                     let tc = m.TextureCoordinateChannels.[0]
@@ -249,18 +249,18 @@ module Assimp =
         //      filter out identity trafos here and also want to be aware of the system's 
         //      overall root-trafo (which is Identity too)
         member x.ModelTrafoStack (n : Node) =
-            let p : list<IMod<Trafo3d>> = n?ModelTrafoStack
+            let p : list<aval<Trafo3d>> = n?ModelTrafoStack
             let mine = n.Transform |> toTrafo
 
             // in general the following code would be sufficient (but not optimal):
-            // n.AllChildren?ModelTrafo <- Mod.map (fun t -> t * mine) p
+            // n.AllChildren?ModelTrafo <- AVal.map (fun t -> t * mine) p
 
             if mine.Forward.IsIdentity(Constant.PositiveTinyValue) then
                 n.AllChildren?ModelTrafoStack <- p
             else
-                n.AllChildren?ModelTrafoStack <- (Mod.constant mine)::p
+                n.AllChildren?ModelTrafoStack <- (AVal.constant mine)::p
 
-        member x.ModelTrafo(e : Node) : IMod<Trafo3d> =
+        member x.ModelTrafo(e : Node) : aval<Trafo3d> =
             let sg = Sg.set (ASet.empty)
             sg?ModelTrafo()
 
@@ -290,10 +290,10 @@ module Assimp =
 
             }
 
-        member x.LocalBoundingBox(s : Scene) : IMod<Box3d> =
+        member x.LocalBoundingBox(s : Scene) : aval<Box3d> =
             s.RootNode.LocalBoundingBox()
 
-        member x.LocalBoundingBox(n : Node) : IMod<Box3d> =
+        member x.LocalBoundingBox(n : Node) : aval<Box3d> =
             adaptive {
                 let scene = n.Scene
                 let meshes = n.MeshIndices |> Seq.map (fun i -> scene.Meshes.[i]) |> Seq.toList
@@ -335,7 +335,7 @@ module Assimp =
         let tex =
             PixTexture2d(PixImageMipMap [|image :> PixImage|], true) :> ITexture
 
-        Mod.constant tex
+        AVal.constant tex
 
 
     // a scene can simply be loaded using assimp.
@@ -370,8 +370,8 @@ module AssimpInterop =
     let sg =
         model 
             |> Sg.normalizeTo ( Box3d(-V3d.III, V3d.III) )
-            |> Sg.trafo (Mod.constant Trafo3d.ChangeYZ)
-            |> Sg.blendMode (Mod.constant Rendering.BlendMode.Blend)
+            |> Sg.trafo (AVal.constant Trafo3d.ChangeYZ)
+            |> Sg.blendMode (AVal.constant Rendering.BlendMode.Blend)
             |> Sg.effect [
                     DefaultSurfaces.trafo |> toEffect                  
                     DefaultSurfaces.constantColor C4f.Red |> toEffect  

@@ -7,6 +7,7 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
 open Aardvark.Rendering.GL
+open FSharp.Data.Adaptive
 
 [<AllowNullLiteral>]
 type Fence private(ctx : ContextHandle, handle : nativeint) =
@@ -85,13 +86,13 @@ type Fence private(ctx : ContextHandle, handle : nativeint) =
         member x.Dispose() = x.Dispose()
 
 type FenceSet() =
-    let mutable fences = HMap.empty<ContextHandle, Fence>
+    let mutable fences = HashMap.empty<ContextHandle, Fence>
 
     member x.Enqueue() =
         let fence = Fence.Create()
         lock x (fun () ->
             fences <-
-                fences |> HMap.update fence.Context (fun old ->
+                fences |> HashMap.update fence.Context (fun old ->
                     match old with
                         | Some old -> old.Dispose()
                         | None -> ()
@@ -103,7 +104,7 @@ type FenceSet() =
         let waitFor = 
             lock x (fun () -> 
                 let res = fences
-                fences <- HMap.empty
+                fences <- HashMap.empty
                 res
             )
 

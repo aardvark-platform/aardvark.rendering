@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.Base
 
 open System
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 
@@ -29,7 +29,7 @@ type ISparseTexture<'a when 'a : unmanaged> =
     abstract member MipMapLevels : int
     abstract member Count : int
     abstract member Format : Col.Format
-    abstract member Texture : IMod<ITexture>
+    abstract member Texture : aval<ITexture>
     abstract member GetBrickCount : level : int -> V3i
 
     abstract member SparseLevels : int
@@ -622,7 +622,7 @@ module DefaultTextures =
         pi
 
     let checkerboard = 
-        PixTexture2d(PixImageMipMap [| checkerboardPix :> PixImage |], true) :> ITexture |> Mod.constant
+        PixTexture2d(PixImageMipMap [| checkerboardPix :> PixImage |], true) :> ITexture |> AVal.constant
 
     let blackPix = 
         let pi = PixImage<byte>(Col.Format.RGBA, V2i.II)
@@ -630,4 +630,4 @@ module DefaultTextures =
         pi
 
     let blackTex = 
-        PixTexture2d(PixImageMipMap [| blackPix :> PixImage |], false) :> ITexture |> Mod.constant
+        PixTexture2d(PixImageMipMap [| blackPix :> PixImage |], false) :> ITexture |> AVal.constant

@@ -9,7 +9,7 @@ open System.Collections.Concurrent
 open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
@@ -39,7 +39,7 @@ type CustomResource<'a, 'v when 'a : equality and 'v : unmanaged>(owned : list<I
         destroy h
         for o in owned do
             o.RemoveRef()
-            o.RemoveOutput x
+            o.Outputs.Remove x |> ignore
 
     override x.GetInfo _ =
         owned |> List.sumBy (fun r -> r.Info)

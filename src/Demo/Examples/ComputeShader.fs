@@ -3,12 +3,12 @@ namespace Examples
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection
 open Aardvark.Rendering.Text
@@ -196,12 +196,12 @@ module ComputeShader =
         let view = 
             CameraView.lookAt (V3d(4,4,4)) V3d.Zero V3d.OOI
                 |> DefaultCameraController.control win.Mouse win.Keyboard win.Time 
-                |> Mod.map CameraView.viewTrafo
+                |> AVal.map CameraView.viewTrafo
         let proj =
             win.Sizes 
-                |> Mod.map (fun s -> Frustum.perspective 60.0 0.05 1000.0 (float s.X / float s.Y))
-                |> Mod.map Frustum.projTrafo
-                :> IMod
+                |> AVal.map (fun s -> Frustum.perspective 60.0 0.05 1000.0 (float s.X / float s.Y))
+                |> AVal.map Frustum.projTrafo
+                :> IAdaptiveValue
         let win = win :> IRenderTarget
         let subscribe (f : unit -> unit) = ()
         
@@ -433,7 +433,7 @@ module ComputeShader =
 //        let runtime = app.Runtime :> IRuntime
 //        let win = app :> IRenderTarget
 //        let view = app.Info.viewTrafos
-//        let proj = app.Info.projTrafos :> IMod
+//        let proj = app.Info.projTrafos :> IAdaptiveValue
 //        let run () = app.Run()
 //        let subscribe (f : unit -> unit) =
 //            app.Controllers |> Array.iter (fun c ->
@@ -506,7 +506,7 @@ module ComputeShader =
         let magic =
             let sw = System.Diagnostics.Stopwatch()
 
-            win.Time |> Mod.map (fun _ ->
+            win.Time |> AVal.map (fun _ ->
                 let dt = sw.Elapsed.TotalSeconds
                 sw.Restart()
 
@@ -533,7 +533,7 @@ module ComputeShader =
 
 
 
-        let u (n : String) (m : IMod) (s : ISg) =
+        let u (n : String) (m : IAdaptiveValue) (s : ISg) =
             Sg.UniformApplicator(n, m, s) :> ISg
 
         let sphere = Primitives.unitSphere 5
@@ -547,10 +547,10 @@ module ComputeShader =
 
         win.RenderTask <-
             Sg.render IndexedGeometryMode.TriangleList call
-                |> Sg.vertexBuffer DefaultSemantic.Positions (BufferView(Mod.constant (ArrayBuffer pos :> IBuffer), typeof<V3f>))
-                |> Sg.vertexBuffer DefaultSemantic.Normals (BufferView(Mod.constant (ArrayBuffer norm :> IBuffer), typeof<V3f>))
-                |> instanceBuffer (Symbol.Create "Offset") (BufferView(Mod.constant (positions :> IBuffer), typeof<V4f>))
-                |> instanceBuffer (Symbol.Create "Mass") (BufferView(Mod.constant (masses :> IBuffer), typeof<float32>))
+                |> Sg.vertexBuffer DefaultSemantic.Positions (BufferView(AVal.constant (ArrayBuffer pos :> IBuffer), typeof<V3f>))
+                |> Sg.vertexBuffer DefaultSemantic.Normals (BufferView(AVal.constant (ArrayBuffer norm :> IBuffer), typeof<V3f>))
+                |> instanceBuffer (Symbol.Create "Offset") (BufferView(AVal.constant (positions :> IBuffer), typeof<V4f>))
+                |> instanceBuffer (Symbol.Create "Mass") (BufferView(AVal.constant (masses :> IBuffer), typeof<float32>))
                 |> Sg.translate 0.0 0.0 1.0
                 |> Sg.shader {
                     do! Shaders.instanceOffset
@@ -560,8 +560,8 @@ module ComputeShader =
                 }
                 |> u "ViewTrafo" view
                 |> u "ProjTrafo" proj
-                |> Sg.viewTrafo view //(view |> Mod.map (Array.item 0))
-                |> Sg.uniform "Scale" (Mod.constant 0.05)
+                |> Sg.viewTrafo view //(view |> AVal.map (Array.item 0))
+                |> Sg.uniform "Scale" (AVal.constant 0.05)
                 |> Sg.uniform "Magic" magic
                 |> Sg.compile runtime win.FramebufferSignature
 

@@ -3,10 +3,11 @@
 open System
 open System.Collections.Concurrent
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Text
 open Aardvark.SceneGraph
+open FSharp.Data.Traceable
 
 module RenderPass =
     let shapes = RenderPass.main |> RenderPass.after "shapes" RenderPassOrder.BackToFront
@@ -19,12 +20,12 @@ module Sg =
     open Aardvark.Base.Ag
 
     
-    type ShapeSet (content : aset<IMod<Trafo3d> * IMod<ShapeList>>) =
+    type ShapeSet (content : aset<aval<Trafo3d> * aval<ShapeList>>) =
         interface ISg
         member x.Content = content
 
 
-    type Shape (renderBoundary : bool, boundaryColor : C4b, boundaryExtent : Border2d, content : IMod<ShapeList>) =
+    type Shape (renderBoundary : bool, boundaryColor : C4b, boundaryExtent : Border2d, content : aval<ShapeList>) =
         interface ISg
 
         member x.RenderBoundary = renderBoundary
@@ -34,7 +35,7 @@ module Sg =
         new(content) = Shape(false, C4b.Black, Border2d.None, content)
         new(color, content) = Shape(true, color, Border2d.None, content)
 
-    type BillboardApplicator(child : IMod<ISg>) =
+    type BillboardApplicator(child : aval<ISg>) =
         inherit Sg.AbstractApplicator(child)
 
 
@@ -47,7 +48,7 @@ module Sg =
 
             let trafo =
                 b.ViewTrafo
-                    |> Mod.map (fun view ->
+                    |> AVal.map (fun view ->
                         let pos = view.Forward.TransformPosProj V3d.Zero
                         Trafo3d.Translation(pos) * view.Inverse
                     )
@@ -55,23 +56,23 @@ module Sg =
 
             b.Child?ModelTrafoStack <- trafo::b.ModelTrafoStack
             
-        member x.LocalBoundingBox(t : Shape) : IMod<Box3d> =
-            t.Content |> Mod.map (fun c ->
+        member x.LocalBoundingBox(t : Shape) : aval<Box3d> =
+            t.Content |> AVal.map (fun c ->
                 Box3d(V3d(c.bounds.Min, 0.0), V3d(c.bounds.Max, 0.0))
             )
 
-        member x.GlobalBoundingBox(t : Shape) : IMod<Box3d> =
-            Mod.map2 (fun c (t : Trafo3d) ->
+        member x.GlobalBoundingBox(t : Shape) : aval<Box3d> =
+            AVal.map2 (fun c (t : Trafo3d) ->
                 let box = Box3d(V3d(c.bounds.Min, 0.0), V3d(c.bounds.Max, 0.0))
                 box.Transformed(t.Forward)
 
             ) t.Content t.ModelTrafo
             
-        member x.LocalBoundingBox(t : ShapeSet) : IMod<Box3d> =
-            Mod.constant Box3d.Invalid
+        member x.LocalBoundingBox(t : ShapeSet) : aval<Box3d> =
+            AVal.constant Box3d.Invalid
 
-        member x.GlobalBoundingBox(t : ShapeSet) : IMod<Box3d> =
-            Mod.constant Box3d.Invalid
+        member x.GlobalBoundingBox(t : ShapeSet) : aval<Box3d> =
+            AVal.constant Box3d.Invalid
 
         member x.RenderObjects(t : ShapeSet) : aset<IRenderObject> =
             let content = t.Content
@@ -81,9 +82,9 @@ module Sg =
             let reader = content.GetReader()
 
             let trafosAndShapes =
-                Mod.custom (fun token ->
-                    reader.GetOperations token |> ignore
-                    reader.State |> HRefSet.toArray |> Array.map (fun (trafo,shapes) ->
+                AVal.custom (fun token ->
+                    reader.GetChanges token |> ignore
+                    reader.State |> CountingHashSet.toArray |> Array.map (fun (trafo,shapes) ->
                         let trafo = trafo.GetValue token
                         let shapes = shapes.GetValue token
                         trafo, shapes
@@ -91,15 +92,15 @@ module Sg =
                 )
 
             let shapesOnly = 
-                Mod.custom (fun token ->
-                    reader.GetOperations token |> ignore
-                    reader.State |> HRefSet.toArray |> Array.map (fun (trafo,shapes) ->
+                AVal.custom (fun token ->
+                    reader.GetChanges token |> ignore
+                    reader.State |> CountingHashSet.toArray |> Array.map (fun (trafo,shapes) ->
                         shapes.GetValue token
                     )
                 )    
 
             let trafoBuffer =
-                trafosAndShapes |> Mod.map (fun state ->
+                trafosAndShapes |> AVal.map (fun state ->
                     state |> Array.mapi (fun i (trafo,shapes) ->
                         
                         let trafo = 
@@ -117,7 +118,7 @@ module Sg =
                 )
 
             let offsetAndScaleBuffer =
-                shapesOnly |> Mod.map (fun state ->
+                shapesOnly |> AVal.map (fun state ->
                     state |> Seq.collect (fun shapes ->
                         shapes.concreteShapes
                             |> Seq.map (fun shape -> 
@@ -134,7 +135,7 @@ module Sg =
                 )
 
             let colorBuffer =
-                shapesOnly |> Mod.map (fun state ->
+                shapesOnly |> AVal.map (fun state ->
                     state |> Seq.collect (fun shapes ->
                         shapes.concreteShapes |> Seq.map (fun s ->
                             let c = s.color
@@ -155,7 +156,7 @@ module Sg =
                 )
                 
             let indirect =
-                shapesOnly |> Mod.map (fun state ->
+                shapesOnly |> AVal.map (fun state ->
                     state |> Seq.collect (fun shapes ->
                         shapes.concreteShapes |> Seq.map (ConcreteShape.shape >> cache.GetBufferRange)
                     )
@@ -190,50 +191,51 @@ module Sg =
 
             let aa =
                 match shapes.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "Antialias") with
-                    | Some (:? IMod<bool> as aa) -> aa
-                    | _ -> Mod.constant false
+                    | Some (:? aval<bool> as aa) -> aa
+                    | _ -> AVal.constant false
 
             let fill =
                 match shapes.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "FillGlyphs") with
-                    | Some (:? IMod<bool> as aa) -> aa
-                    | _ -> Mod.constant true
+                    | Some (:? aval<bool> as aa) -> aa
+                    | _ -> AVal.constant true
                     
             let bias =
                 match shapes.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "DepthBias") with
-                    | Some (:? IMod<float> as bias) -> bias
-                    | _ -> Mod.constant defaultDepthBias
+                    | Some (:? aval<float> as bias) -> bias
+                    | _ -> AVal.constant defaultDepthBias
                     
             shapes.Uniforms <-
                 let old = shapes.Uniforms
                 { new IUniformProvider with
                     member x.TryGetUniform(scope : Ag.Scope, sem : Symbol) =
                         match string sem with
-                            | "Antialias" -> aa :> IMod |> Some
-                            | "FillGlyphs" -> fill :> IMod |> Some
-                            | "DepthBias" -> bias :> IMod |> Some
+                            | "Antialias" -> aa :> IAdaptiveValue |> Some
+                            | "FillGlyphs" -> fill :> IAdaptiveValue |> Some
+                            | "DepthBias" -> bias :> IAdaptiveValue |> Some
                             | _ -> old.TryGetUniform(scope, sem)
 
                     member x.Dispose() =
                         old.Dispose()
                 }
 
-            shapes.Multisample <- Mod.map2 (fun a f -> not f || a) aa fill
+            shapes.Multisample <- AVal.map2 (fun a f -> not f || a) aa fill
             shapes.RenderPass <- RenderPass.shapes
-            shapes.BlendMode <- Mod.constant BlendMode.Blend
+            shapes.BlendMode <- AVal.constant BlendMode.Blend
             shapes.VertexAttributes <- cache.VertexBuffers
             shapes.IndirectBuffer <- indirect
             shapes.InstanceAttributes <- instanceAttributes
             shapes.Mode <- IndexedGeometryMode.TriangleList
 
             trafosAndShapes 
-                |> Mod.map(fun l -> 
+                |> AVal.map(fun l -> 
                     match l |> Array.tryFind (fun (_,s) -> s.renderStyle = RenderStyle.Billboard) with
                     | Some x -> 
                         shapes.Surface <- Surface.FShadeSimple cache.InstancedBillboardEffect
                     | None -> 
                         shapes.Surface <- Surface.FShadeSimple cache.InstancedEffect
-                    shapes :> IRenderObject)
-                |> Mod.toASet
+                    shapes :> IRenderObject |> HashSet.single
+                )
+                |> ASet.ofAVal
 
         member x.RenderObjects(t : Shape) : aset<IRenderObject> =
             let content = t.Content
@@ -241,7 +243,7 @@ module Sg =
             let shapes = RenderObject.create()
                 
             let content =
-                content |> Mod.map (fun c ->
+                content |> AVal.map (fun c ->
                     
                     let shapes =
                         c.concreteShapes 
@@ -253,7 +255,7 @@ module Sg =
                 )
 
             let indirectAndOffsets =
-                content |> Mod.map (fun renderText ->
+                content |> AVal.map (fun renderText ->
                     let indirectBuffer = 
                         renderText.concreteShapes 
                             |> List.toArray
@@ -292,8 +294,8 @@ module Sg =
                     indirectBuffer, offsets, colors
                 )
 
-            let offsets = BufferView(Mod.map (fun (_,o,_) -> o) indirectAndOffsets, typeof<V4f>)
-            let colors = BufferView(Mod.map (fun (_,_,c) -> c) indirectAndOffsets, typeof<C4b>)
+            let offsets = BufferView(AVal.map (fun (_,o,_) -> o) indirectAndOffsets, typeof<V4f>)
+            let colors = BufferView(AVal.map (fun (_,_,c) -> c) indirectAndOffsets, typeof<C4b>)
 
             let instanceAttributes =
                 let old = shapes.InstanceAttributes
@@ -309,34 +311,34 @@ module Sg =
 
             let aa =
                 match shapes.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "Antialias") with
-                    | Some (:? IMod<bool> as aa) -> aa
-                    | _ -> Mod.constant false
+                    | Some (:? aval<bool> as aa) -> aa
+                    | _ -> AVal.constant false
 
             let fill =
                 match shapes.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "FillGlyphs") with
-                    | Some (:? IMod<bool> as aa) -> aa
-                    | _ -> Mod.constant true
+                    | Some (:? aval<bool> as aa) -> aa
+                    | _ -> AVal.constant true
                     
             let bias =
                 match shapes.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "DepthBias") with
-                    | Some (:? IMod<float> as bias) -> bias
-                    | _ -> Mod.constant defaultDepthBias
+                    | Some (:? aval<float> as bias) -> bias
+                    | _ -> AVal.constant defaultDepthBias
                     
             shapes.Uniforms <-
                 let old = shapes.Uniforms
-                let ownTrafo = content |> Mod.map (fun c -> c.renderTrafo)
+                let ownTrafo = content |> AVal.map (fun c -> c.renderTrafo)
                 { new IUniformProvider with
                     member x.TryGetUniform(scope, sem) =
                         match string sem with
-                            | "Antialias" -> aa :> IMod |> Some
-                            | "FillGlyphs" -> fill :> IMod |> Some
-                            | "DepthBias" -> bias :> IMod |> Some
+                            | "Antialias" -> aa :> IAdaptiveValue |> Some
+                            | "FillGlyphs" -> fill :> IAdaptiveValue |> Some
+                            | "DepthBias" -> bias :> IAdaptiveValue |> Some
                             | "ModelTrafo" -> 
                                 match old.TryGetUniform(scope, sem) with
-                                    | Some (:? IMod<Trafo3d> as m) ->
-                                        Mod.map2 (*) ownTrafo m :> IMod |> Some
+                                    | Some (:? aval<Trafo3d> as m) ->
+                                        AVal.map2 (*) ownTrafo m :> IAdaptiveValue |> Some
                                     | _ ->
-                                        ownTrafo :> IMod |> Some
+                                        ownTrafo :> IAdaptiveValue |> Some
 
                             | _ -> 
                                 old.TryGetUniform(scope, sem)
@@ -345,21 +347,21 @@ module Sg =
                         old.Dispose()
                 }
 
-            shapes.Multisample <- Mod.map2 (fun a f -> not f || a) aa fill
+            shapes.Multisample <- AVal.map2 (fun a f -> not f || a) aa fill
             shapes.RenderPass <- RenderPass.shapes
-            shapes.BlendMode <- Mod.constant BlendMode.Blend
+            shapes.BlendMode <- AVal.constant BlendMode.Blend
             shapes.VertexAttributes <- cache.VertexBuffers
-            shapes.IndirectBuffer <- indirectAndOffsets |> Mod.map (fun (i,_,_) -> i)
+            shapes.IndirectBuffer <- indirectAndOffsets |> AVal.map (fun (i,_,_) -> i)
             shapes.InstanceAttributes <- instanceAttributes
             shapes.Mode <- IndexedGeometryMode.TriangleList
-            shapes.DepthBias <- Mod.constant (DepthBiasState(0.0, 0.0, 0.0))
+            shapes.DepthBias <- AVal.constant (DepthBiasState(0.0, 0.0, 0.0))
             
             //shapes.WriteBuffers <- Some (Set.ofList [DefaultSemantic.Colors])
 
             let boundary = RenderObject.create()
-            //boundary.ConservativeRaster <- Mod.constant false
+            //boundary.ConservativeRaster <- AVal.constant false
             boundary.RenderPass <- RenderPass.shapes
-            boundary.BlendMode <- Mod.constant BlendMode.Blend
+            boundary.BlendMode <- AVal.constant BlendMode.Blend
             boundary.VertexAttributes <- cache.VertexBuffers
             let drawCall =
                 let range = cache.GetBufferRange Shape.Quad
@@ -371,12 +373,12 @@ module Sg =
                     BaseVertex = 0
                 )
 
-            boundary.DrawCallInfos <- [drawCall] |> Mod.constant
+            boundary.DrawCallInfos <- [drawCall] |> AVal.constant
             boundary.Mode <- IndexedGeometryMode.TriangleList
 
             let bounds = 
                 let e = t.BoundaryExtent
-                content |> Mod.map (fun s -> 
+                content |> AVal.map (fun s -> 
                     let b = s.bounds
                     let bounds = Box2d(b.Min.X - e.left, b.Min.Y - e.bottom, b.Max.X + e.right, b.Max.Y + e.top)
                     bounds
@@ -387,10 +389,10 @@ module Sg =
                 { new IUniformProvider with
                     member x.TryGetUniform(scope, sem) =
                         match string sem with
-                            | "BoundaryColor" -> t.BoundaryColor |> Mod.constant :> IMod |> Some
+                            | "BoundaryColor" -> t.BoundaryColor |> AVal.constant :> IAdaptiveValue |> Some
                             | "ModelTrafo" -> 
                                 let scaleTrafo = 
-                                    bounds |> Mod.map (fun bounds -> 
+                                    bounds |> AVal.map (fun bounds -> 
                                         if bounds.IsValid then
                                             Trafo3d.Scale(bounds.SizeX, bounds.SizeY, 1.0) *
                                             Trafo3d.Translation(bounds.Min.X, bounds.Min.Y, 0.0)
@@ -399,10 +401,10 @@ module Sg =
                                     )
 
                                 match old.TryGetUniform(scope, sem) with
-                                    | Some (:? IMod<Trafo3d> as m) ->
-                                        Mod.map2 (*) scaleTrafo m :> IMod |> Some
+                                    | Some (:? aval<Trafo3d> as m) ->
+                                        AVal.map2 (*) scaleTrafo m :> IAdaptiveValue |> Some
                                     | _ ->
-                                        scaleTrafo :> IMod |> Some
+                                        scaleTrafo :> IAdaptiveValue |> Some
 
                             | _ -> old.TryGetUniform(scope, sem)
 
@@ -436,72 +438,72 @@ module Sg =
                 else Some (Set.ofList [DefaultSemantic.Depth; DefaultSemantic.Stencil])
 
             boundary.WriteBuffers <- writeBuffers
-            boundary.StencilMode <- Mod.constant writeStencil
-            boundary.FillMode <- Mod.constant FillMode.Fill
+            boundary.StencilMode <- AVal.constant writeStencil
+            boundary.FillMode <- AVal.constant FillMode.Fill
 
-            content |> Mod.map(fun x -> 
+            content |> AVal.map(fun x -> 
                 match x.renderStyle with
                 | RenderStyle.Normal -> 
                     shapes.Surface <- Surface.FShadeSimple cache.Effect
-                    shapes.DepthTest <- Mod.constant(DepthTestMode.None)
-                    shapes.StencilMode <- Mod.constant(readStencil)
-                    MultiRenderObject [boundary; shapes] :> IRenderObject 
+                    shapes.DepthTest <- AVal.constant(DepthTestMode.None)
+                    shapes.StencilMode <- AVal.constant(readStencil)
+                    MultiRenderObject [boundary; shapes] :> IRenderObject  |> HashSet.single
                 | RenderStyle.NoBoundary ->
                     shapes.Surface <- Surface.FShadeSimple cache.Effect
-                    shapes.DepthTest <- Mod.constant(DepthTestMode.LessOrEqual)
-                    shapes.StencilMode <- Mod.constant(StencilMode.Disabled)
-                    shapes :> IRenderObject // MultiRenderObject [shapes] :> IRenderObject 
+                    shapes.DepthTest <- AVal.constant(DepthTestMode.LessOrEqual)
+                    shapes.StencilMode <- AVal.constant(StencilMode.Disabled)
+                    shapes :> IRenderObject |> HashSet.single // MultiRenderObject [shapes] :> IRenderObject 
                 | RenderStyle.Billboard -> 
                     shapes.Surface <- Surface.FShadeSimple cache.BillboardEffect
-                    shapes.DepthTest <- Mod.constant(DepthTestMode.LessOrEqual)
-                    shapes.StencilMode <- Mod.constant(StencilMode.Disabled)
-                    shapes :> IRenderObject
+                    shapes.DepthTest <- AVal.constant(DepthTestMode.LessOrEqual)
+                    shapes.StencilMode <- AVal.constant(StencilMode.Disabled)
+                    shapes :> IRenderObject |> HashSet.single
 
-                ) |> Mod.toASet
+                ) |> ASet.ofAVal
 
         member x.FillGlyphs(s : ISg) =
             let mode = s.FillMode
-            mode |> Mod.map (fun m -> m = FillMode.Fill)
+            mode |> AVal.map (fun m -> m = FillMode.Fill)
 
         member x.Antialias(r : Root<ISg>) =
-            r.Child?Antialias <- Mod.constant true
+            r.Child?Antialias <- AVal.constant true
 
     let billboard (sg : ISg) =
-        sg |> Mod.constant |> BillboardApplicator :> ISg
+        sg |> AVal.constant |> BillboardApplicator :> ISg
 
-    let shape (content : IMod<ShapeList>) =
+    let shape (content : aval<ShapeList>) =
         Shape(content) :> ISg
 
-    let shapeWithBackground (color : C4b) (border : Border2d) (content : IMod<ShapeList>) =
+    let shapeWithBackground (color : C4b) (border : Border2d) (content : aval<ShapeList>) =
         Shape(true, color, border, content) :> ISg
 
-    let shapes (content : aset<IMod<Trafo3d> * IMod<ShapeList>>) =
+    let shapes (content : aset<aval<Trafo3d> * aval<ShapeList>>) =
         ShapeSet(content) :> ISg
         
-    let textWithConfig (cfg : TextConfig) (content : IMod<string>) =
+    let textWithConfig (cfg : TextConfig) (content : aval<string>) =
         content 
-        |> Mod.map cfg.Layout
+        |> AVal.map cfg.Layout
         |> shape
 
-    let text (f : Font) (color : C4b) (content : IMod<string>) =
+    let text (f : Font) (color : C4b) (content : aval<string>) =
         content 
-            |> Mod.map (fun c -> Text.Layout(f, color, c)) 
+            |> AVal.map (fun c -> Text.Layout(f, color, c)) 
             |> shape
             
-    let textWithBackground (f : Font) (color : C4b) (backgroundColor : C4b) (border : Border2d) (content : IMod<string>) =
+    let textWithBackground (f : Font) (color : C4b) (backgroundColor : C4b) (border : Border2d) (content : aval<string>) =
         content 
-            |> Mod.map (fun c -> Text.Layout(f, color, c)) 
+            |> AVal.map (fun c -> Text.Layout(f, color, c)) 
             |> shapeWithBackground backgroundColor border
 
-    let textsWithConfig (cfg : TextConfig) (content : aset<IMod<Trafo3d> * IMod<string>>) =
+    let textsWithConfig (cfg : TextConfig) (content : aset<aval<Trafo3d> * aval<string>>) =
         content |> ASet.map (fun (trafo, content) ->
-            trafo, Mod.map cfg.Layout content
+            trafo, AVal.map cfg.Layout content
         )
         |> shapes
 
-    let texts (f : Font) (color : C4b) (content : aset<IMod<Trafo3d> * IMod<string>>) =
+    let texts (f : Font) (color : C4b) (content : aset<aval<Trafo3d> * aval<string>>) =
         content |> ASet.map (fun (trafo, content) ->
-            let shapeList = content |> Mod.map (fun c -> Text.Layout(f, color, c))
+            let shapeList = content |> AVal.map (fun c -> Text.Layout(f, color, c))
             trafo, shapeList
         )
         |> shapes

@@ -20,12 +20,12 @@ namespace Examples
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 open Aardvark.Rendering.Interactive
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection
 
@@ -36,7 +36,7 @@ module PostProcessing =
     Interactive.Samples <- 1
     let win = Interactive.Window
     // let's start by creating our example-scene containing random points.
-    let pointSize = Mod.init 50.0
+    let pointSize = AVal.init 50.0
     let pointCount = 2048
 
     // we now need to define some shaders performing the per-pixel blur on a given input texture.
@@ -124,8 +124,8 @@ module PostProcessing =
         let randomColor() = C4b(rand.NextDouble(), rand.NextDouble(), rand.NextDouble(), 1.0)
 
         Sg.draw IndexedGeometryMode.PointList
-            |> Sg.vertexAttribute DefaultSemantic.Positions (Array.init pointCount (fun _ -> randomV3f()) |> Mod.constant)
-            |> Sg.vertexAttribute DefaultSemantic.Colors (Array.init pointCount (fun _ -> randomColor()) |> Mod.constant)
+            |> Sg.vertexAttribute DefaultSemantic.Positions (Array.init pointCount (fun _ -> randomV3f()) |> AVal.constant)
+            |> Sg.vertexAttribute DefaultSemantic.Colors (Array.init pointCount (fun _ -> randomColor()) |> AVal.constant)
             |> Sg.viewTrafo Interactive.DefaultViewTrafo
             |> Sg.projTrafo Interactive.DefaultProjTrafo
             |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.pointSprite |> toEffect; Shaders.pointSpriteFragment |> toEffect; DefaultSurfaces.vertexColor |> toEffect]
@@ -137,13 +137,13 @@ module PostProcessing =
     // for rendering the filtered image we need a fullscreen quad
     let fullscreenQuad =
         Sg.draw IndexedGeometryMode.TriangleStrip
-            |> Sg.vertexAttribute DefaultSemantic.Positions (Mod.constant [|V3f(-1.0,-1.0,0.0); V3f(1.0,-1.0,0.0); V3f(-1.0,1.0,0.0);V3f(1.0,1.0,0.0) |])
-            |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (Mod.constant [|V2f.OO; V2f.IO; V2f.OI; V2f.II|])
+            |> Sg.vertexAttribute DefaultSemantic.Positions (AVal.constant [|V3f(-1.0,-1.0,0.0); V3f(1.0,-1.0,0.0); V3f(-1.0,1.0,0.0);V3f(1.0,1.0,0.0) |])
+            |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (AVal.constant [|V2f.OO; V2f.IO; V2f.OI; V2f.II|])
             |> Sg.depthTest ~~DepthTestMode.None
 
     // so in a first pass we need to render our pointScene to a color texture which
     // is quite simple using the RenderTask utilities provided in Base.Rendering.
-    // from the rendering we get an IMod<ITexture> which will be outOfDate whenever
+    // from the rendering we get an aval<ITexture> which will be outOfDate whenever
     // something changes in pointScene and updated whenever subsequent passes need it.
 
     let signature = //win.FramebufferSignature
@@ -160,7 +160,7 @@ module PostProcessing =
  
 
     let bla =
-        Mod.init (Some 1.0)
+        AVal.init (Some 1.0)
 
     Interactive.Keyboard.DownWithRepeats.Values.Add (fun k ->
         match k with
@@ -176,7 +176,7 @@ module PostProcessing =
     )
 
     // by taking the texture created above and the fullscreen quad we can now apply
-    // the first gaussian filter to it and in turn get a new IMod<ITexture>     
+    // the first gaussian filter to it and in turn get a new aval<ITexture>     
     let blurredOnlyX =
         fullscreenQuad 
             |> Sg.texture DefaultSemantic.DiffuseColorTexture mainResult
@@ -186,7 +186,7 @@ module PostProcessing =
             |> RenderTask.renderToColor win.Sizes
 
     // by taking the texture created above and the fullscreen quad we can now apply
-    // the first gaussian filter to it and in turn get a new IMod<ITexture>     
+    // the first gaussian filter to it and in turn get a new aval<ITexture>     
     let blurredOnlyY =
         fullscreenQuad 
             |> Sg.texture DefaultSemantic.DiffuseColorTexture mainResult
@@ -208,9 +208,9 @@ module PostProcessing =
                 |> Sg.blendMode ~~BlendMode.Blend
 //
 //        let overlayBox =
-//            let box = win.Sizes |> Mod.map (fun s -> Box2d.FromMinAndSize(0.0, 0.0, overlayRelativeSize * float s.X, overlayRelativeSize * float s.Y))
+//            let box = win.Sizes |> AVal.map (fun s -> Box2d.FromMinAndSize(0.0, 0.0, overlayRelativeSize * float s.X, overlayRelativeSize * float s.Y))
 //
-//            box |> Mod.map Rectangle
+//            box |> AVal.map Rectangle
 //                |> Nvg.stroke
 //                |> Nvg.strokeColor ~~C4f.Gray50
 //                |> Nvg.strokeWidth ~~2.0
@@ -218,7 +218,7 @@ module PostProcessing =
 //        let overlayText =
 //            Nvg.text ~~"Original"
 //                |> Nvg.fontSize ~~20.0
-//                |> Nvg.trafo (win.Sizes |> Mod.map (fun s -> M33d.Translation(float s.X * 0.5 * overlayRelativeSize, float s.Y * overlayRelativeSize - 10.0)))
+//                |> Nvg.trafo (win.Sizes |> AVal.map (fun s -> M33d.Translation(float s.X * 0.5 * overlayRelativeSize, float s.Y * overlayRelativeSize - 10.0)))
 //                |> Nvg.systemFont "Consolas" FontStyle.Bold
 //                |> Nvg.align ~~TextAlign.Center
 //                |> Nvg.andAlso overlayBox
@@ -253,12 +253,12 @@ module PostProcessing =
 //        ComputeTest.run()
 //        Environment.Exit 0
 
-//        let fbo = win.Runtime.CreateFramebuffer(win.FramebufferSignature, Mod.constant (V2i(1024, 768)))
+//        let fbo = win.Runtime.CreateFramebuffer(win.FramebufferSignature, AVal.constant (V2i(1024, 768)))
 //        fbo.Acquire()
 //        let fboHandle = fbo.GetValue()
 //        let color = unbox<BackendTextureOutputView> fboHandle.Attachments.[DefaultSemantic.Colors]
 //        let output = OutputDescription.ofFramebuffer fboHandle
-//        let clear = win.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.Black, Mod.constant 1.0)
+//        let clear = win.Runtime.CompileClear(win.FramebufferSignature, AVal.constant C4f.Black, AVal.constant 1.0)
 //        let view1 = CameraView.lookAt V3d.III V3d.Zero V3d.OOI |> CameraView.viewTrafo
 //        let view2 = CameraView.lookAt (10.0 * V3d.III) V3d.Zero V3d.OOI |> CameraView.viewTrafo
 //
@@ -287,7 +287,7 @@ module PostProcessing =
     // finally we create a simple utility for changing the pointSize
     // you can play with it and see the render-result adjust to the given point-size.
     let setPointSize (s : float) =
-        transact (fun () -> Mod.change pointSize s)
+        transact (fun () -> AVal.change pointSize s)
 
 
     // some other setters showing intermediate result textures

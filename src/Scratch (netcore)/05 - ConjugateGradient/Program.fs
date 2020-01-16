@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Microsoft.FSharp.Quotations
@@ -308,22 +308,22 @@ type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Forma
     let poly'  = residual' (Term.TermParameter2d "x") (Term.Uniform "h")
 
     //let epoly = Term.toReflectedCall Term.Read.image residual
-    //let upoly = Term.parameters residual |> HMap.toList |> List.map fst
+    //let upoly = Term.parameters residual |> HashMap.toList |> List.map fst
     
     let epoly' = Term.toReflectedCall Term.Read.image poly'
-    let upoly' = Term.parameters poly' |> HMap.toList |> List.map fst
+    let upoly' = Term.parameters poly' |> HashMap.toList |> List.map fst
 
     let poly'' =
         let d = Term.TermParameter2d("d")
         
         let mutable sum = Term<V2i>.Zero
         let all = Term.allDerivatives "x" poly'
-        for (c, p) in HMap.toSeq all do
+        for (c, p) in HashMap.toSeq all do
             sum <- sum + p * d.[c.X, c.Y]
         sum
 
     let epoly'' = Term.toReflectedCall Term.Read.image poly''
-    let upoly'' = Term.parameters poly'' |> HMap.toList |> List.map fst
+    let upoly'' = Term.parameters poly'' |> HashMap.toList |> List.map fst
 
 
     let negativeV4 = 

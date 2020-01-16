@@ -2,7 +2,7 @@
 
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 open Valve.VR
@@ -56,6 +56,9 @@ module StereoShader =
             return V4d.IIII
         }
 
+type private DummyObject() =
+    inherit AdaptiveObject()
+
 type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i -> V2i)  =
     inherit VrRenderer(adjustSize)
 
@@ -71,7 +74,7 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
 
     let start = System.DateTime.Now
     let sw = System.Diagnostics.Stopwatch.StartNew()
-    let time = Mod.custom(fun _ -> start + sw.Elapsed)
+    let time = AVal.custom(fun _ -> start + sw.Elapsed)
    
     let framebufferSignature = 
         runtime.CreateFramebufferSignature(
@@ -91,10 +94,10 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
             ]
         )
         
-    let caller = AdaptiveObject()
+    let caller = DummyObject()
 
-    let version = Mod.init 0
-    let tex = Mod.custom (fun _ -> fTex :> ITexture)
+    let version = AVal.init 0
+    let tex = AVal.custom (fun _ -> fTex :> ITexture)
     
     let keyboard = new EventKeyboard()
     let mouse = new EventMouse(false)
@@ -106,7 +109,7 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
     let renderCtx = ContextHandle.create debug
 
 
-    let clearColor = Mod.init C4f.Black
+    let clearColor = AVal.init C4f.Black
     let mutable clearTask = RenderTask.empty
     let mutable hiddenTask = RenderTask.empty
     let mutable userTask = RenderTask.empty
@@ -131,20 +134,20 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
                 |> Sg.shader {
                     do! StereoShader.hiddenAreaFragment
                 }
-                |> Sg.stencilMode (Mod.constant writeStencil)
+                |> Sg.stencilMode (AVal.constant writeStencil)
                 |> Sg.writeBuffers' (Set.ofList [DefaultSemantic.Stencil])
 
         hiddenTask <- runtime.CompileRender(framebufferSignature, sg.RenderObjects())
         
     let compileClear () =
-        clearTask <- runtime.CompileClear(framebufferSignature, clearColor, Mod.constant 1.0)
+        clearTask <- runtime.CompileClear(framebufferSignature, clearColor, AVal.constant 1.0)
 
-    member x.Version = version :> IMod<_>
+    member x.Version = version :> aval<_>
     member x.Texture = tex
     
     member x.FramebufferSignature = framebufferSignature :> IFramebufferSignature
     member x.Runtime = app.Runtime
-    member x.Sizes = Mod.constant x.DesiredSize
+    member x.Sizes = AVal.constant x.DesiredSize
     member x.Samples = samples
     member x.Time = time
 
@@ -235,7 +238,7 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
 
     interface IRenderTarget with
         member x.Runtime = app.Runtime :> IRuntime
-        member x.Sizes = Mod.constant x.DesiredSize
+        member x.Sizes = AVal.constant x.DesiredSize
         member x.Samples = samples
         member x.FramebufferSignature = x.FramebufferSignature
         member x.RenderTask

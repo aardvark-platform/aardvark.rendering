@@ -6,8 +6,8 @@ open System.Collections.Concurrent
 open Aardvark.Application
 open Aardvark.Rendering.Vulkan
 open Aardvark.Base
-open Aardvark.Base.Incremental
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive
+open FSharp.Data.Adaptive.Operators
 
 module VisualDeviceChooser =
     open System.IO

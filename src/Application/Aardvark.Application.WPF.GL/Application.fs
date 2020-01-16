@@ -7,7 +7,7 @@ open System.IO
 open System.Windows.Forms
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Rendering.GL
 open Aardvark.Application
 
@@ -39,7 +39,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
             if not !initialized then
                 initialized := true
 
-                using ctx.ResourceLock (fun _ ->
+                Operators.using ctx.ResourceLock (fun _ ->
                     try GLVM.vmInit()
                     with _ -> Log.line "No glvm found, running without glvm"
 

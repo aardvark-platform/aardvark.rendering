@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.SceneGraph.Semantics
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
 open Aardvark.Base.Rendering
@@ -15,8 +15,8 @@ module AdapterSemantics =
         member x.RenderObjects(a : Sg.AdapterNode) : aset<IRenderObject> =
             a.Node?RenderObjects()
 
-        member x.GlobalBoundingBox(a : Sg.AdapterNode) : IMod<Box3d> =
+        member x.GlobalBoundingBox(a : Sg.AdapterNode) : aval<Box3d> =
             a.Node?GlobalBoundingBox()
 
-        member x.LocalBoundingBox(a : Sg.AdapterNode) : IMod<Box3d> =
+        member x.LocalBoundingBox(a : Sg.AdapterNode) : aval<Box3d> =
             a.Node?LocalBoundingBox()

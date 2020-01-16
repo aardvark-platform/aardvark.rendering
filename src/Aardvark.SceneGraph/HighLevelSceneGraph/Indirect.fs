@@ -2,7 +2,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 
 [<AutoOpen>]
@@ -16,12 +16,12 @@ module Indirect =
         }
 
     module Sg =
-        type IndirectNode(signature : IndirectSignature, objects : aset<IndexedGeometry * Map<string, IMod>>) =
+        type IndirectNode(signature : IndirectSignature, objects : aset<IndexedGeometry * Map<string, IAdaptiveValue>>) =
             interface ISg
             member x.Signature = signature
             member x.Objects = objects
 
-        let indirect (signature : IndirectSignature) (objects : aset<IndexedGeometry * Map<string, IMod>>) =
+        let indirect (signature : IndirectSignature) (objects : aset<IndexedGeometry * Map<string, IAdaptiveValue>>) =
             IndirectNode(signature, objects) :> ISg
 
 
@@ -32,7 +32,7 @@ open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Base.Ag
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open System.Collections.Generic
 open System.Threading
@@ -82,12 +82,12 @@ module Indirect =
             pool <- runtime.CreateGeometryPool(vertexTypes)
             geometryCache.Clear()
 
-    type Writer(m : IMod, offset : nativeint, ptr : ref<nativeint>) = 
+    type Writer(m : IAdaptiveValue, offset : nativeint, ptr : ref<nativeint>) = 
         inherit AdaptiveObject()
 
         member x.Write(token : AdaptiveToken) =
             x.EvaluateIfNeeded token () (fun token ->
-                let value = m.GetValue token
+                let value = m.GetValueUntyped token
                 let dst = !ptr + offset
                 Marshal.StructureToPtr(value, dst, false)
             )
@@ -97,7 +97,7 @@ module Indirect =
 
         let dirty = HashSet<Writer>()
         let mutable manager = Aardvark.Base.Management.MemoryManager.createNop()
-        let cache = RefDict<Map<string, IMod>, Management.Block<unit> * list<Writer>>()
+        let cache = RefDict<Map<string, IAdaptiveValue>, Management.Block<unit> * list<Writer>>()
 
         let mutable capacity = 0n
         let stores =
@@ -122,12 +122,12 @@ module Indirect =
                 Log.warn "[Indirect] resize from: %A to %A" capacity manager.Capactiy
                 capacity <- manager.Capactiy
 
-        override x.InputChanged(t, o) =
+        override x.InputChangedObject(t, o) =
             match o with    
                 | :? Writer as w -> lock dirty (fun () -> dirty.Add w |> ignore)
                 | _ -> ()
 
-        member x.Add(values : Map<string, IMod>) =
+        member x.Add(values : Map<string, IAdaptiveValue>) =
             let block, writers =
                 cache.Create(values, fun values ->
                     let slot = manager.Alloc(1n)
@@ -149,7 +149,7 @@ module Indirect =
                 )
             block
 
-        member x.Remove(values : Map<string, IMod>) =
+        member x.Remove(values : Map<string, IAdaptiveValue>) =
             let wasLast, (ptr, writers) = cache.TryRemove values
             if wasLast then
                 manager.Free ptr
@@ -170,7 +170,7 @@ module Indirect =
             x.EvaluateAlways token (fun token ->
                 let dirty = 
                     lock dirty (fun () ->
-                        let arr = HashSet.toArray dirty
+                        let arr = Aardvark.Base.HashSet.toArray dirty
                         dirty.Clear()
                         arr
                     )
@@ -202,7 +202,7 @@ module Indirect =
             let mutable reader = node.Objects.GetReader()
             let geometryCache = GeometryCache(runtime, node.Signature.vertexTypes)
             let uniformCache = UniformCache(runtime, node.Signature.uniformTypes)
-            let callCache = Dict<IndexedGeometry * Map<string, IMod>, DrawCallInfo>()
+            let callCache = Dict<IndexedGeometry * Map<string, IAdaptiveValue>, DrawCallInfo>()
 
             let mutable refCount = 0
             let kill () =
@@ -213,7 +213,6 @@ module Indirect =
                     member x.Dispose () = 
                         if Interlocked.Decrement(&refCount) = 0 then
                             Log.warn "destroy stuff"
-                            reader.Dispose()
                             reader <- node.Objects.GetReader()
                             geometryCache.Clear()
                             uniformCache.Clear()
@@ -222,9 +221,9 @@ module Indirect =
 
             let obj = RenderObject.create()
             let indirectAndInstanceBuffers =
-                Mod.custom (fun token ->
+                AVal.custom (fun token ->
                     
-                    let ops = reader.GetOperations(token)
+                    let ops = reader.GetChanges(token)
                     for op in ops do
                         match op with   
                             | Add(_,(g,u)) ->
@@ -260,7 +259,7 @@ module Indirect =
 
             let instanceProvider =
                 node.Signature.uniformTypes |> Map.map (fun name t ->
-                    BufferView(Mod.map (snd >> Map.find name) indirectAndInstanceBuffers, t)
+                    BufferView(AVal.map (snd >> Map.find name) indirectAndInstanceBuffers, t)
                 )
                 |> AttributeProvider.ofMap
 
@@ -271,7 +270,7 @@ module Indirect =
                     member x.TryGetAttribute(sem) = geometryCache.TryGetBufferView sem
                 }
 
-            obj.IndirectBuffer <- Mod.map fst indirectAndInstanceBuffers
+            obj.IndirectBuffer <- AVal.map fst indirectAndInstanceBuffers
             obj.InstanceAttributes <- instanceProvider
             obj.VertexAttributes <- vertexProvider
             obj.Mode <- node.Signature.mode

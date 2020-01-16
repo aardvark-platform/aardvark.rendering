@@ -7,7 +7,7 @@ open System.Runtime.InteropServices
 open System.Collections.Generic
 open System.Collections.Concurrent
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base.ReflectionHelpers
@@ -411,7 +411,7 @@ type Image =
         val mutable public Layout : VkImageLayout
         val mutable public RefCount : int
         val mutable public PeerHandles : VkImage[]
-        val mutable public Version : ModRef<int>
+        val mutable public Version : cval<int>
 
         member x.AddReference() = Interlocked.Increment(&x.RefCount) |> ignore
 
@@ -468,7 +468,7 @@ type Image =
                 Layout = layout
                 RefCount = 1
                 PeerHandles = [||]
-                Version = Mod.init 0
+                Version = AVal.init 0
             }
     end
 

@@ -5,7 +5,7 @@ open System.IO
 open System.Xml
 open System.Xml.Linq
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open ICSharpCode.SharpZipLib
 open ICSharpCode.SharpZipLib.Zip
 
@@ -34,10 +34,10 @@ module Prinziple =
   //no:
   //normal file read
 
-  let mutable private zipTable : hmap<string,string> = HMap.empty
+  let mutable private zipTable : HashMap<string,string> = HashMap.empty
 
   let splitPath (path : string) =    
-    let p = zipTable |> HMap.filter(fun _ v -> path.StartsWith v) |> HMap.toList |> List.map snd |> List.tryHead    
+    let p = zipTable |> HashMap.filter(fun _ v -> path.StartsWith v) |> HashMap.toList |> List.map snd |> List.tryHead    
     match p with
     | Some zipped -> Some (Path.ChangeExtension(zipped, ".opc"), path.[zipped.Length+1..path.Length-1])
     | None -> None
@@ -46,7 +46,7 @@ module Prinziple =
     let dir   = Path.GetFullPath(dir)
     let zPath = Path.ChangeExtension(dir, ".opc")
     if File.Exists zPath then
-      zipTable <- HMap.add dir dir zipTable    
+      zipTable <- HashMap.add dir dir zipTable    
     dir
  
   let openRead path =

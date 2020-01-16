@@ -5,7 +5,7 @@
 open System
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Rendering.GL
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
@@ -391,6 +391,9 @@ module WGLDXContextExtensions =
 
             new D3DRenderbuffer(ctx, resolveBuffer, renderBuffer, size, format, samples, surface, shareHandle)
 
+type private DummyObject() =
+    inherit AdaptiveObject()
+
 type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
     inherit UserControl()
 
@@ -405,11 +408,11 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
     let mutable pending = 1
     let trigger() = pending <- 1
 
-    let caller = AdaptiveObject()
+    let caller = DummyObject()
     let subscription = caller.AddMarkingCallback trigger
     do this.SizeChanged.Add (fun _ -> trigger())
 
-    let size = Mod.init V2i.II
+    let size = AVal.init V2i.II
 
     let mutable renderTask = RenderTask.empty
 
@@ -426,7 +429,7 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
 
     let startTime = DateTime.Now
     let sw = System.Diagnostics.Stopwatch.StartNew()
-    let time = Mod.custom (fun _ -> startTime + sw.Elapsed)
+    let time = AVal.custom (fun _ -> startTime + sw.Elapsed)
     
     let mutable running = false
     let mutable color : Option<D3DRenderbuffer> = None
@@ -684,7 +687,7 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
         with get() = renderTask
         and set t = renderTask <- t
 
-    member x.Sizes = size :> IMod<_>
+    member x.Sizes = size :> aval<_>
     
     member x.BeforeRender = beforeRender
     member x.AfterRender = afterRender

@@ -8,6 +8,7 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
+open FSharp.Data.Adaptive
 
 #nowarn "9"
 // #nowarn "51"
@@ -447,7 +448,7 @@ module ShaderProgram =
 
 
             if recurse decl real then
-                Some (assignment |> Dictionary.toSeq |> HMap.ofSeq)
+                Some (assignment |> Dictionary.toSeq |> HashMap.ofSeq)
             else
                 None
 
@@ -559,14 +560,14 @@ module ShaderProgram =
 
         type CustomPicklers private() =
             
-            static member HSetPickler (r : IPicklerResolver) : Pickler<hset<'a>> =
+            static member HSetPickler (r : IPicklerResolver) : Pickler<HashSet<'a>> =
                 let l = r.Resolve<list<'a>>()
 
                 let read (rs : ReadState) =
-                    l.Read rs "AsList" |> HSet.ofList
+                    l.Read rs "AsList" |> HashSet.ofList
                     
-                let write (ws : WriteState) (set : hset<'a>) =
-                    l.Write ws "AsList" (set |> HSet.toList)
+                let write (ws : WriteState) (set : HashSet<'a>) =
+                    l.Write ws "AsList" (set |> HashSet.toList)
 
                 Pickler.FromPrimitives(read, write)
 

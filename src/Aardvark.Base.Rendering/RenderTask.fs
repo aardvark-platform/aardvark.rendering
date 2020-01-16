@@ -2,8 +2,8 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive
+open FSharp.Data.Adaptive.Operators
 open System.Collections.Generic
 open Aardvark.Base.Rendering
 open System.Runtime.CompilerServices
@@ -11,10 +11,10 @@ open System.Threading
 
 module ChangeableResources =
 
-    let createTexture (runtime : IRuntime) (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<TextureFormat>) =
+    let createTexture (runtime : IRuntime) (samples : aval<int>) (size : aval<V2i>) (format : aval<TextureFormat>) =
         let mutable current = None
 
-        Mod.custom (fun self ->
+        AVal.custom (fun self ->
             let samples = samples.GetValue self
             let size = size.GetValue self
             let format = format.GetValue self
@@ -34,10 +34,10 @@ module ChangeableResources =
                     n
         )
 
-    let createRenderbuffer (runtime : IRuntime) (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<RenderbufferFormat>) =
+    let createRenderbuffer (runtime : IRuntime) (samples : aval<int>) (size : aval<V2i>) (format : aval<RenderbufferFormat>) =
         let mutable current = None
 
-        Mod.custom (fun self ->
+        AVal.custom (fun self ->
             let samples = samples.GetValue self
             let size = size.GetValue self
             let format = format.GetValue self
@@ -57,11 +57,11 @@ module ChangeableResources =
                     n
         )
 
-    let createFramebuffer (runtime : IRuntime) (signature : IFramebufferSignature) (color : Option<IMod<#IFramebufferOutput>>) (depth : Option<IMod<#IFramebufferOutput>>) (stencil : Option<IMod<#IFramebufferOutput>>) =
+    let createFramebuffer (runtime : IRuntime) (signature : IFramebufferSignature) (color : Option<aval<#IFramebufferOutput>>) (depth : Option<aval<#IFramebufferOutput>>) (stencil : Option<aval<#IFramebufferOutput>>) =
         
         let mutable current = None
 
-        Mod.custom (fun self ->
+        AVal.custom (fun self ->
             let color = 
                 match color with
                     | Some c -> Some (c.GetValue self)
@@ -158,20 +158,20 @@ module ChangeableResources =
                     n
         )
 
-    let createFramebufferFromTexture (runtime : IRuntime) (signature : IFramebufferSignature) (color : IMod<IBackendTexture>) (depth : IMod<IRenderbuffer>) =
-        createFramebuffer  runtime signature  ( color |> Mod.map (fun s -> { texture = s; slice = 0; level = 0 } :> IFramebufferOutput) |> Some ) ( Mod.cast depth |> Some )
+    let createFramebufferFromTexture (runtime : IRuntime) (signature : IFramebufferSignature) (color : aval<IBackendTexture>) (depth : aval<IRenderbuffer>) =
+        createFramebuffer  runtime signature  ( color |> AVal.map (fun s -> { texture = s; slice = 0; level = 0 } :> IFramebufferOutput) |> Some ) ( AVal.map unbox depth |> Some )
 
 
 [<AutoOpen>]
 module private RefCountedResources = 
 
-    type IMod<'a> with
+    type IAdaptiveValue<'a> with
         member x.GetValue(c : AdaptiveToken, t : RenderToken) =
             match x with
                 | :? IOutputMod<'a> as x -> x.GetValue(c, t)
                 | _ -> x.GetValue(c)
 
-    type AdaptiveTexture(runtime : IRuntime, format : TextureFormat, samples : int, size : IMod<V2i>) =
+    type AdaptiveTexture(runtime : IRuntime, format : TextureFormat, samples : int, size : aval<V2i>) =
         inherit AbstractOutputMod<ITexture>()
 
         let mutable handle : Option<IBackendTexture> = None
@@ -205,7 +205,7 @@ module private RefCountedResources =
                     handle <- Some tex
                     tex :> ITexture
          
-    type AdaptiveCubeTexture(runtime : IRuntime, format : TextureFormat, samples : int, size : IMod<int>) =
+    type AdaptiveCubeTexture(runtime : IRuntime, format : TextureFormat, samples : int, size : aval<int>) =
         inherit AbstractOutputMod<ITexture>()
 
         let mutable handle : Option<IBackendTexture> = None
@@ -239,7 +239,7 @@ module private RefCountedResources =
                     handle <- Some tex
                     tex :> ITexture
 
-    type AdaptiveRenderbuffer(runtime : IRuntime, format : RenderbufferFormat, samples : int, size : IMod<V2i>) =  
+    type AdaptiveRenderbuffer(runtime : IRuntime, format : RenderbufferFormat, samples : int, size : aval<V2i>) =  
         inherit AbstractOutputMod<IRenderbuffer>()
 
         let mutable handle : Option<IRenderbuffer> = None
@@ -293,13 +293,13 @@ module private RefCountedResources =
             rb :> IFramebufferOutput
 
     type IRuntime with
-        member x.CreateTexture(format : TextureFormat, samples : int, size : IMod<V2i>) =
+        member x.CreateTexture(format : TextureFormat, samples : int, size : aval<V2i>) =
             AdaptiveTexture(x, format, samples, size) :> IOutputMod<ITexture>
 
-        member x.CreateTextureCube(format : TextureFormat, samples : int, size : IMod<int>) =
+        member x.CreateTextureCube(format : TextureFormat, samples : int, size : aval<int>) =
             AdaptiveCubeTexture(x, format, samples, size) :> IOutputMod<ITexture>
 
-        member x.CreateRenderbuffer(format : RenderbufferFormat, samples : int, size : IMod<V2i>) =
+        member x.CreateRenderbuffer(format : RenderbufferFormat, samples : int, size : aval<V2i>) =
             AdaptiveRenderbuffer(x, format, samples, size) :> IOutputMod<IRenderbuffer>
 
         member x.CreateTextureAttachment(texture : IOutputMod<ITexture>, slice : int) =
@@ -310,7 +310,7 @@ module private RefCountedResources =
 
 
 
-    type AdaptiveFramebuffer(runtime : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : IMod<V2i>) =
+    type AdaptiveFramebuffer(runtime : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<V2i>) =
         inherit AbstractOutputMod<IFramebuffer>()
 
         let createAttachment (sem : Symbol) (att : AttachmentSignature) =
@@ -363,7 +363,7 @@ module private RefCountedResources =
             handle <- Some fbo
             fbo
 
-    type AdaptiveFramebufferCube(runtime : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : IMod<int>) =
+    type AdaptiveFramebufferCube(runtime : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<int>) =
         inherit AbstractOutputMod<IFramebuffer[]>()
 
         let store = SymDict.empty
@@ -381,7 +381,7 @@ module private RefCountedResources =
             else
                 let rb = 
                     store.GetOrCreate(sem, fun sem ->
-                        runtime.CreateRenderbuffer(att.format, att.samples, size |> Mod.map(fun x -> V2i(x))) :> IOutputMod
+                        runtime.CreateRenderbuffer(att.format, att.samples, size |> AVal.map(fun x -> V2i(x))) :> IOutputMod
                     ) |> unbox<IOutputMod<IRenderbuffer>>
 
                 runtime.CreateRenderbufferAttachment(rb)
@@ -446,12 +446,6 @@ module private RefCountedResources =
             task.Run(token, t, OutputDescription.ofFramebuffer fbo)
             fbo
 
-        override x.Inputs =
-            seq {
-                yield task :> _
-                yield target :> _
-            }
-
         override x.Create() =
             Log.line "result created"
             target.Acquire()
@@ -472,9 +466,6 @@ module private RefCountedResources =
                 | _ ->
                     failwithf "could not get result for semantic %A as texture" semantic
 
-        override x.Inputs =
-            Seq.singleton (res :> _)
-
         override x.Create() =
             Log.line "texture created"
             res.Acquire()
@@ -492,15 +483,15 @@ module private RefCountedResources =
 type RuntimeFramebufferExtensions private() =
 
     [<Extension>]
-    static member CreateFramebuffer (this : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : IMod<V2i>) : IOutputMod<IFramebuffer> =
+    static member CreateFramebuffer (this : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<V2i>) : IOutputMod<IFramebuffer> =
         AdaptiveFramebuffer(this, signature, textures, size) :> IOutputMod<IFramebuffer>
     
     [<Extension>]
-    static member CreateFramebufferCube (this : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : IMod<int>) : IOutputMod<IFramebuffer[]> =
+    static member CreateFramebufferCube (this : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<int>) : IOutputMod<IFramebuffer[]> =
         AdaptiveFramebufferCube(this, signature, textures, size) :> IOutputMod<IFramebuffer[]>
 
     [<Extension>]
-    static member CreateFramebuffer (this : IRuntime, signature : IFramebufferSignature, size : IMod<V2i>) : IOutputMod<IFramebuffer> =
+    static member CreateFramebuffer (this : IRuntime, signature : IFramebufferSignature, size : aval<V2i>) : IOutputMod<IFramebuffer> =
         let sems =
             Set.ofList [
                 yield! signature.ColorAttachments |> Map.toSeq |> Seq.map snd |> Seq.map fst
@@ -522,6 +513,9 @@ type RuntimeFramebufferExtensions private() =
 type AbstractRenderTask() =
     inherit AdaptiveObject()
 
+
+    let id = newId()
+
     //static let dynamicUniforms = 
     //    Set.ofList [
     //        "ViewTrafo"
@@ -539,27 +533,27 @@ type AbstractRenderTask() =
     let mutable disposed = 0
  
     let runtimeValueCache = Dict.empty
-    let currentOutput = Mod.init { framebuffer = Unchecked.defaultof<_>; images = Map.empty; overrides = Map.empty; viewport = Box2i(V2i.OO, V2i.II) }
+    let currentOutput = AVal.init { framebuffer = Unchecked.defaultof<_>; images = Map.empty; overrides = Map.empty; viewport = Box2i(V2i.OO, V2i.II) }
     let tryGetRuntimeValue (name : string) =
         runtimeValueCache.GetOrCreate(name, fun name ->
             // TODO: different runtime-types
             match Map.tryFind name runtimeUniforms with
                 | Some f -> 
-                    currentOutput |> Mod.map f :> IMod |> Some
+                    currentOutput |> AVal.map f :> IAdaptiveValue |> Some
                 | None -> 
                     None
         )
 
         
     //let hooks : Dictionary<string, DefaultingModTable> = Dictionary.empty
-    //let hook (name : string) (m : IMod) : IMod =
+    //let hook (name : string) (m : IAdaptiveValue) : IAdaptiveValue =
         //if Set.contains name dynamicUniforms then
         //    match hooks.TryGetValue(name) with
         //        | (true, table) -> 
         //            table.Hook m
 
         //        | _ ->
-        //            let tValue = m.GetType().GetInterface(typedefof<IMod<_>>.Name).GetGenericArguments().[0]
+        //            let tValue = m.GetType().GetInterface(typedefof<aval<_>>.Name).GetGenericArguments().[0]
         //            let tTable = typedefof<DefaultingModTable<_>>.MakeGenericType [| tValue |]
         //            let table = Activator.CreateInstance(tTable) |> unbox<DefaultingModTable>
         //            hooks.[name] <- table 
@@ -653,6 +647,7 @@ type AbstractRenderTask() =
         member x.Dispose() = x.Dispose()
 
     interface IRenderTask with
+        member x.Id = id
         member x.FramebufferSignature = x.FramebufferSignature
         member x.Runtime = x.Runtime
         member x.FrameId = frameId
@@ -667,11 +662,12 @@ module RenderTask =
     
     type private EmptyRenderTask private() =
         inherit ConstantObject()
-
+        let id = newId()
         static let instance = new EmptyRenderTask() :> IRenderTask
         static member Instance = instance
 
         interface IRenderTask with
+            member x.Id = id
             member x.FramebufferSignature = None
             member x.Dispose() = ()
             member x.Update(caller,t) = ()
@@ -726,7 +722,7 @@ module RenderTask =
 
 
 
-    type private ModRenderTask(input : IMod<IRenderTask>) =
+    type private ModRenderTask(input : aval<IRenderTask>) =
         inherit AbstractRenderTask()
         let mutable inner : Option<IRenderTask> = None
 
@@ -740,8 +736,9 @@ module RenderTask =
                         | Some oi -> oi.Dispose()
                         | _ -> ()
 
-                    if not (isNull x.Caller) then
-                        ni.AddOutput x.Caller
+                    match x.Caller with
+                    | Some caller -> ni.Outputs.Add caller |> ignore
+                    | None -> ()
 
             inner <- Some ni
             ni
@@ -766,7 +763,7 @@ module RenderTask =
             ni.Run(token, t, fbo)
 
         override x.Release() =
-            input.RemoveOutput x
+            input.Outputs.Remove x |> ignore
             match inner with
                 | Some i -> 
                     i.Dispose()
@@ -825,7 +822,7 @@ module RenderTask =
             this.OutOfDate <- true
 
             // adjust the dependencies
-            for (i,op) in reader.GetOperations(token) |> PDeltaList.toSeq do
+            for (i,op) in reader.GetChanges(token) |> IndexListDelta.toSeq do
                 match op with
                     | Set(t) -> set i t
                     | Remove -> remove i
@@ -863,9 +860,7 @@ module RenderTask =
 
 
         override x.Release() =
-            reader.RemoveOutput this
-            reader.Dispose()
-
+            reader.Outputs.Remove this |> ignore
             for i in tasks do
                 i.Dispose()
             tasks.Clear()
@@ -879,7 +874,7 @@ module RenderTask =
 
         override x.FramebufferSignature = None
         override x.Perform(token, t, fbo) = f.Evaluate (token,(token,t,fbo))
-        override x.Release() = f.RemoveOutput this 
+        override x.Release() = f.Outputs.Remove this |> ignore
         override x.PerformUpdate(token, t) = ()
         override x.Runtime = None
         override x.Use f = lock x f
@@ -970,11 +965,11 @@ module RenderTask =
             | _ ->
                 new BeforeAfterRenderTask(None, Some f, t) :> IRenderTask
 
-    let ofMod (m : IMod<IRenderTask>) : IRenderTask =
+    let ofMod (m : aval<IRenderTask>) : IRenderTask =
         new ModRenderTask(m) :> IRenderTask
 
-    let bind (f : 'a -> IRenderTask) (m : IMod<'a>) : IRenderTask =
-        new ModRenderTask(Mod.map f m) :> IRenderTask
+    let bind (f : 'a -> IRenderTask) (m : aval<'a>) : IRenderTask =
+        new ModRenderTask(AVal.map f m) :> IRenderTask
 
     let ofSeq (s : seq<IRenderTask>) =
         new SequentialRenderTask(Seq.toArray s) :> IRenderTask
@@ -1003,7 +998,7 @@ module RenderTask =
     let getResult (sem : Symbol) (t : IOutputMod<IFramebuffer>) =
         t.GetOutputTexture sem
 
-    let renderSemantics (sem : Set<Symbol>) (size : IMod<V2i>) (task : IRenderTask) =
+    let renderSemantics (sem : Set<Symbol>) (size : aval<V2i>) (task : IRenderTask) =
         let runtime = task.Runtime.Value
         let signature = task.FramebufferSignature.Value
 
@@ -1015,17 +1010,17 @@ module RenderTask =
         let res = new SequentialRenderTask([|clear; task|]) |> renderTo fbo
         sem |> Seq.map (fun k -> k, getResult k res) |> Map.ofSeq
 
-    let renderToColor (size : IMod<V2i>) (task : IRenderTask) =
+    let renderToColor (size : aval<V2i>) (task : IRenderTask) =
         task |> renderSemantics (Set.singleton DefaultSemantic.Colors) size |> Map.find DefaultSemantic.Colors
 
-    let renderToDepth (size : IMod<V2i>) (task : IRenderTask) =
+    let renderToDepth (size : aval<V2i>) (task : IRenderTask) =
         task |> renderSemantics (Set.singleton DefaultSemantic.Depth) size |> Map.find DefaultSemantic.Depth
 
-    let renderToDepthAndStencil (size : IMod<V2i>) (task : IRenderTask) =
+    let renderToDepthAndStencil (size : aval<V2i>) (task : IRenderTask) =
         let map = task |> renderSemantics (Set.singleton DefaultSemantic.Depth) size
         (Map.find DefaultSemantic.Depth map, Map.find DefaultSemantic.Stencil map)
 
-    let renderToColorAndDepth (size : IMod<V2i>) (task : IRenderTask) =
+    let renderToColorAndDepth (size : aval<V2i>) (task : IRenderTask) =
         let map = task |> renderSemantics (Set.ofList [DefaultSemantic.Depth; DefaultSemantic.Colors]) size
         (Map.find DefaultSemantic.Colors map, Map.find DefaultSemantic.Depth map)
 
@@ -1044,11 +1039,11 @@ module ``RenderTask Builder`` =
     type private Result = list<alist<IRenderTask>>
 
     type RenderTaskBuilder() =
-        member x.Bind(m : IMod<'a>, f : 'a -> Result) : Result =
-            [alist.Bind(m, f >> AList.ofList >> AList.concat)]
+        member x.Bind(m : aval<'a>, f : 'a -> Result) : Result =
+            [alist.Bind(m, f >> AList.concat)]
 
         member x.For(s : alist<'a>, f : 'a -> Result): Result =
-            [alist.For(s,f >> AList.ofList >> AList.concat)]
+            [alist.For(s,f >> AList.concat)]
 
         member x.Bind(f : unit -> unit, c : unit -> Result) : Result =
             let task = 
@@ -1069,7 +1064,7 @@ module ``RenderTask Builder`` =
         member x.Bind(l : alist<IRenderTask>, c : unit -> Result) =
             alist.YieldFrom(l)::c()
 
-        member x.Bind(m : IMod<IRenderTask>, c : unit -> Result) =
+        member x.Bind(m : aval<IRenderTask>, c : unit -> Result) =
             let head = m |> RenderTask.ofMod |> alist.Yield
             head::c()
 
@@ -1083,13 +1078,13 @@ module ``RenderTask Builder`` =
             []
 
         member x.Run(l : Result) =
-            let l = AList.concat (AList.ofList l)
+            let l = AList.concat l
             RenderTask.ofAList l
 
 
     let rendertask = RenderTaskBuilder()
 //
-//    let test (renderActive : IMod<bool>) (clear : IMod<IRenderTask>) (render : alist<IRenderTask>) =
+//    let test (renderActive : aval<bool>) (clear : aval<IRenderTask>) (render : alist<IRenderTask>) =
 //        rendertask {
 //            do! RenderTask.log "before clear: %d" 190
 //            do! clear

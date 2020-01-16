@@ -3,7 +3,7 @@
 
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.IO
 open Aardvark.Application
@@ -119,7 +119,7 @@ let quadTexture() =
             |> Sg.shader {
                 do! Shader.environment
                }
-            |> Sg.texture (Symbol.Create "EnvironmentMap") (Mod.constant environment)
+            |> Sg.texture (Symbol.Create "EnvironmentMap") (AVal.constant environment)
 
     let coord =
         Sg.coordinateCross' 3.0
@@ -187,10 +187,10 @@ module ShaderStuff =
                 DefaultSurfaces.trafo |> toEffect
                 fragment |> toEffect
                ]
-            |> Sg.uniform "A" (Mod.constant V3d.IOI)
-            |> Sg.uniform "B" (Mod.constant V3d.OII)
-            |> Sg.uniform "C" (Mod.constant 1.0)
-            |> Sg.diffuseTexture (tex :> ITexture |> Mod.constant)
+            |> Sg.uniform "A" (AVal.constant V3d.IOI)
+            |> Sg.uniform "B" (AVal.constant V3d.OII)
+            |> Sg.uniform "C" (AVal.constant 1.0)
+            |> Sg.diffuseTexture (tex :> ITexture |> AVal.constant)
 
 
 
@@ -217,7 +217,7 @@ let naiveLoD() =
                 for y in -size .. 2.0 .. size do
                     for z in -size .. 2.0 .. size do 
                         yield scene |> Sg.translate x y z 
-                        //yield scene |> Sg.uniform "Urdar" (Mod.constant (M44d.Translation(x,y,z)))
+                        //yield scene |> Sg.uniform "Urdar" (AVal.constant (M44d.Translation(x,y,z)))
         ] |> Sg.ofSeq
 
     let sg = 
@@ -287,20 +287,20 @@ let picking() =
     let win = App.Window
     let cam = CameraView.lookAt (V3d(6,6,6)) V3d.Zero V3d.OOI
     let view = cam |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
-    let proj = win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
+    let proj = win.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
 
     let tree = PickTree.ofSg many
 
     let mutable last = None
 
-    let cam = Mod.map2 (fun view proj -> { cameraView = view; frustum = proj }) view proj
-    let ray = Mod.map2 Camera.pickRay cam App.Mouse.Position
-    let hit = Mod.bind tree.Intersect ray
+    let cam = AVal.map2 (fun view proj -> { cameraView = view; frustum = proj }) view proj
+    let ray = AVal.map2 Camera.pickRay cam App.Mouse.Position
+    let hit = AVal.bind tree.Intersect ray
 
 //    let scopeString (scope : Ag.Scope) =
 //        match Ag.tryGetAttributeValue scope "ModelTrafo" with
-//            | Success (trafo : IMod<Trafo3d>) ->
-//                let t = Mod.force trafo
+//            | Success (trafo : aval<Trafo3d>) ->
+//                let t = AVal.force trafo
 //                sprintf "%A" t.Forward.C3.XYZ
 //            | Error e ->
 //                "no trafo!!!"
@@ -314,7 +314,7 @@ let picking() =
 //    )
 //
 //
-//    hit |> Mod.unsafeRegisterCallbackKeepDisposable (fun hit ->
+//    hit |> AVal.unsafeRegisterCallbackKeepDisposable (fun hit ->
 //        match hit with
 //            | Some hit ->
 //                let (part, point) = hit.Value
@@ -344,7 +344,7 @@ let picking() =
 
 
     let trafo = 
-        hit |> Mod.map (fun hit ->
+        hit |> AVal.map (fun hit ->
             match hit with
                 | Some hit -> hit.Value |> snd |> Trafo3d.Translation
                 | None -> V3d(nan, nan, nan) |> Trafo3d.Translation
@@ -359,24 +359,24 @@ let picking() =
                 DefaultSurfaces.vertexColor    |> toEffect
                 DefaultSurfaces.simpleLighting |> toEffect
                ]
-            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
-            |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
+            |> Sg.viewTrafo (view |> AVal.map CameraView.viewTrafo)
+            |> Sg.projTrafo (proj |> AVal.map Frustum.projTrafo)
 
 
 //    App.Mouse.Move.Values.Add (fun (_,pp) ->
-//        let cam = { cameraView = Mod.force view; frustum = Mod.force proj }
+//        let cam = { cameraView = AVal.force view; frustum = AVal.force proj }
 //        let ray = Camera.pickRay cam pp 
 //
 //        let scopeString (scope : Ag.Scope) =
 //            match Ag.tryGetAttributeValue scope "ModelTrafo" with
-//                | Success (trafo : IMod<Trafo3d>) ->
-//                    let t = Mod.force trafo
+//                | Success (trafo : aval<Trafo3d>) ->
+//                    let t = AVal.force trafo
 //                    sprintf "%A" t.Forward.C3.XYZ
 //                | Error e ->
 //                    "no trafo!!!"
 //            
 //
-//        let res = hit |> Mod.force
+//        let res = hit |> AVal.force
 //        match res with
 //            | Some hit -> 
 //                let scope = hit.Value.Scope
@@ -441,7 +441,7 @@ let frustumMerge() =
 [<Demo>]
 let manymany() =
 
-    let sphere = Sg.sphere 0 (Mod.constant C4b.Red) (Mod.constant 0.2)
+    let sphere = Sg.sphere 0 (AVal.constant C4b.Red) (AVal.constant 0.2)
 
     let controller = 
         controller {
@@ -454,7 +454,7 @@ let manymany() =
             for x in -10.0 .. 2.0 .. 10.0 do 
                 for y in -10.0 .. 2.0 .. 10.0 do
                     for z in -10.0 .. 2.0 .. 10.0 do 
-                        let m = Mod.init (Trafo3d.RotationZ(0.0))
+                        let m = AVal.init (Trafo3d.RotationZ(0.0))
 
                         let t = Trafo3d.Translation(x,y,z)
                         let m = AFun.integrate controller t
@@ -462,7 +462,7 @@ let manymany() =
 
                         yield 
                             sphere |> Sg.trafo m//, m
-                        //yield scene |> Sg.uniform "Urdar" (Mod.constant (M44d.Translation(x,y,z)))
+                        //yield scene |> Sg.uniform "Urdar" (AVal.constant (M44d.Translation(x,y,z)))
         ]
 
         
@@ -483,7 +483,7 @@ let manymany() =
 
     let mutable last = System.Diagnostics.Stopwatch()
     let mutable framecount = 0
-    App.Time |> Mod.unsafeRegisterCallbackKeepDisposable (fun _ -> 
+    App.Time |> AVal.unsafeRegisterCallbackKeepDisposable (fun _ -> 
         framecount <- framecount + 1
         if framecount % 100 = 0 then 
             printfn "fps = %f" (100000.0 / last.Elapsed.TotalMilliseconds) 
@@ -496,7 +496,7 @@ let manymany() =
         //|> Aardvark.Rendering.Optimizer.optimize App.Runtime App.FramebufferSignature
        
 //    let rnd = System.Random()
-//    App.Time |> Mod.unsafeRegisterCallbackKeepDisposable (fun a -> 
+//    App.Time |> AVal.unsafeRegisterCallbackKeepDisposable (fun a -> 
 //        transact (fun () -> 
 //            for m in mods do 
 //                m.Value <- Trafo3d.RotationZ(rnd.NextDouble())
@@ -786,7 +786,7 @@ let test () =
 
     let runtime = app.Runtime :> IRuntime
     let win = app.CreateGameWindow()
-    let ss = runtime.CreateFramebuffer(win.FramebufferSignature,V2i.II |> Mod.constant)
+    let ss = runtime.CreateFramebuffer(win.FramebufferSignature,V2i.II |> AVal.constant)
     
     Log.line "START THING"
     let pool = runtime.CreateGeometryPool( [DefaultSemantic.Positions, typeof<V4f>; DefaultSemantic.Colors, typeof<V4f>] |> Map.ofList )
@@ -809,7 +809,7 @@ let test () =
         for i in 1..10 do (System.GC.Collect(System.Int32.MaxValue, GCCollectionMode.Forced, true); System.GC.WaitForFullGCComplete() |> ignore) 
         Log.line "Collected GC NOW.")
     win.Keyboard.KeyUp(Keys.Space).Values.Add( fun _ -> enabled := false )
-    win.Keyboard.KeyDown(Keys.D).Values.Add( fun _ -> Log.line "- render -"; win.RenderTask.Run(RenderToken.Empty, ss |> Mod.force) )
+    win.Keyboard.KeyDown(Keys.D).Values.Add( fun _ -> Log.line "- render -"; win.RenderTask.Run(RenderToken.Empty, ss |> AVal.force) )
     
 
     async {
@@ -871,24 +871,24 @@ let main argv =
 
     //let projTrafo = 
     //    win.Sizes 
-    //        |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
-    //        |> Mod.map Frustum.projTrafo
+    //        |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
+    //        |> AVal.map Frustum.projTrafo
 
     //let viewTrafo = 
     //    CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
     //        |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
-    //        |> Mod.map CameraView.viewTrafo
+    //        |> AVal.map CameraView.viewTrafo
 
 
 //    let rotor =
 //        let startTime = System.DateTime.Now
-//        win.Time |> Mod.map (fun t ->
+//        win.Time |> AVal.map (fun t ->
 //            let t = (t - startTime).TotalSeconds
 //            Trafo3d.RotationZ (0.5 * t)
 //        )
 
 //    let viewTrafo =
-//        Mod.map2 (*) rotor viewTrafo
+//        AVal.map2 (*) rotor viewTrafo
 
 //    let realObjects = CSet.empty
 
@@ -915,14 +915,14 @@ let main argv =
 //        let call = DrawCallInfo(FaceVertexCount = sphere.IndexArray.Length, InstanceCount = 1)
 //        let sg =
 //            Sg.render IndexedGeometryMode.TriangleList call
-//                |> Sg.vertexAttribute DefaultSemantic.Positions (Mod.init vertices)
-//                |> Sg.vertexAttribute DefaultSemantic.Normals (Mod.init normals)
-//                |> Sg.index (Mod.init index)
+//                |> Sg.vertexAttribute DefaultSemantic.Positions (AVal.init vertices)
+//                |> Sg.vertexAttribute DefaultSemantic.Normals (AVal.init normals)
+//                |> Sg.index (AVal.init index)
 //                |> Sg.effect [effect]
 //                |> Sg.translate pos.X pos.Y pos.Z
 //                |> Sg.viewTrafo viewTrafo
 //                |> Sg.projTrafo projTrafo
-//                //|> Sg.fillMode (Mod.constant FillMode.Line)
+//                //|> Sg.fillMode (AVal.constant FillMode.Line)
 
 
 //        let objects = sg.RenderObjects() |> ASet.toList

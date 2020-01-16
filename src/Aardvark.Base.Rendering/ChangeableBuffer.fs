@@ -6,7 +6,7 @@ open System.Collections.Generic
 open System.Threading
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 module private Mem =
     let inline alloc (size : nativeint) =
@@ -35,13 +35,13 @@ module private Range =
 
 [<CompiledName("ChangeableBuffer")>]
 type cbuffer(sizeInBytes : nativeint, release : cbuffer -> unit) =
-    inherit Mod.AbstractMod<IBuffer>()
+    inherit AVal.AbstractVal<IBuffer>()
 
     let mutable capacity = sizeInBytes
     let mutable ptr = Mem.alloc capacity
     let ptrLock = new ReaderWriterLockSlim()
 
-    let readers = HashSet<CBufferReader>()
+    let readers = System.Collections.Generic.HashSet<CBufferReader>()
 
     let changed (self : cbuffer) (offset : nativeint) (size : nativeint) =
         if size > 0n then
@@ -180,4 +180,4 @@ module CBuffer =
 
     let inline toAdaptiveBuffer (b : cbuffer) = b :> IAdaptiveBuffer
 
-    let inline toMod (b : cbuffer) = b :> IMod<_>
+    let inline toMod (b : cbuffer) = b :> aval<_>

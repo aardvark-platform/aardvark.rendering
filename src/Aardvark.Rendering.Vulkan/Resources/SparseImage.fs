@@ -396,7 +396,7 @@ type BufferTensorExtensions private() =
         )
    
 module SparseTextureImplemetation = 
-    open Aardvark.Base.Incremental
+    open FSharp.Data.Adaptive
 
     type Bind<'a when 'a : unmanaged> = { level : int; slice : int; index : V3i; data : NativeTensor4<'a> }
 
@@ -485,7 +485,7 @@ module SparseTextureImplemetation =
             MVar.take swapResult
 
         let texture =
-            Mod.custom (fun t ->
+            AVal.custom (fun t ->
                 if isDisposed then
                     NullTexture() :> ITexture
                 else
@@ -868,13 +868,13 @@ module SparseTextureImplemetation =
         let mutable frontBricks = Array.zeroCreate 0
 
         img.OnSwap.Add (fun _ ->
-            frontBricks <- lock residentBricks (fun () -> HashSet.toArray residentBricks)
+            frontBricks <- lock residentBricks (fun () -> Aardvark.Base.HashSet.toArray residentBricks)
         )
 
 
 
         let renderResult =
-            img.Texture |> Mod.map (fun t ->
+            img.Texture |> AVal.map (fun t ->
                 let img = unbox<Image> t
                 let size = brickSize
 
@@ -957,14 +957,14 @@ module SparseTextureImplemetation =
 
         let renderer() =
             while true do
-//                Mod.force img.Texture |> ignore
+//                AVal.force img.Texture |> ignore
 //                Log.start "frame %d" count
 //                Log.line "modification: %A" modifications
 //                Log.line "resident: %A" resident
 //                Log.stop()
 //                Thread.Sleep(16)
 
-                let errors = Mod.force renderResult
+                let errors = AVal.force renderResult
 
                 match errors with
                     | [] -> 

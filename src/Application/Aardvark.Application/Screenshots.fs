@@ -2,8 +2,8 @@
 
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Base.Rendering
 open System.Runtime.CompilerServices
 open System.Threading.Tasks
@@ -48,13 +48,13 @@ module Screenshot =
 
     let takeMS (samples : int) (target : IRenderTarget) =
         async {
-            let img = renderToImage samples (Mod.force target.Sizes) target.RenderTask
+            let img = renderToImage samples (AVal.force target.Sizes) target.RenderTask
             return img
         }
 
     let take (target : IRenderTarget) =
         async {
-            let img = renderToImage target.Samples (Mod.force target.Sizes) target.RenderTask
+            let img = renderToImage target.Samples (AVal.force target.Sizes) target.RenderTask
             return img
         }
 
@@ -64,7 +64,7 @@ type RenderTargetExtensions private() =
     
     [<Extension>]
     static member Capture(this : IRenderTarget, samples : int) =
-        Screenshot.renderToImage samples (Mod.force this.Sizes) this.RenderTask
+        Screenshot.renderToImage samples (AVal.force this.Sizes) this.RenderTask
 
     [<Extension>]
     static member Capture(this : IRenderTarget) =

@@ -3,8 +3,8 @@
 open System
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Application
 
 
@@ -14,7 +14,7 @@ module CameraControllers =
     let controlLook (m : IMouse) =
         controller {
             // map the mouse position to a V2i
-            let position = m.Position |> Mod.map (fun p -> p.NormalizedPosition)
+            let position = m.Position |> AVal.map (fun p -> p.NormalizedPosition)
 
             // the down-flag for the left mouse button
             let! d = m.IsDown MouseButtons.Left
@@ -48,7 +48,7 @@ module CameraControllers =
     /// moves the CameraView in its XY-Plane using the middle mouse-button 
     let controlPan (m : IMouse) (speed : float) =
         controller {
-            let position = m.Position |> Mod.map (fun p -> p.Position)
+            let position = m.Position |> AVal.map (fun p -> p.Position)
             let! d = m.IsDown MouseButtons.Middle
 
             if d then
@@ -66,7 +66,7 @@ module CameraControllers =
     /// moves the CameraView in its Z-Axis using the right mouse-button 
     let controlZoom (m : IMouse) (speed : float) =
         controller {
-            let position = m.Position |> Mod.map (fun p -> p.Position)
+            let position = m.Position |> AVal.map (fun p -> p.Position)
             let! d = m.IsDown MouseButtons.Right
 
             if d then
@@ -89,7 +89,7 @@ module CameraControllers =
                 (m.IsDown Keys.D %?  V2i.IO %. V2i.OO)
 
             if move <> V2i.Zero then
-                let! dt = differentiate Mod.time
+                let! dt = differentiate AVal.time
 
                 return fun (cam : CameraView) ->
                     let direction = 
@@ -147,7 +147,7 @@ module CameraControllers =
 
     let controlOrbit (m : IMouse) (center : V3d) =
         controller {
-            let position = m.Position |> Mod.map (fun p -> p.NormalizedPosition)
+            let position = m.Position |> AVal.map (fun p -> p.NormalizedPosition)
             
             let centerCam (cam : CameraView) =
                 let d = Vec.dot cam.Forward (Vec.normalize (center - cam.Location))
@@ -196,7 +196,7 @@ module CameraControllers =
                 else
                     cam
 
-            let! dp = differentiate Mod.time
+            let! dp = differentiate AVal.time
 
             if dp > TimeSpan.Zero then
                 return fun (cam : CameraView) ->
@@ -214,7 +214,7 @@ module CameraControllers =
         }
 
 
-    let flyTo (location : IMod<V3d>) (direction : ModRef<V3d>) = 
+    let flyTo (location : aval<V3d>) (direction : ModRef<V3d>) = 
         controller {
             let! loc = location
             let! dir = direction
@@ -226,7 +226,7 @@ module CameraControllers =
                 let mutable axis = V3d.Zero
                 let mutable deltaAngle = 0.0
                 let mutable accTime = 0.0
-                let! dt = differentiate Mod.time
+                let! dt = differentiate AVal.time
 
                 return fun (cam : CameraView) ->
                     if accTime = 0.0 then
@@ -244,19 +244,19 @@ module CameraControllers =
                         cam.WithLocation(cam.Location + move * rt).WithForward(M44d.Rotation(axis, deltaAngle * rt).TransformDir cam.Forward)
 
                     else
-                        transact (fun () -> Mod.change direction V3d.Zero)
+                        transact (fun () -> AVal.change direction V3d.Zero)
                         cam
 
 
         }
 
 
-    let fly (target : IMod<DateTime * V3d>)  =
+    let fly (target : aval<DateTime * V3d>)  =
         controller {
             let! (_when, _where) = target
 
             if _when > DateTime.Now then
-                let! dt = differentiate Mod.time
+                let! dt = differentiate AVal.time
 
                 return fun (cam : CameraView) ->
                     let off = _where - cam.Location

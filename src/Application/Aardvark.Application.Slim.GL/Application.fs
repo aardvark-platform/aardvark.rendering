@@ -3,7 +3,7 @@ namespace Aardvark.Application.Slim
 open System
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Rendering.GL
 open Aardvark.Application
 
@@ -39,7 +39,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
 //                ctx.CurrentContextHandle <- Some handle
 //                ContextHandle.Current <- Some handle
 
-                using ctx.ResourceLock (fun _ ->
+                Operators.using ctx.ResourceLock (fun _ ->
 
                     Log.startTimed "initializing OpenGL runtime"
 

@@ -1,7 +1,7 @@
 ﻿open System
 open FShade
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Rendering
 open Aardvark.Application
 open Aardvark.Application.Slim
@@ -94,15 +94,15 @@ let main argv =
 
     let initialView = CameraView.LookAt(V3d(3,3,3), V3d.Zero)
     let view = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
-    let perspective = win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 10.0 (float s.X / float s.Y))
+    let perspective = win.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 10.0 (float s.X / float s.Y))
 
     let sg =
         leafs 
             |> Sg.set
             |> Sg.loadAsync win.FramebufferSignature
             |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.vertexColor |> toEffect]
-            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
-            |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo)
+            |> Sg.viewTrafo (view |> AVal.map CameraView.viewTrafo)
+            |> Sg.projTrafo (perspective |> AVal.map Frustum.projTrafo)
 
     let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, sg)
 

@@ -2,7 +2,7 @@ namespace Aardvark.Application.Slim
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Application
 open OpenTK
 open OpenTK.Graphics
@@ -331,7 +331,7 @@ type SimpleWindow(position : V2i, initialSize : V2i)  =
     
     let handle = Factory.Default.CreateNativeWindow(position.X, position.Y, initialSize.X, initialSize.Y, "Aardvark rocks \\o/", GraphicsMode.Default, GameWindowFlags.Default, DisplayDevice.Default)
     
-    let mSize = Mod.init initialSize
+    let mSize = AVal.init initialSize
     
     let eResize = Event<ResizeEventHandler, ResizeEventArgs>()
     let keyboard = new GameWindowIO.Keyboard()
@@ -425,7 +425,7 @@ type SimpleWindow(position : V2i, initialSize : V2i)  =
         with get() = V2i(handle.Size.Width, handle.Size.Height)
         and set (s : V2i) = handle.Size <- System.Drawing.Size(s.X, s.Y)
 
-    member x.Sizes = mSize :> IMod<_>
+    member x.Sizes = mSize :> aval<_>
     member x.Keyboard = keyboard :> IKeyboard
     member x.Mouse = mouse :> IMouse
 

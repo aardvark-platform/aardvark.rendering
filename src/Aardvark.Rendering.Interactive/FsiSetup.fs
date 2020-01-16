@@ -7,7 +7,7 @@ module FsiSetup =
     open System.Threading
 
     open Aardvark.Base
-    open Aardvark.Base.Incremental
+    open FSharp.Data.Adaptive
     open Aardvark.Base.Rendering
     open Aardvark.SceneGraph
     open Aardvark.SceneGraph.Semantics
@@ -36,7 +36,7 @@ module FsiSetup =
             Ag.initialize()
             Aardvark.Base.Ag.unpack <- fun o ->
                     match o with
-                        | :? IMod as o -> o.GetValue()
+                        | :? IAdaptiveValue as o -> o.GetValue()
                         | _ -> o
 
             Aardvark.Init()
@@ -54,7 +54,7 @@ module FsiSetup =
             Ag.initialize()
             Aardvark.Base.Ag.unpack <- fun o ->
                     match o with
-                        | :? IMod as o -> o.GetValue()
+                        | :? IAdaptiveValue as o -> o.GetValue()
                         | _ -> o
 
             Aardvark.Init()

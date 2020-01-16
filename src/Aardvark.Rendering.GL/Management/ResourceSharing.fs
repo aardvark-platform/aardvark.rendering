@@ -8,7 +8,7 @@ open System.Threading
 open System.Collections.Concurrent
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base.ShaderReflection
@@ -25,14 +25,14 @@ module Sharing =
 
         member x.Acquire() =
             if Interlocked.Increment &refCount = 1 then
-                let b = using ctx.ResourceLock (fun _ -> create())
+                let b = Operators.using ctx.ResourceLock (fun _ -> create())
                 x.Handle <- b.Handle
                 x.SizeInBytes <- b.SizeInBytes
 
         member x.Release() =
             if Interlocked.Decrement &refCount = 0 then
                 destroy()
-                using ctx.ResourceLock (fun _ -> ctx.Delete x)
+                Operators.using ctx.ResourceLock (fun _ -> ctx.Delete x)
                 x.Handle <- 0
                 x.SizeInBytes <- 0n
 
@@ -43,7 +43,7 @@ module Sharing =
 
         member x.Acquire() =
             if Interlocked.Increment &refCount = 1 then
-                let b = using ctx.ResourceLock (fun _ -> create())
+                let b = Operators.using ctx.ResourceLock (fun _ -> create())
                 x.IsArray <- b.IsArray
                 x.Handle <- b.Handle
                 x.Dimension <- b.Dimension
@@ -58,7 +58,7 @@ module Sharing =
         member x.Release() =
             if Interlocked.Decrement &refCount = 0 then
                 destroy()
-                using ctx.ResourceLock (fun _ -> ctx.Delete x)
+                Operators.using ctx.ResourceLock (fun _ -> ctx.Delete x)
                 x.Handle <- 0
 
 

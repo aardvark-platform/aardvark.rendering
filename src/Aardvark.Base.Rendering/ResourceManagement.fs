@@ -5,19 +5,19 @@ open System.Threading
 open System.Collections.Generic
 open System.Collections.Concurrent
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
 
 type IOutputMod =
-    inherit IMod
+    inherit IAdaptiveValue
     abstract member Acquire : unit -> unit
     abstract member Release : unit -> unit
     abstract member GetValue : AdaptiveToken * RenderToken -> obj
 
 type IOutputMod<'a> =
-    inherit IMod<'a>
+    inherit aval<'a>
     inherit IOutputMod
     abstract member GetValue : AdaptiveToken * RenderToken -> 'a
 
@@ -50,11 +50,12 @@ type AbstractOutputMod<'a>() =
     member x.GetValue(token : AdaptiveToken) =
         x.GetValue(token, RenderToken.Empty)
 
-    interface IMod with
+    interface IAdaptiveValue with
         member x.IsConstant = false
-        member x.GetValue(c) = x.GetValue(c) :> obj
+        member x.ContentType = typeof<'a>
+        member x.GetValueUntyped(c) = x.GetValue(c) :> obj
 
-    interface IMod<'a> with
+    interface aval<'a> with
         member x.GetValue(c) = x.GetValue(c)
 
     interface IOutputMod with
@@ -129,6 +130,7 @@ type ResourceInfo =
 type IResource =
     inherit IAdaptiveObject
     inherit IDisposable  
+    abstract member Id : int
     abstract member AddRef : unit -> unit
     abstract member RemoveRef : unit -> unit
     abstract member Update : token : AdaptiveToken * rt : RenderToken -> unit
@@ -139,7 +141,7 @@ type IResource =
 
 type IResource<'h> =
     inherit IResource
-    abstract member Handle : IMod<'h>
+    abstract member Handle : aval<'h>
 
 type IResource<'h, 'v when 'v : unmanaged> =
     inherit IResource<'h>
@@ -161,14 +163,11 @@ type Resource<'h, 'v when 'v : unmanaged>(kind : ResourceKind) =
     static let th = typeof<'h>
 
     let mutable current = None
-    let handle = Mod.init Unchecked.defaultof<'h>
+    let handle = AVal.init Unchecked.defaultof<'h>
     let pointer : nativeptr<'v> = NativePtr.alloc 1
 
     let mutable refCount = 0
     let onDispose = new System.Reactive.Subjects.Subject<unit>()
-
-
-
 
     let mutable info = ResourceInfo.Zero
     let lockObj = obj()
@@ -183,7 +182,6 @@ type Resource<'h, 'v when 'v : unmanaged>(kind : ResourceKind) =
         lock x (fun () ->
             x.Outputs.Clear()
             x.OutOfDate <- true
-            handle.UnsafeCache <- Unchecked.defaultof<_>
         )
 
     let setHandle (x : Resource<'h, 'v>) (h : 'h) : unit =
@@ -193,6 +191,8 @@ type Resource<'h, 'v when 'v : unmanaged>(kind : ResourceKind) =
         handle.Level <- max (1 + x.Level) handle.Level
         if not (Unchecked.equals h handle.Value) then
             transact (fun () -> handle.Value <- h)
+
+    let id = newId()
 
     abstract member Create : AdaptiveToken * RenderToken * Option<'h> -> 'h
     abstract member Destroy : 'h -> unit
@@ -253,7 +253,7 @@ type Resource<'h, 'v when 'v : unmanaged>(kind : ResourceKind) =
             x.PerformUpdate(token, rt)
         )
     
-    member x.Handle = handle :> IMod<_>
+    member x.Handle = handle :> aval<_>
 
     member x.Dispose() = x.RemoveRef()
 
@@ -267,6 +267,7 @@ type Resource<'h, 'v when 'v : unmanaged>(kind : ResourceKind) =
         member x.Dispose() = x.RemoveRef()
 
     interface IResource<'h, 'v> with
+        member x.Id = id
         member x.HandleType = th
         member x.IsDisposed = x.IsDisposed
         member x.Kind = kind
@@ -283,7 +284,7 @@ and ResourceCache<'h, 'v when 'v : unmanaged>(parent : Option<ResourceCache<'h, 
         not typeof<'h>.IsPrimitive && not typeof<'h>.IsEnum
 
 
-    let acquireOutput (old : Option<'x>) (m : IMod<'a>) =
+    let acquireOutput (old : Option<'x>) (m : aval<'a>) =
         match old with
             | None ->
                 match m with
@@ -293,7 +294,7 @@ and ResourceCache<'h, 'v when 'v : unmanaged>(parent : Option<ResourceCache<'h, 
             | _ ->
                 ()
 
-    let releaseOutput  (m : IMod<'a>) =
+    let releaseOutput  (m : aval<'a>) =
         match m with
             | :? IOutputMod<'a> as om -> om.Release()
             | _ -> ()
@@ -309,7 +310,7 @@ and ResourceCache<'h, 'v when 'v : unmanaged>(parent : Option<ResourceCache<'h, 
             | _ -> ()
         
 
-    let eval (m : IMod<'a>) (rt : RenderToken) (token : AdaptiveToken) =
+    let eval (m : aval<'a>) (rt : RenderToken) (token : AdaptiveToken) =
         match m with
             | :? IOutputMod<'a> as om -> om.GetValue(token, rt) 
             | _ -> m.GetValue(token)
@@ -352,7 +353,7 @@ and ResourceCache<'h, 'v when 'v : unmanaged>(parent : Option<ResourceCache<'h, 
             | None -> 
                 x.GetOrCreateLocalWrapped(key, create, wrap)
 
-    member x.GetOrCreateWrapped<'a, 'x, 'y when 'y : unmanaged>(dataMod : IMod<'a>, additionalKeys : list<obj>, creator : unit -> ResourceDescription<'a, 'x, 'y>, wrap : Resource<'x, 'y> -> Resource<'h, 'v>) =
+    member x.GetOrCreateWrapped<'a, 'x, 'y when 'y : unmanaged>(dataMod : aval<'a>, additionalKeys : list<obj>, creator : unit -> ResourceDescription<'a, 'x, 'y>, wrap : Resource<'x, 'y> -> Resource<'h, 'v>) =
         let key = (dataMod :> obj)::additionalKeys
         match tryGetParent key with
             | Some v -> 
@@ -462,7 +463,7 @@ and ResourceCache<'h, 'v when 'v : unmanaged>(parent : Option<ResourceCache<'h, 
                     wrap resource
                 )
 
-    member x.GetOrCreate<'a>(dataMod : IMod<'a>, additionalKeys : list<obj>, creator : unit -> ResourceDescription<'a, 'h, 'v>) =
+    member x.GetOrCreate<'a>(dataMod : aval<'a>, additionalKeys : list<obj>, creator : unit -> ResourceDescription<'a, 'h, 'v>) =
         x.GetOrCreateWrapped<'a, 'h, 'v>(dataMod, additionalKeys, creator, id)
 
     member x.GetOrCreateDependent<'a, 'b when 'a : equality and 'b : unmanaged>(res : IResource<'a, 'b>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'h, 'v>) =
@@ -516,7 +517,7 @@ and ResourceCache<'h, 'v when 'v : unmanaged>(parent : Option<ResourceCache<'h, 
 
                         member x.Destroy(h : 'h) =
                             res.RemoveRef()
-                            res.RemoveOutput x
+                            res.Outputs.Remove x |> ignore
                             if ownsHandle then
                                 ownsHandle <- false
                                 desc.delete h
@@ -524,7 +525,7 @@ and ResourceCache<'h, 'v when 'v : unmanaged>(parent : Option<ResourceCache<'h, 
                 )
 
 
-    member x.GetOrCreate<'a>(dataMod : IMod<'a>, creator : unit -> ResourceDescription<'a, 'h, 'v>) =
+    member x.GetOrCreate<'a>(dataMod : aval<'a>, creator : unit -> ResourceDescription<'a, 'h, 'v>) =
         x.GetOrCreate(dataMod, [], creator)
 
     member x.Count = store.Count
@@ -539,7 +540,7 @@ and ResourceCache<'h, 'v when 'v : unmanaged>(parent : Option<ResourceCache<'h, 
 //    inherit ConstantObject()
 //    static let th = typeof<'h>
 
-//    let h = Mod.constant handle
+//    let h = AVal.constant handle
 //    let ptr = NativePtr.alloc 1
 //    do NativePtr.write ptr v
 
@@ -583,20 +584,25 @@ type InputSet(o : IAdaptiveObject) =
         )
 
 type ResourceInputSet() =
-    inherit DirtyTrackingAdaptiveObject<IResource>()
+    inherit AdaptiveObject()
 
+
+
+    let mutable dirty = System.Collections.Generic.HashSet<IResource>()
     let all = ReferenceCountingSet<IResource>()
 
 
     let updateOne (token : AdaptiveToken) (r : IResource) (t : RenderToken) =
         r.Update(token, t)
 
-    let updateDirty (x : ResourceInputSet) (token : AdaptiveToken) (rt : RenderToken) =
+    let updateDirty (token : AdaptiveToken) (rt : RenderToken) =
         let rec run (level : int) (token : AdaptiveToken) (rt : RenderToken) = 
             let dirty = 
-                let d = x.Dirty
-                x.Dirty <- HashSet()
-                d
+                lock all (fun () ->
+                    let d = dirty
+                    dirty <- System.Collections.Generic.HashSet<IResource>()
+                    d
+                )
 
             if level > 4 && dirty.Count > 0 then
                 Log.warn "nested shit"
@@ -610,6 +616,14 @@ type ResourceInputSet() =
 
         run 0 token rt
 
+    override x.InputChangedObject(transaction, object) =
+        match object with
+        | :? IResource as resource ->
+            lock all (fun () -> dirty.Add resource |> ignore)
+        | _ ->
+            ()
+
+
     member x.Count = all.Count
 
     member x.Add (r : IResource) =
@@ -618,7 +632,7 @@ type ResourceInputSet() =
                 if all.Add r then
                     lock r (fun () ->
                         if r.OutOfDate then 
-                            x.Dirty.Add r |> ignore
+                            dirty.Add r |> ignore
                             true
 
                         else 
@@ -632,20 +646,20 @@ type ResourceInputSet() =
         if needsUpdate then
             Log.warn "adding outdated resource: %A" r.Kind
             x.EvaluateAlways AdaptiveToken.Top (fun token -> 
-                updateDirty x token RenderToken.Empty
+                updateDirty token RenderToken.Empty
             )
 
     member x.Remove (r : IResource) =
         lock all (fun () ->
             if all.Remove r then
-                x.Dirty.Remove r |> ignore
+                dirty.Remove r |> ignore
                 lock r (fun () -> r.Outputs.Remove x |> ignore)
         )
 
     member x.Update (token : AdaptiveToken, rt : RenderToken) =
         x.EvaluateAlways token  (fun token -> 
             if x.OutOfDate then
-                updateDirty x token rt
+                updateDirty token rt
         )
 
     member x.Dispose () =
@@ -655,7 +669,7 @@ type ResourceInputSet() =
                     r.Outputs.Remove x |> ignore)
 
             all.Clear()
-            x.Dirty.Clear()
+            dirty.Clear()
         )
 
     interface IDisposable with

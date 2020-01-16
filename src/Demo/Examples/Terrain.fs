@@ -4,12 +4,12 @@
 open System
 open System.IO
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection
 open Aardvark.Rendering.Text
@@ -224,19 +224,19 @@ module Terrain =
         FShade.EffectDebugger.attach()
 
 
-        let bounds = Mod.init (Box3d(V3d(-10.0, -10.0, 0.0), V3d(10.0, 10.0, 3.0)))
+        let bounds = AVal.init (Box3d(V3d(-10.0, -10.0, 0.0), V3d(10.0, 10.0, 3.0)))
 
         let gridCount = V2i(40, 40)
         let cellSize = 1.0 / V2d gridCount
         let sg = 
             grid gridCount
                 |> Sg.ofIndexedGeometry
-                |> Sg.trafo (bounds |> Mod.map (fun b -> Trafo3d.Scale(b.Size) * Trafo3d.Translation(b.Min)))
+                |> Sg.trafo (bounds |> AVal.map (fun b -> Trafo3d.Scale(b.Size) * Trafo3d.Translation(b.Min)))
 
                 |> Sg.fileTexture (Symbol.Create HeightMap) @"C:\Users\schorsch\Desktop\ps_height_4k.png" true
                 |> Sg.fileTexture DefaultSemantic.DiffuseColorTexture @"C:\Users\schorsch\Desktop\ps_texture_4k.png" true
 
-                |> Sg.uniform "CellSize" (Mod.constant cellSize)
+                |> Sg.uniform "CellSize" (AVal.constant cellSize)
 
                 |> Sg.shader {
                     do! Shader.heightVertex

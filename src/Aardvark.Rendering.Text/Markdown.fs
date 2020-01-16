@@ -2,7 +2,7 @@
 
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open CommonMark
 open CommonMark.Syntax
@@ -487,7 +487,7 @@ module Markdown =
 [<AutoOpen>]
 module ``Markdown Sg Extensions`` =
     module Sg =
-        let markdown (config : MarkdownConfig) (code : IMod<string>) =
+        let markdown (config : MarkdownConfig) (code : aval<string>) =
             code
-                |> Mod.map (Markdown.layout config)
+                |> AVal.map (Markdown.layout config)
                 |> Sg.shapeWithBackground (C4b(255uy, 255uy, 255uy, 200uy)) Border2d.None

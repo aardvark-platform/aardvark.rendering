@@ -15,6 +15,7 @@
   <ItemGroup>
     <Compile Include="RunningMean.fs" />
     <Compile Include="DefaultSemantic.fs" />
+    <Compile Include="ReferenceCountingSet.fs" />
     <Compile Include="Utilities\ColoredLock.fs" />
     <Compile Include="Utilities\PrimitiveValueConverter.fs" />
     <Compile Include="Utilities\GPUVendor.fs" />

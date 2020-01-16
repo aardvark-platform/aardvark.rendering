@@ -3,7 +3,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
@@ -418,7 +418,7 @@ module Playground =
         let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
         let perspective = 
             win.Sizes 
-              |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
+              |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
 
 
         let viewTrafo = DefaultCameraController.control win.Mouse win.Keyboard win.Time view
@@ -446,8 +446,8 @@ module Playground =
                     DefaultSurfaces.simpleLighting |> toEffect
                   ]
                |> Sg.diffuseFileTexture' @"E:\Development\WorkDirectory\DataSVN\pattern.jpg" true
-               |> Sg.viewTrafo (viewTrafo   |> Mod.map CameraView.viewTrafo )
-               |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
+               |> Sg.viewTrafo (viewTrafo   |> AVal.map CameraView.viewTrafo )
+               |> Sg.projTrafo (perspective |> AVal.map Frustum.projTrafo    )
 
         let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, sg.RenderObjects())
 
@@ -465,7 +465,7 @@ module Playground =
         let view = CameraView.LookAt(V3d(0.0, -2.0, 0.0), V3d.Zero, V3d.OOI)
         let perspective = 
             win.Sizes 
-              |> Mod.map (fun s -> Frustum.perspective 120.0 0.1 10.0 (float s.X / float s.Y))
+              |> AVal.map (fun s -> Frustum.perspective 120.0 0.1 10.0 (float s.X / float s.Y))
 
 
         let viewTrafo = DefaultCameraController.control win.Mouse win.Keyboard win.Time view
@@ -487,7 +487,7 @@ module Playground =
                 |> PixImageCube.toTexture true
 
         let envCube = 
-            envCubePix |> Mod.constant
+            envCubePix |> AVal.constant
 
         let ctx = app.Runtime.Context
 
@@ -502,8 +502,8 @@ module Playground =
 
         let fullscreenQuad =
             Sg.draw IndexedGeometryMode.TriangleStrip
-                |> Sg.vertexAttribute DefaultSemantic.Positions (Mod.constant [|V3f(-1.0,-1.0,1.0); V3f(1.0,-1.0,1.0); V3f(-1.0,1.0,1.0);V3f(1.0,1.0,1.0) |])
-                |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (Mod.constant [|V2f.OO; V2f.IO; V2f.OI; V2f.II|])
+                |> Sg.vertexAttribute DefaultSemantic.Positions (AVal.constant [|V3f(-1.0,-1.0,1.0); V3f(1.0,-1.0,1.0); V3f(-1.0,1.0,1.0);V3f(1.0,1.0,1.0) |])
+                |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (AVal.constant [|V2f.OO; V2f.IO; V2f.OI; V2f.II|])
 
         let envSg =
             fullscreenQuad
@@ -513,15 +513,15 @@ module Playground =
 
         let cross =
             Sg.draw IndexedGeometryMode.PointList
-                |> Sg.vertexAttribute DefaultSemantic.Positions (Mod.constant [|V3f.OOO; V3f.IOO; V3f.OIO; V3f.OOI|])
-                |> Sg.vertexAttribute DefaultSemantic.Colors (Mod.constant [|C4b.White; C4b.Red; C4b.Green; C4b.Blue|])
+                |> Sg.vertexAttribute DefaultSemantic.Positions (AVal.constant [|V3f.OOO; V3f.IOO; V3f.OIO; V3f.OOI|])
+                |> Sg.vertexAttribute DefaultSemantic.Colors (AVal.constant [|C4b.White; C4b.Red; C4b.Green; C4b.Blue|])
                 |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.pointSprite |> toEffect; DefaultSurfaces.vertexColor |> toEffect; DefaultSurfaces.pointSpriteFragment |> toEffect]
-                |> Sg.uniform "PointSize" (Mod.constant 20.0)
+                |> Sg.uniform "PointSize" (AVal.constant 20.0)
         let sg = 
             Sg.group' [ cross; envSg ]
-                |> Sg.viewTrafo (viewTrafo |> Mod.map CameraView.viewTrafo)
-                |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo)
-                //|> Sg.depthTest (Mod.constant DepthTestMode.None)
+                |> Sg.viewTrafo (viewTrafo |> AVal.map CameraView.viewTrafo)
+                |> Sg.projTrafo (perspective |> AVal.map Frustum.projTrafo)
+                //|> Sg.depthTest (AVal.constant DepthTestMode.None)
 
         let task = app.Runtime.CompileRender(win.FramebufferSignature, sg)
 
@@ -539,7 +539,7 @@ module Playground =
         let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
         let perspective = 
             win.Sizes 
-              |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 10.0 (float s.X / float s.Y))
+              |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 10.0 (float s.X / float s.Y))
 
 
         let viewTrafo = DefaultCameraController.control win.Mouse win.Keyboard win.Time view
@@ -576,7 +576,7 @@ module Playground =
         async {
             do! Async.SwitchToNewThread()
             while true do
-                if Mod.force add then
+                if AVal.force add then
                     let g = randomPoints 10
                     transact (fun () ->
                         lock lockObj (fun () -> geometries.Add g |> ignore)
@@ -588,7 +588,7 @@ module Playground =
         async {
             do! Async.SwitchToNewThread()
             while true do
-                if Mod.force rem then
+                if AVal.force rem then
                     if geometries.Count > 0 then
                         transact (fun () ->
                             lock lockObj (fun () -> 
@@ -627,13 +627,13 @@ module Playground =
                     DefaultSurfaces.trafo |> toEffect                  
                     DefaultSurfaces.vertexColor |> toEffect 
                     ]
-                |> Sg.depthTest (Mod.constant DepthTestMode.None)
-                |> Sg.blendMode (Mod.constant blendMode)
-                // viewTrafo () creates camera controls and returns IMod<ICameraView> which we project to its view trafo component by using CameraView.viewTrafo
-                |> Sg.viewTrafo (viewTrafo |> Mod.map CameraView.viewTrafo ) 
+                |> Sg.depthTest (AVal.constant DepthTestMode.None)
+                |> Sg.blendMode (AVal.constant blendMode)
+                // viewTrafo () creates camera controls and returns aval<ICameraView> which we project to its view trafo component by using CameraView.viewTrafo
+                |> Sg.viewTrafo (viewTrafo |> AVal.map CameraView.viewTrafo ) 
                 // perspective () connects a proj trafo to the current main window (in order to take account for aspect ratio when creating the matrices.
-                // Again, perspective() returns IMod<Frustum> which we project to its matrix by mapping ofer Frustum.projTrafo.
-                |> Sg.projTrafo (perspective  |> Mod.map Frustum.projTrafo    )
+                // Again, perspective() returns aval<Frustum> which we project to its matrix by mapping ofer Frustum.projTrafo.
+                |> Sg.projTrafo (perspective  |> AVal.map Frustum.projTrafo    )
                 //|> Sg.normalizeAdaptive
 
         let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, final)
@@ -655,7 +655,7 @@ module Playground =
         let view = CameraView.LookAt(V3d(10.0,10.0,10.0), V3d(0,0,0), V3d.OOI)
         let perspective = 
             win.Sizes 
-              |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
+              |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
 
 
         let viewTrafo = DefaultCameraController.control win.Mouse win.Keyboard win.Time view
@@ -685,7 +685,7 @@ module Playground =
                             yield { bounds = bounds; levels = 3; createLevel = fun level -> randomPoints bounds level ((1 <<< level)*5) }
             }
 
-        let getLodRepr (vt : IMod<CameraView>) (proj : IMod<Frustum>) (g : Geometry) : IMod<IndexedGeometry> =
+        let getLodRepr (vt : aval<CameraView>) (proj : aval<Frustum>) (g : Geometry) : aval<IndexedGeometry> =
             let mutable current = None
             adaptive  {
                 let! vt = vt
@@ -722,11 +722,11 @@ module Playground =
                     DefaultSurfaces.trafo |> toEffect                  
                     DefaultSurfaces.vertexColor |> toEffect 
                     ]
-                // viewTrafo () creates camera controls and returns IMod<ICameraView> which we project to its view trafo component by using CameraView.viewTrafo
-                |> Sg.viewTrafo (viewTrafo |> Mod.map CameraView.viewTrafo ) 
+                // viewTrafo () creates camera controls and returns aval<ICameraView> which we project to its view trafo component by using CameraView.viewTrafo
+                |> Sg.viewTrafo (viewTrafo |> AVal.map CameraView.viewTrafo ) 
                 // perspective () connects a proj trafo to the current main window (in order to take account for aspect ratio when creating the matrices.
-                // Again, perspective() returns IMod<Frustum> which we project to its matrix by mapping ofer Frustum.projTrafo.
-                |> Sg.projTrafo (perspective  |> Mod.map Frustum.projTrafo    )
+                // Again, perspective() returns aval<Frustum> which we project to its matrix by mapping ofer Frustum.projTrafo.
+                |> Sg.projTrafo (perspective  |> AVal.map Frustum.projTrafo    )
                 //|> Sg.normalizeAdaptive
 
         let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, final)

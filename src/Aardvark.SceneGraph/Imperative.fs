@@ -9,30 +9,30 @@ open System.Collections.Generic
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open TrafoOperators
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 type AirState =
     {
-        isActive            : IMod<bool>
-        drawCallInfos       : IMod<list<DrawCallInfo>>
+        isActive            : aval<bool>
+        drawCallInfos       : aval<list<DrawCallInfo>>
         mode                : IndexedGeometryMode
         surface             : Surface
 
-        depthTest           : IMod<DepthTestMode>
-        depthBias           : IMod<DepthBiasState>
-        cullMode            : IMod<CullMode>
-        frontFace           : IMod<WindingOrder>
-        blendMode           : IMod<BlendMode>
-        fillMode            : IMod<FillMode>
-        stencilMode         : IMod<StencilMode>
+        depthTest           : aval<DepthTestMode>
+        depthBias           : aval<DepthBiasState>
+        cullMode            : aval<CullMode>
+        frontFace           : aval<WindingOrder>
+        blendMode           : aval<BlendMode>
+        fillMode            : aval<FillMode>
+        stencilMode         : aval<StencilMode>
         
         indices             : Option<BufferView>
-        indirect            : Option<IMod<IIndirectBuffer>>
+        indirect            : Option<aval<IIndirectBuffer>>
         instanceAttributes  : Map<Symbol, BufferView>
         vertexAttributes    : Map<Symbol, BufferView>
         
-        uniforms            : Map<Symbol, IMod>
-        trafos              : list<IMod<Trafo3d>>
+        uniforms            : Map<Symbol, IAdaptiveValue>
+        trafos              : list<aval<Trafo3d>>
 
         writeBuffers        : Option<Set<Symbol>>
 
@@ -137,7 +137,7 @@ module AirState =
             fillMode            = ro.FillMode
             stencilMode         = ro.StencilMode
                   
-            indirect            = if isNull ro.IndirectBuffer then None else Some ro.IndirectBuffer
+            indirect            = if isNull (ro.IndirectBuffer :> obj) then None else Some ro.IndirectBuffer
             indices             = ro.Indices
             instanceAttributes  = Map.empty
             vertexAttributes    = Map.empty
@@ -183,7 +183,7 @@ type private AirAttributeProvider(local : Map<Symbol, BufferView>, inh : IAttrib
         member x.All = Seq.empty
         member x.Dispose() = ()
 
-type private AirUniformProvider(local : Map<Symbol, IMod>, trafos : list<IMod<Trafo3d>>, inh : IUniformProvider) =
+type private AirUniformProvider(local : Map<Symbol, IAdaptiveValue>, trafos : list<aval<Trafo3d>>, inh : IUniformProvider) =
     static let mt = Symbol.Create "ModelTrafo"
     let model = lazy (Aardvark.SceneGraph.Semantics.TrafoSemantics.flattenStack trafos)
 
@@ -192,7 +192,7 @@ type private AirUniformProvider(local : Map<Symbol, IMod>, trafos : list<IMod<Tr
     interface IUniformProvider with
         member x.TryGetUniform(scope, sem) =
             if sem = mt then 
-                model.Value :> IMod |> Some
+                model.Value :> IAdaptiveValue |> Some
             else
                 match Map.tryFind sem local with
                     | Some u -> Some u
@@ -215,13 +215,13 @@ type Air private() =
 
                 ro.IsActive <- state.isActive
 
-                match state.drawCallInfos with
+                match state.drawCallInfos :> obj with
                     | null -> 
                         match state.indirect with
                             | Some b -> ro.IndirectBuffer <- b
                             | None -> failwith "sadasdas"
-                    | infos ->
-                        ro.DrawCallInfos <- infos
+                    | _ ->
+                        ro.DrawCallInfos <- state.drawCallInfos
 
                 ro.Mode <- state.mode
                 ro.Surface <- state.surface
@@ -249,44 +249,44 @@ type Air private() =
     static member BindVertexBuffer(slot : Symbol, view : BufferView) =
         modify (fun s -> { s with vertexAttributes = Map.add slot view s.vertexAttributes })
 
-    static member BindVertexBuffer(slot : Symbol, buffer : IMod<IBuffer>, elementType : Type, offset : int, stride : int) =
+    static member BindVertexBuffer(slot : Symbol, buffer : aval<IBuffer>, elementType : Type, offset : int, stride : int) =
         let view = BufferView(buffer, elementType, offset, stride)
         Air.BindVertexBuffer(slot, view)
 
-    static member BindVertexBuffer(slot : Symbol, buffer : IMod<IBuffer>, elementType : Type, offset : int) =
+    static member BindVertexBuffer(slot : Symbol, buffer : aval<IBuffer>, elementType : Type, offset : int) =
         let view = BufferView(buffer, elementType, offset)
         Air.BindVertexBuffer(slot, view)
 
-    static member BindVertexBuffer(slot : Symbol, buffer : IMod<IBuffer>, elementType : Type) =
+    static member BindVertexBuffer(slot : Symbol, buffer : aval<IBuffer>, elementType : Type) =
         let view = BufferView(buffer, elementType)
         Air.BindVertexBuffer(slot, view)
 
-    static member BindVertexBuffer(slot : Symbol, buffer : IMod<Array>, elementType : Type) =
-        let view = BufferView(buffer |> Mod.map (fun d -> d |> ArrayBuffer :> IBuffer), elementType)
+    static member BindVertexBuffer(slot : Symbol, buffer : aval<Array>, elementType : Type) =
+        let view = BufferView(buffer |> AVal.map (fun d -> d |> ArrayBuffer :> IBuffer), elementType)
         Air.BindVertexBuffer(slot, view)
 
-    static member BindVertexBuffer(slot : Symbol, buffer : IMod<'a[]>) =
-        let view = BufferView(buffer |> Mod.map (fun d -> d |> ArrayBuffer :> IBuffer), typeof<'a>)
+    static member BindVertexBuffer(slot : Symbol, buffer : aval<'a[]>) =
+        let view = BufferView(buffer |> AVal.map (fun d -> d |> ArrayBuffer :> IBuffer), typeof<'a>)
         Air.BindVertexBuffer(slot, view)
 
     static member BindVertexBuffer(slot : Symbol, buffer : IBuffer, elementType : Type, offset : int, stride : int) =
-        let view = BufferView(Mod.constant buffer, elementType, offset, stride)
+        let view = BufferView(AVal.constant buffer, elementType, offset, stride)
         Air.BindVertexBuffer(slot, view)
 
     static member BindVertexBuffer(slot : Symbol, buffer : IBuffer, elementType : Type, offset : int) =
-        let view = BufferView(Mod.constant buffer, elementType, offset)
+        let view = BufferView(AVal.constant buffer, elementType, offset)
         Air.BindVertexBuffer(slot, view)
 
     static member BindVertexBuffer(slot : Symbol, buffer : IBuffer, elementType : Type) =
-        let view = BufferView(Mod.constant buffer, elementType)
+        let view = BufferView(AVal.constant buffer, elementType)
         Air.BindVertexBuffer(slot, view)
 
     static member BindVertexBuffer(slot : Symbol, buffer : Array) =
-        let view = BufferView(buffer |> ArrayBuffer :> IBuffer |> Mod.constant, buffer.GetType().GetElementType())
+        let view = BufferView(buffer |> ArrayBuffer :> IBuffer |> AVal.constant, buffer.GetType().GetElementType())
         Air.BindVertexBuffer(slot, view)
 
     static member BindVertexBuffer(slot : Symbol, buffer : 'a[]) =
-        let view = BufferView(buffer |> ArrayBuffer :> IBuffer |> Mod.constant, typeof<'a>)
+        let view = BufferView(buffer |> ArrayBuffer :> IBuffer |> AVal.constant, typeof<'a>)
         Air.BindVertexBuffer(slot, view)
 
     static member BindVertexBuffers (buffers : list<Symbol * BufferView>) =
@@ -302,7 +302,7 @@ type Air private() =
         modify (fun s ->
             let mutable b = s.vertexAttributes
             for (sem, v) in buffers do
-                let view = BufferView(v |> ArrayBuffer :> IBuffer |> Mod.constant, v.GetType().GetElementType())
+                let view = BufferView(v |> ArrayBuffer :> IBuffer |> AVal.constant, v.GetType().GetElementType())
                 b <- Map.add sem view b
 
             { s with vertexAttributes = b }
@@ -318,44 +318,44 @@ type Air private() =
     static member BindInstanceBuffer(slot : Symbol, view : BufferView) =
         modify (fun s -> { s with instanceAttributes = Map.add slot view s.instanceAttributes })
 
-    static member BindInstanceBuffer(slot : Symbol, buffer : IMod<IBuffer>, elementType : Type, offset : int, stride : int) =
+    static member BindInstanceBuffer(slot : Symbol, buffer : aval<IBuffer>, elementType : Type, offset : int, stride : int) =
         let view = BufferView(buffer, elementType, offset, stride)
         Air.BindInstanceBuffer(slot, view)
 
-    static member BindInstanceBuffer(slot : Symbol, buffer : IMod<IBuffer>, elementType : Type, offset : int) =
+    static member BindInstanceBuffer(slot : Symbol, buffer : aval<IBuffer>, elementType : Type, offset : int) =
         let view = BufferView(buffer, elementType, offset)
         Air.BindInstanceBuffer(slot, view)
 
-    static member BindInstanceBuffer(slot : Symbol, buffer : IMod<IBuffer>, elementType : Type) =
+    static member BindInstanceBuffer(slot : Symbol, buffer : aval<IBuffer>, elementType : Type) =
         let view = BufferView(buffer, elementType)
         Air.BindInstanceBuffer(slot, view)
 
-    static member BindInstanceBuffer(slot : Symbol, buffer : IMod<Array>, elementType : Type) =
-        let view = BufferView(buffer |> Mod.map (fun d -> d |> ArrayBuffer :> IBuffer), elementType)
+    static member BindInstanceBuffer(slot : Symbol, buffer : aval<Array>, elementType : Type) =
+        let view = BufferView(buffer |> AVal.map (fun d -> d |> ArrayBuffer :> IBuffer), elementType)
         Air.BindInstanceBuffer(slot, view)
 
-    static member BindInstanceBuffer(slot : Symbol, buffer : IMod<'a[]>) =
-        let view = BufferView(buffer |> Mod.map (fun d -> d |> ArrayBuffer :> IBuffer), typeof<'a>)
+    static member BindInstanceBuffer(slot : Symbol, buffer : aval<'a[]>) =
+        let view = BufferView(buffer |> AVal.map (fun d -> d |> ArrayBuffer :> IBuffer), typeof<'a>)
         Air.BindInstanceBuffer(slot, view)
 
     static member BindInstanceBuffer(slot : Symbol, buffer : IBuffer, elementType : Type, offset : int, stride : int) =
-        let view = BufferView(Mod.constant buffer, elementType, offset, stride)
+        let view = BufferView(AVal.constant buffer, elementType, offset, stride)
         Air.BindInstanceBuffer(slot, view)
 
     static member BindInstanceBuffer(slot : Symbol, buffer : IBuffer, elementType : Type, offset : int) =
-        let view = BufferView(Mod.constant buffer, elementType, offset)
+        let view = BufferView(AVal.constant buffer, elementType, offset)
         Air.BindInstanceBuffer(slot, view)
 
     static member BindInstanceBuffer(slot : Symbol, buffer : IBuffer, elementType : Type) =
-        let view = BufferView(Mod.constant buffer, elementType)
+        let view = BufferView(AVal.constant buffer, elementType)
         Air.BindInstanceBuffer(slot, view)
 
     static member BindInstanceBuffer(slot : Symbol, buffer : Array) =
-        let view = BufferView(buffer |> ArrayBuffer :> IBuffer |> Mod.constant, buffer.GetType().GetElementType())
+        let view = BufferView(buffer |> ArrayBuffer :> IBuffer |> AVal.constant, buffer.GetType().GetElementType())
         Air.BindInstanceBuffer(slot, view)
 
     static member BindInstanceBuffer(slot : Symbol, buffer : 'a[]) =
-        let view = BufferView(buffer |> ArrayBuffer :> IBuffer |> Mod.constant, typeof<'a>)
+        let view = BufferView(buffer |> ArrayBuffer :> IBuffer |> AVal.constant, typeof<'a>)
         Air.BindInstanceBuffer(slot, view)
 
     static member BindInstanceBuffers (buffers : list<Symbol * BufferView>) =
@@ -371,7 +371,7 @@ type Air private() =
         modify (fun s ->
             let mutable b = s.instanceAttributes
             for (sem, v) in buffers do
-                let view = BufferView(v |> ArrayBuffer :> IBuffer |> Mod.constant, v.GetType().GetElementType())
+                let view = BufferView(v |> ArrayBuffer :> IBuffer |> AVal.constant, v.GetType().GetElementType())
                 b <- Map.add sem view b
 
             { s with instanceAttributes = b }
@@ -389,28 +389,28 @@ type Air private() =
         if isNull index then
             modify (fun s -> { s with indices = None })
         else
-            modify (fun s -> { s with indices = BufferView(Mod.constant (ArrayBuffer index :> IBuffer), typeof<'a>) |> Some })
+            modify (fun s -> { s with indices = BufferView(AVal.constant (ArrayBuffer index :> IBuffer), typeof<'a>) |> Some })
 
 
     // ================================================================================================================
     // Uniforms
     // ================================================================================================================
-    static member BindUniform(sem : string, value : IMod) =
+    static member BindUniform(sem : string, value : IAdaptiveValue) =
         modify (fun s -> { s with uniforms = Map.add (Symbol.Create sem) value s.uniforms })
 
-    static member BindUniform(sem : string, value : IMod<'a>) =
-        modify (fun s -> { s with uniforms = Map.add (Symbol.Create sem) (value :> IMod) s.uniforms })
+    static member BindUniform(sem : string, value : aval<'a>) =
+        modify (fun s -> { s with uniforms = Map.add (Symbol.Create sem) (value :> IAdaptiveValue) s.uniforms })
 
-    static member BindUniform(sem : Symbol, value : IMod) =
+    static member BindUniform(sem : Symbol, value : IAdaptiveValue) =
         modify (fun s -> { s with uniforms = Map.add sem value s.uniforms })
 
-    static member BindUniform(sem : Symbol, value : IMod<'a>) =
-        modify (fun s -> { s with uniforms = Map.add sem (value :> IMod) s.uniforms })
+    static member BindUniform(sem : Symbol, value : aval<'a>) =
+        modify (fun s -> { s with uniforms = Map.add sem (value :> IAdaptiveValue) s.uniforms })
 
     static member BindUniform(sem : Symbol, value : 'a) =
-        modify (fun s -> { s with uniforms = Map.add sem (Mod.constant value :> IMod) s.uniforms })
+        modify (fun s -> { s with uniforms = Map.add sem (AVal.constant value :> IAdaptiveValue) s.uniforms })
 
-    static member BindUniforms(values : list<Symbol * IMod>) =
+    static member BindUniforms(values : list<Symbol * IAdaptiveValue>) =
         modify (fun s -> 
             let mutable uniforms = s.uniforms
 
@@ -430,8 +430,8 @@ type Air private() =
                     if isNull u then typeof<int>
                     else u.GetType()
 
-                let constantType = typedefof<ConstantMod<_>>.MakeGenericType [|t|]
-                let m = Activator.CreateInstance(constantType, [|u|]) |> unbox<IMod>
+                let constantType = typedefof<ConstantVal<_>>.MakeGenericType [|t|]
+                let m = Activator.CreateInstance(constantType, [|u|]) |> unbox<IAdaptiveValue>
 
                 uniforms <- Map.add sem m uniforms
 
@@ -439,7 +439,7 @@ type Air private() =
             { s with uniforms = uniforms }
         )
 
-    static member BindUniforms(values : list<string * IMod>) =
+    static member BindUniforms(values : list<string * IAdaptiveValue>) =
         modify (fun s -> 
             let mutable uniforms = s.uniforms
 
@@ -459,8 +459,8 @@ type Air private() =
                     if isNull u then typeof<int>
                     else u.GetType()
 
-                let constantType = typedefof<ConstantMod<_>>.MakeGenericType [|t|]
-                let m = Activator.CreateInstance(constantType, [|u|]) |> unbox<IMod>
+                let constantType = typedefof<ConstantVal<_>>.MakeGenericType [|t|]
+                let m = Activator.CreateInstance(constantType, [|u|]) |> unbox<IAdaptiveValue>
 
                 uniforms <- Map.add (Symbol.Create sem) m uniforms
 
@@ -470,34 +470,34 @@ type Air private() =
 
 
     static member BindTexture(sem : Symbol, value : ITexture) =
-        modify (fun s -> { s with uniforms = Map.add sem (Mod.constant value :> IMod) s.uniforms })
+        modify (fun s -> { s with uniforms = Map.add sem (AVal.constant value :> IAdaptiveValue) s.uniforms })
 
     static member BindTexture(sem : Symbol, value : ITexture[]) =
-        modify (fun s -> { s with uniforms = Map.add sem (Mod.constant value :> IMod) s.uniforms })
+        modify (fun s -> { s with uniforms = Map.add sem (AVal.constant value :> IAdaptiveValue) s.uniforms })
 
     static member BindTexture(sem : Symbol, file : string, config : TextureParams) =
         let value = FileTexture(file, config) :> ITexture
-        modify (fun s -> { s with uniforms = Map.add sem (Mod.constant value :> IMod) s.uniforms })
+        modify (fun s -> { s with uniforms = Map.add sem (AVal.constant value :> IAdaptiveValue) s.uniforms })
 
     static member BindTexture(sem : Symbol, file : string, wantMipMaps : bool) =
         let value = FileTexture(file, wantMipMaps) :> ITexture
-        modify (fun s -> { s with uniforms = Map.add sem (Mod.constant value :> IMod) s.uniforms })
+        modify (fun s -> { s with uniforms = Map.add sem (AVal.constant value :> IAdaptiveValue) s.uniforms })
 
     static member BindTexture(sem : Symbol, file : string) =
         let value = FileTexture(file, true) :> ITexture
-        modify (fun s -> { s with uniforms = Map.add sem (Mod.constant value :> IMod) s.uniforms })
+        modify (fun s -> { s with uniforms = Map.add sem (AVal.constant value :> IAdaptiveValue) s.uniforms })
 
 
 
-    static member PushTrafo (t : IMod<Trafo3d>) =
+    static member PushTrafo (t : aval<Trafo3d>) =
         modify (fun s -> { s with trafos = t::s.trafos })
 
     static member PushTrafo (t : Trafo3d) =
-        modify (fun s -> { s with trafos = (Mod.constant t)::s.trafos })
+        modify (fun s -> { s with trafos = (AVal.constant t)::s.trafos })
 
 
     static member PushScale (scale : float) =
-        modify (fun s -> { s with trafos = (Mod.constant (Trafo3d.Scale scale))::s.trafos })
+        modify (fun s -> { s with trafos = (AVal.constant (Trafo3d.Scale scale))::s.trafos })
 
 
     static member PopTrafo () =
@@ -521,48 +521,48 @@ type Air private() =
     // ================================================================================================================
     // DepthTest
     // ================================================================================================================
-    static member DepthTest(mode : IMod<DepthTestMode>) =
+    static member DepthTest(mode : aval<DepthTestMode>) =
         modify (fun s -> { s with depthTest = mode })
 
     static member DepthTest(mode : DepthTestMode) =
-        modify (fun s -> { s with depthTest = Mod.constant mode })
+        modify (fun s -> { s with depthTest = AVal.constant mode })
 
 
     // ================================================================================================================
     // CullMode
     // ================================================================================================================
-    static member CullMode(mode : IMod<CullMode>) =
+    static member CullMode(mode : aval<CullMode>) =
         modify (fun s -> { s with cullMode = mode })
 
     static member CullMode(mode : CullMode) =
-        modify (fun s -> { s with cullMode = Mod.constant mode })
+        modify (fun s -> { s with cullMode = AVal.constant mode })
 
     // ================================================================================================================
     // BlendMode
     // ================================================================================================================
-    static member BlendMode(mode : IMod<BlendMode>) =
+    static member BlendMode(mode : aval<BlendMode>) =
         modify (fun s -> { s with blendMode = mode })
 
     static member BlendMode(mode : BlendMode) =
-        modify (fun s -> { s with blendMode = Mod.constant mode })
+        modify (fun s -> { s with blendMode = AVal.constant mode })
 
     // ================================================================================================================
     // FillMode
     // ================================================================================================================
-    static member FillMode(mode : IMod<FillMode>) =
+    static member FillMode(mode : aval<FillMode>) =
         modify (fun s -> { s with fillMode = mode })
 
     static member FillMode(mode : FillMode) =
-        modify (fun s -> { s with fillMode = Mod.constant mode })
+        modify (fun s -> { s with fillMode = AVal.constant mode })
 
     // ================================================================================================================
     // StencilMode
     // ================================================================================================================
-    static member StencilMode(mode : IMod<StencilMode>) =
+    static member StencilMode(mode : aval<StencilMode>) =
         modify (fun s -> { s with stencilMode = mode })
 
     static member StencilMode(mode : StencilMode) =
-        modify (fun s -> { s with stencilMode = Mod.constant mode })
+        modify (fun s -> { s with stencilMode = AVal.constant mode })
 
 
     // ================================================================================================================
@@ -589,33 +589,33 @@ type Air private() =
     // ================================================================================================================
     // Draw
     // ================================================================================================================ 
-    static member Draw(infos : IMod<list<DrawCallInfo>>) =
+    static member Draw(infos : aval<list<DrawCallInfo>>) =
         air {
             do! modify (fun s -> { s with drawCallInfos = infos })
             do! emit
         }
 
-    static member DrawIndirect(b : IMod<IIndirectBuffer>) =
+    static member DrawIndirect(b : aval<IIndirectBuffer>) =
         air {
-            do! modify (fun s -> { s with indirect = Some b; drawCallInfos = null })
+            do! modify (fun s -> { s with indirect = Some b; drawCallInfos = Unchecked.defaultof<_> })
             do! emit
         }
 
-    static member Draw(infos : IMod<DrawCallInfo>) =
+    static member Draw(infos : aval<DrawCallInfo>) =
         air {
-            do! modify (fun s -> { s with drawCallInfos = Mod.map (fun i -> [i]) infos })
+            do! modify (fun s -> { s with drawCallInfos = AVal.map (fun i -> [i]) infos })
             do! emit
         }
 
     static member Draw(infos : list<DrawCallInfo>) =
         air {
-            do! modify (fun s -> { s with drawCallInfos = Mod.constant infos })
+            do! modify (fun s -> { s with drawCallInfos = AVal.constant infos })
             do! emit
         }
 
     static member Draw(info : DrawCallInfo) =
         air {
-            do! modify (fun s -> { s with drawCallInfos = Mod.constant [info] })
+            do! modify (fun s -> { s with drawCallInfos = AVal.constant [info] })
             do! emit
         }
 
@@ -676,11 +676,11 @@ module ``Air Sg F#`` =
 
     let inline uniformValue (v : 'a) =
         match v :> obj with
-            | :? IMod as m -> m
-            | _ -> Mod.constant v :> IMod
+            | :? IAdaptiveValue as m -> m
+            | _ -> AVal.constant v :> IAdaptiveValue
 
     let inline attValue (v : 'a[]) =
-        let view = BufferView(v |> ArrayBuffer :> IBuffer |> Mod.constant, typeof<'a>)
+        let view = BufferView(v |> ArrayBuffer :> IBuffer |> AVal.constant, typeof<'a>)
         view
 
 
@@ -692,7 +692,7 @@ module ``Air Sg F#`` =
 
 namespace Aardvark.SceneGraph.Semantics
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 
 [<Ag.Semantic>]

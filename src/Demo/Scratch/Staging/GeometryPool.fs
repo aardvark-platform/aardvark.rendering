@@ -8,7 +8,7 @@ open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
@@ -67,7 +67,7 @@ module ``Pool Tests`` =
             Primitives.unitSphere 3
             //Primitives.unitSphere (rnd.Next(1, 7))
             //Primitives.unitCone (rnd.Next(10, 2000))
-                |> AdaptiveGeometry.ofIndexedGeometry [Sem.Hugo, Mod.constant trafo :> IMod] // Sem.HugoN, Mod.constant (M44d.op_Explicit<M33d>(trafo.Backward.Transposed)) :> IMod ]
+                |> AdaptiveGeometry.ofIndexedGeometry [Sem.Hugo, AVal.constant trafo :> IAdaptiveValue] // Sem.HugoN, AVal.constant (M44d.op_Explicit<M33d>(trafo.Backward.Transposed)) :> IAdaptiveValue ]
                 |> pool.Add
 
 
@@ -125,7 +125,7 @@ module ``Pool Tests`` =
                 
         )
 
-        let mode = Mod.init FillMode.Fill
+        let mode = AVal.init FillMode.Fill
         App.Keyboard.KeyDown(Keys.K).Values.Add (fun () ->
             transact (fun () ->
                 mode.Value <- 
@@ -138,7 +138,7 @@ module ``Pool Tests`` =
         let sg = 
             Sg.PoolNode(pool, geometries, IndexedGeometryMode.TriangleList)
                 |> Sg.fillMode mode
-                |> Sg.uniform "LightLocation" (Mod.constant (10.0 * V3d.III))
+                |> Sg.uniform "LightLocation" (AVal.constant (10.0 * V3d.III))
                 |> Sg.effect [
                     hugoShade |> toEffect
                     DefaultSurfaces.trafo |> toEffect
@@ -176,11 +176,11 @@ module ``Pool Tests`` =
                 let trafo = Trafo3d.Scale 0.1 * Trafo3d.Translation pos
                 let ig = Primitives.unitBox
                 let ig = ig.Clone()
-                let trafo = Mod.init(trafo)
+                let trafo = AVal.init(trafo)
                 (ig, trafo)
-                //let trafoRender = Mod.map (fun (t : Trafo3d) -> M44f.op_Explicit(t.Forward)) trafo 
+                //let trafoRender = AVal.map (fun (t : Trafo3d) -> M44f.op_Explicit(t.Forward)) trafo 
                 //(ig, trafo, trafoRender)
-                //let nTrafoRender = Mod.map (fun (t : Trafo3d) -> M33f.op_Explicit(t.Forward)) trafo 
+                //let nTrafoRender = AVal.map (fun (t : Trafo3d) -> M33f.op_Explicit(t.Forward)) trafo 
                 //(ig, trafo, trafoRender, nTrafoRender)
             )
 
@@ -207,8 +207,8 @@ module ``Pool Tests`` =
 
         let geometriesLazy = 
             geometries |> ASet.map (fun (g, t) -> 
-                                            //g |> AdaptiveGeometry.ofIndexedGeometry [ (Sem.Hugo, (tr :> IMod)); (Sem.HugoN, (ntr :> IMod)) ])
-                                            g |> AdaptiveGeometry.ofIndexedGeometry [ (Sem.Hugo, (t :> IMod)) ])
+                                            //g |> AdaptiveGeometry.ofIndexedGeometry [ (Sem.Hugo, (tr :> IAdaptiveValue)); (Sem.HugoN, (ntr :> IAdaptiveValue)) ])
+                                            g |> AdaptiveGeometry.ofIndexedGeometry [ (Sem.Hugo, (t :> IAdaptiveValue)) ])
                        |> ASet.mapUse (fun ag -> addToPool ag)
 
         // initial evaluation
@@ -216,7 +216,7 @@ module ``Pool Tests`` =
 
         let sg = 
             Sg.PoolNode(pool, geometriesLazy, IndexedGeometryMode.TriangleList)
-                |> Sg.uniform "LightLocation" (Mod.constant (10.0 * V3d.III))
+                |> Sg.uniform "LightLocation" (AVal.constant (10.0 * V3d.III))
                 |> Sg.effect [
                     hugoShade |> toEffect
                     DefaultSurfaces.trafo |> toEffect

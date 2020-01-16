@@ -2,7 +2,7 @@ namespace Aardvark.SceneGraph.Opc
 
 open System.IO
 open Aardvark.Base
-open Aardvark.Base.Incremental  
+open FSharp.Data.Adaptive  
 open Aardvark.SceneGraph
 
 module Sg2 = 
@@ -35,8 +35,8 @@ module Sg2 =
            let tex = FileTexture(texPath,config) :> ITexture
 
            Sg.ofIndexedGeometry g
-             |> Sg.trafo (Mod.constant (info.Local2Global * trafo))             
-             |> Sg.diffuseTexture (Mod.constant tex)             
+             |> Sg.trafo (AVal.constant (info.Local2Global * trafo))             
+             |> Sg.diffuseTexture (AVal.constant tex)             
            )
         |> Sg.ofList
         

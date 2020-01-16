@@ -3,12 +3,12 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection
 open Aardvark.Rendering.Vulkan
@@ -91,11 +91,11 @@ module Stereo =
 
         let mutable currentLine = ""
 
-        let lines = Mod.init []
+        let lines = AVal.init []
         let mutable lineCount = 0
         let maxLines = 30
 
-        let text = lines |> Mod.map (List.rev >> String.concat "\r\n")
+        let text = lines |> AVal.map (List.rev >> String.concat "\r\n")
 
         member x.Text = text
 
@@ -146,13 +146,13 @@ module Stereo =
 
 
             let consoleTrafo = 
-                impl.Sizes |> Mod.map (fun s -> 
+                impl.Sizes |> AVal.map (fun s -> 
                     Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
                     Trafo3d.Translation(-0.95, 0.9, 0.0)
                 )
 
             let helpTrafo = 
-                impl.Sizes |> Mod.map (fun s -> 
+                impl.Sizes |> AVal.map (fun s -> 
                     Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
                     Trafo3d.Translation(-0.95, -0.95, 0.0)
                     
@@ -169,7 +169,7 @@ module Stereo =
                     |> Sg.projTrafo consoleTrafo
 
             let overlay2 =
-                Sg.text font C4b.White (Mod.constant "press ESC to exit")
+                Sg.text font C4b.White (AVal.constant "press ESC to exit")
                     |> Sg.scale 0.05
                     |> Sg.projTrafo helpTrafo
                 
@@ -213,7 +213,7 @@ module Stereo =
                     //do! DefaultSurfaces.constantColor C4f.Red
                     do! DefaultSurfaces.simpleLighting
                 }
-                |> Sg.viewTrafo (info.viewTrafos |> Mod.map (Array.item 0))
+                |> Sg.viewTrafo (info.viewTrafos |> AVal.map (Array.item 0))
                 |> Sg.uniform "ViewTrafo" info.viewTrafos
                 |> Sg.uniform "ProjTrafo" info.projTrafos
                 |> Sg.compile app.Runtime app.FramebufferSignature
@@ -287,7 +287,7 @@ module Stereo =
     let runNew() =
         let font = Font "Consolas"
 
-        let active = Mod.init true
+        let active = AVal.init true
 
         let run =
             async {
@@ -363,10 +363,10 @@ module Stereo =
 
         //let size = V2i(960, 1080)
 
-        let s = win.Sizes |> Mod.map (fun s -> s / V2i(2,1))
+        let s = win.Sizes |> AVal.map (fun s -> s / V2i(2,1))
 
         let colors =
-            OutputMod.custom 
+            OutputAVal.custom 
                 []
                 (fun t -> runtime.CreateTextureArray(s.GetValue t, TextureFormat.Rgba8, 1, samples, 2))
                 (fun t h -> h.Size.XY = s.GetValue t)
@@ -374,7 +374,7 @@ module Stereo =
                 id
                 
         let depth =
-            OutputMod.custom 
+            OutputAVal.custom 
                 []
                 (fun t -> runtime.CreateTextureArray(s.GetValue t, TextureFormat.Depth24Stencil8, 1, samples, 2))
                 (fun t h -> h.Size.XY = s.GetValue t)
@@ -382,7 +382,7 @@ module Stereo =
                 id
 
         let resolved =
-            OutputMod.custom 
+            OutputAVal.custom 
                 []
                 (fun t -> runtime.CreateTextureArray(s.GetValue t, TextureFormat.Rgba8, 1, 1, 2))
                 (fun t h -> h.Size.XY = s.GetValue t)
@@ -390,7 +390,7 @@ module Stereo =
                 id
                 
         let framebuffer =
-            OutputMod.custom
+            OutputAVal.custom
                 [colors; depth]
                 (fun t -> runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, colors.GetValue(t).[TextureAspect.Color, 0] :> IFramebufferOutput; DefaultSemantic.Depth, depth.GetValue(t).[TextureAspect.Depth, 0] :> IFramebufferOutput]))
                 (fun t h -> false)
@@ -402,13 +402,13 @@ module Stereo =
         let cameraView = 
             CameraView.lookAt (V3d(6.0, 6.0, 6.0)) V3d.Zero V3d.OOI
                 |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
-                |> Mod.map CameraView.viewTrafo
+                |> AVal.map CameraView.viewTrafo
 
         let near = 0.1
         let far = 100.0
 
         let views =
-            cameraView |> Mod.map (fun view ->
+            cameraView |> AVal.map (fun view ->
                 [| 
                     view * Trafo3d.Translation(0.05, 0.0, 0.0)
                     view * Trafo3d.Translation(-0.05, 0.0, 0.0)
@@ -420,7 +420,7 @@ module Stereo =
             let outer = 1.0537801252809621805875367233154
             let inner = 0.77567951104961310377955052031392
 
-            win.Sizes |> Mod.map (fun size ->
+            win.Sizes |> AVal.map (fun size ->
                 let aspect = float size.X / float size.Y 
                 let y = tan (120.0 * Constant.RadiansPerDegree / 2.0) / aspect //(outer + inner) / (2.0 * aspect)d
 
@@ -452,12 +452,12 @@ module Stereo =
             |> Sg.uniform "ViewTrafo" views
             |> Sg.compile runtime signature
 
-        let clear = runtime.CompileClear(signature, Mod.constant C4f.Black, Mod.constant 1.0)
+        let clear = runtime.CompileClear(signature, AVal.constant C4f.Black, AVal.constant 1.0)
         resolved.Acquire()
         framebuffer.Acquire()
 
         let margin =
-            Mod.custom (fun t ->
+            AVal.custom (fun t ->
                 let fbo = framebuffer.GetValue(t)
                 let colors = colors.GetValue t
                 let final = resolved.GetValue t
@@ -477,7 +477,7 @@ module Stereo =
                     do! StereoShader.sample
                 }
                 |> Sg.uniform "Margin" margin
-                |> Sg.uniform "InputTexture" (resolved |> Mod.map (fun t -> t :> ITexture)) //(Mod.constant (colors :> ITexture))
+                |> Sg.uniform "InputTexture" (resolved |> AVal.map (fun t -> t :> ITexture)) //(AVal.constant (colors :> ITexture))
                 |> Sg.compile runtime win.FramebufferSignature
 
 

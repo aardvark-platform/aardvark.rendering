@@ -4,7 +4,7 @@
 open System
 open System.IO
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
@@ -91,7 +91,7 @@ module Volume =
             volume.Tensor4.SubImageAtZ(int64 layer).Set(images.[layer].Volume) |> ignore
 
 
-        let texture = PixTexture3d(volume, false) :> ITexture |> Mod.constant
+        let texture = PixTexture3d(volume, false) :> ITexture |> AVal.constant
 
         let size = V3d volume.Size / float volume.Size.NormMax
 
@@ -101,7 +101,7 @@ module Volume =
                 do! Shader.vertex
                 do! Shader.fragment
                }
-            |> Sg.cullMode (Mod.constant CullMode.Back)
+            |> Sg.cullMode (AVal.constant CullMode.Back)
 
 
 

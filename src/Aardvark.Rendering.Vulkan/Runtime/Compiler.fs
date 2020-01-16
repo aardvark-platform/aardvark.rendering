@@ -8,7 +8,7 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open System.Diagnostics
 open System.Collections.Generic
 

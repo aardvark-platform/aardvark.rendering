@@ -7,7 +7,7 @@ open System
 
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Rendering.GL
 open Aardvark.Application
 
@@ -386,11 +386,11 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int, graphicsMo
     let mutable defaultOutput = defaultFramebuffer |> OutputDescription.ofFramebuffer
 
     let mutable stereoFramebuffer : Option<OutputDescription * Framebuffer * Texture * Texture> = None
-    let clearTask = runtime.CompileClear(fboSignature, Mod.constant C4f.Black, Mod.constant 1.0)
+    let clearTask = runtime.CompileClear(fboSignature, AVal.constant C4f.Black, AVal.constant 1.0)
 
     let avgFrameTime = RunningMean(3)
-    let sizes = Mod.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
-    let time = Mod.custom (fun s -> DateTime.Now + TimeSpan.FromSeconds(avgFrameTime.Average))
+    let sizes = AVal.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
+    let time = AVal.custom (fun s -> DateTime.Now + TimeSpan.FromSeconds(avgFrameTime.Average))
     let mutable first = true
 
     let mouse = new GameWindowIO.Mouse()
@@ -434,9 +434,9 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int, graphicsMo
             task <- t
             taskSub <- t.AddMarkingCallback (fun () -> x.Invalidate())
 
-    member x.Sizes = sizes :> IMod<_>
+    member x.Sizes = sizes :> aval<_>
 
-    member x.Time = time :> IMod<_>
+    member x.Time = time :> aval<_>
 
     member x.AverageFrameTime = MicroTime(int64 (avgFrameTime.Average * 1E9))
 
@@ -460,7 +460,7 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int, graphicsMo
 
         let k = keyboard :> IKeyboard
         k.KeyDown(Keys.End).Values.Add (fun () ->
-            if Mod.force k.Control then
+            if AVal.force k.Control then
                 x.RenderAsFastAsPossible <- not x.RenderAsFastAsPossible
         )
     
@@ -468,7 +468,7 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int, graphicsMo
         let mutable oldBorder = x.WindowBorder
         let mutable full = false
         k.KeyDown(Keys.Enter).Values.Add(fun () ->
-            if Mod.force k.Alt && Mod.force k.Shift then
+            if AVal.force k.Alt && AVal.force k.Shift then
                 if full then
                     full <- false
                     x.WindowBorder <- oldBorder
@@ -501,10 +501,10 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int, graphicsMo
 
             let size = V2i(base.ClientSize.Width, base.ClientSize.Height)
             
-            using (ctx.RenderingLock contextHandle) (fun _ ->
+            Operators.using (ctx.RenderingLock contextHandle) (fun _ ->
                         
                 if size <> sizes.Value then
-                    transact (fun () -> Mod.change sizes size)
+                    transact (fun () -> sizes.Value <- size)
 
                 if graphicsMode.Stereo then
                     let outputDesc, colorTex = 
@@ -595,7 +595,7 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int, graphicsMo
         member x.RenderTask
             with get() = x.RenderTask
             and set t = x.RenderTask <- t
-        member x.Sizes = sizes :> IMod<_>
+        member x.Sizes = sizes :> aval<_>
         member x.Samples = samples
         member x.BeforeRender = beforeRender.Publish
         member x.AfterRender = afterRender.Publish

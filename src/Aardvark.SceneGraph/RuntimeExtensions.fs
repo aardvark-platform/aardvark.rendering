@@ -7,7 +7,7 @@ open System.Runtime.CompilerServices
 open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Base.Ag
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 [<AbstractClass; Sealed; Extension>]
 type SceneGraphRuntimeExtensions private() =
@@ -21,7 +21,7 @@ type SceneGraphRuntimeExtensions private() =
 
     [<Extension>]
     static member CompileRender (x : IRuntime, signature : IFramebufferSignature, engine : BackendConfiguration, s : ISg) =
-        let app = Sg.DynamicNode(Mod.constant s)
+        let app = Sg.DynamicNode(AVal.constant s)
         app?Runtime <- x
         let jobs : aset<IRenderObject> = app.RenderObjects()
         // TODO: fix overlays

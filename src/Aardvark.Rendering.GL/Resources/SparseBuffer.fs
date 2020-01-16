@@ -7,7 +7,7 @@ open System.Collections.Generic
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Rendering.GL
 
 open Aardvark.Base.Management
@@ -400,7 +400,7 @@ type SparseBufferGeometryPool(ctx : Context, types : Map<Symbol, Type>) =
 
     member x.TryGetBufferView(sem : Symbol) =
         match Map.tryFind sem buffers with
-            | Some (b,t,_) -> BufferView(Mod.constant (b :> IBuffer), t) |> Some
+            | Some (b,t,_) -> BufferView(AVal.constant (b :> IBuffer), t) |> Some
             | _ -> None
 
     member x.Dispose() =

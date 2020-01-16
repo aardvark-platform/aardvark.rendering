@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.SceneGraph
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 
 

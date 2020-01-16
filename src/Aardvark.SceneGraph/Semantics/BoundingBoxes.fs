@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.SceneGraph.Semantics
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
 
@@ -14,11 +14,11 @@ module BoundingBoxExtensions =
 
     open System.Runtime.CompilerServices
 
-    let private composeCache = BinaryCache<IMod<Box3d>, IMod<Box3d>, IMod<Box3d>>(Mod.map2 (fun l r -> Box3d.Union(l,r)))
+    let private composeCache = BinaryCache<aval<Box3d>, aval<Box3d>, aval<Box3d>>(AVal.map2 (fun l r -> Box3d.Union(l,r)))
     let private (<+>) l r = composeCache.Invoke(l,r)
-    let private invalid = Mod.constant Box3d.Invalid
+    let private invalid = AVal.constant Box3d.Invalid
 
-    let private bbCache = ConditionalWeakTable<RenderObject, IMod<Box3d>>()
+    let private bbCache = ConditionalWeakTable<RenderObject, aval<Box3d>>()
     
     type RenderObject with
         member x.GetBoundingBox() =
@@ -28,12 +28,12 @@ module BoundingBoxExtensions =
                     let v = 
                         match x.VertexAttributes.TryGetAttribute DefaultSemantic.Positions with
                             | Some v ->
-                                v.Buffer |> Mod.bind (fun buffer ->
+                                v.Buffer |> AVal.bind (fun buffer ->
                                     match buffer with
                                         | :? ArrayBuffer as pos ->
-                                            let trafo : IMod<Trafo3d> = x.AttributeScope?ModelTrafo()
+                                            let trafo : aval<Trafo3d> = x.AttributeScope?ModelTrafo()
 
-                                            Mod.map (fun trafo ->
+                                            AVal.map (fun trafo ->
                                                 let box = Box3f.op_Explicit (Box3f(pos.Data |> unbox<V3f[]>))
                                                 box
                                             ) trafo
@@ -51,13 +51,13 @@ module BoundingBoxExtensions =
             | :? RenderObject as o -> o.GetBoundingBox()
             | :? MultiRenderObject as o ->
                 let boxes = o.Children |> List.map objBB
-                Mod.custom (fun t ->
+                AVal.custom (fun t ->
                     boxes |> List.map (fun b -> b.GetValue t) |> Box3d
                 )
             | :? IPreparedRenderObject as o ->
                 match o.Original with
                     | Some o -> o.GetBoundingBox()
-                    | _ -> Mod.constant Box3d.Invalid
+                    | _ -> AVal.constant Box3d.Invalid
 
             | :? CommandRenderObject as o ->
                 match cmdBB o.Command with
@@ -66,7 +66,7 @@ module BoundingBoxExtensions =
             | _ ->
                 invalid
 
-    and private cmdBB (c : RuntimeCommand) : Option<IMod<Box3d>> =
+    and private cmdBB (c : RuntimeCommand) : Option<aval<Box3d>> =
         match c with
             | RuntimeCommand.EmptyCmd -> None
             | RuntimeCommand.ClearCmd _ -> None
@@ -80,11 +80,11 @@ module BoundingBoxExtensions =
                 None
             | RuntimeCommand.OrderedCmd l ->
                 let merge (s : Box3d) (v : Box3d) : Box3d = Box3d.Union(s,v)
-                l |> AList.toASet |> ASet.choose cmdBB |> ASet.flattenM |> ASet.fold merge Box3d.Invalid |> Some
+                l |> AList.toASet |> ASet.choose cmdBB |> ASet.flattenA |> ASet.fold merge Box3d.Invalid |> Some
     
             | RuntimeCommand.RenderCmd objs ->
                 let merge (s : Box3d) (v : Box3d) : Box3d = Box3d.Union(s,v)
-                objs |> ASet.mapM objBB |> ASet.fold merge Box3d.Invalid |> Some
+                objs |> ASet.mapA objBB |> ASet.fold merge Box3d.Invalid |> Some
             | _ ->
                 Log.warn "[Sg] bouningbox for %A not implemented" c 
                 None
@@ -98,12 +98,12 @@ module BoundingBoxExtensions =
 module BoundingBoxes =
 
     type ISg with
-        member x.GlobalBoundingBox() : IMod<Box3d> = x?GlobalBoundingBox()
-        member x.LocalBoundingBox()  : IMod<Box3d> = x?LocalBoundingBox()
+        member x.GlobalBoundingBox() : aval<Box3d> = x?GlobalBoundingBox()
+        member x.LocalBoundingBox()  : aval<Box3d> = x?LocalBoundingBox()
 
     module Semantic =
-        let globalBoundingBox (sg : ISg) : IMod<Box3d> = sg?GlobalBoundingBox()
-        let localBoundingBox  (sg : ISg) : IMod<Box3d> = sg?LocalBoundingBox()
+        let globalBoundingBox (sg : ISg) : aval<Box3d> = sg?GlobalBoundingBox()
+        let localBoundingBox  (sg : ISg) : aval<Box3d> = sg?LocalBoundingBox()
 
 
     let private trySub (b : Box3d) (d : Box3d) =
@@ -128,35 +128,35 @@ module BoundingBoxes =
                 | _ ->
                     Box3d.Invalid
 
-        member x.LocalBoundingBox(r : Sg.GeometrySet) : IMod<Box3d> =
+        member x.LocalBoundingBox(r : Sg.GeometrySet) : aval<Box3d> =
             r.Geometries 
                 |> ASet.map computeBoundingBox
                 |> ASet.foldHalfGroup (curry Box3d.Union) trySub Box3d.Invalid
 
-        member x.GlobalBoundingBox(r : Sg.GeometrySet) : IMod<Box3d> =
+        member x.GlobalBoundingBox(r : Sg.GeometrySet) : aval<Box3d> =
             let l = r.LocalBoundingBox()
             let t = r.ModelTrafo
-            Mod.map2 (fun (t : Trafo3d) (b : Box3d) -> b.Transformed(t)) t l
+            AVal.map2 (fun (t : Trafo3d) (b : Box3d) -> b.Transformed(t)) t l
 
-        member x.GlobalBoundingBox(r : Sg.RenderObjectNode) : IMod<Box3d> =
-            r.Objects |> ASet.mapM (fun o -> o.GetBoundingBox()) |> ASet.fold  (curry Box3d.Union) Box3d.Invalid
+        member x.GlobalBoundingBox(r : Sg.RenderObjectNode) : aval<Box3d> =
+            r.Objects |> ASet.mapA (fun o -> o.GetBoundingBox()) |> ASet.fold  (curry Box3d.Union) Box3d.Invalid
 
-        member x.LocalBoundingBox(r : Sg.RenderObjectNode) : IMod<Box3d> =
+        member x.LocalBoundingBox(r : Sg.RenderObjectNode) : aval<Box3d> =
             r.GlobalBoundingBox()
 
-        member x.GlobalBoundingBox(r : Sg.IndirectRenderNode) : IMod<Box3d> =
-            Mod.constant Box3d.Infinite
+        member x.GlobalBoundingBox(r : Sg.IndirectRenderNode) : aval<Box3d> =
+            AVal.constant Box3d.Infinite
 
-        member x.LocalBoundingBox(r : Sg.IndirectRenderNode) : IMod<Box3d> =
-            Mod.constant Box3d.Infinite
+        member x.LocalBoundingBox(r : Sg.IndirectRenderNode) : aval<Box3d> =
+            AVal.constant Box3d.Infinite
 
-        member x.LocalBoundingBox(p : Sg.OverlayNode) : IMod<Box3d> =
-            Mod.constant Box3d.Invalid
+        member x.LocalBoundingBox(p : Sg.OverlayNode) : aval<Box3d> =
+            AVal.constant Box3d.Invalid
 
-        member x.GlobalBoundingBox(p : Sg.OverlayNode) : IMod<Box3d> =
-            Mod.constant Box3d.Invalid
+        member x.GlobalBoundingBox(p : Sg.OverlayNode) : aval<Box3d> =
+            AVal.constant Box3d.Invalid
 
-        member x.GlobalBoundingBox(node : Sg.RenderNode) : IMod<Box3d> =
+        member x.GlobalBoundingBox(node : Sg.RenderNode) : aval<Box3d> =
             let scope = Ag.getContext()
             let va = node.VertexAttributes
             let positions : BufferView = 
@@ -191,12 +191,12 @@ module BoundingBoxes =
                         return failwithf "unknown IBuffer for positions: %A" buffer
             }
 
-        member x.GlobalBoundingBox(app : IGroup) : IMod<Box3d> =
+        member x.GlobalBoundingBox(app : IGroup) : aval<Box3d> =
             app.Children 
-                |> ASet.mapM (fun sg -> sg.GlobalBoundingBox() ) 
+                |> ASet.mapA (fun sg -> sg.GlobalBoundingBox() ) 
                 |> ASet.foldHalfGroup (curry Box3d.Union) trySub Box3d.Invalid
             
-        member x.GlobalBoundingBox(n : IApplicator) : IMod<Box3d> = 
+        member x.GlobalBoundingBox(n : IApplicator) : aval<Box3d> = 
             adaptive {
                 let! low = n.Child
                 return! low.GlobalBoundingBox()
@@ -210,7 +210,7 @@ module BoundingBoxes =
         let transform (bb : Box3d) (t : Trafo3d) = bb.Transformed t
 
 
-        member x.LocalBoundingBox(node : Sg.RenderNode) : IMod<Box3d> =
+        member x.LocalBoundingBox(node : Sg.RenderNode) : aval<Box3d> =
             let scope = Ag.getContext()
             let va = node.VertexAttributes
             let positions : BufferView = 
@@ -242,20 +242,20 @@ module BoundingBoxes =
                         return failwithf "unknown IBuffer for positions: %A" buffer
             }
             
-        member x.LocalBoundingBox(app : IGroup) : IMod<Box3d> =
+        member x.LocalBoundingBox(app : IGroup) : aval<Box3d> =
             app.Children 
-                |> ASet.mapM (fun sg -> sg.LocalBoundingBox()) 
+                |> ASet.mapA (fun sg -> sg.LocalBoundingBox()) 
                 |> ASet.foldHalfGroup (curry Box3d.Union) trySub Box3d.Invalid
 
-        member x.LocalBoundingBox(app : Sg.TrafoApplicator) : IMod<Box3d> =  
+        member x.LocalBoundingBox(app : Sg.TrafoApplicator) : aval<Box3d> =  
             adaptive {
                 let! c = app.Child
-                let! bb = c.LocalBoundingBox() : IMod<Box3d>
+                let! bb = c.LocalBoundingBox() : aval<Box3d>
                 let! trafo = app.Trafo
                 return transform bb trafo
             }
 
-        member x.LocalBoundingBox(n : IApplicator) : IMod<Box3d> = 
+        member x.LocalBoundingBox(n : IApplicator) : aval<Box3d> = 
             adaptive {
                 let! low = n.Child
                 return! low.LocalBoundingBox()

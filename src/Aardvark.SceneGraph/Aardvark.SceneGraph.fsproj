@@ -29,7 +29,6 @@
     <Compile Include="Semantics\Adapter.fs" />
     <Compile Include="Semantics\Textures.fs" />
     <Compile Include="Semantics\Environment.fs" />
-    <Compile Include="Semantics\AsyncLoad.fs" />
     <Compile Include="HighLevelSceneGraph\LodTree.fs" />
     <Compile Include="HighLevelSceneGraph\Commands.fs" />
     <Compile Include="HighLevelSceneGraph\Lod.fs" />

@@ -20,10 +20,10 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Interactive
 
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.Base.Incremental.Operators // loads operators such as ~~ and %+ for conveniently creating and modifying mods
+open FSharp.Data.Adaptive.Operators // loads operators such as ~~ and %+ for conveniently creating and modifying mods
 open Aardvark.SceneGraph.Semantics
 
 module Render2TexturePrimiviteChangeableSize = 
@@ -34,7 +34,7 @@ module Render2TexturePrimiviteChangeableSize =
     let runtime = win.Runtime // the runtime instance provides functions for creating resources (lower abstraction than sg)
 
     let size = V2i(1024,768)
-    let sizeM = Mod.init size
+    let sizeM = AVal.init size
     let color = 
         ChangeableResources.createTexture runtime ~~1 sizeM ~~TextureFormat.Rgba8
     let depth = 
@@ -66,8 +66,8 @@ module Render2TexturePrimiviteChangeableSize =
     let clear = runtime.CompileClear(signature, ~~C4f.Red, ~~1.0)
 
     // Run the render task imperatively
-    clear.Run(null, Mod.force fbo |> OutputDescription.ofFramebuffer) |> ignore
-    task.Run(null,  Mod.force fbo |> OutputDescription.ofFramebuffer) |> ignore
+    clear.Run(null, AVal.force fbo |> OutputDescription.ofFramebuffer) |> ignore
+    task.Run(null,  AVal.force fbo |> OutputDescription.ofFramebuffer) |> ignore
 
     // this module demonstrates how to read back textures. In order to see the result,
     // a form containing the readback result is shown
@@ -76,7 +76,7 @@ module Render2TexturePrimiviteChangeableSize =
         open System.IO
 
         let pi = PixImage<byte>(Col.Format.BGRA, size) 
-        runtime.Download(color |> Mod.force, 0, 0, pi)
+        runtime.Download(color |> AVal.force, 0, 0, pi)
         let tempFileName = Path.ChangeExtension( Path.combine [__SOURCE_DIRECTORY__;  Path.GetTempFileName() ], ".bmp" )
         pi.SaveAsImage tempFileName
     
@@ -93,7 +93,7 @@ module Render2TexturePrimiviteChangeableSize =
     // The render to texture texture can also be used in another render pass (here we again render to our main window)
     let sg = 
         Sg.fullScreenQuad 
-            |> Sg.texture DefaultSemantic.DiffuseColorTexture (color |> Mod.map (fun s -> s :> ITexture))
+            |> Sg.texture DefaultSemantic.DiffuseColorTexture (color |> AVal.map (fun s -> s :> ITexture))
             |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.diffuseTexture |> toEffect]
             |> Sg.viewTrafo Interactive.DefaultViewTrafo
             |> Sg.projTrafo Interactive.DefaultProjTrafo
@@ -115,9 +115,9 @@ printfn "Done. Modify sg and call setSg again in order to see the modified rende
 [<AutoOpen>]
 module Test = 
     // check out how to change render targets imperatively
-    let mkSmall () = transact (fun () -> Mod.change sizeM (V2i(16,16)))
+    let mkSmall () = transact (fun () -> AVal.change sizeM (V2i(16,16)))
     let renderAgain () = 
-        clear.Run(RenderToken.Empty, Mod.force fbo)
-        task.Run(RenderToken.Empty, Mod.force fbo) |> ignore
+        clear.Run(RenderToken.Empty, AVal.force fbo)
+        task.Run(RenderToken.Empty, AVal.force fbo) |> ignore
         printfn "move camera in order to see new result"
 

@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.SceneGraph.Semantics
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
 open Aardvark.Base.Rendering
@@ -185,7 +185,7 @@ module RenderObjectSemantics =
                 }
 
             let indirect =
-                packer |> Mod.map (fun set ->
+                packer |> AVal.map (fun set ->
                     set |> Seq.toArray
                         |> Array.map (fun r ->
                             DrawCallInfo(
@@ -231,8 +231,8 @@ module RenderObjectSemantics =
                 }
 
             rj.VertexAttributes <- vertexAttributes
-            rj.IndirectBuffer <- indirect |> Mod.map IndirectBuffer.ofArray
-            //rj.IndirectCount <- indirect |> Mod.map Array.length
+            rj.IndirectBuffer <- indirect |> AVal.map IndirectBuffer.ofArray
+            //rj.IndirectCount <- indirect |> AVal.map Array.length
             rj.Mode <- r.Mode
             rj.Activate <- activate
 

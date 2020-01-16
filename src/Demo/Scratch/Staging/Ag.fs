@@ -12,7 +12,7 @@
 //open Aardvark.Base
 //open QuotationCompiler
 //open QuotationCompiler.Simple
-//open Aardvark.Base.Incremental
+//open FSharp.Data.Adaptive
 //
 //module Ag =
 //

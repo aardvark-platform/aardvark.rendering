@@ -5,7 +5,7 @@ open System.Runtime.CompilerServices
 open System.Windows.Forms
 open Aardvark.Application
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 type SimpleRenderWindow() as this =
     inherit Form()
@@ -54,7 +54,7 @@ type SimpleRenderWindow() as this =
         x.Text <- baseTitle
 
         ctrl.Keyboard.KeyDown(Keys.Enter).Values.Add (fun () ->
-            if Mod.force ctrl.Keyboard.Alt && Mod.force ctrl.Keyboard.Shift then
+            if AVal.force ctrl.Keyboard.Alt && AVal.force ctrl.Keyboard.Shift then
                 this.ToggleFullScreen()
         )
 

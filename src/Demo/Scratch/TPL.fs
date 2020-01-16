@@ -9,7 +9,7 @@ open System.Threading
 open System.Threading.Tasks
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 open Aardvark.SceneGraph

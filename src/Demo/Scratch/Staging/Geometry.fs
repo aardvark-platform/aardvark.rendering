@@ -3,7 +3,7 @@
 open System
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Native
 
 #nowarn "9"
@@ -330,7 +330,7 @@ type Geometry =
         faceVertexCount  : int
         vertexCount      : int
         indices          : Option<BufferView>
-        uniforms         : Map<Symbol,IMod>
+        uniforms         : Map<Symbol,IAdaptiveValue>
         vertexAttributes : Map<Symbol,BufferView>
         [<DefaultValue>]
         mutable dispose          : Option<unit -> unit>
@@ -365,7 +365,7 @@ type Geometry =
             if ci >= 0 then 
                 let ptr = current
                 let size = sizeof<int> * ci
-                let b = Utils.toBuffer size ptr :> IBuffer |> Mod.constant
+                let b = Utils.toBuffer size ptr :> IBuffer |> AVal.constant
                 current <- current + nativeint size
                 BufferView(b, typeof<int>) |> Some
             else
@@ -383,7 +383,7 @@ type Geometry =
                     vertexCount <- min vertexCount cnt
                     let size = dim * Utils.componentSize elementType * cnt
 
-                    let buffer = current |> Utils.toBuffer size :> IBuffer |> Mod.constant
+                    let buffer = current |> Utils.toBuffer size :> IBuffer |> AVal.constant
                     let viewType = Utils.toViewType(elementType, dim)
                     yield Symbol.Create name, BufferView(buffer, viewType)
 
@@ -426,7 +426,7 @@ type Geometry =
                                         with get(slice : int, level : int) = data.[level]
                                 }
 
-                            let t = texture :> ITexture |> Mod.constant :> IMod
+                            let t = texture :> ITexture |> AVal.constant :> IAdaptiveValue
 
                             yield Symbol.Create name, t
 
@@ -437,7 +437,7 @@ type Geometry =
                             current <- current + nativeint (Marshal.SizeOf t)
                             let tmod = typedefof<ConstantMod<_>>.MakeGenericType [| t |]
                             let ctor = tmod.GetConstructor [| t |]
-                            let m = ctor.Invoke [| value |] |> unbox<IMod>
+                            let m = ctor.Invoke [| value |] |> unbox<IAdaptiveValue>
 
                             yield Symbol.Create name, m
 
@@ -499,7 +499,7 @@ type Geometry =
 
         match x.indices with
             | Some i ->
-                let v : int[] = BufferView.download 0 x.faceVertexCount i |> Mod.force |> PrimitiveValueConverter.arrayConverter i.ElementType
+                let v : int[] = BufferView.download 0 x.faceVertexCount i |> AVal.force |> PrimitiveValueConverter.arrayConverter i.ElementType
                 let b = v.UnsafeCoerce<byte>()
                 w.Write(b, 0, b.Length)
 
@@ -517,7 +517,7 @@ type Geometry =
             w.Write(dim)
             w.Write(x.vertexCount)
 
-            let arr = view |> BufferView.download 0 x.vertexCount |> Mod.force
+            let arr = view |> BufferView.download 0 x.vertexCount |> AVal.force
             let arr = arr.UnsafeCoerce<byte>()
             w.Write(arr, 0, arr.Length)
 
@@ -527,8 +527,8 @@ type Geometry =
             w.Write(Text.Encoding.ASCII.GetBytes name)
 
             match value with
-                | :? IMod<ITexture> as t ->
-                    let t = t |> Mod.force
+                | :? aval<ITexture> as t ->
+                    let t = t |> AVal.force
                     match t with
                         | :? FileTexture as t -> 
                             w.Write(int UniformKind.Texture)
@@ -603,7 +603,7 @@ module GeometryTest =
                     )
 
                 ro.Mode <- g.mode
-                ro.DrawCallInfos <- Mod.constant [call]
+                ro.DrawCallInfos <- AVal.constant [call]
                 ro.Indices <- g.indices
 
                 let u = ro.Uniforms
@@ -640,7 +640,7 @@ module GeometryTest =
         
         let mutable test = Unchecked.defaultof<_>
         if true ||  not (IO.File.Exists file) then
-            let t = FileTexture(@"C:\Aardwork\ps_height_1k.png", true) :> ITexture |> Mod.constant :> IMod
+            let t = FileTexture(@"C:\Aardwork\ps_height_1k.png", true) :> ITexture |> AVal.constant :> IAdaptiveValue
             let geometry =
                 {
                     mode             = IndexedGeometryMode.TriangleList
@@ -649,7 +649,7 @@ module GeometryTest =
                     indices          = Some (BufferView.ofArray [| 0;1;2; 0;2;3 |])
                     uniforms =
                         Map.ofList [ 
-                            Symbol.Create "ModelTrafo", Mod.constant (Trafo3d.Scale(10.0)) :> IMod 
+                            Symbol.Create "ModelTrafo", AVal.constant (Trafo3d.Scale(10.0)) :> IAdaptiveValue 
                             DefaultSemantic.DiffuseColorTexture, t
                         ]
                     vertexAttributes = 
@@ -760,7 +760,7 @@ module GeometryTest =
 //        member x.TryGetAttribute(name : Symbol) =
 //            match pAttributes.TryGetValue (string name) with
 //                | (true, att) ->
-//                    let b = Utils.toBuffer att.data :> IBuffer |> Mod.constant
+//                    let b = Utils.toBuffer att.data :> IBuffer |> AVal.constant
 //                    let t = Utils.toViewType(att.elementType, att.dimension)
 //                    BufferView(b, t) |> Some
 //                | _ ->

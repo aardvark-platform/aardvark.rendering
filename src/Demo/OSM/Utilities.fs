@@ -8,7 +8,7 @@ open BruTile.Cache
 open BruTile.Predefined
 open Aardvark.Base
 open DevILSharp
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Application
 open Aardvark.Application.WinForms
 open Aardvark.SceneGraph
@@ -71,21 +71,21 @@ module Extensions =
         let async (defaultValue : 'a) (t : Task<'a>) =
 
             let aw = ref None
-            let r = Mod.init defaultValue
+            let r = AVal.init defaultValue
 
             let a = t.GetAwaiter()
             a.OnCompleted(fun () ->
                 transact (fun () -> r.Value <- a.GetResult())
             )
             
-            r :> IMod<_>
+            r :> aval<_>
 
         let lazyAsync (defaultValue : 'a) (run : Async<'a>) =
             let task : ref<Option<Task<'a>>> = ref None
 
             let res = ref Unchecked.defaultof<_>
             res :=
-                Mod.custom (fun s ->
+                AVal.custom (fun s ->
                     match !task with
                         | Some t ->
                             if t.IsCompleted then 

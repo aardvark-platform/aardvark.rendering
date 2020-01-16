@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -116,12 +116,12 @@ let main argv =
                     DefaultSurfaces.vertexColor     |> toEffect
                     DefaultSurfaces.simpleLighting  |> toEffect
                 ]
-             |> Sg.blendMode (Rendering.BlendMode.Blend |> Mod.constant )
-             |> Sg.fillMode  (FillMode.Line             |> Mod.constant)
-             |> Sg.cullMode  (CullMode.Back        |> Mod.constant)
-             |> Sg.trafo     (Trafo3d.Identity          |> Mod.constant)
+             |> Sg.blendMode (Rendering.BlendMode.Blend |> AVal.constant )
+             |> Sg.fillMode  (FillMode.Line             |> AVal.constant)
+             |> Sg.cullMode  (CullMode.Back        |> AVal.constant)
+             |> Sg.trafo     (Trafo3d.Identity          |> AVal.constant)
              |> Sg.uniform   "ViewportSize"         win.Sizes
-             |> Sg.uniform   "MaxEdgeLengthInPixel" (50 |> Mod.constant )
+             |> Sg.uniform   "MaxEdgeLengthInPixel" (50 |> AVal.constant )
     
 
     win.Scene <- sg

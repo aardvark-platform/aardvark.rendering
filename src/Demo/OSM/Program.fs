@@ -6,7 +6,7 @@ open BruTile.Cache
 open BruTile.Predefined
 open Aardvark.Base
 open DevILSharp
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Application
 open Aardvark.Application.WinForms
 open Aardvark.SceneGraph
@@ -48,7 +48,7 @@ module Textures =
 
     // get a chached texture for the given tile and zoom-level
     // TODO: add proper memory management (textures are never deleted)
-    let private cache = System.Collections.Concurrent.ConcurrentDictionary<string * V2i, IMod<ITexture>>()
+    let private cache = System.Collections.Concurrent.ConcurrentDictionary<string * V2i, aval<ITexture>>()
     let private scheduler = MyScheduler(25)
     let private factory = TaskFactory(scheduler)
 
@@ -98,7 +98,7 @@ module Textures =
                     return PixTexture2d(PixImageMipMap [|img|], false) |> app.Runtime.PrepareTexture :> ITexture
                 }
 
-            run |> Async.StartAsTask |> Mod.async (NullTexture() :> ITexture)
+            run |> Async.StartAsTask |> AVal.async (NullTexture() :> ITexture)
         )
 
 [<AutoOpen>]
@@ -164,15 +164,15 @@ let main argv =
         let vertical = (float (w.Sizes.GetValue().Y) / float (w.Sizes.GetValue().X)) * horizontal
         let box = Box2d.FromCenterAndSize(worldBounds.Center, V2d(horizontal, vertical))
 
-        Mod.init box.Min, Mod.init box.Size
+        AVal.init box.Min, AVal.init box.Size
 
     // compose viewportOrigin/Size to a Box2d
-    let viewport = Mod.map2 (fun vo vs -> Box2d.FromMinAndSize(vo,vs-V2d.II)) viewportOrigin viewportSize
+    let viewport = AVal.map2 (fun vo vs -> Box2d.FromMinAndSize(vo,vs-V2d.II)) viewportOrigin viewportSize
 
     // whenever the window size changes we'd like to adjust the viewport's aspect
     // Note that we don't do this in the mod-system since we want to be able to override
     // this behavoiur.
-    w.Sizes |> Mod.unsafeRegisterCallbackKeepDisposable (fun s ->
+    w.Sizes |> AVal.unsafeRegisterCallbackKeepDisposable (fun s ->
         let aspect = float s.X / float s.Y
         transact (fun () ->
             let vp = viewport.GetValue()
@@ -198,7 +198,7 @@ let main argv =
             let res = viewportSize / V2d viewResolution
 
             return Utilities.GetNearestLevel(source.Schema.Resolutions, max res.X res.Y)
-        } |> Mod.onPush
+        } |> AVal.onPush
 
     // determine the tile-size in world-space
     let tileSize = 
@@ -224,7 +224,7 @@ let main argv =
 
             let res =  V2i(ceil (1.0 / rel.X), ceil (1.0 / rel.Y)) + V2i.II
             return res
-        } |> Mod.onPush
+        } |> AVal.onPush
 
 
     // calculate the integer index for the first (upper-left) tile 
@@ -288,7 +288,7 @@ let main argv =
         aset {
             for coord in tileIndices do
                 yield zeroOneQuad |> Sg.trafo (getTileTrafo coord)
-                                  |> Sg.diffuseTexture (getTileTexture coord |> Mod.onPush)
+                                  |> Sg.diffuseTexture (getTileTexture coord |> AVal.onPush)
                 
         }
 
@@ -298,7 +298,7 @@ let main argv =
         let normal01FrameTrafo = Trafo3d.ViewTrafo(V3d(-1.0, 1.0, 0.0), V3d.IOO * 2.0, -V3d.OIO * 2.0, V3d.OOI).Inverse
         sgs |> Sg.set
             |> Sg.effect [toEffect vertex; toEffect fragment]
-            |> Sg.trafo (Mod.constant normal01FrameTrafo)
+            |> Sg.trafo (AVal.constant normal01FrameTrafo)
 
 
 
@@ -313,25 +313,25 @@ let main argv =
 
     //let sg = Sg.group' [sg]
 
-    let mode = Mod.init FillMode.Fill
+    let mode = AVal.init FillMode.Fill
 
     w.Keyboard.DownWithRepeats.Values.Subscribe(fun k ->
         if k = Aardvark.Application.Keys.X then
             transact (fun () ->
                 match mode.Value with
-                    | FillMode.Fill -> Mod.change mode FillMode.Line
-                    | FillMode.Line -> Mod.change mode FillMode.Point
-                    | _ -> Mod.change mode FillMode.Fill
+                    | FillMode.Fill -> AVal.change mode FillMode.Line
+                    | FillMode.Line -> AVal.change mode FillMode.Point
+                    | _ -> AVal.change mode FillMode.Fill
             )
 
     ) |> ignore
 
     let sg = sg |> Sg.fillMode mode
-                |> Sg.vertexBufferValue (Symbol.Create "Hugo") (Mod.constant V4f.IIII)
-    //let sg = Sg.VertexAttributeApplicator(Symbol.Create "Hugo", BufferView(Mod.constant (NullBuffer(V4f.IOII) :> IBuffer), typeof<V4f>), sg) :> ISg
+                |> Sg.vertexBufferValue (Symbol.Create "Hugo") (AVal.constant V4f.IIII)
+    //let sg = Sg.VertexAttributeApplicator(Symbol.Create "Hugo", BufferView(AVal.constant (NullBuffer(V4f.IOII) :> IBuffer), typeof<V4f>), sg) :> ISg
     // compile the rendertask and pass it to the window
 
-    let engine = Mod.init BackendConfiguration.Native
+    let engine = AVal.init BackendConfiguration.Native
     let engines = 
         ref [
             BackendConfiguration.Native
@@ -342,7 +342,7 @@ let main argv =
         if k = Aardvark.Application.Keys.P then
             match !engines with
                 | h::r ->
-                    transact(fun () -> Mod.change engine h)
+                    transact(fun () -> AVal.change engine h)
                     engines := r @ [h]
                 | _ -> ()
         elif k = Aardvark.Application.Keys.G then

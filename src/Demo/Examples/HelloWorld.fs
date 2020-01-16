@@ -2,7 +2,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
@@ -26,7 +26,7 @@ module HelloWorld =
         let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
         let perspective = 
             win.Sizes 
-              |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
+              |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
 
 
         let viewTrafo = DefaultCameraController.control win.Mouse win.Keyboard win.Time view
@@ -53,8 +53,8 @@ module HelloWorld =
                     DefaultSurfaces.constantColor C4f.Red |> toEffect
                     DefaultSurfaces.simpleLighting        |> toEffect
                   ]
-               |> Sg.viewTrafo (viewTrafo   |> Mod.map CameraView.viewTrafo )
-               |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
+               |> Sg.viewTrafo (viewTrafo   |> AVal.map CameraView.viewTrafo )
+               |> Sg.projTrafo (perspective |> AVal.map Frustum.projTrafo    )
 
         let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, sg.RenderObjects())
 

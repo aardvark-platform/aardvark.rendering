@@ -1,7 +1,7 @@
 ﻿open System
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
@@ -19,13 +19,13 @@ open Aardvark.Rendering.Text
 module IncrementalExtensions = 
     open System.Threading
 
-    let throttled (name : string) (ms : int) (f : 'a -> unit) (m : IMod<'a>) : IMod<'a> = 
+    let throttled (name : string) (ms : int) (f : 'a -> unit) (m : aval<'a>) : aval<'a> = 
         let v = MVar.empty()
-        let r = Mod.init (Mod.force m)
+        let r = AVal.init (AVal.force m)
         let f () = 
             while true do
                 let () = MVar.take v
-                let v = Mod.force m
+                let v = AVal.force m
                 f v 
                 transact (fun _ -> r.Value <- v)
                 Thread.Sleep ms
@@ -36,7 +36,7 @@ module IncrementalExtensions =
         t.IsBackground <- true
         t.Name <- name
         t.Start()
-        r :> IMod<_>
+        r :> aval<_>
 
 
 type WtfRuntimeApplicator(r : IRuntime, child : ISg) =
@@ -75,14 +75,14 @@ let main argv =
         ]
         
     let sw = System.Diagnostics.Stopwatch.StartNew()
-    let trigger = Mod.custom (fun _ -> sw.Elapsed.TotalSeconds)
+    let trigger = AVal.custom (fun _ -> sw.Elapsed.TotalSeconds)
     
 
     let cfg = { Aardvark.Rendering.Text.TextConfig.Default with color = C4b.Red; align = TextAlignment.Center; renderStyle = RenderStyle.NoBoundary }
 
-    //let inputText = Mod.init "aaaa"
+    //let inputText = AVal.init "aaaa"
 
-    //let text = inputText |> Mod.map (fun t -> cfg.Layout t)
+    //let text = inputText |> AVal.map (fun t -> cfg.Layout t)
 
 
     //let size = V2i(512,512)
@@ -106,18 +106,18 @@ let main argv =
     //            ]
     //        )
     //    let mutable old : Option<IRenderTask> = None
-    //    let t = Mod.init (text |> Mod.force) |> Sg.shape |> Sg.applyRuntime runtime |> Sg.compile runtime signature
+    //    let t = AVal.init (text |> AVal.force) |> Sg.shape |> Sg.applyRuntime runtime |> Sg.compile runtime signature
     //    fun (s : ShapeList) ->
     //        let o = old
     //        Log.startTimed "compile text"
-    //        let s = Sg.shape (Mod.constant s) 
+    //        let s = Sg.shape (AVal.constant s) 
     //        s?Runtime <- runtime
     //        let task = 
     //            s 
     //            |> Sg.applyRuntime runtime 
     //            |> Sg.scale 0.1
-    //            |> Sg.viewTrafo (Mod.constant Trafo3d.Identity)
-    //            |> Sg.projTrafo (Frustum.ortho (Box3d.Unit) |> Frustum.projTrafo |> Mod.constant)
+    //            |> Sg.viewTrafo (AVal.constant Trafo3d.Identity)
+    //            |> Sg.projTrafo (Frustum.ortho (Box3d.Unit) |> Frustum.projTrafo |> AVal.constant)
     //            |> Sg.compile runtime signature
     //        old <- Some task
     //        task.Run(RenderToken.Empty, fbo)
@@ -129,7 +129,7 @@ let main argv =
     let prepare () = ()
 
 
-    let text = trigger  |> Mod.map (fun _ -> 
+    let text = trigger  |> AVal.map (fun _ -> 
             //Log.startTimed "layout"
             let s = System.Guid.NewGuid() |> string 
             let r = cfg.Layout s
@@ -140,8 +140,8 @@ let main argv =
 
     //let text = "jsdfjdsfj"
     //let c = cfg.Layout text
-    //let text = Mod.constant c
-    //let text = Mod.constant (cfg.Layout "")
+    //let text = AVal.constant c
+    //let text = AVal.constant (cfg.Layout "")
     //let text = IncrementalExtensions.throttled "ttext" 400000 prepare text
     let overlay = text |> Sg.shape // |> Sg.scale 0.02
 
@@ -155,10 +155,10 @@ let main argv =
     //    t.Start()
     //    t
     let t = 
-        trigger |> Mod.map (fun time -> 
+        trigger |> AVal.map (fun time -> 
             Trafo3d.RotationZ (time * 0.1)
         )
-    let t = Mod.constant Trafo3d.Identity
+    let t = AVal.constant Trafo3d.Identity
 
  
     let rand = Random()
@@ -170,14 +170,14 @@ let main argv =
     let positions = 
         let randomV3f() = V3d(rand.NextDouble(), rand.NextDouble(), rand.NextDouble()) |> V3f.op_Explicit
         let pts =  Array.init pointCount (fun _ -> randomV3f()) :> Array
-        trigger |> Mod.map (fun time -> 
+        trigger |> AVal.map (fun time -> 
             ArrayBuffer(pts.Copy()) :> IBuffer
         )
 
 
         
     let vertices = BufferView(positions,typeof<V3f>)
-    //let normals = BufferView(ArrayBuffer(packedGeometry.normals) :> IBuffer |> Mod.constant,typeof<V3f>)
+    //let normals = BufferView(ArrayBuffer(packedGeometry.normals) :> IBuffer |> AVal.constant,typeof<V3f>)
 
     let dyncGen = 
         Sg.draw IndexedGeometryMode.PointList
@@ -194,19 +194,19 @@ let main argv =
         //dyncGen
         overlay
         |> Sg.trafo t
-        |> Sg.viewTrafo (Mod.constant (CameraView.viewTrafo view))
-        |> Sg.projTrafo (Mod.constant (Frustum.projTrafo frustum))
+        |> Sg.viewTrafo (AVal.constant (CameraView.viewTrafo view))
+        |> Sg.projTrafo (AVal.constant (Frustum.projTrafo frustum))
 
 
     let res = 
         RenderTask.ofList [
-            app.Runtime.CompileClear(signature,Mod.constant C4f.Black, Mod.constant 1.0)
+            app.Runtime.CompileClear(signature,AVal.constant C4f.Black, AVal.constant 1.0)
             Sg.compile app.Runtime signature sg
         ]
-    let fbo = app.Runtime.CreateFramebuffer(signature, Mod.constant (V2i(1024, 768)))
+    let fbo = app.Runtime.CreateFramebuffer(signature, AVal.constant (V2i(1024, 768)))
     fbo.Acquire()
 
-    let f = Mod.force fbo
+    let f = AVal.force fbo
 
     let sw = System.Diagnostics.Stopwatch()
     while true do
