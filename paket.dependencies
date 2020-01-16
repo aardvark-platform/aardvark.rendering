@@ -4,15 +4,15 @@ source https://api.nuget.org/v3/index.json
 nuget FSharp.Core                        >= 4.6.2 lowest_matching: true
 
 nuget Aardvark.Base.TypeProviders        ~> 4.5.15
-nuget Aardvark.Base.FSharp               ~> 5.0.0-prerelease0001
-nuget Aardvark.Base.IO                   ~> 5.0.0-prerelease0001
-nuget Aardvark.Base.Incremental          ~> 5.0.0-prerelease0001
-nuget Aardvark.Base.Runtime              ~> 5.0.0-prerelease0001
-nuget Aardvark.Base.Essentials           ~> 5.0.0-prerelease0001
+nuget Aardvark.Base.FSharp               ~> 5.0.0-prerelease0002
+nuget Aardvark.Base.IO                   ~> 5.0.0-prerelease0002
+nuget Aardvark.Base.Incremental          ~> 5.0.0-prerelease0002
+nuget Aardvark.Base.Runtime              ~> 5.0.0-prerelease0002
+nuget Aardvark.Base.Essentials           ~> 5.0.0-prerelease0002
                                   
-nuget FShade.Core                        ~> 5.0.0-prerelease0001
-nuget FShade                             ~> 5.0.0-prerelease0001
-nuget FShade.Debug                       ~> 5.0.0-prerelease0001
+nuget FShade.Core                        ~> 5.0.0-prerelease0002
+nuget FShade                             ~> 5.0.0-prerelease0002
+nuget FShade.Debug                       ~> 5.0.0-prerelease0002
 
 nuget Unofficial.OpenVR					 ~> 1.1.0 
 nuget Unofficial.Typography              ~> 0.0.3

@@ -136,7 +136,7 @@ module CommandTest =
 
         let mutable urdar = System.Collections.Generic.Stack()
 
-        let geometries = CSet.ofSeq oida
+        let geometries = cset oida
 
         let mutable up = false
 

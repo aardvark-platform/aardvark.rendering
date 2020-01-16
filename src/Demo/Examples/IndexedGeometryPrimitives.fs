@@ -97,7 +97,7 @@ module IndexedGeometry =
 
         prims
             |> List.map Sg.ofIndexedGeometry
-            |> Sg.group'
+            |> Sg.ofList
             |> Sg.andAlso (tris |> AVal.map (IndexedGeometryPrimitives.triangles)
                                 |> AVal.map (Sg.ofIndexedGeometry)
                                 |> Sg.dynamic)

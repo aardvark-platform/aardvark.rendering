@@ -13,10 +13,10 @@ module AdapterSemantics =
     [<Semantic>]
     type AdapterSem() =
         member x.RenderObjects(a : Sg.AdapterNode) : aset<IRenderObject> =
-            a.Node?RenderObjects()
+            a.Node?RenderObjects() |> ASet.scoped
 
         member x.GlobalBoundingBox(a : Sg.AdapterNode) : aval<Box3d> =
-            a.Node?GlobalBoundingBox()
+            a.Node?GlobalBoundingBox() 
 
         member x.LocalBoundingBox(a : Sg.AdapterNode) : aval<Box3d> =
             a.Node?LocalBoundingBox()

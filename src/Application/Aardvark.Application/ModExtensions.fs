@@ -62,8 +62,6 @@ module AVal =
     let rec private int (initial : aval<'a>) (controllers : list<aval<AdaptiveFunc<'a>>>): aval<'a> =
         match controllers with
             | c::cs ->
-                
-                
                 let result = 
                     c |> AVal.bind (fun f ->
                         AVal.custom (fun t ->
@@ -90,7 +88,11 @@ module AVal =
         AVal.custom (fun token ->
             let v = result.GetValue token
             if !currentValue <> v then
+
+                //time.Outputs.Add current |> ignore
+                //time.GetValue token |> ignore
                 currentValue := v
+
 
                 AdaptiveObject.RunAfterEvaluate(fun () ->
                     current.MarkOutdated()

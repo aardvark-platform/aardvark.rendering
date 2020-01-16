@@ -169,7 +169,7 @@ module Assimp =
                                 vertexCount
 
                         if faceVertexCount = 0 || faceVertexCount % 3 <> 0 then
-                            let sg = Sg.group' []
+                            let sg = Sg.empty
                             cache.Add(m, sg)
                             sg
                         else
@@ -207,7 +207,7 @@ module Assimp =
                             cache.Add(m, sg)
                             sg
                     else
-                        let sg = Sg.group' []
+                        let sg = Sg.empty
                         cache.Add(m, sg)
                         sg
 

@@ -63,7 +63,7 @@ module CullingTest =
             }
 
         let changed = MVar.empty ()
-        cameraView |> AVal.unsafeRegisterCallbackKeepDisposable (fun _ -> MVar.put changed ()) |> ignore
+        cameraView.AddCallback (fun _ -> MVar.put changed ()) |> ignore
 
         let objectIndex = AVal.init 1
 
@@ -193,7 +193,7 @@ module CullingTest =
        
         Log.startTimed "gather objs"
         let objects = sg.RenderObjects()
-        objects |> ASet.toArray |> ignore
+        objects.Content |> AVal.force |> HashSet.toArray |> ignore
         Log.stop()
 
 
@@ -313,7 +313,7 @@ module CullingTest =
             }
 
         let changed = MVar.empty ()
-        cameraView |> AVal.unsafeRegisterCallbackKeepDisposable (fun _ -> MVar.put changed ()) |> ignore
+        cameraView.AddCallback (fun _ -> MVar.put changed ()) |> ignore
 
         let objectIndex = AVal.init 1
 
@@ -460,7 +460,7 @@ module CullingTest =
             }
 
         let changed = MVar.empty ()
-        cameraView |> AVal.unsafeRegisterCallbackKeepDisposable (fun _ -> MVar.put changed ()) |> ignore
+        cameraView.AddCallback (fun _ -> MVar.put changed ()) |> ignore
 
         let objectIndex = AVal.init 1
 
@@ -489,7 +489,7 @@ module CullingTest =
         let cullTimer = System.Diagnostics.Stopwatch()
         let mutable visibleThings = 0
 
-        let renderSet = CSet.empty
+        let renderSet = cset()
 
         let cullComputeTime = System.Diagnostics.Stopwatch()
 
@@ -511,11 +511,11 @@ module CullingTest =
                             isActive.Value <- visible
                             if visible then 
                                 visibleThings <- visibleThings + 1
-                                let worked = CSet.add sg renderSet
+                                let worked = renderSet.Add sg
                                 assert worked
                             else 
                                 visibleThings <- visibleThings - 1
-                                let worked = CSet.remove sg renderSet
+                                let worked = renderSet.Add sg
                                 assert worked
                             changedCount <- changedCount + 1
                     cullComputeTime.Stop()

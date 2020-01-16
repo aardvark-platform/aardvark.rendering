@@ -234,7 +234,7 @@ module PostProcessing =
                 |> Sg.texture DefaultSemantic.DiffuseColorTexture blurredOnlyX
                 |> Sg.effect [Shaders.gaussY |> toEffect]
         
-        Sg.group' [mainResult; overlayOriginal]
+        Sg.ofList [mainResult; overlayOriginal]
 
 
 
@@ -287,7 +287,7 @@ module PostProcessing =
     // finally we create a simple utility for changing the pointSize
     // you can play with it and see the render-result adjust to the given point-size.
     let setPointSize (s : float) =
-        transact (fun () -> AVal.change pointSize s)
+        transact (fun () -> pointSize.Value <- s)
 
 
     // some other setters showing intermediate result textures

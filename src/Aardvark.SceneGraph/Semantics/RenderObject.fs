@@ -107,8 +107,6 @@ module RenderObjectSemantics =
         member x.OverlayTasks() : aset<RenderPass * IRenderTask> = x?OverlayTasks()
 
     module Semantic =
-        [<System.Obsolete("renderJobs is deprecated, please use renderObjects instead.")>]        
-        let renderJobs (s : ISg) : aset<IRenderObject> = s?RenderObjects()
         let renderObjects (s : ISg) : aset<IRenderObject> = s?RenderObjects()
         let overlayTasks (s : ISg) : aset<RenderPass * IRenderTask> = s?OverlayTasks()
 
@@ -119,13 +117,13 @@ module RenderObjectSemantics =
             aset {
                 let! c = a.Child
                 yield! c.RenderObjects()
-            }
+            } |> ASet.scoped
 
         member x.RenderObjects(g : IGroup) : aset<IRenderObject> =
             aset {
                 for c in g.Children do
                     yield! c.RenderObjects()
-            }
+            } |> ASet.scoped
 
         member x.RenderObjects(r : Sg.IndirectRenderNode) : aset<IRenderObject> =
             let scope = Ag.getContext()
@@ -250,14 +248,14 @@ module RenderObjectSemantics =
             aset {
                 let! c = app.Child
                 yield! c.OverlayTasks()
-            }
+            } |> ASet.scoped
 
 
         member x.OverlayTasks(g : IGroup) =
             aset {
                 for c in g.Children do
                     yield! c.OverlayTasks()
-            }
+            } |> ASet.scoped
 
         member x.OverlayTasks(r : Sg.OverlayNode) =
             ASet.single (r.RenderPass, r.RenderTask)

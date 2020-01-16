@@ -167,11 +167,11 @@ module Shadows =
     let shadowCam = CameraView.lookAt (V3d.III * 2.0) V3d.Zero V3d.OOI
     let shadowProj = Frustum.perspective 60.0 0.1 10.0 1.0
 
-
+    let time = TimeMod()
     //let angle = AVal.init 0.0
     let rotation =
         controller {
-            let! dt = differentiate AVal.time
+            let! dt = differentiate time
             return fun f -> f + dt.TotalSeconds * 0.6
         }
   
@@ -293,7 +293,7 @@ module Shadows =
 
     let setShadowSize (w : int) (h : int) =
         transact (fun () ->
-            AVal.change shadowMapSize (V2i(w,h))
+            shadowMapSize.Value <- V2i(w,h)
         )
 
 open Shadows

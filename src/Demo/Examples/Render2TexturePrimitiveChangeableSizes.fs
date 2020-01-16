@@ -115,7 +115,7 @@ printfn "Done. Modify sg and call setSg again in order to see the modified rende
 [<AutoOpen>]
 module Test = 
     // check out how to change render targets imperatively
-    let mkSmall () = transact (fun () -> AVal.change sizeM (V2i(16,16)))
+    let mkSmall () = transact (fun () -> sizeM.Value <- V2i(16,16))
     let renderAgain () = 
         clear.Run(RenderToken.Empty, AVal.force fbo)
         task.Run(RenderToken.Empty, AVal.force fbo) |> ignore

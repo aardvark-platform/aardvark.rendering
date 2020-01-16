@@ -366,7 +366,7 @@ module Stereo =
         let s = win.Sizes |> AVal.map (fun s -> s / V2i(2,1))
 
         let colors =
-            OutputAVal.custom 
+            OutputMod.custom 
                 []
                 (fun t -> runtime.CreateTextureArray(s.GetValue t, TextureFormat.Rgba8, 1, samples, 2))
                 (fun t h -> h.Size.XY = s.GetValue t)
@@ -374,7 +374,7 @@ module Stereo =
                 id
                 
         let depth =
-            OutputAVal.custom 
+            OutputMod.custom 
                 []
                 (fun t -> runtime.CreateTextureArray(s.GetValue t, TextureFormat.Depth24Stencil8, 1, samples, 2))
                 (fun t h -> h.Size.XY = s.GetValue t)
@@ -382,7 +382,7 @@ module Stereo =
                 id
 
         let resolved =
-            OutputAVal.custom 
+            OutputMod.custom 
                 []
                 (fun t -> runtime.CreateTextureArray(s.GetValue t, TextureFormat.Rgba8, 1, 1, 2))
                 (fun t h -> h.Size.XY = s.GetValue t)
@@ -390,7 +390,7 @@ module Stereo =
                 id
                 
         let framebuffer =
-            OutputAVal.custom
+            OutputMod.custom
                 [colors; depth]
                 (fun t -> runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, colors.GetValue(t).[TextureAspect.Color, 0] :> IFramebufferOutput; DefaultSemantic.Depth, depth.GetValue(t).[TextureAspect.Depth, 0] :> IFramebufferOutput]))
                 (fun t h -> false)

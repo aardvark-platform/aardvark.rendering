@@ -207,7 +207,7 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
             )
 
         eAfterRender.Trigger()
-        transact time.MarkOutdated
+        AdaptiveObject.RunAfterEvaluate time.MarkOutdated
         if rafap then x.Invalidate()
 
    

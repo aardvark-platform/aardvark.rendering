@@ -135,7 +135,7 @@ module VulkanTests =
         let mutable frontBricks = Array.zeroCreate 0
 
         img.OnSwap.Add (fun _ ->
-            frontBricks <- lock residentBricks (fun () -> HashSet.toArray residentBricks)
+            frontBricks <- lock residentBricks (fun () -> Aardvark.Base.HashSet.toArray residentBricks)
         )
 
 
@@ -428,57 +428,6 @@ let main argv =
     let chainM (l : aval<list<afun<'a, 'a>>>) =
         l |> AVal.map AFun.chain |> AFun.bind id
 
-    let controller (loc : aval<V3d>) (target : aval<DateTime * V3d>) = 
-        adaptive {
-            let! active = controllerActive
-
-
-            // if the controller is active determine the implementation
-            // based on mode
-            if active then
-                
-                let! mode = mode
-
-
-
-                return [
-                    
-
-                    yield CameraControllers.fly target
-                    // scroll and zoom 
-                    yield CameraControllers.controlScroll win.Mouse 0.1 0.004
-                    yield CameraControllers.controlZoom win.Mouse 0.05
-
-                    
-                    match mode with
-                        | Fly ->
-                            // fly controller special handlers
-                            yield CameraControllers.controlLook win.Mouse
-                            yield CameraControllers.controlWSAD win.Keyboard 5.0
-                            yield CameraControllers.controlPan win.Mouse 0.05
-
-                        | Orbit ->
-                            // special orbit controller
-                            yield CameraControllers.controlOrbit win.Mouse V3d.Zero
-
-                        | Rotate ->
-                            
-//                            // rotate is just a regular orbit-controller
-//                            // with a simple animation rotating around the Z-Axis
-                            yield CameraControllers.controlOrbit win.Mouse V3d.Zero
-                            yield CameraControllers.controlAnimation V3d.Zero V3d.OOI
-
-                ]
-            else
-                // if the controller is inactive simply return an empty-list
-                // of controller functions
-                return []
-
-        } |> chainM
-
-    let resetPos = AVal.init (6.0 * V3d.III)
-    let resetDir = AVal.init (DateTime.MaxValue, V3d.Zero)
-
     let cam = DefaultCameraController.control win.Mouse win.Keyboard win.Time cam // |> AFun.integrate controller
     //let cam = cam |> AFun.integrate (controller resetPos resetDir)
 
@@ -603,13 +552,13 @@ let main argv =
 
 
     let mode = AVal.init FillMode.Fill
-    let font = Font "Comic Sans"
+    let font = Font "Consolas"
 
 
     let config = 
         { MarkdownConfig.light with 
-            codeFont = "Kunstler Script"
-            paragraphFont = "Kunstler Script" 
+            codeFont = "Consolas"
+            paragraphFont = "Consolas" 
         }
 
     let label1 =
@@ -642,7 +591,7 @@ let main argv =
     let sg = 
         active |> AVal.map (fun a ->
             if a then
-                Sg.group [label3; label2; label1]
+                Sg.ofList [label3; label2; label1]
                     //|> Sg.andAlso quad
                     |> Sg.viewTrafo (cam |> AVal.map CameraView.viewTrafo)
                     |> Sg.projTrafo (win.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))

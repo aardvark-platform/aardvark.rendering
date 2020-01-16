@@ -348,17 +348,21 @@ module LevelOfDetail =
 
 
         let mutable frozen = false
-        let views = DefaultingModRef (view |> AVal.map Array.singleton)
-        let projs = DefaultingModRef (proj |> AVal.map Array.singleton)
+
+        let vv = view |> AVal.map Array.singleton
+        let pp = proj |> AVal.map Array.singleton
+
+        let views = cval vv
+        let projs = cval pp
 
         let toggleFreeze() =
             transact (fun () ->
                 if frozen then
-                    views.Reset()
-                    projs.Reset()
+                    views.Value <- vv
+                    projs.Value <- pp
                 else
-                    views.Value <- AVal.force views
-                    projs.Value <- AVal.force projs
+                    views.Value <- AVal.constant (AVal.force (AVal.force views))
+                    projs.Value <- AVal.constant (AVal.force (AVal.force projs))
                 frozen <- not frozen
             )
 
@@ -369,7 +373,7 @@ module LevelOfDetail =
         let tree = GeometryTree(Box3d(-10.0 * V3d.III, 10.0 * V3d.III))
 
 
-        let viewProj = AVal.map2 (Array.map2 (*)) views projs
+        let viewProj = AVal.map2 (Array.map2 (*)) (AVal.bind id views) (AVal.bind id projs)
 
 
         let visible =

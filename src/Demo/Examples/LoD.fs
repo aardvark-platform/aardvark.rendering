@@ -215,8 +215,8 @@ module LoD =
         win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ ->
             transact (fun () ->
                 match mode.Value with
-                    | Main -> AVal.change mode Test
-                    | Test -> AVal.change mode Main
+                    | Main -> mode.Value <- Test
+                    | Test -> mode.Value <- Main
 
                 printfn "mode: %A" mode.Value
             )
@@ -309,7 +309,7 @@ module LoD =
         } 
                      
     let sg = 
-        Sg.group' [
+        Sg.ofList [
             cloud
                 |> Sg.effect [
                     DefaultSurfaces.trafo |> toEffect 

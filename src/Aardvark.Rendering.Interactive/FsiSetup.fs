@@ -34,11 +34,6 @@ module FsiSetup =
             #endif
 
             Ag.initialize()
-            Aardvark.Base.Ag.unpack <- fun o ->
-                    match o with
-                        | :? IAdaptiveValue as o -> o.GetValue()
-                        | _ -> o
-
             Aardvark.Init()
 
     let initFsi entryPath =
@@ -52,10 +47,5 @@ module FsiSetup =
                 System.Reflection.Assembly.LoadFile(entryPath)
 
             Ag.initialize()
-            Aardvark.Base.Ag.unpack <- fun o ->
-                    match o with
-                        | :? IAdaptiveValue as o -> o.GetValue()
-                        | _ -> o
-
             Aardvark.Init()
  

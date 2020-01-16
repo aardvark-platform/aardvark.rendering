@@ -120,12 +120,12 @@ module Render2TexturePrimitiveFloat =
             |> Sg.projTrafo Interactive.DefaultProjTrafo
 
     win.Keyboard.KeyDown(Keys.Add).Values.Subscribe(fun _ ->
-        transact (fun _ -> AVal.change cnt (cnt.Value + 1))
+        transact (fun _ -> cnt.Value <- cnt.Value + 1)
         printfn "%A" cnt
     ) |> ignore
 
     win.Keyboard.KeyDown(Keys.OemMinus).Values.Subscribe(fun _ ->
-        transact (fun _ -> AVal.change cnt (cnt.Value - 1))
+        transact (fun _ -> cnt.Value <- cnt.Value - 1)
         printfn "%A" cnt
     ) |> ignore
 
