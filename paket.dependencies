@@ -1,7 +1,7 @@
-framework: netstandard2.0, net471, netcoreapp2.0
+framework: netstandard2.0, net471, netcoreapp3.0
 source https://api.nuget.org/v3/index.json
 
-nuget FSharp.Core                        ~> 4.6.2
+nuget FSharp.Core                        >= 4.6.2 lowest_matching: true
 
 nuget Aardvark.Base.TypeProviders        ~> 4.5.15
 nuget Aardvark.Base.FSharp               ~> 5.0.0-prerelease0001
@@ -46,6 +46,7 @@ nuget SourceLink.Create.CommandLine copy_local: true ~> 2.8.2
 clitool dotnet-sourcelink
 
 group Build
+framework: netstandard2.0
 source https://api.nuget.org/v3/index.json
 github aardvark-platform/aardvark.fake:v5
 nuget FSharp.Data ~> 3.0.0
