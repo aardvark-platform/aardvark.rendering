@@ -4,11 +4,11 @@ source https://api.nuget.org/v3/index.json
 nuget FSharp.Core                        >= 4.6.2 lowest_matching: true
 
 nuget Aardvark.Base.TypeProviders        ~> 4.5.15
-nuget Aardvark.Base.FSharp               ~> 5.0.0-prerelease0005
-nuget Aardvark.Base.IO                   ~> 5.0.0-prerelease0005
-nuget Aardvark.Base.Incremental          ~> 5.0.0-prerelease0005
-nuget Aardvark.Base.Runtime              ~> 5.0.0-prerelease0005
-nuget Aardvark.Base.Essentials           ~> 5.0.0-prerelease0005
+nuget Aardvark.Base.FSharp               ~> 5.0.0-prerelease0006
+nuget Aardvark.Base.IO                   ~> 5.0.0-prerelease0006
+nuget Aardvark.Base.Incremental          ~> 5.0.0-prerelease0006
+nuget Aardvark.Base.Runtime              ~> 5.0.0-prerelease0006
+nuget Aardvark.Base.Essentials           ~> 5.0.0-prerelease0006
                                   
 nuget FShade.Core                        ~> 5.0.0-prerelease0004
 nuget FShade                             ~> 5.0.0-prerelease0004
@@ -22,7 +22,7 @@ nuget GLSLangSharp                       ~> 0.4.6
 nuget BruTile                            ~> 2.0.0-alpha1
 nuget Unofficial.LibTessDotNet           ~> 2.0.2
 nuget SharpDX.Direct3D9                  ~> 4.0.1
-nuget Unofficial.AssimpNet               ~> 4.0.4
+nuget Unofficial.AssimpNet               ~> 4.0.5
 
 nuget Unofficial.OpenTK                  ~> 3.0.16
 nuget Unofficial.OpenTK.GLControl        ~> 3.0.16

@@ -8,11 +8,6 @@ open System
 
 [<EntryPoint; STAThread>]
 let main argv = 
-    Report.Verbosity <- 10000
-
-    //let ptr = Aardvark.LoadLibrary(typeof<Assimp.Animation>.Assembly, "Assimp64.dll")
-    //Log.line "%A" ptr
-    //System.Environment.Exit 0
     Ag.initialize()
     Aardvark.Init()
 
