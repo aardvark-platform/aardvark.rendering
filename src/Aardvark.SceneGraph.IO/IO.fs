@@ -12,6 +12,13 @@ module Loader =
     open System
     open System.IO
 
+    [<OnAardvarkInit>]
+    let init() =
+        Assimp.Unmanaged.AssimpLibraryImplementation.NativeLibraryPath <- Aardvark.NativeLibraryPath
+        Assimp.Unmanaged.AssimpLibraryImplementation.SeparateLibraryDirectories <- Aardvark.SeparateLibraryDirectories
+
+
+
     type Texture =
         {
             coordIndex : int
@@ -751,18 +758,18 @@ module Loader =
 
 
 
-        [<CompiledName("Initialize")>]
-        let initialize () =
-            Log.start "unpacking native dependencies for assimp"
-            let r = 
-                try
-                    DynamicLinker.tryUnpackNativeLibrary "Assimp"
-                with e -> 
-                    Log.warn "failed to unpack native dependencies: %s" e.Message
-                    false
-            Log.stop ()
-            if r then Log.line "Assimp native dependencies successfully unpacked."
-            else Log.line "Failed to unpack native assimp dependencies. Did you forget Aardvark.Init()? Make sure Aardvark.SceneGraph.IO.dll is in your output directory."
+        //[<CompiledName("Initialize")>]
+        //let initialize () =
+        //    Log.start "unpacking native dependencies for assimp"
+        //    let r = 
+        //        try
+        //            DynamicLinker.tryUnpackNativeLibrary "Assimp"
+        //        with e -> 
+        //            Log.warn "failed to unpack native dependencies: %s" e.Message
+        //            false
+        //    Log.stop ()
+        //    if r then Log.line "Assimp native dependencies successfully unpacked."
+        //    else Log.line "Failed to unpack native assimp dependencies. Did you forget Aardvark.Init()? Make sure Aardvark.SceneGraph.IO.dll is in your output directory."
 
         let defaultFlags = 
             Assimp.PostProcessSteps.CalculateTangentSpace |||
