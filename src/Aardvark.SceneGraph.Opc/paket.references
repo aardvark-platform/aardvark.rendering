@@ -2,5 +2,4 @@ Aardvark.Base
 Aardvark.Base.IO
 Aardvark.Base.Incremental
 FSharp.Core
-SharpZipLib.NETStandard
-SourceLink.Create.CommandLine
+SharpZipLib
