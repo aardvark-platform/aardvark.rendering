@@ -234,16 +234,16 @@ module private ManagedBufferImplementation =
             x.EvaluateAlways' token (fun token dirty ->
                     for d in dirty do
                         d.Write(token)
-                    x.Store :> IBuffer
+                    store :> IBuffer
                 )
 
         member x.Capacity = store.SizeInBytes
         member x.Count = store.SizeInBytes / asize |> int
 
         member x.Dispose() =
-            runtime.DeleteBuffer store
-            store <- Unchecked.defaultof<_>
-            x.MarkOutdated()
+            if not (Object.ReferenceEquals(store, null)) then
+                runtime.DeleteBuffer store
+                store <- Unchecked.defaultof<_>
 
         interface IDisposable with
             member x.Dispose() = x.Dispose()
