@@ -26,7 +26,7 @@ type Buffer =
         interface IBackendBuffer with
             member x.Runtime = x.Device.Runtime :> IBufferRuntime
             member x.Handle = x.Handle :> obj
-            member x.SizeInBytes = nativeint x.Memory.Size
+            member x.SizeInBytes = nativeint x.Size // NOTE: return size as specified by user. memory might have larger size as it is an aligned block
             member x.Dispose() = x.Device.Runtime.DeleteBuffer x
 
         member x.AddReference() = Interlocked.Increment(&x.RefCount) |> ignore
