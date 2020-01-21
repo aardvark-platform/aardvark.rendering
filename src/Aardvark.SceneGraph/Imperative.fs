@@ -14,7 +14,7 @@ open FSharp.Data.Adaptive
 type AirState =
     {
         isActive            : aval<bool>
-        drawCallInfos       : aval<list<DrawCallInfo>>
+        drawCalls           : DrawCalls
         mode                : IndexedGeometryMode
         surface             : Surface
 
@@ -27,7 +27,6 @@ type AirState =
         stencilMode         : aval<StencilMode>
         
         indices             : Option<BufferView>
-        indirect            : Option<aval<IIndirectBuffer>>
         instanceAttributes  : Map<Symbol, BufferView>
         vertexAttributes    : Map<Symbol, BufferView>
         
@@ -125,7 +124,7 @@ module AirState =
 
         {
             isActive            = ro.IsActive
-            drawCallInfos       = ro.DrawCallInfos
+            drawCalls           = ro.DrawCalls
             mode                = ro.Mode
             surface             = ro.Surface
                               
@@ -137,7 +136,6 @@ module AirState =
             fillMode            = ro.FillMode
             stencilMode         = ro.StencilMode
                   
-            indirect            = if isNull (ro.IndirectBuffer :> obj) then None else Some ro.IndirectBuffer
             indices             = ro.Indices
             instanceAttributes  = Map.empty
             vertexAttributes    = Map.empty
@@ -214,15 +212,7 @@ type Air private() =
                 let ro = RenderObject.Clone state.scope
 
                 ro.IsActive <- state.isActive
-
-                match state.drawCallInfos :> obj with
-                    | null -> 
-                        match state.indirect with
-                            | Some b -> ro.IndirectBuffer <- b
-                            | None -> failwith "sadasdas"
-                    | _ ->
-                        ro.DrawCallInfos <- state.drawCallInfos
-
+                ro.DrawCalls <- state.drawCalls
                 ro.Mode <- state.mode
                 ro.Surface <- state.surface
                 ro.DepthTest <- state.depthTest
@@ -591,31 +581,31 @@ type Air private() =
     // ================================================================================================================ 
     static member Draw(infos : aval<list<DrawCallInfo>>) =
         air {
-            do! modify (fun s -> { s with drawCallInfos = infos })
+            do! modify (fun s -> { s with drawCalls = Direct infos })
             do! emit
         }
 
-    static member DrawIndirect(b : aval<IIndirectBuffer>) =
+    static member DrawIndirect(b : aval<IndirectBuffer>) =
         air {
-            do! modify (fun s -> { s with indirect = Some b; drawCallInfos = Unchecked.defaultof<_> })
+            do! modify (fun s -> { s with drawCalls = Indirect b })
             do! emit
         }
 
     static member Draw(infos : aval<DrawCallInfo>) =
         air {
-            do! modify (fun s -> { s with drawCallInfos = AVal.map (fun i -> [i]) infos })
+            do! modify (fun s -> { s with drawCalls = Direct (AVal.map (fun i -> [i]) infos) })
             do! emit
         }
 
     static member Draw(infos : list<DrawCallInfo>) =
         air {
-            do! modify (fun s -> { s with drawCallInfos = AVal.constant infos })
+            do! modify (fun s -> { s with drawCalls = Direct (AVal.constant infos) })
             do! emit
         }
 
     static member Draw(info : DrawCallInfo) =
         air {
-            do! modify (fun s -> { s with drawCallInfos = AVal.constant [info] })
+            do! modify (fun s -> { s with drawCalls = Direct (AVal.constant [info]) })
             do! emit
         }
 

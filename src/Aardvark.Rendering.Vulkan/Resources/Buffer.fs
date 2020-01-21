@@ -26,7 +26,7 @@ type Buffer =
         interface IBackendBuffer with
             member x.Runtime = x.Device.Runtime :> IBufferRuntime
             member x.Handle = x.Handle :> obj
-            member x.SizeInBytes = nativeint x.Memory.Size
+            member x.SizeInBytes = nativeint x.Size // NOTE: return size as specified by user. memory might have larger size as it is an aligned block
             member x.Dispose() = x.Device.Runtime.DeleteBuffer x
 
         member x.AddReference() = Interlocked.Increment(&x.RefCount) |> ignore
@@ -290,6 +290,17 @@ module Buffer =
                 bits &&& mask <> 0u
                )
             |> Seq.toList
+
+    let toVkUsage (usage : BufferUsage) = 
+        let mutable flags = VkBufferUsageFlags.None
+        if usage.HasFlag BufferUsage.Index then flags <- flags ||| VkBufferUsageFlags.IndexBufferBit
+        if usage.HasFlag BufferUsage.Vertex then flags <- flags ||| VkBufferUsageFlags.VertexBufferBit
+        if usage.HasFlag BufferUsage.Uniform then flags <- flags ||| VkBufferUsageFlags.UniformBufferBit
+        if usage.HasFlag BufferUsage.Indirect then flags <- flags ||| VkBufferUsageFlags.IndirectBufferBit
+        if usage.HasFlag BufferUsage.Storage then flags <- flags ||| VkBufferUsageFlags.StorageBufferBit
+        if usage.HasFlag BufferUsage.Read then flags <- flags ||| VkBufferUsageFlags.TransferSrcBit
+        if usage.HasFlag BufferUsage.Write then flags <- flags ||| VkBufferUsageFlags.TransferDstBit
+        flags
 
     let private emptyBuffers = ConcurrentDictionary<Device * VkBufferUsageFlags, Buffer>()
 

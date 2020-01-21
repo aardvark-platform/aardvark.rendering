@@ -575,14 +575,15 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
 
     let dirty = System.Collections.Generic.HashSet<int>()
     let mutable count = 0
+    let mutable stride = 20
 
     let bufferHandles = NativePtr.allocArray [| V3i(buffer.Handle, bbuffer.Handle, count) |]
-    let indirectHandle = NativePtr.allocArray [| V2i(buffer.Handle, count) |]
+    let indirectHandle = NativePtr.allocArray [| IndirectDrawArgs(buffer.Handle, count, stride) |]
     let computeSize = NativePtr.allocArray [| V3i.Zero |]
 
     let updatePointers() =
         NativePtr.write bufferHandles (V3i(buffer.Handle, bbuffer.Handle, count))
-        NativePtr.write indirectHandle (V2i(buffer.Handle, count))
+        NativePtr.write indirectHandle (IndirectDrawArgs(buffer.Handle, count, stride))
         NativePtr.write computeSize (V3i(ceilDiv count 64, 1, 1))
 
     let oldProgram = NativePtr.allocArray [| 0 |]
@@ -792,7 +793,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
 
 
     member x.Buffer =
-        Aardvark.Rendering.GL.IndirectBufferExtensions.IndirectBuffer(buffer, count, sizeof<DrawCallInfo>, false)
+        Aardvark.Base.IndirectBuffer(buffer :> IBuffer, count, sizeof<DrawCallInfo>, false)
 
     member x.BoundsBuffer =
         bbuffer
@@ -836,7 +837,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
 
             
         let h = NativePtr.read indirectHandle
-        if h.Y > 0 then
+        if h.Count > 0 then
             before(s)
             if alphaToCoverage then 
                 s.Enable(int EnableCap.SampleAlphaToCoverage)

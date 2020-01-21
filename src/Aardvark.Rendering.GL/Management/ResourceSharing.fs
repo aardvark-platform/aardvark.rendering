@@ -75,14 +75,12 @@ module Sharing =
             )
 
         member x.Create(data : IBuffer) =
-            match data with
-                | _ ->
-                    if active then
-                        let shared = get data
-                        shared.Acquire()
-                        shared :> Buffer
-                    else
-                        ctx.CreateBuffer data
+            if active then
+                let shared = get data
+                shared.Acquire()
+                shared :> Buffer
+            else
+                ctx.CreateBuffer data
 
         member x.Update(b : Buffer, data : IBuffer) : Buffer =
             match b with

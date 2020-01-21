@@ -61,7 +61,7 @@ type ICommandStream =
     
     abstract member BindBufferRangeFixed : target : BufferRangeTarget * slot : int * b : nativeptr<int> * offset : nativeint * size : nativeint -> unit 
 
-    abstract member NamedBufferData : buffer : int * size : nativeint * data : nativeint * usage : BufferUsageHint -> unit 
+    abstract member NamedBufferData : buffer : int * size : nativeint * data : nativeint * usage : OpenTK.Graphics.OpenGL4.BufferUsageHint -> unit 
     abstract member NamedBufferSubData : buffer : int * offset : nativeint * size : nativeint * data : nativeint -> unit 
     
 
@@ -91,8 +91,8 @@ type ICommandStream =
 
     abstract member DrawArrays : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * calls : nativeptr<DrawCallInfoList> -> unit 
     abstract member DrawElements : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indexType : int * calls : nativeptr<DrawCallInfoList> -> unit 
-    abstract member DrawArraysIndirect : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indirect : nativeptr<V2i> -> unit 
-    abstract member DrawElementsIndirect : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indexType : int * indirect : nativeptr<V2i> -> unit 
+    abstract member DrawArraysIndirect : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indirect : nativeptr<IndirectDrawArgs> -> unit 
+    abstract member DrawElementsIndirect : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indexType : int * indirect : nativeptr<IndirectDrawArgs> -> unit 
     
     abstract member ClearColor : c : nativeptr<C4f> -> unit 
     abstract member ClearDepth : c : nativeptr<float> -> unit 
@@ -408,7 +408,7 @@ module GLAssemblerExtensions =
             s.PushArg(int target)
             s.Call(OpenGl.Pointers.BindBufferRange)
 
-        member this.NamedBufferData(buffer : int, size : nativeint, data : nativeint, usage : BufferUsageHint) =
+        member this.NamedBufferData(buffer : int, size : nativeint, data : nativeint, usage : OpenTK.Graphics.OpenGL4.BufferUsageHint) =
             s.BeginCall(4)
             s.PushArg (int usage)
             s.PushArg data
@@ -597,7 +597,7 @@ module GLAssemblerExtensions =
             s.PushArg(NativePtr.toNativeInt stats)
             s.Call(OpenGl.Pointers.HDrawElements)
 
-        member this.DrawArraysIndirect(stats : nativeptr<V2i>, isActive : nativeptr<int>, beginMode : nativeptr<GLBeginMode>, indirect : nativeptr<V2i>) =
+        member this.DrawArraysIndirect(stats : nativeptr<V2i>, isActive : nativeptr<int>, beginMode : nativeptr<GLBeginMode>, indirect : nativeptr<IndirectDrawArgs>) =
             s.BeginCall(4)
             s.PushArg(NativePtr.toNativeInt indirect)
             s.PushArg(NativePtr.toNativeInt beginMode)
@@ -605,7 +605,7 @@ module GLAssemblerExtensions =
             s.PushArg(NativePtr.toNativeInt stats)
             s.Call(OpenGl.Pointers.HDrawArraysIndirect)
             
-        member this.DrawElementsIndirect(stats : nativeptr<V2i>, isActive : nativeptr<int>, beginMode : nativeptr<GLBeginMode>, indexType : int, indirect : nativeptr<V2i>) =
+        member this.DrawElementsIndirect(stats : nativeptr<V2i>, isActive : nativeptr<int>, beginMode : nativeptr<GLBeginMode>, indexType : int, indirect : nativeptr<IndirectDrawArgs>) =
             s.BeginCall(5)
             s.PushArg(NativePtr.toNativeInt indirect)
             s.PushArg(indexType)
@@ -728,9 +728,9 @@ module GLAssemblerExtensions =
             member this.DispatchCompute(gx: int, gy: int, gz: int) = this.DispatchCompute(gx, gy, gz)
             member this.DispatchCompute(groups: nativeptr<V3i>) = this.DispatchCompute(groups)
             member this.DrawArrays(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, calls: nativeptr<DrawCallInfoList>) = this.DrawArrays(stats, isActive, beginMode, calls)
-            member this.DrawArraysIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indirect: nativeptr<V2i>) = this.DrawArraysIndirect(stats, isActive, beginMode, indirect)
+            member this.DrawArraysIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indirect: nativeptr<IndirectDrawArgs>) = this.DrawArraysIndirect(stats, isActive, beginMode, indirect)
             member this.DrawElements(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indexType: int, calls: nativeptr<DrawCallInfoList>) = this.DrawElements(stats, isActive, beginMode, indexType, calls)
-            member this.DrawElementsIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indexType: int, indirect: nativeptr<V2i>) = this.DrawElementsIndirect(stats, isActive, beginMode, indexType, indirect)
+            member this.DrawElementsIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indexType: int, indirect: nativeptr<IndirectDrawArgs>) = this.DrawElementsIndirect(stats, isActive, beginMode, indexType, indirect)
             member this.Enable(v: int) = this.Enable(v)
             member this.Enable(v: nativeptr<int>) = this.Enable(v)
             member this.EndQuery(target: QueryTarget) = this.EndQuery(target)
@@ -739,7 +739,7 @@ module GLAssemblerExtensions =
             member this.Get(pname: GetIndexedPName, index: int, ptr: nativeptr<'a>) = this.Get(pname, index, ptr)
             member this.GetQueryObject(query: nativeptr<int>, param: GetQueryObjectParam, ptr: nativeptr<'a>) = this.GetQueryObject(query, param, ptr)
             member this.GetQueryObject(query: int, param: GetQueryObjectParam, ptr: nativeptr<'a>) = this.GetQueryObject(query, param, ptr)
-            member this.NamedBufferData(buffer: int, size: nativeint, data: nativeint, usage: BufferUsageHint) = this.NamedBufferData(buffer, size, data, usage)
+            member this.NamedBufferData(buffer: int, size: nativeint, data: nativeint, usage: OpenTK.Graphics.OpenGL4.BufferUsageHint) = this.NamedBufferData(buffer, size, data, usage)
             member this.NamedBufferSubData(buffer: int, offset: nativeint, size: nativeint, data: nativeint) = this.NamedBufferSubData(buffer, offset, size, data)
             member this.QueryCounter(target: QueryCounterTarget, id: int) = this.QueryCounter(target, id)
             member this.QueryCounter(target: QueryCounterTarget, id: nativeptr<int>) = this.QueryCounter(target, id)
@@ -826,9 +826,9 @@ module GLAssemblerExtensions =
             member x.DispatchCompute(gx: int, gy: int, gz: int) = inner.DispatchCompute(gx, gy, gz); x.Append("DispatchCompute", gx, gy, gz)
             member x.DispatchCompute(groups: nativeptr<V3i>) = inner.DispatchCompute(groups); x.Append("DispatchCompute", groups)
             member x.DrawArrays(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, calls: nativeptr<DrawCallInfoList>) = inner.DrawArrays(stats, isActive, beginMode, calls); x.Append("DrawArrays", stats, isActive, beginMode, calls)
-            member x.DrawArraysIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indirect: nativeptr<V2i>) = inner.DrawArraysIndirect(stats, isActive, beginMode, indirect); x.Append("DrawArraysIndirect", stats, isActive, beginMode, indirect)
+            member x.DrawArraysIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indirect: nativeptr<IndirectDrawArgs>) = inner.DrawArraysIndirect(stats, isActive, beginMode, indirect); x.Append("DrawArraysIndirect", stats, isActive, beginMode, indirect)
             member x.DrawElements(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indexType: int, calls: nativeptr<DrawCallInfoList>) = inner.DrawElements(stats, isActive, beginMode, indexType, calls); x.Append("DrawElements", stats, isActive, beginMode, indexType, calls)
-            member x.DrawElementsIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indexType: int, indirect: nativeptr<V2i>) = inner.DrawElementsIndirect(stats, isActive, beginMode, indexType, indirect); x.Append("DrawElementsIndirect", stats, isActive, beginMode, indexType, indirect)
+            member x.DrawElementsIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indexType: int, indirect: nativeptr<IndirectDrawArgs>) = inner.DrawElementsIndirect(stats, isActive, beginMode, indexType, indirect); x.Append("DrawElementsIndirect", stats, isActive, beginMode, indexType, indirect)
             member x.Enable(v: int) = inner.Enable(v); x.Append("Enable", v)
             member x.Enable(v: nativeptr<int>) = inner.Enable(v); x.Append("Enable", v)
             member x.EndQuery(target: QueryTarget) = inner.EndQuery(target); x.Append("EndQuery", target)
@@ -837,7 +837,7 @@ module GLAssemblerExtensions =
             member x.Get(pname: GetIndexedPName, index: int, ptr: nativeptr<'a>) = inner.Get(pname, index, ptr); x.Append("Get", pname, index, ptr)
             member x.GetQueryObject(query: nativeptr<int>, param: GetQueryObjectParam, ptr: nativeptr<'a>) = inner.GetQueryObject(query, param, ptr); x.Append("GetQueryObject", query, param, ptr)
             member x.GetQueryObject(query: int, param: GetQueryObjectParam, ptr: nativeptr<'a>) = inner.GetQueryObject(query, param, ptr); x.Append("GetQueryObject", query, param, ptr)
-            member x.NamedBufferData(buffer: int, size: nativeint, data: nativeint, usage: BufferUsageHint) = inner.NamedBufferData(buffer, size, data, usage); x.Append("NamedBufferData", buffer, size, data, usage)
+            member x.NamedBufferData(buffer: int, size: nativeint, data: nativeint, usage: OpenTK.Graphics.OpenGL4.BufferUsageHint) = inner.NamedBufferData(buffer, size, data, usage); x.Append("NamedBufferData", buffer, size, data, usage)
             member x.NamedBufferSubData(buffer: int, offset: nativeint, size: nativeint, data: nativeint) = inner.NamedBufferSubData(buffer, offset, size, data); x.Append("NamedBufferSubData", buffer, offset, size, data)
             member x.QueryCounter(target: QueryCounterTarget, id: int) = inner.QueryCounter(target, id); x.Append("QueryCounter", target, id)
             member x.QueryCounter(target: QueryCounterTarget, id: nativeptr<int>) = inner.QueryCounter(target, id); x.Append("QueryCounter", target, id)
@@ -929,7 +929,7 @@ module GLAssemblerExtensions =
                 calls.Pointer
             )
 
-        member inline x.DrawArraysIndirect(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, indirect : IResource<_, V2i>) =
+        member inline x.DrawArraysIndirect(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, indirect : IResource<_, IndirectDrawArgs>) =
             x.DrawArraysIndirect(
                 stats,
                 isActive.Pointer,
@@ -937,7 +937,7 @@ module GLAssemblerExtensions =
                 indirect.Pointer
             )
          
-        member inline x.DrawElementsIndirect(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, indexType : int, indirect : IResource<_, V2i>) =
+        member inline x.DrawElementsIndirect(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, indexType : int, indirect : IResource<_, IndirectDrawArgs>) =
             x.DrawElementsIndirect(
                 stats,
                 isActive.Pointer,

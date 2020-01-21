@@ -311,7 +311,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     member private x.BufferCache            : ResourceCache<Buffer, int>                    = bufferCache
     member private x.TextureCache           : ResourceCache<Texture, V2i>                   = textureCache
-    member private x.IndirectBufferCache    : ResourceCache<IndirectBuffer, V2i>            = indirectBufferCache
+    member private x.IndirectBufferCache    : ResourceCache<GLIndirectBuffer, IndirectDrawArgs> = indirectBufferCache
     member private x.SamplerCache           : ResourceCache<Sampler, int>                   = samplerCache
     member private x.VertexInputCache       : ResourceCache<VertexInputBindingHandle, int>  = vertexInputCache
     member private x.UniformLocationCache   : ResourceCache<UniformLocation, nativeint>     = uniformLocationCache
@@ -427,13 +427,60 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Texture
         })
 
-    member x.CreateIndirectBuffer(indexed : bool, data : aval<IIndirectBuffer>) =
-        indirectBufferCache.GetOrCreate<IIndirectBuffer>(data, [indexed :> obj], fun () -> {
-            create = fun b   -> ctx.CreateIndirect(indexed, b)
-            update = fun h b -> ctx.UploadIndirect(h, indexed, b); h
-            delete = fun h   -> ctx.Delete h
+    member x.CreateIndirectBuffer(indexed : bool, data : aval<IndirectBuffer>) =
+        
+        // TODO: proper cache for transformIndirectData -> if transform necessary duplicates are uploaded at the moment
+
+        let transformIndirectData (buffer : IBuffer) =
+            match buffer with
+            | :? ArrayBuffer as ab ->
+                match ab.Data with
+                | :? (DrawCallInfo[]) as data -> 
+                    let transformed = data |> Array.map (fun dc -> 
+                                DrawCallInfo(
+                                    FaceVertexCount = dc.FaceVertexCount,
+                                    InstanceCount = dc.InstanceCount,
+                                    FirstIndex = dc.FirstIndex,
+                                    BaseVertex = dc.FirstInstance,
+                                    FirstInstance = dc.BaseVertex
+                                ))
+                    ArrayBuffer(transformed) :> IBuffer
+                | _ -> failwith "[GL] IndirectBuffer data supposed to be DrawCallInfo[]"
+            | :? SingleValueBuffer as sb -> failwith "TODO"
+            | _ -> 
+                buffer
+
+        indirectBufferCache.GetOrCreate<IndirectBuffer>(data, [indexed :> obj], fun () -> {
+            create = fun b   -> let (buffer, own) =
+                                    match b.Buffer with
+                                    | :? Buffer -> 
+                                        (b.Buffer :?> Buffer, false)
+                                    | _ -> 
+                                        let layoutedData = if indexed then transformIndirectData b.Buffer else b.Buffer
+                                        (bufferManager.Create(layoutedData), true)
+
+                                GLIndirectBuffer(buffer, b.Count, b.Stride, b.Indexed, own)
+
+            update = fun h b -> if h.Indexed <> b.Indexed then
+                                    failwith "[GL] cannot change Indexed option of IndirectBuffer"
+
+                                let buffer =
+                                    match b.Buffer with
+                                    | :? Buffer -> 
+                                        if h.OwnResource then 
+                                            failwith "[GL] cannot change IndirectBuffer type"
+                                        b.Buffer :?> Buffer
+                                    | _ -> 
+                                        if not h.OwnResource then 
+                                            failwith "[GL] cannot change IndirectBuffer type"
+                                        let layoutedData = if indexed then transformIndirectData b.Buffer else b.Buffer
+                                        bufferManager.Update(h.Buffer, layoutedData)
+
+                                GLIndirectBuffer(buffer, b.Count, b.Stride, b.Indexed, h.OwnResource)
+
+            delete = fun h   -> if h.OwnResource then bufferManager.Delete(h.Buffer)
             info =   fun h   -> h.Buffer.SizeInBytes |> Mem |> ResourceInfo
-            view =   fun h   -> V2i(h.Buffer.Handle, h.Count)
+            view =   fun h   -> IndirectDrawArgs(h.Buffer.Handle, h.Count, h.Stride)
             kind = ResourceKind.IndirectBuffer
         })
 

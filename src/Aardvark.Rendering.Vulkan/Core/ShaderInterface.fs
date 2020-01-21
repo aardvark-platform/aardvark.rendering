@@ -67,13 +67,13 @@ type GeometryFlags =
     /// Stage input primitive is triangles.
     | InputTriangles            = 0x0008
     /// Geometry stage input primitive is triangles adjacency.
-    | InputTrianglesAdjacency    = 0x0008
+    | InputTrianglesAdjacency   = 0x0010
     /// Stage output primitive is points. 
-    | OutputPoints              = 0x0010
+    | OutputPoints              = 0x0020
     /// Stage output primitive is line strip.
-    | OutputLineStrip           = 0x0020
+    | OutputLineStrip           = 0x0040
     /// Stage output primitive is triangle strip.
-    | OutputTriangleStrip       = 0x0040
+    | OutputTriangleStrip       = 0x0080
 
 [<System.Flags>]
 type FragmentFlags =

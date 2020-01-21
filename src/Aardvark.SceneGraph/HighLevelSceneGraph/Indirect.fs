@@ -252,7 +252,7 @@ module Indirect =
                                 ()
 
                     let instanceBuffers = uniformCache.GetBuffers(token)
-                    let indirect = callCache.Values |> Seq.toArray |> IndirectBuffer.ofArray
+                    let indirect = callCache.Values |> Seq.toArray |> IndirectBuffer.ofArray false
                     
                     indirect, instanceBuffers
                 )
@@ -270,7 +270,7 @@ module Indirect =
                     member x.TryGetAttribute(sem) = geometryCache.TryGetBufferView sem
                 }
 
-            obj.IndirectBuffer <- AVal.map fst indirectAndInstanceBuffers
+            obj.DrawCalls <- Indirect (AVal.map fst indirectAndInstanceBuffers)
             obj.InstanceAttributes <- instanceProvider
             obj.VertexAttributes <- vertexProvider
             obj.Mode <- node.Signature.mode

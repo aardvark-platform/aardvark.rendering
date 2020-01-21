@@ -881,7 +881,7 @@ type PreparedObjectInfo =
         oIndexBuffer : Option<OpenGl.Enums.IndexType * IResource<Buffer, int>>
         oIsActive : IResource<bool, int>
         oDrawCallInfos : IResource<DrawCallInfoList, DrawCallInfoList>
-        oIndirectBuffer : Option<IResource<IndirectBuffer, V2i>>
+        oIndirectBuffer : Option<IResource<GLIndirectBuffer, IndirectDrawArgs>>
         oVertexInputBinding : IResource<VertexInputBindingHandle, int>  
     }
     
@@ -1012,9 +1012,9 @@ module PreparedObjectInfo =
 
         GL.Check "[Prepare] Indices"
 
-        let indirect =
-            if isNull (rj.IndirectBuffer :> obj) then None
-            else x.CreateIndirectBuffer(Option.isSome rj.Indices, rj.IndirectBuffer) |> Some
+        let indirect = match rj.DrawCalls with
+                       | Indirect indir -> x.CreateIndirectBuffer(Option.isSome rj.Indices, indir) |> Some
+                       | _ -> None
 
         GL.Check "[Prepare] Indirect Buffer"
 
@@ -1029,7 +1029,9 @@ module PreparedObjectInfo =
 
         let isActive = x.CreateIsActive rj.IsActive
         let beginMode = x.CreateBeginMode(program.Handle, rj.Mode)
-        let drawCalls = if isNull (rj.DrawCallInfos :> obj) then Unchecked.defaultof<_> else x.CreateDrawCallInfoList rj.DrawCallInfos
+        let drawCalls = match rj.DrawCalls with
+                        | Direct dir -> x.CreateDrawCallInfoList dir
+                        | _ -> Unchecked.defaultof<_>
 
 
         // finally return the PreparedRenderObject

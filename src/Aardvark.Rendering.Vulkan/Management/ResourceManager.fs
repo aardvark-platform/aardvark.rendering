@@ -458,12 +458,12 @@ module Resources =
 //            }
 //        )
 
-    type IndirectBufferResource(owner : IResourceCache, key : list<obj>, device : Device, indexed : bool, input : aval<IIndirectBuffer>) =
-        inherit ImmutableResourceLocation<IIndirectBuffer, IndirectBuffer>(
+    type IndirectBufferResource(owner : IResourceCache, key : list<obj>, device : Device, indexed : bool, input : aval<IndirectBuffer>) =
+        inherit ImmutableResourceLocation<IndirectBuffer, VkIndirectBuffer>(
             owner, key, 
             input,
             {
-                icreate = fun (b : IIndirectBuffer) -> device.CreateIndirectBuffer(indexed, b)
+                icreate = fun (b : IndirectBuffer) -> device.CreateIndirectBuffer(indexed, b)
                 idestroy = fun b -> device.Delete b
                 ieagerDestroy = true
             }
@@ -973,7 +973,7 @@ module Resources =
         override x.Free(p : VkPipeline) =
             VkRaw.vkDestroyPipeline(renderPass.Device.Handle, p, NativePtr.zero)
 
-    type IndirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, calls : IResourceLocation<IndirectBuffer>) =
+    type IndirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, calls : IResourceLocation<VkIndirectBuffer>) =
         inherit AbstractPointerResourceWithEquality<DrawCall>(owner, key)
 
         override x.Create() =
@@ -1178,7 +1178,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
     //let descriptorPool = device.CreateDescriptorPool(1 <<< 22, 1 <<< 22)
 
     let bufferCache             = ResourceLocationCache<Buffer>(user)
-    let indirectBufferCache     = ResourceLocationCache<IndirectBuffer>(user)
+    let indirectBufferCache     = ResourceLocationCache<VkIndirectBuffer>(user)
     let indexBufferCache        = ResourceLocationCache<Buffer>(user)
     let descriptorSetCache      = ResourceLocationCache<DescriptorSet>(user)
     let uniformBufferCache      = ResourceLocationCache<UniformBuffer>(user)
@@ -1254,7 +1254,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateIndexBuffer(input : aval<IBuffer>) =
         bufferCache.GetOrCreate([input :> obj], fun cache key -> new BufferResource(cache, key, device, VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.IndexBufferBit, input))
         
-    member x.CreateIndirectBuffer(indexed : bool, input : aval<IIndirectBuffer>) =
+    member x.CreateIndirectBuffer(indexed : bool, input : aval<IndirectBuffer>) =
         indirectBufferCache.GetOrCreate([indexed :> obj; input :> obj], fun cache key -> new IndirectBufferResource(cache, key, device, indexed, input))
 
     member x.CreateImage(input : aval<ITexture>) =
@@ -1480,7 +1480,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateDrawCall(indexed : bool, calls : aval<list<DrawCallInfo>>) =
         drawCallCache.GetOrCreate([indexed :> obj; calls :> obj], fun cache key -> new DirectDrawCallResource(cache, key, indexed, calls))
 
-    member x.CreateDrawCall(indexed : bool, calls : IResourceLocation<IndirectBuffer>) =
+    member x.CreateDrawCall(indexed : bool, calls : IResourceLocation<VkIndirectBuffer>) =
         drawCallCache.GetOrCreate([indexed :> obj; calls :> obj], fun cache key -> new IndirectDrawCallResource(cache, key, indexed, calls))
         
     member x.CreateVertexBufferBinding(buffers : list<IResourceLocation<Buffer> * int64>) =

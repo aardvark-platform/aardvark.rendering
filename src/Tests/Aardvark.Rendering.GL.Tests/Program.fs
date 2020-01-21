@@ -56,7 +56,7 @@ let testCompile() =
             RenderPass          = RenderPass.main
             
             DrawCallInfos       = AVal.constant [ callInfo ]
-            IndirectBuffer      = Unchecked.defaultof<_>
+            DrawCalls           = Direct(Mod.constant [ callInfo ])
             Mode                = IndexedGeometryMode.TriangleList
         
 

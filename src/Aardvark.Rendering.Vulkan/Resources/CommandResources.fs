@@ -22,7 +22,7 @@ type DeviceDrawCallExtensions private() =
 
 
     [<Extension>]
-    static member CreateDrawCall(this : Device, indexed : bool, buffer : IndirectBuffer) =
+    static member CreateDrawCall(this : Device, indexed : bool, buffer : VkIndirectBuffer) =
         DrawCall.Indirect(indexed, buffer.Handle, buffer.Count)
 
 

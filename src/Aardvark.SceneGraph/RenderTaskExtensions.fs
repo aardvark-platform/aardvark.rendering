@@ -99,7 +99,7 @@ module RenderTask =
                 AttributeScope = Ag.emptyScope
                 IsActive = AVal.constant true
                 RenderPass = RenderPass.main
-                DrawCallInfos = AVal.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)]
+                DrawCalls = Direct (AVal.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)])
                 Mode = IndexedGeometryMode.TriangleList
                 Surface = Shaders.fs |> toEffect |> Surface.FShadeSimple
                 DepthTest = AVal.constant DepthTestMode.LessOrEqual

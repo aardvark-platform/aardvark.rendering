@@ -99,7 +99,7 @@ module HarwareFeatures =
                             inc &i
             |]
 
-        let indirect = IndirectBuffer(ArrayBuffer indirect, indirect.Length) :> IIndirectBuffer
+        let indirect = IndirectBuffer.ofArray false indirect
 
 
         let sg =    

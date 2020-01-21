@@ -242,6 +242,9 @@ type Surface =
     | Backend of ISurface
     | None
 
+type DrawCalls =
+    | Direct of aval<list<DrawCallInfo>> // F# list seriously !?
+    | Indirect of aval<IndirectBuffer>
 
 [<CustomEquality>]
 [<CustomComparison>]
@@ -253,8 +256,7 @@ type RenderObject =
         mutable IsActive            : aval<bool>
         mutable RenderPass          : RenderPass
                 
-        mutable DrawCallInfos       : aval<list<DrawCallInfo>>
-        mutable IndirectBuffer      : aval<IIndirectBuffer>
+        mutable DrawCalls           : DrawCalls
         mutable Mode                : IndexedGeometryMode
         
 
@@ -296,8 +298,7 @@ type RenderObject =
           AttributeScope = Ag.emptyScope
           IsActive = Unchecked.defaultof<_>
           RenderPass = RenderPass.main
-          DrawCallInfos = Unchecked.defaultof<_>
-          IndirectBuffer = Unchecked.defaultof<_>
+          DrawCalls = Unchecked.defaultof<_>
 
           Mode = IndexedGeometryMode.TriangleList
           Surface = Surface.None
@@ -354,8 +355,7 @@ module RenderObjectExtensions =
           AttributeScope = Ag.emptyScope
           IsActive = Unchecked.defaultof<_>
           RenderPass = RenderPass.main
-          DrawCallInfos = Unchecked.defaultof<_>
-          IndirectBuffer = Unchecked.defaultof<_>
+          DrawCalls = Unchecked.defaultof<_>
           Mode = IndexedGeometryMode.TriangleList
           Surface = Surface.None
           DepthTest = Unchecked.defaultof<_>

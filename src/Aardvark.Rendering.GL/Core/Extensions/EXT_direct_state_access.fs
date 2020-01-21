@@ -21,7 +21,7 @@ module EXT_direct_state_access =
 
         static member EXT_direct_state_access = supported
 
-        static member NamedBufferData(buffer : int, size : nativeint, data : nativeint, usage : BufferUsageHint) =
+        static member NamedBufferData(buffer : int, size : nativeint, data : nativeint, usage : OpenTK.Graphics.OpenGL4.BufferUsageHint) =
             if supported then
                 GL.Ext.NamedBufferData(buffer, size, data, usage)
             else

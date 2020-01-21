@@ -170,7 +170,7 @@ module Sg =
                         )
                     )
                     |> Seq.toArray
-                    |> IndirectBuffer.ofArray
+                    |> IndirectBuffer.ofArray false
                 )
 
             let trafos = BufferView(trafoBuffer, typeof<M34f>)
@@ -222,7 +222,7 @@ module Sg =
             shapes.RenderPass <- RenderPass.shapes
             shapes.BlendMode <- AVal.constant BlendMode.Blend
             shapes.VertexAttributes <- cache.VertexBuffers
-            shapes.IndirectBuffer <- indirect
+            shapes.DrawCalls <- Indirect(indirect)
             shapes.InstanceAttributes <- instanceAttributes
             shapes.Mode <- IndexedGeometryMode.TriangleList
 
@@ -269,7 +269,7 @@ module Sg =
                                     BaseVertex = 0
                                 )
                                 )
-                            |> IndirectBuffer.ofArray
+                            |> IndirectBuffer.ofArray false
 
                     let offsets = 
                         renderText.concreteShapes 
@@ -351,7 +351,7 @@ module Sg =
             shapes.RenderPass <- RenderPass.shapes
             shapes.BlendMode <- AVal.constant BlendMode.Blend
             shapes.VertexAttributes <- cache.VertexBuffers
-            shapes.IndirectBuffer <- indirectAndOffsets |> AVal.map (fun (i,_,_) -> i)
+            shapes.DrawCalls <- Indirect (indirectAndOffsets |> AVal.map (fun (i,_,_) -> i))
             shapes.InstanceAttributes <- instanceAttributes
             shapes.Mode <- IndexedGeometryMode.TriangleList
             shapes.DepthBias <- AVal.constant (DepthBiasState(0.0, 0.0, 0.0))
@@ -373,7 +373,7 @@ module Sg =
                     BaseVertex = 0
                 )
 
-            boundary.DrawCallInfos <- [drawCall] |> AVal.constant
+            boundary.DrawCalls <- Direct ([drawCall] |> AVal.constant)
             boundary.Mode <- IndexedGeometryMode.TriangleList
 
             let bounds = 

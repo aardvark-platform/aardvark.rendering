@@ -393,10 +393,10 @@ void runInstruction(Instruction* i)
 		hglDrawElements((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (DrawCallInfoList*)i->Arg4);
 		break;
 	case HDrawArraysIndirect:
-		hglDrawArraysIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (HandleAndCount*)i->Arg3);
+		hglDrawArraysIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (IndirctDrawArgsStruct*)i->Arg3);
 		break;
 	case HDrawElementsIndirect:
-		hglDrawElementsIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (HandleAndCount*)i->Arg4);
+		hglDrawElementsIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (IndirctDrawArgsStruct*)i->Arg4);
 		break;
 	case HSetDepthTest:
 		hglSetDepthTest((DepthTestMode*)i->Arg0);
@@ -708,10 +708,10 @@ Statistics runRedundancyChecks(Fragment* frag)
 					hglDrawElements((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (DrawCallInfoList*)i->Arg4);
 					break;
 				case HDrawArraysIndirect:
-					hglDrawArraysIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (HandleAndCount*)i->Arg3);
+					hglDrawArraysIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (IndirctDrawArgsStruct*)i->Arg3);
 					break;
 				case HDrawElementsIndirect:
-					hglDrawElementsIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (HandleAndCount*)i->Arg4);
+					hglDrawElementsIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (IndirctDrawArgsStruct*)i->Arg4);
 					break;
 
 				case HSetDepthTest:
@@ -900,14 +900,15 @@ DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* m
 	endtrace("a")
 }
 
-DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, HandleAndCount* handleAndCount)
+DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, IndirctDrawArgsStruct* args)
 {
 	trace("hglDrawArraysIndirect\n");
 
 	auto active = *isActive;
-	auto drawcount = handleAndCount->Count;
+	auto drawcount = args->Count;
 	if (!active || !drawcount) return;
-	auto buffer = handleAndCount->Handle;
+	auto buffer = args->Handle;
+	auto stride = args->Stride;
 
 	stats->DrawCalls++;
 	stats->EffectiveDrawCalls += drawcount;
@@ -927,7 +928,7 @@ DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginM
 		for (n = 0; n < drawcount; n++)
 		{
 			const DrawArraysIndirectCommand  *cmd;
-			cmd = (DrawArraysIndirectCommand*)(indirect + n * 20);
+			cmd = (DrawArraysIndirectCommand*)(indirect + n * stride);
 
 			glDrawArraysInstancedBaseInstance(m, cmd->First, cmd->Count, cmd->InstanceCount, cmd->BaseInstance);
 		}
@@ -940,7 +941,7 @@ DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginM
 		if (buffer != 0)
 		{
 			glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
-			glMultiDrawArraysIndirect(m, nullptr, drawcount, 20);
+			glMultiDrawArraysIndirect(m, nullptr, drawcount, stride);
 		}
 		else
 		{
@@ -951,13 +952,14 @@ DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginM
 	endtrace("a")
 }
 
-DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, HandleAndCount* handleAndCount)
+DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, IndirctDrawArgsStruct* args)
 {
 	trace("hglDrawElementsIndirect\n");
-	auto drawcount = handleAndCount->Count;
+	auto drawcount = args->Count;
 	auto active = *isActive;
 	if (!active || !drawcount)return;
-	auto buffer = handleAndCount->Handle;
+	auto buffer = args->Handle;
+	auto stride = args->Stride;
 
 	stats->DrawCalls++;
 	stats->EffectiveDrawCalls += drawcount;
@@ -977,7 +979,7 @@ DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, Begi
 		for (n = 0; n < drawcount; n++)
 		{
 			const DrawElementsIndirectCommand  *cmd;
-			cmd = (const DrawElementsIndirectCommand  *)indirect + n;
+			cmd = (DrawElementsIndirectCommand*)(indirect + n * stride);
 
 			glDrawElementsInstancedBaseVertexBaseInstance(
 				m,
@@ -998,7 +1000,7 @@ DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, Begi
 		if (buffer != 0)
 		{
 			glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
-			glMultiDrawElementsIndirect(m, indexType, nullptr, drawcount, 0);
+			glMultiDrawElementsIndirect(m, indexType, nullptr, drawcount, stride);
 		}
 		else
 		{

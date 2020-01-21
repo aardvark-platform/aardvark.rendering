@@ -62,7 +62,7 @@ module Sg =
         interface ISg
         member x.Objects = objects
 
-    type IndirectRenderNode(buffer : aval<IIndirectBuffer>, mode : IndexedGeometryMode) =
+    type IndirectRenderNode(buffer : aval<IndirectBuffer>, mode : IndexedGeometryMode) =
         interface ISg
 
         member x.Mode = mode

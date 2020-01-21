@@ -62,9 +62,9 @@ module Config =
 
     let mutable CheckErrors = false
 
-    let enableVertexArrayObjectsIfPossible = true
+    //let enableVertexArrayObjectsIfPossible = true // not implemented or deprecated?
     let enableSamplersIfPossible = true
-    let enableUniformBuffersIfPossible = true
+    //let enableUniformBuffersIfPossible = true // not implemented or deprecated?
 
 module RuntimeConfig =
 

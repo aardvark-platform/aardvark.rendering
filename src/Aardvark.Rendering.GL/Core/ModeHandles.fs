@@ -192,3 +192,13 @@ type VertexInputBindingHandle =
         val mutable public Pointer : nativeptr<VertexInputBinding>
         new(p) = { Pointer = p }
     end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type IndirectDrawArgs =
+    struct
+        val mutable public Handle : int
+        val mutable public Count : int
+        val mutable public Stride : int
+
+        new(handle : int, count : int, stride : int) = { Handle = handle; Count = count; Stride = stride }
+    end

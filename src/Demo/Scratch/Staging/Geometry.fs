@@ -603,7 +603,7 @@ module GeometryTest =
                     )
 
                 ro.Mode <- g.mode
-                ro.DrawCallInfos <- AVal.constant [call]
+                ro.DrawCalls <- Direct(AVal.constant [call])
                 ro.Indices <- g.indices
 
                 let u = ro.Uniforms

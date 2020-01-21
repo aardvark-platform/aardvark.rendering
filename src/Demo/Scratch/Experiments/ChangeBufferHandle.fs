@@ -14,8 +14,8 @@ module ChangeBufferHandle =
     let run() =
         let runtime = App.Runtime
 
-        let b0 = runtime.PrepareBuffer (ArrayBuffer [| V3f.OOO; V3f.IOO; V3f.IIO; V3f.OIO |]) :> IBuffer
-        let b1 = runtime.PrepareBuffer (ArrayBuffer [| V3f.OOO; 2.0f * V3f.IOO; 2.0f * V3f.IIO; 2.0f * V3f.OIO |]) :> IBuffer
+        let b0 = runtime.PrepareBuffer (ArrayBuffer [| V3f.OOO; V3f.IOO; V3f.IIO; V3f.OIO |], BufferUsage.Default) :> IBuffer
+        let b1 = runtime.PrepareBuffer (ArrayBuffer [| V3f.OOO; 2.0f * V3f.IOO; 2.0f * V3f.IIO; 2.0f * V3f.OIO |], BufferUsage.Default) :> IBuffer
 
         let t0 = runtime.PrepareTexture (FileTexture(@"C:\Users\Schorsch\Development\WorkDirectory\pattern.jpg",true)) :> ITexture
         let t1 = runtime.PrepareTexture (FileTexture(@"C:\Users\Schorsch\Development\WorkDirectory\grass_color.jpg",true)) :> ITexture
