@@ -73,7 +73,8 @@ module IndirectBuffer =
                     )
                 else
                     Buffer.empty flags device
-
+            | :? Buffer as bb ->
+                bb
             | _ ->
                 failf "unsupported indirect buffer type %A" b.Buffer
 

@@ -20,6 +20,7 @@ type BufferUsage = // Buffer usage
     | Storage = 16
     | Read = 256
     | Write = 512
+    | ReadWrite = 0x300
     | Default = 0x031f
             
 type IBuffer = interface end
@@ -39,8 +40,12 @@ type IBackendBuffer =
     abstract member SizeInBytes : nativeint
         
 and IBufferRuntime =
+    /// Deletes a buffer and releases all GPU resources and API handles
     abstract member DeleteBuffer : IBackendBuffer -> unit
+    /// Prepares a buffer, allocating and uploading the data to GPU memory
+    /// If the buffer is an IBackendBuffer the operation performs NOP
     abstract member PrepareBuffer : data : IBuffer * usage : BufferUsage -> IBackendBuffer
+    /// Creates a GPU buffer with the specified size in bytes and usage
     abstract member CreateBuffer : size : nativeint * usage : BufferUsage -> IBackendBuffer
     abstract member Copy : srcData : nativeint * dst : IBackendBuffer * dstOffset : nativeint * size : nativeint -> unit
     abstract member Copy : srcBuffer : IBackendBuffer * srcOffset : nativeint * dstData : nativeint * size : nativeint -> unit
@@ -476,6 +481,21 @@ type IBufferRuntimeExtensions private() =
     [<Extension>] 
     static member Coerce<'a when 'a : unmanaged>(this : IBackendBuffer) =
         new RuntimeBuffer<'a>(this, int (this.SizeInBytes / nativeint sizeof<'a>)) :> IBuffer<'a>
+
+    /// <summary>
+    /// Creates a buffer in GPU memory with default BufferUsage flags, enabling all usages as well as read and write.
+    /// </summary>
+    [<Extension>]
+    static member CreateBuffer(this : IBufferRuntime, size : nativeint) =
+        this.CreateBuffer(size, BufferUsage.Default)
+
+    /// <summary>
+    /// Prepares a buffer for GPU usage with all BufferUsage flags, but only write permissions.
+    /// If the buffer is an IBackendBuffer the operation performs NOP
+    /// </summary>
+    [<Extension>]
+    static member PrepareBuffer(this : IBufferRuntime, buffer : IBuffer) =
+        this.PrepareBuffer(buffer, BufferUsage.Default &&& ~~~BufferUsage.Read)
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module BufferRange =

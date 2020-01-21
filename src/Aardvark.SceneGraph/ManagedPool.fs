@@ -82,17 +82,17 @@ type IManagedBuffer<'a when 'a : unmanaged> =
 [<AutoOpen>]
 module private ManagedBufferImplementation =
 
-    type ManagedBuffer<'a when 'a : unmanaged>(runtime : IRuntime) =
+    type ManagedBuffer<'a when 'a : unmanaged>(runtime : IRuntime, usage : BufferUsage) =
         inherit DirtyTrackingAdaptiveObject<ManagedBufferWriter>()
         static let asize = sizeof<'a> |> nativeint
 
-        let mutable store = runtime.CreateBuffer(0n, BufferUsage.Default)
+        let mutable store = runtime.CreateBuffer(0n, usage)
 
         let bufferWriters = Dict<BufferView, ManagedBufferWriter<'a>>()
         let uniformWriters = Dict<IMod, ManagedBufferSingleWriter<'a>>()
 
         member x.Resize (sz : nativeint) =
-            let newStore = runtime.CreateBuffer(sz, BufferUsage.Default)
+            let newStore = runtime.CreateBuffer(sz, usage)
             if sz > 0n && store.SizeInBytes > 0n then
                 (runtime :> IBufferRuntime).Copy(store, 0n, newStore, 0n, min sz store.SizeInBytes)
             runtime.DeleteBuffer store
@@ -358,15 +358,15 @@ module ManagedBuffer =
                 tb.GetConstructor(
                     BindingFlags.NonPublic ||| BindingFlags.Public ||| BindingFlags.Instance ||| BindingFlags.Static ||| BindingFlags.CreateInstance,
                     Type.DefaultBinder,
-                    [| typeof<IRuntime> |],
+                    [| typeof<IRuntime>; typeof<BufferUsage> |],
                     null
                 )
             )
         )
 
-    let create (t : Type) (runtime : IRuntime) =
+    let create (t : Type) (runtime : IRuntime) (usage : BufferUsage) =
         let ctor = ctor t
-        ctor.Invoke [| runtime |] |> unbox<IManagedBuffer>
+        ctor.Invoke [| runtime; usage |] |> unbox<IManagedBuffer>
 
 
 type private LayoutManager<'a>() =
@@ -430,9 +430,9 @@ type ManagedPool(runtime : IRuntime, signature : GeometrySignature) =
     let vertexManager = LayoutManager<Map<Symbol, BufferView>>()
     let instanceManager = LayoutManager<Map<Symbol, IMod>>()
 
-    let indexBuffer = new ManagedBuffer<int>(runtime) :> IManagedBuffer<int>
-    let vertexBuffers = signature.vertexBufferTypes |> Map.toSeq |> Seq.map (fun (k,t) -> k, ManagedBuffer.create t runtime) |> SymDict.ofSeq
-    let instanceBuffers = signature.uniformTypes |> Map.toSeq |> Seq.map (fun (k,t) -> k, ManagedBuffer.create t runtime) |> SymDict.ofSeq
+    let indexBuffer = new ManagedBuffer<int>(runtime, BufferUsage.Index ||| BufferUsage.ReadWrite) :> IManagedBuffer<int>
+    let vertexBuffers = signature.vertexBufferTypes |> Map.toSeq |> Seq.map (fun (k,t) -> k, ManagedBuffer.create t runtime (BufferUsage.Vertex ||| BufferUsage.ReadWrite)) |> SymDict.ofSeq
+    let instanceBuffers = signature.uniformTypes |> Map.toSeq |> Seq.map (fun (k,t) -> k, ManagedBuffer.create t runtime (BufferUsage.Vertex ||| BufferUsage.ReadWrite)) |> SymDict.ofSeq
     let vertexDisposables = Dictionary<BufferView, IDisposable>()
 
 
@@ -532,7 +532,7 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
 
     let indices = Dict<DrawCallInfo, int>()
     let calls = List<DrawCallInfo>()
-    let store = new ManagedBuffer<int>(runtime)
+    let store = new ManagedBuffer<int>(runtime, BufferUsage.Indirect ||| BufferUsage.ReadWrite)
     
     let locked x (f : unit -> 'a) =
         lock x f
@@ -556,7 +556,7 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
     //    uint  baseInstance;
     //} DrawElementsIndirectCommand;
 
-    //let stride = if indexed then 20 else 16
+    //let stride = if indexed then 20 else 16 // NOTE: vulkan currently does not support custom stride
     let stride = 20
     let upload (call : DrawCallInfo) (index : int) =
         let mutable c = call
@@ -634,11 +634,11 @@ type IRuntimePoolExtensions private() =
 
     [<Extension>]
     static member CreateManagedBuffer<'a when 'a : unmanaged>(this : IRuntime) : IManagedBuffer<'a> =
-        new ManagedBuffer<'a>(this) :> IManagedBuffer<'a>
+        new ManagedBuffer<'a>(this, (BufferUsage.Vertex ||| BufferUsage.ReadWrite)) :> IManagedBuffer<'a>
 
     [<Extension>]
     static member CreateManagedBuffer(this : IRuntime, elementType : Type) : IManagedBuffer =
-        this |> ManagedBuffer.create elementType
+        ManagedBuffer.create elementType this (BufferUsage.Vertex ||| BufferUsage.ReadWrite)
 
     [<Extension>]
     static member CreateDrawCallBuffer(this : IRuntime, indexed : bool) =
