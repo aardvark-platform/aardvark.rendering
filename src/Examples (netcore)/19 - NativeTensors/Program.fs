@@ -69,9 +69,9 @@ let main argv =
     
 
     // first we need to pin both images in order to use them as NativeVolumes
-    NativeVolume.using inputImage.Volume (fun vInput ->
-        NativeVolume.using resultImage.Volume (fun vOutput ->
-
+    NativeVolume.using inputImage.Volume (fun (vInput : NativeVolume<byte>) ->
+        NativeVolume.using resultImage.Volume (fun (vOutput : NativeVolume<byte>) ->
+            let b = Fun.Lerp(1.0, 0uy, 255uy)
             // blit the input-image to the output
             NativeVolume.blit vInput vOutput
 

@@ -360,7 +360,7 @@ module AssimpInterop =
 
     FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
     System.Environment.CurrentDirectory <- Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"]
-    Aardvark.SceneGraph.IO.Loader.Assimp.initialize ()
+    //Aardvark.SceneGraph.IO.Loader.Assimp.initialize ()
 
 
     let win = Interactive.Window

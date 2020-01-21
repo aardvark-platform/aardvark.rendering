@@ -1001,7 +1001,7 @@ type NativeVolume<'a when 'a : unmanaged> with
         let yjZ = nativeint y.DZ * sa
         let ratio = V3d(x.Size) / V3d(y.Size)
         let initialCoord = 0.5 * ratio - V3d.Half
-        let initialiCoord = V3l(initialCoord.Floor)
+        let initialiCoord = V3l(initialCoord.Floor())
         let initialFrac = initialCoord - V3d(initialiCoord)
         let step = V3d.One * ratio
         let mutable coord = initialCoord

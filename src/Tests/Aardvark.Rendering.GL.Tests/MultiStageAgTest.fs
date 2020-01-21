@@ -31,10 +31,10 @@ module MultipleStageAgMemoryLeakTest =
 
     type ImperativeSceneStructure() =
         let cset = 
-            CSet.ofSeq [ Trafo3d.Identity, 
-                         Array.init 1000 (constF V3f.OOI), 
-                         Array.init 1000 (constF C4b.Red),
-                         ZZZZZLeak globalLeakCnt ]
+            cset [ Trafo3d.Identity, 
+                   Array.init 1000 (constF V3f.OOI), 
+                   Array.init 1000 (constF C4b.Red),
+                   ZZZZZLeak globalLeakCnt ]
         interface IContentWithImperativeInterface with
             member x.AdaptiveRenderArrays = cset :> aset<_>
 
@@ -42,7 +42,7 @@ module MultipleStageAgMemoryLeakTest =
         interface IContentWithImperativeInterface with
             member x.AdaptiveRenderArrays = ASet.empty
 
-    type Engine = { p : IModRef<Option<IContentWithImperativeInterface>> }
+    type Engine = { p : cval<Option<IContentWithImperativeInterface>> }
 
     type IDog = interface end
 
@@ -54,7 +54,7 @@ module MultipleStageAgMemoryLeakTest =
         interface IDog
         member x.Data = d
 
-    type TrafoNode(localTrafos : list<IModRef<Trafo3d>>, c : aval<IDog>) =
+    type TrafoNode(localTrafos : list<cval<Trafo3d>>, c : aval<IDog>) =
         interface IDog 
         member x.Trafos = localTrafos
         member x.Child = c
@@ -69,7 +69,7 @@ module MultipleStageAgMemoryLeakTest =
     type DogSemantics() = 
 
         let getMyTrafo d =
-            AVal.mapN (fun (xs:seq<Trafo3d>) -> Seq.fold (*) Trafo3d.Identity xs) ( d?Trafos )
+            AVal.custom (fun t -> (d?Trafos : seq<aval<_>>) |> Seq.map (fun v -> v.GetValue t) |> Seq.fold (*) Trafo3d.Identity) 
 
         member x.Leafs(data : DataDog) : aset<RenderData> =
             aset {
@@ -79,25 +79,25 @@ module MultipleStageAgMemoryLeakTest =
 //                let trafo : aval<Trafo3d> = getMyTrafo data
                 let trafo : aval<Trafo3d> = data?Trafo2
                 yield d,trafo
-            }
+            } |> ASet.scoped
 
         member x.Leafs(t : TrafoNode) : aset<RenderData> =
             aset {
                 let! c = t.Child
-                yield! c?Leafs()
-            }
+                yield! (c?Leafs() : aset<_>)
+            } |> ASet.scoped
 
         member x.Leafs(t : DogRoot) : aset<RenderData> =
             aset {
                 let! c = t.Child
-                yield! c?Leafs()
-            }
+                yield! (c?Leafs() : aset<_>)
+            } |> ASet.scoped
 
         member x.Leafs(t : DogGroup) : aset<RenderData> =
             aset {
                 for e in t.Children do
-                    yield! e?Leafs()
-            }
+                    yield! (e?Leafs() : aset<_>)
+            } |> ASet.scoped
 
 //        member x.Trafo2(r : Root<IDog>) =
 //            r.Child?Trafo2 <- AVal.init Trafo3d.Identity
@@ -114,7 +114,7 @@ module MultipleStageAgMemoryLeakTest =
         member x.Trafos(t : TrafoNode) =
             t.Child?Trafos <- t.Trafos @ t.Trafos
         member x.Trafo(d : IDog) =
-            AVal.mapN (fun (xs:seq<Trafo3d>) -> Seq.fold (*) Trafo3d.Identity xs) ( d?Trafos )
+            AVal.custom (fun t -> (d?Trafos : seq<aval<_>>) |> Seq.map (fun v -> v.GetValue t) |> Seq.fold (*) Trafo3d.Identity) 
 
 
     let run () =
@@ -178,7 +178,7 @@ module MultipleStageAgMemoryLeakTest =
         win.Keyboard.Down.Values.Subscribe(fun k -> 
             if k = Keys.N then 
                 transact (fun () ->
-                    AVal.change activeEngine  { p = AVal.init <| Some (ImperativeSceneStructure() :> _)}
+                    activeEngine.Value <-  { p = AVal.init <| Some (ImperativeSceneStructure() :> _)}
                 )
                 GC.Collect()
                 GC.WaitForPendingFinalizers()
@@ -201,7 +201,7 @@ module MultipleStageAgMemoryLeakTest =
 
                 let foo () =
                     transact (fun () ->
-                        AVal.change activeEngine  { p = AVal.init <| None}
+                        activeEngine.Value <- { p = AVal.init <| None}
                     )
                     reader.GetChanges() |> ignore
 

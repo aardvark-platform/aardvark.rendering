@@ -14,9 +14,10 @@ open Aardvark.Application.Slim
 // show/window computation expression builders (which reduces code duplication
 // in this case) to setup applications.
 
+
 [<EntryPoint>]
-let main argv = 
-    
+let main argv =
+
     // first we need to initialize Aardvark's core components
     Ag.initialize()
     Aardvark.Init()

@@ -41,7 +41,7 @@ let main argv =
     let rand = RandomSystem()
 
     let texts =
-        CSet.ofList [
+        cset [
             baseTrafo :> aval<_>, withSuffix "Identity"
             withTrafo (Trafo3d.Translation(0.0, 0.0, 3.0)), withSuffix "Up"
             withTrafo (Trafo3d.Translation(3.0, 0.0, 0.0)), withSuffix "Right"

@@ -1,6 +1,7 @@
 ﻿namespace ConjugateGradient
 
 open Aardvark.Base
+open FSharp.Data.Adaptive
 
 [<StructuredFormatDisplay("{AsString}")>]
 type Term<'c when 'c : equality> =

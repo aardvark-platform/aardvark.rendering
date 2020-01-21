@@ -177,7 +177,7 @@ let renderObjectBased (runtime : IRuntime) (signature : IFramebufferSignature) (
 
     // extract the render object using the scene graph semantics
     let template =
-        template.RenderObjects() |> ASet.toList |> List.head |> unbox<RenderObject>
+        template.RenderObjects().Content |> AVal.force |> HashSet.toList |> List.head |> unbox<RenderObject>
 
     // since we left the world of composable scene graphs we need to apply all typically automatically constructed
     // uniform values by hand. 

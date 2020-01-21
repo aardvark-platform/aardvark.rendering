@@ -56,7 +56,7 @@ let main argv =
     let scale = AVal.init 1.0f
 
     let rnd = RandomSystem()
-    let set : cset<IndexedGeometry * V4f> = CSet.empty
+    let set : cset<IndexedGeometry * V4f> = cset()
 
     let node = Sg.indirect signature (set |> ASet.map (fun (ig,pos) -> ig,Map.ofList ["Offset", scale |> AVal.map (fun s -> (pos * s * V4f.One)) :> IAdaptiveValue]))
 
@@ -87,7 +87,7 @@ let main argv =
                 if set.Count > 0 then
                     transact (fun _ -> 
                         let geo = rnd.UniformInt(set.Count)
-                        let el = Seq.item geo set
+                        let el = Seq.item geo (AVal.force (set :> aset<_>).Content)
                         set.Remove(el) |> ignore
                     )
                 printfn "count: %A" set.Count

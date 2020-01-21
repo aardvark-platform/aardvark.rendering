@@ -351,7 +351,7 @@ module Sg =
 
             let bind (view : IBuffer<V4f> * int -> 'a) =
                 { new AbstractOutputMod<'a>() with
-                    override x.InputChanged(o,i) =
+                    override x.InputChangedObject(o,i) =
                         if i = (cps :> IAdaptiveObject) then cpsChanged <- true
 
                     member x.Create() =
@@ -364,7 +364,7 @@ module Sg =
                     member x.Destroy() =
                         match last with
                         | Some o -> 
-                            o.RemoveOutput x
+                            o.Outputs.Remove x |> ignore
                             o.Release()
                             last <- None
                         | _ -> 
@@ -378,7 +378,7 @@ module Sg =
                                 cpsChanged <- false
                                 match last with
                                 | Some o ->
-                                    o.RemoveOutput x
+                                    o.Outputs.Remove x |> ignore
                                     o.Release()
                                 | _ -> 
                                     ()

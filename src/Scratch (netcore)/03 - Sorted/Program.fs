@@ -162,7 +162,7 @@ module Shaders =
             false
 
     let max1 (v : V3d) =
-        let a = v.Abs
+        let a = v.Abs()
         v / (max a.X (max a.Y a.Z))
            
     [<ReflectedDefinition>]

@@ -40,7 +40,7 @@ let main argv =
     let cameraView = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
 
     let rnd = Random(1123)
-    let stuff = Sg.Group()
+    let stuff = cset()
     let cnt = 1000
     let size = sqrt (float cnt)
     for i in 1..cnt do
@@ -52,6 +52,7 @@ let main argv =
 
     let sg =
             stuff
+            |> Sg.set
             |> Sg.effect [
                     Shader.niceTrafo                       |> toEffect // using ViewProj should only create one view*proj computation
                     DefaultSurfaces.constantColor C4f.Red |> toEffect

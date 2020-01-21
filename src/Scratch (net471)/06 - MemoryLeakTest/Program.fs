@@ -40,13 +40,14 @@ let main argv =
 
     let cameraView = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
 
-    let stuff = Sg.Group()
+    let stuff = cset()
     let sphere = IndexedGeometryPrimitives.Sphere.solidPhiThetaSphere Sphere3d.Unit 10 C4b.White
     let sphere = Sg.ofIndexedGeometry sphere
     stuff.Add(sphere) |> ignore
 
     let sg =
             stuff
+            |> Sg.set
             |> Sg.effect [
                     Shader.badTrafo                       |> toEffect // using ModelView* trafo will pin the computation and source indefinitely
                     DefaultSurfaces.constantColor C4f.Red |> toEffect

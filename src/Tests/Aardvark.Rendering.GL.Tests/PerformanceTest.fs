@@ -42,7 +42,7 @@ module RandomCubesPerformanceTest =
             [ for x in 1 .. 25000 do
                 let r = rnd.Next(candidates.Length)
                 yield Sg.trafo (nextTrafo () |> AVal.constant) candidates.[r]
-            ] |> Sg.group
+            ] |> Sg.ofList
 
         let sg =
             objects
@@ -124,7 +124,7 @@ module RandomCubesPerformanceTest =
             [ for x in 1 .. 25000 do
                 let r = rnd.Next(candidates.Length)
                 yield Sg.trafo (nextTrafo () |> AVal.constant) candidates.[r]
-            ] |> Sg.group
+            ] |> Sg.ofList
 
         let sg =
             objects
@@ -184,7 +184,7 @@ module RenderTaskPerformance =
             [ for x in 0 .. 20 do
                 let r = rnd.Next(candidates.Length)
                 yield Sg.trafo (nextTrafo () |> AVal.constant) candidates.[r]
-            ] |> Sg.group
+            ] |> Sg.ofList
 
         let renderObjects = Semantics.RenderObjectSemantics.Semantic.renderObjects objects
 
@@ -293,7 +293,7 @@ module StartupPerformance =
             let objectsSg = 
                 [ for x in objects do
                     yield Sg.trafo (nextTrafo () |> AVal.constant) x
-                ] |> Sg.group
+                ] |> Sg.ofList
 
             let sg =
                 objectsSg
@@ -302,7 +302,7 @@ module StartupPerformance =
                     |> Sg.surface effect
 
             Report.BeginTimed("Gathering render objects")
-            let renderObjects = ASet.toArray (sg.RenderObjects())
+            let renderObjects = ASet.force (sg.RenderObjects())
             Report.End() |> ignore
 
             Report.BeginTimed("Preparing render objects")
@@ -311,7 +311,7 @@ module StartupPerformance =
 
             printfn "start your engine!!!"
             Console.ReadLine() |> ignore
-            let renderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofArray preparedRenderObjects)
+            let renderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofHashSet preparedRenderObjects)
             let sw = System.Diagnostics.Stopwatch()
             Report.BeginTimed("Preparing Task")
             sw.Start()
@@ -427,7 +427,7 @@ module IsActiveFlagPerformance =
             let objectsSg = 
                 [ for x in objects do
                     yield Sg.trafo (nextTrafo () |> AVal.constant) x
-                ] |> Sg.group
+                ] |> Sg.ofList
 
             let sg =
                 objectsSg
@@ -436,7 +436,7 @@ module IsActiveFlagPerformance =
                     |> Sg.surface effect
 
             Report.BeginTimed("Gathering render objects")
-            let renderObjects = ASet.toArray (sg.RenderObjects())
+            let renderObjects = ASet.force (sg.RenderObjects())
             Report.End() |> ignore
 
             Report.BeginTimed("Preparing render objects")
@@ -446,11 +446,11 @@ module IsActiveFlagPerformance =
             printfn "start your engine!!!"
             //Console.ReadLine() |> ignore
 
-            let secondRenderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofArray preparedRenderObjects)
+            let secondRenderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofHashSet preparedRenderObjects)
             secondRenderTask.Run(RenderToken.Empty, fbo)
             secondRenderTask.Dispose()
 
-            let renderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofArray preparedRenderObjects)
+            let renderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofHashSet preparedRenderObjects)
             
 
             let sw = System.Diagnostics.Stopwatch()
@@ -487,7 +487,7 @@ module IsActiveFlagPerformance =
             sw.Restart()
             transact (fun () -> 
             for o in 0 .. i - 1 do
-                AVal.change isActiveFlags.[o] (not isActiveFlags.[o].Value)
+                isActiveFlags.[o].Value <- (not isActiveFlags.[o].Value)
             )
             sw.Stop()
             let elapsed = renderFrame()

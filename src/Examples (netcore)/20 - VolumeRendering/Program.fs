@@ -167,7 +167,7 @@ let main argv =
     let box = Box3d(-V3d.III, V3d.III)
     let color = C4b.Red
 
-    let folder = @"D:\volumes\hechtkopfsalamander male - Copy"
+    let folder = @"C:\Users\Schorsch\Development\WorkDirectory\hechtkopfsalamander male - Copy"
     let files = Directory.GetFiles folder
 
     let images = files |> Array.map (fun p -> PixImage.Create(p).ToPixImage<byte>(Col.Format.Gray))

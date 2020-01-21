@@ -460,7 +460,7 @@ module RenderingTests =
         let screen = V2i(2048, 2048)
 
         let grid (size : V2i) (inner : ISg) =
-            Sg.group' [
+            Sg.ofList [
                 for x in -size.X/2..size.X/2 do
                     for y in -size.Y/2..size.Y/2 do
                         yield inner |> Sg.trafo (~~Trafo3d.Translation(float x, float y, 0.0))
@@ -552,7 +552,7 @@ module RenderingTests =
         let sw = Stopwatch()
         sw.Start()
         while sw.Elapsed.TotalSeconds < 20.0 || iterations < 50 do
-            transact(fun () -> AVal.change rootTrafo (rootTrafo.Value * Trafo3d.Scale(1.00001)))
+            transact(fun () -> rootTrafo.Value <- (rootTrafo.Value * Trafo3d.Scale(1.00001)))
             clear.Run(RenderToken.Empty, fbo) |> ignore
             task.Run(RenderToken.Empty, fbo) |> ignore
             iterations <- iterations + 1
@@ -575,7 +575,7 @@ module RenderingTests =
         let screen = V2i(2048, 2048)
 
         let grid (size : V2i) (inner : ISg) =
-            Sg.group' [
+            Sg.ofList [
                 for x in -size.X/2..size.X/2 do
                     for y in -size.Y/2..size.Y/2 do
                         yield inner |> Sg.trafo (~~Trafo3d.Translation(float x, float y, 0.0))
@@ -686,14 +686,15 @@ module RenderingTests =
 
         let mutable candidates = (grid leaf).RandomOrder() |> Seq.toList
 
-        let g = Sg.group []//candidates
+        let g = cset()
 
         let sg =
             g
-                |> Sg.trafo (~~Trafo3d.Scale(0.5 / float s))
-                |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
-                |> Sg.viewTrafo ~~(Trafo3d.Identity)
-                |> Sg.projTrafo ~~(Trafo3d.Identity)
+            |> Sg.set
+            |> Sg.trafo (~~Trafo3d.Scale(0.5 / float s))
+            |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
+            |> Sg.viewTrafo ~~(Trafo3d.Identity)
+            |> Sg.projTrafo ~~(Trafo3d.Identity)
 
         let useWindow = true
         let runtime, app =
@@ -741,7 +742,7 @@ module RenderingTests =
             match candidates with
                 | x::xs -> 
                     candidates <- xs
-                    g.Add x |> ignore
+                    transact (fun () -> g.Add x |> ignore)
                 | _ -> printfn "out of candiates"
 
      
@@ -751,8 +752,8 @@ module RenderingTests =
                 System.Threading.Thread.Sleep 10
                 printfn "c %A" g.Count
                 if g.Count > 0 && r.NextDouble() > 0.5 then
-                    let a = g |> Seq.toArray |> (flip Array.get) (r.Next(0,g.Count))
-                    g.Remove(a) |> ignore
+                    let a = g |> ASet.force |> Seq.toArray |> (flip Array.get) (r.Next(0,g.Count))
+                    transact (fun () -> g.Remove(a) |> ignore)
                     candidates <- a::candidates
                 else
                     if List.isEmpty candidates |> not then
@@ -762,7 +763,7 @@ module RenderingTests =
                                 g.Add x |> ignore
                             | _ -> printfn "out of candiates"
 
-            renderJobs |> ASet.toList |> List.length |> printfn "got %d render objs"
+            renderJobs |> ASet.force |> HashSet.count |> printfn "got %d render objs"
         , System.Threading.Tasks.TaskCreationOptions.LongRunning) 
 
 

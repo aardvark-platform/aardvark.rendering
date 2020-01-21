@@ -14,8 +14,17 @@ module ImageSharp =
     open SixLabors.ImageSharp.Advanced
     open Microsoft.FSharp.NativeInterop
 
+    type ImageVisitor<'r> =
+        abstract member Accept : Image<'fmt> -> 'r
+
     let load (path : string) =
-        match Image.Load path with
+        use stream = System.IO.File.OpenRead path
+        let mutable fmt : IImageFormat = null
+        let info = Image.Identify(stream)
+
+        stream.Seek(0L, System.IO.SeekOrigin.Begin) |> ignore
+        use img = Image.Load stream
+        match img with
         | :? Image<Rgba32> as img ->
             let res = PixImage<byte>(Col.Format.RGBA, V2i(img.Width, img.Height))
             let gc = GCHandle.Alloc(res.Volume.Data, GCHandleType.Pinned)
@@ -30,34 +39,46 @@ module ImageSharp =
             let gc = GCHandle.Alloc(res.Volume.Data, GCHandleType.Pinned)
             try
                 let ptr : nativeptr<Rgba32> = NativePtr.ofNativeInt (gc.AddrOfPinnedObject())
-                img.GetPixelSpan().CopyTo(System.Span<Rgb24>(NativePtr.toVoidPtr ptr, res.Volume.Data.Length / 4))
+                img.GetPixelSpan().CopyTo(System.Span<Rgb24>(NativePtr.toVoidPtr ptr, res.Volume.Data.Length / 3))
                 res :> PixImage
             finally
                 gc.Free()
-        | :? Image<PixelFormats.Alpha8> as img ->
+        | :? Image<Alpha8> as img ->
             let res = PixImage<byte>(Col.Format.Gray, V2i(img.Width, img.Height))
             let gc = GCHandle.Alloc(res.Volume.Data, GCHandleType.Pinned)
             try
                 let ptr : nativeptr<Rgba32> = NativePtr.ofNativeInt (gc.AddrOfPinnedObject())
-                img.GetPixelSpan().CopyTo(System.Span<Alpha8>(NativePtr.toVoidPtr ptr, res.Volume.Data.Length / 3))
+                img.GetPixelSpan().CopyTo(System.Span<Alpha8>(NativePtr.toVoidPtr ptr, res.Volume.Data.Length))
                 res :> PixImage
             finally
                 gc.Free()
-        | :? Image<PixelFormats.Argb32> as img ->
+        | :? Image<Argb32> as img ->
             let res = PixImage<byte>(Col.Format.Gray, V2i(img.Width, img.Height))
             let gc = GCHandle.Alloc(res.Volume.Data, GCHandleType.Pinned)
             try
                 let ptr : nativeptr<Rgba32> = NativePtr.ofNativeInt (gc.AddrOfPinnedObject())
-                img.GetPixelSpan().CopyTo(System.Span<Argb32>(NativePtr.toVoidPtr ptr, res.Volume.Data.Length / 4))
+                let dst = System.Span<Rgba32>(NativePtr.toVoidPtr ptr, res.Volume.Data.Length / 4)
+                let src = img.GetPixelSpan()
+                for i in 0 .. dst.Length - 1 do
+                    dst.[i] <- Rgba32(src.[i].R, src.[i].G, src.[i].B, src.[i].A)
                 res :> PixImage
             finally
                 gc.Free()
-        | :? Image<PixelFormats.Rgba64> as img ->
+        | :? Image<Rgba64> as img ->
             let res = PixImage<uint16>(Col.Format.RGBA, V2i(img.Width, img.Height))
             let gc = GCHandle.Alloc(res.Volume.Data, GCHandleType.Pinned)
             try
-                let ptr : nativeptr<Rgba32> = NativePtr.ofNativeInt (gc.AddrOfPinnedObject())
+                let ptr : nativeptr<Rgba64> = NativePtr.ofNativeInt (gc.AddrOfPinnedObject())
                 img.GetPixelSpan().CopyTo(System.Span<Rgba64>(NativePtr.toVoidPtr ptr, res.Volume.Data.Length / 4))
+                res :> PixImage
+            finally
+                gc.Free()
+        | :? Image<Gray16> as img ->
+            let res = PixImage<uint16>(Col.Format.Gray, V2i(img.Width, img.Height))
+            let gc = GCHandle.Alloc(res.Volume.Data, GCHandleType.Pinned)
+            try
+                let ptr : nativeptr<Gray16> = NativePtr.ofNativeInt (gc.AddrOfPinnedObject())
+                img.GetPixelSpan().CopyTo(System.Span<Gray16>(NativePtr.toVoidPtr ptr, res.Volume.Data.Length))
                 res :> PixImage
             finally
                 gc.Free()
@@ -73,7 +94,7 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
-    let img = ImageSharp.load @"C:\Users\Schorsch\Desktop\images\e.jpg"
+    let img = ImageSharp.load @"C:\Users\Schorsch\Desktop\86.png"
 
     //img.SaveAsImage @"C:\Users\Schorsch\Desktop\test.png"
 

@@ -173,7 +173,7 @@ let main argv =
                 |> Sg.effect [Shaders.gaussY |> toEffect]
 
 
-        Sg.group' [mainResult; overlayOriginal] 
+        Sg.ofList [mainResult; overlayOriginal] 
             |> Sg.viewTrafo ~~Trafo3d.Identity 
             |> Sg.projTrafo ~~Trafo3d.Identity
 

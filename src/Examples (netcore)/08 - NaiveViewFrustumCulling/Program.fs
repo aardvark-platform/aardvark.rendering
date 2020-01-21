@@ -15,7 +15,7 @@ open Aardvark.Application.Slim
 type Object = {
     bb        : Box3d // world space bb
     sg        : ISg   // scene
-    isVisible : IModRef<bool>
+    isVisible : cval<bool>
 }
 
 [<EntryPoint>]

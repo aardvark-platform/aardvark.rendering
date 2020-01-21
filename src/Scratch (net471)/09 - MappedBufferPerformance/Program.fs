@@ -80,7 +80,7 @@ let main argv =
             (ig, trafo)
         )
 
-    let geometries = CSet.ofArray geometrySet
+    let geometries = cset geometrySet
                
     let addToPool(ag : AdaptiveGeometry) = 
             
@@ -93,7 +93,9 @@ let main argv =
         geometries |> ASet.map (fun (g, t) -> 
                                         let ntr = t|> AVal.map(fun t -> t.Backward.Transposed |> M33d.op_Explicit)
                                         g |> AdaptiveGeometry.ofIndexedGeometry [ (Sem.InstanceTrafo, (t :> IAdaptiveValue)); (Sem.InstanceNormalTrafo, (ntr :> IAdaptiveValue)) ])
-                    |> ASet.mapUse (fun ag -> addToPool ag)
+                    
+                    // TODO: what about use??????
+                    |> ASet.map (fun ag -> addToPool ag)
                     
     let sg = 
         Sg.PoolNode(pool, pooledGeometries, IndexedGeometryMode.TriangleList)
@@ -125,7 +127,7 @@ let main argv =
                 let rotation = sw.Elapsed.TotalSeconds * 360.0 // 360° per second
                 sw.Restart()
 
-                geometries |> Seq.take 100 |> Seq.iter (fun (g, t) -> 
+                geometries |> ASet.force |> Seq.take 100 |> Seq.iter (fun (g, t) -> 
                         t.Value <- Trafo3d.RotationZInDegrees(rotation) * t.Value)
                 )
             

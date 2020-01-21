@@ -132,8 +132,7 @@ let main argv =
 
     let tetureSingleMod = AVal.init (rndTex())
 
-    let scene = CSet.empty
-
+    let scene = cset()
     let count = AVal.init 1
 
     let addStuff (number : int) = 
@@ -168,7 +167,7 @@ let main argv =
                 transact(fun _ -> case.Value <- (cur + 1) % 5)
                 () 
             | Keys.Z ->
-                transact(fun _ -> AVal.change tetureSingleMod (rndTex()))
+                transact(fun _ -> tetureSingleMod.Value <- (rndTex()))
             | _ ->
                 ()
     )
