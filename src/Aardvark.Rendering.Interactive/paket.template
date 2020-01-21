@@ -7,7 +7,5 @@ licenseUrl http://www.apache.org/licenses/LICENSE-2.0.txt
 description
     Aardvark is an open-source platform for visual computing, real-time graphics and visualization.
 files
-    ..\..\bin\Release\Aardvark.Rendering.Interactive.dll ==> lib\net471
+    ..\..\bin\Release\net471\Aardvark.Rendering.Interactive.dll ==> lib\net471
     ..\..\bin\Release\LoadReferences.fsx ==> scripts\
-excludeddependencies 
-	SourceLink.Create.CommandLine
