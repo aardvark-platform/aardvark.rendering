@@ -298,7 +298,7 @@ let main argv =
         } 
 
     let sg = 
-        Sg.group' [
+        Sg.ofList [
             cloud
                 |> Sg.effect [
                     DefaultSurfaces.trafo        |> toEffect 
