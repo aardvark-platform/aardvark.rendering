@@ -10,8 +10,8 @@ open ICSharpCode.SharpZipLib
 open ICSharpCode.SharpZipLib.Zip
 
 module Prinziple = 
-
-  ICSharpCode.SharpZipLib.Zip.ZipConstants.DefaultCodePage <- 437
+  // TODO @thomasortner: check this!!!!
+  ICSharpCode.SharpZipLib.Zip.ZipStrings.CodePage <- 437
 
   let private readAllBytes' (reader : BinaryReader) =
 
