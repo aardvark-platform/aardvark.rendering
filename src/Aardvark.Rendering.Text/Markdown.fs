@@ -296,7 +296,7 @@ module Markdown =
 
             let emit (g : Shape) =
                 modifyState (fun (s : LayoutState) ->
-                    let c (w : float) = { offset = V2d(s.x, s.y); z = 0; scale = s.textState.scale; color = s.color; shape = g }
+                    let c (w : float) = { trafo = M33d.Translation(s.x, s.y) * M33d.Scale(s.textState.scale); z = 0; color = s.color; shape = g }
                     { s with
                         max = V2d(s.max.X, max (s.y + s.textState.scale.Y) s.max.Y)
 
@@ -310,7 +310,7 @@ module Markdown =
 
             let emitFullWidth (g : Shape) =
                 modifyState (fun (s : LayoutState) ->
-                    let c (w : float) = { offset = V2d(s.x, s.y); z = 0; scale = V2d(w, s.textState.scale.Y); color = s.color; shape = g }
+                    let c (w : float) = { trafo = M33d.Translation(s.x, s.y) * M33d.Scale(w, s.textState.scale.Y); z = 0; color = s.color; shape = g }
                     { s with
                         max = V2d(s.max.X, max (s.y + s.textState.scale.Y) s.max.Y)
                         concrete = c :: s.concrete
@@ -464,7 +464,7 @@ module Markdown =
                 s.concrete 
                     |> List.map (fun f -> f bounds.SizeX) 
                     |> List.map (fun shape ->
-                        { shape with offset = V2d(shape.offset.X - center, shape.offset.Y) }
+                        { shape with trafo = M33d.Translation(-center, 0.0) * shape.trafo } 
                     )
 
             {

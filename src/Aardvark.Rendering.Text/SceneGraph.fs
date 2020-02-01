@@ -101,7 +101,7 @@ module Sg =
 
             let trafoBuffer =
                 trafosAndShapes |> AVal.map (fun state ->
-                    state |> Array.mapi (fun i (trafo,shapes) ->
+                    state |> Array.mapi (fun i (trafo, shapes) ->
                         
                         let trafo = 
                             M34d.op_Explicit (
@@ -117,21 +117,25 @@ module Sg =
                     :> IBuffer
                 )
 
-            let offsetAndScaleBuffer =
+            let trafoBuffers =
                 shapesOnly |> AVal.map (fun state ->
-                    state |> Seq.collect (fun shapes ->
-                        shapes.concreteShapes
-                            |> Seq.map (fun shape -> 
-                                let s = shape.scale
-                                let o = shape.offset
-                                let sx = if shapes.flipViewDependent then -s.X else s.X
-                                let sy = s.Y
-                                V4f(o.X, o.Y, sx, sy)
+                    let r0, r1 = 
+                        state |> Array.collect (fun shapes ->
+                            let w = if shapes.flipViewDependent then -1.0f else 1.0f
+
+                            shapes.concreteShapes
+                            |> List.toArray
+                            |> Array.map (fun shape ->
+                                let r0 = V4f(V3f shape.trafo.R0, w)
+                                let r1 = V4f shape.trafo.R1.XYZO
+                                r0, r1
                             )
-                    )
-                    |> Seq.toArray
-                    |> ArrayBuffer
-                    :> IBuffer
+                        )
+                        |> Array.unzip
+
+
+                    ArrayBuffer r0 :> IBuffer,
+                    ArrayBuffer r1 :> IBuffer
                 )
 
             let colorBuffer =
@@ -174,7 +178,8 @@ module Sg =
                 )
 
             let trafos = BufferView(trafoBuffer, typeof<M34f>)
-            let offsetAndScale = BufferView(offsetAndScaleBuffer, typeof<V4f>)
+            let trafoR0 = BufferView(AVal.map fst trafoBuffers, typeof<V4f>)
+            let trafoR1 = BufferView(AVal.map snd trafoBuffers, typeof<V4f>)
             let colors = BufferView(colorBuffer, typeof<C4b>)
 
             let instanceAttributes =
@@ -183,7 +188,8 @@ module Sg =
                     member x.TryGetAttribute sem =
                         if sem = Path.Attributes.TrafoOffsetAndScale then trafos |> Some
                         elif sem = Path.Attributes.PathColor then colors |> Some
-                        elif sem = Path.Attributes.PathOffsetAndScale then offsetAndScale |> Some
+                        elif sem = Path.Attributes.ShapeTrafoR0 then trafoR0 |> Some
+                        elif sem = Path.Attributes.ShapeTrafoR1 then trafoR1 |> Some
                         else old.TryGetAttribute sem
                     member x.All = old.All
                     member x.Dispose() = old.Dispose()
@@ -271,18 +277,22 @@ module Sg =
                                 )
                             |> IndirectBuffer.ofArray false
 
-                    let offsets = 
-                        renderText.concreteShapes 
+                    let trafoR0, trafoR1 =
+                        let r0, r1 = 
+                            let w = if renderText.flipViewDependent then -1.0f else 1.0f
+
+                            renderText.concreteShapes 
                             |> List.toArray
                             |> Array.map (fun shape ->
-                                let o = shape.offset
-                                let s = shape.scale
-                                let sx = if renderText.flipViewDependent then -s.X else s.X
-                                let sy = s.Y
-                                V4f(o.X, o.Y, sx, sy)
+                                let r0 = V4f(V3f shape.trafo.R0, w)
+                                let r1 = V4f shape.trafo.R1.XYZO
+                                r0, r1
                             )
-                            |> ArrayBuffer
-                            :> IBuffer
+                            |> Array.unzip
+
+
+                        ArrayBuffer r0 :> IBuffer,
+                        ArrayBuffer r1 :> IBuffer
 
                     let colors = 
                         renderText.concreteShapes 
@@ -291,17 +301,19 @@ module Sg =
                             |> ArrayBuffer
                             :> IBuffer
 
-                    indirectBuffer, offsets, colors
+                    indirectBuffer, trafoR0, trafoR1, colors
                 )
 
-            let offsets = BufferView(AVal.map (fun (_,o,_) -> o) indirectAndOffsets, typeof<V4f>)
-            let colors = BufferView(AVal.map (fun (_,_,c) -> c) indirectAndOffsets, typeof<C4b>)
+            let trafoR0 = BufferView(AVal.map (fun (_,r0,_,_) -> r0) indirectAndOffsets, typeof<V4f>)
+            let trafoR1 = BufferView(AVal.map (fun (_,_,r1,_) -> r1) indirectAndOffsets, typeof<V4f>)
+            let colors = BufferView(AVal.map (fun (_,_,_,c) -> c) indirectAndOffsets, typeof<C4b>)
 
             let instanceAttributes =
                 let old = shapes.InstanceAttributes
                 { new IAttributeProvider with
                     member x.TryGetAttribute sem =
-                        if sem = Path.Attributes.PathOffsetAndScale then offsets |> Some
+                        if sem = Path.Attributes.ShapeTrafoR0 then trafoR0 |> Some
+                        elif sem = Path.Attributes.ShapeTrafoR1 then trafoR1 |> Some
                         elif sem = Path.Attributes.PathColor then colors |> Some
                         else old.TryGetAttribute sem
                     member x.All = old.All
@@ -351,7 +363,7 @@ module Sg =
             shapes.RenderPass <- RenderPass.shapes
             shapes.BlendMode <- AVal.constant BlendMode.Blend
             shapes.VertexAttributes <- cache.VertexBuffers
-            shapes.DrawCalls <- Indirect (indirectAndOffsets |> AVal.map (fun (i,_,_) -> i))
+            shapes.DrawCalls <- indirectAndOffsets |> AVal.map (fun (i,_,_,_) -> i) |> Indirect
             shapes.InstanceAttributes <- instanceAttributes
             shapes.Mode <- IndexedGeometryMode.TriangleList
             shapes.DepthBias <- AVal.constant (DepthBiasState(0.0, 0.0, 0.0))

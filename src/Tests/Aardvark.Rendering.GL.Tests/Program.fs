@@ -55,8 +55,7 @@ let testCompile() =
             IsActive            = AVal.constant true
             RenderPass          = RenderPass.main
             
-            DrawCallInfos       = AVal.constant [ callInfo ]
-            DrawCalls           = Direct(Mod.constant [ callInfo ])
+            DrawCalls           = Direct(AVal.constant [ callInfo ])
             Mode                = IndexedGeometryMode.TriangleList
         
 

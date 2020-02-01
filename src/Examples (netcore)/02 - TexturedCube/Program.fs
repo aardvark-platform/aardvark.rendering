@@ -94,13 +94,6 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
-    let img = ImageSharp.load @"C:\Users\Schorsch\Desktop\86.png"
-
-    //img.SaveAsImage @"C:\Users\Schorsch\Desktop\test.png"
-
-    //System.Environment.Exit 0
-
-
     // lets define the bounds/color for our box
     // NOTE that the color is going to be ignored since we're using a texture
     let box = Box3d(-V3d.III, V3d.III)
@@ -111,7 +104,7 @@ let main argv =
         Sg.box (AVal.constant color) (AVal.constant box)
 
             // apply the texture as "DiffuseTexture"
-            |> Sg.diffuseTexture' (PixTexture2d(PixImageMipMap [|img|], TextureParams.mipmapped))
+            |> Sg.diffuseTexture DefaultTextures.checkerboard
 
             // apply a shader ...
             // * transforming all vertices

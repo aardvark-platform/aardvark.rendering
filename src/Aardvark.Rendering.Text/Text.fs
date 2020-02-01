@@ -12,31 +12,33 @@ open Aardvark.Base.Rendering
 [<Struct>]
 type ConcreteShape =
     {
-        offset      : V2d
-        scale       : V2d
+        trafo       : M33d
         color       : C4b
         z           : int
         shape       : Shape
     }
 
     member x.bounds =
-        let b = x.shape.Path.bounds
-        Box2d.FromMinAndSize(b.Min + x.offset, b.Size * x.scale)
+        x.shape.Path.bounds.Transformed(x.trafo)
+        //Box2d.FromMinAndSize(b.Min + x.offset, b.Size * x.scale)
 
 
 module ConcreteShape =
 
-    let ofPath (offset : V2d) (scale : V2d) (color : C4b) (path : Path) =
+    let ofPath (trafo : M33d) (color : C4b) (path : Path) =
         {
-            offset = offset
-            scale = scale
+            trafo = trafo
             color = color
             z = 0
             shape = Shape path
         }
 
-    let inline offset (shape : ConcreteShape) = shape.offset
-    let inline scale (shape : ConcreteShape) = shape.scale
+    let transform (trafo : M23d) (shape : ConcreteShape) =
+        { shape with
+            trafo = M33d.op_Explicit trafo * shape.trafo
+        }
+
+    let inline trafo (shape : ConcreteShape) = shape.trafo
     let inline color (shape : ConcreteShape) = shape.color
     let inline shape (shape : ConcreteShape) = shape.shape
     let inline bounds (shape : ConcreteShape) = shape.bounds
@@ -50,7 +52,7 @@ module ConcreteShape =
                 lineTo  (V2d(bounds.Min.X, bounds.Max.Y))
                 close
             }
-        ofPath V2d.Zero V2d.II color path
+        ofPath M33d.Identity color path
 
     let rectangle (color : C4b) (lineWidth : float) (bounds : Box2d) =
         let small   = bounds.ShrunkBy     (lineWidth / 2.0)
@@ -71,7 +73,7 @@ module ConcreteShape =
                 close
 
             }
-        ofPath V2d.Zero V2d.II color path
+        ofPath M33d.Identity color path
 
 
     let fillRoundedRectangle (color : C4b)  (radius : float) (bounds : Box2d) =
@@ -102,7 +104,7 @@ module ConcreteShape =
                     arc     (pc11 - ry) (e (pc11 - ry - rx))
                 }
 
-            ofPath V2d.Zero V2d.II color path
+            ofPath M33d.Identity color path
 
     let roundedRectangle (color : C4b) (lineWidth : float) (radius : float) (bounds : Box2d) =
         if radius <= Constant.PositiveTinyValue then
@@ -155,7 +157,7 @@ module ConcreteShape =
 
                 }
 
-            ofPath V2d.Zero V2d.II color path
+            ofPath M33d.Identity color path
 
 
     let fillEllipse (color : C4b) (e : Ellipse2d) =
@@ -178,7 +180,7 @@ module ConcreteShape =
                 arc     (c + y) e
                 arc     (c + x) e
             }
-        ofPath V2d.Zero V2d.II color path
+        ofPath M33d.Identity color path
 
     let ellipse (color : C4b) (lineWidth : float) (e : Ellipse2d) =
         let a0 = e.Axis0
@@ -215,7 +217,7 @@ module ConcreteShape =
                 arc     (c + ix) inner
 
             }
-        ofPath V2d.Zero V2d.II color path
+        ofPath M33d.Identity color path
 
 
     let fillCircle (color : C4b) (c : Circle2d) =
@@ -269,11 +271,11 @@ module ConcreteShape =
                 f p0 p1 p2
             )
             |> Path.ofArray
-            |> ofPath V2d.Zero V2d.II color
+            |> ofPath M33d.Identity color
 
         else
             Path.empty
-            |> ofPath V2d.Zero V2d.II color
+            |> ofPath M33d.Identity color
 
     let private pathAux (f : V2d -> V2d -> V2d -> PathSegment) (color : C4b) (lineWidth : float) (points : list<V2d>) =
         let points = List.toArray points
@@ -349,11 +351,11 @@ module ConcreteShape =
 
             Array.append outer inner
             |> Path.ofArray
-            |> ofPath V2d.Zero V2d.II color
+            |> ofPath M33d.Identity color
 
         else
             Path.empty
-            |> ofPath V2d.Zero V2d.II color
+            |> ofPath M33d.Identity color
              
     let fillBezierPath (color : C4b) (lineWidth : float) (points : list<V2d>) = fillPathAux PathSegment.bezier2 color points
     let bezierPath (color : C4b) (lineWidth : float) (points : list<V2d>) = pathAux PathSegment.bezier2 color lineWidth points
@@ -377,8 +379,7 @@ type ShapeList =
         renderStyle         : RenderStyle
     }
     
-    member x.offsets = x.concreteShapes |> List.map ConcreteShape.offset
-    member x.scales = x.concreteShapes |> List.map ConcreteShape.scale
+    member x.trafos = x.concreteShapes |> List.map ConcreteShape.trafo
     member x.colors = x.concreteShapes |> List.map ConcreteShape.color
     member x.shapes = x.concreteShapes |> List.map ConcreteShape.shape
 
@@ -390,7 +391,14 @@ module ShapeList =
 
         let cx = bounds.Center.X
 
-        let shapes = shapes |> List.map (fun s -> { s with offset = V2d(s.offset.X - cx, s.offset.Y)})
+        let shapes = 
+            shapes |> List.map (fun s -> 
+                { s with 
+                    trafo =
+                        M33d.Translation(-cx, 0.0) *
+                        s.trafo
+                }
+            )
         
         let range = shapes |> List.map (fun s -> s.z) |> Range1i
 
@@ -419,8 +427,8 @@ module ShapeList =
         let newCenter = newBounds.Center
         let shift = V2d(oldCenter.X - newCenter.X, 0.0)
 
-        let shape = { shape with offset = shape.offset - V2d(newCenter.X, 0.0) }
-        let concreteShapes = r.concreteShapes |> List.map (fun s -> { s with offset = s.offset + shift })
+        let shape = { shape with trafo = M33d.Translation(-newCenter.X, 0.0) * shape.trafo } //shape.offset - V2d(newCenter.X, 0.0) }
+        let concreteShapes = r.concreteShapes |> List.map (fun s -> { s with trafo = M33d.Translation(shift) * s.trafo })
 
         {
             bounds = newBounds
@@ -441,8 +449,8 @@ module ShapeList =
         let newCenter = newBounds.Center
         let shift = V2d(oldCenter.X - newCenter.X, 0.0)
 
-        let shape = { shape with offset = shape.offset - V2d(newCenter.X, 0.0) }
-        let concreteShapes = r.concreteShapes |> List.map (fun s -> { s with offset = s.offset + shift })
+        let shape = { shape with trafo = M33d.Translation(-newCenter.X, 0.0) * shape.trafo }
+        let concreteShapes = r.concreteShapes |> List.map (fun s -> { s with trafo = M33d.Translation(shift) * s.trafo })
 
         {
             bounds = newBounds
@@ -539,8 +547,7 @@ type Text private() =
                 //glyphs.Add(g)
 
                 concrete.Add {
-                    offset = pos
-                    scale = V2d.II
+                    trafo = M33d.Translation(pos)
                     color = color
                     z = 0
                     shape = g
@@ -553,7 +560,7 @@ type Text private() =
         
         let concrete =
             concrete |> CSharpList.toList |> List.map (fun shape ->
-                { shape with offset = V2d(shape.offset.X - realCenter, shape.offset.Y) }
+                { shape with trafo = M33d.Translation(-realCenter, 0.0) * shape.trafo } 
             )
 
         {
