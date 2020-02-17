@@ -65,13 +65,54 @@ let main argv =
         // create a scenegraph, given a IndexedGeometry instance...
         quad |> Sg.ofIndexedGeometry
 
+
+
+    let lines = 
+        Mod.init [|Line3d(V3d.OOO,V3d.III)|]
+
+    let d = 
+        Mod.init (Some lines)
+    win.Keyboard.KeyDown(Keys.G).Values.Add(fun _ -> 
+        for i in 0 .. 1000 do
+            transact (fun _ -> 
+                d.Value <- 
+                    match d.Value with
+                        | None -> Some lines
+                        | Some v -> None
+            )
+    )
+
+    win.Keyboard.KeyDown(Keys.E).Values.Add(fun _ -> 
+        for i in 0 .. 1000 do
+            transact (fun _ -> 
+                if lines.Value.Length = 0 then  
+                    lines.Value <- [|Line3d()|]
+                else lines.Value <- Array.init 1000 (fun _-> Line3d())
+            )
+    )
+
+    let sg = 
+        d |> Mod.bind (fun e -> 
+            match e with
+                | None -> Mod.constant [|Line3d()|] :> IMod<_>
+                | Some e -> e :> IMod<_>
+        )
+
+    let lines = 
+        Sg.lines (Mod.constant C4b.White) sg
+        |> Sg.uniform "LineWidth" (Mod.constant 5) 
+        |> Sg.effect [
+            toEffect DefaultSurfaces.trafo
+            toEffect DefaultSurfaces.vertexColor
+            toEffect DefaultSurfaces.thickLine
+            ]
+
     let sg =
-        Sg.box' C4b.White Box3d.Unit 
+        lines
             // here we use fshade to construct a shader: https://github.com/aardvark-platform/aardvark.docs/wiki/FShadeOverview
             |> Sg.effect [
                     DefaultSurfaces.trafo                 |> toEffect
                     DefaultSurfaces.constantColor C4f.Red |> toEffect
-                    DefaultSurfaces.simpleLighting        |> toEffect
                 ]
             // extract our viewTrafo from the dynamic cameraView and attach it to the scene graphs viewTrafo 
             |> Sg.viewTrafo (cameraView  |> Mod.map CameraView.viewTrafo )
