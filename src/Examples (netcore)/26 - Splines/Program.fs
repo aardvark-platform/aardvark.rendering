@@ -109,6 +109,24 @@ module SplineShader =
         let res = evalSpline a b c d t
         0.5 * (res.XY / res.W + V2d.II)
 
+    let transformProj (viewportSize : V2i) (viewProj : M44d) (pt : V3f) =
+        let a = viewProj * V4d(V3d pt, 1.0)
+        V2d viewportSize * 0.5 * a.XY / a.W
+
+    let fromConjugateDiameters (a : V2d) (b : V2d) =
+        let ab = Vec.dot a b
+        if abs ab < 1E-5 then
+            a,b
+        else
+            let a2 = a.LengthSquared
+            let b2 = b.LengthSquared
+            let t = 0.5 * atan2 (2.0*ab) (a2 - b2)
+            let ct = cos t
+            let st = sin t
+            let v0 = a * ct + b * st
+            let v1 = b * ct - a * st
+            v0,v1
+
     [<LocalSize(X = 64)>]
     let prepare (cpIn : V4f[]) (div : int[]) (ts : V2f[]) (count : int) (viewProj : M44d) (viewportSize : V2i) (threshold : float) =
         compute {
@@ -116,33 +134,51 @@ module SplineShader =
 
             if id < count then
                 let i0 = 4 * id
-                let p0 = viewProj * V4d cpIn.[i0 + 0]
-                let p1 = viewProj * V4d cpIn.[i0 + 1]
-                let p2 = viewProj * V4d cpIn.[i0 + 2]
-                let p3 = viewProj * V4d cpIn.[i0 + 3]
+                let c3 = V4d cpIn.[i0 + 3]
+                if c3.W <= 0.0 then
+                    // circle
+                    let c = transformProj viewportSize viewProj cpIn.[i0 + 0].XYZ
+                    let rx = transformProj viewportSize viewProj (cpIn.[i0 + 0].XYZ + cpIn.[i0 + 1].XYZ) - c 
+                    let ry = transformProj viewportSize viewProj (cpIn.[i0 + 0].XYZ + cpIn.[i0 + 2].XYZ) - c 
+                    
+                    let rx,ry = fromConjugateDiameters rx ry
+                    let a = Vec.length rx
+                    let b = Vec.length ry
+                    let lam = (a-b)/(a+b)
+                    let l = lam*lam
+                    let len = (a+b) * Constant.Pi //* (1.0 + (3.0 * l)/(10.0 + sqrt (4.0 - 3.0 * l)))
 
-                // TODO: proper clipping
-                let mutable tmin = 0.0
-                let mutable tmax = 1.0
-                // !!! clipSline is wrong !!!
-                // clipSpline (p0.XY / p0.W) (p1.XY / p1.W) (p2.XY / p2.W) (p3.XY / p3.W) &&tmin &&tmax
+                    let dd = clamp 1 8192 (int (len / threshold))
+                    div.[id] <- dd
+                    ts.[id] <- V2f(0.0f, float32 Constant.PiTimesTwo)
+                else
+                    let p0 = viewProj * V4d cpIn.[i0 + 0]
+                    let p1 = viewProj * V4d cpIn.[i0 + 1]
+                    let p2 = viewProj * V4d cpIn.[i0 + 2]
+                    let p3 = viewProj * c3
+
+                    // TODO: proper clipping
+                    let mutable tmin = 0.0
+                    let mutable tmax = 1.0
+                    // !!! clipSline is wrong !!!
+                    // clipSpline (p0.XY / p0.W) (p1.XY / p1.W) (p2.XY / p2.W) (p3.XY / p3.W) &&tmin &&tmax
                 
 
-                let steps = 8
-                let mutable tc = tmin
-                let mutable pc = evalProjectiveSpline p0 p1 p2 p3 tc
-                let step = (tmax - tmin) / float steps
-                let mutable approxLen = 0.0
-                for i in 0 .. steps - 1 do
-                    let tn = tc + step
-                    let pn = evalProjectiveSpline p0 p1 p2 p3 tn
-                    approxLen <- approxLen + Vec.length(V2d viewportSize * (pn - pc))
-                    tc <- tn
-                    pc <- pn
+                    let steps = 8
+                    let mutable tc = tmin
+                    let mutable pc = evalProjectiveSpline p0 p1 p2 p3 tc
+                    let step = (tmax - tmin) / float steps
+                    let mutable approxLen = 0.0
+                    for i in 0 .. steps - 1 do
+                        let tn = tc + step
+                        let pn = evalProjectiveSpline p0 p1 p2 p3 tn
+                        approxLen <- approxLen + Vec.length(V2d viewportSize * (pn - pc))
+                        tc <- tn
+                        pc <- pn
 
-                let dd = clamp 1 8192 (int (approxLen / threshold))
-                div.[id] <- dd
-                ts.[id] <- V2f(tmin, tmax)
+                    let dd = clamp 1 8192 (int (approxLen / threshold))
+                    div.[id] <- dd
+                    ts.[id] <- V2f(tmin, tmax)
         }
         
     [<LocalSize(X = 64)>]
@@ -183,16 +219,30 @@ module SplineShader =
                 let t1 = t0 + ts
 
                 let i0 = 4 * splineId
-                let a = V4d cps.[i0 + 0]
-                let b = V4d cps.[i0 + 1]
-                let c = V4d cps.[i0 + 2]
-                let d = V4d cps.[i0 + 3]
+                let c3 = V4d cps.[i0 + 3]
+                if c3.W <= 0.0 then
+                    let center = V4d cps.[i0 + 0]
+                    let rx = V4d cps.[i0 + 1]
+                    let ry = V4d cps.[i0 + 2]
 
-                let p0 = evalSpline a b c d t0
-                let p1 = evalSpline a b c d t1
+                    let p0 = center.XYZ + cos t0 * rx.XYZ + sin t0 * ry.XYZ
+                    let p1 = center.XYZ + cos t1 * rx.XYZ + sin t1 * ry.XYZ
+                    
+                    lines.[2*id+0] <- V4f(V3f p0, 1.0f)
+                    lines.[2*id+1] <- V4f(V3f p1, 1.0f)
 
-                lines.[2*id+0] <- V4f p0
-                lines.[2*id+1] <- V4f p1
+                else
+                
+                    let a = V4d cps.[i0 + 0]
+                    let b = V4d cps.[i0 + 1]
+                    let c = V4d cps.[i0 + 2]
+                    let d = V4d cps.[i0 + 3]
+
+                    let p0 = evalSpline a b c d t0
+                    let p1 = evalSpline a b c d t1
+
+                    lines.[2*id+0] <- V4f p0
+                    lines.[2*id+1] <- V4f p1
         }
 
 
@@ -200,7 +250,7 @@ module Sg =
     open Aardvark.Base.Ag
     open Aardvark.SceneGraph.Semantics
 
-    type SplineNode(viewportSize : IMod<V2i>, threshold : IMod<float>, controlPoints : IMod<V3d[]>) =
+    type SplineNode(viewportSize : IMod<V2i>, threshold : IMod<float>, controlPoints : IMod<V4d[]>) =
         interface ISg
         member x.ViewportSize = viewportSize
         member x.Threshold = threshold
@@ -219,14 +269,15 @@ module Sg =
                 prim, prepare, evaluate
             )
 
-        static let subdiv (runtime : IRuntime) (threshold : IMod<float>) (size : IMod<V2i>) (viewProj : IMod<Trafo3d>) (cpsArray : V3d[]) =
+        static let subdiv (runtime : IRuntime) (threshold : IMod<float>) (size : IMod<V2i>) (viewProj : IMod<Trafo3d>) (cpsArray : IMod<V4d[]>) =
             let prim, prepare, evaluate = get runtime
             
-            let cnt = cpsArray.Length / 4
-            let mutable cps = Unchecked.defaultof<IBuffer<V4f>>
+            
             let mutable res : Option<IBuffer<V4f>> = None
         
-            let compute (t : AdaptiveToken) =
+            let compute (cps : IBuffer<V4f>) (t : AdaptiveToken) =
+                let cpsArray = cpsArray.GetValue t
+                let cnt = cpsArray.Length / 4
                 use div = runtime.CreateBuffer<int>(cnt)
                 use ts = runtime.CreateBuffer<V2f>(cnt)
                 let viewProj = viewProj.GetValue t
@@ -290,23 +341,49 @@ module Sg =
                 res, total
 
             let overall =
+                let mutable cps : Option<IBuffer<V4f>> = None
+                let mutable cpsDirty = true
                 { new AbstractOutputMod<IBuffer<V4f> * int>() with
+                    override x.InputChanged(_,o) =
+                        if o = (cpsArray :> IAdaptiveObject) then cpsDirty <- true
+                        ()
+
                     member x.Create() = 
                         Log.warn "create"
-                        cps <- runtime.CreateBuffer<V4f>(cpsArray.Length)
-                        cps.Upload(cpsArray |> Array.map (fun v -> V4f(v.X, v.Y, v.Z, 1.0)))
                         transact (fun () -> x.MarkOutdated())
 
                     member x.Destroy() = 
                         Log.warn "destroy"
-                        cps.Dispose()
-                        cps <- Unchecked.defaultof<IBuffer<V4f>>
+                        cps |> Option.iter (fun d -> d.Dispose())
+                        cps <- None
                         res |> Option.iter (fun d -> d.Dispose())
                         res <- None
+                        cpsDirty <- true
                         transact (fun () -> x.MarkOutdated())
 
                     member x.Compute(t,rt) = 
-                        compute t
+                        
+                        if cpsDirty then
+                            cpsDirty <- false
+                            let cpsArray = cpsArray.GetValue t
+                            let cap = Fun.NextPowerOfTwo(cpsArray.Length) |> max 16
+                            let cps = 
+                                match cps with
+                                | Some cps when cps.Count = cap -> cps
+                                | Some cp ->
+                                    cp.Dispose()
+                                    let cp = runtime.CreateBuffer<V4f>(cap)
+                                    cps <- Some cp
+                                    cp
+                                | None ->
+                                    let cp = runtime.CreateBuffer<V4f>(cap)
+                                    cps <- Some cp
+                                    cp
+                                    
+                            
+                            cps.Upload(cpsArray |> Array.map (fun v -> V4f v))
+
+                        compute cps.Value t
                 }
             
 
@@ -333,10 +410,10 @@ module Sg =
             
         member x.GlobalBoundingBox(s : SplineNode) =
             let t = s.ModelTrafo
-            Mod.map2 (fun (trafo : Trafo3d) (cps : V3d[]) -> Box3d(cps |> Array.map trafo.Forward.TransformPos)) t s.ControlPoints
+            Mod.map2 (fun (trafo : Trafo3d) (cps : V4d[]) -> Box3d(cps |> Array.map (Vec.xyz >> trafo.Forward.TransformPos))) t s.ControlPoints
 
         member x.LocalBoundingBox(s : SplineNode) =
-            s.ControlPoints |> Mod.map Box3d
+            s.ControlPoints |> Mod.map (Seq.map Vec.xyz >> Box3d)
 
         member x.RenderObjects(s : SplineNode) : aset<IRenderObject> =
             let runtime = s.Runtime
@@ -347,16 +424,12 @@ module Sg =
             let cps = s.ControlPoints
 
             let mutable last : Option<IOutputMod<_>> = None
-            let mutable cpsChanged = false
 
             let bind (view : IBuffer<V4f> * int -> 'a) =
                 { new AbstractOutputMod<'a>() with
-                    override x.InputChanged(o,i) =
-                        if i = (cps :> IAdaptiveObject) then cpsChanged <- true
 
                     member x.Create() =
-                        let v = cps.GetValue()
-                        let om = subdiv runtime s.Threshold s.ViewportSize mvp v
+                        let om = subdiv runtime s.Threshold s.ViewportSize mvp cps
                         om.Acquire()
                         last <- Some om
                         transact (fun () -> x.MarkOutdated())
@@ -372,17 +445,9 @@ module Sg =
                         transact (fun () -> x.MarkOutdated())
 
                     member x.Compute(t,rt) = 
-                        let v = cps.GetValue(t)
                         let om = 
-                            if cpsChanged || Option.isNone last then
-                                cpsChanged <- false
-                                match last with
-                                | Some o ->
-                                    o.RemoveOutput x
-                                    o.Release()
-                                | _ -> 
-                                    ()
-                                let om = subdiv runtime s.Threshold s.ViewportSize mvp v
+                            if Option.isNone last then
+                                let om = subdiv runtime s.Threshold s.ViewportSize mvp cps
                                 om.Acquire()
                                 last <- Some om
                                 om
@@ -435,8 +500,11 @@ let main argv =
 
     let cps =
         Mod.init [|
-            V3d.OOO; V3d.OOI; V3d.IOI; V3d.IOO
-            V3d(0,1,0); V3d(0,1,1); V3d(1,1,-1); V3d(1,1,0)
+            V4d.OOOI; V4d.OOII; V4d.IOII; V4d.IOOI
+            V4d(0,1,0,1); V4d(0,1,1,1); V4d(1,1,-1,1); V4d(1,1,0,1)
+
+            V4d(0,0,1,1); V4d(2,0,0,1); V4d(0,2,0,1); V4d.Zero
+
         |]
 
     let threshold = Mod.init 10.0
@@ -454,7 +522,18 @@ let main argv =
         
         | Keys.Enter -> 
             transact (fun () -> 
-                cps.Value <- Array.append cps.Value (Array.init 4 (fun _ -> rand.UniformV3d(bounds)))
+                if rand.UniformDouble() > 0.5 then
+                    cps.Value <- Array.append cps.Value (Array.init 4 (fun _ -> V4d(rand.UniformV3d(bounds), 1.0)))
+                else
+                    cps.Value <- Array.append cps.Value 
+                        [|
+                            rand.UniformV3d(bounds).XYZO
+                            (rand.UniformV3dDirection() * 5.0).XYZO
+                            (rand.UniformV3dDirection() * 0.5).XYZO
+                            V4d.NONO
+                        |]
+                    
+                    //(Array.init 4 (fun _ -> V4d(rand.UniformV3d(bounds), 0.0)))
             )
         | Keys.Back -> 
             if cps.Value.Length > 4 then
