@@ -3,6 +3,7 @@ source https://api.nuget.org/v3/index.json
 
 nuget FSharp.Core                        >= 4.6.2 lowest_matching: true
 
+nuget FSharp.Data.Adaptive               ~> 0.0.17
 nuget Aardvark.Base.TypeProviders        ~> 4.5.15
 nuget Aardvark.Base.FSharp               ~> 5.0.0-prerelease0007
 nuget Aardvark.Base.IO                   ~> 5.0.0-prerelease0007

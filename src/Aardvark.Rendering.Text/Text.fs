@@ -25,6 +25,18 @@ type ConcreteShape =
 
 module ConcreteShape =
 
+    type TrafoConverter () =
+        static member ToM33d(v : M33d) : M33d = v
+        static member ToM33d(v : M23d) : M33d = M33d.op_Explicit v
+        static member ToM33d(v : Trafo2d) : M33d = v.Forward
+        static member ToM33d(v : M44d) : M33d = v.UpperLeftM33()
+        static member ToM33d(v : M33f) : M33d = M33d.op_Explicit v
+        static member ToM33d(v : M23f) : M33d = M33d.op_Explicit v
+        static member ToM33d(v : M44f) : M33d = M33d.op_Explicit v
+
+    let inline private conv (d : ^d) (a : ^a) =
+        ((^d or ^a) : (static member ToM33d : ^a -> M33d) (a))
+
     let ofPath (trafo : M33d) (color : C4b) (path : Path) =
         {
             trafo = trafo
@@ -33,9 +45,13 @@ module ConcreteShape =
             shape = Shape path
         }
 
-    let transform (trafo : M23d) (shape : ConcreteShape) =
+    let ofList (trafo : M33d) (color : C4b) (segments: list<PathSegment>) =
+        ofPath trafo color (Path.ofList segments)
+
+    let inline transform (trafo : ^a) (shape : ConcreteShape) =
+        let t = conv Unchecked.defaultof<TrafoConverter> trafo
         { shape with
-            trafo = M33d.op_Explicit trafo * shape.trafo
+            trafo = t * shape.trafo
         }
 
     let inline trafo (shape : ConcreteShape) = shape.trafo
@@ -95,13 +111,13 @@ module ConcreteShape =
                 Path.build {
                     start   (pc11 - ry)
                     lineTo  (pc10 + ry)
-                    arc     (pc10 - rx) (e (pc10 + ry - rx))
+                    arc     pc10 (pc10 - rx)
                     lineTo  (pc00 + rx)
-                    arc     (pc00 + ry) (e (pc00 + ry + rx))
+                    arc     pc00 (pc00 + ry)
                     lineTo  (pc01 - ry)
-                    arc     (pc01 + rx) (e (pc01 - ry + rx))
+                    arc     pc01 (pc01 + rx)
                     lineTo  (pc11 - rx)
-                    arc     (pc11 - ry) (e (pc11 - ry - rx))
+                    arc     pc11 (pc11 - ry)
                 }
 
             ofPath M33d.Identity color path
@@ -137,22 +153,22 @@ module ConcreteShape =
                 Path.build {
                     start   (po11 - roy)
                     lineTo  (po10 + roy)
-                    arc     (po10 - rox) (e ro (po10 + roy - rox))
+                    arc     po10 (po10 - rox)// (e ro (po10 + roy - rox))
                     lineTo  (po00 + rox)
-                    arc     (po00 + roy) (e ro (po00 + roy + rox))
+                    arc     po00 (po00 + roy) //(e ro (po00 + roy + rox))
                     lineTo  (po01 - roy)
-                    arc     (po01 + rox) (e ro (po01 - roy + rox))
+                    arc     po01 (po01 + rox) // (e ro (po01 - roy + rox))
                     lineTo  (po11 - rox)
-                    arc     (po11 - roy) (e ro (po11 - roy - rox))
+                    arc     po11 (po11 - roy) //(e ro (po11 - roy - rox))
 
                     start   (pi11 - riy)
-                    arc     (pi11 - rix) (e ri (pi11 - rix - riy))
+                    arc     pi11 (pi11 - rix)// (e ri (pi11 - rix - riy))
                     lineTo  (pi01 + rix)
-                    arc     (pi01 - riy) (e ri (pi01 + rix - riy))
+                    arc     pi01 (pi01 - riy) // (e ri (pi01 + rix - riy))
                     lineTo  (pi00 + riy) 
-                    arc     (pi00 + rix) (e ri (pi00 + rix + riy))
+                    arc     pi00 (pi00 + rix) // (e ri (pi00 + rix + riy))
                     lineTo  (pi10 - rix) 
-                    arc     (pi10 + riy) (e ri (pi10 - rix + riy))
+                    arc     pi10 (pi10 + riy)// (e ri (pi10 - rix + riy))
                     lineTo  (pi11 - riy)
 
                 }
@@ -173,13 +189,10 @@ module ConcreteShape =
         let x = e.Axis0
         let y = e.Axis1
         let path =
-            Path.build {
-                start   (c + x)
-                arc     (c - y) e
-                arc     (c - x) e
-                arc     (c + y) e
-                arc     (c + x) e
-            }
+            Path.ofList [
+                PathSegment.arc 0.0 -Constant.PiTimesTwo e
+            ]
+ 
         ofPath M33d.Identity color path
 
     let ellipse (color : C4b) (lineWidth : float) (e : Ellipse2d) =
@@ -193,31 +206,53 @@ module ConcreteShape =
         let l0 = e.Axis0.Length
         let l1 = e.Axis1.Length
 
+        let fx = (1.0 - lineWidth / (2.0 * l0))
+        let fy = (1.0 - lineWidth / (2.0 * l1))
         let outer = Ellipse2d(e.Center, e.Axis0 * (1.0 + lineWidth / (2.0 * l0)), e.Axis1 * (1.0 + lineWidth / (2.0 * l1)))
-        let inner = Ellipse2d(e.Center, e.Axis0 * (1.0 - lineWidth / (2.0 * l0)), e.Axis1 * (1.0 - lineWidth / (2.0 * l1)))
 
-        let c = outer.Center
-        let ox = outer.Axis0
-        let oy = outer.Axis1
-        let ix = inner.Axis0
-        let iy = inner.Axis1
-        let path =
-            Path.build {
-                start   (c + ox)
-                arc     (c - oy) outer
-                arc     (c - ox) outer
-                arc     (c + oy) outer
-                arc     (c + ox) outer
+        if fx <= 1E-9 || fy <= 1E-9 then
+            fillEllipse color outer
+        else
+            let inner = Ellipse2d(e.Center, e.Axis0 * fx, e.Axis1 * fy)
+
+            let c = outer.Center
+            let ox = outer.Axis0
+            let oy = outer.Axis1
+            let ix = inner.Axis0
+            let iy = inner.Axis1
+            let path =
+            
+                Path.ofList [
+
+                    PathSegment.arc 0.0 -Constant.PiTimesTwo outer
+                    PathSegment.arc 0.0 Constant.PiTimesTwo inner
+                    //PathSegment.arc 0.0 -Constant.PiHalf outer
+                    //PathSegment.arc -Constant.PiHalf -Constant.PiHalf outer
+                    //PathSegment.arc -Constant.Pi -Constant.PiHalf outer
+                    //PathSegment.arc -(1.5*Constant.Pi) -Constant.PiHalf outer
+
+                    //PathSegment.arc 0.0 Constant.PiHalf inner
+                    //PathSegment.arc Constant.PiHalf Constant.PiHalf inner
+                    //PathSegment.arc Constant.Pi Constant.PiHalf inner
+                    //PathSegment.arc (1.5*Constant.Pi) Constant.PiHalf inner
+                ]
+
+                //Path.build {
+                //    start   (c + ox)
+                //    arc     (c - oy) outer
+                //    arc     (c - ox) outer
+                //    arc     (c + oy) outer
+                //    arc     (c + ox) outer
 
                 
-                start   (c + ix)
-                arc     (c + iy) inner
-                arc     (c - ix) inner
-                arc     (c - iy) inner
-                arc     (c + ix) inner
+                //    start   (c + ix)
+                //    arc     (c + iy) inner
+                //    arc     (c - ix) inner
+                //    arc     (c - iy) inner
+                //    arc     (c + ix) inner
 
-            }
-        ofPath M33d.Identity color path
+                //}
+            ofPath M33d.Identity color path
 
 
     let fillCircle (color : C4b) (c : Circle2d) =
@@ -225,6 +260,9 @@ module ConcreteShape =
         
     let circle (color : C4b) (lineWidth : float) (c : Circle2d) =
         ellipse color lineWidth (Ellipse2d(c.Center, V2d(c.Radius, 0.0), V2d(0.0, c.Radius)))
+
+
+
 
 
     let private fillPathAux (f : V2d -> V2d -> V2d -> PathSegment) (color : C4b) (points : list<V2d>) =
@@ -357,10 +395,10 @@ module ConcreteShape =
             Path.empty
             |> ofPath M33d.Identity color
              
-    let fillBezierPath (color : C4b) (lineWidth : float) (points : list<V2d>) = fillPathAux PathSegment.bezier2 color points
+    let fillBezierPath (color : C4b) (points : list<V2d>) = fillPathAux PathSegment.bezier2 color points
     let bezierPath (color : C4b) (lineWidth : float) (points : list<V2d>) = pathAux PathSegment.bezier2 color lineWidth points
     
-    let fillArcPath (color : C4b) (lineWidth : float) (points : list<V2d>) = fillPathAux PathSegment.arcSegment color points
+    let fillArcPath (color : C4b) (points : list<V2d>) = fillPathAux PathSegment.arcSegment color points
     let arcPath (color : C4b) (lineWidth : float) (points : list<V2d>) = pathAux PathSegment.arcSegment color lineWidth points
 
 type RenderStyle =
