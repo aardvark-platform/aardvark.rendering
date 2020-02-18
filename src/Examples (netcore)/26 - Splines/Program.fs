@@ -182,7 +182,7 @@ module SplineShader =
         }
         
     [<LocalSize(X = 64)>]
-    let evalulate (scannedDiv : int[]) (scannedCount : int) (ts : V2f[]) (cps : V4f[]) (lines : V4f[]) =
+    let evalulate (scannedDiv : int[]) (scannedCount : int) (ts : V2f[]) (cps : V4f[]) (cols : V4f[]) (lines : V4f[]) (outCols : V4f[]) =
         compute {
             let id = getGlobalId().X
             let count = scannedDiv.[scannedCount - 1]
@@ -225,24 +225,31 @@ module SplineShader =
                     let rx = V4d cps.[i0 + 1]
                     let ry = V4d cps.[i0 + 2]
 
+                    let c0 = cols.[i0 + 0]
+                    let c1 = cols.[i0 + 3]
                     let p0 = center.XYZ + cos t0 * rx.XYZ + sin t0 * ry.XYZ
                     let p1 = center.XYZ + cos t1 * rx.XYZ + sin t1 * ry.XYZ
                     
                     lines.[2*id+0] <- V4f(V3f p0, 1.0f)
                     lines.[2*id+1] <- V4f(V3f p1, 1.0f)
-
+                    outCols.[2*id+0] <- c0
+                    outCols.[2*id+1] <- c1
                 else
                 
                     let a = V4d cps.[i0 + 0]
                     let b = V4d cps.[i0 + 1]
                     let c = V4d cps.[i0 + 2]
                     let d = V4d cps.[i0 + 3]
-
+                    
+                    let c0 = cols.[i0 + 0]
+                    let c1 = cols.[i0 + 3]
                     let p0 = evalSpline a b c d t0
                     let p1 = evalSpline a b c d t1
 
                     lines.[2*id+0] <- V4f p0
                     lines.[2*id+1] <- V4f p1
+                    outCols.[2*id+0] <- c0
+                    outCols.[2*id+1] <- c1
         }
 
 
@@ -250,11 +257,12 @@ module Sg =
     open Aardvark.Base.Ag
     open Aardvark.SceneGraph.Semantics
 
-    type SplineNode(viewportSize : IMod<V2i>, threshold : IMod<float>, controlPoints : IMod<V4d[]>) =
+    type SplineNode(viewportSize : IMod<V2i>, threshold : IMod<float>, controlPoints : IMod<V4d[]>, controlColors : IMod<C4b[]>) =
         interface ISg
         member x.ViewportSize = viewportSize
         member x.Threshold = threshold
         member x.ControlPoints = controlPoints
+        member x.ControlColors = controlColors
 
     [<Semantic>]
     type SplineSemantics() =
@@ -269,13 +277,14 @@ module Sg =
                 prim, prepare, evaluate
             )
 
-        static let subdiv (runtime : IRuntime) (threshold : IMod<float>) (size : IMod<V2i>) (viewProj : IMod<Trafo3d>) (cpsArray : IMod<V4d[]>) =
+        static let subdiv (runtime : IRuntime) (threshold : IMod<float>) (size : IMod<V2i>) (viewProj : IMod<Trafo3d>) (cpsArray : IMod<V4d[]>) (colorArray : IMod<C4b[]>) : IOutputMod<IBuffer<V4f> * IBuffer<V4f> * int> =
             let prim, prepare, evaluate = get runtime
             
             
             let mutable res : Option<IBuffer<V4f>> = None
+            let mutable res2 : Option<IBuffer<V4f>> = None
         
-            let compute (cps : IBuffer<V4f>) (t : AdaptiveToken) =
+            let compute (cols : IBuffer<V4f>) (cps : IBuffer<V4f>) (t : AdaptiveToken) =
                 let cpsArray = cpsArray.GetValue t
                 let cnt = cpsArray.Length / 4
                 use div = runtime.CreateBuffer<int>(cnt)
@@ -321,6 +330,22 @@ module Sg =
                             let b = runtime.CreateBuffer<V4f>(cap)
                             res <- Some b
                             b
+
+                let res2 =
+                    match res2 with
+                        | Some b when b.Count = cap -> 
+                            b
+                        | Some b ->
+                            Log.warn "size: %d" cap
+                            b.Dispose()
+                            let b = runtime.CreateBuffer<V4f>(cap)
+                            res2 <- Some b
+                            b
+                        | None ->
+                            Log.warn "size: %d" cap
+                            let b = runtime.CreateBuffer<V4f>(cap)
+                            res2 <- Some b
+                            b
                         
 
                 //let evalulate (scannedDiv : int[]) (scannedCount : int) (ts : V2f[]) (cps : V4f[]) (lines : V4f[])
@@ -329,7 +354,9 @@ module Sg =
                 ip.["scannedCount"] <- cnt
                 ip.["ts"] <- ts
                 ip.["cps"] <- cps
+                ip.["cols"] <- cols
                 ip.["lines"] <- res
+                ip.["outCols"] <- res2
                 ip.Flush()
 
                 runtime.Run [
@@ -338,12 +365,13 @@ module Sg =
                     ComputeCommand.Dispatch(ceilDiv total 64)
                 ]
 
-                res, total
+                res, res2, total
 
             let overall =
                 let mutable cps : Option<IBuffer<V4f>> = None
+                let mutable cls : Option<IBuffer<V4f>> = None
                 let mutable cpsDirty = true
-                { new AbstractOutputMod<IBuffer<V4f> * int>() with
+                { new AbstractOutputMod<IBuffer<V4f> * IBuffer<V4f> * int>() with
                     override x.InputChanged(_,o) =
                         if o = (cpsArray :> IAdaptiveObject) then cpsDirty <- true
                         ()
@@ -356,8 +384,10 @@ module Sg =
                         Log.warn "destroy"
                         cps |> Option.iter (fun d -> d.Dispose())
                         cps <- None
+                        cls <- None
                         res |> Option.iter (fun d -> d.Dispose())
                         res <- None
+                        res2 <- None
                         cpsDirty <- true
                         transact (fun () -> x.MarkOutdated())
 
@@ -366,6 +396,7 @@ module Sg =
                         if cpsDirty then
                             cpsDirty <- false
                             let cpsArray = cpsArray.GetValue t
+                            let colArray = colorArray.GetValue t
                             let cap = Fun.NextPowerOfTwo(cpsArray.Length) |> max 16
                             let cps = 
                                 match cps with
@@ -379,11 +410,23 @@ module Sg =
                                     let cp = runtime.CreateBuffer<V4f>(cap)
                                     cps <- Some cp
                                     cp
-                                    
+                            let cls = 
+                                match cls with
+                                | Some cls when cls.Count = cap -> cls
+                                | Some cp ->
+                                    cp.Dispose()
+                                    let cp = runtime.CreateBuffer<V4f>(cap)
+                                    cls <- Some cp
+                                    cp
+                                | None ->
+                                    let cp = runtime.CreateBuffer<V4f>(cap)
+                                    cls <- Some cp
+                                    cp   
                             
                             cps.Upload(cpsArray |> Array.map (fun v -> V4f v))
+                            cls.Upload(colArray |> Array.map (fun c -> c.ToC4f().ToV4f()))
 
-                        compute cps.Value t
+                        compute cls.Value cps.Value t
                 }
             
 
@@ -422,14 +465,15 @@ module Sg =
 
             //let mm = s.ControlPoints |> Mod.map (subdiv runtime s.Threshold s.ViewportSize mvp)
             let cps = s.ControlPoints
+            let cls : IMod<C4b[]> = s.ControlColors
 
             let mutable last : Option<IOutputMod<_>> = None
 
-            let bind (view : IBuffer<V4f> * int -> 'a) =
+            let bind (view : IBuffer<V4f> * IBuffer<V4f> * int -> 'a) =
                 { new AbstractOutputMod<'a>() with
 
                     member x.Create() =
-                        let om = subdiv runtime s.Threshold s.ViewportSize mvp cps
+                        let om = subdiv runtime s.Threshold s.ViewportSize mvp cps cls
                         om.Acquire()
                         last <- Some om
                         transact (fun () -> x.MarkOutdated())
@@ -447,7 +491,7 @@ module Sg =
                     member x.Compute(t,rt) = 
                         let om = 
                             if Option.isNone last then
-                                let om = subdiv runtime s.Threshold s.ViewportSize mvp cps
+                                let om = subdiv runtime s.Threshold s.ViewportSize mvp cps cls
                                 om.Acquire()
                                 last <- Some om
                                 om
@@ -460,8 +504,9 @@ module Sg =
                 
 
 
-            let buffer = bind (fun (b,_) -> b.Buffer :> IBuffer)
-            let count = bind (fun (_,c) -> 2*c)
+            let posbuffer = bind (fun (b,_,_) -> b.Buffer :> IBuffer)
+            let colbuffer = bind (fun (_,b,_) -> b.Buffer :> IBuffer)
+            let count = bind (fun (_,_,c) -> 2*c)
                 
 
             let o = RenderObject.create()
@@ -469,12 +514,14 @@ module Sg =
             o.Mode <- IndexedGeometryMode.LineList
             o.VertexAttributes <-
                 let oa = o.VertexAttributes
-                let posView = BufferView(buffer, typeof<V4f>)
+                let posView = BufferView(posbuffer, typeof<V4f>)
+                let colView = BufferView(colbuffer, typeof<V4f>)
                 { new IAttributeProvider with
                     member x.Dispose() = oa.Dispose()
                     member x.All = oa.All
                     member x.TryGetAttribute(sem : Symbol) =
                         if sem = DefaultSemantic.Positions then Some posView
+                        elif sem = DefaultSemantic.Colors then Some colView
                         else oa.TryGetAttribute sem
                 }
 
@@ -507,6 +554,13 @@ let main argv =
 
         |]
 
+    let cls = 
+        Mod.init [|
+            C4b.Red; C4b.Red; C4b.Red; C4b.Red; 
+            C4b.Green; C4b.Green; C4b.Green; C4b.Green;
+            C4b.Blue; C4b.Blue; C4b.Blue; C4b.Blue;         
+        |]
+
     let threshold = Mod.init 10.0
     let active = Mod.init true
 
@@ -524,6 +578,7 @@ let main argv =
             transact (fun () -> 
                 if rand.UniformDouble() > 0.5 then
                     cps.Value <- Array.append cps.Value (Array.init 4 (fun _ -> V4d(rand.UniformV3d(bounds), 1.0)))
+                    cls.Value <- Array.append cls.Value (Array.init 4 (fun _ -> rand.UniformC3f().ToC4f().ToC4b()))
                 else
                     cps.Value <- Array.append cps.Value 
                         [|
@@ -532,8 +587,7 @@ let main argv =
                             (rand.UniformV3dDirection() * 0.5).XYZO
                             V4d.NONO
                         |]
-                    
-                    //(Array.init 4 (fun _ -> V4d(rand.UniformV3d(bounds), 0.0)))
+                    cls.Value <- Array.append cls.Value (Array.init 4 (fun _ -> rand.UniformC3f().ToC4f().ToC4b()))
             )
         | Keys.Back -> 
             if cps.Value.Length > 4 then
@@ -548,14 +602,14 @@ let main argv =
         Sg.ofList [
             for x in 0 .. 0 do
                 yield 
-                    Sg.SplineNode(win.Sizes, threshold, cps) :> ISg
+                    Sg.SplineNode(win.Sizes, threshold, cps,cls) :> ISg
                     |> Sg.uniform "LineWidth" (Mod.constant 6.0)
                     |> Sg.translate (float x * 2.0) 0.0 0.0
                     |> Sg.shader {
                         do! DefaultSurfaces.trafo
+                        do! DefaultSurfaces.vertexColor
                         do! DefaultSurfaces.thickLine
                         do! DefaultSurfaces.thickLineRoundCaps
-                        do! DefaultSurfaces.constantColor C4f.White
                     }
         ]
 
