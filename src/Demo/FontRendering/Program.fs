@@ -8,11 +8,9 @@ open Aardvark.Base.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.Rendering
 open Aardvark.Application
-open Aardvark.Application.WinForms
+open Aardvark.Application.Slim
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
-open System.Windows.Media
-open System.Windows
 open FontRendering
 open Aardvark.Rendering.Text
 open System.Runtime.InteropServices
@@ -375,19 +373,231 @@ let tensorPerformance() =
 
 
 
+let ellipseTest() =
+  
+    Ag.initialize()
+    Aardvark.Init()
+    
+    
+    let rand = RandomSystem()
+    for i in 1 .. 10000 do rand.UniformDouble() |> ignore
+
+    
+    use app = new OpenGlApplication()
+    use win = app.CreateGameWindow(8)
+    let proj = win.Sizes |> AVal.map (fun s -> Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0))
+    
+    let scale = cval 1.0
+    let kind = cval 0
+
+
+    win.Mouse.Scroll.Values.Add (fun d ->
+        transact (fun () ->
+            let d1 = d / 120.0
+            scale.Value <- scale.Value * (1.05 ** d1)
+        )
+    )
+
+    win.Keyboard.DownWithRepeats.Values.Add (fun k ->
+        match k with
+        | Keys.Space -> transact (fun () -> kind.Value <- kind.Value + 1)
+        | _ -> ()
+    )
+
+
+    let e0s = 
+        [
+            //PathSegment.bezier2 (V2d(-0.5,0.0)) (V2d(0.0, 0.5)) (V2d(0.5, 0.0))
+            //PathSegment.arc 0.0 -Constant.Pi (Ellipse2d(V2d(0.0, -0.2), 0.5*V2d.IO, 0.5*V2d.OI))
+            
+            let trafo = Trafo2d.Rotation(Constant.PiHalf)
+
+            let p0 = V2d(-0.5,-0.5)  |> trafo.Forward.TransformPos
+            let p1 = V2d(3.0, -0.5) |> trafo.Forward.TransformPos
+            let p2 = V2d(-3.0, 0.5) |> trafo.Forward.TransformPos
+            let p3 = V2d(0.5, 0.5) |> trafo.Forward.TransformPos
+
+            yield PathSegment.line (V2d(-0.5,-0.7)) (V2d(0.5,-0.7))
+
+            
+            yield PathSegment.bezier2 (V2d(0.7,-0.7)) (V2d(0.95,0.0)) (V2d(0.7,0.7))
+            
+            yield PathSegment.bezier3 p0 p1 p2 p3
+
+
+            yield PathSegment.arc 0.0 -Constant.PiTimesTwo (Ellipse2d(V2d.Zero, 0.7 * V2d.IO, 0.5 * V2d.OI))
+
+            //PathSegment.bezier3 (V2d(-0.5,-0.2)) (V2d(-0.2, 0.7)) (V2d(0.2, 0.7)) (V2d(0.5, -0.2))
+        ]
+
+    let e1 = 
+        AVal.custom (fun t ->
+            let k = kind.GetValue t
+            let p = win.Mouse.Position.GetValue(t).Position
+            let s = win.Sizes.GetValue t
+            let scale = scale.GetValue t
+            let ndc = 
+                V3d(
+                    2.0 * (float p.X / float s.X) - 1.0, 
+                    1.0 - 2.0 * (float p.Y / float s.Y),
+                    -1.0
+                )
+
+            let cc = proj.GetValue().Backward.TransformPosProj ndc |> Vec.xy
+
+            let e = Ellipse2d(cc, scale * 0.2*V2d.IO, scale * 0.3*V2d.OI)
+            //PathSegment.arc 0.0 -Constant.Pi e
+
+            let trafo = Trafo2d.Scale(scale) * Trafo2d.Translation(cc)
+
+            let p0 = V2d(-0.5,-0.5)  |> trafo.Forward.TransformPos
+            let p1 = V2d(3.0, -0.5) |> trafo.Forward.TransformPos
+            let p2 = V2d(-3.0, 0.5) |> trafo.Forward.TransformPos
+            let p3 = V2d(0.5, 0.5) |> trafo.Forward.TransformPos
+
+
+            match k % 4 with
+            | 0 -> PathSegment.line (cc - V2d.Half*scale) (cc + V2d.Half*scale)
+            | 1 -> PathSegment.bezier2 (cc + V2d(-0.5*scale, 0.5*scale)) (V2d(cc.X, cc.Y-0.5*scale)) (cc + V2d(0.5*scale, 0.5*scale)) 
+            | 2 -> PathSegment.arc 0.0 -(0.75 * Constant.PiTimesTwo) e
+            | _ -> PathSegment.bezier3 p0 p1 p2 p3
+        )
+
+    let allIntersections =
+        e1 |> AVal.map (fun e1 ->   
+            let map =
+                e0s |> List.choose (fun e0 ->
+                    let intersections = PathSegment.intersections 1E-7 e0 e1
+                    match intersections with
+                    | [] -> None
+                    | _ -> Some (e0, intersections)
+                )
+                |> HashMap.ofList
+            e1, map
+        )
+
+
+    let intersections =
+        allIntersections |> AVal.map (fun (e1, map) ->  
+            map |> HashMap.toArray |> Array.collect (fun (e0, ts) ->
+                ts |> List.toArray |> Array.map (fun (t0, t1) ->
+                    let p0 = PathSegment.point t0 e0
+                    let p1 = PathSegment.point t1 e1
+                    V3f(V2f p0, -1.0f), V3f(V2f p1, -0.9f)
+                )
+            )
+            |> Array.unzip
+        )
+
+    let toGeometry (color : C4b) (s : aval<option<PathSegment>>) =
+        let positions = 
+            s |> AVal.map (fun s ->
+                match s with
+                | Some s -> 
+                    let lines = System.Collections.Generic.List<V3f>()
+                    let div = 128
+                    let step = 1.0 / float div
+
+                    let mutable last = PathSegment.startPoint s
+                    let mutable t = step
+                    for i in 0 .. div - 1 do
+                        let pt = PathSegment.point t s
+                        lines.Add (V3f(V2f last, 0.0f))
+                        lines.Add (V3f(V2f pt, 0.0f))
+                        last <- pt
+                        t <- t + step
+                    lines.ToArray()
+                | None ->
+                    [||]
+            )
+            
+        Sg.draw IndexedGeometryMode.LineList
+        |> Sg.vertexAttribute DefaultSemantic.Positions positions
+        |> Sg.vertexBufferValue DefaultSemantic.Colors (AVal.constant (color.ToC4f().ToV4f()))
+        
+    let splitted =
+        allIntersections |> AVal.map (fun (e1,splits) ->
+            let ts = splits |> HashMap.toList |> List.collect snd |> List.map snd
+            PathSegment.splitMany ts e1 |> List.indexed |> HashMap.ofList
+        )
+        |> AMap.ofAVal
+
+
+    let colors =
+        Dict.ofList [
+            0, C4b.Red
+            1, C4b.Green
+            2, C4b.Blue
+            3, C4b.Yellow
+            4, C4b.Cyan
+            5, C4b.Magenta
+            6, C4b.VRVisGreen
+        ]
+    let inline getColor (i : int) =
+        colors.GetOrCreate(i, fun _ ->
+            rand.UniformC3f().ToC4b()
+        )
+
+    let shapes =
+        Sg.ofList [
+            Sg.set (
+                let last = AMap.count splitted |> AVal.map (fun c -> max (Fun.NextPowerOfTwo (c-1)) 32)
+                ASet.range (AVal.constant 0) last |> ASet.map (fun i ->
+                    let color = getColor i
+                    let r = AMap.tryFind i splitted
+                    toGeometry color r
+                )
+            )
+            for e0 in e0s do
+                let color = rand.UniformC3f().ToC4b()
+                toGeometry color (AVal.constant (Some e0))
+        ]
+        |> Sg.uniform "LineWidth" (AVal.constant 3.0)
+        |> Sg.shader {
+            do! DefaultSurfaces.trafo
+            do! DefaultSurfaces.thickLine
+            do! DefaultSurfaces.thickLineRoundCaps
+        }
+
+
+    let sg = 
+        Sg.ofList [
+            Sg.draw IndexedGeometryMode.PointList
+            |> Sg.vertexAttribute DefaultSemantic.Positions (AVal.map fst intersections)
+            |> Sg.vertexBufferValue DefaultSemantic.Colors (AVal.constant V4f.IOOI)
+            |> Sg.uniform "PointSize" (AVal.constant 5.0)
+        
+            Sg.draw IndexedGeometryMode.PointList
+            |> Sg.vertexAttribute DefaultSemantic.Positions (AVal.map snd intersections)
+            |> Sg.vertexBufferValue DefaultSemantic.Colors (AVal.constant V4f.OIOI)
+            |> Sg.uniform "PointSize" (AVal.constant 7.0)
+        ]
+        |> Sg.andAlso shapes
+        |> Sg.projTrafo proj
+        |> Sg.shader {
+            do! DefaultSurfaces.trafo
+            do! DefaultSurfaces.pointSprite
+            do! DefaultSurfaces.pointSpriteFragment
+        }
+
+    win.RenderTask <- app.Runtime.CompileRender(win.FramebufferSignature, sg)
+    win.Run()
+
 
 
 
 [<EntryPoint; STAThread>]
 let main argv = 
-    
+    ellipseTest()
+    System.Environment.Exit 0
+
     Ag.initialize()
     Aardvark.Init()
 
 
 
-    use app = new VulkanApplication(true)
-    let win = app.CreateSimpleRenderWindow(8)
+    use app = new OpenGlApplication(false, false)
+    let win = app.CreateGameWindow(8)
     
 
     let cam = CameraViewWithSky(Location = V3d.III * 2.0, Forward = -V3d.III.Normalized)
@@ -550,13 +760,12 @@ let main argv =
 
 
     let mode = AVal.init FillMode.Fill
-    let font = Font "Consolas"
 
-
-    let config = 
+    let config : MarkdownConfig = 
         { MarkdownConfig.light with 
             codeFont = "Consolas"
-            paragraphFont = "Consolas" 
+            paragraphFont = "Times New Roman" 
+            lineSpacing = 1.2
         }
 
     let label1 =
@@ -564,8 +773,92 @@ let main argv =
             |> Sg.scale 0.1
             |> Sg.billboard
 
+    let shape = 
+        let a = V2d(-0.1,0.0)
+        let b = V2d(0.1,0.0)
+        let r = 0.13
+        let d = a - b
+        let len = Vec.length d
+        let m = (a + b) / 2.0
+        let n = V2d(-d.Y, d.X) |> Vec.normalize
+        let d = sqrt (r*r - sqr (len / 2.0))
+        let c0 = m - n * d
+        let c1 = m + n * d
 
-    let f = Font "Consolas"
+        let e0 = Ellipse2d(c0, V2d.IO * r, V2d.OI * r)
+        let e1 = Ellipse2d(c1, V2d.IO * r, V2d.OI * r)
+        let a0 = e0.GetAlpha a
+        let b0 = e0.GetAlpha b
+        let a1 = e1.GetAlpha a
+        let b1 = e1.GetAlpha b
+
+        let d0s = a0 - b0
+        let d0l = 
+            if d0s < 0.0 then Constant.PiTimesTwo + d0s
+            else d0s - Constant.PiTimesTwo
+
+        let d1s = a1 - b1
+        let d1l = 
+            if d1s < 0.0 then Constant.PiTimesTwo + d1s
+            else d1s - Constant.PiTimesTwo
+
+
+        Log.warn "%A %A %A %A" b0 a0 d0s d0l
+        Log.warn "%A %A %A %A" b1 a1 d1s d1l
+
+        ShapeList.ofList [
+            ConcreteShape.fillRoundedRectangle C4b.Yellow 0.1 (Box2d.FromCenterAndSize(V2d.Zero, V2d.II))
+            ConcreteShape.roundedRectangle C4b.Red 0.1 0.3 (Box2d.FromCenterAndSize(V2d.Zero, V2d.II))
+
+            ConcreteShape.fillEllipse C4b.Green (Ellipse2d(V2d.Zero, V2d.IO * 0.4, V2d.OI * 0.3))
+            
+            ConcreteShape.ellipse C4b.Red (0.1) (Ellipse2d(V2d.Zero, V2d.IO * 0.4, V2d.OI * 0.3))
+
+            ConcreteShape.ofList M33d.Identity C4b.White  [
+                PathSegment.line (V2d(0.1, 0.1)) b
+                PathSegment.arc b0 d0l e0
+                PathSegment.line a (V2d(-0.1, 0.1))
+                PathSegment.line (V2d(-0.1, 0.1)) (V2d(0.1, 0.1))
+            ]
+
+            ConcreteShape.ofList (M33d.Translation(0.3, 0.0)) C4b.White [
+                PathSegment.line (V2d(0.1, 0.2)) b
+                PathSegment.arc b0 d0s e0
+                PathSegment.line a (V2d(-0.1, 0.2))
+                PathSegment.line (V2d(-0.1, 0.2)) (V2d(0.1, 0.2))
+            ]
+
+            ConcreteShape.ofList (M33d.Translation(-0.3, 0.0)) C4b.White [
+                PathSegment.line (V2d(0.1, 0.2)) b
+                PathSegment.arc b1 d1s e1
+                PathSegment.line a (V2d(-0.1, 0.2))
+                PathSegment.line (V2d(-0.1, 0.2)) (V2d(0.1, 0.2))
+            ]
+
+            ConcreteShape.ofList (M33d.Translation(-0.6, 0.0)) C4b.White [
+                PathSegment.line (V2d(0.1, 0.2)) b
+                PathSegment.arc b1 d1l e1
+                PathSegment.line a (V2d(-0.1, 0.2))
+                PathSegment.line (V2d(-0.1, 0.2)) (V2d(0.1, 0.2))
+            ]
+            ConcreteShape.ofList (M33d.Translation(0.6, 0.0)) C4b.White [
+                PathSegment.line (V2d(0.1, 0.2)) b
+                PathSegment.bezier2 b (V2d(0.0, 0.3)) a
+                PathSegment.line a (V2d(-0.1, 0.2))
+                PathSegment.line (V2d(-0.1, 0.2)) (V2d(0.1, 0.2))
+            ]
+
+            //ConcreteShape.ofList (M33d.Translation(0.0, -0.5)) C4b.Yellow [
+            //    PathSegment.arc Constant.Pi Constant.Pi (Ellipse2d(m, -V2d.IO * len/2.0, V2d.OI * len/2.0))
+            //    PathSegment.line a (V2d(-0.1, 0.2))
+            //    PathSegment.line (V2d(-0.1, 0.2)) (V2d(0.1, 0.2))
+            //    PathSegment.line (V2d(0.1, 0.2)) b
+            //]
+            
+
+
+
+        ]
 
     let message = AVal.init message
     let label2 =
@@ -591,8 +884,11 @@ let main argv =
             if a then
                 Sg.ofList [label3; label2; label1]
                     //|> Sg.andAlso quad
+                    |> Sg.andAlso (Sg.shape (AVal.constant shape))
                     |> Sg.viewTrafo (cam |> AVal.map CameraView.viewTrafo)
                     |> Sg.projTrafo (win.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
+
+                    |> Sg.projTrafo (win.Sizes |> AVal.map (fun s -> Trafo3d.Scale (1.0, float s.X / float s.Y, 1.0)))
                     |> Sg.fillMode mode
                     |> Sg.uniform "Antialias" aa
             else
