@@ -1,3 +1,4 @@
+**/.ionide
 bin/Release
 bin/Debug
 !/bin/*.nuspec
