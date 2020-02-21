@@ -91,7 +91,7 @@ module ProgramExtensions =
         let get (ctx : Context) =   
             backendCache.GetOrAdd(ctx, fun ctx ->
 
-                let bindingMode =
+                let bindingMode = 
                     if ctx.Driver.glsl >= Version(4,3) then BindingMode.PerKind
                     else BindingMode.None
 
@@ -532,6 +532,62 @@ module ProgramExtensions =
         member x.TryCompileProgram(id : string, signature : IFramebufferSignature, code : Lazy<GLSL.GLSLShader>) : Error<_> =
             codeCache.GetOrAdd((id, signature), fun (id, signature) ->
                 
+
+                let fixBindings (p : Program) (iface : FShade.GLSL.GLSLProgramInterface) = 
+                    if p.Context.FShadeBackend.Config.bindingMode = FShade.GLSL.BindingMode.None then
+
+
+                        let uniformBuffers =
+                            let mutable b = 0
+                            iface.uniformBuffers |> MapExt.map (fun name ub ->
+                                let bi = GL.GetUniformBlockIndex(p.Handle, name)
+                                let binding = b
+                                b <- b + 1
+                                GL.UniformBlockBinding(p.Handle, bi, binding)
+                                { ub with ubBinding = binding }
+                            )
+
+                        let samplers =
+                            let mutable b = 0
+                            iface.samplers |> MapExt.map (fun name sam ->
+                                let l = GL.GetUniformLocation(p.Handle, name)
+                                let binding = b
+                                b <- b + 1
+                                GL.ProgramUniform1(p.Handle, l, binding)
+                                { sam with samplerBinding = binding }
+                            )
+                            
+                        let images =
+                            let mutable b = 0
+                            iface.images |> MapExt.map (fun name img ->
+                                let l = GL.GetUniformLocation(p.Handle, name)
+                                let binding = b
+                                b <- b + 1
+                                GL.ProgramUniform1(p.Handle, l, binding)
+                                { img with imageBinding = binding }
+                            )
+
+                        let storageBuffers =
+                            let mutable b = 0
+                            iface.storageBuffers |> MapExt.map (fun name sb ->
+                                let bi = GL.GetProgramResourceIndex(p.Handle, ProgramInterface.ShaderStorageBlock, name)
+                                let binding = b
+                                b <- b + 1
+                                GL.ShaderStorageBlockBinding(p.Handle, bi, binding)
+                                { sb with ssbBinding = binding }
+                            )
+
+
+
+                        { iface with 
+                            uniformBuffers = uniformBuffers 
+                            samplers = samplers
+                            storageBuffers = storageBuffers
+                            images = images
+                        }
+                    else
+                        iface
+
                 let (file : string, content : Option<ShaderCacheEntry>) =
                     match x.ShaderCachePath with    
                         | Some cachePath ->
@@ -581,7 +637,8 @@ module ProgramExtensions =
                             let outputs = code.iface.outputs |> List.map (fun p -> p.paramName, p.paramLocation) |> Map.ofList
                             match x.TryCompileProgramCode(outputs, true, code.code) with
                             | Success prog ->
-                                let prog = { prog with Interface = code.iface }
+                                let iface = fixBindings prog code.iface
+                                let prog = { prog with Interface = iface }
                                 Success prog
                             | Error e ->
                                 Error e
@@ -596,16 +653,21 @@ module ProgramExtensions =
                                     SupportedModes = c.modes
                                     Interface = c.iface
                                 }
-
-                            Success program
+                                
+                            let iface = fixBindings program c.iface
+                            Success { program with Interface = iface }
 
                     | _ -> 
                         let code = code.Value
                         let outputs = code.iface.outputs |> List.map (fun p -> p.paramName, p.paramLocation) |> Map.ofList
                         match x.TryCompileProgramCode(outputs, true, code.code) with
                             | Success prog ->
-                                let prog = { prog with Interface = code.iface }
+                                let iface = fixBindings prog code.iface
+                                let prog = { prog with Interface = iface }
                                 
+                                //for (name, b) in MapExt.toSeq code.iface.uniformBuffers do
+                                //    b.ubBinding
+
                                 match x.ShaderCachePath with    
                                     | Some cachePath ->
                                         match x.TryGetProgramBinary prog with
