@@ -618,7 +618,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
                         let cfg = signature.EffectConfig(Range1d(-1.0, 1.0), false)
                         effect
                         |> Effect.toModule cfg
-                        |> ModuleCompiler.compileGLSL430
+                        |> ModuleCompiler.compileGLSL ctx.FShadeBackend
                     )
 
                 match ctx.TryCompileProgram(effect.Id, signature, shader) with

@@ -378,7 +378,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             shaderCache.GetOrAdd(key,fun _ -> 
                 let glsl = 
                     signature.Link(effect, Range1d(-1.0, 1.0), false, topology)
-                        |> ModuleCompiler.compileGLSL430
+                        |> ModuleCompiler.compileGLSL ctx.FShadeBackend
 
                 let entries =
                     effect.Shaders 

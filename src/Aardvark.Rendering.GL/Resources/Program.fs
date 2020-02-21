@@ -83,6 +83,44 @@ module ProgramExtensions =
     open System.Text.RegularExpressions
     open System
 
+    module private FShadeBackend = 
+        open FShade.GLSL
+
+        let private backendCache = System.Collections.Concurrent.ConcurrentDictionary<Context, Backend>()
+
+        let get (ctx : Context) =   
+            backendCache.GetOrAdd(ctx, fun ctx ->
+
+                let bindingMode =
+                    if ctx.Driver.glsl >= Version(4,3) then BindingMode.PerKind
+                    else BindingMode.None
+
+                let uniformBuffers =
+                    ctx.Driver.version >= Version(3,1) || Set.contains "GL_ARB_Uniform_Buffer_Object" ctx.Driver.extensions
+
+                let locations =
+                    ctx.Driver.glsl >= Version(3,3) 
+
+                let cfg = 
+                    { 
+                        version = ctx.Driver.glsl
+                        enabledExtensions = Set.empty
+                        createUniformBuffers = uniformBuffers
+                        bindingMode = bindingMode
+                        createDescriptorSets = false
+                        stepDescriptorSets = false
+                        createInputLocations = locations
+                        createPerStageUniforms = false
+                        reverseMatrixLogic = true
+                    }
+                Backend.Create cfg
+            )
+
+    type Context with
+        member x.FShadeBackend = FShadeBackend.get x
+
+
+
     let private getShaderType (stage : ShaderStage) =
         match stage with
             | ShaderStage.Vertex -> ShaderType.VertexShader
@@ -636,7 +674,7 @@ module ProgramExtensions =
                         let glsl = 
                             lazy (
                                 let module_ = signature.Link(effect, Range1d(-1.0, 1.0), false, topology)
-                                ModuleCompiler.compileGLSL430 module_
+                                ModuleCompiler.compileGLSL x.FShadeBackend module_
                             )
 
                         match x.TryCompileProgram(effect.Id, signature, glsl) with
@@ -659,7 +697,7 @@ module ProgramExtensions =
                             let layoutHash = shaderPickler.ComputeHash(inputLayout).Hash |> Convert.ToBase64String
                             
                             let iface =
-                                match x.TryCompileProgram(effect.Id + layoutHash, signature, lazy (ModuleCompiler.compileGLSL430 initial)) with  
+                                match x.TryCompileProgram(effect.Id + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend initial)) with  
                                     | Success prog -> 
                                         let iface = prog.Interface
                                         { iface with
@@ -675,7 +713,7 @@ module ProgramExtensions =
                             let changeableProgram = 
                                 b |> AVal.map (fun m ->
                                     let effect = m.userData |> unbox<Effect>
-                                    match x.TryCompileProgram(effect.Id + layoutHash, signature, lazy (ModuleCompiler.compileGLSL430 m)) with
+                                    match x.TryCompileProgram(effect.Id + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend m)) with
                                         | Success p -> p
                                         | Error e ->
                                             Log.error "[GL] shader compiler returned errors: %A" e
