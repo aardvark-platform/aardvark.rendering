@@ -631,9 +631,9 @@ NUGET
       System.Xml.XmlDocument (>= 4.3) - restriction: || (&& (== net471) (< net45)) (== netcoreapp3.0) (== netstandard2.0)
     Unofficial.AssimpNet (4.0.5)
     Unofficial.LibTessDotNet (2.0.2)
-    Unofficial.OpenTK (3.0.16)
-    Unofficial.OpenTK.GLControl (3.0.16)
-      Unofficial.OpenTK (3.0.16)
+    Unofficial.OpenTK (3.0.17)
+    Unofficial.OpenTK.GLControl (3.0.17)
+      Unofficial.OpenTK (3.0.17)
     Unofficial.OpenVR (1.1)
     Unofficial.Typography (0.0.3)
 
