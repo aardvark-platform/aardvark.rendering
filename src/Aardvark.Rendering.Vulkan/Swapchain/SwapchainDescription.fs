@@ -162,7 +162,7 @@ module SwapchainDescription =
             [
                 ImageTrafo.MirrorY
                 ImageTrafo.MirrorX
-                ImageTrafo.Rot0
+                ImageTrafo.Identity
                 ImageTrafo.Rot180
             ]
 

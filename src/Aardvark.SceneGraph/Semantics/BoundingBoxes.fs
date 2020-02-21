@@ -14,7 +14,7 @@ module BoundingBoxExtensions =
 
     open System.Runtime.CompilerServices
 
-    let private composeCache = BinaryCache<aval<Box3d>, aval<Box3d>, aval<Box3d>>(AVal.map2 (fun l r -> Box3d.Union(l,r)))
+    let private composeCache = BinaryCache<aval<Box3d>, aval<Box3d>, aval<Box3d>>(AVal.map2 (fun l r -> Box.Union(l,r)))
     let private (<+>) l r = composeCache.Invoke(l,r)
     let private invalid = AVal.constant Box3d.Invalid
 
@@ -34,7 +34,7 @@ module BoundingBoxExtensions =
                                             let trafo : aval<Trafo3d> = x.AttributeScope?ModelTrafo()
 
                                             AVal.map (fun trafo ->
-                                                let box = Box3f.op_Explicit (Box3f(pos.Data |> unbox<V3f[]>))
+                                                let box = Box3d.op_Explicit (Box3f(pos.Data |> unbox<V3f[]>))
                                                 box
                                             ) trafo
 
@@ -79,11 +79,11 @@ module BoundingBoxExtensions =
             | RuntimeCommand.DispatchCmd _ ->
                 None
             | RuntimeCommand.OrderedCmd l ->
-                let merge (s : Box3d) (v : Box3d) : Box3d = Box3d.Union(s,v)
+                let merge (s : Box3d) (v : Box3d) : Box3d = Box.Union(s,v)
                 l |> AList.toASet |> ASet.choose cmdBB |> ASet.flattenA |> ASet.fold merge Box3d.Invalid |> Some
     
             | RuntimeCommand.RenderCmd objs ->
-                let merge (s : Box3d) (v : Box3d) : Box3d = Box3d.Union(s,v)
+                let merge (s : Box3d) (v : Box3d) : Box3d = Box.Union(s,v)
                 objs |> ASet.mapA objBB |> ASet.fold merge Box3d.Invalid |> Some
             | _ ->
                 Log.warn "[Sg] bouningbox for %A not implemented" c 
@@ -122,8 +122,8 @@ module BoundingBoxes =
             match g.IndexedAttributes.TryGetValue DefaultSemantic.Positions with
                 | (true, arr) ->
                     match arr with
-                        | :? array<V3f> as arr -> Box3f(arr) |> Box3f.op_Explicit
-                        | :? array<V4f> as arr -> Box3f(arr |> Array.map Vec.xyz) |> Box3f.op_Explicit
+                        | :? array<V3f> as arr -> Box3f(arr) |> Box3d.op_Explicit
+                        | :? array<V4f> as arr -> Box3f(arr |> Array.map Vec.xyz) |> Box3d.op_Explicit
                         | _ -> failwithf "unknown position-type: %A" arr
                 | _ ->
                     Box3d.Invalid
@@ -131,7 +131,7 @@ module BoundingBoxes =
         member x.LocalBoundingBox(r : Sg.GeometrySet) : aval<Box3d> =
             r.Geometries 
                 |> ASet.map computeBoundingBox
-                |> ASet.foldHalfGroup (curry Box3d.Union) trySub Box3d.Invalid
+                |> ASet.foldHalfGroup (curry Box.Union) trySub Box3d.Invalid
 
         member x.GlobalBoundingBox(r : Sg.GeometrySet) : aval<Box3d> =
             let l = r.LocalBoundingBox()
@@ -139,7 +139,7 @@ module BoundingBoxes =
             AVal.map2 (fun (t : Trafo3d) (b : Box3d) -> b.Transformed(t)) t l
 
         member x.GlobalBoundingBox(r : Sg.RenderObjectNode) : aval<Box3d> =
-            r.Objects |> ASet.mapA (fun o -> o.GetBoundingBox()) |> ASet.fold  (curry Box3d.Union) Box3d.Invalid
+            r.Objects |> ASet.mapA (fun o -> o.GetBoundingBox()) |> ASet.fold  (curry Box.Union) Box3d.Invalid
 
         member x.LocalBoundingBox(r : Sg.RenderObjectNode) : aval<Box3d> =
             r.GlobalBoundingBox()
@@ -194,7 +194,7 @@ module BoundingBoxes =
         member x.GlobalBoundingBox(app : IGroup) : aval<Box3d> =
             app.Children 
                 |> ASet.mapA (fun sg -> sg.GlobalBoundingBox() ) 
-                |> ASet.foldHalfGroup (curry Box3d.Union) trySub Box3d.Invalid
+                |> ASet.foldHalfGroup (curry Box.Union) trySub Box3d.Invalid
             
         member x.GlobalBoundingBox(n : IApplicator) : aval<Box3d> = 
             adaptive {
@@ -245,7 +245,7 @@ module BoundingBoxes =
         member x.LocalBoundingBox(app : IGroup) : aval<Box3d> =
             app.Children 
                 |> ASet.mapA (fun sg -> sg.LocalBoundingBox()) 
-                |> ASet.foldHalfGroup (curry Box3d.Union) trySub Box3d.Invalid
+                |> ASet.foldHalfGroup (curry Box.Union) trySub Box3d.Invalid
 
         member x.LocalBoundingBox(app : Sg.TrafoApplicator) : aval<Box3d> =  
             adaptive {

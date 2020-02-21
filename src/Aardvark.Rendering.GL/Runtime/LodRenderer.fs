@@ -1255,8 +1255,8 @@ module LodTreeHelpers =
                     let delta = b * a.Inverse
 
                     let dRot = Rot3d.FromAngleAxis(delta.Rot.ToAngleAxis() * t)
-                    let dTrans = delta.Rot.InvTransformDir(delta.Trans) * t
-                    let dScaled = Euclidean3d(dRot, dRot.TransformDir dTrans)
+                    let dTrans = delta.Rot.InvTransform(delta.Trans) * t
+                    let dScaled = Euclidean3d(dRot, dRot.Transform dTrans)
 
                     dScaled * a
             )

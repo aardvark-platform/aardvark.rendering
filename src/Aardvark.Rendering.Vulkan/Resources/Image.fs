@@ -171,7 +171,7 @@ module ``Image Format Extensions`` =
             let dy = x.DY
             let dz = x.DZ
             match t with
-                | ImageTrafo.Rot0 -> x
+                | ImageTrafo.Identity -> x
                 | ImageTrafo.Rot90 -> x.SubVolume(sx - 1L, 0L, 0L, sy, sx, sz, dy, -dx, dz)
                 | ImageTrafo.Rot180 -> x.SubVolume(sx - 1L, sy - 1L, 0L, sx, sy, sz, -dx, -dy, dz)
                 | ImageTrafo.Rot270 -> x.SubVolume(0L, sy - 1L, 0L, sy, sx, sz, -dy, dx, dz)

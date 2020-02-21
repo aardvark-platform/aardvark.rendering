@@ -859,7 +859,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             let mutable dst = Box2i.FromMinAndSize(dstOffset, size)
 
             match trafo with
-                | ImageTrafo.Rot0 -> ()
+                | ImageTrafo.Identity -> ()
                 | ImageTrafo.MirrorY -> 
                     dst.Min.Y <- dst.Max.Y - 1
                     dst.Max.Y <- -1

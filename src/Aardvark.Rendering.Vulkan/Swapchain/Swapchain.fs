@@ -60,7 +60,7 @@ module ImageTrafoExtensions =
     type Box3i with
         member x.Transformed(t : ImageTrafo) =
             match t with
-                | ImageTrafo.Rot0 -> 
+                | ImageTrafo.Identity -> 
                     x
 
                 | ImageTrafo.MirrorX -> 

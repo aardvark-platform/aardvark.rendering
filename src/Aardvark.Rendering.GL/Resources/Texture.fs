@@ -1267,7 +1267,7 @@ module TextureUploadExtensions =
                 let viSize = V3l(int64 w, int64 h, int64 channels)
                 let dstInfo =
                     match trafo with
-                        | ImageTrafo.Rot0 -> 
+                        | ImageTrafo.Identity -> 
                             VolumeInfo(
                                 0L,
                                 viSize,
@@ -1349,7 +1349,7 @@ module TextureUploadExtensions =
             let dstInfo =
                 let viSize = V3l(int64 size.X, int64 size.Y, int64 channels)
                 match trafo with
-                    | ImageTrafo.Rot0 -> 
+                    | ImageTrafo.Identity -> 
                         VolumeInfo(
                             0L,
                             viSize,

@@ -97,7 +97,7 @@ module Shader =
     let clipVs (v : VertexIn) =
         vertex {
             let planeCoefficients : V4d = uniform?ClipPlaneCoefficients
-            let clidDistance = V4d.Dot(v.wp, planeCoefficients)
+            let clidDistance = Vec.dot v.wp planeCoefficients
             return { wp = v.wp
                      cd = [| clidDistance |] }
         }

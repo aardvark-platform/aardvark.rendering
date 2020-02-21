@@ -459,7 +459,7 @@ module ShapeList =
 
         let shape = { shape with z = r.zRange.Min - 1 }
 
-        let newBounds = Box2d.Union(shape.bounds, r.bounds)
+        let newBounds = Box.Union(shape.bounds, r.bounds)
 
         let oldCenter = r.bounds.Center
         let newCenter = newBounds.Center
@@ -481,7 +481,7 @@ module ShapeList =
         
         let shape = { shape with z = r.zRange.Max + 1 }
 
-        let newBounds = Box2d.Union(shape.bounds, r.bounds)
+        let newBounds = Box.Union(shape.bounds, r.bounds)
 
         let oldCenter = r.bounds.Center
         let newCenter = newBounds.Center
