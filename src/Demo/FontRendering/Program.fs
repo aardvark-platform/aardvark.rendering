@@ -467,7 +467,7 @@ let ellipseTest() =
         e1 |> AVal.map (fun e1 ->   
             let map =
                 e0s |> List.choose (fun e0 ->
-                    let intersections = PathSegment.intersections 1E-7 e0 e1
+                    let intersections = PathSegment.intersections 1E-9 e0 e1
                     match intersections with
                     | [] -> None
                     | _ -> Some (e0, intersections)
