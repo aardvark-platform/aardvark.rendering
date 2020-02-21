@@ -11,9 +11,9 @@ nuget Aardvark.Base.Incremental          ~> 5.0.0-prerelease0008
 nuget Aardvark.Base.Runtime              ~> 5.0.0-prerelease0008
 nuget Aardvark.Base.Essentials           ~> 5.0.0-prerelease0008
                                   
-nuget FShade.Core                        ~> 5.0.0-prerelease0004
-nuget FShade                             ~> 5.0.0-prerelease0004
-nuget FShade.Debug                       ~> 5.0.0-prerelease0004
+nuget FShade.Core                        ~> 5.0.0-prerelease0005
+nuget FShade                             ~> 5.0.0-prerelease0005
+nuget FShade.Debug                       ~> 5.0.0-prerelease0005
 
 nuget Unofficial.OpenVR					 ~> 1.1.0 
 nuget Unofficial.Typography              ~> 0.0.3
