@@ -328,7 +328,7 @@ module Shaders =
         
         let ld = dir.Length
         let lv = v.Length
-        let c = V3d.Dot(dir / ld, v / lv)
+        let c = Vec.Dot(dir / ld, v / lv)
         (v / lv) * (ld / c) 
 
     //let nextMultiple (a : float) (v : float) =
