@@ -601,9 +601,10 @@ type Application(runtime : IRuntime) =
                 glfw.WindowHint(WindowHintOpenGlProfile.OpenGlProfile, OpenGlProfile.Core)
                 glfw.WindowHint(WindowHintRobustness.ContextRobustness, Robustness.LoseContextOnReset)
                 glfw.WindowHint(WindowHintBool.OpenGLForwardCompat, true)
-                glfw.WindowHint(WindowHintBool.DoubleBuffer, true)
+                glfw.WindowHint(WindowHintBool.DoubleBuffer, false)
                 glfw.WindowHint(WindowHintBool.OpenGLDebugContext, false)
                 glfw.WindowHint(WindowHintBool.ContextNoError, true)
+                glfw.WindowHint(WindowHintBool.SrgbCapable, true)
                 if RuntimeInformation.IsOSPlatform(OSPlatform.OSX) then
                     glfw.WindowHint(unbox<WindowHintBool> 0x00023001, cfg.physicalSize)
 
