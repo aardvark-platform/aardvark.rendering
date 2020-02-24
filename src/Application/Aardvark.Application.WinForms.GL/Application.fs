@@ -8,7 +8,6 @@ open FSharp.Data.Adaptive
 open Aardvark.Rendering.GL
 open Aardvark.Application
 
-
 type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
     do if forceNvidia then Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
        OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
@@ -17,7 +16,9 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
        with e -> Report.Warn("Could not set UnhandledExceptionMode.")
 
     let runtime = new Runtime()
-    let ctx = new Context(runtime, enableDebug)
+    let ctx = 
+        let resourceContexts = Array.init 2 (fun _ -> ContextHandleOpenTK.create enableDebug)
+        new Context(runtime, enableDebug, resourceContexts)
     do runtime.Context <- ctx
  
     let defaultCachePath =
@@ -97,13 +98,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
                 init ctx 
             | _ ->
                 failwithf "unknown control type: %A" ctrl
-        
 
-    member x.CreateGameWindow(?samples : int) =
-        let samples = defaultArg samples 1
-        let w = new GameWindow(runtime, enableDebug, samples)
-        init ctx 
-        w
 
     interface IApplication with
         member x.Initialize(ctrl : IRenderControl, samples : int) = x.Initialize(ctrl, samples)

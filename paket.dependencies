@@ -27,7 +27,7 @@ nuget Unofficial.AssimpNet               ~> 4.0.5
 
 nuget Unofficial.OpenTK                  ~> 3.0.17
 nuget Unofficial.OpenTK.GLControl        ~> 3.0.17
-	
+nuget Silk.NET.GLFW                      ~> 1.0.0-preview5
 	
 nuget FSharp.Charting                    ~> 0.91.1
 nuget OpenHardwareMonitor                ~> 0.7.1

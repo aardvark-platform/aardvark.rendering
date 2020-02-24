@@ -12,9 +12,44 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
     do if forceNvidia then Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
        OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
 
+
     let runtime = new Runtime()
-    let ctx = new Context(runtime, enableDebug)
+    let glfw = Glfw.Application(runtime)
+
+
+    let windowConfig =
+        {
+            Glfw.WindowConfig.title = "Aardvark rocks \\o/"
+            Glfw.WindowConfig.width = 1024
+            Glfw.WindowConfig.height = 768
+            Glfw.WindowConfig.resizable = true
+            Glfw.WindowConfig.focus = true
+            Glfw.WindowConfig.refreshRate = 0
+            Glfw.WindowConfig.opengl = Some(4,1)
+            Glfw.WindowConfig.physicalSize = false
+            Glfw.WindowConfig.transparent = false
+            Glfw.WindowConfig.samples = 1
+        }
+        
+    let resourceContexts =
+        Array.init 2 (fun _ ->
+            let w = glfw.CreateWindow windowConfig
+            let h = ContextHandle(w.Context, w.WindowInfo)
+            if enableDebug then h.AttachDebugOutputIfNeeded()
+            h.MakeCurrent()
+
+            OpenTK.Graphics.OpenGL4.GL.Hint(OpenTK.Graphics.OpenGL4.HintTarget.PointSmoothHint, OpenTK.Graphics.OpenGL4.HintMode.Fastest)
+            OpenTK.Graphics.OpenGL4.GL.Enable(OpenTK.Graphics.OpenGL4.EnableCap.TextureCubeMapSeamless)
+            OpenTK.Graphics.OpenGL4.GL.Disable(OpenTK.Graphics.OpenGL4.EnableCap.PolygonSmooth)
+            OpenTK.Graphics.OpenGL4.GL.Hint(OpenTK.Graphics.OpenGL4.HintTarget.FragmentShaderDerivativeHint, OpenTK.Graphics.OpenGL4.HintMode.Nicest)
+
+            h.ReleaseCurrent()
+            h
+        )
+
+    let ctx = new Context(runtime, enableDebug, resourceContexts)
     do runtime.Context <- ctx
+       glfw.Context <- ctx
  
     let defaultCachePath =
         let dir =
@@ -87,7 +122,9 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
 
     member x.CreateGameWindow(?samples : int) =
         let samples = defaultArg samples 1
-        let w = new GameWindow(runtime, enableDebug, samples)
+        let w = 
+            glfw.CreateWindow { windowConfig with samples = samples }
+
         init ctx 
         w
 

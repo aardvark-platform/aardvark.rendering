@@ -24,13 +24,29 @@ let main argv =
 
     // create an OpenGL/Vulkan application. Use the use keyword (using in C#) in order to
     // properly dipose resources on shutdown...
-    use app = new VulkanApplication()
+    use app = new OpenGlApplication()
     // SimpleRenderWindow is a System.Windows.Forms.Form which contains a render control
     // of course you can a custum form and add a control to it.
     // Note that there is also a WPF binding for OpenGL. For more complex GUIs however,
     // we recommend using aardvark-media anyways..
-    let win = app.CreateGameWindow(samples = 8, vsync = false)
+    let win = app.CreateGameWindow(samples = 8)
     //win.Title <- "Hello Aardvark"
+
+    //win.Decorated <- false
+    //win.Floating <- true
+    //win.WindowState <- Glfw.WindowState.Maximized
+
+    //win.Keyboard.Down.Values.Add (fun k ->
+    //    match k with
+    //    | Keys.Enter -> 
+    //        match win.WindowState with
+    //        | Glfw.WindowState.Maximized -> win.WindowState <- Glfw.WindowState.Normal
+    //        | _ -> win.WindowState <- Glfw.WindowState.Maximized
+    //    | Keys.Space ->
+    //        win.Decorated <- not win.Decorated
+    //    | _ ->
+    //        ()
+    //)
 
     // Given eye, target and sky vector we compute our initial camera pose
     let initialView = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)

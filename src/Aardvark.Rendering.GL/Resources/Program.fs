@@ -535,8 +535,6 @@ module ProgramExtensions =
 
                 let fixBindings (p : Program) (iface : FShade.GLSL.GLSLProgramInterface) = 
                     if p.Context.FShadeBackend.Config.bindingMode = FShade.GLSL.BindingMode.None then
-
-
                         let uniformBuffers =
                             let mutable b = 0
                             iface.uniformBuffers |> MapExt.map (fun name ub ->
