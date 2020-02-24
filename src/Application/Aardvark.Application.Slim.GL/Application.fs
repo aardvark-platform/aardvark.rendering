@@ -44,6 +44,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
             OpenTK.Graphics.OpenGL4.GL.Hint(OpenTK.Graphics.OpenGL4.HintTarget.FragmentShaderDerivativeHint, OpenTK.Graphics.OpenGL4.HintMode.Nicest)
 
             h.ReleaseCurrent()
+            glfw.RemoveExistingWindow w
             h
         )
 

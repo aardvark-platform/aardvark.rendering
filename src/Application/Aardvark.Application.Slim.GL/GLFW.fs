@@ -450,6 +450,7 @@ type Application(runtime : IRuntime) =
     let mutable ctx = Unchecked.defaultof<Aardvark.Rendering.GL.Context>
 
     let glfw = Glfw.GetApi()
+    do if not (glfw.Init()) then  failwith "GLFW init failed"
 
     let lockObj = obj()
     let mutable lastWindow = None
@@ -457,44 +458,45 @@ type Application(runtime : IRuntime) =
 
     let existingWindows = System.Collections.Concurrent.ConcurrentHashSet<Window>()
     let visibleWindows = System.Collections.Concurrent.ConcurrentHashSet<Window>()
+    do Application.IsMainThread_ <- true
 
-    let thread =
-        let mutable inited = None
-        let thread = 
-            startThread (fun () ->
-                Application.IsMainThread_ <- true
-                if not (glfw.Init()) then 
-                    lock lockObj (fun () ->
-                        inited <- Some false
-                        Monitor.PulseAll lockObj
-                    )
-                else                
-                    lock lockObj (fun () -> 
-                        inited <- Some true
-                        Monitor.PulseAll lockObj
-                    )
-                    let mutable outDated = false
-                    while true do
-                        glfw.WaitEvents()
+    //let thread =
+    //    let mutable inited = None
+    //    let thread = 
+    //        startThread (fun () ->
+    //            Application.IsMainThread_ <- true
+    //            if not (glfw.Init()) then 
+    //                lock lockObj (fun () ->
+    //                    inited <- Some false
+    //                    Monitor.PulseAll lockObj
+    //                )
+    //            else                
+    //                lock lockObj (fun () -> 
+    //                    inited <- Some true
+    //                    Monitor.PulseAll lockObj
+    //                )
+    //                let mutable outDated = false
+    //                while true do
+    //                    glfw.WaitEvents()
 
-                        let mutable action = Unchecked.defaultof<unit -> unit>
-                        while queue.TryDequeue(&action) do
-                            try action()
-                            with _ -> ()
+    //                    let mutable action = Unchecked.defaultof<unit -> unit>
+    //                    while queue.TryDequeue(&action) do
+    //                        try action()
+    //                        with _ -> ()
 
-                        outDated <- false
-                        for w in visibleWindows do
-                            let v = w.Redraw()
-                            outDated <- outDated || v
-            )
+    //                    outDated <- false
+    //                    for w in visibleWindows do
+    //                        let v = w.Redraw()
+    //                        outDated <- outDated || v
+    //        )
 
-        lock lockObj (fun () -> 
-            while Option.isNone inited do
-                Monitor.Wait lockObj |> ignore
-        )
+        //lock lockObj (fun () -> 
+        //    while Option.isNone inited do
+        //        Monitor.Wait lockObj |> ignore
+        //)
 
-        if not inited.Value then failwith "GLFW init failed"
-        thread
+        //if not inited.Value then failwith "GLFW init failed"
+        //thread
 
 
     member x.Runtime = runtime
@@ -640,22 +642,23 @@ type Application(runtime : IRuntime) =
             new Window(x, win, cfg.title, ctx, info, cfg.samples)
         )        
 
-    // member x.Run([<System.ParamArray>] ws : Window[]) =
-    //     Application.IsMainThread_ <- true
-    //     if not (glfw.Init()) then failwith "GLFW init failed"
-    //     running <- true
-    //     for w in ws do
-    //         w.IsVisible <- true
-    //     while existingWindows.Count > 0 do
-    //         glfw.WaitEvents()
-    //         let mutable action = Unchecked.defaultof<unit -> unit>
-    //         while queue.TryDequeue(&action) do
-    //             try action()
-    //             with _ -> ()
-    //         for w in visibleWindows do
-    //             w.Redraw()
- 
-    //     running <- false   
+    member x.Run([<System.ParamArray>] ws : Window[]) =    
+        let mutable outDated = false
+
+        for w in ws do w.IsVisible <- true
+
+        while existingWindows.Count > 0 do
+            glfw.WaitEvents()
+
+            let mutable action = Unchecked.defaultof<unit -> unit>
+            while queue.TryDequeue(&action) do
+                try action()
+                with _ -> ()
+
+            outDated <- false
+            for w in visibleWindows do
+                let v = w.Redraw()
+                outDated <- outDated || v
 
 
 and Window internal(app : Application, win : nativeptr<WindowHandle>, title : string, ctx : OpenTK.Graphics.IGraphicsContext, info : OpenTK.Platform.IWindowInfo, samples : int) as this =
@@ -1328,18 +1331,5 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
             renderTask.OutOfDate
 
     member x.Run() =
-        let l = obj()
-        let mutable closed = false
-        x.Invoke(fun () -> x.IsVisible <- true)
-        use s = 
-            x.Closing.Subscribe (fun () ->
-                lock l (fun () ->
-                    closed <- true
-                    Monitor.PulseAll l
-                )
-            )
-        lock l (fun () ->
-            while not closed do
-                Monitor.Wait l |> ignore
-        )                
+        app.Run x          
 
