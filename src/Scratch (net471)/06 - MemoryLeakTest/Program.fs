@@ -30,8 +30,9 @@ let main argv =
     Aardvark.Init()
 
     use app = new OpenGlApplication()
-    let win = app.CreateSimpleRenderWindow(samples = 8)
+    let win = app.CreateSimpleRenderWindow(8)
     win.Title <- "Memory Leak"
+    
 
     let initialView = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
     let frustum = 
@@ -63,7 +64,8 @@ let main argv =
     
     let renderTask =
         RenderTask.custom (fun (self,token,outputDesc) -> 
-            
+            win.Time.GetValue self |> ignore
+
             transact (fun () -> 
                     // clear old geometry and create new
                     stuff.Clear() 
