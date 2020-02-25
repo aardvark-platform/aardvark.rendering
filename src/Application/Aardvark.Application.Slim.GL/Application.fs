@@ -6,6 +6,7 @@ open Aardvark.Base
 open FSharp.Data.Adaptive
 open Aardvark.Rendering.GL
 open Aardvark.Application
+open System.Runtime.InteropServices
 
 
 type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
@@ -127,21 +128,18 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
 
         w.KeyDown.Add (fun e ->
             match e.Key with
-            | Keys.F1 when e.Ctrl && e.Shift ->
+            | Keys.R when e.Ctrl && e.Shift ->
                 w.RenderAsFastAsPossible <- not w.RenderAsFastAsPossible
                 Log.line "[Window] RenderAsFastAsPossible: %A" w.RenderAsFastAsPossible
-            | Keys.F2 when e.Ctrl && e.Shift ->
+            | Keys.V when e.Ctrl && e.Shift ->
                 w.VSync <- not w.VSync
                 Log.line "[Window] VSync: %A" w.VSync
-            | Keys.F3 when e.Ctrl && e.Shift ->
+            | Keys.G when e.Ctrl && e.Shift ->
                 w.MeasureGpuTime <- not w.MeasureGpuTime
                 Log.line "[Window] MeasureGpuTime: %A" w.MeasureGpuTime
-            | Keys.F11 ->
+            | Keys.Enter when e.Ctrl && e.Shift ->
                 w.Fullcreen <- not w.Fullcreen
                 Log.line "[Window] Fullcreen: %A" w.Fullcreen
-            | Keys.F12 when e.Ctrl && e.Shift ->
-                w.ShowFrameTime <- not w.ShowFrameTime
-                Log.line "[Window] ShowFrameTime: %A" w.ShowFrameTime
             | _ ->
                 ()
         )

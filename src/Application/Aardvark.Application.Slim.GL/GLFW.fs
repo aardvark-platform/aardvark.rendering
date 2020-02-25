@@ -377,10 +377,10 @@ type KeyEvent internal(key : Aardvark.Application.Keys, scanCode : int, action :
 
         let modifiers = 
             [
-                if x.Alt then "alt"
-                if x.Shift then "shift"
-                if x.Ctrl then "ctrl"
-                if x.Super then "super"          
+                if x.Alt then yield "alt"
+                if x.Shift then yield "shift"
+                if x.Ctrl then yield "ctrl"
+                if x.Super then yield "super"          
             ]
 
         sprintf "%s { key: %A; scan: %A; mod: [%s]; name: %s }" kind key scanCode (String.concat "; " modifiers) keyName
@@ -410,10 +410,10 @@ type MouseEvent internal(button : Aardvark.Application.MouseButtons, position: V
 
         let modifiers = 
             [
-                if x.Alt then "alt"
-                if x.Shift then "shift"
-                if x.Ctrl then "ctrl"
-                if x.Super then "super"          
+                if x.Alt then yield "alt"
+                if x.Shift then yield "shift"
+                if x.Ctrl then yield "ctrl"
+                if x.Super then yield "super"          
             ]
 
         sprintf "%s { button: %A; mod: [%s]; position: %A }" kind button (String.concat "; " modifiers) position
@@ -452,7 +452,6 @@ type Application(runtime : IRuntime) =
     let glfw = Glfw.GetApi()
     do if not (glfw.Init()) then  failwith "GLFW init failed"
 
-    let lockObj = obj()
     let mutable lastWindow = None
     let queue = System.Collections.Concurrent.ConcurrentQueue<unit -> unit>()
 
