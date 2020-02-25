@@ -606,7 +606,7 @@ type Application(runtime : IRuntime) =
                 if RuntimeInformation.IsOSPlatform(OSPlatform.OSX) then
                     glfw.WindowHint(unbox<WindowHintBool> 0x00023001, cfg.physicalSize)
 
-                glfw.WindowHint(unbox<WindowHintBool> 0x0002200C, false)
+                glfw.WindowHint(unbox<WindowHintBool> 0x0002200C, true)
                 glfw.WindowHint(WindowHintInt.Samples, cfg.samples)
                 match lastWindow with
                 | Some l -> parent <- l
@@ -1102,13 +1102,18 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
         and set f =
             x.Invoke(fun () ->
                 if f then 
-                    let o = x.ContentPosition
-                    let s = x.FramebufferSize
-                    beforeFullScreen <- Box2i.FromMinAndSize(o, s)
+                    let mutable os = V2i.Zero
+                    let mutable oo = V2i.Zero
+                    glfw.GetWindowSize(win, &os.X, &os.Y)
+                    glfw.GetWindowPos(win, &oo.X, &oo.Y)
+                    beforeFullScreen <- Box2i.FromMinAndSize(oo, os)
+
                     let m = glfw.GetPrimaryMonitor()
-                    let (x,y,w,h) = glfw.GetMonitorWorkarea(m)
                     let mode = glfw.GetVideoMode(m) |> NativePtr.read
-                    glfw.SetWindowMonitor(win, m, x, y, w, h, mode.RefreshRate)
+
+                    //let ws = V2i(round (float mode.Width / float scale.X), round(float mode.Height / float scale.Y))  
+
+                    glfw.SetWindowMonitor(win, m, 0, 0, mode.Width, mode.Height, mode.RefreshRate)
                 else
                     let o = beforeFullScreen.Min
                     let s = beforeFullScreen.Size
