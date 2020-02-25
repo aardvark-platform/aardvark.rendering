@@ -1,4 +1,4 @@
-framework: netstandard2.0, net471, netcoreapp3.0
+framework: netstandard2.0, net471, netcoreapp3.0, netcoreapp3.1
 source https://api.nuget.org/v3/index.json
 
 nuget FSharp.Core                        >= 4.6.2 lowest_matching: true
@@ -25,8 +25,8 @@ nuget Unofficial.LibTessDotNet           ~> 2.0.2
 nuget SharpDX.Direct3D9                  ~> 4.0.1
 nuget Unofficial.AssimpNet               ~> 4.0.5
 
-nuget Unofficial.OpenTK                  ~> 3.0.17
-nuget Unofficial.OpenTK.GLControl        ~> 3.0.17
+nuget Unofficial.OpenTK                  ~> 3.0.18
+nuget Unofficial.OpenTK.GLControl        ~> 3.0.18
 nuget Silk.NET.GLFW                      ~> 1.0.0-preview5
 	
 nuget FSharp.Charting                    ~> 0.91.1

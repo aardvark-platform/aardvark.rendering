@@ -1,7 +1,5 @@
 ﻿namespace Aardvark.Application.WPF
 
-#if WINDOWS
-
 
 open System
 open System.Runtime.InteropServices
@@ -68,5 +66,3 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) a
         member x.BeforeRender = ctrl.BeforeRender
         member x.AfterRender = ctrl.AfterRender
     new(context, enableDebug) = new OpenGlRenderControl(context, enableDebug, 1)
-
-#endif

@@ -4,7 +4,7 @@ open Aardvark.Base.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.Application.WinForms
+open Aardvark.Application.WPF
 
 // This example illustrates how to create a simple render window. 
 // In contrast to the rest of the examples (beginning from 01-Triangle), we use
@@ -14,9 +14,9 @@ open Aardvark.Application.WinForms
 // show/window computation expression builders (which reduces code duplication
 // in this case) to setup applications.
 
-[<EntryPoint>]
+[<EntryPoint; STAThread>]
 let main argv = 
-    
+    Config.useSharingControl <- true
     // first we need to initialize Aardvark's core components
     Ag.initialize()
     Aardvark.Init()
@@ -28,7 +28,7 @@ let main argv =
     // of course you can a custum form and add a control to it.
     // Note that there is also a WPF binding for OpenGL. For more complex GUIs however,
     // we recommend using aardvark-media anyways..
-    let win = app.CreateSimpleRenderWindow(samples = 8)
+    let win = app.CreateSimpleRenderWindow(8)
     //win.Title <- "Hello Aardvark"
 
     win.Keyboard.Down.Values.Add(fun k ->

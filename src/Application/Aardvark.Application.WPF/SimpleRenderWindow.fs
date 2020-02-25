@@ -1,7 +1,5 @@
 ﻿namespace Aardvark.Application.WPF
 
-#if WINDOWS
-
 open System.Runtime.CompilerServices
 open System.Windows
 open System.Windows.Controls
@@ -11,13 +9,18 @@ open Aardvark.Application
 
 
 
-type SimpleRenderWindow() =
+type SimpleRenderWindow() as this =
     inherit Window()
     let ctrl = new RenderControl()
 
     do base.Width <- 1024.0
        base.Height <- 768.0
+       base.Title <- "Aardvark rocks WPF \\o/"
+       ctrl.BorderThickness <- Thickness(0.0)
+       base.BorderThickness <- Thickness(0.0)
        base.Content <- ctrl
+       let mutable d = { new System.IDisposable with member x.Dispose() = () }
+       d <- ctrl.AfterRender.Subscribe (fun _ -> d.Dispose(); this.Dispatcher.BeginInvoke(new System.Action(fun () -> ctrl.FocusReal() |> ignore)) |> ignore)
 
     member x.Control = ctrl
 
@@ -68,4 +71,3 @@ type WPFApplicationExtensions private() =
     static member CreateSimpleRenderWindow(this : IApplication) =
         WPFApplicationExtensions.CreateSimpleRenderWindow(this, 1)
 
-#endif
