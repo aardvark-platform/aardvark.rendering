@@ -1197,7 +1197,7 @@ let main args =
             app :> Aardvark.Application.IApplication,win :> Aardvark.Application.IRenderWindow
         else
             let app = new Aardvark.Application.WinForms.OpenGlApplication()
-            let win = app.CreateGameWindow()
+            let win = app.CreateSimpleRenderWindow()
             app:> Aardvark.Application.IApplication,win :> Aardvark.Application.IRenderWindow
     CullingTest.run app win |> ignore
     //CullingTest.runInstanced () |> ignore

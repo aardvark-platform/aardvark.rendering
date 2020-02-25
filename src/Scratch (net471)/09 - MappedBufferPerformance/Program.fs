@@ -39,7 +39,7 @@ let main argv =
     Aardvark.Init()
 
     use app = new OpenGlApplication()
-    let win = app.CreateGameWindow(samples = 8)
+    let win = app.CreateSimpleRenderWindow(samples = 8)
     //use app = new VulkanApplication()
     //let win = app.CreateSimpleRenderWindow(8)
 

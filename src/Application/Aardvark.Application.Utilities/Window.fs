@@ -906,7 +906,7 @@ module ``Render Utilities`` =
         member x.Yield(()) =
             {
                 app = None
-                backend = Backend.Vulkan
+                backend = Backend.GL
                 debug = DebugVerbosity.Warning
                 samples = 8
                 deviceKind = DeviceKind.Dedicated

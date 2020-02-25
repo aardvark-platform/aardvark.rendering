@@ -435,9 +435,9 @@ type WindowConfig =
         height : int
         focus : bool
         resizable : bool
-        refreshRate : int
+        vsync : bool
         transparent : bool
-        opengl : option<int*int>
+        opengl : bool
         physicalSize : bool
         samples : int
     }    
@@ -460,43 +460,43 @@ type Application(runtime : IRuntime) =
     let visibleWindows = System.Collections.Concurrent.ConcurrentHashSet<Window>()
     do Application.IsMainThread_ <- true
 
-    //let thread =
-    //    let mutable inited = None
-    //    let thread = 
-    //        startThread (fun () ->
-    //            Application.IsMainThread_ <- true
-    //            if not (glfw.Init()) then 
-    //                lock lockObj (fun () ->
-    //                    inited <- Some false
-    //                    Monitor.PulseAll lockObj
-    //                )
-    //            else                
-    //                lock lockObj (fun () -> 
-    //                    inited <- Some true
-    //                    Monitor.PulseAll lockObj
-    //                )
-    //                let mutable outDated = false
-    //                while true do
-    //                    glfw.WaitEvents()
+    let openglVersion =
+        let versions =
+            [
+                System.Version(4,5)
+                System.Version(4,3)
+                System.Version(4,1)
+                System.Version(3,3)
+                System.Version(3,0)
+            ]
+        let best = 
+            versions |> List.tryFind (fun v -> 
+                glfw.DefaultWindowHints()
+                glfw.WindowHint(WindowHintClientApi.ClientApi, ClientApi.OpenGL)
+                glfw.WindowHint(WindowHintInt.ContextVersionMajor, v.Major)
+                glfw.WindowHint(WindowHintInt.ContextVersionMinor, v.Minor)
+                glfw.WindowHint(WindowHintBool.OpenGLForwardCompat, true)
+                glfw.WindowHint(WindowHintOpenGlProfile.OpenGlProfile, OpenGlProfile.Core)
+                glfw.WindowHint(WindowHintBool.Visible, false)
 
-    //                    let mutable action = Unchecked.defaultof<unit -> unit>
-    //                    while queue.TryDequeue(&action) do
-    //                        try action()
-    //                        with _ -> ()
+                let w = 
+                    try glfw.CreateWindow(1, 1, "", NativePtr.zero, NativePtr.zero)
+                    with _ -> NativePtr.zero
 
-    //                    outDated <- false
-    //                    for w in visibleWindows do
-    //                        let v = w.Redraw()
-    //                        outDated <- outDated || v
-    //        )
+                if w = NativePtr.zero then
+                    Log.warn "OpenGL %A not working" v
+                    false
+                else
+                    glfw.DestroyWindow(w)
+                    Log.line "OpenGL %A working" v
+                    true
 
-        //lock lockObj (fun () -> 
-        //    while Option.isNone inited do
-        //        Monitor.Wait lockObj |> ignore
-        //)
+            )
+        match best with
+        | Some b -> b
+        | None -> failwith "no compatible OpenGL version found"
 
-        //if not inited.Value then failwith "GLFW init failed"
-        //thread
+
 
 
     member x.Runtime = runtime
@@ -581,30 +581,29 @@ type Application(runtime : IRuntime) =
             let mutable parent : nativeptr<WindowHandle> = NativePtr.zero
             glfw.DefaultWindowHints()
 
-            match cfg.opengl with
-            | Some (major, minor) ->
+            if cfg.opengl then
                 glContext <- true
                 glfw.WindowHint(WindowHintClientApi.ClientApi, ClientApi.OpenGL)
-                glfw.WindowHint(WindowHintInt.ContextVersionMajor, major)
-                glfw.WindowHint(WindowHintInt.ContextVersionMinor, minor)
+                glfw.WindowHint(WindowHintInt.ContextVersionMajor, openglVersion.Major)
+                glfw.WindowHint(WindowHintInt.ContextVersionMinor, openglVersion.Minor)
                 glfw.WindowHint(WindowHintInt.DepthBits, 24)
                 glfw.WindowHint(WindowHintInt.StencilBits, 8)
 
 
                 let m = glfw.GetPrimaryMonitor()
                 let mode = glfw.GetVideoMode(m) |> NativePtr.read
-                glfw.WindowHint(WindowHintInt.RedBits, mode.RedBits)
-                glfw.WindowHint(WindowHintInt.GreenBits, mode.GreenBits)
-                glfw.WindowHint(WindowHintInt.BlueBits, mode.BlueBits)
-                glfw.WindowHint(WindowHintInt.AlphaBits, if cfg.transparent then 8 else 0)
+                glfw.WindowHint(WindowHintInt.RedBits, 8)
+                glfw.WindowHint(WindowHintInt.GreenBits, 8)
+                glfw.WindowHint(WindowHintInt.BlueBits, 8)
+                glfw.WindowHint(WindowHintInt.AlphaBits, 8)
                 glfw.WindowHint(WindowHintInt.RefreshRate, mode.RefreshRate)
                 glfw.WindowHint(WindowHintOpenGlProfile.OpenGlProfile, OpenGlProfile.Core)
                 glfw.WindowHint(WindowHintRobustness.ContextRobustness, Robustness.LoseContextOnReset)
                 glfw.WindowHint(WindowHintBool.OpenGLForwardCompat, true)
-                glfw.WindowHint(WindowHintBool.DoubleBuffer, false)
+                glfw.WindowHint(WindowHintBool.DoubleBuffer, true)
                 glfw.WindowHint(WindowHintBool.OpenGLDebugContext, false)
                 glfw.WindowHint(WindowHintBool.ContextNoError, true)
-                glfw.WindowHint(WindowHintBool.SrgbCapable, true)
+                glfw.WindowHint(WindowHintBool.SrgbCapable, false)
                 if RuntimeInformation.IsOSPlatform(OSPlatform.OSX) then
                     glfw.WindowHint(unbox<WindowHintBool> 0x00023001, cfg.physicalSize)
 
@@ -613,13 +612,13 @@ type Application(runtime : IRuntime) =
                 match lastWindow with
                 | Some l -> parent <- l
                 | None -> ()
-            | None ->
+            else
                 glfw.WindowHint(WindowHintClientApi.ClientApi, ClientApi.NoApi)
 
             glfw.WindowHint(WindowHintBool.TransparentFramebuffer, cfg.transparent)
             glfw.WindowHint(WindowHintBool.Visible, false)
             glfw.WindowHint(WindowHintBool.Resizable, cfg.resizable)
-            glfw.WindowHint(WindowHintInt.RefreshRate, cfg.refreshRate)
+            glfw.WindowHint(WindowHintInt.RefreshRate, 0)
             glfw.WindowHint(WindowHintBool.FocusOnShow, cfg.focus)
 
 
@@ -638,31 +637,33 @@ type Application(runtime : IRuntime) =
             if not (isNull ctx) then  
                 ctx.MakeCurrent info
                 ctx.LoadAll()          
+                glfw.SwapInterval(if cfg.vsync then 1 else 0)
+                ctx.MakeCurrent null
 
-            glfw.MakeContextCurrent(NativePtr.zero)
-            new Window(x, win, cfg.title, ctx, info, cfg.samples)
+            new Window(x, win, cfg.title, cfg.vsync, ctx, info, cfg.samples)
         )        
 
     member x.Run([<System.ParamArray>] ws : Window[]) =    
-        let mutable outDated = false
+        let mutable wait = false
 
         for w in ws do w.IsVisible <- true
 
         while existingWindows.Count > 0 do
-            glfw.WaitEvents()
+            if wait then glfw.WaitEvents()
+            else glfw.PollEvents()
 
             let mutable action = Unchecked.defaultof<unit -> unit>
             while queue.TryDequeue(&action) do
                 try action()
                 with _ -> ()
 
-            outDated <- false
+            wait <- true
             for w in visibleWindows do
                 let v = w.Redraw()
-                outDated <- outDated || v
+                if v then wait <- false
 
 
-and Window internal(app : Application, win : nativeptr<WindowHandle>, title : string, ctx : OpenTK.Graphics.IGraphicsContext, info : OpenTK.Platform.IWindowInfo, samples : int) as this =
+and Window internal(app : Application, win : nativeptr<WindowHandle>, title : string, enableVSync : bool, ctx : OpenTK.Graphics.IGraphicsContext, info : OpenTK.Platform.IWindowInfo, samples : int) as this =
     static let keyNameCache = System.Collections.Concurrent.ConcurrentDictionary<Keys * int, string>()
 
     let glfw = app.Glfw
@@ -670,8 +671,12 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
     let mutable windowScale = V2d.II
     let mutable damaged = true
     let mutable title = title
+    let mutable currentTitle = title
     let mutable icon : option<PixImageMipMap> = None
     let mutable lastMousePosition = V2d.Zero
+    let mutable enableVSync = enableVSync
+    let mutable vsync = enableVSync
+    let mutable showFrameTime = true
 
     do app.AddExistingWindow this
 
@@ -841,13 +846,11 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
             | ValueSome k -> 
                 match a with
                 | InputAction.Press -> 
-                    Log.warn "%A" k
                     keyboard.KeyDown(k)
                     keyDown.Trigger(KeyEvent(k, c, a, m, name))
                 | InputAction.Repeat -> 
-                    //keyboard.KeyDown(k)
-                    //keyDown.Trigger(KeyEvent(k,c, a, m, name))
-                    ()
+                    keyboard.KeyDown(k)
+                    keyDown.Trigger(KeyEvent(k,c, a, m, name))
                 | InputAction.Release -> 
                     keyboard.KeyUp(k)
                     keyUp.Trigger(KeyEvent(k, c, a, m, name))
@@ -951,6 +954,10 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
         )
 
     let mutable beforeFullScreen = Box2i.FromMinAndSize(V2i.Zero, V2i(1024, 768))
+    let mutable averageFrameTime = MicroTime.Zero
+    let mutable averageGpuTime = MicroTime.Zero
+    let mutable renderContinuous = false
+    let mutable measureGpuTime = true
 
     let mutable renderTask : IRenderTask = RenderTask.empty
     let mutable renderTaskSub = 
@@ -971,8 +978,10 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
 
     let mutable frameCount = 0
     let mutable totalTime = MicroTime.Zero
+    let mutable totalGpuTime = MicroTime.Zero
     let sw = System.Diagnostics.Stopwatch()
 
+    let mutable queryObjects : option<struct(int * int)> = None
 
     member x.AfterRender = afterRender.Publish
     member x.BeforeRender = beforeRender.Publish
@@ -989,7 +998,10 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
                         damaged <- true
                         glfw.PostEmptyEvent()
                     )
+                damaged <- true
             )
+            glfw.PostEmptyEvent()
+
     member x.Runtime = app.Runtime
     member x.Samples = samples
     member x.Sizes = currentSize :> aval<_>
@@ -998,20 +1010,20 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
     member x.Mouse = mouse :> Aardvark.Application.IMouse
 
     interface Aardvark.Application.IRenderTarget with
-        member x.AfterRender = afterRender.Publish
-        member x.BeforeRender = beforeRender.Publish
-        member x.FramebufferSignature  = signature :> _
+        member x.AfterRender = x.AfterRender
+        member x.BeforeRender = x.BeforeRender
+        member x.FramebufferSignature = x.FramebufferSignature
         member x.RenderTask
             with get () = x.RenderTask
             and set (v: IRenderTask) = x.RenderTask <- v
-        member x.Runtime = app.Runtime
-        member x.Samples = samples
-        member x.Sizes = currentSize :> aval<_>
-        member x.Time = time
+        member x.Runtime = x.Runtime
+        member x.Samples = x.Samples
+        member x.Sizes = x.Sizes
+        member x.Time = x.Time
 
     interface Aardvark.Application.IRenderControl with
-        member x.Keyboard = keyboard :> _
-        member x.Mouse = mouse :> _
+        member x.Keyboard = x.Keyboard
+        member x.Mouse = x.Mouse
        
     interface Aardvark.Application.IRenderWindow with
         member x.Run() = x.Run()
@@ -1285,51 +1297,124 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
             app.RemoveExistingWindow x
         )
 
-    member x.NewFrame (t : MicroTime) = 
+    member x.VSync
+        with get() = enableVSync
+        and set v = enableVSync <- v
+       
+    member x.ShowFrameTime 
+        with get() = showFrameTime
+        and set v =
+            if v <> showFrameTime then
+                showFrameTime <- v
+                x.Invoke(fun () ->
+                    glfw.SetWindowTitle(win, title)
+                    currentTitle <- title
+                )
+
+    member x.AverageFrameTime = averageFrameTime
+    member x.AverageGPUFrameTime = averageGpuTime
+
+    member x.MeasureGpuTime
+        with get() = measureGpuTime
+        and set v = measureGpuTime <- v
+
+    member x.RenderAsFastAsPossible
+        with get() = renderContinuous
+        and set v =
+            if renderContinuous <> v then
+                renderContinuous <- v
+                if v then glfw.PostEmptyEvent()
+                else ()
+
+    member private x.NewFrame (t : MicroTime, gpu : MicroTime) = 
         frameCount <- frameCount + 1
         totalTime <- totalTime + t
+        totalGpuTime <- totalGpuTime + gpu
         if frameCount > 50 then
-            let fps = float frameCount / totalTime.TotalSeconds
-            x.Title <- sprintf "Aardvark rocks \\o/ (%.3f fps)" fps
+            averageFrameTime <- totalTime / frameCount
+            averageGpuTime <- totalGpuTime / frameCount
+            if showFrameTime then
+                if measureGpuTime then
+                    let r = 100.0 * (averageGpuTime / averageFrameTime)
+                    currentTitle <- sprintf "%s (%A/%.1f%%)" title averageFrameTime r
+                    glfw.SetWindowTitle(win, currentTitle)
+                else
+                    currentTitle <- sprintf "%s (%A)" title averageFrameTime
+                    glfw.SetWindowTitle(win, currentTitle)
+                    
+            elif title <> currentTitle then
+                glfw.SetWindowTitle(win, title)
+                
+            //x.Title <- sprintf "Aardvark rocks \\o/ (%.3f fps)" fps
             frameCount <- 0
             totalTime <- MicroTime.Zero
+            totalGpuTime <- MicroTime.Zero
         ()
 
     member internal x.Redraw() : bool =
-        if damaged then
-            damaged <- false
-            if not (isNull ctx) then
-                use __ = app.Context.RenderingLock ctxHandle
-                
-                glfw.SwapInterval(0)
-                beforeRender.Trigger()
-                let s = x.FramebufferSize
-                defaultFramebuffer.Size <- s
-                let output = OutputDescription.ofFramebuffer defaultFramebuffer
+        if renderContinuous || damaged then
+            let mutable gpuTime = MicroTime.Zero
+            sw.Restart()
+            try
+                damaged <- false
+                if not (isNull ctx) then
+                    use __ = app.Context.RenderingLock ctxHandle
+                    
+                    let mutable startQuery = 0
+                    let mutable endQuery = 0
+                    if measureGpuTime then
+                        let struct(s, e) = 
+                            match queryObjects with
+                            | Some t -> t
+                            | None ->
+                                let arr = [|0; 0|]
+                                GL.GenQueries(2, arr)
+                                queryObjects <- Some(struct(arr.[0], arr.[1]))
+                                struct(arr.[0], arr.[1])
 
-                GL.ColorMask(true, true, true, true)
-                GL.DepthMask(true)
-                GL.Viewport(0, 0, s.X, s.Y)
-                GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
-                GL.ClearDepth(1.0)
-                GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+                        GL.QueryCounter(s, QueryCounterTarget.Timestamp)
+                        startQuery <- s
+                        endQuery <- e
 
-                renderTask.Run(AdaptiveToken.Top, RenderToken.Empty, output)
+                    if vsync <> enableVSync then
+                        vsync <- enableVSync
+                        if enableVSync then glfw.SwapInterval(1)
+                        else glfw.SwapInterval(0)
 
-                glfw.SwapBuffers(win)                 
+                    beforeRender.Trigger()
+                    let s = x.FramebufferSize
+                    defaultFramebuffer.Size <- s
+                    let output = OutputDescription.ofFramebuffer defaultFramebuffer
 
+                    GL.ColorMask(true, true, true, true)
+                    GL.DepthMask(true)
+                    GL.Viewport(0, 0, s.X, s.Y)
+                    GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+                    GL.ClearDepth(1.0)
+                    GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+
+                    renderTask.Run(AdaptiveToken.Top, RenderToken.Empty, output)
+                    
+                    if measureGpuTime then
+                        GL.QueryCounter(endQuery, QueryCounterTarget.Timestamp)
+                        let mutable startTime = 0L
+                        let mutable stopTime = 0L
+                        GL.GetQueryObject(startQuery, GetQueryObjectParam.QueryResult, &startTime)
+                        GL.GetQueryObject(endQuery, GetQueryObjectParam.QueryResult, &stopTime)
+                        gpuTime <- MicroTime.FromNanoseconds (stopTime - startTime)
+
+                    glfw.SwapBuffers(win)      
+                    renderContinuous || renderTask.OutOfDate
+                else
+                    renderContinuous || renderTask.OutOfDate
+            finally 
                 afterRender.Trigger()  
                 transact time.MarkOutdated  
 
-                let t = sw.MicroTime
-                sw.Restart()
-                x.NewFrame t
-
-                renderTask.OutOfDate
-            else
-                renderTask.OutOfDate
+                sw.Stop()
+                x.NewFrame(sw.MicroTime, gpuTime)
         else
-            renderTask.OutOfDate
+            renderContinuous || renderTask.OutOfDate
 
     member x.Run() =
         app.Run x          

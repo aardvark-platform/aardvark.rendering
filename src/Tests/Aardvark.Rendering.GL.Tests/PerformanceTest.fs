@@ -104,7 +104,7 @@ module RandomCubesPerformanceTest =
         Aardvark.Init()
 
         use app = new OpenGlApplication()
-        let win = app.CreateGameWindow(1)
+        let win = app.CreateSimpleRenderWindow(1)
 
         let initialView = CameraView.LookAt(180.0 * V3d.III, V3d.OOO, V3d.OOI)
         let perspective = 
@@ -164,7 +164,7 @@ module RenderTaskPerformance =
         Aardvark.Init()
 
         use app = new OpenGlApplication()
-        let win = app.CreateGameWindow(1)
+        let win = app.CreateSimpleRenderWindow(1)
 
         let initialView = CameraView.LookAt(V3d.III, V3d.OOO, V3d.OOI)
         let perspective = 

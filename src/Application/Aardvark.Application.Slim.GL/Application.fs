@@ -24,8 +24,8 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
             Glfw.WindowConfig.height = 768
             Glfw.WindowConfig.resizable = true
             Glfw.WindowConfig.focus = true
-            Glfw.WindowConfig.refreshRate = 0
-            Glfw.WindowConfig.opengl = Some(4,1)
+            Glfw.WindowConfig.vsync = true
+            Glfw.WindowConfig.opengl = true
             Glfw.WindowConfig.physicalSize = false
             Glfw.WindowConfig.transparent = false
             Glfw.WindowConfig.samples = 1
@@ -123,8 +123,28 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
 
     member x.CreateGameWindow(?samples : int) =
         let samples = defaultArg samples 1
-        let w = 
-            glfw.CreateWindow { windowConfig with samples = samples }
+        let w = glfw.CreateWindow { windowConfig with samples = samples }
+
+        w.KeyDown.Add (fun e ->
+            match e.Key with
+            | Keys.F1 when e.Ctrl && e.Shift ->
+                w.RenderAsFastAsPossible <- not w.RenderAsFastAsPossible
+                Log.line "[Window] RenderAsFastAsPossible: %A" w.RenderAsFastAsPossible
+            | Keys.F2 when e.Ctrl && e.Shift ->
+                w.VSync <- not w.VSync
+                Log.line "[Window] VSync: %A" w.VSync
+            | Keys.F3 when e.Ctrl && e.Shift ->
+                w.MeasureGpuTime <- not w.MeasureGpuTime
+                Log.line "[Window] MeasureGpuTime: %A" w.MeasureGpuTime
+            | Keys.F11 ->
+                w.Fullcreen <- not w.Fullcreen
+                Log.line "[Window] Fullcreen: %A" w.Fullcreen
+            | Keys.F12 when e.Ctrl && e.Shift ->
+                w.ShowFrameTime <- not w.ShowFrameTime
+                Log.line "[Window] ShowFrameTime: %A" w.ShowFrameTime
+            | _ ->
+                ()
+        )
 
         init ctx 
         w

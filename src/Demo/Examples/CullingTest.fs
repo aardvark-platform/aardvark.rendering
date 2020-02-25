@@ -269,7 +269,7 @@ module CullingTest =
         Aardvark.Init()
 
         use app = new OpenGlApplication()
-        let win = app.CreateGameWindow()
+        let win = app.CreateSimpleRenderWindow()
 
         let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
         let frustum = 

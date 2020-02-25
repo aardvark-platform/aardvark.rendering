@@ -27,9 +27,8 @@ module HarwareFeatures =
             match bb with
                 | Backend.GL -> new OpenGlApplication() :> IApplication
                 | Backend.Vulkan -> new VulkanApplication() :> IApplication
-        let win = 
-            if game && bb = Backend.GL then (unbox<OpenGlApplication> app).CreateGameWindow(samples) :> IRenderWindow
-            else app.CreateSimpleRenderWindow(samples) :> IRenderWindow
+        let win =
+            app.CreateSimpleRenderWindow(samples) :> IRenderWindow
 
         let view =
             CameraView.lookAt (V3d(6,6,6)) V3d.Zero V3d.OOI
