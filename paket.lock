@@ -675,7 +675,8 @@ NUGET
     Unofficial.OpenTK.GLControl (3.0.18)
       Unofficial.OpenTK (3.0.18)
     Unofficial.OpenVR (1.1)
-    Unofficial.Typography (0.0.3)
+    Unofficial.Typography (0.1)
+      System.Numerics.Vectors (>= 4.5)
 
 GROUP Build
 RESTRICTION: == netstandard2.0

@@ -16,7 +16,7 @@ nuget FShade                             ~> 5.0.0-prerelease0005
 nuget FShade.Debug                       ~> 5.0.0-prerelease0005
 
 nuget Unofficial.OpenVR					 ~> 1.1.0 
-nuget Unofficial.Typography              ~> 0.0.3
+nuget Unofficial.Typography              ~> 0.1.0
 nuget CommonMark.NET                     ~> 0.15.1
 nuget GLSLangSharp                       ~> 0.4.6
 

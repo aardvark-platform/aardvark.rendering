@@ -347,13 +347,13 @@ module Markdown =
                             do! withTextState props (fun () ->
                                 state {
                                     let! font = getFont
-                                    let mutable last = '\n'
-                                    for c in text do
-                                        match c with
-                                            | ' ' -> do! moveX 0.5
-                                            | '\t' -> do! moveX 2.0
-                                            | '\n' -> do! lineBreak
-                                            | '\r' -> ()
+                                    let mutable last = CodePoint '\n'
+                                    for c in text.ToCodePointArray() do
+                                        match c.String with
+                                            | " " -> do! moveX 0.5
+                                            | "\t" -> do! moveX 2.0
+                                            | "\n" -> do! lineBreak
+                                            | "\r" -> ()
                                             | _ ->
                                                 let! s = getState
                                                 let g = font.GetGlyph c
