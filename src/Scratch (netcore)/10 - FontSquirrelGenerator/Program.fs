@@ -189,7 +189,7 @@ module FontSquirrelGenerator =
         printfn "    let private getBytes fmt = fmt |> Printf.kprintf (fun str -> client.Value.DownloadData(str))"
         printfn ""
         printfn "    let private cachePath = "
-        printfn "        let p = Path.GetTempPath()"
+        printfn "        let p = System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData)"
         printfn "        let d = Path.Combine(p, \"fontsquirrel\")"
         printfn "        if not (Directory.Exists d) then Directory.CreateDirectory d |> ignore"
         printfn "        d"

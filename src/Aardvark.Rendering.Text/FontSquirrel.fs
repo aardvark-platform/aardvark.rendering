@@ -9,7 +9,7 @@ module FontSquirrel =
     let private getBytes fmt = fmt |> Printf.kprintf (fun str -> client.Value.DownloadData(str))
 
     let private cachePath = 
-        let p = Path.GetTempPath()
+        let p = System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData)
         let d = Path.Combine(p, "fontsquirrel")
         if not (Directory.Exists d) then Directory.CreateDirectory d |> ignore
         d
