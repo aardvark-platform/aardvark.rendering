@@ -8,7 +8,7 @@ open Aardvark.Application.Slim
 [<EntryPoint>]
 let main argv = 
     
-    Ag.initialize()
+    
     Aardvark.Init()
 
     printfn "press [Space] to increment texture id."

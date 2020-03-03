@@ -149,9 +149,6 @@ module AirState =
             final               = []
         }
 
-    let create() =
-        Ag.getContext() |> ofScope
-
     let isActive = reader (fun s -> s.isActive)
     let mode = reader (fun s -> s.mode)
     let surface = reader (fun s -> s.surface)
@@ -644,8 +641,6 @@ type Air private() =
         a.RunUnit(&state)
         MultiRenderObject(state.final) :> IRenderObject
 
-    static member Run (a : Air<unit>) =
-        a |> Air.RunInScope (Ag.getContext())
    
 
 [<AutoOpen>]
@@ -685,10 +680,10 @@ open Aardvark.Base
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 
-[<Ag.Semantic>]
+[<Rule>]
 type AirNodeSem() =
-    member x.RenderObjects(n : Sg.AirNode) =
-        n.Content |> Air.Run |> ASet.single
+    member x.RenderObjects(n : Sg.AirNode, scope : Ag.Scope) =
+        n.Content |> Air.RunInScope scope |> ASet.single
 
 
 

@@ -737,7 +737,7 @@ module RenderingTests =
 module UseTest =
     
     let bla () =
-        Ag.initialize()
+        
         Aardvark.Init()
 
         use runtime = new Runtime()

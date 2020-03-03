@@ -11,7 +11,7 @@ open System.Diagnostics
 [<EntryPoint>]
 let main argv = 
     
-    Ag.initialize()
+    
     Aardvark.Init()
 
     use app = new OpenGlApplication()

@@ -78,17 +78,16 @@ open Aardvark.Base.Ag
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph  
 
-[<Semantic>]
+[<Rule>]
 type LodNodeSem() =
-    member x.RenderObjects(sg : Sg.LodTreeNode) =
-        let scope = Ag.getContext()
+    member x.RenderObjects(sg : Sg.LodTreeNode, scope : Ag.Scope) =
         let state = PipelineState.ofScope scope
-        let surface = sg.Surface
-        let pass = sg.RenderPass
+        let surface = scope.Surface
+        let pass = scope.RenderPass
 
-        let model = sg.ModelTrafo
-        let view = sg.ViewTrafo
-        let proj = sg.ProjTrafo
+        let model = scope.ModelTrafo
+        let view = scope.ViewTrafo
+        let proj = scope.ProjTrafo
 
         let id = newId()
         let obj =

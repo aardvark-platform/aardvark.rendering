@@ -55,7 +55,7 @@ let howManyColorsIllusion (size : int) =
 let main argv = 
     
     // first we need to initialize Aardvark's core components
-    Ag.initialize()
+    
     Aardvark.Init()
 
     // let's create an input image containing a simple illusion

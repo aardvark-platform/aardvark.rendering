@@ -7,6 +7,7 @@ open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Text
 open Aardvark.SceneGraph
+open Aardvark.SceneGraph.Semantics
 open FSharp.Data.Traceable
 
 module RenderPass =
@@ -39,45 +40,45 @@ module Sg =
         inherit Sg.AbstractApplicator(child)
 
 
-    [<Ag.Semantic>]
+    [<Rule>]
     type ShapeSem() =
         static let defaultDepthBias = 1.0 / float (1 <<< 21)
 
-        member x.ModelTrafoStack(b : BillboardApplicator) =
-            let view = b.ViewTrafo
+        member x.ModelTrafoStack(b : BillboardApplicator, scope : Ag.Scope) =
+            let view = scope.ViewTrafo
 
             let trafo =
-                b.ViewTrafo
+                scope.ViewTrafo
                     |> AVal.map (fun view ->
                         let pos = view.Forward.TransformPosProj V3d.Zero
                         Trafo3d.Translation(pos) * view.Inverse
                     )
 
 
-            b.Child?ModelTrafoStack <- trafo::b.ModelTrafoStack
+            b.Child?ModelTrafoStack <- trafo::scope.ModelTrafoStack
             
-        member x.LocalBoundingBox(t : Shape) : aval<Box3d> =
+        member x.LocalBoundingBox(t : Shape, scope : Ag.Scope) : aval<Box3d> =
             t.Content |> AVal.map (fun c ->
                 Box3d(V3d(c.bounds.Min, 0.0), V3d(c.bounds.Max, 0.0))
             )
 
-        member x.GlobalBoundingBox(t : Shape) : aval<Box3d> =
+        member x.GlobalBoundingBox(t : Shape, scope : Ag.Scope) : aval<Box3d> =
             AVal.map2 (fun c (t : Trafo3d) ->
                 let box = Box3d(V3d(c.bounds.Min, 0.0), V3d(c.bounds.Max, 0.0))
                 box.Transformed(t.Forward)
 
-            ) t.Content t.ModelTrafo
+            ) t.Content scope.ModelTrafo
             
         member x.LocalBoundingBox(t : ShapeSet) : aval<Box3d> =
             AVal.constant Box3d.Invalid
 
-        member x.GlobalBoundingBox(t : ShapeSet) : aval<Box3d> =
+        member x.GlobalBoundingBox(t : ShapeSet, scope : Ag.Scope) : aval<Box3d> =
             AVal.constant Box3d.Invalid
 
-        member x.RenderObjects(t : ShapeSet) : aset<IRenderObject> =
+        member x.RenderObjects(t : ShapeSet, scope : Ag.Scope) : aset<IRenderObject> =
             let content = t.Content
-            let cache = ShapeCache.GetOrCreateCache(t.Runtime)
-            let shapes = RenderObject.create()
+            let cache = ShapeCache.GetOrCreateCache(scope.Runtime)
+            let shapes = RenderObject.ofScope scope
                 
             let reader = content.GetReader()
 
@@ -196,17 +197,17 @@ module Sg =
                 }
 
             let aa =
-                match shapes.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "Antialias") with
+                match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "Antialias") with
                     | Some (:? aval<bool> as aa) -> aa
                     | _ -> AVal.constant false
 
             let fill =
-                match shapes.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "FillGlyphs") with
+                match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "FillGlyphs") with
                     | Some (:? aval<bool> as aa) -> aa
                     | _ -> AVal.constant true
                     
             let bias =
-                match shapes.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "DepthBias") with
+                match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "DepthBias") with
                     | Some (:? aval<float> as bias) -> bias
                     | _ -> AVal.constant defaultDepthBias
                     
@@ -243,10 +244,10 @@ module Sg =
                 )
                 |> ASet.ofAVal
 
-        member x.RenderObjects(t : Shape) : aset<IRenderObject> =
+        member x.RenderObjects(t : Shape, scope : Ag.Scope) : aset<IRenderObject> =
             let content = t.Content
-            let cache = ShapeCache.GetOrCreateCache(t.Runtime)
-            let shapes = RenderObject.create()
+            let cache = ShapeCache.GetOrCreateCache(scope.Runtime)
+            let shapes = RenderObject.ofScope scope
                 
             let content =
                 content |> AVal.map (fun c ->
@@ -322,17 +323,17 @@ module Sg =
 
 
             let aa =
-                match shapes.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "Antialias") with
+                match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "Antialias") with
                     | Some (:? aval<bool> as aa) -> aa
                     | _ -> AVal.constant false
 
             let fill =
-                match shapes.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "FillGlyphs") with
+                match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "FillGlyphs") with
                     | Some (:? aval<bool> as aa) -> aa
                     | _ -> AVal.constant true
                     
             let bias =
-                match shapes.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "DepthBias") with
+                match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "DepthBias") with
                     | Some (:? aval<float> as bias) -> bias
                     | _ -> AVal.constant defaultDepthBias
                     
@@ -370,7 +371,7 @@ module Sg =
             
             //shapes.WriteBuffers <- Some (Set.ofList [DefaultSemantic.Colors])
 
-            let boundary = RenderObject.create()
+            let boundary = RenderObject.ofScope scope
             //boundary.ConservativeRaster <- AVal.constant false
             boundary.RenderPass <- RenderPass.shapes
             boundary.BlendMode <- AVal.constant BlendMode.Blend
@@ -473,8 +474,8 @@ module Sg =
 
                 ) |> ASet.ofAVal
 
-        member x.FillGlyphs(s : ISg) =
-            let mode = s.FillMode
+        member x.FillGlyphs(s : ISg, scope : Ag.Scope) =
+            let mode = scope.FillMode
             mode |> AVal.map (fun m -> m = FillMode.Fill)
 
         member x.Antialias(r : Root<ISg>) =

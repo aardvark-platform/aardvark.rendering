@@ -25,7 +25,7 @@ let sizeShader (v : SizeVertex) =
 let main argv = 
     
     // first we need to initialize Aardvark's core components
-    Ag.initialize()
+    
     Aardvark.Init()
 
     // Sg.box provides a scenegraph containing a box (which can be changed, as

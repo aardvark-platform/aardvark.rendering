@@ -1065,7 +1065,7 @@ let main args =
 
     let useVulkan = true
 
-    Ag.initialize()
+    
     Aardvark.Init()
 
 
@@ -1216,7 +1216,7 @@ let main args =
 
 
 
-    Ag.initialize()
+    
     Aardvark.Init()
     
     Interactive.Renderer <- Vulkan

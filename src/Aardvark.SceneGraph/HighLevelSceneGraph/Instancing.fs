@@ -115,7 +115,7 @@ module Instancing =
             )
        
 
-    [<Semantic>]
+    [<Rule>]
     type InstancingSem() =
 
         static let bufferToM44f (inverse : bool) (b : IBuffer) =
@@ -196,7 +196,7 @@ module Instancing =
                                 
 
                     let objectModel =
-                        match o.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "ModelTrafo") with
+                        match o.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "ModelTrafo") with
                             | Some (:? aval<Trafo3d> as inner) -> inner
                             | _ -> AVal.constant Trafo3d.Identity
 
@@ -260,12 +260,12 @@ module Instancing =
                 | o ->
                     failwithf "[Sg] cannot instance object: %A" o
 
-        member x.RenderObjects(n : Sg.InstancingNode) : aset<IRenderObject> =
-            let model : list<aval<Trafo3d>> = n?ModelTrafoStack
+        member x.RenderObjects(n : Sg.InstancingNode, scope : Ag.Scope) : aset<IRenderObject> =
+            let model : list<aval<Trafo3d>> = scope.ModelTrafoStack
             let model = TrafoSemantics.flattenStack model
 
             n.Child |> ASet.bind (fun c ->
-                let objects : aset<IRenderObject> = c?RenderObjects()
+                let objects : aset<IRenderObject> = c.RenderObjects(scope)
                 objects |> ASet.map (fun ro ->
                     applyTrafos n.Uniforms model n.Count ro 
                 )

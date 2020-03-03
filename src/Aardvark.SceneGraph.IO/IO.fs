@@ -205,54 +205,51 @@ module Loader =
         open Aardvark.SceneGraph.Semantics
 
         type Node with      
-            member x.RenderObjects() : aset<IRenderObject> = x?RenderObjects()
+            member x.RenderObjects(scope : Ag.Scope) : aset<IRenderObject> = x?RenderObjects(scope)
+
+        type Ag.Scope with
             member x.ModelTrafoStack 
                 with get() : list<aval<Trafo3d>> = x?ModelTrafoStack
-                and set v = x?ModelTrafoStack <- v
 
             
             member x.Uniforms 
                 with get() : list<IUniformProvider> = x?Uniforms
                 and set v = x?Uniforms <- v
 
-            member x.ModelTrafo : aval<Trafo3d> = x?ModelTrafo()
-
         type Scene with      
-            member x.RenderObjects() : aset<IRenderObject> = x?RenderObjects()
-            member x.ModelTrafoStack : list<aval<Trafo3d>> = x?ModelTrafoStack
-            member x.ModelTrafo : aval<Trafo3d> = x?ModelTrafo()
+            member x.RenderObjects(scope) : aset<IRenderObject> = x?RenderObjects(scope)
 
-        [<Semantic>]
+        [<Rule>]
         type SceneSem() =
 
-            member x.Uniforms(n : Node) =
-                let parent = n.Uniforms
+            member x.Uniforms(n : Node, scope : Ag.Scope) =
+                let parent = scope.Uniforms
                 match n with
                     | Material(m,c) ->
-                        c.Uniforms <- (m :> IUniformProvider)::parent
+                        c?Uniforms <- (m :> IUniformProvider)::parent
                     | _ ->
                         n.AllChildren?Uniforms <- parent
 
-            member x.ModelTrafoStack(n : Node) =
-                let parent = n.ModelTrafoStack
+            member x.ModelTrafoStack(n : Node, scope : Ag.Scope) =
+                let parent = scope.ModelTrafoStack
                 match n with
                     | Trafo(t,c) -> 
-                        c.ModelTrafoStack <- (AVal.constant t)::parent
+                        c?ModelTrafoStack <- (AVal.constant t)::parent
 
                     | Material(m,c) ->
-                        c.ModelTrafoStack <- parent
+                        c?ModelTrafoStack <- parent
 
                     | _ ->
                         n.AllChildren?ModelTrafoStack <- parent
 
-            member x.RenderObjects(n : Node) =
+            member x.RenderObjects(n : Node, scope : Ag.Scope) =
                 match n with
                     | Trafo(_,n) -> 
-                        n.RenderObjects()
+                        n.RenderObjects(scope)
                     | Material(_,n) -> 
-                        n.RenderObjects()
+                        n.RenderObjects(scope)
                     | Group(nodes) ->
-                        nodes |> ASet.ofList |> ASet.collect (fun n -> n.RenderObjects())
+                        nodes |> ASet.ofList |> ASet.collect (fun n -> n.RenderObjects(scope))
                     | Empty ->
                         ASet.empty
                     | Leaf mesh ->
@@ -270,7 +267,7 @@ module Loader =
                                 InstanceCount = 1
                             )
 
-                        let ro = RenderObject.create()
+                        let ro = RenderObject.ofScope scope
                         ro.VertexAttributes <- mesh
                         ro.Mode <- mesh.geometry.Mode
                         ro.DrawCalls <- Direct(AVal.constant [call])
@@ -292,20 +289,20 @@ module Loader =
 
                         ASet.single (ro :> IRenderObject)
 
-            member x.RenderObjects(s : Scene) =
-                s.root.RenderObjects()
+            member x.RenderObjects(s : Scene, scope : Ag.Scope) =
+                s.root.RenderObjects(scope)
 
-            member x.LocalBoundingBox(s : Scene) =
+            member x.LocalBoundingBox(s : Scene, scope : Ag.Scope) =
                 AVal.constant s.bounds
 
-            member x.GlobalBoundingBox(n : Node) : aval<Box3d> =
+            member x.GlobalBoundingBox(n : Node, scope : Ag.Scope) : aval<Box3d> =
                 match n with
                     | Trafo(_,n) -> 
-                        n?GlobalBoundingBox()
+                        n?GlobalBoundingBox(scope)
                     | Material(_,n) -> 
-                        n?GlobalBoundingBox()
+                        n?GlobalBoundingBox(scope)
                     | Group(nodes) ->
-                        let bbs : list<aval<Box3d>> = nodes |> List.map (fun n -> n?GlobalBoundingBox()) 
+                        let bbs : list<aval<Box3d>> = nodes |> List.map (fun n -> n?GlobalBoundingBox(scope)) 
                         AVal.custom (fun token ->
                             let bbs = bbs |> List.map (fun v -> v.GetValue token)
                             Box3d bbs
@@ -313,17 +310,17 @@ module Loader =
                     | Empty ->
                         AVal.constant Box3d.Invalid
                     | Leaf mesh ->
-                        n.ModelTrafo |> AVal.map (fun t -> mesh.bounds.Transformed t)
+                        scope.ModelTrafo |> AVal.map (fun t -> mesh.bounds.Transformed t)
                             
-            member x.LocalBoundingBox(n : Node) : aval<Box3d> =
+            member x.LocalBoundingBox(n : Node, scope : Ag.Scope) : aval<Box3d> =
                 match n with
                     | Trafo(t,n) -> 
-                        let box : aval<Box3d> = n?LocalBoundingBox()
+                        let box : aval<Box3d> = n?LocalBoundingBox(scope)
                         box |> AVal.map (fun b -> b.Transformed t)
                     | Material(_,n) -> 
-                        n?LocalBoundingBox()
+                        n?LocalBoundingBox(scope)
                     | Group(nodes) ->
-                        let bbs : list<aval<Box3d>> = nodes |> List.map (fun n -> n?LocalBoundingBox()) 
+                        let bbs : list<aval<Box3d>> = nodes |> List.map (fun n -> n?LocalBoundingBox(scope)) 
                         AVal.custom (fun token ->
                             let bbs = bbs |> List.map (fun v -> v.GetValue token)
                             Box3d bbs
@@ -333,8 +330,8 @@ module Loader =
                     | Leaf mesh ->
                         AVal.constant mesh.bounds
                             
-            member x.GlobalBoundingBox(s : Scene) =
-                s.ModelTrafo |> AVal.map (fun t -> s.bounds.Transformed t)
+            member x.GlobalBoundingBox(s : Scene, scope : Ag.Scope) =
+                scope.ModelTrafo |> AVal.map (fun t -> s.bounds.Transformed t)
 
 
     type Assimp = class end

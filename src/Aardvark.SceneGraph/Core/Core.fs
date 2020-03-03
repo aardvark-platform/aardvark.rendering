@@ -54,18 +54,18 @@ module private Providers =
             match cache with
                 | Some c -> c
                 | None -> 
-                    match scope.TryGetAttributeValue attName with
-                        | Success map ->
+                    match scope.TryGetInherited attName with
+                        | Some (:? Map<Symbol, BufferView> as map) ->
                             cache <- Some map
                             map
-                        | Error e ->
+                        | _ ->
                             failwithf "could not get atttribute map %A for %A" attName scope
 
         interface IAttributeProvider with
 
             member x.Dispose() =
                 cache <- None
-                scope <- emptyScope
+                scope <- Ag.Scope.Root
 
             member x.All =
                 getMap() |> Map.toSeq
@@ -139,8 +139,8 @@ module private Providers =
                             cache.Add(s, cs)
                             Some cs
                         | None -> 
-                            match scope.TryGetAttributeValue (str) with
-                                | Success (v : IAdaptiveValue) -> 
+                            match scope.TryGetInherited (str) with
+                                | Some (:? IAdaptiveValue as v) -> 
                                     let cs = v
                                     cache.Add(s, cs)
                                     Some cs
@@ -159,7 +159,7 @@ module private Providers =
 
             member x.Dispose() =
                 cache.Clear()
-                scope <- emptyScope
+                scope <- Ag.Scope.Root
 
             member x.TryGetUniform(dynamicScope,s) = x.TryGetUniform(dynamicScope,s)
 

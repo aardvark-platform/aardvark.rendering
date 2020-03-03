@@ -325,26 +325,26 @@ module SceneGraphCompletenessCheck =
                 else
                     cleanName t.Name
 
-    [<OnAardvarkInit>]
-    let checkSemanticCompleteness() =
-        let sgTypes = Introspection.GetAllClassesImplementingInterface(typeof<ISg>)
+    //[<OnAardvarkInit>]
+    //let checkSemanticCompleteness() =
+    //    let sgTypes = Introspection.GetAllClassesImplementingInterface(typeof<ISg>)
 
-        let sgModule = typeof<Sg.Set>.DeclaringType
+    //    let sgModule = typeof<Sg.Set>.DeclaringType
 
-        for att in semantics do
-            let semTypes = System.Collections.Generic.HashSet<Type>()
-            for t in sgTypes do
-                if t.DeclaringType = sgModule then
-                    match t |> Ag.tryGetAttributeType att with
-                        | Some attType ->
-                            semTypes.Add attType |> ignore
-                        | None ->
-                            Log.warn "no semantic %A for type %s" att (prettyName t)
+    //    for att in semantics do
+    //        let semTypes = System.Collections.Generic.HashSet<Type>()
+    //        for t in sgTypes do
+    //            if t.DeclaringType = sgModule then
+    //                match t |> Ag.tryGetAttributeType att with
+    //                    | Some attType ->
+    //                        semTypes.Add attType |> ignore
+    //                    | None ->
+    //                        Log.warn "no semantic %A for type %s" att (prettyName t)
 
-            if semTypes.Count > 1 then
-                let allTypes = semTypes |> Seq.map prettyName |> String.concat "; "
-                Log.warn "conflicting types for semantic functions %A [%s]" att allTypes
+    //        if semTypes.Count > 1 then
+    //            let allTypes = semTypes |> Seq.map prettyName |> String.concat "; "
+    //            Log.warn "conflicting types for semantic functions %A [%s]" att allTypes
 
 
-        ()
+    //    ()
 

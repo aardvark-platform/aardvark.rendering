@@ -195,10 +195,10 @@ module Indirect =
             dirty.Clear()
             transact x.MarkOutdated
 
-    [<Semantic>]
+    [<Rule>]
     type IndirectSem() =
-        member x.RenderObjects(node : Sg.IndirectNode) : aset<IRenderObject> =
-            let runtime : IRuntime = x?Runtime
+        member x.RenderObjects(node : Sg.IndirectNode, scope : Ag.Scope) : aset<IRenderObject> =
+            let runtime : IRuntime = scope?Runtime
             let mutable reader = node.Objects.GetReader()
             let geometryCache = GeometryCache(runtime, node.Signature.vertexTypes)
             let uniformCache = UniformCache(runtime, node.Signature.uniformTypes)
@@ -219,7 +219,7 @@ module Indirect =
                             callCache.Clear()
                     }
 
-            let obj = RenderObject.create()
+            let obj = RenderObject.ofScope scope
             let indirectAndInstanceBuffers =
                 AVal.custom (fun token ->
                     

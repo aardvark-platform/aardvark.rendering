@@ -11,7 +11,7 @@ open Aardvark.SceneGraph.Internal
 [<AutoOpen>]
 module ModeSemantics =
 
-    type ISg with
+    type Ag.Scope with
         member x.DepthTestMode : aval<DepthTestMode> = x?DepthTestMode
         member x.DepthBias     : aval<DepthBiasState> = x?DepthBias
         member x.CullMode      : aval<CullMode>      = x?CullMode
@@ -27,20 +27,20 @@ module ModeSemantics =
         member x.Multisample : aval<bool>                   = x?Multisample
 
     module Semantic =
-        let depthTestMode  (s : ISg) = s.DepthTestMode
-        let depthBias      (s : ISg) = s.DepthBias
-        let cullMode       (s : ISg) = s.CullMode
-        let frontFace      (s : ISg) = s.FrontFace
-        let fillMode       (s : ISg) = s.FillMode
-        let stencilMode    (s : ISg) = s.StencilMode
-        let blendMode      (s : ISg) = s.BlendMode
-        let writeBuffers   (s : ISg) = s.WriteBuffers
-        let colorWriteMask (s : ISg) = s.ColorWriteMask
-        let depthWriteMask (s : ISg) = s.DepthWriteMask
-        let conservativeRaster (s : ISg) = s.ConservativeRaster
-        let multisample (s : ISg) = s.Multisample
+        let depthTestMode  (s : Ag.Scope) = s.DepthTestMode
+        let depthBias      (s : Ag.Scope) = s.DepthBias
+        let cullMode       (s : Ag.Scope) = s.CullMode
+        let frontFace      (s : Ag.Scope) = s.FrontFace
+        let fillMode       (s : Ag.Scope) = s.FillMode
+        let stencilMode    (s : Ag.Scope) = s.StencilMode
+        let blendMode      (s : Ag.Scope) = s.BlendMode
+        let writeBuffers   (s : Ag.Scope) = s.WriteBuffers
+        let colorWriteMask (s : Ag.Scope) = s.ColorWriteMask
+        let depthWriteMask (s : Ag.Scope) = s.DepthWriteMask
+        let conservativeRaster (s : Ag.Scope) = s.ConservativeRaster
+        let multisample (s : Ag.Scope) = s.Multisample
         
-    [<Semantic>]
+    [<Rule>]
     type ModeSem() =
         let defaultDepth   = AVal.constant DepthTestMode.LessOrEqual
         let defaultCull    = AVal.constant CullMode.None
@@ -55,85 +55,85 @@ module ModeSemantics =
         let defaultDepthBias = AVal.constant (DepthBiasState(0.0, 0.0, 0.0))
         let defaultFrontFace = AVal.constant WindingOrder.Clockwise
 
-        member x.DepthTestMode(e : Root<ISg>) =
+        member x.DepthTestMode(e : Root<ISg>, scope : Ag.Scope) =
             e.Child?DepthTestMode <- defaultDepth
 
-        member x.DepthBias(e : Root<ISg>) =
+        member x.DepthBias(e : Root<ISg>, scope : Ag.Scope) =
             e.Child?DepthBias <- defaultDepthBias
 
-        member x.CullMode(e : Root<ISg>) =
+        member x.CullMode(e : Root<ISg>, scope : Ag.Scope) =
             e.Child?CullMode <- defaultCull
 
-        member x.FrontFace(e : Root<ISg>) =
+        member x.FrontFace(e : Root<ISg>, scope : Ag.Scope) =
             e.Child?FrontFace <- defaultFrontFace
 
-        member x.FillMode(e : Root<ISg>) =
+        member x.FillMode(e : Root<ISg>, scope : Ag.Scope) =
             e.Child?FillMode <- defaultFill
 
-        member x.StencilMode(e : Root<ISg>) =
+        member x.StencilMode(e : Root<ISg>, scope : Ag.Scope) =
             e.Child?StencilMode <- defaultStencil
 
-        member x.BlendMode(e : Root<ISg>) =
+        member x.BlendMode(e : Root<ISg>, scope : Ag.Scope) =
             e.Child?BlendMode <- defaultBlend
 
-        member x.ConservativeRaster(e : Root<ISg>) =
+        member x.ConservativeRaster(e : Root<ISg>, scope : Ag.Scope) =
             e.Child?ConservativeRaster <- defaultConservativeRaster
             
-        member x.ConservativeRaster(b : Sg.ConservativeRasterApplicator) =
+        member x.ConservativeRaster(b : Sg.ConservativeRasterApplicator, scope : Ag.Scope) =
             b.Child?ConservativeRaster <- b.ConservativeRaster
 
-        member x.Multisample(e : Root<ISg>) =
+        member x.Multisample(e : Root<ISg>, scope : Ag.Scope) =
             e.Child?Multisample <- defaultMultisample
             
-        member x.Multisample(b : Sg.MultisampleApplicator) =
+        member x.Multisample(b : Sg.MultisampleApplicator, scope : Ag.Scope) =
             b.Child?Multisample <- b.Multisample
 
-        member x.WriteBuffers(e : Root<ISg>) = e.Child?WriteBuffers <- defaultWriteBuffers
-        member x.WriteBuffers(b : Sg.WriteBuffersApplicator) =
+        member x.WriteBuffers(e : Root<ISg>, scope : Ag.Scope) = e.Child?WriteBuffers <- defaultWriteBuffers
+        member x.WriteBuffers(b : Sg.WriteBuffersApplicator, scope : Ag.Scope) =
             b.Child?WriteBuffers <- b.WriteBuffers
 
-        member x.ColorWriteMask(e : Root<ISg>) = e.Child?ColorWriteMask <- defaultColorWriteMask
-        member x.ColorWriteMask(b : Sg.ColorWriteMaskApplicator) =
+        member x.ColorWriteMask(e : Root<ISg>, scope : Ag.Scope) = e.Child?ColorWriteMask <- defaultColorWriteMask
+        member x.ColorWriteMask(b : Sg.ColorWriteMaskApplicator, scope : Ag.Scope) =
             b.Child?ColorWriteMask <- b.MaskRgba
 
-        member x.DepthWriteMask(e : Root<ISg>) = e.Child?DepthWriteMask <- defaultDepthWriteMask
-        member x.DepthWriteMask(b : Sg.DepthWriteMaskApplicator) =
+        member x.DepthWriteMask(e : Root<ISg>, scope : Ag.Scope) = e.Child?DepthWriteMask <- defaultDepthWriteMask
+        member x.DepthWriteMask(b : Sg.DepthWriteMaskApplicator, scope : Ag.Scope) =
             b.Child?DepthWriteMask <- b.WriteEnabled
 
-        member x.DepthTestMode(a : Sg.DepthTestModeApplicator) =
+        member x.DepthTestMode(a : Sg.DepthTestModeApplicator, scope : Ag.Scope) =
             a.Child?DepthTestMode <- a.Mode
         
-        member x.DepthBias(a : Sg.DepthBiasApplicator) =
+        member x.DepthBias(a : Sg.DepthBiasApplicator, scope : Ag.Scope) =
             a.Child?DepthBias <- a.State
 
-        member x.CullMode(a : Sg.CullModeApplicator) =
+        member x.CullMode(a : Sg.CullModeApplicator, scope : Ag.Scope) =
             a.Child?CullMode <- a.Mode
 
-        member x.FrontFace(a : Sg.FrontFaceApplicator) =
+        member x.FrontFace(a : Sg.FrontFaceApplicator, scope : Ag.Scope) =
             a.Child?FrontFace <- a.WindingOrder
 
-        member x.FillMode(a : Sg.FillModeApplicator) =
+        member x.FillMode(a : Sg.FillModeApplicator, scope : Ag.Scope) =
             a.Child?FillMode <- a.Mode
 
-        member x.StencilMode(a : Sg.StencilModeApplicator) =
+        member x.StencilMode(a : Sg.StencilModeApplicator, scope : Ag.Scope) =
             a.Child?StencilMode <- a.Mode
 
-        member x.BlendMode(a : Sg.BlendModeApplicator) =
+        member x.BlendMode(a : Sg.BlendModeApplicator, scope : Ag.Scope) =
             a.Child?BlendMode <- a.Mode
 
-        member x.DepthTestMode(a : Sg.RasterizerStateApplicator) =
+        member x.DepthTestMode(a : Sg.RasterizerStateApplicator, scope : Ag.Scope) =
             a.Child?DepthTestMode <- a.DepthTestMode
 
-        member x.CullMode(a : Sg.RasterizerStateApplicator) =
+        member x.CullMode(a : Sg.RasterizerStateApplicator, scope : Ag.Scope) =
             a.Child?CullMode <- a.CullMode
 
-        member x.FillMode(a : Sg.RasterizerStateApplicator) =
+        member x.FillMode(a : Sg.RasterizerStateApplicator, scope : Ag.Scope) =
             a.Child?FillMode <- a.FillMode
 
-        member x.StencilMode(a : Sg.RasterizerStateApplicator) =
+        member x.StencilMode(a : Sg.RasterizerStateApplicator, scope : Ag.Scope) =
             a.Child?StencilMode <- a.StencilMode
 
-        member x.BlendMode(a : Sg.RasterizerStateApplicator) =
+        member x.BlendMode(a : Sg.RasterizerStateApplicator, scope : Ag.Scope) =
             a.Child?BlendMode <- a.BlendMode
 
 

@@ -676,9 +676,9 @@ module ManagedPoolSg =
 
 
 module ``Pool Semantics`` =
-    [<Aardvark.Base.Ag.Semantic>]
+    [<Aardvark.Base.Rule>]
     type PoolSem() =
-        member x.RenderObjects(p : Sg.PoolNode) =
+        member x.RenderObjects(p : Sg.PoolNode, scope : Ag.Scope) =
             
             let pool = p.Pool
             
@@ -701,7 +701,7 @@ module ``Pool Semantics`` =
                 let! c = calls;
                 if c.Count > 0 then
                     if ((ro :> obj) = null) then
-                        ro <- Aardvark.SceneGraph.Semantics.RenderObject.create()
+                        ro <- Aardvark.SceneGraph.Semantics.RenderObject.ofScope scope
                         ro.Mode <- p.Mode
                         ro.Indices <- Some pool.IndexBuffer
                         ro.VertexAttributes <- pool.VertexAttributes

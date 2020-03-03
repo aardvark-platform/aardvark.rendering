@@ -136,7 +136,7 @@ module HarwareFeatures =
                 }
 
         let template =
-            template.RenderObjects().Content |> AVal.force |> HashSet.toList |> List.head |> unbox<RenderObject>
+            template.RenderObjects(Ag.Scope.Root).Content |> AVal.force |> HashSet.toList |> List.head |> unbox<RenderObject>
 
 
         let win, view, proj = newWin()

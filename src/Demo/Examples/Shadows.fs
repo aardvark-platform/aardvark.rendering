@@ -48,22 +48,22 @@ module EffectStack =
         let composeEffects (s : ISg) = ComposeEffects(AVal.constant s) :> ISg
         let attachEffects (e : list<FShadeEffect>) (s : ISg) = AttachEffects(AVal.constant s, e)
 
-    type ISg with
+    type Ag.Scope with
         member x.EffectStack : list<FShadeEffect> = x?EffectStack
 
     module EffectStackSemantics =
 
-        [<Semantic>]
+        [<Rule>]
         type ComposeEffectsSemantics() =
-            member x.Surface(sg : Sg.ComposeEffects) =
-                let e = FShade.Effect.compose sg.EffectStack
+            member x.Surface(sg : Sg.ComposeEffects, scope : Ag.Scope) =
+                let e = FShade.Effect.compose scope.EffectStack
                 let s = AVal.constant (FShadeSurface.Get(e) :> ISurface)
                 sg.Child?Surface <- s
 
-            member x.EffectStack(s : Sg.AttachEffects) =
-                s.Child?EffectStack <- s.EffectStack @ s.Effects 
+            member x.EffectStack(s : Sg.AttachEffects, scope : Ag.Scope) =
+                s.Child?EffectStack <- scope.EffectStack @ s.Effects 
 
-            member x.EffectStack(s : Root<ISg>) = 
+            member x.EffectStack(s : Root<ISg>, scope : Ag.Scope) = 
                 s.Child?EffectStack <- List.empty<FShadeEffect>
      
 

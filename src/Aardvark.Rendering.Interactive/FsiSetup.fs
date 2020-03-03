@@ -33,7 +33,7 @@ module FsiSetup =
                 System.Reflection.Assembly.LoadFile(entryPath)
             #endif
 
-            Ag.initialize()
+            
             Aardvark.Init()
 
     let initFsi entryPath =
@@ -46,6 +46,6 @@ module FsiSetup =
             IntrospectionProperties.CustomEntryAssembly <- 
                 System.Reflection.Assembly.LoadFile(entryPath)
 
-            Ag.initialize()
+            
             Aardvark.Init()
  

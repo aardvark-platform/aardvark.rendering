@@ -14,16 +14,16 @@ type LodNode(viewDecider : (LodScope -> bool), low : ISg, high : ISg) =
     member x.High = high
     member x.ViewDecider = viewDecider
 
-[<Semantic>]
+[<Rule>]
 type LodSem() =
 
-    member x.RenderObjects(node : LodNode) : aset<IRenderObject> =
+    member x.RenderObjects(node : LodNode, scope : Ag.Scope) : aset<IRenderObject> =
         aset {
-            let bb      = node.Low.GlobalBoundingBox()
-            let lowJobs  = node.Low.RenderObjects()
-            let highJobs = node.High.RenderObjects()
+            let bb      = node.Low.GlobalBoundingBox(scope)
+            let lowJobs  = node.Low.RenderObjects(scope)
+            let highJobs = node.High.RenderObjects(scope)
 
-            let! camera = node.CameraLocation
+            let! camera = scope.CameraLocation
 
             if node.ViewDecider { cameraPosition = camera; bb = AVal.force bb } then 
                 yield! highJobs

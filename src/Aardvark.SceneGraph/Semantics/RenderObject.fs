@@ -58,9 +58,6 @@ module RenderObject =
 
         rj
 
-    let inline create() =
-        Ag.getContext() |> ofScope
-
 
 module PipelineState =
     let ofScope (scope : Ag.Scope) =
@@ -95,49 +92,43 @@ module PipelineState =
             perGeometryUniforms = Map.empty
         }
 
-    let inline create() =
-        Ag.getContext() |> ofScope
-
-
 [<AutoOpen>]
 module RenderObjectSemantics =
 
     type ISg with
-        member x.RenderObjects() : aset<IRenderObject> = x?RenderObjects()
-        member x.OverlayTasks() : aset<RenderPass * IRenderTask> = x?OverlayTasks()
+        member x.RenderObjects(scope : Ag.Scope) : aset<IRenderObject> = x?RenderObjects(scope)
+        member x.OverlayTasks(scope : Ag.Scope) : aset<RenderPass * IRenderTask> = x?OverlayTasks(scope)
 
     module Semantic =
-        let renderObjects (s : ISg) : aset<IRenderObject> = s?RenderObjects()
-        let overlayTasks (s : ISg) : aset<RenderPass * IRenderTask> = s?OverlayTasks()
+        let renderObjects (scope : Ag.Scope) (s : ISg) : aset<IRenderObject> = s?RenderObjects(scope)
+        let overlayTasks (scope : Ag.Scope) (s : ISg) : aset<RenderPass * IRenderTask> = s?OverlayTasks(scope)
 
 
-    [<Semantic>]
+    [<Rule>]
     type RenderObjectSem() =
-        member x.RenderObjects(a : IApplicator) : aset<IRenderObject> =
+        member x.RenderObjects(a : IApplicator, scope : Ag.Scope) : aset<IRenderObject> =
             aset {
                 let! c = a.Child
-                yield! c.RenderObjects()
-            } |> ASet.scoped
+                yield! c.RenderObjects(scope)
+            }
 
-        member x.RenderObjects(g : IGroup) : aset<IRenderObject> =
+        member x.RenderObjects(g : IGroup, scope : Ag.Scope) : aset<IRenderObject> =
             aset {
                 for c in g.Children do
-                    yield! c.RenderObjects()
-            } |> ASet.scoped
+                    yield! c.RenderObjects(scope)
+            }
 
-        member x.RenderObjects(r : Sg.IndirectRenderNode) : aset<IRenderObject> =
-            let scope = Ag.getContext()
+        member x.RenderObjects(r : Sg.IndirectRenderNode, scope : Ag.Scope) : aset<IRenderObject> =
             let rj = RenderObject.ofScope scope
             rj.DrawCalls <- Indirect r.Indirect
             rj.Mode <- r.Mode
 
             ASet.single (rj :> IRenderObject)
 
-        member x.RenderObjects(o : Sg.RenderObjectNode) =
+        member x.RenderObjects(o : Sg.RenderObjectNode, scope : Ag.Scope) =
             o.Objects
 
-        member x.RenderObjects(r : Sg.RenderNode) : aset<IRenderObject> =
-            let scope = Ag.getContext()
+        member x.RenderObjects(r : Sg.RenderNode, scope : Ag.Scope) : aset<IRenderObject> =
             let rj = RenderObject.ofScope scope
 
             let callInfos =
@@ -162,8 +153,7 @@ module RenderObjectSemantics =
 
             ASet.single (rj :> IRenderObject)
 
-        member x.RenderObjects(r : Sg.GeometrySet) : aset<IRenderObject> =
-            let scope = Ag.getContext()
+        member x.RenderObjects(r : Sg.GeometrySet, scope : Ag.Scope) : aset<IRenderObject> =
             let rj = RenderObject.ofScope scope
 
             let packer = new GeometrySetUtilities.GeometryPacker(r.AttributeTypes)
@@ -235,26 +225,26 @@ module RenderObjectSemantics =
 
             ASet.single (rj :> IRenderObject)
 
-        member x.RenderObjects(r : Sg.OverlayNode) : aset<IRenderObject> =
+        member x.RenderObjects(r : Sg.OverlayNode, scope : Ag.Scope) : aset<IRenderObject> =
             ASet.empty
 
-    [<Semantic>]
+    [<Rule>]
     type SubTaskSem() =
-        member x.OverlayTasks(r : ISg) : aset<RenderPass * IRenderTask> =
+        member x.OverlayTasks(r : ISg, scope : Ag.Scope) : aset<RenderPass * IRenderTask> =
             ASet.empty
 
-        member x.OverlayTasks(app : IApplicator) =
+        member x.OverlayTasks(app : IApplicator, scope : Ag.Scope) =
             aset {
                 let! c = app.Child
-                yield! c.OverlayTasks()
-            } |> ASet.scoped
+                yield! c.OverlayTasks(scope)
+            }
 
 
-        member x.OverlayTasks(g : IGroup) =
+        member x.OverlayTasks(g : IGroup, scope : Ag.Scope) =
             aset {
                 for c in g.Children do
-                    yield! c.OverlayTasks()
-            } |> ASet.scoped
+                    yield! c.OverlayTasks(scope)
+            }
 
-        member x.OverlayTasks(r : Sg.OverlayNode) =
-            ASet.single (r.RenderPass, r.RenderTask)
+        member x.OverlayTasks(r : Sg.OverlayNode, scope : Ag.Scope) =
+            ASet.single (scope.RenderPass, r.RenderTask)

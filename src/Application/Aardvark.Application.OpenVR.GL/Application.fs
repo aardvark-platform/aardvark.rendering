@@ -137,7 +137,7 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
                 |> Sg.stencilMode (AVal.constant writeStencil)
                 |> Sg.writeBuffers' (Set.ofList [DefaultSemantic.Stencil])
 
-        hiddenTask <- runtime.CompileRender(framebufferSignature, sg.RenderObjects())
+        hiddenTask <- runtime.CompileRender(framebufferSignature, sg.RenderObjects(Ag.Scope.Root))
         
     let compileClear () =
         clearTask <- runtime.CompileClear(framebufferSignature, clearColor, AVal.constant 1.0)

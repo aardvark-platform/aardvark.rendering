@@ -192,7 +192,7 @@ module CullingTest =
 
        
         Log.startTimed "gather objs"
-        let objects = sg.RenderObjects()
+        let objects = sg.RenderObjects(Ag.Scope.Root)
         objects.Content |> AVal.force |> HashSet.toArray |> ignore
         Log.stop()
 
@@ -265,7 +265,7 @@ module CullingTest =
 
     let runInstanced () =
 
-        Ag.initialize()
+        
         Aardvark.Init()
 
         use app = new OpenGlApplication()
@@ -392,7 +392,7 @@ module CullingTest =
                |> Sg.projTrafo (frustum      |> AVal.map Frustum.projTrafo    )
 
        
-        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, sg.RenderObjects())
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, sg.RenderObjects(Ag.Scope.Root))
 
         win.Keyboard.KeyDown(Keys.Space).Values.Subscribe(fun _ -> 
             transact (fun _ ->
@@ -546,7 +546,7 @@ module CullingTest =
                |> Sg.projTrafo (frustum      |> AVal.map Frustum.projTrafo    )
 
        
-        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, sg.RenderObjects())
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, sg.RenderObjects(Ag.Scope.Root))
 
         win.Keyboard.KeyDown(Keys.Space).Values.Subscribe(fun _ -> 
             transact (fun _ ->

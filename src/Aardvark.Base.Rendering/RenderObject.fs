@@ -289,13 +289,13 @@ type RenderObject =
         member x.AttributeScope = x.AttributeScope
 
     member x.Path = 
-        if System.Object.ReferenceEquals(x.AttributeScope,Ag.emptyScope) 
+        if System.Object.ReferenceEquals(x.AttributeScope,Ag.Scope.Root) 
         then "EMPTY" 
-        else x.AttributeScope.Path
+        else string x.AttributeScope
 
     static member Create() =
         { Id = newId()
-          AttributeScope = Ag.emptyScope
+          AttributeScope = Ag.Scope.Root
           IsActive = Unchecked.defaultof<_>
           RenderPass = RenderPass.main
           DrawCalls = Unchecked.defaultof<_>
@@ -352,7 +352,7 @@ module RenderObjectExtensions =
 
     let private empty =
         { Id = -1
-          AttributeScope = Ag.emptyScope
+          AttributeScope = Ag.Scope.Root
           IsActive = Unchecked.defaultof<_>
           RenderPass = RenderPass.main
           DrawCalls = Unchecked.defaultof<_>

@@ -117,13 +117,13 @@ open Aardvark.SceneGraph
 module RuntimeCommandSemantics =
 
     module private RuntimeCommand =
-        let rec ofRenderCommand (parent : ISg) (cmd : RenderCommand) =
+        let rec ofRenderCommand (scope : Ag.Scope) (parent : ISg) (cmd : RenderCommand) =
             match cmd with
                 | RenderCommand.REmpty -> 
                     RuntimeCommand.Empty
 
                 | RenderCommand.RUnorderedScenes scenes ->
-                    let objects = scenes |> ASet.collect (fun s -> s.RenderObjects())
+                    let objects = scenes |> ASet.collect (fun s -> s.RenderObjects(scope))
                     RuntimeCommand.Render(objects)
 
                 | RenderCommand.RClear(colors, depth, stencil) ->
@@ -131,22 +131,22 @@ module RuntimeCommandSemantics =
 
                 | RenderCommand.RGeometries(config, geometries) ->
                     let effect =
-                        match parent.Surface with
+                        match scope.Surface with
                             | Surface.FShadeSimple e -> e
                             | s -> failwithf "[Sg] cannot create GeometryCommand with shader: %A" s
 
                     let state =
                         {
-                            depthTest           = parent.DepthTestMode
-                            depthBias           = parent.DepthBias
-                            cullMode            = parent.CullMode
-                            frontFace           = parent.FrontFace
-                            blendMode           = parent.BlendMode
-                            fillMode            = parent.FillMode
-                            stencilMode         = parent.StencilMode
-                            multisample         = parent.Multisample
-                            writeBuffers        = parent.WriteBuffers
-                            globalUniforms      = new Providers.UniformProvider(Ag.getContext(), parent.Uniforms, [])
+                            depthTest           = scope.DepthTestMode
+                            depthBias           = scope.DepthBias
+                            cullMode            = scope.CullMode
+                            frontFace           = scope.FrontFace
+                            blendMode           = scope.BlendMode
+                            fillMode            = scope.FillMode
+                            stencilMode         = scope.StencilMode
+                            multisample         = scope.Multisample
+                            writeBuffers        = scope.WriteBuffers
+                            globalUniforms      = new Providers.UniformProvider(scope, scope.Uniforms, [])
                             geometryMode        = config.mode
                             vertexInputTypes    = config.vertexInputTypes
                             perGeometryUniforms = config.perGeometryUniforms
@@ -155,44 +155,43 @@ module RuntimeCommandSemantics =
                     RuntimeCommand.Geometries(effect, state, geometries)
             
                 | RenderCommand.ROrdered(list) ->
-                    let commands = list |> AList.map (ofRenderCommand parent)
+                    let commands = list |> AList.map (ofRenderCommand scope parent)
                     RuntimeCommand.Ordered(commands)
 
                 | RenderCommand.ROrderedConstant(list) ->
-                    let commands = list |> List.map (ofRenderCommand parent)
+                    let commands = list |> List.map (ofRenderCommand scope parent)
                     RuntimeCommand.Ordered(AList.ofList commands)
 
                 | RenderCommand.RIfThenElse(c,t,f) ->
-                    RuntimeCommand.IfThenElse(c, ofRenderCommand parent t, ofRenderCommand parent f)
+                    RuntimeCommand.IfThenElse(c, ofRenderCommand scope parent t, ofRenderCommand scope parent f)
 
                 | RenderCommand.RLodTree(config,g) ->
                     let state =
                         {
-                            depthTest           = parent.DepthTestMode
-                            depthBias           = parent.DepthBias
-                            cullMode            = parent.CullMode
-                            frontFace           = parent.FrontFace
-                            blendMode           = parent.BlendMode
-                            fillMode            = parent.FillMode
-                            stencilMode         = parent.StencilMode
-                            multisample         = parent.Multisample
-                            writeBuffers        = parent.WriteBuffers
-                            globalUniforms      = new Providers.UniformProvider(Ag.getContext(), parent.Uniforms, [])
+                            depthTest           = scope.DepthTestMode
+                            depthBias           = scope.DepthBias
+                            cullMode            = scope.CullMode
+                            frontFace           = scope.FrontFace
+                            blendMode           = scope.BlendMode
+                            fillMode            = scope.FillMode
+                            stencilMode         = scope.StencilMode
+                            multisample         = scope.Multisample
+                            writeBuffers        = scope.WriteBuffers
+                            globalUniforms      = new Providers.UniformProvider(scope, scope.Uniforms, [])
                             geometryMode        = config.mode
                             vertexInputTypes    = config.vertexInputTypes
                             perGeometryUniforms = config.perGeometryUniforms
                         }
 
-                    RuntimeCommand.LodTree(parent.Surface, state, g)
+                    RuntimeCommand.LodTree(scope.Surface, state, g)
 
-    [<Semantic>]
+    [<Rule>]
     type RuntimeCommandSem() =
-        member x.RenderObjects(n : Sg.RuntimeCommandNode) : aset<IRenderObject> =
+        member x.RenderObjects(n : Sg.RuntimeCommandNode, scope : Ag.Scope) : aset<IRenderObject> =
             let cmd = n.Command
-            let runtimeCommand = RuntimeCommand.ofRenderCommand n cmd
+            let runtimeCommand = RuntimeCommand.ofRenderCommand scope n cmd
 
-            let pass = n.RenderPass
-            let scope = Ag.getContext()
+            let pass = scope.RenderPass
 
             let obj = CommandRenderObject(pass, scope, runtimeCommand)
             ASet.single (obj :> IRenderObject)

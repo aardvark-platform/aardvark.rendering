@@ -151,7 +151,7 @@ module ``Sg Picking Extensions`` =
             res
 
         let ofSg (sg : ISg) =
-            sg?PickObjects() |> ofPickObjects
+            sg?PickObjects(Ag.Scope.Root) |> ofPickObjects
 
         let intersectFull (ray : Ray3d) (tmin : float) (tmax : float) (t : PickTree) =
             t.Intersect(ray, tmin, tmax)
@@ -173,7 +173,7 @@ module ``Sg Picking Extensions`` =
             PickableApplicator(AVal.constant (Pickable.ofShape shape), AVal.constant sg) :> ISg
             
         let pickBoundingBox (sg : ISg) =
-            let pickable = sg.LocalBoundingBox() |> AVal.map (PickShape.Box >> Pickable.ofShape)
+            let pickable = sg.LocalBoundingBox(Ag.Scope.Root) |> AVal.map (PickShape.Box >> Pickable.ofShape)
             PickableApplicator(pickable, AVal.constant sg) :> ISg
 
         let requirePicking (sg : ISg) =
@@ -193,7 +193,9 @@ open Aardvark.SceneGraph
 module PickingSemantics =
 
     type ISg with
-        member x.PickObjects() : aset<PickObject> = x?PickObjects()
+        member x.PickObjects(scope : Ag.Scope) : aset<PickObject> = x?PickObjects(scope)
+
+    type Ag.Scope with
         member x.RequirePicking : bool = x?RequirePicking
 
     type private PickingKey =
@@ -204,7 +206,7 @@ module PickingSemantics =
             mode : IndexedGeometryMode
         }
 
-    [<Semantic>]
+    [<Rule>]
     type PickObjectSem() =
 
         static let cache = Dict<PickingKey, Option<aval<Pickable>>>()
@@ -350,27 +352,26 @@ module PickingSemantics =
                 )
             )
 
-        member x.RequirePicking(r : Root<ISg>) =
+        member x.RequirePicking(r : Root<ISg>, scope : Ag.Scope) =
             r.Child?RequirePicking <- false
 
-        member x.RequirePicking(a : Sg.RequirePickingApplicator) =
+        member x.RequirePicking(a : Sg.RequirePickingApplicator, scope : Ag.Scope) =
             a.Child?RequirePicking <- true
 
-        member x.PickObjects(render : Sg.RenderNode) : aset<PickObject> =
-            if render.RequirePicking then
+        member x.PickObjects(render : Sg.RenderNode, scope : Ag.Scope) : aset<PickObject> =
+            if scope.RequirePicking then
                 let key =
                     {
-                        positions = render.VertexAttributes |> Map.tryFind DefaultSemantic.Positions
-                        index = render.VertexIndexBuffer
+                        positions = scope.VertexAttributes |> Map.tryFind DefaultSemantic.Positions
+                        index = scope.VertexIndexBuffer
                         call = render.DrawCallInfo
                         mode = render.Mode
                     }
 
                 match createLeafPickable key with
                     | Some pickable ->
-                        let ctx = Ag.getContext()
-                        let pickable = AVal.map2 Pickable.transform x.ModelTrafo pickable
-                        let o = PickObject(ctx, pickable)
+                        let pickable = AVal.map2 Pickable.transform scope.ModelTrafo pickable
+                        let o = PickObject(scope, pickable)
                         ASet.single o
                     | None ->
                         ASet.empty
@@ -378,22 +379,22 @@ module PickingSemantics =
             else
                 ASet.empty
 
-        member x.PickObjects(app : IApplicator) : aset<PickObject> =
+        member x.PickObjects(app : IApplicator, scope : Ag.Scope) : aset<PickObject> =
             aset {
                 let! c = app.Child
-                yield! c.PickObjects()
+                yield! c.PickObjects(scope)
             }
 
-        member x.PickObjects(set : IGroup) : aset<PickObject> =
+        member x.PickObjects(set : IGroup, scope : Ag.Scope) : aset<PickObject> =
             aset {
                 for c in set.Children do
-                    yield! c.PickObjects()
+                    yield! c.PickObjects(scope)
             }
 
-        member x.PickObjects(s : ISg) : aset<PickObject> =
+        member x.PickObjects(s : ISg, scope : Ag.Scope) : aset<PickObject> =
             ASet.empty
 
-        member x.PickObjects(pickable : Sg.PickableApplicator) : aset<PickObject> =
-            let pickable = AVal.map2 Pickable.transform x.ModelTrafo pickable.Pickable
-            let o = PickObject(Ag.getContext(), pickable)
+        member x.PickObjects(pickable : Sg.PickableApplicator, scope : Ag.Scope) : aset<PickObject> =
+            let pickable = AVal.map2 Pickable.transform scope.ModelTrafo pickable.Pickable
+            let o = PickObject(scope, pickable)
             ASet.single o

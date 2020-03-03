@@ -133,7 +133,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
                 |> Sg.stencilMode (AVal.constant writeStencil)
                 |> Sg.writeBuffers' (Set.ofList [DefaultSemantic.Stencil])
 
-        hiddenTask <- RuntimeCommand.Render(sg.RenderObjects())
+        hiddenTask <- RuntimeCommand.Render(sg.RenderObjects(Ag.Scope.Root))
 
     let swClear     = Stopwatch()
     let swRender    = Stopwatch()

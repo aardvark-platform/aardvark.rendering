@@ -9,7 +9,7 @@ open Aardvark.Application
 [<EntryPoint>]
 let main argv = 
     
-    Ag.initialize()
+    
     Aardvark.Init()
 
     // window { ... } is similar to show { ... } but instead
