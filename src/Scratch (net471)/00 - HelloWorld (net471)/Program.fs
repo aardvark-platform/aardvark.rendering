@@ -14,9 +14,9 @@ open Aardvark.Application.WinForms
 // show/window computation expression builders (which reduces code duplication
 // in this case) to setup applications.
 
-[<EntryPoint>]
+[<EntryPoint; STAThread>]
 let main argv = 
-    
+    //Config.useSharingControl <- true
     // first we need to initialize Aardvark's core components
     Ag.initialize()
     Aardvark.Init()
@@ -28,8 +28,12 @@ let main argv =
     // of course you can a custum form and add a control to it.
     // Note that there is also a WPF binding for OpenGL. For more complex GUIs however,
     // we recommend using aardvark-media anyways..
-    let win = app.CreateSimpleRenderWindow(samples = 8)
+    let win = app.CreateSimpleRenderWindow(8)
     //win.Title <- "Hello Aardvark"
+
+    win.Keyboard.Down.Values.Add(fun k ->
+        Log.warn "%A" k
+    )
 
     // Given eye, target and sky vector we compute our initial camera pose
     let initialView = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)

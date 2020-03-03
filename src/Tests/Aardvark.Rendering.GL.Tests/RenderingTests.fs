@@ -331,7 +331,7 @@ module RenderingTests =
         printfn "%A" len
 
         use runtime = new Runtime()
-        use ctx = new Context(runtime, false)
+        use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false))
         runtime.Context <- ctx
 
         let size = V2i(1024,768)
@@ -394,7 +394,7 @@ module RenderingTests =
     let ``[GL] simple render to multiple texture``() =
 
         use runtime = new Runtime()
-        use ctx = new Context(runtime, false)
+        use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false))
         runtime.Context <- ctx
 
         let size = V2i(1024,768)
@@ -490,7 +490,7 @@ module RenderingTests =
                 |> Sg.projTrafo ~~(frustum |> Frustum.projTrafo)
 
         use runtime = new Runtime()
-        use ctx = new Context(runtime, false)
+        use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false))
         runtime.Context <- ctx
 
         using ctx.ResourceLock (fun _ -> 
@@ -605,7 +605,7 @@ module RenderingTests =
                 |> Sg.projTrafo ~~(frustum |> Frustum.projTrafo)
 
         use runtime = new Runtime()
-        use ctx = new Context(runtime, false)
+        use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false))
         runtime.Context <- ctx
 
         using ctx.ResourceLock (fun _ -> 
@@ -668,147 +668,6 @@ module RenderingTests =
         Log.line "compile + render: %.2fs" (updateAndRenderTime)
 
         ()
-
-    [<Test>]
-    let ``[GL] concurrent group change``() =
-        let leaf = quad |> Sg.ofIndexedGeometry
-        let screen = V2i(2048, 2048)
-
-        let cnt = 1000
-        let s = int (ceil (sqrt (float cnt) / 2.0))
-
-        let grid (inner : ISg) =
-            [
-                for x in -s .. s do
-                    for y in -s .. s do
-                        yield inner |> Sg.trafo (~~Trafo3d.Translation(float x, float y, 0.0))
-            ]
-
-        let mutable candidates = (grid leaf).RandomOrder() |> Seq.toList
-
-        let g = cset()
-
-        let sg =
-            g
-            |> Sg.set
-            |> Sg.trafo (~~Trafo3d.Scale(0.5 / float s))
-            |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
-            |> Sg.viewTrafo ~~(Trafo3d.Identity)
-            |> Sg.projTrafo ~~(Trafo3d.Identity)
-
-        let useWindow = true
-        let runtime, app =
-            if useWindow then
-                let app = new Aardvark.Application.WinForms.OpenGlApplication()
-                let win = app.CreateGameWindow()
-                
-                app.Runtime, Some (app, win)
-            else
-                let runtime = new Runtime()
-                let ctx = new Context(runtime, false)
-                using ctx.ResourceLock (fun _ -> 
-                    Log.line "vendor:   %s" runtime.Context.Driver.vendor
-                    Log.line "renderer: %s" runtime.Context.Driver.renderer
-                )
-                runtime.Context <- ctx
-                runtime, None
-
-
-        let win = app.Value |> snd
-
-
-        let renderJobs = sg.RenderObjects()
-        let clear = runtime.CompileClear(app.Value |> snd |> (fun s -> s.FramebufferSignature), ~~C4f.Black, ~~1.0)
-        let task = runtime.CompileRender(app.Value |> snd |> (fun s -> s.FramebufferSignature), BackendConfiguration.Native, renderJobs)
-
-//        win.Keyboard.KeyDown(Keys.P).Values.Subscribe(fun _ ->
-//            lock task (fun () ->
-//                let task = task |> unbox<Aardvark.Rendering.GL.GroupedRenderTask.RenderTask>
-//                let code = task.Program.Disassemble() |> unbox<Instruction[][]>
-//
-//                let mutable fragment = 0
-//                for part in code do
-//                    Log.start "fragment %d" fragment
-//                    for i in part do
-//                        Log.line "%A" i
-//                    Log.stop()
-//                    fragment <- fragment + 1
-//                printfn "press Enter to continue"
-//                Console.ReadLine() |> ignore
-//            )
-//        ) |> ignore
-
-        for i in 0..cnt/2 do
-            match candidates with
-                | x::xs -> 
-                    candidates <- xs
-                    transact (fun () -> g.Add x |> ignore)
-                | _ -> printfn "out of candiates"
-
-     
-        let r = System.Random()
-        let t = System.Threading.Tasks.Task.Factory.StartNew(fun () ->
-            while true do
-                System.Threading.Thread.Sleep 10
-                printfn "c %A" g.Count
-                if g.Count > 0 && r.NextDouble() > 0.5 then
-                    let a = g |> ASet.force |> Seq.toArray |> (flip Array.get) (r.Next(0,g.Count))
-                    transact (fun () -> g.Remove(a) |> ignore)
-                    candidates <- a::candidates
-                else
-                    if List.isEmpty candidates |> not then
-                        match candidates with
-                            | x::xs -> 
-                                candidates <- xs
-                                g.Add x |> ignore
-                            | _ -> printfn "out of candiates"
-
-            renderJobs |> ASet.force |> HashSet.count |> printfn "got %d render objs"
-        , System.Threading.Tasks.TaskCreationOptions.LongRunning) 
-
-
-        if useWindow then app.Value |> snd |> (fun s -> s.RenderTask <- RenderTask.ofList [clear; task]; s.Run())
-        else
-
-
-
-            let color = runtime.CreateTexture(screen, TextureFormat.Rgba8, 1, 1, 1)
-            let depth = runtime.CreateRenderbuffer(screen, RenderbufferFormat.Depth24Stencil8, 1)
-
-            let signature =
-                runtime.CreateFramebufferSignature [
-                    DefaultSemantic.Colors, RenderbufferFormat.ofTextureFormat color.Format
-                    DefaultSemantic.Depth, depth.Format
-                ]
-
-            let fbo = 
-                signature.CreateFramebuffer [
-                    DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
-                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
-                ]
-        
-
-            clear.Run(RenderToken.Empty, fbo)
-            GL.Sync()
-            let token = RenderToken()
-            task.Run(token, fbo)
-            GL.Sync()
-            Log.line "%d objects" token.DrawCallCount
-            let pi = runtime.Download(color, PixFormat.ByteRGBA)
-            pi.SaveAsImage(@"C:\Aardwork\urdar.png")
-            GL.Sync()
-            Log.line "starting update test"
-            let mutable iterations = 0
-            let sw = Stopwatch()
-            let disp = System.Collections.Generic.List()
-            sw.Start()
-            while sw.Elapsed.TotalSeconds < 5.0 do
-                clear.Run(RenderToken.Empty, fbo)
-                task.Run(RenderToken.Empty, fbo)
-            sw.Stop()
-
-        ()
-
 
     module RenderObjects =
         let emptyUniforms =
@@ -875,61 +734,6 @@ module RenderingTests =
                 Uniforms = emptyUniforms
             }
 
-    [<Test>]
-    let ``[GL] memory leak test``() =
-
-        let useWindow = false
-        let runtime, app =
-            if useWindow then
-                let app = new Aardvark.Application.WinForms.OpenGlApplication()
-                let win = app.CreateGameWindow()
-                
-                app.Runtime, Some (app, win)
-            else
-                let app = new Aardvark.Application.WinForms.OpenGlApplication()
-                let runtime = new Runtime()
-                let ctx = new Context(runtime, false)
-                runtime.Context <- ctx
-                runtime, None
-
-
-        let ro = RenderObjects.baseObject
-
-        let screen = V2i(1024,1024)
-
-
-        if useWindow then
-             let clear = runtime.CompileClear(app.Value |> snd |> (fun s -> s.FramebufferSignature), ~~C4f.Black, ~~1.0)
-             let task = runtime.CompileRender(app.Value |> snd |> (fun s -> s.FramebufferSignature), BackendConfiguration.Native, ASet.empty)
-
-             app.Value |> snd |> (fun s -> s.RenderTask <- RenderTask.ofList [clear; task]; s.Run())
-        else
-            let color = runtime.CreateTexture(screen, TextureFormat.Rgba8, 1, 1, 1)
-            let depth = runtime.CreateRenderbuffer(screen, RenderbufferFormat.Depth24Stencil8, 1)
-
-            let signature =
-                runtime.CreateFramebufferSignature [
-                    DefaultSemantic.Colors, RenderbufferFormat.ofTextureFormat color.Format
-                    DefaultSemantic.Depth, depth.Format
-                ]
-
-            let fbo = 
-                signature.CreateFramebuffer [
-                    DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
-                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
-                ]
-
-            let mutable po = Unchecked.defaultof<IPreparedRenderObject>
-        
-            while true do
-                using runtime.Context.ResourceLock (fun _ -> 
-                    let rj = RenderObject.Create
-                    if po <> Unchecked.defaultof<_> then po.Dispose()
-                    po <- runtime.PrepareRenderObject(signature, ro)
-                    printfn "GL memory: %A" runtime.Context.MemoryUsage
-                )
-        ()
-
 module UseTest =
     
     let bla () =
@@ -937,7 +741,7 @@ module UseTest =
         Aardvark.Init()
 
         use runtime = new Runtime()
-        use ctx = new Context(runtime, false)
+        use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false))
         runtime.Context <- ctx
 
         let size = V2i(1024,1024)

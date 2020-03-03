@@ -39,7 +39,7 @@ let main argv =
     Aardvark.Init()
 
     use app = new OpenGlApplication()
-    let win = app.CreateGameWindow(samples = 8)
+    let win = app.CreateSimpleRenderWindow(samples = 8)
     //use app = new VulkanApplication()
     //let win = app.CreateSimpleRenderWindow(8)
 
@@ -119,7 +119,8 @@ let main argv =
     let renderTask = 
         
         RenderTask.custom (fun (self,token,outputDesc) -> 
-            
+            win.Time.GetValue self |> ignore
+
             transact(fun () -> 
 
                 //let subset = geometrySet.RandomOrder().TakeToArray(geometrySet.Length - 1)
@@ -133,7 +134,7 @@ let main argv =
                         t.Value <- Trafo3d.RotationZInDegrees(rotation) * t.Value)
                 )
             
-            renderTask.Run(token, outputDesc)
+            renderTask.Run(self, token, outputDesc)
         )
         
     win.RenderTask <- renderTask

@@ -14,17 +14,24 @@ type TextStyle =
         emph    : bool
         code    : bool
     }
+    
+type FontCollection =
+    {
+        regular     : Font
+        bold        : Font
+        italic      : Font
+        boldItalic  : Font
+    }
 
 type MarkdownConfig =
     {
-
         color               : C4b
         lineSpacing         : float
         characterSpacing    : float
         headingStyles       : Map<int, TextStyle>
         
-        paragraphFont       : string
-        codeFont            : string
+        paragraphFont       : FontCollection
+        codeFont            : FontCollection
     }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -41,8 +48,20 @@ module MarkdownConfig =
             color                   = C4b(51uy, 51uy, 51uy, 255uy)
             lineSpacing             = 1.5
             characterSpacing        = 1.0
-            paragraphFont           = "Arial"
-            codeFont                = "Consolas"
+            paragraphFont =
+                {
+                    regular     = FontSquirrel.Noto_Sans.Regular
+                    bold        = FontSquirrel.Noto_Sans.Bold
+                    italic      = FontSquirrel.Noto_Sans.Italic
+                    boldItalic  = FontSquirrel.Noto_Sans.BoldItalic
+                }
+            codeFont = 
+                {
+                    regular     = FontSquirrel.Courier_Prime.Regular
+                    bold        = FontSquirrel.Courier_Prime.Bold
+                    italic      = FontSquirrel.Courier_Prime.Italic
+                    boldItalic  = FontSquirrel.Courier_Prime.BoldItalic
+                }
 
             headingStyles =
                 Map.ofList [
@@ -65,26 +84,6 @@ module MarkdownConfig =
 module Markdown =
     open Aardvark.Base.Monads
     open Aardvark.Base.Monads.StateOld
-
-    type FontCollection =
-        {
-            regular     : Font
-            bold        : Font
-            italic      : Font
-            boldItalic  : Font
-        }
-
-    let private fontCollectionCache = System.Collections.Concurrent.ConcurrentDictionary<string, FontCollection>()
-
-    let getFontCollection(name : string) =
-        fontCollectionCache.GetOrAdd(name, fun name ->
-            {
-                regular     = Font.create name FontStyle.Regular
-                bold        = Font.create name FontStyle.Bold
-                italic      = Font.create name FontStyle.Italic
-                boldItalic  = Font.create name FontStyle.BoldItalic
-            }
-        )
 
 
     type LayoutState = 
@@ -111,8 +110,20 @@ module Markdown =
 
         static member empty = 
             { 
-                paragraph = getFontCollection "Arial"
-                code      = getFontCollection "Consolas"
+                paragraph =
+                    {
+                        regular     = FontSquirrel.Noto_Sans.Regular
+                        bold        = FontSquirrel.Noto_Sans.Bold
+                        italic      = FontSquirrel.Noto_Sans.Italic
+                        boldItalic  = FontSquirrel.Noto_Sans.BoldItalic
+                    }
+                code      = 
+                    {
+                        regular     = FontSquirrel.Courier_Prime.Regular
+                        bold        = FontSquirrel.Courier_Prime.Bold
+                        italic      = FontSquirrel.Courier_Prime.Italic
+                        boldItalic  = FontSquirrel.Courier_Prime.BoldItalic
+                    }
 
                 x = 0.0
                 y = 0.0
@@ -347,13 +358,13 @@ module Markdown =
                             do! withTextState props (fun () ->
                                 state {
                                     let! font = getFont
-                                    let mutable last = '\n'
-                                    for c in text do
-                                        match c with
-                                            | ' ' -> do! moveX 0.5
-                                            | '\t' -> do! moveX 2.0
-                                            | '\n' -> do! lineBreak
-                                            | '\r' -> ()
+                                    let mutable last = CodePoint '\n'
+                                    for c in text.ToCodePointArray() do
+                                        match c.String with
+                                            | " " -> do! moveX 0.5
+                                            | "\t" -> do! moveX 2.0
+                                            | "\n" -> do! lineBreak
+                                            | "\r" -> ()
                                             | _ ->
                                                 let! s = getState
                                                 let g = font.GetGlyph c
@@ -451,8 +462,8 @@ module Markdown =
             let ((), s) = 
                 run.runState {
                     LayoutState.empty with
-                        paragraph   = getFontCollection config.paragraphFont
-                        code        = getFontCollection config.codeFont
+                        paragraph   = config.paragraphFont
+                        code        = config.codeFont
                         color       = config.color 
                         config      = config
                 }

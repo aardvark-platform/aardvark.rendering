@@ -12,6 +12,7 @@
     <OutputPath>..\..\..\bin\Release\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="GLFW.fs" />
     <Compile Include="GameWindow.fs" />
     <Compile Include="Application.fs" />
   </ItemGroup>

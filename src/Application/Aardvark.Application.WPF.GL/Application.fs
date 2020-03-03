@@ -1,7 +1,5 @@
 ﻿namespace Aardvark.Application.WPF
 
-#if WINDOWS
-
 open System
 open System.IO
 open System.Windows.Forms
@@ -19,7 +17,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
        OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
 
     let runtime = new Runtime()
-    let ctx = new Context(runtime, enableDebug)
+    let ctx = new Context(runtime, enableDebug, Array.init 2 (fun _ -> ContextHandleOpenTK.create enableDebug))
     do runtime.Context <- ctx
 
     let defaultCachePath =
@@ -89,14 +87,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
                     
         ()
 
-    member x.CreateGameWindow(samples : int) =
-        let w = new GameWindow(runtime, enableDebug, samples)
-        init ctx 
-        w
-
     interface IApplication with
         member x.Initialize(ctrl : IRenderControl, samples : int) = x.Initialize(ctrl, samples)
         member x.Runtime = x.Runtime :> IRuntime
         member x.Dispose() = x.Dispose()
-
-#endif

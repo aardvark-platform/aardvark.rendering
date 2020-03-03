@@ -106,7 +106,7 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
     let afterRender = Event<unit>()
     let mutable loaded = false
     
-    let renderCtx = ContextHandle.create debug
+    let renderCtx = ContextHandleOpenTK.create debug
 
 
     let clearColor = AVal.init C4f.Black

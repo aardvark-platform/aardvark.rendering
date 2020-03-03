@@ -172,7 +172,7 @@ module MultipleStageAgMemoryLeakTest =
         let rsg = Sg.set sg
 
         use app = new OpenGlApplication()
-        let win = app.CreateGameWindow()
+        let win = app.CreateSimpleRenderWindow()
    
 
         win.Keyboard.Down.Values.Subscribe(fun k -> 

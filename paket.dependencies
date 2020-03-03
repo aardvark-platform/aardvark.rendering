@@ -1,22 +1,22 @@
-framework: netstandard2.0, net471, netcoreapp3.0
+framework: netstandard2.0, net471, netcoreapp3.0, netcoreapp3.1
 source https://api.nuget.org/v3/index.json
 
 nuget FSharp.Core                        >= 4.6.2 lowest_matching: true
 
 nuget FSharp.Data.Adaptive               ~> 0.0.17
 nuget Aardvark.Base.TypeProviders        ~> 4.5.15
-nuget Aardvark.Base.FSharp               ~> 5.0.0-prerelease0008
-nuget Aardvark.Base.IO                   ~> 5.0.0-prerelease0008
-nuget Aardvark.Base.Incremental          ~> 5.0.0-prerelease0008
-nuget Aardvark.Base.Runtime              ~> 5.0.0-prerelease0008
-nuget Aardvark.Base.Essentials           ~> 5.0.0-prerelease0008
+nuget Aardvark.Base.FSharp               ~> 5.0.0-prerelease0009
+nuget Aardvark.Base.IO                   ~> 5.0.0-prerelease0009
+nuget Aardvark.Base.Incremental          ~> 5.0.0-prerelease0009
+nuget Aardvark.Base.Runtime              ~> 5.0.0-prerelease0009
+nuget Aardvark.Base.Essentials           ~> 5.0.0-prerelease0009
                                   
 nuget FShade.Core                        ~> 5.0.0-prerelease0005
 nuget FShade                             ~> 5.0.0-prerelease0005
 nuget FShade.Debug                       ~> 5.0.0-prerelease0005
 
 nuget Unofficial.OpenVR					 ~> 1.1.0 
-nuget Unofficial.Typography              ~> 0.0.3
+nuget Unofficial.Typography              ~> 0.1.0
 nuget CommonMark.NET                     ~> 0.15.1
 nuget GLSLangSharp                       ~> 0.4.6
 
@@ -25,9 +25,9 @@ nuget Unofficial.LibTessDotNet           ~> 2.0.2
 nuget SharpDX.Direct3D9                  ~> 4.0.1
 nuget Unofficial.AssimpNet               ~> 4.0.5
 
-nuget Unofficial.OpenTK                  ~> 3.0.17
-nuget Unofficial.OpenTK.GLControl        ~> 3.0.17
-	
+nuget Unofficial.OpenTK                  ~> 3.0.18
+nuget Unofficial.OpenTK.GLControl        ~> 3.0.18
+nuget Silk.NET.GLFW                      ~> 1.0.0-preview5
 	
 nuget FSharp.Charting                    ~> 0.91.1
 nuget OpenHardwareMonitor                ~> 0.7.1

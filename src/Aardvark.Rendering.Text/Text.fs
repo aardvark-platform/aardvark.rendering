@@ -515,7 +515,7 @@ type TextConfig =
     }
     static member Default =
         {
-            font = Font "Consolas"
+            font = FontSquirrel.Courier_Prime.Regular
             color = C4b.White
             align = TextAlignment.Center
             flipViewDependent = true
@@ -531,10 +531,6 @@ type Text private() =
     [<Extension>]
     static member Layout(font : Font, color : C4b, align : TextAlignment, bounds : Box2d, content : string, renderStyle : RenderStyle) =
         let chars = List<float * Glyph>()
-        //let offsets = List<V2d>()
-        //let scales = List<V2d>()
-        //let colors = List<C4b>()
-        //let glyphs = List<Shape>()
         let concrete = List<ConcreteShape>()
 
         let mutable cy = 0.0
@@ -543,18 +539,19 @@ type Text private() =
         let mutable realBounds = Box2d.Invalid
 
         for l in allLines do
+            let l = l.ToCodePointArray()
             let mutable cx = 0.0
-            let mutable last = '\n'
+            let mutable last = CodePoint '\n'
             chars.Clear()
 
             let mutable minX = 0.0
             let mutable i = 0
             for c in l do
                 let kerning = font.GetKerning(last, c)
-                match c with
-                    | ' ' -> cx <- cx + font.Spacing
-                    | '\t' -> cx <- cx + 4.0 + font.Spacing
-                    | c ->
+                match c.String with
+                    | " " -> cx <- cx + font.Spacing
+                    | "\t" -> cx <- cx + 4.0 + font.Spacing
+                    | _ ->
                         let g = font |> Font.glyph c
                         chars.Add(cx + g.Before + kerning, g)
                         cx <- cx + kerning + g.Advance

@@ -1,7 +1,5 @@
 ﻿namespace Aardvark.Application.WPF
 
-#if WINDOWS
-
 open System
 open System.Windows
 open System.Windows.Controls
@@ -93,6 +91,11 @@ type RenderControl() as self =
             sizes.Value <- V2i.OO
         )
 
+    member x.FocusReal() =
+        match ctrl with
+        | Some c -> c.Focus()
+        | None -> x.Focus()
+
     override x.OnRenderSizeChanged(e) =
         base.OnRenderSizeChanged(e)
         transact (fun () -> sizes.Value <- (V2i(x.ActualWidth, x.ActualHeight)))
@@ -140,5 +143,3 @@ type RenderControl() as self =
         member x.RenderTask 
             with get() = x.RenderTask
             and set t = x.RenderTask <- t
-
-#endif
