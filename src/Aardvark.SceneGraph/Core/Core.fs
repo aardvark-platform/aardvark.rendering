@@ -145,15 +145,24 @@ module private Providers =
                                     cache.Add(s, cs)
                                     Some cs
                                 | _ ->
-                                    if str.StartsWith("Has") then
-                                        let baseName = str.Substring(3).ToSymbol()
-                                        let sourceUniform = x.TryGetUniform(dynamicScope, baseName)
-                                        match sourceUniform with    
-                                            | Some v -> 
-                                                NullResources.isValidResourceAdaptive v :> IAdaptiveValue |> Some 
-                                            | None -> 
-                                                baseName |> contains |> AVal.constant :> IAdaptiveValue |> Some
-                                    else None
+                                    let syn =
+                                        match scope.Parent with
+                                        | Some p -> scope.Node.TryGetSynthesized(str, p)
+                                        | None -> scope.Node.TryGetSynthesized(str, Ag.Scope.Root)
+                                    match syn with
+                                    | Some (:? IAdaptiveValue as v) ->
+                                        cache.Add(s, v)
+                                        Some v
+                                    | _ -> 
+                                        if str.StartsWith("Has") then
+                                            let baseName = str.Substring(3).ToSymbol()
+                                            let sourceUniform = x.TryGetUniform(dynamicScope, baseName)
+                                            match sourceUniform with    
+                                                | Some v -> 
+                                                    NullResources.isValidResourceAdaptive v :> IAdaptiveValue |> Some 
+                                                | None -> 
+                                                    baseName |> contains |> AVal.constant :> IAdaptiveValue |> Some
+                                        else None
 
         interface IUniformProvider with
 
