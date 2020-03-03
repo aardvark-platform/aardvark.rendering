@@ -478,7 +478,7 @@ module Sg =
             let mode = scope.FillMode
             mode |> AVal.map (fun m -> m = FillMode.Fill)
 
-        member x.Antialias(r : Root<ISg>) =
+        member x.Antialias(r : Root<ISg>, scope : Ag.Scope) =
             r.Child?Antialias <- AVal.constant true
 
     let billboard (sg : ISg) =
