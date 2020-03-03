@@ -18,10 +18,10 @@
     <Compile Include="PathSegment.fs" />
     <Compile Include="Path.fs" />
     <Compile Include="Font.fs" />
+    <Compile Include="FontSquirrel.fs" />
     <Compile Include="Text.fs" />
     <Compile Include="SceneGraph.fs" />
     <Compile Include="Markdown.fs" />
-    <Compile Include="FontSquirrel.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj" />

@@ -515,7 +515,7 @@ type TextConfig =
     }
     static member Default =
         {
-            font = Font "Consolas"
+            font = FontSquirrel.Courier_Prime.Regular
             color = C4b.White
             align = TextAlignment.Center
             flipViewDependent = true
@@ -531,10 +531,6 @@ type Text private() =
     [<Extension>]
     static member Layout(font : Font, color : C4b, align : TextAlignment, bounds : Box2d, content : string, renderStyle : RenderStyle) =
         let chars = List<float * Glyph>()
-        //let offsets = List<V2d>()
-        //let scales = List<V2d>()
-        //let colors = List<C4b>()
-        //let glyphs = List<Shape>()
         let concrete = List<ConcreteShape>()
 
         let mutable cy = 0.0
