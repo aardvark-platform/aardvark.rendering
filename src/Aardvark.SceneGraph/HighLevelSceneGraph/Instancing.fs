@@ -271,6 +271,6 @@ module Instancing =
                 )
             )
 
-        member x.ModelTrafoStack(n : Sg.InstancingNode) : unit =
+        member x.ModelTrafoStack(n : Sg.InstancingNode, scope : Ag.Scope) : unit =
             n.Child?ModelTrafoStack <- List.empty<aval<Trafo3d>>
 

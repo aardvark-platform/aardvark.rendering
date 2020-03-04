@@ -69,7 +69,7 @@ module RandomCubesPerformanceTest =
         let task = 
             RenderTask.ofList [
                 app.Runtime.CompileClear(signature, AVal.constant C4f.Black, AVal.constant 1.0)
-                app.Runtime.CompileRender(signature, config, sg.RenderObjects())
+                app.Runtime.CompileRender(signature, config, sg.RenderObjects(Ag.Scope.Root))
             ]
 
         for i in 1..10 do
@@ -136,7 +136,7 @@ module RandomCubesPerformanceTest =
                 ]
 
         let config = BackendConfiguration.Native
-        win.RenderTask <- app.Runtime.CompileRender(win.FramebufferSignature, config, sg.RenderObjects())
+        win.RenderTask <- app.Runtime.CompileRender(win.FramebufferSignature, config, sg.RenderObjects(Ag.Scope.Root))
 
         win.Run()
 
@@ -186,7 +186,7 @@ module RenderTaskPerformance =
                 yield Sg.trafo (nextTrafo () |> AVal.constant) candidates.[r]
             ] |> Sg.ofList
 
-        let renderObjects = Semantics.RenderObjectSemantics.Semantic.renderObjects objects
+        let renderObjects = Semantics.RenderObjectSemantics.Semantic.renderObjects Ag.Scope.Root objects
 
         let transparency = RenderPass.after "nam" RenderPassOrder.Arbitrary RenderPass.main
        
@@ -199,7 +199,7 @@ module RenderTaskPerformance =
                 |> Sg.surface s
                 |> Sg.pass transparency
                 |> Sg.blendMode (AVal.constant BlendMode.Blend)
-                |> Semantics.RenderObjectSemantics.Semantic.renderObjects
+                |> Semantics.RenderObjectSemantics.Semantic.renderObjects Ag.Scope.Root
 
 
         let framebuffers =
@@ -302,7 +302,7 @@ module StartupPerformance =
                     |> Sg.surface effect
 
             Report.BeginTimed("Gathering render objects")
-            let renderObjects = ASet.force (sg.RenderObjects())
+            let renderObjects = ASet.force (sg.RenderObjects(Ag.Scope.Root))
             Report.End() |> ignore
 
             Report.BeginTimed("Preparing render objects")
@@ -436,7 +436,7 @@ module IsActiveFlagPerformance =
                     |> Sg.surface effect
 
             Report.BeginTimed("Gathering render objects")
-            let renderObjects = ASet.force (sg.RenderObjects())
+            let renderObjects = ASet.force (sg.RenderObjects(Ag.Scope.Root))
             Report.End() |> ignore
 
             Report.BeginTimed("Preparing render objects")

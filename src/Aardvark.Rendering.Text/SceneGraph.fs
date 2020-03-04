@@ -69,7 +69,7 @@ module Sg =
 
             ) t.Content scope.ModelTrafo
             
-        member x.LocalBoundingBox(t : ShapeSet) : aval<Box3d> =
+        member x.LocalBoundingBox(t : ShapeSet, scope : Ag.Scope) : aval<Box3d> =
             AVal.constant Box3d.Invalid
 
         member x.GlobalBoundingBox(t : ShapeSet, scope : Ag.Scope) : aval<Box3d> =

@@ -378,12 +378,8 @@ module RenderTask =
         static member ComputeBoundingBox (o : IRenderObject) : aval<Box3d> =
             match o with
                 | :? RenderObject as o ->
-                    let value = 
-                        match o.AttributeScope.Parent with
-                        | Some p -> o.AttributeScope.Node.TryGetSynthesized("GlobalBoundingBox", p)
-                        | None -> o.AttributeScope.Node.TryGetSynthesized("GlobalBoundingBox", Ag.Scope.Root)
-                    match value with
-                        | Some (:? aval<Box3d> as box) -> box
+                    match o.AttributeScope.TryGetSynthesized<aval<Box3d>>("GlobalBoundingBox") with
+                        | Some box -> box
                         | _ -> failwith "[Vulkan] could not get BoundingBox for RenderObject"
                     
                 | :? MultiRenderObject as o ->

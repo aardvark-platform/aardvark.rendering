@@ -5,11 +5,11 @@ nuget FSharp.Core                        >= 4.6.2 lowest_matching: true
 
 nuget FSharp.Data.Adaptive               ~> 0.0.17
 nuget Aardvark.Base.TypeProviders        ~> 4.5.15
-nuget Aardvark.Base.FSharp               ~> 5.0.0-prerelease0011
-nuget Aardvark.Base.IO                   ~> 5.0.0-prerelease0011
-nuget Aardvark.Base.Incremental          ~> 5.0.0-prerelease0011
-nuget Aardvark.Base.Runtime              ~> 5.0.0-prerelease0011
-nuget Aardvark.Base.Essentials           ~> 5.0.0-prerelease0011
+nuget Aardvark.Base.FSharp               ~> 5.0.0-prerelease0012
+nuget Aardvark.Base.IO                   ~> 5.0.0-prerelease0012
+nuget Aardvark.Base.Incremental          ~> 5.0.0-prerelease0012
+nuget Aardvark.Base.Runtime              ~> 5.0.0-prerelease0012
+nuget Aardvark.Base.Essentials           ~> 5.0.0-prerelease0012
                                   
 nuget FShade.Core                        ~> 5.0.0-prerelease0005
 nuget FShade                             ~> 5.0.0-prerelease0005

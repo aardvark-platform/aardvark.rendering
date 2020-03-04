@@ -774,15 +774,11 @@ module private RuntimeCommands =
 
         let boundingBox =
             lazy (
-                let bb =
-                    match o.AttributeScope.Parent with
-                    | Some p -> o.AttributeScope.Node.TryGetSynthesized("GlobalBoundingBox", p)
-                    | None -> o.AttributeScope.Node.TryGetSynthesized("GlobalBoundingBox", Ag.Scope.Root)
-                match bb with
-                    | Some (:? aval<Box3d> as b) -> b
-                    | _ -> 
-                        Log.warn "[Vulkan] no bounding box for Object %A" o.AttributeScope
-                        AVal.constant Box3d.Unit
+                match o.AttributeScope.TryGetSynthesized<aval<Box3d>>("GlobalBoundingBox") with
+                | Some b -> b
+                | _ -> 
+                    Log.warn "[Vulkan] no bounding box for Object %A" o.AttributeScope
+                    AVal.constant Box3d.Unit
             )
 
         static let rec hook (task : AbstractRenderTask) (o : IRenderObject) =
