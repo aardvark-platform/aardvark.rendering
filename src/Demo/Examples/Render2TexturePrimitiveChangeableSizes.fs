@@ -62,7 +62,7 @@ module Render2TexturePrimiviteChangeableSize =
             |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
 
     // Create render tasks given the signature and concrete buffers        
-    let task = runtime.CompileRender(signature, render2TextureSg.RenderObjects())
+    let task = runtime.CompileRender(signature, render2TextureSg.RenderObjects(Ag.Scope.Root))
     let clear = runtime.CompileClear(signature, ~~C4f.Red, ~~1.0)
 
     // Run the render task imperatively

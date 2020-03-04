@@ -43,9 +43,9 @@ type WtfRuntimeApplicator(r : IRuntime, child : ISg) =
     inherit Sg.AbstractApplicator(child)
     member x.Runtime = r
 
-[<Semantic>]
+[<Rule>]
 type RuntimeSem() =
-    member x.Runtime(w : WtfRuntimeApplicator) = w.Child?Runtime <- w.Runtime
+    member x.Runtime(w : WtfRuntimeApplicator, scope : Ag.Scope) = w.Child?Runtime <- w.Runtime
 
 module Sg = 
     let applyRuntime (r : IRuntime) (sg : ISg) = WtfRuntimeApplicator(r,sg) :> ISg
@@ -56,7 +56,7 @@ let main argv =
     Aardvark.Rendering.Vulkan.Config.showRecompile <- false
 
     // first we need to initialize Aardvark's core components
-    Ag.initialize()
+    
     Aardvark.Init()
 
     // create an OpenGL/Vulkan application. Use the use keyword (using in C#) in order to

@@ -61,12 +61,12 @@ module Sems =
     open Aardvark.SceneGraph.Semantics
     open Aardvark.Base.Ag
 
-    [<Aardvark.Base.Ag.Semantic>]
+    [<Aardvark.Base.Rule>]
     type BlaSems () =
         
-        member x.RenderObjects(b : BlaNode) =
+        member x.RenderObjects(b : BlaNode, scope : Ag.Scope) =
             
-            let o = RenderObject.create()
+            let o = RenderObject.ofScope scope
 
             o.Mode <- b.Mode
 
@@ -375,7 +375,7 @@ let tensorPerformance() =
 
 let ellipseTest() =
   
-    Ag.initialize()
+    
     Aardvark.Init()
     
     
@@ -591,7 +591,7 @@ let main argv =
     ellipseTest()
     System.Environment.Exit 0
 
-    Ag.initialize()
+    
     Aardvark.Init()
 
 
@@ -761,12 +761,7 @@ let main argv =
 
     let mode = AVal.init FillMode.Fill
 
-    let config : MarkdownConfig = 
-        { MarkdownConfig.light with 
-            codeFont = "Consolas"
-            paragraphFont = "Times New Roman" 
-            lineSpacing = 1.2
-        }
+    let config = MarkdownConfig.light
 
     let label1 =
         Sg.markdown config (AVal.constant md)

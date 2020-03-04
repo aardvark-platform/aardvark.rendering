@@ -774,11 +774,11 @@ module private RuntimeCommands =
 
         let boundingBox =
             lazy (
-                match Ag.tryGetSynAttribute o.AttributeScope "GlobalBoundingBox" with
-                    | Some (:? aval<Box3d> as b) -> b
-                    | _ -> 
-                        Log.warn "[Vulkan] no bounding box for Object %A" o.AttributeScope
-                        AVal.constant Box3d.Unit
+                match o.AttributeScope.TryGetSynthesized<aval<Box3d>>("GlobalBoundingBox") with
+                | Some b -> b
+                | _ -> 
+                    Log.warn "[Vulkan] no bounding box for Object %A" o.AttributeScope
+                    AVal.constant Box3d.Unit
             )
 
         static let rec hook (task : AbstractRenderTask) (o : IRenderObject) =
@@ -967,8 +967,8 @@ module private RuntimeCommands =
                 let u = cmd.Uniforms
                     
                 let box = cmd.BoundingBox
-                let view = u.TryGetUniform(Ag.emptyScope, Symbol.Create "ViewTrafo")
-                let proj = u.TryGetUniform(Ag.emptyScope, Symbol.Create "ProjTrafo")
+                let view = u.TryGetUniform(Ag.Scope.Root, Symbol.Create "ViewTrafo")
+                let proj = u.TryGetUniform(Ag.Scope.Root, Symbol.Create "ProjTrafo")
                 match view, proj with
                     | Some (:? aval<Trafo3d> as v), Some (:? aval<Trafo3d> as p) ->
                         AVal.custom (fun t ->
@@ -1810,7 +1810,7 @@ module private RuntimeCommands =
                         match g.SingleAttributes.TryGetValue name with
                             | (true, (:? IAdaptiveValue as a)) -> a
                             | _ -> 
-                                match pipeline.ppUniforms.TryGetUniform(Ag.emptyScope, name) with
+                                match pipeline.ppUniforms.TryGetUniform(Ag.Scope.Root, name) with
                                     | Some a -> a
                                     | None -> failwithf "[Vulkan] could not get uniform %A" name
                     )

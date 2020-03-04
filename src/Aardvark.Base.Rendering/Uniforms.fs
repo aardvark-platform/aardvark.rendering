@@ -70,7 +70,7 @@ module Uniforms =
 
 
         let inline (?) (p : IUniformProvider) (name : string) : Trafo =
-            match p.TryGetUniform(Ag.emptyScope, Symbol.Create name) with
+            match p.TryGetUniform(Ag.Scope.Root, Symbol.Create name) with
                 | Some (:? aval<Trafo3d> as m) -> Single m
                 | Some (:? aval<Trafo3d[]> as m) -> Layered m
                 | _ -> raise <| NotFoundException name

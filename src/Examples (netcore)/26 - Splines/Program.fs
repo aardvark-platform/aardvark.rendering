@@ -206,7 +206,7 @@ module Sg =
         member x.Threshold = threshold
         member x.ControlPoints = controlPoints
 
-    [<Semantic>]
+    [<Rule>]
     type SplineSemantics() =
         
         static let cache = System.Collections.Concurrent.ConcurrentDictionary<IRuntime, ParallelPrimitives * IComputeShader * IComputeShader>()
@@ -331,17 +331,17 @@ module Sg =
             //    }
             //buffer :> IOutputMod<_>, count :> IOutputMod<_>
             
-        member x.GlobalBoundingBox(s : SplineNode) =
-            let t = s.ModelTrafo
+        member x.GlobalBoundingBox(s : SplineNode, scope : Ag.Scope) =
+            let t = scope.ModelTrafo
             AVal.map2 (fun (trafo : Trafo3d) (cps : V3d[]) -> Box3d(cps |> Array.map trafo.Forward.TransformPos)) t s.ControlPoints
 
-        member x.LocalBoundingBox(s : SplineNode) =
+        member x.LocalBoundingBox(s : SplineNode, scope : Ag.Scope) =
             s.ControlPoints |> AVal.map Box3d
 
-        member x.RenderObjects(s : SplineNode) : aset<IRenderObject> =
-            let runtime = s.Runtime
-            let viewProj = AVal.map2 (*) s.ViewTrafo s.ProjTrafo
-            let mvp = AVal.map2 (*) s.ModelTrafo viewProj
+        member x.RenderObjects(s : SplineNode, scope : Ag.Scope) : aset<IRenderObject> =
+            let runtime = scope.Runtime
+            let viewProj = AVal.map2 (*) scope.ViewTrafo scope.ProjTrafo
+            let mvp = AVal.map2 (*) scope.ModelTrafo viewProj
 
             //let mm = s.ControlPoints |> AVal.map (subdiv runtime s.Threshold s.ViewportSize mvp)
             let cps = s.ControlPoints
@@ -399,7 +399,7 @@ module Sg =
             let count = bind (fun (_,c) -> 2*c)
                 
 
-            let o = RenderObject.create()
+            let o = RenderObject.ofScope scope
             o.DrawCalls <- Direct(count |> AVal.map (fun c -> [DrawCallInfo(FaceVertexCount = c, InstanceCount = 1)]))
             o.Mode <- IndexedGeometryMode.LineList
             o.VertexAttributes <-
@@ -419,7 +419,7 @@ module Sg =
 
 [<EntryPoint>]
 let main argv = 
-    Ag.initialize()
+    
     Aardvark.Init()
     
     let win =

@@ -16,7 +16,7 @@ module HelloWorld =
 
     let run () =
 
-        Ag.initialize()
+        
         Aardvark.Init()
 
         use app = new OpenGlApplication()
@@ -56,7 +56,7 @@ module HelloWorld =
                |> Sg.viewTrafo (viewTrafo   |> AVal.map CameraView.viewTrafo )
                |> Sg.projTrafo (perspective |> AVal.map Frustum.projTrafo    )
 
-        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, sg.RenderObjects())
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, sg.RenderObjects(Ag.Scope.Root))
 
         win.RenderTask <- task //|> DefaultOverlays.withStatistics
         win.Run()

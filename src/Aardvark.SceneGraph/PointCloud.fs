@@ -633,10 +633,9 @@ module PointCloudRenderObjectSemantics =
 
             ro :> IRenderObject
 
-        [<Semantic>]
+        [<Rule>]
         type MyPCSem() =
-            member x.RenderObjects(m : Sg.PointCloud) =
-                let scope = Ag.getContext()
+            member x.RenderObjects(m : Sg.PointCloud, scope : Ag.Scope) =
                 let obj = createRenderObject scope m.Config m.Data
                 ASet.single obj
 

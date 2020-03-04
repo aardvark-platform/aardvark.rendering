@@ -445,7 +445,7 @@ module SgFSharp =
 
                 smallest
 
-            let bb = this?GlobalBoundingBox() : aval<Box3d>
+            let bb = this?GlobalBoundingBox(Ag.Scope.Root) : aval<Box3d>
 
             printfn "normalizing from: %A" ( bb.GetValue() )
 
@@ -469,7 +469,7 @@ module SgFSharp =
 
                 smallest
 
-            let bb = this?GlobalBoundingBox() : aval<Box3d>
+            let bb = this?GlobalBoundingBox(Ag.Scope.Root) : aval<Box3d>
 
             let transformBox (sbox : Box3d) = Trafo3d.Translation(-sbox.Center) * Trafo3d.Scale(getBoxScale sbox box) * Trafo3d.Translation(box.Center)
 

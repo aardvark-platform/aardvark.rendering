@@ -15,7 +15,7 @@ open FSharp.Data.Traceable
 
 [<EntryPoint>]
 let main argv =
-    Ag.initialize()
+    
     Aardvark.Init()
 
     use app = new OpenGlApplication()

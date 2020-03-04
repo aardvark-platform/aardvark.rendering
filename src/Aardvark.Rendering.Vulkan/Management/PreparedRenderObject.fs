@@ -109,12 +109,12 @@ type DevicePreparedRenderObjectExtensions private() =
                     ds.Bindings |> Array.choosei (fun i b ->
                         match b.Parameter with
                             | UniformBlockParameter block ->
-                                let buffer = this.CreateUniformBuffer(Ag.emptyScope, block, ro.Uniforms, SymDict.empty)
+                                let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, ro.Uniforms, SymDict.empty)
                                 resources.Add buffer
                                 AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
 
                             | StorageBufferParameter block ->
-                                let buffer = this.CreateStorageBuffer(Ag.emptyScope, block, ro.Uniforms, SymDict.empty)
+                                let buffer = this.CreateStorageBuffer(Ag.Scope.Root, block, ro.Uniforms, SymDict.empty)
                                 AdaptiveDescriptor.AdaptiveStorageBuffer (i, buffer) |> Some
 
                             | SamplerParameter sam ->
@@ -129,7 +129,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                                 let textureName = Symbol.Create textureName
                                                 let samplerState = samplerState.SamplerStateDescription
 
-                                                match ro.Uniforms.TryGetUniform(Ag.emptyScope, textureName) with
+                                                match ro.Uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
                                                 | Some (:? aval<ITexture> as tex) ->
 
                                                     let tex = this.CreateImage(tex)
@@ -149,7 +149,7 @@ type DevicePreparedRenderObjectExtensions private() =
                             | ImageParameter img ->
                                 let viewSam = 
                                     let textureName = Symbol.Create img.imageName
-                                    match ro.Uniforms.TryGetUniform(Ag.emptyScope, textureName) with
+                                    match ro.Uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
                                     | Some (:? aval<ITexture> as tex) ->
 
                                         let tex = this.CreateImage(tex)
@@ -290,12 +290,12 @@ type DevicePreparedRenderObjectExtensions private() =
                     ds.Bindings |> Array.choosei (fun i b ->
                         match b.Parameter with
                             | UniformBlockParameter block ->
-                                let buffer = this.CreateUniformBuffer(Ag.emptyScope, block, uniforms, SymDict.empty)
+                                let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
                                 resources.Add buffer
                                 AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
 
                             | StorageBufferParameter block ->
-                                let buffer = this.CreateStorageBuffer(Ag.emptyScope, block, uniforms, SymDict.empty)
+                                let buffer = this.CreateStorageBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
                                 AdaptiveDescriptor.AdaptiveStorageBuffer (i, buffer) |> Some
 
                             | SamplerParameter sam ->
@@ -310,7 +310,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                                 let textureName = Symbol.Create textureName
                                                 let samplerState = samplerState.SamplerStateDescription
 
-                                                match uniforms.TryGetUniform(Ag.emptyScope, textureName) with
+                                                match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
                                                 | Some (:? aval<ITexture> as tex) ->
 
                                                     let tex = this.CreateImage(tex)
@@ -330,7 +330,7 @@ type DevicePreparedRenderObjectExtensions private() =
                             | ImageParameter img ->
                                 let viewSam = 
                                     let textureName = Symbol.Create img.imageName
-                                    match uniforms.TryGetUniform(Ag.emptyScope, textureName) with
+                                    match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
                                     | Some (:? aval<ITexture> as tex) ->
 
                                         let tex = this.CreateImage(tex)

@@ -123,7 +123,7 @@ let main argv =
     
     //failwith "REMOVE THIS FAILWITH"
 
-    Ag.initialize()
+    
     Aardvark.Init()
 
     let win =

@@ -109,7 +109,7 @@ let parallelFilter<'a when 'a : unmanaged> (par : ParallelPrimitives) (arr : 'a[
 let main argv = 
     
     // first we need to initialize Aardvark's core components
-    Ag.initialize()
+    
     Aardvark.Init()
 
     // create an application

@@ -76,7 +76,7 @@ module RenderCommands =
         member x.Geometries = geometries
 
         interface IRenderObject with
-            member x.AttributeScope = Ag.emptyScope
+            member x.AttributeScope = Ag.Scope.Root
             member x.Id = id
             member x.RenderPass = RenderPass.main
             
@@ -378,8 +378,8 @@ module RenderTask =
         static member ComputeBoundingBox (o : IRenderObject) : aval<Box3d> =
             match o with
                 | :? RenderObject as o ->
-                    match Ag.tryGetAttributeValue o.AttributeScope "GlobalBoundingBox" with
-                        | Success box -> box
+                    match o.AttributeScope.TryGetSynthesized<aval<Box3d>>("GlobalBoundingBox") with
+                        | Some box -> box
                         | _ -> failwith "[Vulkan] could not get BoundingBox for RenderObject"
                     
                 | :? MultiRenderObject as o ->
@@ -774,8 +774,8 @@ module RenderTask =
             override x.Add(o : IRenderObject) =
                 if not (cache.ContainsKey o) then
                     if cache.Count = 0 then
-                        match Ag.tryGetAttributeValue o.AttributeScope "ViewTrafo" with
-                            | Success trafo -> camera <- trafo
+                        match o.AttributeScope.TryGetInherited "ViewTrafo" with
+                            | Some (:? aval<Trafo3d> as trafo) -> camera <- trafo
                             | _ -> failf "could not get camera view"
 
                     let res = x.Compile o

@@ -199,7 +199,7 @@ module LoD =
 
 [<EntryPoint>]
 let main argv = 
-    Ag.initialize()
+    
     Aardvark.Init()
 
     let img = PixImage.Create(@"C:\volumes\bigger.png") |> unbox<PixImage<byte>>

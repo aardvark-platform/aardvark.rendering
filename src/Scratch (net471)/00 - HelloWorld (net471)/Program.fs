@@ -18,7 +18,6 @@ open Aardvark.Application.WinForms
 let main argv = 
     //Config.useSharingControl <- true
     // first we need to initialize Aardvark's core components
-    Ag.initialize()
     Aardvark.Init()
 
     // create an OpenGL/Vulkan application. Use the use keyword (using in C#) in order to

@@ -226,7 +226,7 @@ module Utilities =
                 match win with
                     | :? OpenVR.VulkanVRApplicationLayered as win ->
                         let sg =  x.WrapSg(win, sg)
-                        win.RenderTask <- RuntimeCommand.Render(sg.RenderObjects())
+                        win.RenderTask <- RuntimeCommand.Render(sg.RenderObjects(Ag.Scope.Root))
                     | _ ->
                         let task = x.Compile(win, sg)
                         win.RenderTask <- task

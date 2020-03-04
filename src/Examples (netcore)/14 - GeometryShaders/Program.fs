@@ -173,7 +173,7 @@ module Shader =
 [<EntryPoint>]
 let main argv = 
     
-    Ag.initialize()
+    
     Aardvark.Init()
 
     let available = 

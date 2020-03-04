@@ -629,7 +629,7 @@ module RenderingTests =
             ]
 
         let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
-        let renderJobs = sg.RenderObjects()
+        let renderJobs = sg.RenderObjects(Ag.Scope.Root)
         let task = runtime.CompileRender(signature, renderJobs)
         //let task2 = runtime.CompileRender renderJobs
 
@@ -717,7 +717,7 @@ module RenderingTests =
 
         let baseObject =
             { RenderObject.Create() with
-                AttributeScope = Ag.emptyScope
+                AttributeScope = Ag.Scope.Root
                 IsActive = AVal.constant true
                 RenderPass = RenderPass.main
                 DrawCalls = Direct(AVal.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)])
@@ -737,7 +737,7 @@ module RenderingTests =
 module UseTest =
     
     let bla () =
-        Ag.initialize()
+        
         Aardvark.Init()
 
         use runtime = new Runtime()

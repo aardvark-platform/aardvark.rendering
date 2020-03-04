@@ -50,7 +50,7 @@ let testCompile() =
     let prototype =
         {
             Id = newId()
-            AttributeScope = Ag.emptyScope
+            AttributeScope = Ag.Scope.Root
             
             IsActive            = AVal.constant true
             RenderPass          = RenderPass.main
@@ -195,7 +195,6 @@ let testTextureCubeArray() =
 
 [<EntryPoint>]
 let main args =
-    Aardvark.Base.Ag.initialize()
     Aardvark.Init()
     //testCompile()
 

@@ -16,7 +16,7 @@ module AfterShader =
         member x.Sg = sg
         member x.Effect = e
 
-    [<Semantic>]
+    [<Rule>]
     type AfterSgSem() =
         let rec adjust (e : FShade.Effect) (o : IRenderObject) =
                 match o with
@@ -33,8 +33,8 @@ module AfterShader =
                 | _ ->
                     o
 
-        member x.RenderObjects(a : AfterSg) = 
-            a.Child |> ASet.bind (fun c -> c.RenderObjects() |> ASet.map (adjust a.Effect))
+        member x.RenderObjects(a : AfterSg, scope : Ag.Scope) = 
+            a.Child |> ASet.bind (fun c -> c.RenderObjects(scope) |> ASet.map (adjust a.Effect))
 
 
     module Sg =

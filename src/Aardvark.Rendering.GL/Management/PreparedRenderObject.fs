@@ -449,13 +449,13 @@ module PreparedPipelineState =
         GL.Check "[Prepare] Create Surface"
         
         // create all UniformBuffers requested by the program
-        let uniformBuffers = x.CreateUniformBuffers(slots, rj.globalUniforms, Ag.emptyScope)
+        let uniformBuffers = x.CreateUniformBuffers(slots, rj.globalUniforms, Ag.Scope.Root)
 
         GL.Check "[Prepare] Uniform Buffers"
 
-        let storageBuffers = x.CreateStorageBuffers(slots, rj.globalUniforms, Ag.emptyScope)
+        let storageBuffers = x.CreateStorageBuffers(slots, rj.globalUniforms, Ag.Scope.Root)
 
-        let textureBindings = x.CreateTextureBindings(slots, rj.globalUniforms, Ag.emptyScope)
+        let textureBindings = x.CreateTextureBindings(slots, rj.globalUniforms, Ag.Scope.Root)
 
         GL.Check "[Prepare] Textures"
         
@@ -862,7 +862,7 @@ type PreparedCommand(ctx : Context, renderPass : RenderPass) =
             )
 
     interface IRenderObject with
-        member x.AttributeScope = Ag.emptyScope
+        member x.AttributeScope = Ag.Scope.Root
         member x.Id = x.Id
         member x.RenderPass = renderPass
 

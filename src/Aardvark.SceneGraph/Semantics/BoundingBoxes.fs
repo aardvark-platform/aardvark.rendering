@@ -98,12 +98,12 @@ module BoundingBoxExtensions =
 module BoundingBoxes =
 
     type ISg with
-        member x.GlobalBoundingBox() : aval<Box3d> = x?GlobalBoundingBox()
-        member x.LocalBoundingBox()  : aval<Box3d> = x?LocalBoundingBox()
+        member x.GlobalBoundingBox(scope : Ag.Scope) : aval<Box3d> = x?GlobalBoundingBox(scope)
+        member x.LocalBoundingBox(scope : Ag.Scope)  : aval<Box3d> = x?LocalBoundingBox(scope)
 
     module Semantic =
-        let globalBoundingBox (sg : ISg) : aval<Box3d> = sg?GlobalBoundingBox()
-        let localBoundingBox  (sg : ISg) : aval<Box3d> = sg?LocalBoundingBox()
+        let globalBoundingBox (scope : Ag.Scope) (sg : ISg) : aval<Box3d> = sg?GlobalBoundingBox(scope)
+        let localBoundingBox  (scope : Ag.Scope) (sg : ISg) : aval<Box3d> = sg?LocalBoundingBox(scope)
 
 
     let private trySub (b : Box3d) (d : Box3d) =
@@ -113,7 +113,7 @@ module BoundingBoxes =
             None
 
 
-    [<Semantic>]
+    [<Rule>]
     type GlobalBoundingBoxSem() =
 
         let boxFromArray (v : V3d[]) = if v.Length = 0 then Box3d.Invalid else Box3d v
@@ -128,37 +128,36 @@ module BoundingBoxes =
                 | _ ->
                     Box3d.Invalid
 
-        member x.LocalBoundingBox(r : Sg.GeometrySet) : aval<Box3d> =
+        member x.LocalBoundingBox(r : Sg.GeometrySet, scope : Ag.Scope) : aval<Box3d> =
             r.Geometries 
                 |> ASet.map computeBoundingBox
                 |> ASet.foldHalfGroup (curry Box.Union) trySub Box3d.Invalid
 
-        member x.GlobalBoundingBox(r : Sg.GeometrySet) : aval<Box3d> =
-            let l = r.LocalBoundingBox()
-            let t = r.ModelTrafo
+        member x.GlobalBoundingBox(r : Sg.GeometrySet, scope : Ag.Scope) : aval<Box3d> =
+            let l = r.LocalBoundingBox(scope)
+            let t = scope.ModelTrafo
             AVal.map2 (fun (t : Trafo3d) (b : Box3d) -> b.Transformed(t)) t l
 
-        member x.GlobalBoundingBox(r : Sg.RenderObjectNode) : aval<Box3d> =
+        member x.GlobalBoundingBox(r : Sg.RenderObjectNode, scope : Ag.Scope) : aval<Box3d> =
             r.Objects |> ASet.mapA (fun o -> o.GetBoundingBox()) |> ASet.fold  (curry Box.Union) Box3d.Invalid
 
-        member x.LocalBoundingBox(r : Sg.RenderObjectNode) : aval<Box3d> =
-            r.GlobalBoundingBox()
+        member x.LocalBoundingBox(r : Sg.RenderObjectNode, scope : Ag.Scope) : aval<Box3d> =
+            r.GlobalBoundingBox(scope)
 
-        member x.GlobalBoundingBox(r : Sg.IndirectRenderNode) : aval<Box3d> =
+        member x.GlobalBoundingBox(r : Sg.IndirectRenderNode, scope : Ag.Scope) : aval<Box3d> =
             AVal.constant Box3d.Infinite
 
-        member x.LocalBoundingBox(r : Sg.IndirectRenderNode) : aval<Box3d> =
+        member x.LocalBoundingBox(r : Sg.IndirectRenderNode, scope : Ag.Scope) : aval<Box3d> =
             AVal.constant Box3d.Infinite
 
-        member x.LocalBoundingBox(p : Sg.OverlayNode) : aval<Box3d> =
+        member x.LocalBoundingBox(p : Sg.OverlayNode, scope : Ag.Scope) : aval<Box3d> =
             AVal.constant Box3d.Invalid
 
-        member x.GlobalBoundingBox(p : Sg.OverlayNode) : aval<Box3d> =
+        member x.GlobalBoundingBox(p : Sg.OverlayNode, scope : Ag.Scope) : aval<Box3d> =
             AVal.constant Box3d.Invalid
 
-        member x.GlobalBoundingBox(node : Sg.RenderNode) : aval<Box3d> =
-            let scope = Ag.getContext()
-            let va = node.VertexAttributes
+        member x.GlobalBoundingBox(node : Sg.RenderNode, scope : Ag.Scope) : aval<Box3d> =
+            let va = scope.VertexAttributes
             let positions : BufferView = 
                 match Map.tryFind DefaultSemantic.Positions va with
                     | Some v -> v
@@ -170,8 +169,8 @@ module BoundingBoxes =
                     | :? ArrayBuffer as ab ->
                         let positions = ab.Data |> unbox<V3f[]>
 
-                        let! trafo = node.ModelTrafo
-                        match node.VertexIndexBuffer with
+                        let! trafo = scope.ModelTrafo
+                        match scope.VertexIndexBuffer with
                             | None -> 
                                     return positions |> Array.map (fun p -> trafo.Forward.TransformPos(V3d p)) |> boxFromArray
                             | Some indices ->
@@ -191,28 +190,27 @@ module BoundingBoxes =
                         return failwithf "unknown IBuffer for positions: %A" buffer
             }
 
-        member x.GlobalBoundingBox(app : IGroup) : aval<Box3d> =
+        member x.GlobalBoundingBox(app : IGroup, scope : Ag.Scope) : aval<Box3d> =
             app.Children 
-                |> ASet.mapA (fun sg -> sg.GlobalBoundingBox() ) 
+                |> ASet.mapA (fun sg -> sg.GlobalBoundingBox(scope) ) 
                 |> ASet.foldHalfGroup (curry Box.Union) trySub Box3d.Invalid
             
-        member x.GlobalBoundingBox(n : IApplicator) : aval<Box3d> = 
+        member x.GlobalBoundingBox(n : IApplicator, scope : Ag.Scope) : aval<Box3d> = 
             adaptive {
                 let! low = n.Child
-                return! low.GlobalBoundingBox()
+                return! low.GlobalBoundingBox(scope)
             }
 
 
-    [<Semantic>]
+    [<Rule>]
     type LocalBoundingBoxSem() =
 
         let boxFromArray (v : V3f[]) = if v.Length = 0 then Box3d.Invalid else Box3d (Box3f v)
         let transform (bb : Box3d) (t : Trafo3d) = bb.Transformed t
 
 
-        member x.LocalBoundingBox(node : Sg.RenderNode) : aval<Box3d> =
-            let scope = Ag.getContext()
-            let va = node.VertexAttributes
+        member x.LocalBoundingBox(node : Sg.RenderNode, scope : Ag.Scope) : aval<Box3d> =
+            let va = scope.VertexAttributes
             let positions : BufferView = 
                 match Map.tryFind DefaultSemantic.Positions va with
                     | Some v -> v
@@ -224,7 +222,7 @@ module BoundingBoxes =
                     | :? ArrayBuffer as ab ->
                         let positions = ab.Data |> unbox<V3f[]>
 
-                        match node.VertexIndexBuffer with
+                        match scope.VertexIndexBuffer with
                             | None -> 
                                     return positions |> boxFromArray
                             | Some indices ->
@@ -242,21 +240,21 @@ module BoundingBoxes =
                         return failwithf "unknown IBuffer for positions: %A" buffer
             }
             
-        member x.LocalBoundingBox(app : IGroup) : aval<Box3d> =
+        member x.LocalBoundingBox(app : IGroup, scope : Ag.Scope) : aval<Box3d> =
             app.Children 
-                |> ASet.mapA (fun sg -> sg.LocalBoundingBox()) 
+                |> ASet.mapA (fun sg -> sg.LocalBoundingBox(scope)) 
                 |> ASet.foldHalfGroup (curry Box.Union) trySub Box3d.Invalid
 
-        member x.LocalBoundingBox(app : Sg.TrafoApplicator) : aval<Box3d> =  
+        member x.LocalBoundingBox(app : Sg.TrafoApplicator, scope : Ag.Scope) : aval<Box3d> =  
             adaptive {
                 let! c = app.Child
-                let! bb = c.LocalBoundingBox() : aval<Box3d>
+                let! bb = c.LocalBoundingBox(scope) : aval<Box3d>
                 let! trafo = app.Trafo
                 return transform bb trafo
             }
 
-        member x.LocalBoundingBox(n : IApplicator) : aval<Box3d> = 
+        member x.LocalBoundingBox(n : IApplicator, scope : Ag.Scope) : aval<Box3d> = 
             adaptive {
                 let! low = n.Child
-                return! low.LocalBoundingBox()
+                return! low.LocalBoundingBox(scope)
             }

@@ -96,7 +96,7 @@ module RenderTask =
 
         let baseObject =
             { RenderObject.Create() with
-                AttributeScope = Ag.emptyScope
+                AttributeScope = Ag.Scope.Root
                 IsActive = AVal.constant true
                 RenderPass = RenderPass.main
                 DrawCalls = Direct (AVal.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)])
