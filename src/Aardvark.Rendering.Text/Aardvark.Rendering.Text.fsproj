@@ -16,6 +16,8 @@
   <ItemGroup>
     <EmbeddedResource Include="resources\Symbola.ttf" />
     <Compile Include="PathSegment.fs" />
+    <Compile Include="BvhInternal.fs" />
+    <Compile Include="PathTessellator.fs" />
     <Compile Include="Path.fs" />
     <Compile Include="Font.fs" />
     <Compile Include="FontSquirrel.fs" />

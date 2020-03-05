@@ -588,15 +588,11 @@ let ellipseTest() =
 
 [<EntryPoint; STAThread>]
 let main argv = 
-    ellipseTest()
-    System.Environment.Exit 0
-
-    
     Aardvark.Init()
+    //ellipseTest()
 
 
-
-    use app = new OpenGlApplication(false, false)
+    use app = new OpenGlApplication(true, false)
     let win = app.CreateGameWindow(8)
     
 
@@ -670,8 +666,7 @@ let main argv =
         "* second *item*\r\n" 
 
     let message = 
-        "# This is Aardvark.Rendering\r\n" +
-        "I'm uploading my first screenshot to tracker ฿"
+        "This is Aardvark rendering weird crazy fonts. 😀😁😎"
     // old school stuff here^^
 
     // here's an example-usage of AIR (Aardvark Imperative Renderer) 
@@ -855,7 +850,7 @@ let main argv =
 
         ]
 
-    let message = AVal.init message
+    let message = AVal.constant message
     let label2 =
         //Sg.text f C4b.Green message
         Sg.markdown MarkdownConfig.light message
@@ -866,20 +861,32 @@ let main argv =
     let aa = AVal.init true
 
     
-    let f = Aardvark.Rendering.Text.Font("Consolas")
+    let f = Aardvark.Rendering.Text.FontSquirrel.Rothenburg_Decorative.Regular
     let label3 =
         Sg.text f C4b.White message
-            |> Sg.scale 0.1
-            |> Sg.transform (Trafo3d.FromBasis(-V3d.IOO, V3d.OOI, V3d.OIO, V3d(0.0, 0.0, 0.0)))
+        |> Sg.scale 0.1
+        |> Sg.transform (Trafo3d.FromBasis(-V3d.IOO, V3d.OOI, V3d.OIO, V3d(0.0, 0.0, 0.2)))
+            
+    let f = Aardvark.Rendering.Text.FontSquirrel.Leafy_glade.Regular
+    let label4 =
+        Sg.text f C4b.White message
+        |> Sg.scale 0.1
+        |> Sg.transform (Trafo3d.FromBasis(-V3d.IOO, V3d.OOI, V3d.OIO, V3d(0.0, 0.0, 0.0)))
+           
+    let f = Aardvark.Rendering.Text.FontSquirrel.Roboto.Regular
+    let label5 =
+        Sg.text f C4b.White (AVal.constant "or just regular ones")
+        |> Sg.scale 0.1
+        |> Sg.transform (Trafo3d.FromBasis(-V3d.IOO, V3d.OOI, V3d.OIO, V3d(0.0, 0.0, -0.2)))
 
     let active = AVal.init true
 
     let sg = 
         active |> AVal.map (fun a ->
             if a then
-                Sg.ofList [label3; label2; label1]
+                Sg.ofList [label3; label4; label5]
                     //|> Sg.andAlso quad
-                    |> Sg.andAlso (Sg.shape (AVal.constant shape))
+                    //|> Sg.andAlso (Sg.shape (AVal.constant shape))
                     |> Sg.viewTrafo (cam |> AVal.map CameraView.viewTrafo)
                     |> Sg.projTrafo (win.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
 
@@ -974,13 +981,13 @@ let main argv =
     let main = app.Runtime.CompileRender(win.FramebufferSignature, config, sg) //|> DefaultOverlays.withStatistics
     //let clear = app.Runtime.CompileClear(win.FramebufferSignature, AVal.constant C4f.Black)
 
-    win.Keyboard.Press.Values.Add (fun c ->
-        if c = '\b' then
-            if message.Value.Length > 0 then
-                transact (fun () -> message.Value <- message.Value.Substring(0, message.Value.Length - 1))
-        else
-            transact (fun () -> message.Value <- message.Value + string c)
-    )
+    //win.Keyboard.Press.Values.Add (fun c ->
+    //    if c = '\b' then
+    //        if message.Value.Length > 0 then
+    //            transact (fun () -> message.Value <- message.Value.Substring(0, message.Value.Length - 1))
+    //    else
+    //        transact (fun () -> message.Value <- message.Value + string c)
+    //)
 
     win.RenderTask <- main
     win.Run()

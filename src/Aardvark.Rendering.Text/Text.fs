@@ -572,7 +572,7 @@ type Text private() =
 
             let y = cy
 
-            realBounds.ExtendBy(Box2d(V2d(minX + shift, y - font.Descent - font.InternalLeading), V2d(cx + shift, y + font.Ascent + font.InternalLeading)))
+            //realBounds.ExtendBy(Box2d(V2d(minX + shift, y - font.Descent - font.InternalLeading), V2d(cx + shift, y + font.Ascent + font.InternalLeading)))
             for (x,g) in chars do
                 let pos = V2d(shift + x,y)
                 //realBounds.ExtendBy (Box2d()) //(g.Bounds.Translated(pos))
@@ -580,7 +580,7 @@ type Text private() =
                 //scales.Add(V2d(1.0, 1.0))
                 //colors.Add(color)
                 //glyphs.Add(g)
-
+                realBounds.ExtendBy(g.Bounds.Translated(pos))
                 concrete.Add {
                     trafo = M33d.Translation(pos)
                     color = color

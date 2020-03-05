@@ -4,7 +4,7 @@ open Aardvark.Base.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.Application.WinForms
+open Aardvark.Application.WPF
 
 // This example illustrates how to create a simple render window. 
 // In contrast to the rest of the examples (beginning from 01-Triangle), we use
@@ -16,7 +16,7 @@ open Aardvark.Application.WinForms
 
 [<EntryPoint; STAThread>]
 let main argv = 
-    //Config.useSharingControl <- true
+    Config.useSharingControl <- true
     // first we need to initialize Aardvark's core components
     Aardvark.Init()
 
