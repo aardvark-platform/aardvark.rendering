@@ -322,46 +322,43 @@ module Utilities =
 
 
         let overlay =
-            match Environment.OSVersion with
-                | Windows ->  
-                    let help = status |> AVal.map (fun s -> helpText + "\r\n" + s)
+            let help = status |> AVal.map (fun s -> helpText + "\r\n" + s)
 
-                    let showHelp = AVal.init false
+            let showHelp = AVal.init false
 
-                    win.Keyboard.KeyDown(Aardvark.Application.Keys.H).Values.Add (fun () ->
-                        transact (fun () -> showHelp.Value <- not showHelp.Value)
-                    )
+            win.Keyboard.KeyDown(Aardvark.Application.Keys.H).Values.Add (fun () ->
+                transact (fun () -> showHelp.Value <- not showHelp.Value)
+            )
 
-                    let text = showHelp |> AVal.bind (function true -> help | false -> AVal.constant teaser)
+            let text = showHelp |> AVal.bind (function true -> help | false -> AVal.constant teaser)
 
 
         
 
-                    let trafo = 
-                        win.Sizes |> AVal.map (fun s -> 
-                            let border = V2d(20.0, 10.0) / V2d s
-                            let pixels = 30.0 / float s.Y
-                            Trafo3d.Scale(pixels) *
-                            Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
-                            Trafo3d.Translation(-1.0 + border.X, 1.0 - border.Y - pixels, -1.0)
-                        )
+            let trafo = 
+                win.Sizes |> AVal.map (fun s -> 
+                    let border = V2d(20.0, 10.0) / V2d s
+                    let pixels = 30.0 / float s.Y
+                    Trafo3d.Scale(pixels) *
+                    Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
+                    Trafo3d.Translation(-1.0 + border.X, 1.0 - border.Y - pixels, -1.0)
+                )
 
-                    let font = Font "Consolas"
-        
-                    let chars =
-                        seq {
-                            for c in 0 .. 255 do yield char c
-                        }
+            let chars =
+                seq {
+                    for c in 0 .. 255 do yield char c
+                }
 
-                    win.Runtime.PrepareGlyphs(font, chars)
-                    Sg.text font C4b.White text
-                        |> Sg.trafo trafo
-                        |> Sg.uniform "ViewTrafo" (AVal.constant Trafo3d.Identity)
-                        |> Sg.uniform "ProjTrafo" (AVal.constant Trafo3d.Identity)
-                        |> Sg.viewTrafo (AVal.constant Trafo3d.Identity)
-                        |> Sg.projTrafo (AVal.constant Trafo3d.Identity)
-                | _ ->
-                    Sg.empty
+            let font = FontSquirrel.Hack.Regular
+            use __ = win.Runtime.ContextLock
+            win.Runtime.PrepareGlyphs(font, chars)
+            Sg.text font C4b.White text
+                |> Sg.trafo trafo
+                |> Sg.uniform "ViewTrafo" (AVal.constant Trafo3d.Identity)
+                |> Sg.uniform "ProjTrafo" (AVal.constant Trafo3d.Identity)
+                |> Sg.viewTrafo (AVal.constant Trafo3d.Identity)
+                |> Sg.projTrafo (AVal.constant Trafo3d.Identity)
+   
 
         let sg = sg |> Sg.fillMode fillMode |> Sg.cullMode cullMode
         sg, overlay

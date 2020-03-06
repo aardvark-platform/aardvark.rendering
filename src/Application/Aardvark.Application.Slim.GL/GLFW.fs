@@ -281,27 +281,35 @@ module internal OpenTKContext =
     
     [<AllowNullLiteral>]
     type MyGraphicsContext(glfw : Glfw, win : nativeptr<WindowHandle>) as this =
-        [<System.ThreadStaticAttribute; DefaultValue>]
-        static val mutable private CurrentContext : OpenTK.ContextHandle
+        //[<System.ThreadStaticAttribute; DefaultValue>]
+        //static val mutable private CurrentContext : OpenTK.ContextHandle
 
         let mutable win = win
 
         static let addContext = typeof<GraphicsContext>.GetMethod("AddContext", BindingFlags.NonPublic ||| BindingFlags.Static)
         static let remContext = typeof<GraphicsContext>.GetMethod("RemoveContext", BindingFlags.NonPublic ||| BindingFlags.Static)
 
-
-        static do 
-            let get = GraphicsContext.GetCurrentContextDelegate(fun () -> MyGraphicsContext.CurrentContext)
-            let t = typeof<GraphicsContext>
-            let f = t.GetField("GetCurrentContext", BindingFlags.NonPublic ||| BindingFlags.Static)
-            f.SetValue(null, get)
+        let handle = ContextHandle(NativePtr.toNativeInt win)
+        static let mutable inited = false
+        do 
+            if not inited then
+                inited <- true
+                let get = GraphicsContext.GetCurrentContextDelegate(fun () -> ContextHandle(NativePtr.toNativeInt (glfw.GetCurrentContext())))
+                let t = typeof<GraphicsContext>
+                let f = t.GetField("GetCurrentContext", BindingFlags.NonPublic ||| BindingFlags.Static)
+                f.SetValue(null, get)
 
         do addContext.Invoke(null, [| this :> obj |]) |> ignore
 
         member x.LoadAll(): unit = 
-            let t = typeof<GL>
+            let t = typeof<OpenTK.Graphics.OpenGL4.GL>
             let m = t.GetMethod("LoadEntryPoints", BindingFlags.NonPublic ||| BindingFlags.Instance)
-            let gl = GL()
+            let gl = OpenTK.Graphics.OpenGL4.GL()
+            m.Invoke(gl, null) |> ignore
+
+            let t = typeof<OpenTK.Graphics.OpenGL.GL>
+            let m = t.GetMethod("LoadEntryPoints", BindingFlags.NonPublic ||| BindingFlags.Instance)
+            let gl = OpenTK.Graphics.OpenGL.GL()
             m.Invoke(gl, null) |> ignore
         
         interface IGraphicsContext with
@@ -324,10 +332,12 @@ module internal OpenTKContext =
             member x.LoadAll() = x.LoadAll()
             member x.MakeCurrent(window: IWindowInfo): unit = 
                 if isNull window then 
+                    if OpenTK.Graphics.GraphicsContext.CurrentContextHandle <> handle then
+                        failwith "overriding context"
                     glfw.MakeContextCurrent(NativePtr.zero)
-                    MyGraphicsContext.CurrentContext <- ContextHandle.Zero
                 else 
-                    MyGraphicsContext.CurrentContext <- ContextHandle(NativePtr.toNativeInt win)
+                    if OpenTK.Graphics.GraphicsContext.CurrentContextHandle.Handle <> 0n then
+                        failwith "overriding context"
                     glfw.MakeContextCurrent(win)
 
             member x.SwapBuffers(): unit = 
@@ -340,7 +350,7 @@ module internal OpenTKContext =
 
         interface IGraphicsContextInternal with
             member x.Context: ContextHandle = 
-                ContextHandle(NativePtr.toNativeInt win)
+                handle
             member x.GetAddress(name : string): nativeint = 
                 glfw.GetProcAddress name
             member x.GetAddress(name: nativeint): nativeint = 
@@ -459,7 +469,7 @@ type Application(runtime : IRuntime) =
     let visibleWindows = System.Collections.Concurrent.ConcurrentHashSet<Window>()
     do Application.IsMainThread_ <- true
 
-    let openglVersion =
+    let openglVersion = 
         let versions =
             [
                 System.Version(4,5)
@@ -576,6 +586,10 @@ type Application(runtime : IRuntime) =
 
     member x.CreateWindow(cfg : WindowConfig) =
         x.Invoke(fun () ->
+            let old = glfw.GetCurrentContext()
+            if old <> NativePtr.zero then
+                glfw.MakeContextCurrent(NativePtr.zero)
+
             let mutable glContext = false
             let mutable parent : nativeptr<WindowHandle> = NativePtr.zero
             glfw.DefaultWindowHints()
@@ -623,23 +637,28 @@ type Application(runtime : IRuntime) =
 
             let win = glfw.CreateWindow(cfg.width, cfg.height, cfg.title, NativePtr.zero, parent)
             if win = NativePtr.zero then failwith "GLFW could not create window"
-
-            if glContext then lastWindow <- Some win
+            
+            glfw.MakeContextCurrent(NativePtr.zero)
+            if glContext then 
+                if Option.isNone lastWindow then lastWindow <- Some win
 
             let ctx =
-                if glContext then new OpenTKContext.MyGraphicsContext(glfw, win) :> OpenTK.Graphics.IGraphicsContext        
+                if glContext then new OpenTKContext.MyGraphicsContext(glfw, win) :> OpenTK.Graphics.IGraphicsContextInternal        
                 else null
 
             let info =
                 new OpenTKContext.MyWindowInfo(win)
 
             if not (isNull ctx) then  
-                ctx.MakeCurrent info
+                glfw.MakeContextCurrent(win)
                 ctx.LoadAll()          
                 glfw.SwapInterval(if cfg.vsync then 1 else 0)
-                ctx.MakeCurrent null
+                glfw.MakeContextCurrent(NativePtr.zero)
 
-            new Window(x, win, cfg.title, cfg.vsync, ctx, info, cfg.samples)
+            if old <> NativePtr.zero then
+                glfw.MakeContextCurrent old
+
+            new Window(x, win, cfg.title, cfg.vsync, unbox ctx, info, cfg.samples)
         )        
 
     member x.Run([<System.ParamArray>] ws : Window[]) =    

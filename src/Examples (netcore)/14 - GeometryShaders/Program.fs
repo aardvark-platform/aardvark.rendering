@@ -220,7 +220,7 @@ let main argv =
     let w = 1 + (ceil (sqrt (float combinations.Length)) |> int)
     let h = ceil (float combinations.Length / float w) |> int
 
-    let font = Font("Consolas")
+    let font = FontSquirrel.Hack.Regular
 
     let sg =
         Sg.ofList [

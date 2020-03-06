@@ -532,8 +532,8 @@ module RenderTasks =
 
                 let old = Array.create 4 0
                 let mutable oldFbo = 0
-                OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
-                OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
+                GL.GetInteger(GetPName.Viewport, old)
+                GL.GetInteger(GetPName.FramebufferBinding, &oldFbo)
 
                 let handle = fbo.GetHandle Unchecked.defaultof<_> |> unbox<int>
 
