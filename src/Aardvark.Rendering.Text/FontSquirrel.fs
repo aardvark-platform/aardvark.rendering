@@ -1,4 +1,5 @@
 namespace Aardvark.Rendering.Text
+open Aardvark.Base
 
 module FontSquirrel = 
     open System.IO
@@ -19,26 +20,29 @@ module FontSquirrel =
         if File.Exists path then
             Font.Load(path)
         else
-            let data = getBytes "https://www.fontsquirrel.com/fonts/download/%s" urlName
-            use s = new MemoryStream(data)
-            use a = new ZipArchive(s)
+            Log.startTimed "loading font %s" fileName
+            try
+                let data = getBytes "https://www.fontsquirrel.com/fonts/download/%s" urlName
+                use s = new MemoryStream(data)
+                use a = new ZipArchive(s)
         
-            let real = fileName.ToLower()
-            let ttf = Path.ChangeExtension(real, ".ttf")
+                let real = fileName.ToLower()
+                let ttf = Path.ChangeExtension(real, ".ttf")
         
-            let entry = 
-                a.Entries |> Seq.tryFind (fun e -> 
-                    let name = e.Name.ToLower().Replace("-webfont", "")
-                    e.Length > 0L && (name = real || name = ttf)
-                )
+                let entry = 
+                    a.Entries |> Seq.tryFind (fun e -> 
+                        let name = e.Name.ToLower().Replace("-webfont", "")
+                        e.Length > 0L && (name = real || name = ttf)
+                    )
         
-            match entry with
-            | Some e -> 
-                e.ExtractToFile(path, true)
-                Font.Load(path)
-            | None ->
-                failwithf "could not resolve %s %s" urlName fileName
-
+                match entry with
+                | Some e -> 
+                    e.ExtractToFile(path, true)
+                    Font.Load(path)
+                | None ->
+                    failwithf "could not resolve %s %s" urlName fileName
+            finally
+                Log.stop()
     [<AbstractClass; Sealed>]
     type ``!PaulMaul`` private() =
         static let ``_Regular`` = lazy (load "PaulMaul" "!PaulMaul.ttf")
@@ -1014,6 +1018,14 @@ module FontSquirrel =
         static let ``_Regular`` = lazy (load "autour-one" "AutourOne-Regular.otf")
         static member internal ``RegularLazy`` = ``_Regular``
         static member ``Regular`` = ``_Regular``.Value
+    [<AbstractClass; Sealed>]
+    type ``Avara`` private() =
+        static let ``_Bold`` = lazy (load "avara" "Avara.otf")
+        static let ``_Italic`` = lazy (load "avara" "Avara-italic.otf")
+        static member internal ``BoldLazy`` = ``_Bold``
+        static member ``Bold`` = ``_Bold``.Value
+        static member internal ``ItalicLazy`` = ``_Italic``
+        static member ``Italic`` = ``_Italic``.Value
     [<AbstractClass; Sealed>]
     type ``Azoft_Sans`` private() =
         static let ``_Regular`` = lazy (load "azoft-sans" "azoft-sans.ttf")
@@ -4407,6 +4419,14 @@ module FontSquirrel =
         static member internal ``RegularLazy`` = ``_Regular``
         static member ``Regular`` = ``_Regular``.Value
     [<AbstractClass; Sealed>]
+    type ``Futura_Renner`` private() =
+        static let ``_Regular`` = lazy (load "futura-renner" "FuturaRenner-Regular.otf")
+        static let ``_Light`` = lazy (load "futura-renner" "FuturaRenner-Light.otf")
+        static member internal ``RegularLazy`` = ``_Regular``
+        static member ``Regular`` = ``_Regular``.Value
+        static member internal ``LightLazy`` = ``_Light``
+        static member ``Light`` = ``_Light``.Value
+    [<AbstractClass; Sealed>]
     type ``GEIST_RND`` private() =
         static let ``_Regular`` = lazy (load "GEIST-RND" "GEIST_RND.ttf")
         static member internal ``RegularLazy`` = ``_Regular``
@@ -4861,6 +4881,8 @@ module FontSquirrel =
         static let ``_Lightlegacy`` = lazy (load "hk-grotesk" "HKGrotesk-LightLegacy.otf")
         static let ``_Medium`` = lazy (load "hk-grotesk" "HKGrotesk-Medium.otf")
         static let ``_Mediumlegacy`` = lazy (load "hk-grotesk" "HKGrotesk-MediumLegacy.otf")
+        static let ``_Black`` = lazy (load "hk-grotesk" "HKGrotesk-Black.otf")
+        static let ``_Extrabold`` = lazy (load "hk-grotesk" "HKGrotesk-ExtraBold.otf")
         static let ``_Semibold`` = lazy (load "hk-grotesk" "HKGrotesk-SemiBold.otf")
         static let ``_Semiboldlegacy`` = lazy (load "hk-grotesk" "HKGrotesk-SemiBoldLegacy.otf")
         static member internal ``RegularLazy`` = ``_Regular``
@@ -4899,6 +4921,10 @@ module FontSquirrel =
         static member ``Medium`` = ``_Medium``.Value
         static member internal ``MediumlegacyLazy`` = ``_Mediumlegacy``
         static member ``Mediumlegacy`` = ``_Mediumlegacy``.Value
+        static member internal ``BlackLazy`` = ``_Black``
+        static member ``Black`` = ``_Black``.Value
+        static member internal ``ExtraboldLazy`` = ``_Extrabold``
+        static member ``Extrabold`` = ``_Extrabold``.Value
         static member internal ``SemiboldLazy`` = ``_Semibold``
         static member ``Semibold`` = ``_Semibold``.Value
         static member internal ``SemiboldlegacyLazy`` = ``_Semiboldlegacy``
@@ -9029,6 +9055,29 @@ module FontSquirrel =
         static let ``_Regular`` = lazy (load "ovo" "Ovo-Regular.otf")
         static member internal ``RegularLazy`` = ``_Regular``
         static member ``Regular`` = ``_Regular``.Value
+    [<AbstractClass; Sealed>]
+    type ``Oxanium`` private() =
+        static let ``_Regular`` = lazy (load "oxanium" "Oxanium-Regular.ttf")
+        static let ``_Bold`` = lazy (load "oxanium" "Oxanium-Bold.ttf")
+        static let ``_Light`` = lazy (load "oxanium" "Oxanium-Light.ttf")
+        static let ``_Medium`` = lazy (load "oxanium" "Oxanium-Medium.ttf")
+        static let ``_Extrabold`` = lazy (load "oxanium" "Oxanium-ExtraBold.ttf")
+        static let ``_Semibold`` = lazy (load "oxanium" "Oxanium-SemiBold.ttf")
+        static let ``_Extralight`` = lazy (load "oxanium" "Oxanium-ExtraLight.ttf")
+        static member internal ``RegularLazy`` = ``_Regular``
+        static member ``Regular`` = ``_Regular``.Value
+        static member internal ``BoldLazy`` = ``_Bold``
+        static member ``Bold`` = ``_Bold``.Value
+        static member internal ``LightLazy`` = ``_Light``
+        static member ``Light`` = ``_Light``.Value
+        static member internal ``MediumLazy`` = ``_Medium``
+        static member ``Medium`` = ``_Medium``.Value
+        static member internal ``ExtraboldLazy`` = ``_Extrabold``
+        static member ``Extrabold`` = ``_Extrabold``.Value
+        static member internal ``SemiboldLazy`` = ``_Semibold``
+        static member ``Semibold`` = ``_Semibold``.Value
+        static member internal ``ExtralightLazy`` = ``_Extralight``
+        static member ``Extralight`` = ``_Extralight``.Value
     [<AbstractClass; Sealed>]
     type ``Oxygen`` private() =
         static let ``_Regular`` = lazy (load "oxygen" "Oxygen.otf")
@@ -13591,6 +13640,10 @@ module FontSquirrel =
         type ``Asset`` private() =
             static member ``Regular`` = ``Asset``.``RegularLazy``.Value
         [<AbstractClass; Sealed>]
+        type ``Avara`` private() =
+            static member ``Bold`` = ``Avara``.``BoldLazy``.Value
+            static member ``Italic`` = ``Avara``.``ItalicLazy``.Value
+        [<AbstractClass; Sealed>]
         type ``Baskervville`` private() =
             static member ``Regular`` = ``Baskervville``.``RegularLazy``.Value
             static member ``Italic`` = ``Baskervville``.``ItalicLazy``.Value
@@ -15632,6 +15685,10 @@ module FontSquirrel =
             static member ``BoldItalic`` = ``FreeSerif``.``BoldItalicLazy``.Value
             static member ``Italic`` = ``FreeSerif``.``ItalicLazy``.Value
         [<AbstractClass; Sealed>]
+        type ``Futura_Renner`` private() =
+            static member ``Regular`` = ``Futura_Renner``.``RegularLazy``.Value
+            static member ``Light`` = ``Futura_Renner``.``LightLazy``.Value
+        [<AbstractClass; Sealed>]
         type ``Gafata`` private() =
             static member ``Regular`` = ``Gafata``.``RegularLazy``.Value
         [<AbstractClass; Sealed>]
@@ -15697,6 +15754,8 @@ module FontSquirrel =
             static member ``Lightlegacy`` = ``HK_Grotesk``.``LightlegacyLazy``.Value
             static member ``Medium`` = ``HK_Grotesk``.``MediumLazy``.Value
             static member ``Mediumlegacy`` = ``HK_Grotesk``.``MediumlegacyLazy``.Value
+            static member ``Black`` = ``HK_Grotesk``.``BlackLazy``.Value
+            static member ``Extrabold`` = ``HK_Grotesk``.``ExtraboldLazy``.Value
             static member ``Semibold`` = ``HK_Grotesk``.``SemiboldLazy``.Value
             static member ``Semiboldlegacy`` = ``HK_Grotesk``.``SemiboldlegacyLazy``.Value
         [<AbstractClass; Sealed>]
@@ -16416,6 +16475,15 @@ module FontSquirrel =
             static member ``Bold`` = ``Overpass_Mono``.``BoldLazy``.Value
             static member ``Light`` = ``Overpass_Mono``.``LightLazy``.Value
             static member ``Semibold`` = ``Overpass_Mono``.``SemiboldLazy``.Value
+        [<AbstractClass; Sealed>]
+        type ``Oxanium`` private() =
+            static member ``Regular`` = ``Oxanium``.``RegularLazy``.Value
+            static member ``Bold`` = ``Oxanium``.``BoldLazy``.Value
+            static member ``Light`` = ``Oxanium``.``LightLazy``.Value
+            static member ``Medium`` = ``Oxanium``.``MediumLazy``.Value
+            static member ``Extrabold`` = ``Oxanium``.``ExtraboldLazy``.Value
+            static member ``Semibold`` = ``Oxanium``.``SemiboldLazy``.Value
+            static member ``Extralight`` = ``Oxanium``.``ExtralightLazy``.Value
         [<AbstractClass; Sealed>]
         type ``Oxygen`` private() =
             static member ``Regular`` = ``Oxygen``.``RegularLazy``.Value

@@ -792,10 +792,6 @@ let main argv =
             if d1s < 0.0 then Constant.PiTimesTwo + d1s
             else d1s - Constant.PiTimesTwo
 
-
-        Log.warn "%A %A %A %A" b0 a0 d0s d0l
-        Log.warn "%A %A %A %A" b1 a1 d1s d1l
-
         ShapeList.ofList [
             ConcreteShape.fillRoundedRectangle C4b.Yellow 0.1 (Box2d.FromCenterAndSize(V2d.Zero, V2d.II))
             ConcreteShape.roundedRectangle C4b.Red 0.1 0.3 (Box2d.FromCenterAndSize(V2d.Zero, V2d.II))
@@ -861,7 +857,7 @@ let main argv =
     let aa = AVal.init true
 
     
-    let f = Aardvark.Rendering.Text.FontSquirrel.Rothenburg_Decorative.Regular
+    let f = Aardvark.Rendering.Text.FontSquirrel.Hack.Regular
     let label3 =
         Sg.text f C4b.White message
         |> Sg.scale 0.1
