@@ -8,4 +8,4 @@ description
     Aardvark is an open-source platform for visual computing, real-time graphics and visualization.
 files
     ..\..\bin\Release\net471\Aardvark.Rendering.Interactive.dll ==> lib\net471
-    ..\..\bin\Release\LoadReferences.fsx ==> scripts\
+    ..\..\bin\Release\net471\LoadReferences.fsx ==> scripts\
