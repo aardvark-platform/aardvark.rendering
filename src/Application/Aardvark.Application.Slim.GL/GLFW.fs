@@ -971,6 +971,7 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
             start + sw.Elapsed
         )
 
+    let mutable isDisposed = false
     let mutable beforeFullScreen = Box2i.FromMinAndSize(V2i.Zero, V2i(1024, 768))
     let mutable averageFrameTime = MicroTime.Zero
     let mutable averageGpuTime = MicroTime.Zero
@@ -1047,13 +1048,15 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
         member x.Run() = x.Run()
        
     member x.Dispose() =
-        app.RemoveExistingWindow x
-        app.Post (fun () -> 
-            glfw.HideWindow(win)
-            glfw.DestroyWindow(win)
-            ctx.Dispose()
-            info.Dispose()
-        )
+        if not isDisposed then
+            isDisposed <- true
+            app.RemoveExistingWindow x
+            app.Post (fun () -> 
+                glfw.HideWindow(win)
+                glfw.DestroyWindow(win)
+                //ctx.Dispose()
+                //info.Dispose()
+            )
 
     interface System.IDisposable with
         member x.Dispose() = x.Dispose()

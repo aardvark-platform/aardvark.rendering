@@ -56,7 +56,14 @@ let main argv =
     let scale = AVal.init 1.0f
 
     let rnd = RandomSystem()
-    let set : cset<IndexedGeometry * V4f> = cset()
+    let set : cset<IndexedGeometry * V4f> = 
+        cset(
+            List.init 10 (fun _ ->    
+                let pos = V4d(rnd.UniformV3d(),1.0).ToV4f() * 5.0f
+                let geo = rnd.UniformInt(geometries.Length)
+                (geometries.[geo], pos)
+            )            
+        )
 
     let node = Sg.indirect signature (set |> ASet.map (fun (ig,pos) -> ig,Map.ofList ["Offset", scale |> AVal.map (fun s -> (pos * s * V4f.One)) :> IAdaptiveValue]))
 
@@ -83,7 +90,7 @@ let main argv =
 
     win.Keyboard.DownWithRepeats.Values.Add(fun k -> 
         match k with
-            | Keys.Subtract -> 
+            | Keys.Subtract | Keys.OemMinus -> 
                 if set.Count > 0 then
                     transact (fun _ -> 
                         let geo = rnd.UniformInt(set.Count)
@@ -91,7 +98,7 @@ let main argv =
                         set.Remove(el) |> ignore
                     )
                 printfn "count: %A" set.Count
-            | Keys.Add -> 
+            | Keys.Add | Keys.OemPlus -> 
                 transact (fun _ -> 
                     let pos = V4d(rnd.UniformV3d(),1.0).ToV4f() * 5.0f
                     let geo = rnd.UniformInt(geometries.Length)
@@ -102,7 +109,7 @@ let main argv =
                 transact (fun _ -> 
                     scale.Value <- scale.Value + 0.2f
                 )
-            | Keys.Multiply -> 
+            | Keys.Multiply | Keys.P -> 
                 transact (fun _ -> 
                     for i in 1 .. 100 do
                         let pos = V4d(rnd.UniformV3d(),1.0).ToV4f() * 5.0f
@@ -114,7 +121,7 @@ let main argv =
                 transact (fun _ -> 
                     set.Clear()
                 )
-            | Keys.PageUp ->
+            | Keys.PageUp | Keys.Space ->
                 transact (fun () -> showScene.Value <- not showScene.Value)
 
             | _ -> ()
