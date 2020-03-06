@@ -88,6 +88,9 @@ static PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC		glDrawElementsInsta
 static PFNGLMULTIDRAWARRAYSINDIRECTPROC					glMultiDrawArraysIndirect;
 static PFNGLMULTIDRAWELEMENTSINDIRECTPROC				glMultiDrawElementsIndirect;
 
+static PFNGLDRAWARRAYSINDIRECTPROC                      glDrawArraysIndirect;
+static PFNGLDRAWELEMENTSINDIRECTPROC                    glDrawElementsIndirect;
+
 typedef void (APIENTRYP PFNGLBINDTEXTURESPROC) (GLuint first, GLsizei count, const GLuint *textures);
 typedef void (APIENTRYP PFNGLBINDSAMPLERSPROC) (GLuint first, GLsizei count, const GLuint *samplers);
 typedef void (APIENTRYP PFNGLPOLYGONOFFSETCLAMP) (GLfloat factor, GLfloat bias, GLfloat clamp);

@@ -70,6 +70,8 @@ DllExport(void) vmInit()
 
 	glMultiDrawArraysIndirect = (PFNGLMULTIDRAWARRAYSINDIRECTPROC)getProc("glMultiDrawArraysIndirect");
 	glMultiDrawElementsIndirect = (PFNGLMULTIDRAWELEMENTSINDIRECTPROC)getProc("glMultiDrawElementsIndirect");
+	glDrawArraysIndirect = (PFNGLDRAWARRAYSINDIRECTPROC)getProc("glDrawArraysIndirect");
+	glDrawElementsIndirect = (PFNGLDRAWELEMENTSINDIRECTPROC)getProc("glDrawElementsIndirect");
 
 	glBindTextures = (PFNGLBINDTEXTURESPROC)getProc("glBindTextures");
 	glBindSamplers = (PFNGLBINDTEXTURESPROC)getProc("glBindSamplers");
@@ -919,22 +921,34 @@ DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginM
 
 	if (glMultiDrawArraysIndirect == nullptr)
 	{	
-		GLint size = 0;
-		glBindBuffer(GL_COPY_READ_BUFFER, buffer);
-		glGetBufferParameteriv(GL_COPY_READ_BUFFER, GL_BUFFER_SIZE, &size);
-		auto indirect = (char*)glMapBufferRange(GL_COPY_READ_BUFFER, 0, size, GL_MAP_READ_BIT);
-		
-		GLsizei n;
-		for (n = 0; n < drawcount; n++)
+		if (buffer != 0)
 		{
-			const DrawArraysIndirectCommand  *cmd;
-			cmd = (DrawArraysIndirectCommand*)(indirect + n * stride);
-
-			glDrawArraysInstancedBaseInstance(m, cmd->First, cmd->Count, cmd->InstanceCount, cmd->BaseInstance);
+			glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
+			size_t offset = 0;
+			for (int i = 0; i < drawcount; i++)
+			{
+				glDrawArraysIndirect(m, (const GLvoid*)offset);
+				offset += stride;
+			}
+			glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
 		}
 	
-		glUnmapBuffer(GL_COPY_READ_BUFFER);
-		glBindBuffer(GL_COPY_READ_BUFFER, 0);
+		//GLint size = 0;
+		//glBindBuffer(GL_COPY_READ_BUFFER, buffer);
+		//glGetBufferParameteriv(GL_COPY_READ_BUFFER, GL_BUFFER_SIZE, &size);
+		//auto indirect = (char*)glMapBufferRange(GL_COPY_READ_BUFFER, 0, size, GL_MAP_READ_BIT);
+		//
+		//GLsizei n;
+		//for (n = 0; n < drawcount; n++)
+		//{
+		//	const DrawArraysIndirectCommand  *cmd;
+		//	cmd = (DrawArraysIndirectCommand*)(indirect + n * stride);
+
+		//	glDrawArraysInstancedBaseInstance(m, cmd->First, cmd->Count, cmd->InstanceCount, cmd->BaseInstance);
+		//}
+	
+		//glUnmapBuffer(GL_COPY_READ_BUFFER);
+		//glBindBuffer(GL_COPY_READ_BUFFER, 0);
 	}
 	else
 	{
@@ -970,30 +984,41 @@ DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, Begi
 
 	if (glMultiDrawElementsIndirect == nullptr)
 	{
-		auto indexSize = getIndexSize(indexType);
-		GLint size = 0;
-		glBindBuffer(GL_COPY_READ_BUFFER, buffer);
-		glGetBufferParameteriv(GL_COPY_READ_BUFFER, GL_BUFFER_SIZE, &size);
-		auto indirect = (DrawElementsIndirectCommand*)glMapBufferRange(GL_COPY_READ_BUFFER, 0, size, GL_MAP_READ_BIT);
-		GLsizei n;
-		for (n = 0; n < drawcount; n++)
+		if (buffer != 0)
 		{
-			const DrawElementsIndirectCommand  *cmd;
-			cmd = (DrawElementsIndirectCommand*)(indirect + n * stride);
-
-			glDrawElementsInstancedBaseVertexBaseInstance(
-				m,
-				cmd->Count,
-				indexType,
-				(void*) (cmd->FirstIndex * indexSize), 
-				cmd->InstanceCount,
-				cmd->BaseVertex,
-				cmd->BaseInstance
-			);
+			glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
+			size_t offset = 0;
+			for (int i = 0; i < drawcount; i++)
+			{
+				glDrawElementsIndirect(m, indexType, (const GLvoid*)offset);
+				offset += stride;
+			}
+			glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
 		}
+		//auto indexSize = getIndexSize(indexType);
+		//GLint size = 0;
+		//glBindBuffer(GL_COPY_READ_BUFFER, buffer);
+		//glGetBufferParameteriv(GL_COPY_READ_BUFFER, GL_BUFFER_SIZE, &size);
+		//auto indirect = (DrawElementsIndirectCommand*)glMapBufferRange(GL_COPY_READ_BUFFER, 0, size, GL_MAP_READ_BIT);
+		//GLsizei n;
+		//for (n = 0; n < drawcount; n++)
+		//{
+		//	const DrawElementsIndirectCommand  *cmd;
+		//	cmd = (DrawElementsIndirectCommand*)(indirect + n * stride);
 
-		glUnmapBuffer(GL_COPY_READ_BUFFER);
-		glBindBuffer(GL_COPY_READ_BUFFER, 0);
+		//	glDrawElementsInstancedBaseVertexBaseInstance(
+		//		m,
+		//		cmd->Count,
+		//		indexType,
+		//		(void*) (cmd->FirstIndex * indexSize), 
+		//		cmd->InstanceCount,
+		//		cmd->BaseVertex,
+		//		cmd->BaseInstance
+		//	);
+		//}
+
+		//glUnmapBuffer(GL_COPY_READ_BUFFER);
+		//glBindBuffer(GL_COPY_READ_BUFFER, 0);
 	}
 	else
 	{

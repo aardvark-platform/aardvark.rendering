@@ -22,32 +22,32 @@
     <ProjectGuid>{6CA906E0-8857-4A64-BC84-A8CFBB100725}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>vkvm</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.17134.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>false</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -103,13 +103,13 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;VKVM_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\VulkanSDK\1.0.30.0\Include\vulkan\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\VulkanSDK\1.1.121.2\Include\vulkan</AdditionalIncludeDirectories>
       <AssemblerOutput>AssemblyAndSourceCode</AssemblerOutput>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.0.30.0\Bin32</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.1.121.2\lib</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <CustomBuildStep>
@@ -125,14 +125,14 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;_USRDLL;VKVM_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\VulkanSDK\1.0.65.1\Include\vulkan\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\VulkanSDK\1.1.121.2\Include\vulkan</AdditionalIncludeDirectories>
       <AssemblerOutput>AssemblyAndSourceCode</AssemblerOutput>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.0.65.1\Lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.1.121.2\lib</AdditionalLibraryDirectories>
     </Link>
     <CustomBuildStep>
       <Command>xcopy "$(SolutionDir)..\bin\Debug\vkvm.*" "$(SolutionDir)..\bin\Release\" /Y
@@ -153,7 +153,7 @@ xcopy "$(SolutionDir)..\bin\Debug\vkvm.*" "$(SolutionDir)..\bin\Release\netstand
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;VKVM_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\VulkanSDK\1.0.30.0\Include\vulkan\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\VulkanSDK\1.1.121.2\Include\vulkan</AdditionalIncludeDirectories>
       <AssemblerOutput>AssemblyAndSourceCode</AssemblerOutput>
     </ClCompile>
     <Link>
@@ -161,7 +161,7 @@ xcopy "$(SolutionDir)..\bin\Debug\vkvm.*" "$(SolutionDir)..\bin\Release\netstand
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.0.30.0\Bin32</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.1.121.2\lib</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <CustomBuildStep>
@@ -180,7 +180,7 @@ xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.Vulkan\windows\x86\*" "$(S
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;_USRDLL;VKVM_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\VulkanSDK\1.0.65.1\Include\vulkan\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\VulkanSDK\1.1.121.2\Include\vulkan</AdditionalIncludeDirectories>
       <AssemblerOutput>AssemblyAndSourceCode</AssemblerOutput>
     </ClCompile>
     <Link>
@@ -189,7 +189,7 @@ xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.Vulkan\windows\x86\*" "$(S
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.0.65.1\Lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.1.121.2\lib</AdditionalLibraryDirectories>
     </Link>
     <CustomBuildStep>
       <Command>xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.Vulkan\windows\AMD64\*" "$(SolutionDir)..\bin\Debug" /y
