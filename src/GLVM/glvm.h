@@ -75,6 +75,8 @@ static PFNGLDELETEVERTEXARRAYSPROC						glDeleteVertexArrays;
 static PFNGLENABLEVERTEXATTRIBARRAYPROC					glEnableVertexAttribArray;
 static PFNGLDISABLEVERTEXATTRIBARRAYPROC				glDisableVertexAttribArray;
 static PFNGLVERTEXATTRIBDIVISORPROC						glVertexAttribDivisor;
+static PFNGLDRAWARRAYSINDIRECTPROC                      glDrawArraysIndirect;
+static PFNGLDRAWELEMENTSINDIRECTPROC                    glDrawElementsIndirect;
 #else
 typedef void (APIENTRYP PFNGLDRAWARRAYSINSTANCEDBASEINSTANCEPROC) (GLenum mode, GLint first, GLsizei count, GLsizei primcount, GLuint baseinstance);
 typedef void (APIENTRYP PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC) (GLenum mode, GLsizei count, GLenum type, const void *indices, GLsizei primcount, GLint basevertex, GLuint baseinstance);
@@ -88,8 +90,6 @@ static PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC		glDrawElementsInsta
 static PFNGLMULTIDRAWARRAYSINDIRECTPROC					glMultiDrawArraysIndirect;
 static PFNGLMULTIDRAWELEMENTSINDIRECTPROC				glMultiDrawElementsIndirect;
 
-static PFNGLDRAWARRAYSINDIRECTPROC                      glDrawArraysIndirect;
-static PFNGLDRAWELEMENTSINDIRECTPROC                    glDrawElementsIndirect;
 
 typedef void (APIENTRYP PFNGLBINDTEXTURESPROC) (GLuint first, GLsizei count, const GLuint *textures);
 typedef void (APIENTRYP PFNGLBINDSAMPLERSPROC) (GLuint first, GLsizei count, const GLuint *samplers);

@@ -70,8 +70,6 @@ DllExport(void) vmInit()
 
 	glMultiDrawArraysIndirect = (PFNGLMULTIDRAWARRAYSINDIRECTPROC)getProc("glMultiDrawArraysIndirect");
 	glMultiDrawElementsIndirect = (PFNGLMULTIDRAWELEMENTSINDIRECTPROC)getProc("glMultiDrawElementsIndirect");
-	glDrawArraysIndirect = (PFNGLDRAWARRAYSINDIRECTPROC)getProc("glDrawArraysIndirect");
-	glDrawElementsIndirect = (PFNGLDRAWELEMENTSINDIRECTPROC)getProc("glDrawElementsIndirect");
 
 	glBindTextures = (PFNGLBINDTEXTURESPROC)getProc("glBindTextures");
 	glBindSamplers = (PFNGLBINDTEXTURESPROC)getProc("glBindSamplers");
@@ -130,6 +128,8 @@ DllExport(void) vmInit()
 	glVertexAttribDivisor = (PFNGLVERTEXATTRIBDIVISORPROC)getProc("glVertexAttribDivisor");
 
 	glPolygonOffsetClamp = (PFNGLPOLYGONOFFSETCLAMP)getProc("glPolygonOffsetClampEXT");
+    glDrawArraysIndirect = (PFNGLDRAWARRAYSINDIRECTPROC)getProc("glDrawArraysIndirect");
+    glDrawElementsIndirect = (PFNGLDRAWELEMENTSINDIRECTPROC)getProc("glDrawElementsIndirect");
 
 	#endif
 
