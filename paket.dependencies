@@ -1,5 +1,6 @@
-framework: netstandard2.0, net471, netcoreapp3.0, netcoreapp3.1
+framework: netstandard2.0, net471, netcoreapp3.1
 source https://api.nuget.org/v3/index.json
+storage: none
 
 nuget FSharp.Core                        >= 4.6.2 lowest_matching: true
 
