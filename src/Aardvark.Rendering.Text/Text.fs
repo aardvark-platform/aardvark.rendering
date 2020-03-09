@@ -410,6 +410,7 @@ type RenderStyle =
 type ShapeList =
     {
         bounds              : Box2d
+        textBounds          : Box2d
         concreteShapes      : list<ConcreteShape>
         zRange              : Range1i
         renderTrafo         : Trafo3d
@@ -442,6 +443,7 @@ module ShapeList =
 
         {
             bounds = bounds
+            textBounds = bounds
             concreteShapes = shapes
             renderTrafo = Trafo3d.Translation(cx, 0.0, 0.0)
             zRange = range
@@ -460,7 +462,6 @@ module ShapeList =
         let shape = { shape with z = r.zRange.Min - 1 }
 
         let newBounds = Box.Union(shape.bounds, r.bounds)
-
         let oldCenter = r.bounds.Center
         let newCenter = newBounds.Center
         let shift = V2d(oldCenter.X - newCenter.X, 0.0)
@@ -470,6 +471,7 @@ module ShapeList =
 
         {
             bounds = newBounds
+            textBounds = newBounds
             concreteShapes = shape :: concreteShapes
             renderTrafo = Trafo3d.Translation(newCenter.X, 0.0, 0.0)
             flipViewDependent = r.flipViewDependent
@@ -492,6 +494,7 @@ module ShapeList =
 
         {
             bounds = newBounds
+            textBounds = newBounds
             concreteShapes = shape :: concreteShapes
             renderTrafo = Trafo3d.Translation(newCenter.X, 0.0, 0.0)
             flipViewDependent = r.flipViewDependent
@@ -536,7 +539,8 @@ type Text private() =
         let mutable cy = 0.0
         let allLines = lineBreak.Split content
 
-        let mutable realBounds = Box2d.Invalid
+        let mutable bounds = Box2d.Invalid
+        let mutable renderBounds = Box2d.Invalid
 
         for l in allLines do
             let l = l.ToCodePointArray()
@@ -572,7 +576,7 @@ type Text private() =
 
             let y = cy
 
-            //realBounds.ExtendBy(Box2d(V2d(minX + shift, y - font.Descent - font.InternalLeading), V2d(cx + shift, y + font.Ascent + font.InternalLeading)))
+            bounds.ExtendBy(Box2d(V2d(minX + shift, y - font.Descent - font.InternalLeading), V2d(cx + shift, y + font.Ascent + font.InternalLeading)))
             for (x,g) in chars do
                 let pos = V2d(shift + x,y)
                 //realBounds.ExtendBy (Box2d()) //(g.Bounds.Translated(pos))
@@ -580,7 +584,7 @@ type Text private() =
                 //scales.Add(V2d(1.0, 1.0))
                 //colors.Add(color)
                 //glyphs.Add(g)
-                realBounds.ExtendBy(g.Bounds.Translated(pos))
+                renderBounds.ExtendBy(g.Bounds.Translated(pos))
                 concrete.Add {
                     trafo = M33d.Translation(pos)
                     color = color
@@ -591,7 +595,7 @@ type Text private() =
 
             cy <- cy - font.LineHeight
 
-        let realCenter = realBounds.Center.X
+        let realCenter = renderBounds.Center.X
         
         let concrete =
             concrete |> CSharpList.toList |> List.map (fun shape ->
@@ -599,12 +603,9 @@ type Text private() =
             )
 
         {
-            bounds              = realBounds
+            bounds              = renderBounds
+            textBounds          = bounds
             concreteShapes      = concrete
-            //offsets             = offsets |> CSharpList.toList |> List.map (fun o -> V2d(o.X - realCenter, o.Y))
-            //scales              = scales |> CSharpList.toList
-            //colors              = colors |> CSharpList.toList
-            //shapes              = glyphs |> CSharpList.toList
             renderTrafo         = Trafo3d.Translation(realCenter, 0.0, 0.0)
             flipViewDependent   = true
             zRange = Range1i(0,0)

@@ -480,6 +480,7 @@ module Markdown =
 
             {
                 ShapeList.bounds   = bounds
+                ShapeList.textBounds   = bounds
                 ShapeList.concreteShapes = concrete
                 //ShapeList.shapes   = s.shapes
                 //ShapeList.offsets  = s.offsets |> List.map ( fun o -> V2d(o.X - center, o.Y) )
