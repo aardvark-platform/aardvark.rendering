@@ -603,14 +603,10 @@ let main argv =
 
 
     let mode = Mod.init FillMode.Fill
-    let font = Font "Comic Sans"
+    let font = Font "Comic Sans MS"
 
 
-    let config = 
-        { MarkdownConfig.light with 
-            codeFont = "Kunstler Script"
-            paragraphFont = "Kunstler Script" 
-        }
+    let config = MarkdownConfig.light
 
     let label1 =
         Sg.markdown config (Mod.constant md)
