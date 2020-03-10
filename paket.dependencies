@@ -6,15 +6,15 @@ nuget FSharp.Core                        >= 4.6.2 lowest_matching: true
 
 nuget FSharp.Data.Adaptive               ~> 0.0.17
 nuget Aardvark.Base.TypeProviders        ~> 4.5.15
-nuget Aardvark.Base.FSharp               ~> 5.0.0-prerelease0012
-nuget Aardvark.Base.IO                   ~> 5.0.0-prerelease0012
-nuget Aardvark.Base.Incremental          ~> 5.0.0-prerelease0012
-nuget Aardvark.Base.Runtime              ~> 5.0.0-prerelease0012
-nuget Aardvark.Base.Essentials           ~> 5.0.0-prerelease0012
+nuget Aardvark.Base.FSharp               ~> 5.0.4
+nuget Aardvark.Base.IO                   ~> 5.0.4
+nuget Aardvark.Base.Incremental          ~> 5.0.4
+nuget Aardvark.Base.Runtime              ~> 5.0.4
+nuget Aardvark.Base.Essentials           ~> 5.0.4
                                   
-nuget FShade.Core                        ~> 5.0.0-prerelease0005
-nuget FShade                             ~> 5.0.0-prerelease0005
-nuget FShade.Debug                       ~> 5.0.0-prerelease0005
+nuget FShade.Core                        ~> 5.0.0
+nuget FShade                             ~> 5.0.0
+nuget FShade.Debug                       ~> 5.0.0
 
 nuget Unofficial.OpenVR					 ~> 1.1.0 
 nuget Unofficial.Typography              ~> 0.1.0
@@ -51,4 +51,3 @@ group Build
 framework: netstandard2.0
 source https://api.nuget.org/v3/index.json
 github aardvark-platform/aardvark.fake:v5
-nuget FSharp.Data ~> 3.0.0

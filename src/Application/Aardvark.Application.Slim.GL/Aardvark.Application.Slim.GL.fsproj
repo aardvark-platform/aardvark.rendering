@@ -11,6 +11,17 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <OutputPath>..\..\..\bin\Release\</OutputPath>
   </PropertyGroup>
+  <Target Name="CopyGLFW" AfterTargets="Build">
+    <Copy Condition="'$(OS)' == 'Windows_NT'" SourceFiles="$(ProjectDir)..\..\..\lib\Native\Aardvark.Application.Slim.GL\windows\AMD64\glfw3.dll" DestinationFolder="$(OutputPath)" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'Windows_NT'" SourceFiles="$(ProjectDir)..\..\..\lib\Native\Aardvark.Application.Slim.GL\windows\AMD64\glfw3.dll" DestinationFolder="$(OutputPath)..\netcoreapp3.1" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'Windows_NT'" SourceFiles="$(ProjectDir)..\..\..\lib\Native\Aardvark.Application.Slim.GL\windows\AMD64\glfw3.dll" DestinationFolder="$(OutputPath)..\net471" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'OSX'" SourceFiles="$(ProjectDir)..\..\..\lib\Native\Aardvark.Application.Slim.GL\mac\AMD64\libglfw.3.dylib" DestinationFolder="$(OutputPath)" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'OSX'" SourceFiles="$(ProjectDir)..\..\..\lib\Native\Aardvark.Application.Slim.GL\mac\AMD64\libglfw.3.dylib" DestinationFolder="$(OutputPath)..\netcoreapp3.1" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'OSX'" SourceFiles="$(ProjectDir)..\..\..\lib\Native\Aardvark.Application.Slim.GL\mac\AMD64\libglfw.3.dylib" DestinationFolder="$(OutputPath)..\net471" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'Unix'" SourceFiles="$(ProjectDir)..\..\..\lib\Native\Aardvark.Application.Slim.GL\linux\AMD64\libglfw.so.3" DestinationFolder="$(OutputPath)" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'Unix'" SourceFiles="$(ProjectDir)..\..\..\lib\Native\Aardvark.Application.Slim.GL\linux\AMD64\libglfw.so.3" DestinationFolder="$(OutputPath)..\netcoreapp3.1" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'Unix'" SourceFiles="$(ProjectDir)..\..\..\lib\Native\Aardvark.Application.Slim.GL\linux\AMD64\libglfw.so.3" DestinationFolder="$(OutputPath)..\net471" ContinueOnError="true" />
+  </Target>
   <ItemGroup>
     <Compile Include="GLFW.fs" />
     <Compile Include="GameWindow.fs" />

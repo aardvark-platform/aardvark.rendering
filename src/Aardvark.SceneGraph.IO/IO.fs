@@ -515,8 +515,8 @@ module Loader =
             let toV2d (v : Assimp.Vector2D) =
                 V2d(v.X, v.Y)
                
-            let toRot3d (v : Assimp.Quaternion) =
-                Rot3d(float v.W, float v.X, float v.Y, float v.Z)
+            let toQuaternion (v : Assimp.Quaternion) =
+                QuaternionD(float v.W, float v.X, float v.Y, float v.Z)
 
             let private toV4i (arr : int[]) =
                 match arr.Length with
@@ -838,7 +838,7 @@ module Loader =
 
                 for na in a.NodeAnimationChannels do
                     let pos         = na.PositionKeys |> Seq.map (fun e -> e.Time, toV3d e.Value) |> MapExt.ofSeq
-                    let rot         = na.RotationKeys |> Seq.map (fun e -> e.Time, toRot3d e.Value) |> MapExt.ofSeq
+                    let rot         = na.RotationKeys |> Seq.map (fun e -> e.Time, toQuaternion e.Value) |> MapExt.ofSeq
                     let scale       = na.ScalingKeys |> Seq.map (fun e -> e.Time, toV3d e.Value) |> MapExt.ofSeq
 
                     let position (t : float) =
@@ -890,7 +890,7 @@ module Loader =
                             | None, Some(_,rv) ->
                                 rv
                             | None, None ->
-                                Rot3d.Identity
+                                QuaternionD.Identity
 
                     let node = na.NodeName
 
@@ -900,7 +900,7 @@ module Loader =
                             let p = position t
                             let rot = rotation t
 
-                            let r : M44d = rot |> Rot3d.op_Explicit
+                            let r : M44d = rot |> QuaternionD.op_Explicit
                             let s = scale t
                             M44d.Translation(p) * r * M44d.Scale(s) 
                         )

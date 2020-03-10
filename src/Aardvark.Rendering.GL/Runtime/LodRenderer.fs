@@ -1358,7 +1358,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
     let reader =
         let roots = roots |> ASet.map (fun r -> { r with root = UniqueTree(Guid.NewGuid(), None, None, r.root) :> ILodTreeNode })
         roots.GetReader()
-    let euclideanView = config.view |> AVal.map Euclidean3d
+    let euclideanView = config.view |> AVal.map Euclidean3d.FromTrafo3d
 
   
     let loadTimes = System.Collections.Concurrent.ConcurrentDictionary<Symbol, Regression>()

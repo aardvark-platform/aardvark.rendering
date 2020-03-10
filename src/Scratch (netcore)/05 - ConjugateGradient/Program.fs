@@ -617,11 +617,11 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
                                 if hasX then
                                     match c, d with
                                         | Zero, _ | _, Zero -> 
-                                            [(Power(Uniform "h", Value 0.0), b)]
+                                            [(Power_(Uniform "h", Value 0.0), b)]
                                         | _ -> 
-                                            (Power(Uniform "h", Value 0.0), c) :: allIsolations d
+                                            (Power_(Uniform "h", Value 0.0), c) :: allIsolations d
                                 else
-                                    [(Power(Uniform "h", Value 0.0), b)]
+                                    [(Power_(Uniform "h", Value 0.0), b)]
                             | f -> 
                                 allIsolations bf |> List.map (fun (fi,b) ->
                                     Term.simplify (f * fi), b
@@ -630,7 +630,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
             let residuals = 
                 allIsolations r |> List.map (fun (f, ex) ->
                     match f with
-                        | Power(Uniform "h", Value e) when Fun.IsTiny (Fun.Frac e) ->
+                        | Power_(Uniform "h", Value e) when Fun.IsTiny (Fun.Frac e) ->
                             -int e, ex
 
                         | _ ->
@@ -1372,7 +1372,7 @@ type DepthMapSolver(runtime : IRuntime, lambda : float, sigma : float) =
         let cx = (2.0 * x.[0,0] - x.[-1,0] - x.[1,0]) / h**2
         let cy = (2.0 * x.[0,0] - x.[0,-1] - x.[0,1]) / h**2
         
-        lambda * (w_cx.[0,0] * cx ** 2 + w_cy.[0,0] * cy ** 2) +
+        Term.Value lambda * (w_cx.[0,0] * cx ** 2 + w_cy.[0,0] * cy ** 2) +
         w_v.[0,0] * (x.[0,0] - v.[0,0]) ** 2
         
     let solver = new MultigridSolver2d<FShade.Formats.r32f, float32>(runtime, residual)

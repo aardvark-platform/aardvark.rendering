@@ -539,7 +539,7 @@ type Text private() =
         let mutable cy = 0.0
         let allLines = lineBreak.Split content
 
-        let mutable bounds = Box2d.Invalid
+        let mutable textBounds = Box2d.Invalid
         let mutable renderBounds = Box2d.Invalid
 
         for l in allLines do
@@ -554,10 +554,11 @@ type Text private() =
                 let kerning = font.GetKerning(last, c)
                 match c.String with
                     | " " -> cx <- cx + font.Spacing
-                    | "\t" -> cx <- cx + 4.0 + font.Spacing
+                    | "\t" -> cx <- cx + 4.0 * font.Spacing
                     | _ ->
                         let g = font |> Font.glyph c
-                        chars.Add(cx + g.Before + kerning, g)
+                        let pos = cx + g.Before + kerning
+                        chars.Add(pos, g)
                         cx <- cx + kerning + g.Advance
                         if i = 0 then minX <- g.Before + kerning
                         elif i = l.Length - 1 then cx <- cx + g.Before
@@ -576,15 +577,10 @@ type Text private() =
 
             let y = cy
 
-            bounds.ExtendBy(Box2d(V2d(minX + shift, y - font.Descent - font.InternalLeading), V2d(cx + shift, y + font.Ascent + font.InternalLeading)))
+            textBounds.ExtendBy(Box2d(V2d(minX + shift, y - font.Descent - font.InternalLeading), V2d(cx + shift, y + font.Ascent + font.InternalLeading)))
             for (x,g) in chars do
                 let pos = V2d(shift + x,y)
-                //realBounds.ExtendBy (Box2d()) //(g.Bounds.Translated(pos))
-                //offsets.Add(pos)
-                //scales.Add(V2d(1.0, 1.0))
-                //colors.Add(color)
-                //glyphs.Add(g)
-                renderBounds.ExtendBy(g.Bounds.Translated(pos))
+                renderBounds.ExtendBy(g.Bounds.Translated pos)
                 concrete.Add {
                     trafo = M33d.Translation(pos)
                     color = color
@@ -604,7 +600,7 @@ type Text private() =
 
         {
             bounds              = renderBounds
-            textBounds          = bounds
+            textBounds          = textBounds
             concreteShapes      = concrete
             renderTrafo         = Trafo3d.Translation(realCenter, 0.0, 0.0)
             flipViewDependent   = true
