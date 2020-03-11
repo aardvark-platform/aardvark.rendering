@@ -346,27 +346,31 @@ module LodTreeHelpers =
     type TreeNode<'a> =
         {
             original : ILodTreeNode
-            value : 'a
+            value : option<'a>
             children : list<TreeNode<'a>>
         }
 
 
     module SimplePickTree =
         
-        let rec ofTreeNode (trafo : IMod<Trafo3d>) (v : TreeNode<GeometryPoolInstance>) =
-            let positions = v.value.geometry.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
-            let bounds = v.original.WorldCellBoundingBox
+        let rec ofTreeNode (trafo : IMod<Trafo3d>) (v : TreeNode<GeometryPoolInstance>) : option<SimplePickTree> =
+            match v.value with
+            | Some value -> 
+                let positions = value.geometry.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+                let bounds = v.original.WorldCellBoundingBox
             
-            SimplePickTree (
-                v.original,
-                bounds,
-                positions,
-                trafo,
-                v.original.Root.DataTrafo,
-                v.value.geometry.IndexedAttributes |> SymDict.toSeq |> MapExt.ofSeq,
-                v.value.uniforms,
-                lazy (v.children |> List.map (ofTreeNode trafo))
-            )
+                SimplePickTree (
+                    v.original,
+                    bounds,
+                    positions,
+                    trafo,
+                    v.original.Root.DataTrafo,
+                    value.geometry.IndexedAttributes |> SymDict.toSeq |> MapExt.ofSeq,
+                    value.uniforms,
+                    lazy (v.children |> List.choose (ofTreeNode trafo))
+                ) |> Some
+            | None ->
+                None
 
     module TreeHelpers =
 
@@ -449,8 +453,8 @@ module LodTreeHelpers =
                 let struct (qn,_,_) = queue.HeapDequeue(cmp)
                 0.5 * (qn + quality), size
    
-    type TaskTreeNode<'a> internal(state : TaskTreeState, mapping : CancellationToken -> ILodTreeNode -> Task<'a>, rootId : int, original : ILodTreeNode) =
-        static let neverTask = TaskCompletionSource<'a>().Task
+    type TaskTreeNode<'a> internal(state : TaskTreeState, mapping : CancellationToken -> ILodTreeNode -> Task<option<'a>>, rootId : int, original : ILodTreeNode) =
+        static let neverTask = TaskCompletionSource<option<'a>>().Task
         static let cmp = Func<float * _, float * _, int>(fun (a,_) (b,_) -> compare a b)
 
         let mutable cancel = Some (new CancellationTokenSource())
@@ -459,7 +463,7 @@ module LodTreeHelpers =
             state.AddRunning()
             let c = cancel.Value
             let s = c.Token.Register(fun _ -> state.RemoveRunning())
-            (mapping c.Token original).ContinueWith(fun (t : Task<'a>) -> 
+            (mapping c.Token original).ContinueWith(fun (t : Task<option<'a>>) -> 
                 c.Cancel()
                 s.Dispose()
                 c.Dispose()
@@ -579,7 +583,7 @@ module LodTreeHelpers =
             | TAdd _ | TRem _ | TCollapse _ -> true
             | _ -> false
 
-    type TaskTree<'a>(mapping : CancellationToken -> ILodTreeNode -> Task<'a>, rootId : int) =
+    type TaskTree<'a>(mapping : CancellationToken -> ILodTreeNode -> Task<option<'a>>, rootId : int) =
         static let cmp = Func<float * _, float * _, int>(fun (a,_) (b,_) -> compare a b)
         static let cmpNode = Func<float * ILodTreeNode, float * ILodTreeNode, int>(fun (a,_) (b,_) -> compare a b)
 
@@ -608,7 +612,7 @@ module LodTreeHelpers =
 
             | None -> 
                 let create () =
-                    let n = TaskTreeNode(state, mapping, rootId, t)
+                    let n = TaskTreeNode<'a>(state, mapping, rootId, t)
                     root <- Some n
                     n.Task.ContinueWith (fun (t : Task<_>) -> MVar.put state.trigger ()) |> ignore
 
@@ -683,14 +687,20 @@ module LodTreeHelpers =
         let rec kill (t : TreeNode<'a>) =
             match t.children with
             | [] -> 
-                AtomicOperation.ofList [t.original, { alloc = -1; active = -1; value = None }]
+                match t.value with
+                | Some _ -> AtomicOperation.ofList [t.original, { alloc = -1; active = -1; value = None }]
+                | None -> AtomicOperation.empty
             | cs ->
-                let mutable op = AtomicOperation.ofList [t.original, { alloc = -1; active = 0; value = None }]
+                let mutable op = 
+                    match t.value with
+                    | Some _ -> AtomicOperation.ofList [t.original, { alloc = -1; active = 0; value = None }]
+                    | None -> AtomicOperation.empty
+
                 for c in cs do
                     op <- op + kill c
                 op
 
-        let rec snap (n : TaskTreeNode<'a>) =
+        let rec snap (n : TaskTreeNode<'a>) : option<TreeNode<'a>> =
             match n.TryValue with
             | Some v -> 
                 let nc = n.Children
@@ -722,11 +732,18 @@ module LodTreeHelpers =
             | None, Some n ->
                 let qc = ref AtomicQueue.empty
                 n.children |> List.iter (fun c -> traverse2 qc None (Some c))
-                let op = 
-                    AtomicQueue.toOperation !qc +
-                    AtomicOperation.ofList [ n.original, Operation.Alloc(n.value, List.isEmpty n.children) ]
+                let op = AtomicQueue.toOperation !qc
+
+                match n.value with
+                | Some value ->
+                    let op = 
+                        op +
+                        AtomicOperation.ofList [ n.original, Operation.Alloc(value, List.isEmpty n.children) ]
                          
-                lock q (fun () -> q := AtomicQueue.enqueue op !q) 
+                    lock q (fun () -> q := AtomicQueue.enqueue op !q) 
+                | None ->
+                    lock q (fun () -> q := AtomicQueue.enqueue op !q) 
+
             | Some o, Some n ->
                 assert (Unchecked.equals o.original n.original)
                 match o.children, n.children with
@@ -737,7 +754,7 @@ module LodTreeHelpers =
                     oc |> List.iter (fun c -> traverse2 qc (Some c) None)
                     let op = 
                         AtomicQueue.toOperation !qc +
-                        AtomicOperation.ofList [ n.original, Operation.Activate ]
+                        (match n.value with | Some _ -> AtomicOperation.ofList [ n.original, Operation.Activate ] | _ -> AtomicOperation.empty)
                         
                     lock q (fun () -> q := AtomicQueue.enqueue op !q) 
 
@@ -746,7 +763,7 @@ module LodTreeHelpers =
                     nc |> List.iter (fun c -> traverse2 qc None (Some c))
                     let op = 
                         AtomicQueue.toOperation !qc +
-                        AtomicOperation.ofList [ n.original, Operation.Deactivate ]
+                        (match n.value with | Some _ -> AtomicOperation.ofList [ n.original, Operation.Deactivate ] | _ -> AtomicOperation.empty)
                         
                     lock q (fun () -> q := AtomicQueue.enqueue op !q) 
 
@@ -1933,7 +1950,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         match pickTrees with
                         | Some mm ->
                             let trafo = getRootTrafo root
-                            let picky = r.State |> Option.map (fun s -> SimplePickTree.ofTreeNode trafo s)
+                            let picky = r.State |> Option.bind (fun s -> SimplePickTree.ofTreeNode trafo s)
                             transact (fun () -> 
                                 match picky with
                                 | Some picky -> mm.Value <- mm.Value |> HMap.add root picky
@@ -1971,24 +1988,28 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         let startTime = time()
                         let (g,u) = node.GetData(ct, wantedInputs)
 
-                        let cnt = 
-                            match Seq.tryHead u with
-                            | Some (KeyValue(_, (v : Array) )) -> v.Length
-                            | _ -> 1
+                        if g.FaceVertexCount <= 0 then
+                            None
+                        else
 
-                        let u = MapExt.add "TreeId" (Array.create cnt rootId :> System.Array) u
-                        let loaded = GeometryPoolInstance.ofGeometry signature g u
+                            let cnt = 
+                                match Seq.tryHead u with
+                                | Some (KeyValue(_, (v : Array) )) -> v.Length
+                                | _ -> 1
+
+                            let u = MapExt.add "TreeId" (Array.create cnt rootId :> System.Array) u
+                            let loaded = GeometryPoolInstance.ofGeometry signature g u
                                 
-                        let endTime = time()
-                        addLoadTime node.DataSource node.DataSize (endTime - startTime)
+                            let endTime = time()
+                            addLoadTime node.DataSource node.DataSize (endTime - startTime)
 
                         
 
-                        if not ct.IsCancellationRequested then
-                            let res = cont ct node loaded
-                            res
-                        else
-                            raise <| OperationCanceledException()
+                            if not ct.IsCancellationRequested then
+                                let res = cont ct node loaded
+                                Some res
+                            else
+                                raise <| OperationCanceledException()
                     )
 
                       
