@@ -93,7 +93,7 @@ module Sg =
             let shapesOnly = 
                 Mod.custom (fun token ->
                     reader.GetOperations token |> ignore
-                    reader.State |> HRefSet.toArray |> Array.map (fun (trafo,shapes) ->
+                    reader.State |> Seq.toArray |> Array.map (fun (trafo,shapes) ->
                         shapes.GetValue token
                     )
                 )    
