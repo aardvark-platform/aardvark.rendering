@@ -795,16 +795,16 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.ResolveMultisamples(ms : IFramebufferOutput, srcOffset : V2i, ss : IBackendTexture, dstOffset : V2i, dstLayer : int, size : V2i, trafo : ImageTrafo) =
         Operators.using ctx.ResourceLock (fun _ ->
             let mutable oldFbo = 0
-            OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo);
+            GL.GetInteger(GetPName.FramebufferBinding, &oldFbo);
 
             let targetTex = ss |> unbox<Texture>
-            //let size = ms.Size
-            let readFbo = OpenGL.GL.GenFramebuffer()
-            let drawFbo = OpenGL.GL.GenFramebuffer()
+            let readFbo = GL.GenFramebuffer()
+            let drawFbo = GL.GenFramebuffer()
 
-            OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.ReadFramebuffer,readFbo)
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer,readFbo)
             GL.Check "could not bind read framebuffer"
-            let mutable multiSlice = false
+            let mutable srcAtt = FramebufferAttachment.ColorAttachment0
+
             match ms with
                 | :? IBackendTextureOutputView as ms ->
                     let baseSlice = ms.slices.Min
@@ -813,16 +813,19 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
                     if slices <> 1 then failwith "layer sub-ranges not supported atm."
                     
+                    if TextureFormat.hasDepth tex.Format then srcAtt <- FramebufferAttachment.DepthStencilAttachment
                     if tex.IsArray || tex.Dimension = TextureDimension.TextureCube then
-                        GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, tex.Handle, ms.level, baseSlice)
+                        GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, srcAtt, tex.Handle, ms.level, baseSlice)
                         GL.Check "could not set read framebuffer texture"
                     else
                         // NOTE: allow to resolve/copy singlesample textures as well
-                        GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, (if tex.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), tex.Handle, ms.level)
+                        GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, srcAtt, (if tex.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), tex.Handle, ms.level)
                         GL.Check "could not set read framebuffer texture"
                     
                 | :? Renderbuffer as ms ->
-                    GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, ms.Handle)
+                
+                    if TextureFormat.hasDepth (RenderbufferFormat.toTextureFormat ms.Format) then srcAtt <- FramebufferAttachment.DepthStencilAttachment
+                    GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, srcAtt, RenderbufferTarget.Renderbuffer, ms.Handle)
                     GL.Check "could not set read framebuffer texture"
 
                 | :? ITextureLevel as ms ->
@@ -832,12 +835,13 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
                     if slices <> 1 then failwith "layer sub-ranges not supported atm."
                     
+                    if TextureFormat.hasDepth tex.Format then srcAtt <- FramebufferAttachment.DepthStencilAttachment
                     if tex.IsArray || tex.Dimension = TextureDimension.TextureCube then
-                        GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, tex.Handle, ms.Level, baseSlice)
+                        GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, srcAtt, tex.Handle, ms.Level, baseSlice)
                         GL.Check "could not set read framebuffer texture"
                     else
                         // NOTE: allow to resolve/copy singlesample textures as well
-                        GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, (if tex.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), tex.Handle, ms.Level)
+                        GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, srcAtt, (if tex.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), tex.Handle, ms.Level)
                         GL.Check "could not set read framebuffer texture"
 
                 | _ ->
@@ -848,10 +852,10 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer,drawFbo)
             GL.Check "could not bind write framebuffer"
             if targetTex.IsArray || targetTex.Dimension = TextureDimension.TextureCube then
-                GL.FramebufferTextureLayer(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, targetTex.Handle, 0, dstLayer)
+                GL.FramebufferTextureLayer(FramebufferTarget.DrawFramebuffer, srcAtt, targetTex.Handle, 0, dstLayer)
                 GL.Check "could not set write framebuffer texture"
             else
-                GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, targetTex.Handle, 0)
+                GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, srcAtt, targetTex.Handle, 0)
                 GL.Check "could not set write framebuffer texture"
 
 
@@ -866,14 +870,22 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 | ImageTrafo.MirrorX ->
                     dst.Min.X <- dst.Max.X - 1
                     dst.Max.X <- -1
-                | _ -> failwith "unsupported image trafo"
+                | _ -> 
+                    failwith "unsupported image trafo"
                     
+            let mask =  
+                if srcAtt = FramebufferAttachment.DepthStencilAttachment then 
+                    ClearBufferMask.DepthBufferBit
+                else 
+                    GL.ReadBuffer(ReadBufferMode.ColorAttachment0)
+                    GL.DrawBuffer(DrawBufferMode.ColorAttachment0)
+                    ClearBufferMask.ColorBufferBit
 
-            GL.BlitFramebuffer(src.Min.X, src.Min.Y, src.Max.X, src.Max.Y, dst.Min.X, dst.Min.Y, dst.Max.X, dst.Max.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest)
+            GL.BlitFramebuffer(src.Min.X, src.Min.Y, src.Max.X, src.Max.Y, dst.Min.X, dst.Min.Y, dst.Max.X, dst.Max.Y, mask, BlitFramebufferFilter.Nearest)
             GL.Check "could not blit framebuffer"
 
-            GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, 0)
-            GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, 0, 0)
+            GL.FramebufferTexture(FramebufferTarget.ReadFramebuffer, srcAtt, 0, 0)
+            GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, srcAtt, 0, 0)
 
             GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)

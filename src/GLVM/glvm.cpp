@@ -848,10 +848,12 @@ DllExport(void) hglDrawArrays(RuntimeStats* stats, int* isActive, BeginMode* mod
 
 	for (int i = 0; i < cnt; i++, info += 1)
 	{
+		if (info->InstanceCount == 0) continue;
+
 		stats->EffectiveDrawCalls += info->InstanceCount;
-		if (info->InstanceCount != 1 || info->FirstInstance != 0)
-		{
-			glDrawArraysInstancedBaseInstance(m, info->FirstIndex, info->FaceVertexCount, info->InstanceCount, info->FirstInstance);
+		if (info->InstanceCount > 1) {
+			if (info->FirstInstance == 0)glDrawArraysInstanced(m, info->FirstIndex, info->FaceVertexCount, info->InstanceCount);
+			else glDrawArraysInstancedBaseInstance(m, info->FirstIndex, info->FaceVertexCount, info->InstanceCount, info->FirstInstance);
 		}
 		else
 		{
@@ -877,11 +879,11 @@ DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* m
 	stats->DrawCalls+=(int)cnt;
 	for (int i = 0; i < cnt; i++, info += 1)
 	{
+		if (info->InstanceCount == 0) continue;
 		stats->EffectiveDrawCalls += info->InstanceCount;
-
-		if (info->InstanceCount != 1 || info->FirstInstance != 0)
-		{
-			glDrawElementsInstancedBaseVertexBaseInstance(m, info->FaceVertexCount, indexType, (const void*)(int64_t)(info->FirstIndex*indexSize), info->InstanceCount, info->BaseVertex, info->FirstInstance);
+		if (info->InstanceCount > 1) {
+			if (info->FirstInstance == 0) glDrawElementsInstanced(m, info->FaceVertexCount, indexType, (const void*)(int64_t)(info->FirstIndex * indexSize), info->InstanceCount);
+			else glDrawElementsInstancedBaseVertexBaseInstance(m, info->FaceVertexCount, indexType, (const void*)(int64_t)(info->FirstIndex * indexSize), info->InstanceCount, info->BaseVertex, info->FirstInstance);
 		}
 		else
 		{
