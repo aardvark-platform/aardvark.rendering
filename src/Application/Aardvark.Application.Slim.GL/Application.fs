@@ -32,24 +32,27 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
             Glfw.WindowConfig.samples = 1
         }
         
+    let createContext() =
+        let w = glfw.CreateWindow windowConfig
+        let h = ContextHandle(w.Context, w.WindowInfo)
+        if enableDebug then h.AttachDebugOutputIfNeeded()
+        h.MakeCurrent()
+
+        OpenTK.Graphics.OpenGL4.GL.Hint(OpenTK.Graphics.OpenGL4.HintTarget.PointSmoothHint, OpenTK.Graphics.OpenGL4.HintMode.Fastest)
+        OpenTK.Graphics.OpenGL4.GL.Enable(OpenTK.Graphics.OpenGL4.EnableCap.TextureCubeMapSeamless)
+        OpenTK.Graphics.OpenGL4.GL.Disable(OpenTK.Graphics.OpenGL4.EnableCap.PolygonSmooth)
+        OpenTK.Graphics.OpenGL4.GL.Hint(OpenTK.Graphics.OpenGL4.HintTarget.FragmentShaderDerivativeHint, OpenTK.Graphics.OpenGL4.HintMode.Nicest)
+
+        h.ReleaseCurrent()
+        glfw.RemoveExistingWindow w
+        h
+
     let resourceContexts =
         Array.init 2 (fun _ ->
-            let w = glfw.CreateWindow windowConfig
-            let h = ContextHandle(w.Context, w.WindowInfo)
-            if enableDebug then h.AttachDebugOutputIfNeeded()
-            h.MakeCurrent()
-
-            OpenTK.Graphics.OpenGL4.GL.Hint(OpenTK.Graphics.OpenGL4.HintTarget.PointSmoothHint, OpenTK.Graphics.OpenGL4.HintMode.Fastest)
-            OpenTK.Graphics.OpenGL4.GL.Enable(OpenTK.Graphics.OpenGL4.EnableCap.TextureCubeMapSeamless)
-            OpenTK.Graphics.OpenGL4.GL.Disable(OpenTK.Graphics.OpenGL4.EnableCap.PolygonSmooth)
-            OpenTK.Graphics.OpenGL4.GL.Hint(OpenTK.Graphics.OpenGL4.HintTarget.FragmentShaderDerivativeHint, OpenTK.Graphics.OpenGL4.HintMode.Nicest)
-
-            h.ReleaseCurrent()
-            glfw.RemoveExistingWindow w
-            h
+            createContext()
         )
 
-    let ctx = new Context(runtime, enableDebug, resourceContexts)
+    let ctx = new Context(runtime, enableDebug, resourceContexts, fun () -> glfw.Invoke createContext)
     do runtime.Context <- ctx
        glfw.Context <- ctx
  

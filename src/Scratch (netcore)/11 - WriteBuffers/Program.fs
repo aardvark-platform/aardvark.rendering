@@ -13,7 +13,6 @@ module Shader =
             return V4d(v.tc, 1.0, 1.0)
         }
 
-
 [<EntryPoint>]
 let main argv = 
     Aardvark.Init()

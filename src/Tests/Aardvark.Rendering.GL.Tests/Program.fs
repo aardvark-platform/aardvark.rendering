@@ -10,7 +10,7 @@ open Aardvark.Application.WinForms
 
 let testCompile() =
     use runtime = new Runtime()
-    let ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false))
+    let ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false), (fun () -> ContextHandleOpenTK.create false))
     runtime.Context <- ctx
 
     let signature =

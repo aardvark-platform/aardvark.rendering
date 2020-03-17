@@ -18,7 +18,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
     let runtime = new Runtime()
     let ctx = 
         let resourceContexts = Array.init 2 (fun _ -> ContextHandleOpenTK.create enableDebug)
-        new Context(runtime, enableDebug, resourceContexts)
+        new Context(runtime, enableDebug, resourceContexts, fun () -> ContextHandleOpenTK.create enableDebug)
     do runtime.Context <- ctx
  
     let defaultCachePath =
