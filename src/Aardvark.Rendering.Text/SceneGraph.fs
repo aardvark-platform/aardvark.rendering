@@ -225,8 +225,11 @@ module Sg =
                         old.Dispose()
                 }
 
+            let pass = scope.RenderPass
+            let pass = if pass = RenderPass.main then RenderPass.shapes else pass
+
             shapes.Multisample <- AVal.map2 (fun a f -> not f || a) aa fill
-            shapes.RenderPass <- RenderPass.shapes
+            shapes.RenderPass <- if pass = RenderPass.main then RenderPass.shapes else pass
             shapes.BlendMode <- AVal.constant BlendMode.Blend
             shapes.VertexAttributes <- cache.VertexBuffers
             shapes.DrawCalls <- Indirect(indirect)
@@ -360,8 +363,10 @@ module Sg =
                         old.Dispose()
                 }
 
+            let pass = scope.RenderPass
+            let pass = if pass = RenderPass.main then RenderPass.shapes else pass
             shapes.Multisample <- AVal.map2 (fun a f -> not f || a) aa fill
-            shapes.RenderPass <- RenderPass.shapes
+            shapes.RenderPass <- pass
             shapes.BlendMode <- AVal.constant BlendMode.Blend
             shapes.VertexAttributes <- cache.VertexBuffers
             shapes.DrawCalls <- indirectAndOffsets |> AVal.map (fun (i,_,_,_) -> i) |> Indirect
@@ -372,8 +377,7 @@ module Sg =
             //shapes.WriteBuffers <- Some (Set.ofList [DefaultSemantic.Colors])
 
             let boundary = RenderObject.ofScope scope
-            //boundary.ConservativeRaster <- AVal.constant false
-            boundary.RenderPass <- RenderPass.shapes
+            boundary.RenderPass <- pass
             boundary.BlendMode <- AVal.constant BlendMode.Blend
             boundary.VertexAttributes <- cache.VertexBuffers
             let drawCall =
@@ -454,22 +458,35 @@ module Sg =
             boundary.StencilMode <- AVal.constant writeStencil
             boundary.FillMode <- AVal.constant FillMode.Fill
 
-            content |> AVal.map(fun x -> 
-                match x.renderStyle with
+            let style = content |> AVal.map(fun x -> x.renderStyle)
+
+            let depthTest =
+                style |> AVal.bind (function
+                    | RenderStyle.Normal -> AVal.constant DepthTestMode.None
+                    | _ -> scope.DepthTestMode
+                )
+            let stencil =
+                style |> AVal.bind (function
+                    | RenderStyle.Normal -> AVal.constant(readStencil)
+                    | _ -> scope.StencilMode
+                )
+
+            style |> AVal.map(fun s -> 
+                match s with
                 | RenderStyle.Normal -> 
                     shapes.Surface <- Surface.FShadeSimple cache.Effect
-                    shapes.DepthTest <- AVal.constant(DepthTestMode.None)
-                    shapes.StencilMode <- AVal.constant(readStencil)
+                    shapes.DepthTest <- depthTest
+                    shapes.StencilMode <-stencil
                     MultiRenderObject [boundary; shapes] :> IRenderObject  |> HashSet.single
                 | RenderStyle.NoBoundary ->
                     shapes.Surface <- Surface.FShadeSimple cache.Effect
-                    shapes.DepthTest <- AVal.constant(DepthTestMode.LessOrEqual)
-                    shapes.StencilMode <- AVal.constant(StencilMode.Disabled)
+                    shapes.DepthTest <- depthTest
+                    shapes.StencilMode <- stencil
                     shapes :> IRenderObject |> HashSet.single // MultiRenderObject [shapes] :> IRenderObject 
                 | RenderStyle.Billboard -> 
                     shapes.Surface <- Surface.FShadeSimple cache.BillboardEffect
-                    shapes.DepthTest <- AVal.constant(DepthTestMode.LessOrEqual)
-                    shapes.StencilMode <- AVal.constant(StencilMode.Disabled)
+                    shapes.DepthTest <- depthTest
+                    shapes.StencilMode <- stencil
                     shapes :> IRenderObject |> HashSet.single
 
                 ) |> ASet.ofAVal
