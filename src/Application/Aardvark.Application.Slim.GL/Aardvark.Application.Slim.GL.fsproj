@@ -23,6 +23,7 @@
     <Copy Condition="'$(OS)' == 'Unix'" SourceFiles="$(ProjectDir)..\..\..\lib\Native\Aardvark.Application.Slim.GL\linux\AMD64\libglfw.so.3" DestinationFolder="$(OutputPath)..\net471" ContinueOnError="true" />
   </Target>
   <ItemGroup>
+    <EmbeddedResource Include="resources\aardvark.png" />
     <Compile Include="GLFW.fs" />
     <Compile Include="GameWindow.fs" />
     <Compile Include="Application.fs" />
