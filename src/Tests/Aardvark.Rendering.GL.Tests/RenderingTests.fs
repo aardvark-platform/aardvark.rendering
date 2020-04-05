@@ -6,9 +6,9 @@ open FsUnit
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Application
 open System.Diagnostics
 open Aardvark.SceneGraph.Semantics
@@ -43,7 +43,7 @@ module ``Rendering Tests`` =
         img
 
     let checkerBoardTexture =
-        PixTexture2d(PixImageMipMap [|checkerBoardImage :> PixImage|], true) :> ITexture |> Mod.constant
+        PixTexture2d(PixImageMipMap [|checkerBoardImage :> PixImage|], true) :> ITexture |> AVal.constant
 
 
     [<Test>]
@@ -331,7 +331,7 @@ module RenderingTests =
         printfn "%A" len
 
         use runtime = new Runtime()
-        use ctx = new Context(runtime, false)
+        use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false), (fun () -> ContextHandleOpenTK.create false))
         runtime.Context <- ctx
 
         let size = V2i(1024,768)
@@ -394,7 +394,7 @@ module RenderingTests =
     let ``[GL] simple render to multiple texture``() =
 
         use runtime = new Runtime()
-        use ctx = new Context(runtime, false)
+        use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false), (fun () -> ContextHandleOpenTK.create false))
         runtime.Context <- ctx
 
         let size = V2i(1024,768)
@@ -460,7 +460,7 @@ module RenderingTests =
         let screen = V2i(2048, 2048)
 
         let grid (size : V2i) (inner : ISg) =
-            Sg.group' [
+            Sg.ofList [
                 for x in -size.X/2..size.X/2 do
                     for y in -size.Y/2..size.Y/2 do
                         yield inner |> Sg.trafo (~~Trafo3d.Translation(float x, float y, 0.0))
@@ -480,7 +480,7 @@ module RenderingTests =
         let cam = CameraView.lookAt (0.5 * V3d.OOI) V3d.Zero V3d.OIO
         let frustum = Frustum.perspective 60.0 0.1 1000.0 (float screen.X / float screen.Y)
 
-        let rootTrafo = Mod.init Trafo3d.Identity
+        let rootTrafo = AVal.init Trafo3d.Identity
 
         let sg =
             buildGrid 3
@@ -490,7 +490,7 @@ module RenderingTests =
                 |> Sg.projTrafo ~~(frustum |> Frustum.projTrafo)
 
         use runtime = new Runtime()
-        use ctx = new Context(runtime, false)
+        use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false), (fun () -> ContextHandleOpenTK.create false))
         runtime.Context <- ctx
 
         using ctx.ResourceLock (fun _ -> 
@@ -552,7 +552,7 @@ module RenderingTests =
         let sw = Stopwatch()
         sw.Start()
         while sw.Elapsed.TotalSeconds < 20.0 || iterations < 50 do
-            transact(fun () -> Mod.change rootTrafo (rootTrafo.Value * Trafo3d.Scale(1.00001)))
+            transact(fun () -> rootTrafo.Value <- (rootTrafo.Value * Trafo3d.Scale(1.00001)))
             clear.Run(RenderToken.Empty, fbo) |> ignore
             task.Run(RenderToken.Empty, fbo) |> ignore
             iterations <- iterations + 1
@@ -575,7 +575,7 @@ module RenderingTests =
         let screen = V2i(2048, 2048)
 
         let grid (size : V2i) (inner : ISg) =
-            Sg.group' [
+            Sg.ofList [
                 for x in -size.X/2..size.X/2 do
                     for y in -size.Y/2..size.Y/2 do
                         yield inner |> Sg.trafo (~~Trafo3d.Translation(float x, float y, 0.0))
@@ -595,7 +595,7 @@ module RenderingTests =
         let cam = CameraView.lookAt (0.5 * V3d.OOI) V3d.Zero V3d.OIO
         let frustum = Frustum.perspective 60.0 0.1 1000.0 (float screen.X / float screen.Y)
 
-        let rootTrafo = Mod.init Trafo3d.Identity
+        let rootTrafo = AVal.init Trafo3d.Identity
 
         let sg =
             buildGrid 3
@@ -605,7 +605,7 @@ module RenderingTests =
                 |> Sg.projTrafo ~~(frustum |> Frustum.projTrafo)
 
         use runtime = new Runtime()
-        use ctx = new Context(runtime, false)
+        use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false), (fun () -> ContextHandleOpenTK.create false))
         runtime.Context <- ctx
 
         using ctx.ResourceLock (fun _ -> 
@@ -629,7 +629,7 @@ module RenderingTests =
             ]
 
         let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
-        let renderJobs = sg.RenderObjects()
+        let renderJobs = sg.RenderObjects(Ag.Scope.Root)
         let task = runtime.CompileRender(signature, renderJobs)
         //let task2 = runtime.CompileRender renderJobs
 
@@ -669,146 +669,6 @@ module RenderingTests =
 
         ()
 
-    [<Test>]
-    let ``[GL] concurrent group change``() =
-        let leaf = quad |> Sg.ofIndexedGeometry
-        let screen = V2i(2048, 2048)
-
-        let cnt = 1000
-        let s = int (ceil (sqrt (float cnt) / 2.0))
-
-        let grid (inner : ISg) =
-            [
-                for x in -s .. s do
-                    for y in -s .. s do
-                        yield inner |> Sg.trafo (~~Trafo3d.Translation(float x, float y, 0.0))
-            ]
-
-        let mutable candidates = (grid leaf).RandomOrder() |> Seq.toList
-
-        let g = Sg.group []//candidates
-
-        let sg =
-            g
-                |> Sg.trafo (~~Trafo3d.Scale(0.5 / float s))
-                |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
-                |> Sg.viewTrafo ~~(Trafo3d.Identity)
-                |> Sg.projTrafo ~~(Trafo3d.Identity)
-
-        let useWindow = true
-        let runtime, app =
-            if useWindow then
-                let app = new Aardvark.Application.WinForms.OpenGlApplication()
-                let win = app.CreateGameWindow()
-                
-                app.Runtime, Some (app, win)
-            else
-                let runtime = new Runtime()
-                let ctx = new Context(runtime, false)
-                using ctx.ResourceLock (fun _ -> 
-                    Log.line "vendor:   %s" runtime.Context.Driver.vendor
-                    Log.line "renderer: %s" runtime.Context.Driver.renderer
-                )
-                runtime.Context <- ctx
-                runtime, None
-
-
-        let win = app.Value |> snd
-
-
-        let renderJobs = sg.RenderObjects()
-        let clear = runtime.CompileClear(app.Value |> snd |> (fun s -> s.FramebufferSignature), ~~C4f.Black, ~~1.0)
-        let task = runtime.CompileRender(app.Value |> snd |> (fun s -> s.FramebufferSignature), BackendConfiguration.Native, renderJobs)
-
-//        win.Keyboard.KeyDown(Keys.P).Values.Subscribe(fun _ ->
-//            lock task (fun () ->
-//                let task = task |> unbox<Aardvark.Rendering.GL.GroupedRenderTask.RenderTask>
-//                let code = task.Program.Disassemble() |> unbox<Instruction[][]>
-//
-//                let mutable fragment = 0
-//                for part in code do
-//                    Log.start "fragment %d" fragment
-//                    for i in part do
-//                        Log.line "%A" i
-//                    Log.stop()
-//                    fragment <- fragment + 1
-//                printfn "press Enter to continue"
-//                Console.ReadLine() |> ignore
-//            )
-//        ) |> ignore
-
-        for i in 0..cnt/2 do
-            match candidates with
-                | x::xs -> 
-                    candidates <- xs
-                    g.Add x |> ignore
-                | _ -> printfn "out of candiates"
-
-     
-        let r = System.Random()
-        let t = System.Threading.Tasks.Task.Factory.StartNew(fun () ->
-            while true do
-                System.Threading.Thread.Sleep 10
-                printfn "c %A" g.Count
-                if g.Count > 0 && r.NextDouble() > 0.5 then
-                    let a = g |> Seq.toArray |> (flip Array.get) (r.Next(0,g.Count))
-                    g.Remove(a) |> ignore
-                    candidates <- a::candidates
-                else
-                    if List.isEmpty candidates |> not then
-                        match candidates with
-                            | x::xs -> 
-                                candidates <- xs
-                                g.Add x |> ignore
-                            | _ -> printfn "out of candiates"
-
-            renderJobs |> ASet.toList |> List.length |> printfn "got %d render objs"
-        , System.Threading.Tasks.TaskCreationOptions.LongRunning) 
-
-
-        if useWindow then app.Value |> snd |> (fun s -> s.RenderTask <- RenderTask.ofList [clear; task]; s.Run())
-        else
-
-
-
-            let color = runtime.CreateTexture(screen, TextureFormat.Rgba8, 1, 1, 1)
-            let depth = runtime.CreateRenderbuffer(screen, RenderbufferFormat.Depth24Stencil8, 1)
-
-            let signature =
-                runtime.CreateFramebufferSignature [
-                    DefaultSemantic.Colors, RenderbufferFormat.ofTextureFormat color.Format
-                    DefaultSemantic.Depth, depth.Format
-                ]
-
-            let fbo = 
-                signature.CreateFramebuffer [
-                    DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
-                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
-                ]
-        
-
-            clear.Run(RenderToken.Empty, fbo)
-            GL.Sync()
-            let token = RenderToken()
-            task.Run(token, fbo)
-            GL.Sync()
-            Log.line "%d objects" token.DrawCallCount
-            let pi = runtime.Download(color, PixFormat.ByteRGBA)
-            pi.SaveAsImage(@"C:\Aardwork\urdar.png")
-            GL.Sync()
-            Log.line "starting update test"
-            let mutable iterations = 0
-            let sw = Stopwatch()
-            let disp = System.Collections.Generic.List()
-            sw.Start()
-            while sw.Elapsed.TotalSeconds < 5.0 do
-                clear.Run(RenderToken.Empty, fbo)
-                task.Run(RenderToken.Empty, fbo)
-            sw.Stop()
-
-        ()
-
-
     module RenderObjects =
         let emptyUniforms =
             { new IUniformProvider with
@@ -816,11 +676,11 @@ module RenderingTests =
                 member x.Dispose() = ()
             }
 
-        let uniformProvider (color : IMod<ITexture>) (depth : IMod<ITexture>) =
+        let uniformProvider (color : aval<ITexture>) (depth : aval<ITexture>) =
             { new IUniformProvider with
                 member x.TryGetUniform(scope : Ag.Scope, semantic : Symbol) =
-                    if semantic = DefaultSemantic.ColorTexture then Some (color :> IMod)
-                    elif semantic = DefaultSemantic.DepthTexture then Some (depth :> IMod)
+                    if semantic = DefaultSemantic.ColorTexture then Some (color :> IAdaptiveValue)
+                    elif semantic = DefaultSemantic.DepthTexture then Some (depth :> IAdaptiveValue)
                     else None
 
                 member x.Dispose() =
@@ -839,8 +699,8 @@ module RenderingTests =
             let positions =  ArrayBuffer ([|V3f(-1.0f, -1.0f, 1.0f); V3f(1.0f, -1.0f, 1.0f); V3f(1.0f, 1.0f, 1.0f); V3f(-1.0f, 1.0f, 1.0f)|] :> Array)
             let texCoords = ArrayBuffer ([|V2f.OO; V2f.IO; V2f.II; V2f.OI|] :> Array)
 
-            let pView = BufferView(Mod.constant (positions :> IBuffer), typeof<V3f>)
-            let tcView = BufferView(Mod.constant (texCoords :> IBuffer), typeof<V2f>)
+            let pView = BufferView(AVal.constant (positions :> IBuffer), typeof<V3f>)
+            let tcView = BufferView(AVal.constant (texCoords :> IBuffer), typeof<V2f>)
 
             { new IAttributeProvider with
                 member x.All = 
@@ -857,86 +717,31 @@ module RenderingTests =
 
         let baseObject =
             { RenderObject.Create() with
-                AttributeScope = Ag.emptyScope
-                IsActive = Mod.constant true
+                AttributeScope = Ag.Scope.Root
+                IsActive = AVal.constant true
                 RenderPass = RenderPass.main
-                DrawCallInfos = Mod.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)]
+                DrawCalls = Direct(AVal.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)])
                 Mode = IndexedGeometryMode.TriangleList
                 Surface = DefaultSurfaces.constantColor C4f.Gray |> toEffect |> Surface.FShadeSimple
-                DepthTest = Mod.constant Aardvark.Base.Rendering.DepthTestMode.LessOrEqual
-                CullMode = Mod.constant Aardvark.Base.Rendering.CullMode.None
-                BlendMode = Mod.constant Aardvark.Base.Rendering.BlendMode.Blend
-                FillMode = Mod.constant Aardvark.Base.Rendering.FillMode.Fill
-                StencilMode = Mod.constant Aardvark.Base.Rendering.StencilMode.Disabled
+                DepthTest = AVal.constant Aardvark.Base.Rendering.DepthTestMode.LessOrEqual
+                CullMode = AVal.constant Aardvark.Base.Rendering.CullMode.None
+                BlendMode = AVal.constant Aardvark.Base.Rendering.BlendMode.Blend
+                FillMode = AVal.constant Aardvark.Base.Rendering.FillMode.Fill
+                StencilMode = AVal.constant Aardvark.Base.Rendering.StencilMode.Disabled
                 Indices = BufferView.ofArray [|0;1;2; 0;2;3|] |> Some
                 InstanceAttributes = emptyAttributes
                 VertexAttributes = attributeProvider
                 Uniforms = emptyUniforms
             }
 
-    [<Test>]
-    let ``[GL] memory leak test``() =
-
-        let useWindow = false
-        let runtime, app =
-            if useWindow then
-                let app = new Aardvark.Application.WinForms.OpenGlApplication()
-                let win = app.CreateGameWindow()
-                
-                app.Runtime, Some (app, win)
-            else
-                let app = new Aardvark.Application.WinForms.OpenGlApplication()
-                let runtime = new Runtime()
-                let ctx = new Context(runtime, false)
-                runtime.Context <- ctx
-                runtime, None
-
-
-        let ro = RenderObjects.baseObject
-
-        let screen = V2i(1024,1024)
-
-
-        if useWindow then
-             let clear = runtime.CompileClear(app.Value |> snd |> (fun s -> s.FramebufferSignature), ~~C4f.Black, ~~1.0)
-             let task = runtime.CompileRender(app.Value |> snd |> (fun s -> s.FramebufferSignature), BackendConfiguration.Native, ASet.empty)
-
-             app.Value |> snd |> (fun s -> s.RenderTask <- RenderTask.ofList [clear; task]; s.Run())
-        else
-            let color = runtime.CreateTexture(screen, TextureFormat.Rgba8, 1, 1, 1)
-            let depth = runtime.CreateRenderbuffer(screen, RenderbufferFormat.Depth24Stencil8, 1)
-
-            let signature =
-                runtime.CreateFramebufferSignature [
-                    DefaultSemantic.Colors, RenderbufferFormat.ofTextureFormat color.Format
-                    DefaultSemantic.Depth, depth.Format
-                ]
-
-            let fbo = 
-                signature.CreateFramebuffer [
-                    DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
-                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
-                ]
-
-            let mutable po = Unchecked.defaultof<IPreparedRenderObject>
-        
-            while true do
-                using runtime.Context.ResourceLock (fun _ -> 
-                    let rj = RenderObject.Create
-                    if po <> Unchecked.defaultof<_> then po.Dispose()
-                    po <- runtime.PrepareRenderObject(signature, ro)
-                    printfn "GL memory: %A" runtime.Context.MemoryUsage
-                )
-        ()
-
 module UseTest =
     
     let bla () =
-        Ag.initialize()
+        
         Aardvark.Init()
 
         use runtime = new Runtime()
-        use ctx = new Context(runtime, false)
+        use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false), (fun () -> ContextHandleOpenTK.create false))
         runtime.Context <- ctx
 
         let size = V2i(1024,1024)
@@ -975,8 +780,8 @@ module UseTest =
 
 
         let cam = CameraView.lookAt (V3d.III * 3.0) V3d.Zero V3d.OOI
-        let model = Mod.init Trafo3d.Identity
-        let view = Mod.init cam
+        let model = AVal.init Trafo3d.Identity
+        let view = AVal.init cam
         let sg =
             Sg.box' C4b.White (Box3d(-V3d.III, V3d.III))
                 |> Sg.effect [
@@ -984,8 +789,8 @@ module UseTest =
                     DefaultSurfaces.constantColor C4f.White |> toEffect
                 ]
                 |> Sg.trafo model
-                |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
-                |> Sg.projTrafo (Frustum.perspective 60.0 0.1 100.0 1.0 |> Frustum.projTrafo |> Mod.constant)
+                |> Sg.viewTrafo (view |> AVal.map CameraView.viewTrafo)
+                |> Sg.projTrafo (Frustum.perspective 60.0 0.1 100.0 1.0 |> Frustum.projTrafo |> AVal.constant)
 
         
         use clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)

@@ -9,7 +9,7 @@ open Aardvark.Base.Sorting
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open System.Diagnostics
 open System.Collections.Generic
 open Aardvark.Base.Runtime
@@ -23,7 +23,7 @@ type ICommandStreamResource =
     abstract member Resources : seq<IResourceLocation>
 
     abstract member GroupKey : list<obj>
-    abstract member BoundingBox : IMod<Box3d>
+    abstract member BoundingBox : aval<Box3d>
 
 module RenderCommands =
  
@@ -35,23 +35,23 @@ module RenderCommands =
      
     type ClearValues =
         {
-            colors  : Map<Symbol, IMod<C4f>>
-            depth   : Option<IMod<float>>
-            stencil : Option<IMod<int>>
+            colors  : Map<Symbol, aval<C4f>>
+            depth   : Option<aval<float>>
+            stencil : Option<aval<int>>
         }
 
     type PipelineState =
         {
             surface             : Aardvark.Base.Surface
 
-            depthTest           : IMod<DepthTestMode>
-            depthBias           : IMod<DepthBiasState>
-            cullMode            : IMod<CullMode>
-            frontFace           : IMod<WindingOrder>
-            blendMode           : IMod<BlendMode>
-            fillMode            : IMod<FillMode>
-            stencilMode         : IMod<StencilMode>
-            multisample         : IMod<bool>
+            depthTest           : aval<DepthTestMode>
+            depthBias           : aval<DepthBiasState>
+            cullMode            : aval<CullMode>
+            frontFace           : aval<WindingOrder>
+            blendMode           : aval<BlendMode>
+            fillMode            : aval<FillMode>
+            stencilMode         : aval<StencilMode>
+            multisample         : aval<bool>
             writeBuffers        : Option<Set<Symbol>>
             globalUniforms      : IUniformProvider
 
@@ -63,20 +63,20 @@ module RenderCommands =
 
     type Geometry =
         {
-            vertexAttributes    : Map<Symbol, IMod<IBuffer>>
+            vertexAttributes    : Map<Symbol, aval<IBuffer>>
             indices             : Option<Aardvark.Base.BufferView>
-            uniforms            : Map<string, IMod>
-            call                : IMod<list<DrawCallInfo>>
+            uniforms            : Map<string, IAdaptiveValue>
+            call                : aval<list<DrawCallInfo>>
         }
 
-    type TreeRenderObject(pipe : PipelineState, geometries : IMod<Tree<Geometry>>) =
+    type TreeRenderObject(pipe : PipelineState, geometries : aval<Tree<Geometry>>) =
         let id = newId()
 
         member x.Pipeline = pipe
         member x.Geometries = geometries
 
         interface IRenderObject with
-            member x.AttributeScope = Ag.emptyScope
+            member x.AttributeScope = Ag.Scope.Root
             member x.Id = id
             member x.RenderPass = RenderPass.main
             
@@ -120,7 +120,7 @@ module RenderCommands =
                 |> Map.ofList
 
             let inputState =
-                x.CreateVertexInputState(layout.PipelineInfo, Mod.constant (VertexInputState.ofTypes inputs))
+                x.CreateVertexInputState(layout.PipelineInfo, AVal.constant (VertexInputState.ofTypes inputs))
 
             let inputAssembly =
                 x.CreateInputAssemblyState(state.geometryMode, program)
@@ -206,7 +206,7 @@ module RenderCommands =
                 pgResources     = CSharpList.toList resources
             }
 
-    type TreeCommandStreamResource(owner, key, pipe : PipelineState, things : IMod<Tree<Geometry>>, resources : ResourceLocationSet, manager : ResourceManager, renderPass : RenderPass, stats : nativeptr<V2i>) =
+    type TreeCommandStreamResource(owner, key, pipe : PipelineState, things : aval<Tree<Geometry>>, resources : ResourceLocationSet, manager : ResourceManager, renderPass : RenderPass, stats : nativeptr<V2i>) =
         inherit AbstractResourceLocation<VKVM.CommandStream>(owner, key)
          
         let id = newId()
@@ -215,7 +215,7 @@ module RenderCommands =
         let mutable entry = Unchecked.defaultof<VKVM.CommandStream>
         let preparedPipeline = manager.PreparePipelineState(renderPass, pipe)
 
-        let bounds = lazy (Mod.constant Box3d.Invalid)
+        let bounds = lazy (AVal.constant Box3d.Invalid)
         let allResources = ReferenceCountingSet<IResourceLocation>()
         let mutable state = Tree.Empty
 
@@ -375,18 +375,20 @@ module RenderTask =
     [<AbstractClass; Sealed; Extension>]
     type IRenderObjectExts private() =
         [<Extension>]
-        static member ComputeBoundingBox (o : IRenderObject) : IMod<Box3d> =
+        static member ComputeBoundingBox (o : IRenderObject) : aval<Box3d> =
             match o with
                 | :? RenderObject as o ->
-                    match Ag.tryGetAttributeValue o.AttributeScope "GlobalBoundingBox" with
-                        | Success box -> box
+                    match o.AttributeScope.TryGetSynthesized<aval<Box3d>>("GlobalBoundingBox") with
+                        | Some box -> box
                         | _ -> failwith "[Vulkan] could not get BoundingBox for RenderObject"
                     
                 | :? MultiRenderObject as o ->
-                    o.Children |> List.map IRenderObjectExts.ComputeBoundingBox |> Mod.mapN Box3d
+                    let bbs = o.Children |> List.map IRenderObjectExts.ComputeBoundingBox 
+                    AVal.custom (fun t -> bbs |> List.map (fun bb -> bb.GetValue t) |> Box3d)
 
                 | :? PreparedMultiRenderObject as o ->
-                    o.Children |> List.map IRenderObjectExts.ComputeBoundingBox |> Mod.mapN Box3d
+                    let bbs = o.Children |> List.map IRenderObjectExts.ComputeBoundingBox 
+                    AVal.custom (fun t -> bbs |> List.map (fun bb -> bb.GetValue t) |> Box3d)
                     
                 | :? PreparedRenderObject as o ->
                     IRenderObjectExts.ComputeBoundingBox o.original
@@ -449,7 +451,7 @@ module RenderTask =
             override x.GetHandle _ = 
                 { handle = stream; version = 0 }   
 
-        type ClearCommandStreamResource(owner, key, pass : RenderPass, viewports : IMod<Box2i[]>, colors : Map<Symbol, IMod<C4f>>, depth : Option<IMod<float>>, stencil : Option<IMod<uint32>>) =
+        type ClearCommandStreamResource(owner, key, pass : RenderPass, viewports : aval<Box2i[]>, colors : Map<Symbol, aval<C4f>>, depth : Option<aval<float>>, stencil : Option<aval<uint32>>) =
             inherit AbstractResourceLocation<VKVM.CommandStream>(owner, key)
          
             let mutable stream : VKVM.CommandStream = Unchecked.defaultof<_>
@@ -532,7 +534,7 @@ module RenderTask =
                 member x.Stream = stream
                 member x.Resources = Seq.empty
                 member x.GroupKey = [id :> obj]
-                member x.BoundingBox = Mod.constant Box3d.Invalid
+                member x.BoundingBox = AVal.constant Box3d.Invalid
 
             override x.Create() =
                 stream <- new VKVM.CommandStream()
@@ -557,8 +559,8 @@ module RenderTask =
             let mutable version = 0
 
 
-            override x.InputChanged(t ,i) =
-                base.InputChanged(t, i)
+            override x.InputChangedObject(t ,i) =
+                base.InputChangedObject(t, i)
                 match i with
                     | :? IResourceLocation<UniformBuffer> -> ()
                     | :? IResourceLocation -> version <- version + 1
@@ -579,7 +581,7 @@ module RenderTask =
                 call.Acquire()
                 call |> unbox<ICommandStreamResource>
             
-            member x.CompileClear(pass : RenderPass, viewports : IMod<Box2i[]>, colors : Map<Symbol, IMod<C4f>>, depth : Option<IMod<float>>, stencil : Option<IMod<uint32>>) =
+            member x.CompileClear(pass : RenderPass, viewports : aval<Box2i[]>, colors : Map<Symbol, aval<C4f>>, depth : Option<aval<float>>, stencil : Option<aval<uint32>>) =
                 
                 let call = 
                     clearCache.GetOrCreate([pass :> obj; viewports :> obj; colors :> obj; depth :> obj; stencil :> obj], fun owner key ->
@@ -594,8 +596,8 @@ module RenderTask =
         open Compiler
 
         [<AbstractClass>]
-        type AbstractChangeableCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>, scissors : IMod<Box2i[]>) =
-            inherit Mod.AbstractMod<CommandBuffer>()
+        type AbstractChangeableCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : aval<Box2i[]>, scissors : aval<Box2i[]>) =
+            inherit AVal.AbstractVal<CommandBuffer>()
 
             let locked = ReferenceCountingSet<ILockedResource>()
 
@@ -620,7 +622,7 @@ module RenderTask =
             abstract member Sort : AdaptiveToken -> bool
             default x.Sort _ = false
 
-            override x.InputChanged(t : obj, o : IAdaptiveObject) =
+            override x.InputChangedObject(t : obj, o : IAdaptiveObject) =
                 match o with
                     | :? ICommandStreamResource as r ->
                         lock dirty (fun () -> dirty.Add r |> ignore)
@@ -662,7 +664,7 @@ module RenderTask =
                 // update all dirty programs 
                 let dirty =
                     lock dirty (fun () ->
-                        let res = dirty |> HashSet.toArray
+                        let res = dirty |> Aardvark.Base.HashSet.toArray
                         dirty.Clear()
                         res
                     )
@@ -716,13 +718,13 @@ module RenderTask =
             
 
         [<AbstractClass>]
-        type AbstractChangeableSetCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>, scissors : IMod<Box2i[]>) =
+        type AbstractChangeableSetCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : aval<Box2i[]>, scissors : aval<Box2i[]>) =
             inherit AbstractChangeableCommandBuffer(manager, pool, renderPass, viewports, scissors )
 
             abstract member Add : IRenderObject -> bool
             abstract member Remove : IRenderObject -> bool
 
-        type ChangeableUnorderedCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>, scissors : IMod<Box2i[]>) =
+        type ChangeableUnorderedCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : aval<Box2i[]>, scissors : aval<Box2i[]>) =
             inherit AbstractChangeableSetCommandBuffer(manager, pool, renderPass, viewports, scissors)
 
             let first = new VKVM.CommandStream()
@@ -759,21 +761,21 @@ module RenderTask =
                     | _ ->
                         false
 
-        type ChangeableOrderedCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : IMod<Box2i[]>, scissors : IMod<Box2i[]>, sorter : IMod<Trafo3d -> Box3d[] -> int[]>) =
+        type ChangeableOrderedCommandBuffer(manager : ResourceManager, pool : CommandPool, renderPass : RenderPass, viewports : aval<Box2i[]>, scissors : aval<Box2i[]>, sorter : aval<Trafo3d -> Box3d[] -> int[]>) =
             inherit AbstractChangeableSetCommandBuffer(manager, pool, renderPass, viewports, scissors)
         
             let first = new VKVM.CommandStream()
 
-            let cache = Dict<IRenderObject, IMod<Box3d> * ICommandStreamResource>()
+            let cache = Dict<IRenderObject, aval<Box3d> * ICommandStreamResource>()
 
-            let mutable camera = Mod.constant Trafo3d.Identity
+            let mutable camera = AVal.constant Trafo3d.Identity
 
 
             override x.Add(o : IRenderObject) =
                 if not (cache.ContainsKey o) then
                     if cache.Count = 0 then
-                        match Ag.tryGetAttributeValue o.AttributeScope "ViewTrafo" with
-                            | Success trafo -> camera <- trafo
+                        match o.AttributeScope.TryGetInherited "ViewTrafo" with
+                            | Some (:? aval<Trafo3d> as trafo) -> camera <- trafo
                             | _ -> failf "could not get camera view"
 
                     let res = x.Compile o
@@ -831,8 +833,8 @@ module RenderTask =
 
         let pool = device.GraphicsFamily.CreateCommandPool()
         let passes = SortedDictionary<Aardvark.Base.Rendering.RenderPass, AbstractChangeableSetCommandBuffer>()
-        let viewports = Mod.init [||]
-        let scissors = Mod.init [||]
+        let viewports = AVal.init [||]
+        let scissors = AVal.init [||]
         
         let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
 
@@ -883,7 +885,7 @@ module RenderTask =
                             // TODO: sorting broken
 //                            match key.Order with
 //                                | RenderPassOrder.BackToFront | RenderPassOrder.FrontToBack -> 
-//                                    ChangeableOrderedCommandBuffer(manager, pool, renderPass, viewports, Mod.constant (sortByCamera key.Order)) :> AbstractChangeableSetCommandBuffer
+//                                    ChangeableOrderedCommandBuffer(manager, pool, renderPass, viewports, AVal.constant (sortByCamera key.Order)) :> AbstractChangeableSetCommandBuffer
 //                                | _ -> 
                                     ChangeableUnorderedCommandBuffer(manager, pool, renderPass, viewports, scissors) :> AbstractChangeableSetCommandBuffer
                         passes.[key] <- c
@@ -1009,12 +1011,12 @@ module RenderTask =
     type DependentRenderTask(device : Device, renderPass : RenderPass, objects : aset<IRenderObject>, shareTextures : bool, shareBuffers : bool) =
         inherit RenderTask(device, renderPass, shareTextures, shareBuffers)
 
-        let reader = objects.GetReader()
+        let mutable reader = objects.GetReader()
 
         override x.Perform(token : AdaptiveToken, rt : RenderToken, desc : OutputDescription) =
             x.OutOfDate <- true
-            let deltas = reader.GetOperations token
-            if not (HDeltaSet.isEmpty deltas) then
+            let deltas = reader.GetChanges token
+            if not (HashSetDelta.isEmpty deltas) then
                 transact (fun () -> 
                     for d in deltas do
                         match d with
@@ -1027,10 +1029,10 @@ module RenderTask =
         override x.Runtime = Some device.Runtime
 
         override x.Release() =
-            reader.Dispose()
+            reader <- Unchecked.defaultof<_>
             base.Release()
 
-    type ClearTask(device : Device, renderPass : RenderPass, clearColors : Map<Symbol, IMod<C4f>>, clearDepth : IMod<Option<float>>, clearStencil : Option<IMod<uint32>>) =
+    type ClearTask(device : Device, renderPass : RenderPass, clearColors : Map<Symbol, aval<C4f>>, clearDepth : aval<Option<float>>, clearStencil : Option<aval<uint32>>) =
         inherit AdaptiveObject()
         static let depthStencilFormats =
             HashSet.ofList [
@@ -1039,6 +1041,7 @@ module RenderTask =
                 RenderbufferFormat.DepthStencil
             ]
         
+        let id = newId()
         let pool = device.GraphicsFamily.CreateCommandPool()
         let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
 
@@ -1088,6 +1091,7 @@ module RenderTask =
             )
 
         interface IRenderTask with
+            member x.Id = id
             member x.Update(c, t) = ()
             member x.Run(c,t,o) = x.Run(c,t,o)
             member x.Dispose() = 

@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.Slim
@@ -15,13 +15,13 @@ open Aardvark.Application.Slim
 type Object = {
     bb        : Box3d // world space bb
     sg        : ISg   // scene
-    isVisible : IModRef<bool>
+    isVisible : cval<bool>
 }
 
 [<EntryPoint>]
 let main argv = 
    
-    Ag.initialize()
+    
     Aardvark.Init()
 
     use app = new OpenGlApplication()
@@ -30,7 +30,7 @@ let main argv =
     let initialView = CameraView.LookAt(V3d(20.0,20.0,20.0), V3d.Zero, V3d.OOI)
     let frustum = 
         win.Sizes 
-            |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
+            |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
 
     let cameraView = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
 
@@ -45,7 +45,7 @@ let main argv =
                     for z in min .. max do
                         let pos = V3d(float x,float y, float z)
                         let box = Box3d.FromCenterAndSize(pos, V3d.III * radius * 2.0)
-                        let isVisible = Mod.init true
+                        let isVisible = AVal.init true
                         yield {
                             bb = box
                             sg = sphere |> Sg.onOff isVisible |> Sg.translate pos.X pos.Y pos.Z
@@ -83,8 +83,8 @@ let main argv =
                 DefaultSurfaces.vertexColor           |> toEffect
                 DefaultSurfaces.simpleLighting        |> toEffect
                 ] 
-            |> Sg.viewTrafo (cameraView  |> Mod.map CameraView.viewTrafo )
-            |> Sg.projTrafo (frustum |> Mod.map Frustum.projTrafo    )
+            |> Sg.viewTrafo (cameraView  |> AVal.map CameraView.viewTrafo )
+            |> Sg.projTrafo (frustum |> AVal.map Frustum.projTrafo    )
 
     let renderTask = 
         RenderTask.ofList [

@@ -1,16 +1,157 @@
 {
     // See https://go.microsoft.com/fwlink/?LinkId=733558
     // for the documentation about the tasks.json format
-    "version": "0.1.0",
-    "command": "build.cmd",
-    "isShellCommand": true,
-    "args": [],
-    "showOutput": "always",
+    "version": "2.0.0",
     "tasks": [
         {
-            "taskName": "compile",
-            "args": [],
-            "isBuildCommand": true
+            "label": "createoutput",
+            "linux": {
+                "command": "mkdir",
+                "args": [
+                    "-p",
+                    "bin/Debug/netcoreapp3.1"
+                ]
+            },
+            "osx": {
+                "command": "mkdir",
+                "args": [
+                    "-p",
+                    "bin/Debug/netcoreapp3.1"
+                ]
+            },
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "copyglvm",
+            "dependsOn": [
+                "createoutput"
+            ],
+            "windows": {
+                "command": "xcopy",
+                "args": [
+                    "/y",
+                    "lib\\Native\\Aardvark.Rendering.GL\\windows\\AMD64\\glvm.dll",
+                    "bin\\Debug\\netcoreapp3.1\\"
+                ]
+            },
+            "linux": {
+                "command": "cp",
+                "args": [
+                    "lib/Native/Aardvark.Rendering.GL/linux/AMD64/glvm.so",
+                    "bin/Debug/netcoreapp3.1/glvm.so"
+                ]
+            },
+            "osx": {
+                "command": "cp",
+                "args": [
+                    "lib/Native/Aardvark.Rendering.GL/mac/AMD64/glvm.dylib",
+                    "bin/Debug/netcoreapp3.1/glvm.dylib"
+                ]
+            },
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "copyglfw",
+            "dependsOn": [
+                "createoutput"
+            ],
+            "windows": {
+                "command": "xcopy",
+                "args": [
+                    "/y",
+                    "lib\\Native\\Aardvark.Application.Slim.GL\\windows\\AMD64\\glfw3.dll",
+                    "bin\\Debug\\netcoreapp3.1\\"
+                ]
+            },
+            "linux": {
+                "command": "cp",
+                "args": [
+                    "lib/Native/Aardvark.Application.Slim.GL/linux/AMD64/libglfw.so.3",
+                    "bin/Debug/netcoreapp3.1/libglfw.so.3"
+                ]
+            },
+            "osx": {
+                "command": "cp",
+                "args": [
+                    "llib/Native/Aardvark.Application.Slim.GL/mac/AMD64/libglfw.3.dylib",
+                    "bin/Debug/netcoreapp3.1/libglfw.3.dylib"
+                ]
+            },
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "copyvkvm",
+            "dependsOn": [
+                "createoutput"
+            ],
+            "windows": {
+                "command": "xcopy",
+                "args": [
+                    "/y",
+                    "lib\\Native\\Aardvark.Rendering.Vulkan\\windows\\AMD64\\vkvm.dll",
+                    "bin\\Debug\\netcoreapp3.1\\"
+                ]
+            },
+            "linux": {
+                "command": "cp",
+                "args": [
+                    "lib/Native/Aardvark.Rendering.Vulkan/linux/AMD64/vkvm.so",
+                    "bin/Debug/netcoreapp3.1/vkvm.so"
+                ]
+            },
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "restore",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "restore",
+                "src/Aardvark.Rendering.NonWindows.sln"
+            ],
+            "group": "build",
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "clean",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "clean",
+                "src/Aardvark.Rendering.NonWindows.sln"
+            ],
+            "group": "build",
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "build",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "build",
+                "--no-restore",
+                "src/Aardvark.Rendering.NonWindows.sln",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always"
+            },
+            "problemMatcher": "$msCompile",
+            "dependsOn": [
+                "restore",
+                "copyglvm",
+                "copyvkvm",
+                "copyglfw",
+            ]
         }
     ]
 }

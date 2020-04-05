@@ -5,7 +5,7 @@ module MultipleStageAgMemoryLeakTest =
 
     open System
     open Aardvark.Base
-    open Aardvark.Base.Incremental
+    open FSharp.Data.Adaptive
     open Aardvark.Base.Rendering
     open Aardvark.SceneGraph
     open Aardvark.SceneGraph.Semantics
@@ -31,10 +31,10 @@ module MultipleStageAgMemoryLeakTest =
 
     type ImperativeSceneStructure() =
         let cset = 
-            CSet.ofSeq [ Trafo3d.Identity, 
-                         Array.init 1000 (constF V3f.OOI), 
-                         Array.init 1000 (constF C4b.Red),
-                         ZZZZZLeak globalLeakCnt ]
+            cset [ Trafo3d.Identity, 
+                   Array.init 1000 (constF V3f.OOI), 
+                   Array.init 1000 (constF C4b.Red),
+                   ZZZZZLeak globalLeakCnt ]
         interface IContentWithImperativeInterface with
             member x.AdaptiveRenderArrays = cset :> aset<_>
 
@@ -42,7 +42,7 @@ module MultipleStageAgMemoryLeakTest =
         interface IContentWithImperativeInterface with
             member x.AdaptiveRenderArrays = ASet.empty
 
-    type Engine = { p : IModRef<Option<IContentWithImperativeInterface>> }
+    type Engine = { p : cval<Option<IContentWithImperativeInterface>> }
 
     type IDog = interface end
 
@@ -50,81 +50,79 @@ module MultipleStageAgMemoryLeakTest =
         interface IDog
         member x.Children = xs
 
-    type DataDog(d : IMod<Data>) =
+    type DataDog(d : aval<Data>) =
         interface IDog
         member x.Data = d
 
-    type TrafoNode(localTrafos : list<IModRef<Trafo3d>>, c : IMod<IDog>) =
+    type TrafoNode(localTrafos : list<cval<Trafo3d>>, c : aval<IDog>) =
         interface IDog 
         member x.Trafos = localTrafos
         member x.Child = c
 
-    type DogRoot(c : IMod<IDog>) =
+    type DogRoot(c : aval<IDog>) =
         interface IDog
         member x.Child = c
 
-    type RenderData = Data * IMod<Trafo3d>
+    type RenderData = Data * aval<Trafo3d>
 
-    [<Semantic>]
+    [<Rule>]
     type DogSemantics() = 
 
-        let getMyTrafo d =
-            Mod.mapN (fun (xs:seq<Trafo3d>) -> Seq.fold (*) Trafo3d.Identity xs) ( d?Trafos )
+        let getMyTrafo (d : Ag.Scope) =
+            AVal.custom (fun t -> (d?Trafos : seq<aval<_>>) |> Seq.map (fun v -> v.GetValue t) |> Seq.fold (*) Trafo3d.Identity) 
 
-        member x.Leafs(data : DataDog) : aset<RenderData> =
+        member x.Leafs(data : DataDog, scope : Ag.Scope) : aset<RenderData> =
             aset {
                 let! d = data.Data
-//                let trafo : IMod<Trafo3d> = Mod.constant Trafo3d.Identity // data?Trafo()
-//                let trafo : IMod<Trafo3d> = data?Trafo()
-//                let trafo : IMod<Trafo3d> = getMyTrafo data
-                let trafo : IMod<Trafo3d> = data?Trafo2
+//                let trafo : aval<Trafo3d> = AVal.constant Trafo3d.Identity // data?Trafo()
+//                let trafo : aval<Trafo3d> = data?Trafo()
+//                let trafo : aval<Trafo3d> = getMyTrafo data
+                let trafo : aval<Trafo3d> = scope?Trafo2
                 yield d,trafo
             }
 
-        member x.Leafs(t : TrafoNode) : aset<RenderData> =
+        member x.Leafs(t : TrafoNode, scope : Ag.Scope) : aset<RenderData> =
             aset {
                 let! c = t.Child
-                yield! c?Leafs()
+                yield! (c?Leafs(scope) : aset<_>)
             }
 
-        member x.Leafs(t : DogRoot) : aset<RenderData> =
+        member x.Leafs(t : DogRoot, scope : Ag.Scope) : aset<RenderData> =
             aset {
                 let! c = t.Child
-                yield! c?Leafs()
+                yield! (c?Leafs(scope) : aset<_>)
             }
 
-        member x.Leafs(t : DogGroup) : aset<RenderData> =
+        member x.Leafs(t : DogGroup, scope : Ag.Scope) : aset<RenderData> =
             aset {
                 for e in t.Children do
-                    yield! e?Leafs()
+                    yield! (e?Leafs(scope) : aset<_>)
             }
 
 //        member x.Trafo2(r : Root<IDog>) =
-//            r.Child?Trafo2 <- Mod.init Trafo3d.Identity
+//            r.Child?Trafo2 <- AVal.init Trafo3d.Identity
 
-        member x.Trafo2(r : DogRoot) =
-            r.Child?Trafo2 <- Mod.init Trafo3d.Identity
+        member x.Trafo2(r : DogRoot, scope : Ag.Scope) =
+            r.Child?Trafo2 <- AVal.init Trafo3d.Identity
 
-        member x.Trafo2(r : TrafoNode) =
-            r.Child?Trafo2 <- Mod.map2 (*) (Mod.init Trafo3d.Identity) r?Trafo2 // BUG: this makes a leak
-            //r.Child?Trafo2 <- Mod.init Trafo3d.Identity // this works
+        member x.Trafo2(r : TrafoNode, scope : Ag.Scope) =
+            r.Child?Trafo2 <- AVal.map2 (*) (AVal.init Trafo3d.Identity) scope?Trafo2 // BUG: this makes a leak
+            //r.Child?Trafo2 <- AVal.init Trafo3d.Identity // this works
 
-        member x.Trafos(r : Root<IDog>) = 
-            r.Child?Trafo <- [Mod.init Trafo3d.Identity]
-        member x.Trafos(t : TrafoNode) =
+        member x.Trafos(r : Root<IDog>, scope : Ag.Scope) = 
+            r.Child?Trafo <- [AVal.init Trafo3d.Identity]
+        member x.Trafos(t : TrafoNode, scope : Ag.Scope) =
             t.Child?Trafos <- t.Trafos @ t.Trafos
-        member x.Trafo(d : IDog) =
-            Mod.mapN (fun (xs:seq<Trafo3d>) -> Seq.fold (*) Trafo3d.Identity xs) ( d?Trafos )
+        member x.Trafo(d : IDog, scope : Ag.Scope) =
+            AVal.custom (fun t -> (scope?Trafos : seq<aval<_>>) |> Seq.map (fun v -> v.GetValue t) |> Seq.fold (*) Trafo3d.Identity) 
 
 
     let run () =
-
-        Ag.initialize()
         Aardvark.Init()
 
-        let activeEngine = Mod.init { p = Mod.init (Some ( EmptyImperativeSceneStructure() :> IContentWithImperativeInterface))}
+        let activeEngine = AVal.init { p = AVal.init (Some ( EmptyImperativeSceneStructure() :> IContentWithImperativeInterface))}
 
-        let sceneData (e : IMod<Engine>) =
+        let sceneData (e : aval<Engine>) =
             aset {
                 let! engine = e
                 let! s = engine.p
@@ -141,23 +139,23 @@ module MultipleStageAgMemoryLeakTest =
         let d1 = 
             aset {
                 for d in data do
-                    yield TrafoNode(t1, (Mod.init (DataDog (Mod.init d) :> IDog))) :> IDog
-                    //yield TrafoNode(t1, (Mod.init (DataDog (Mod.init d) :> IDog))) :> IDog
+                    yield TrafoNode(t1, (AVal.init (DataDog (AVal.init d) :> IDog))) :> IDog
+                    //yield TrafoNode(t1, (AVal.init (DataDog (AVal.init d) :> IDog))) :> IDog
             }
 
 
-        let dog = DogRoot (Mod.init <| (DogGroup d1 :> IDog))
+        let dog = DogRoot (AVal.init <| (DogGroup d1 :> IDog))
 
 
         let chunkVisualization t2 ((trafo,vertics,colors,leak) : PointChunk) : ISg =
             Sg.draw IndexedGeometryMode.PointList
-                |> Sg.vertexAttribute DefaultSemantic.Positions     (vertics |> Mod.constant)
-                |> Sg.vertexAttribute DefaultSemantic.Colors        (colors  |> Mod.constant)
-                |> Sg.trafo (Mod.map (fun t -> t * trafo) t2)
-                //|> Sg.trafo (Mod.init trafo)
+                |> Sg.vertexAttribute DefaultSemantic.Positions     (vertics |> AVal.constant)
+                |> Sg.vertexAttribute DefaultSemantic.Colors        (colors  |> AVal.constant)
+                |> Sg.trafo (AVal.map (fun t -> t * trafo) t2)
+                //|> Sg.trafo (AVal.init trafo)
 
         let renderView (d : IDog) =
-            let leafs  : aset<RenderData> = d?Leafs()
+            let leafs  : aset<RenderData> = d?Leafs(Ag.Scope.Root)
             aset {
                 for l,trafo in leafs do
                     match l with 
@@ -172,13 +170,13 @@ module MultipleStageAgMemoryLeakTest =
         let rsg = Sg.set sg
 
         use app = new OpenGlApplication()
-        let win = app.CreateGameWindow()
+        let win = app.CreateSimpleRenderWindow()
    
 
         win.Keyboard.Down.Values.Subscribe(fun k -> 
             if k = Keys.N then 
                 transact (fun () ->
-                    Mod.change activeEngine  { p = Mod.init <| Some (ImperativeSceneStructure() :> _)}
+                    activeEngine.Value <-  { p = AVal.init <| Some (ImperativeSceneStructure() :> _)}
                 )
                 GC.Collect()
                 GC.WaitForPendingFinalizers()
@@ -201,9 +199,9 @@ module MultipleStageAgMemoryLeakTest =
 
                 let foo () =
                     transact (fun () ->
-                        Mod.change activeEngine  { p = Mod.init <| None}
+                        activeEngine.Value <- { p = AVal.init <| None}
                     )
-                    reader.GetOperations() |> ignore
+                    reader.GetChanges() |> ignore
 
                 foo ()
                 GC.Collect()
@@ -214,7 +212,7 @@ module MultipleStageAgMemoryLeakTest =
         let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
         let perspective = 
             win.Sizes 
-              |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 10.0 (float s.X / float s.Y))
+              |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 10.0 (float s.X / float s.Y))
 
 
         let viewTrafo = DefaultCameraController.control win.Mouse win.Keyboard win.Time view
@@ -233,8 +231,8 @@ module MultipleStageAgMemoryLeakTest =
                     DefaultSurfaces.trafo |> toEffect
                     DefaultSurfaces.constantColor C4f.White |> toEffect
                   ]
-               |> Sg.viewTrafo (viewTrafo   |> Mod.map CameraView.viewTrafo )
-               |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
+               |> Sg.viewTrafo (viewTrafo   |> AVal.map CameraView.viewTrafo )
+               |> Sg.projTrafo (perspective |> AVal.map Frustum.projTrafo    )
 
         let task = app.Runtime.CompileRender(win.FramebufferSignature, sg)
 

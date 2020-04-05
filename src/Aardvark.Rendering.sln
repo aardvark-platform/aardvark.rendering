@@ -2,9 +2,13 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.29609.76
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "08 - DerivedAttributePerformance", "Scratch (net471)\08 - DerivedAttributePerformance\08 - DerivedAttributePerformance.fsproj", "{627A635E-2C40-49EE-BBBF-46FABA90C941}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "11 - WriteBuffers", "Scratch (netcore)\11 - WriteBuffers\11 - WriteBuffers.fsproj", "{08096727-9A9B-4AD0-8A40-B42BFDDCE731}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "05 - HickupTest", "Scratch (net471)\05 - HickupTest\05 - HickupTest.fsproj", "{333848F1-0D67-4D85-8EA3-814253A0E47C}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "10 - FontSquirrelGenerator", "Scratch (netcore)\10 - FontSquirrelGenerator\10 - FontSquirrelGenerator.fsproj", "{9CDE6170-5BEA-4BE7-814A-C134B4530E6C}"
+EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "08 - DerivedAttributePerformance", "Scratch (net471)\08 - DerivedAttributePerformance\08 - DerivedAttributePerformance.fsproj", "{627A635E-2C40-49EE-BBBF-46FABA90C941}"
+EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "05 - HickupTest", "Scratch (net471)\05 - HickupTest\05 - HickupTest.fsproj", "{333848F1-0D67-4D85-8EA3-814253A0E47C}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "08 - TextUpdateTest", "Scratch (netcore)\08 - TextUpdateTest\08 - TextUpdateTest.fsproj", "{DFEF8B29-F9BF-4186-B87C-EA261E24C10F}"
 EndProject
@@ -64,29 +68,25 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Application", "Application"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application", "Application\Aardvark.Application\Aardvark.Application.fsproj", "{E3508B1C-592C-4E8E-98F3-71DBEC6083DA}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WinForms.GL", "Application\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj", "{4F645DE6-6D22-4BAD-8489-C1F8456E3D55}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.WinForms.GL", "Application\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj", "{4F645DE6-6D22-4BAD-8489-C1F8456E3D55}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WinForms", "Application\Aardvark.Application.WinForms\Aardvark.Application.WinForms.fsproj", "{B1D5938D-AB5D-4D0E-8DDE-482EF5308F16}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.WinForms", "Application\Aardvark.Application.WinForms\Aardvark.Application.WinForms.fsproj", "{B1D5938D-AB5D-4D0E-8DDE-482EF5308F16}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WPF", "Application\Aardvark.Application.WPF\Aardvark.Application.WPF.fsproj", "{D8ADA249-0CB6-4BDE-9AE7-DBBDB6C3812A}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.WPF", "Application\Aardvark.Application.WPF\Aardvark.Application.WPF.fsproj", "{D8ADA249-0CB6-4BDE-9AE7-DBBDB6C3812A}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WPF.GL", "Application\Aardvark.Application.WPF.GL\Aardvark.Application.WPF.GL.fsproj", "{993CF671-5810-44D9-85D8-A35F5EE16F8F}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.WPF.GL", "Application\Aardvark.Application.WPF.GL\Aardvark.Application.WPF.GL.fsproj", "{993CF671-5810-44D9-85D8-A35F5EE16F8F}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "OSM", "Demo\OSM\OSM.fsproj", "{BA817F29-8F5B-4E2F-BFB0-E52206B6244B}"
-EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FontRendering", "Demo\FontRendering\FontRendering.fsproj", "{63DCF027-1892-44B9-AF14-1FFF8005617C}"
-EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "AsyncLoading", "Demo\AsyncLoading\AsyncLoading.fsproj", "{275853BC-F5A5-485D-8F15-CBAB95735399}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "FontRendering", "Demo\FontRendering\FontRendering.fsproj", "{63DCF027-1892-44B9-AF14-1FFF8005617C}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Demo", "Demo", "{C664AC25-597F-470A-854B-045CD7E59CE2}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{80F74456-D82F-4D38-83FE-362EFD0C2FCB}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.GL.Tests", "Tests\Aardvark.Rendering.GL.Tests\Aardvark.Rendering.GL.Tests.fsproj", "{EBC7AF0C-DFDC-49C0-9939-630EEAB06C73}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Rendering.GL.Tests", "Tests\Aardvark.Rendering.GL.Tests\Aardvark.Rendering.GL.Tests.fsproj", "{EBC7AF0C-DFDC-49C0-9939-630EEAB06C73}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Examples", "Demo\Examples\Examples.fsproj", "{6C943F93-9A9A-4A57-9A75-A235A3443C22}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Examples", "Demo\Examples\Examples.fsproj", "{6C943F93-9A9A-4A57-9A75-A235A3443C22}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Interactive", "Aardvark.Rendering.Interactive\Aardvark.Rendering.Interactive.fsproj", "{79D48400-F885-461A-B747-E3675A7EF2EF}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Rendering.Interactive", "Aardvark.Rendering.Interactive\Aardvark.Rendering.Interactive.fsproj", "{79D48400-F885-461A-B747-E3675A7EF2EF}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Rendering.Text", "Aardvark.Rendering.Text\Aardvark.Rendering.Text.fsproj", "{FB0C63A7-519A-4FCC-9A4B-841AEE5B8C97}"
 EndProject
@@ -97,11 +97,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Dependencies", "Dependencie
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.SceneGraph.IO", "Aardvark.SceneGraph.IO\Aardvark.SceneGraph.IO.fsproj", "{D7B02E89-DC77-462D-A3D4-A28DAA403AAF}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Scratch", "Demo\Scratch\Scratch.fsproj", "{346185F9-AB7F-4973-8B80-24CEB113E4B5}"
-EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Rendering.Vulkan", "Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj", "{8BBC1EF6-9C85-4BAF-A732-FC46DCA64EC3}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WinForms.Vulkan", "Application\Aardvark.Application.WinForms.Vulkan\Aardvark.Application.WinForms.Vulkan.fsproj", "{99DD80B4-B1B8-4042-BEEA-B3A7FD617242}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.WinForms.Vulkan", "Application\Aardvark.Application.WinForms.Vulkan\Aardvark.Application.WinForms.Vulkan.fsproj", "{99DD80B4-B1B8-4042-BEEA-B3A7FD617242}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.OpenVR", "Application\Aardvark.Application.OpenVR\Aardvark.Application.OpenVR.fsproj", "{7AAAC578-443F-4120-BA74-3732CCE920E8}"
 EndProject
@@ -161,19 +159,19 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "02 - OpcDemo", "Scratch (ne
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "03 - Sorted", "Scratch (netcore)\03 - Sorted\03 - Sorted.fsproj", "{09AC089B-878F-44F1-83C3-7889654C666E}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "00 - HelloWorld (net471)", "Scratch (net471)\00 - HelloWorld (net471)\00 - HelloWorld (net471).fsproj", "{0D5B9ADB-7EFE-44ED-BB73-FB232B74F17C}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "00 - HelloWorld (net471)", "Scratch (net471)\00 - HelloWorld (net471)\00 - HelloWorld (net471).fsproj", "{0D5B9ADB-7EFE-44ED-BB73-FB232B74F17C}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "21 - LoD", "Examples (netcore)\21 - LoD\21 - LoD.fsproj", "{9AEFCF2E-C8BC-42A7-A9AA-13CF6DEF8AA7}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "28 - RenderToTextures", "Examples (netcore)\28 - RenderToTextures\28 - RenderToTextures.fsproj", "{BF9A36CD-ADBA-4065-9A2E-5C88CD4D8437}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "06 - MemoryLeakTest", "Scratch (net471)\06 - MemoryLeakTest\06 - MemoryLeakTest.fsproj", "{BEF94C26-C273-4A14-825F-BB5FD1CB97C0}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "06 - MemoryLeakTest", "Scratch (net471)\06 - MemoryLeakTest\06 - MemoryLeakTest.fsproj", "{BEF94C26-C273-4A14-825F-BB5FD1CB97C0}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "07 - RenderTaskCustom", "Scratch (net471)\07 - RenderTaskCustom\07 - RenderTaskCustom.fsproj", "{76B55D47-C3AD-4C48-BFF7-28F4A2FC62CF}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "07 - RenderTaskCustom", "Scratch (net471)\07 - RenderTaskCustom\07 - RenderTaskCustom.fsproj", "{76B55D47-C3AD-4C48-BFF7-28F4A2FC62CF}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "09 - TextTrafoTest", "Scratch (netcore)\09 - TextTrafoTest\09 - TextTrafoTest.fsproj", "{A21CA003-4F6F-4701-9EB8-899B250FE7CC}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "09 - MappedBufferPerformance", "Scratch (net471)\09 - MappedBufferPerformance\09 - MappedBufferPerformance.fsproj", "{FEB14F7F-7746-444B-A0F1-E5DE9992F7ED}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "09 - MappedBufferPerformance", "Scratch (net471)\09 - MappedBufferPerformance\09 - MappedBufferPerformance.fsproj", "{FEB14F7F-7746-444B-A0F1-E5DE9992F7ED}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -181,6 +179,14 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{08096727-9A9B-4AD0-8A40-B42BFDDCE731}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{08096727-9A9B-4AD0-8A40-B42BFDDCE731}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{08096727-9A9B-4AD0-8A40-B42BFDDCE731}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{08096727-9A9B-4AD0-8A40-B42BFDDCE731}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9CDE6170-5BEA-4BE7-814A-C134B4530E6C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9CDE6170-5BEA-4BE7-814A-C134B4530E6C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9CDE6170-5BEA-4BE7-814A-C134B4530E6C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9CDE6170-5BEA-4BE7-814A-C134B4530E6C}.Release|Any CPU.Build.0 = Release|Any CPU
 		{627A635E-2C40-49EE-BBBF-46FABA90C941}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{627A635E-2C40-49EE-BBBF-46FABA90C941}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{627A635E-2C40-49EE-BBBF-46FABA90C941}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -317,18 +323,10 @@ Global
 		{993CF671-5810-44D9-85D8-A35F5EE16F8F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{993CF671-5810-44D9-85D8-A35F5EE16F8F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{993CF671-5810-44D9-85D8-A35F5EE16F8F}.Release|Any CPU.Build.0 = Release|Any CPU
-		{BA817F29-8F5B-4E2F-BFB0-E52206B6244B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{BA817F29-8F5B-4E2F-BFB0-E52206B6244B}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{BA817F29-8F5B-4E2F-BFB0-E52206B6244B}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{BA817F29-8F5B-4E2F-BFB0-E52206B6244B}.Release|Any CPU.Build.0 = Release|Any CPU
 		{63DCF027-1892-44B9-AF14-1FFF8005617C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{63DCF027-1892-44B9-AF14-1FFF8005617C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{63DCF027-1892-44B9-AF14-1FFF8005617C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{63DCF027-1892-44B9-AF14-1FFF8005617C}.Release|Any CPU.Build.0 = Release|Any CPU
-		{275853BC-F5A5-485D-8F15-CBAB95735399}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{275853BC-F5A5-485D-8F15-CBAB95735399}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{275853BC-F5A5-485D-8F15-CBAB95735399}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{275853BC-F5A5-485D-8F15-CBAB95735399}.Release|Any CPU.Build.0 = Release|Any CPU
 		{EBC7AF0C-DFDC-49C0-9939-630EEAB06C73}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{EBC7AF0C-DFDC-49C0-9939-630EEAB06C73}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EBC7AF0C-DFDC-49C0-9939-630EEAB06C73}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -349,10 +347,6 @@ Global
 		{D7B02E89-DC77-462D-A3D4-A28DAA403AAF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D7B02E89-DC77-462D-A3D4-A28DAA403AAF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D7B02E89-DC77-462D-A3D4-A28DAA403AAF}.Release|Any CPU.Build.0 = Release|Any CPU
-		{346185F9-AB7F-4973-8B80-24CEB113E4B5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{346185F9-AB7F-4973-8B80-24CEB113E4B5}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{346185F9-AB7F-4973-8B80-24CEB113E4B5}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{346185F9-AB7F-4973-8B80-24CEB113E4B5}.Release|Any CPU.Build.0 = Release|Any CPU
 		{8BBC1EF6-9C85-4BAF-A732-FC46DCA64EC3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{8BBC1EF6-9C85-4BAF-A732-FC46DCA64EC3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8BBC1EF6-9C85-4BAF-A732-FC46DCA64EC3}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -466,6 +460,8 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{08096727-9A9B-4AD0-8A40-B42BFDDCE731} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
+		{9CDE6170-5BEA-4BE7-814A-C134B4530E6C} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{627A635E-2C40-49EE-BBBF-46FABA90C941} = {ACAD9454-10F3-4673-BC50-BD1B50A04D3B}
 		{333848F1-0D67-4D85-8EA3-814253A0E47C} = {ACAD9454-10F3-4673-BC50-BD1B50A04D3B}
 		{DFEF8B29-F9BF-4186-B87C-EA261E24C10F} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
@@ -497,13 +493,10 @@ Global
 		{B1D5938D-AB5D-4D0E-8DDE-482EF5308F16} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{D8ADA249-0CB6-4BDE-9AE7-DBBDB6C3812A} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{993CF671-5810-44D9-85D8-A35F5EE16F8F} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
-		{BA817F29-8F5B-4E2F-BFB0-E52206B6244B} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 		{63DCF027-1892-44B9-AF14-1FFF8005617C} = {C664AC25-597F-470A-854B-045CD7E59CE2}
-		{275853BC-F5A5-485D-8F15-CBAB95735399} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 		{EBC7AF0C-DFDC-49C0-9939-630EEAB06C73} = {80F74456-D82F-4D38-83FE-362EFD0C2FCB}
 		{6C943F93-9A9A-4A57-9A75-A235A3443C22} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 		{79D48400-F885-461A-B747-E3675A7EF2EF} = {C664AC25-597F-470A-854B-045CD7E59CE2}
-		{346185F9-AB7F-4973-8B80-24CEB113E4B5} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 		{99DD80B4-B1B8-4042-BEEA-B3A7FD617242} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{7AAAC578-443F-4120-BA74-3732CCE920E8} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{FB047D5E-D49A-462E-BAA0-B058CE06CFC9} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}

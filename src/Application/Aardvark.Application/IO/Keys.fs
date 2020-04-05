@@ -2,7 +2,7 @@
 
 open Aardvark.Base
 open System.Runtime.CompilerServices
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 type Keys =
     /// No key pressed.

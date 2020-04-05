@@ -18,7 +18,7 @@ open Aardvark.Rendering.GL
 /// defines usage hints for buffers. Note that these 
 /// hints can (but must not) be respected by the backend implementation.
 /// </summary>
-type BufferUsage = Static | Dynamic
+type BufferUsageHint = Static | Dynamic
 
 /// <summary>
 /// Buffer simply wraps an OpenGL buffer object and
@@ -60,10 +60,10 @@ module BufferExtensions =
     /// helper function translating our self-defined BufferUsage
     /// to OpenTK's BufferUsageHints
     /// </summary>   
-    let private usageHint (usage : BufferUsage) =
+    let private glUsageHint (usage : BufferUsageHint) =
         match usage with
-            | Static -> BufferUsageHint.StaticDraw
-            | Dynamic -> BufferUsageHint.StaticDraw
+            | Static -> OpenTK.Graphics.OpenGL4.BufferUsageHint.StaticDraw
+            | Dynamic -> OpenTK.Graphics.OpenGL4.BufferUsageHint.DynamicDraw
 
     /// <summary>
     /// extends Context with functions for creating, modifying and deleting buffers.
@@ -75,16 +75,16 @@ module BufferExtensions =
         /// the usage given is just a hint for the OpenGL implementation how
         /// to treat the buffer internally
         /// </summary>
-        member x.CreateBuffer(size : int, usage : BufferUsage) =
+        member x.CreateBuffer(size : int, usageHint : BufferUsageHint) =
             assert(size >= 0)
-            
+
             addBuffer x (int64 size)
             
             let handle = 
                 using x.ResourceLock (fun _ ->
                     let handle = GL.GenBuffer()
                     
-                    GL.NamedBufferData(handle, (nativeint size), 0n, usageHint usage)
+                    GL.NamedBufferData(handle, (nativeint size), 0n, glUsageHint usageHint)
                     GL.Check "failed to upload buffer"
                     
                     handle
@@ -103,15 +103,15 @@ module BufferExtensions =
         /// the usage given is just a hint for the OpenGL implementation how
         /// to treat the buffer internally
         /// </summary>
-        member x.CreateBuffer(data : Array, usage : BufferUsage) =
+        member x.CreateBuffer(data : Array, usageHint : BufferUsageHint) =
             let size = data.GetType().GetElementType().GLSize * data.Length
             let gcHandle = GCHandle.Alloc(data, GCHandleType.Pinned)
-            let result = x.CreateBuffer(gcHandle.AddrOfPinnedObject(), size, usage)     
+            let result = x.CreateBuffer(gcHandle.AddrOfPinnedObject(), size, usageHint)     
             gcHandle.Free()
             result
 
 
-        member x.CreateBuffer(data : nativeint, sizeInBytes : int, usage : BufferUsage) =
+        member x.CreateBuffer(data : nativeint, sizeInBytes : int, usage : BufferUsageHint) =
             
             addBuffer x (int64 sizeInBytes)
             
@@ -119,7 +119,7 @@ module BufferExtensions =
                 using x.ResourceLock (fun _ ->
                     let handle = GL.GenBuffer()
 
-                    EXT_direct_state_access.GL.NamedBufferData(handle, (nativeint sizeInBytes), data, usageHint usage)
+                    EXT_direct_state_access.GL.NamedBufferData(handle, (nativeint sizeInBytes), data, glUsageHint usage)
                     GL.Check "failed to upload buffer"
 
                     handle
@@ -557,19 +557,16 @@ module IndirectBufferExtensions =
 
         callCount
 
-    type IndirectBuffer =
+    type GLIndirectBuffer =
         class
             val mutable public Buffer : Buffer
             val mutable public Count : int
             val mutable public Stride : int
             val mutable public Indexed : bool
-
-            interface IIndirectBuffer with
-                member x.Buffer = x.Buffer :> IBuffer
-                member x.Count = x.Count
-
-            new(b, count, stride, indexed) = { Buffer = b; Count = count; Stride = stride; Indexed = indexed }
-        end 
+            val mutable public OwnResource : bool
+            
+            new(b, count, stride, indexed, ownResource) = { Buffer = b; Count = count; Stride = stride; Indexed = indexed; OwnResource = ownResource }
+        end
 
     type Context with
 
@@ -593,45 +590,78 @@ module IndirectBufferExtensions =
             GL.Check "could not copy buffer"
 
         member x.Clone(b : Buffer, offset : nativeint, size : nativeint) =
-            let mine = x.CreateBuffer(0n, int size, BufferUsage.Dynamic)
+            let mine = x.CreateBuffer(0n, int size, BufferUsageHint.Dynamic)
             x.Copy(b, offset, mine, 0n, size)
             mine
 
         member x.Clone(b : Buffer) = x.Clone(b, 0n, b.SizeInBytes)
 
+        //member x.Delete(buffer : BackendIndirectBuffer) =
+        //    x.Delete(buffer.Buffer :?> Buffer) // by convention
 
-        member x.Delete(buffer : IndirectBuffer) =
-            x.Delete(buffer.Buffer)
+        //member x.UploadIndirect(indirect : GLIndirectBuffer, indexed : bool, data : IndirectBuffer) =
+        //    match data.Buffer with
+        //    | :? Buffer as b -> 
+        //        if data.Indexed <> indexed then
+        //            failwith "[GL] incompatible IndirectBuffer: indexed option does not match"
+        //        GLIndirectBuffer(b, data.Count, data.Stride, data.Indexed) // OwnHandle !?
+        //    | _ ->
+        //        using x.ResourceLock (fun _ ->
+                    
+        //            let layoutedData = 
+        //                match data.Buffer with
+        //                | :? ArrayBuffer as ab -> failwith "" 
+        //                | :? SingleValueBuffer as sb -> failwith ""
+        //                | _ -> data.Buffer // Native or other -> assume data is compatible
 
-        member x.UploadIndirect(indirect : IndirectBuffer, indexed : bool, data : IIndirectBuffer) =
-            using x.ResourceLock (fun _ ->
-                match data.Buffer with
-                    | :? Buffer as b ->
-                        if indirect.Buffer.SizeInBytes <> b.SizeInBytes then
-                            x.Clear(indirect.Buffer, b.SizeInBytes)
-                        x.Copy(b, 0n, indirect.Buffer, 0n, b.SizeInBytes)
+        //            // TODO
+        //            failwith 
+        //            //if indirect.Buffer.SizeInBytes <> layoutedData.SizeInBytes then
+        //            //    x.Clear(indirect.Buffer, layoutedData.SizeInBytes)
+        //            //x.Copy(indirect.Buffer, 0n, buffer, 0n, b.SizeInBytes)
+                    
+        //            //let buffer = indirect.Buffer :?> Buffer // by convention
+        //            //match data.Buffer with
+        //            //    | :? Buffer as b ->
+        //            //        if buffer.SizeInBytes <> b.SizeInBytes then
+        //            //            x.Clear(buffer, b.SizeInBytes)
+        //            //        x.Copy(b, 0n, buffer, 0n, b.SizeInBytes)
 
-                    | b -> 
-                        x.Upload(indirect.Buffer, b, false)
+        //            //    | b -> 
+        //            //        x.Upload(buffer, b, false)
 
-                let callCount = postProcessDrawCallBuffer indexed indirect.Buffer
-                indirect.Indexed <- indexed
-                indirect.Count <- data.Count
-            )
+        //            //let callCount = postProcessDrawCallBuffer indexed buffer
+        //            //indirect.Indexed <- indexed
+        //            //indirect.Count <- data.Count
+        //        )
 
-        member x.CreateIndirect(indexed : bool, data : IIndirectBuffer) =
-            using x.ResourceLock (fun _ ->
-                let buffer = 
-                    match data.Buffer with
-                        | :? Buffer as b -> x.Clone(b)
-                        | _ -> x.CreateBuffer(data.Buffer)
+        //member x.CreateIndirect(indexed : bool, data : IndirectBuffer) =
+        //    match data.Buffer with
+        //    | :? Buffer as b -> 
+        //        if data.Indexed <> indexed then
+        //            failwith "[GL] incompatible IndirectBuffer: indexed option does not match"
+        //        GLIndirectBuffer(b, data.Count, data.Stride, data.Indexed) // OwnHandle !?
+        //    | _ ->
+        //        using x.ResourceLock (fun _ ->
+                    
+        //            // transform data array to indexed/non-indexed layout
+        //            let layoutedData = 
+        //                match data.Buffer with
+        //                | :? ArrayBuffer as ab -> failwith "" 
+        //                | :? SingleValueBuffer as sb -> failwith ""
+        //                | _ -> data.Buffer // Native or other -> assume data is compatible
 
-                let callCount = postProcessDrawCallBuffer indexed buffer
-                IndirectBuffer(buffer, data.Count, sizeof<DrawCallInfo>, indexed)
-            )
+        //            let buffer = x.CreateBuffer(layoutedData)
+        //            GLIndirectBuffer(buffer, data.Count, data.Stride, data.Indexed)
 
+        //            //let buffer = 
+        //            //    match data.Buffer with
+        //            //        | :? Buffer as b -> x.Clone(b)
+        //            //        | _ -> x.CreateBuffer(data.Buffer)
 
-
+        //            //let callCount = postProcessDrawCallBuffer indexed buffer
+        //            //BackendIndirectBuffer(buffer :> IBackendBuffer, data.Count, sizeof<DrawCallInfo>, indexed)
+        //        )
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Buffer =

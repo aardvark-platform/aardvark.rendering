@@ -10,7 +10,3 @@ NUnit
 FShade.GLSL
 Unofficial.OpenTK
 Unofficial.OpenTK.GLControl
-SourceLink.Create.CommandLine
-
-
-dotnet-sourcelink

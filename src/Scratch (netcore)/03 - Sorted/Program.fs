@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -162,7 +162,7 @@ module Shaders =
             false
 
     let max1 (v : V3d) =
-        let a = v.Abs
+        let a = v.Abs()
         v / (max a.X (max a.Y a.Z))
            
     [<ReflectedDefinition>]
@@ -328,7 +328,7 @@ module Shaders =
         
         let ld = dir.Length
         let lv = v.Length
-        let c = V3d.Dot(dir / ld, v / lv)
+        let c = Vec.Dot(dir / ld, v / lv)
         (v / lv) * (ld / c) 
 
     //let nextMultiple (a : float) (v : float) =
@@ -632,7 +632,7 @@ let ofIndexedGeometry2 (instanceCount : int) (g : IndexedGeometry) =
     let attributes = 
         g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) -> 
             let t = v.GetType().GetElementType()
-            let view = BufferView(Mod.constant (ArrayBuffer(v) :> IBuffer), t)
+            let view = BufferView(AVal.constant (ArrayBuffer(v) :> IBuffer), t)
 
             k, view
         ) |> Map.ofSeq
@@ -663,7 +663,7 @@ let ofIndexedGeometry2 (instanceCount : int) (g : IndexedGeometry) =
 [<EntryPoint>]
 let main argv = 
     
-    Ag.initialize()
+    
     Aardvark.Init()
 
     // window { ... } is similar to show { ... } but instead
@@ -708,7 +708,7 @@ let main argv =
         |]
 
     let sorted = 
-        win.View |> Mod.map (fun vs -> 
+        win.View |> AVal.map (fun vs -> 
             let cam = trafo.Backward.TransformPos (vs.[0].Backward.TransformPos(V3d.Zero))
             let b = trafo.Backward.TransformPos (vs.[0].Backward.TransformPos(-V3d.OOI))
             let fw = Vec.normalize (b - cam)
@@ -721,9 +721,9 @@ let main argv =
 
         )
 
-    let fillMode = Mod.init FillMode.Fill
-    let cellSize = Mod.init 64
-    let magic = Mod.init 1.0
+    let fillMode = AVal.init FillMode.Fill
+    let cellSize = AVal.init 64
+    let magic = AVal.init 1.0
     
     win.Keyboard.KeyDown(Keys.Up).Values.Add(fun _ ->
 
@@ -754,7 +754,7 @@ let main argv =
         )
     ) |> ignore
     
-    let planes = Mod.init false
+    let planes = AVal.init false
     win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ ->
         transact (fun () ->
             planes.Value <- not planes.Value
@@ -779,7 +779,7 @@ let main argv =
             |> Sg.shader {
                 do! DefaultSurfaces.constantColor (C4f(0.0,0.0,0.0,0.0))
             }
-            |> Sg.depthTest (Mod.constant DepthTestMode.None)
+            |> Sg.depthTest (AVal.constant DepthTestMode.None)
           
     let pa = RenderPass.after "a" RenderPassOrder.Arbitrary RenderPass.main
     let pb = RenderPass.after "b" RenderPassOrder.Arbitrary pa
@@ -790,7 +790,7 @@ let main argv =
         // create a red box with a simple shader
         box
             |> Sg.instanceBuffer (Sym.ofString "Offset") buffer
-            //|> Sg.uniform "PaddedTextureSize" (Mod.constant fullSize)
+            //|> Sg.uniform "PaddedTextureSize" (AVal.constant fullSize)
             |> Sg.fillMode fillMode
             |> Sg.shader {
                 do! Shaders.instanceTrafo
@@ -798,12 +798,12 @@ let main argv =
                 //do! DefaultSurfaces.constantColor (C4f(0.1,0.0,0.0,0.1))
                 do! Shaders.march
             }
-            |> Sg.blendMode (Mod.constant blendMode)
-            |> Sg.cullMode (Mod.constant CullMode.Back)
-            |> Sg.depthTest (Mod.constant DepthTestMode.None)
+            |> Sg.blendMode (AVal.constant blendMode)
+            |> Sg.cullMode (AVal.constant CullMode.Back)
+            |> Sg.depthTest (AVal.constant DepthTestMode.None)
             |> Sg.pass pa
             |> Sg.transform trafo
-            |> Sg.uniform "GridSize" (Mod.constant cells)
+            |> Sg.uniform "GridSize" (AVal.constant cells)
             |> Sg.uniform "ShowPlanes" planes
             |> Sg.uniform "CellSize" cellSize
             |> Sg.uniform "Magic" magic

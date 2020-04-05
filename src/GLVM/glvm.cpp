@@ -128,6 +128,8 @@ DllExport(void) vmInit()
 	glVertexAttribDivisor = (PFNGLVERTEXATTRIBDIVISORPROC)getProc("glVertexAttribDivisor");
 
 	glPolygonOffsetClamp = (PFNGLPOLYGONOFFSETCLAMP)getProc("glPolygonOffsetClampEXT");
+    glDrawArraysIndirect = (PFNGLDRAWARRAYSINDIRECTPROC)getProc("glDrawArraysIndirect");
+    glDrawElementsIndirect = (PFNGLDRAWELEMENTSINDIRECTPROC)getProc("glDrawElementsIndirect");
 
 	#endif
 
@@ -393,10 +395,10 @@ void runInstruction(Instruction* i)
 		hglDrawElements((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (DrawCallInfoList*)i->Arg4);
 		break;
 	case HDrawArraysIndirect:
-		hglDrawArraysIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (HandleAndCount*)i->Arg3);
+		hglDrawArraysIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (IndirctDrawArgsStruct*)i->Arg3);
 		break;
 	case HDrawElementsIndirect:
-		hglDrawElementsIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (HandleAndCount*)i->Arg4);
+		hglDrawElementsIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (IndirctDrawArgsStruct*)i->Arg4);
 		break;
 	case HSetDepthTest:
 		hglSetDepthTest((DepthTestMode*)i->Arg0);
@@ -708,10 +710,10 @@ Statistics runRedundancyChecks(Fragment* frag)
 					hglDrawElements((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (DrawCallInfoList*)i->Arg4);
 					break;
 				case HDrawArraysIndirect:
-					hglDrawArraysIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (HandleAndCount*)i->Arg3);
+					hglDrawArraysIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (IndirctDrawArgsStruct*)i->Arg3);
 					break;
 				case HDrawElementsIndirect:
-					hglDrawElementsIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (HandleAndCount*)i->Arg4);
+					hglDrawElementsIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (IndirctDrawArgsStruct*)i->Arg4);
 					break;
 
 				case HSetDepthTest:
@@ -846,10 +848,12 @@ DllExport(void) hglDrawArrays(RuntimeStats* stats, int* isActive, BeginMode* mod
 
 	for (int i = 0; i < cnt; i++, info += 1)
 	{
+		if (info->InstanceCount == 0) continue;
+
 		stats->EffectiveDrawCalls += info->InstanceCount;
-		if (info->InstanceCount != 1 || info->FirstInstance != 0)
-		{
-			glDrawArraysInstancedBaseInstance(m, info->FirstIndex, info->FaceVertexCount, info->InstanceCount, info->FirstInstance);
+		if (info->InstanceCount > 1) {
+			if (info->FirstInstance == 0)glDrawArraysInstanced(m, info->FirstIndex, info->FaceVertexCount, info->InstanceCount);
+			else glDrawArraysInstancedBaseInstance(m, info->FirstIndex, info->FaceVertexCount, info->InstanceCount, info->FirstInstance);
 		}
 		else
 		{
@@ -875,11 +879,11 @@ DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* m
 	stats->DrawCalls+=(int)cnt;
 	for (int i = 0; i < cnt; i++, info += 1)
 	{
+		if (info->InstanceCount == 0) continue;
 		stats->EffectiveDrawCalls += info->InstanceCount;
-
-		if (info->InstanceCount != 1 || info->FirstInstance != 0)
-		{
-			glDrawElementsInstancedBaseVertexBaseInstance(m, info->FaceVertexCount, indexType, (const void*)(int64_t)(info->FirstIndex*indexSize), info->InstanceCount, info->BaseVertex, info->FirstInstance);
+		if (info->InstanceCount > 1) {
+			if (info->FirstInstance == 0) glDrawElementsInstanced(m, info->FaceVertexCount, indexType, (const void*)(int64_t)(info->FirstIndex * indexSize), info->InstanceCount);
+			else glDrawElementsInstancedBaseVertexBaseInstance(m, info->FaceVertexCount, indexType, (const void*)(int64_t)(info->FirstIndex * indexSize), info->InstanceCount, info->BaseVertex, info->FirstInstance);
 		}
 		else
 		{
@@ -900,14 +904,15 @@ DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* m
 	endtrace("a")
 }
 
-DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, HandleAndCount* handleAndCount)
+DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, IndirctDrawArgsStruct* args)
 {
 	trace("hglDrawArraysIndirect\n");
 
 	auto active = *isActive;
-	auto drawcount = handleAndCount->Count;
+	auto drawcount = args->Count;
 	if (!active || !drawcount) return;
-	auto buffer = handleAndCount->Handle;
+	auto buffer = args->Handle;
+	auto stride = args->Stride;
 
 	stats->DrawCalls++;
 	stats->EffectiveDrawCalls += drawcount;
@@ -918,29 +923,41 @@ DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginM
 
 	if (glMultiDrawArraysIndirect == nullptr)
 	{	
-		GLint size = 0;
-		glBindBuffer(GL_COPY_READ_BUFFER, buffer);
-		glGetBufferParameteriv(GL_COPY_READ_BUFFER, GL_BUFFER_SIZE, &size);
-		auto indirect = (char*)glMapBufferRange(GL_COPY_READ_BUFFER, 0, size, GL_MAP_READ_BIT);
-		
-		GLsizei n;
-		for (n = 0; n < drawcount; n++)
+		if (buffer != 0)
 		{
-			const DrawArraysIndirectCommand  *cmd;
-			cmd = (DrawArraysIndirectCommand*)(indirect + n * 20);
-
-			glDrawArraysInstancedBaseInstance(m, cmd->First, cmd->Count, cmd->InstanceCount, cmd->BaseInstance);
+			glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
+			size_t offset = 0;
+			for (int i = 0; i < drawcount; i++)
+			{
+				glDrawArraysIndirect(m, (const GLvoid*)offset);
+				offset += stride;
+			}
+			glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
 		}
 	
-		glUnmapBuffer(GL_COPY_READ_BUFFER);
-		glBindBuffer(GL_COPY_READ_BUFFER, 0);
+		//GLint size = 0;
+		//glBindBuffer(GL_COPY_READ_BUFFER, buffer);
+		//glGetBufferParameteriv(GL_COPY_READ_BUFFER, GL_BUFFER_SIZE, &size);
+		//auto indirect = (char*)glMapBufferRange(GL_COPY_READ_BUFFER, 0, size, GL_MAP_READ_BIT);
+		//
+		//GLsizei n;
+		//for (n = 0; n < drawcount; n++)
+		//{
+		//	const DrawArraysIndirectCommand  *cmd;
+		//	cmd = (DrawArraysIndirectCommand*)(indirect + n * stride);
+
+		//	glDrawArraysInstancedBaseInstance(m, cmd->First, cmd->Count, cmd->InstanceCount, cmd->BaseInstance);
+		//}
+	
+		//glUnmapBuffer(GL_COPY_READ_BUFFER);
+		//glBindBuffer(GL_COPY_READ_BUFFER, 0);
 	}
 	else
 	{
 		if (buffer != 0)
 		{
 			glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
-			glMultiDrawArraysIndirect(m, nullptr, drawcount, 20);
+			glMultiDrawArraysIndirect(m, nullptr, drawcount, stride);
 		}
 		else
 		{
@@ -951,13 +968,14 @@ DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginM
 	endtrace("a")
 }
 
-DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, HandleAndCount* handleAndCount)
+DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, IndirctDrawArgsStruct* args)
 {
 	trace("hglDrawElementsIndirect\n");
-	auto drawcount = handleAndCount->Count;
+	auto drawcount = args->Count;
 	auto active = *isActive;
 	if (!active || !drawcount)return;
-	auto buffer = handleAndCount->Handle;
+	auto buffer = args->Handle;
+	auto stride = args->Stride;
 
 	stats->DrawCalls++;
 	stats->EffectiveDrawCalls += drawcount;
@@ -968,37 +986,48 @@ DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, Begi
 
 	if (glMultiDrawElementsIndirect == nullptr)
 	{
-		auto indexSize = getIndexSize(indexType);
-		GLint size = 0;
-		glBindBuffer(GL_COPY_READ_BUFFER, buffer);
-		glGetBufferParameteriv(GL_COPY_READ_BUFFER, GL_BUFFER_SIZE, &size);
-		auto indirect = (DrawElementsIndirectCommand*)glMapBufferRange(GL_COPY_READ_BUFFER, 0, size, GL_MAP_READ_BIT);
-		GLsizei n;
-		for (n = 0; n < drawcount; n++)
+		if (buffer != 0)
 		{
-			const DrawElementsIndirectCommand  *cmd;
-			cmd = (const DrawElementsIndirectCommand  *)indirect + n;
-
-			glDrawElementsInstancedBaseVertexBaseInstance(
-				m,
-				cmd->Count,
-				indexType,
-				(void*) (cmd->FirstIndex * indexSize), 
-				cmd->InstanceCount,
-				cmd->BaseVertex,
-				cmd->BaseInstance
-			);
+			glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
+			size_t offset = 0;
+			for (int i = 0; i < drawcount; i++)
+			{
+				glDrawElementsIndirect(m, indexType, (const GLvoid*)offset);
+				offset += stride;
+			}
+			glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
 		}
+		//auto indexSize = getIndexSize(indexType);
+		//GLint size = 0;
+		//glBindBuffer(GL_COPY_READ_BUFFER, buffer);
+		//glGetBufferParameteriv(GL_COPY_READ_BUFFER, GL_BUFFER_SIZE, &size);
+		//auto indirect = (DrawElementsIndirectCommand*)glMapBufferRange(GL_COPY_READ_BUFFER, 0, size, GL_MAP_READ_BIT);
+		//GLsizei n;
+		//for (n = 0; n < drawcount; n++)
+		//{
+		//	const DrawElementsIndirectCommand  *cmd;
+		//	cmd = (DrawElementsIndirectCommand*)(indirect + n * stride);
 
-		glUnmapBuffer(GL_COPY_READ_BUFFER);
-		glBindBuffer(GL_COPY_READ_BUFFER, 0);
+		//	glDrawElementsInstancedBaseVertexBaseInstance(
+		//		m,
+		//		cmd->Count,
+		//		indexType,
+		//		(void*) (cmd->FirstIndex * indexSize), 
+		//		cmd->InstanceCount,
+		//		cmd->BaseVertex,
+		//		cmd->BaseInstance
+		//	);
+		//}
+
+		//glUnmapBuffer(GL_COPY_READ_BUFFER);
+		//glBindBuffer(GL_COPY_READ_BUFFER, 0);
 	}
 	else
 	{
 		if (buffer != 0)
 		{
 			glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
-			glMultiDrawElementsIndirect(m, indexType, nullptr, drawcount, 0);
+			glMultiDrawElementsIndirect(m, indexType, nullptr, drawcount, stride);
 		}
 		else
 		{

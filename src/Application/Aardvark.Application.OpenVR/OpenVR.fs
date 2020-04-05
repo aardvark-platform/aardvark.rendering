@@ -4,10 +4,11 @@ open System
 open Valve.VR
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open System.Runtime.InteropServices
 open Microsoft.FSharp.NativeInterop
 open Aardvark.SceneGraph
+open FSharp.Data.Traceable
 
 #nowarn "9"
 
@@ -67,8 +68,8 @@ module Unhate =
  
     let private allFlags = unbox<Flags> 0x07
  
-    let private all = List<ModRef<Flags>>()
-    let private trafos = Dict<string, ModRef<Flags>>()
+    let private all = List<cval<Flags>>()
+    let private trafos = Dict<string, cval<Flags>>()
  
  
     let unhate() =
@@ -94,18 +95,18 @@ module Unhate =
             printf "%s: %A " name v.Value
         printfn ""
  
-    let register (name : string) (m : IMod<Trafo3d>) =
+    let register (name : string) (m : aval<Trafo3d>) =
         let flags = trafos.GetOrCreate(name, fun _ ->
-            let m = Mod.init Flags.None
+            let m = AVal.init Flags.None
             all.Add m
             m
         )
-        Mod.map2 applyFlags flags m
+        AVal.map2 applyFlags flags m
  
 module UnhateTest =
     let run() =
         let trafo =
-                Mod.init (Trafo3d.Translation(5.0, 6.0, 7.0))
+                AVal.init (Trafo3d.Translation(5.0, 6.0, 7.0))
                 |> Unhate.register "a"
  
         while true do
@@ -150,15 +151,15 @@ module VrTrafo =
     let inline inverse (t : Trafo3d) = t.Inverse
 
 type MotionState() =
-    let isValid = Mod.init false
-    let pose = Mod.init Trafo3d.Identity
-    let angularVelocity = Mod.init V3d.Zero
-    let velocity = Mod.init V3d.Zero
+    let isValid = AVal.init false
+    let pose = AVal.init Trafo3d.Identity
+    let angularVelocity = AVal.init V3d.Zero
+    let velocity = AVal.init V3d.Zero
 
-    member x.IsValid = isValid :> IMod<_>
-    member x.Pose = pose :> IMod<_>
-    member x.Velocity = velocity :> IMod<_>
-    member x.AngularVelocity = angularVelocity :> IMod<_>
+    member x.IsValid = isValid :> aval<_>
+    member x.Pose = pose :> aval<_>
+    member x.Velocity = velocity :> aval<_>
+    member x.AngularVelocity = angularVelocity :> aval<_>
 
     member x.Update(newPose : byref<TrackedDevicePose_t>) =
         if newPose.bDeviceIsConnected && newPose.bPoseIsValid && newPose.eTrackingResult = ETrackingResult.Running_OK then
@@ -230,12 +231,12 @@ module RenderModels =
 
 
         let indexBuffer = ArrayBuffer(index) //NativeMemoryBuffer(NativePtr.toNativeInt m.IndexData, int m.TriangleCount * 3 * sizeof<uint16>)
-        let indexBufferView = BufferView(Mod.constant (indexBuffer :> IBuffer), typeof<int>)
+        let indexBufferView = BufferView(AVal.constant (indexBuffer :> IBuffer), typeof<int>)
 
         //let vertexBuffer = NativeMemoryBuffer(NativePtr.toNativeInt m.VertexData, int m.VertexCount * sizeof<Vertex>) :> IBuffer
-        let positions = BufferView(Mod.constant (ArrayBuffer(positions) :> IBuffer), typeof<V3f>)
-        let normals = BufferView(Mod.constant (ArrayBuffer(normals) :> IBuffer), typeof<V3f>)
-        let coords = BufferView(Mod.constant (ArrayBuffer(tc) :> IBuffer), typeof<V2f>)
+        let positions = BufferView(AVal.constant (ArrayBuffer(positions) :> IBuffer), typeof<V3f>)
+        let normals = BufferView(AVal.constant (ArrayBuffer(normals) :> IBuffer), typeof<V3f>)
+        let coords = BufferView(AVal.constant (ArrayBuffer(tc) :> IBuffer), typeof<V2f>)
 
         let sg = 
             Sg.VertexIndexApplicator(indexBufferView, Sg.render mode call) :> ISg 
@@ -367,9 +368,9 @@ type VrDevice(system : CVRSystem, deviceType : VrDeviceType, index : int) =
         events.Trigger(evt)
 
 and VrAxis(system : CVRSystem, axisType : EVRControllerAxisType, deviceIndex : int, axisIndex : int) =
-    let touched = Mod.init false
-    let pressed = Mod.init false
-    let position = Mod.init None
+    let touched = AVal.init false
+    let pressed = AVal.init false
+    let position = AVal.init None
     
     let touch = Event<unit>()
     let untouch = Event<unit>()
@@ -379,9 +380,9 @@ and VrAxis(system : CVRSystem, axisType : EVRControllerAxisType, deviceIndex : i
     override x.ToString() =
         sprintf "{ device = %d; axis = %d }" deviceIndex axisIndex
 
-    member x.Touched = touched :> IMod<_>
-    member x.Pressed = pressed :> IMod<_>
-    member x.Position = position :> IMod<_>
+    member x.Touched = touched :> aval<_>
+    member x.Pressed = pressed :> aval<_>
+    member x.Position = position :> aval<_>
     member x.Touch = touch.Publish
     member x.UnTouch = untouch.Publish
     member x.Press = press.Publish
@@ -480,8 +481,8 @@ type VrTexture =
 type VrRenderInfo =
     {
         framebufferSize     : V2i
-        viewTrafos          : IMod<Trafo3d[]>
-        projTrafos          : IMod<Trafo3d[]>
+        viewTrafos          : aval<Trafo3d[]>
+        projTrafos          : aval<Trafo3d[]>
     }
 
     //let swProcessEvents = Stopwatch()
@@ -520,13 +521,13 @@ module VrSystemStats =
     open Aardvark.SceneGraph
     open FShade
 
-    let toStackedGraph (stats : IMod<VrSystemStats>) =
+    let toStackedGraph (stats : aval<VrSystemStats>) =
         
         let col (v : int) =
             C4b(byte (v >>> 16), byte (v >>> 8), byte v)
 
         let trafosAndColors =
-            stats |> Mod.map (fun s ->
+            stats |> AVal.map (fun s ->
                 
 
                 let timesAndColors =
@@ -563,8 +564,8 @@ module VrSystemStats =
                 trafos, colors
             )
 
-        let trafos = Mod.map (fun (t,_) -> t :> System.Array) trafosAndColors
-        let colors = Mod.map (fun (_,c) -> c :> System.Array) trafosAndColors
+        let trafos = AVal.map (fun (t,_) -> t :> System.Array) trafosAndColors
+        let colors = AVal.map (fun (_,c) -> c :> System.Array) trafosAndColors
 
         let baseBox = 
             Sg.box' C4b.White (Box3d(V3d.Zero, V3d.III))
@@ -620,8 +621,8 @@ type VrSystem(appType : VrApplicationType) =
                     yield None
         |]
         
-    let connectedDevices = Mod.custom (fun _ -> lock deviceCache (fun () -> Seq.choose id deviceCache |> HRefSet.ofSeq))
-    let connectedAll = connectedDevices |> ASet.ofMod
+    let connectedDevices = AVal.custom (fun _ -> lock deviceCache (fun () -> Seq.choose id deviceCache |> HashSet.ofSeq))
+    let connectedAll = connectedDevices |> ASet.ofAVal
     let connectedHmds = connectedAll |> ASet.filter (fun d -> d.Type = VrDeviceType.Hmd)
     let connectedControllers = connectedAll |> ASet.filter (fun d -> d.Type = VrDeviceType.Controller)
     
@@ -901,12 +902,12 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
             Log.error "[OpenVR] %A: %s" err str
             //failwithf "[OpenVR] %A: %s" err str
 
-    let depthRange = Range1d(0.15, 1000.0) |> Mod.init
+    let depthRange = Range1d(0.15, 1000.0) |> AVal.init
 
     let projections =
         //let headToEye = system.GetEyeToHeadTransform(EVREye.Eye_Right) |> Trafo.ofHmdMatrix34 |> Trafo.inverse
         //let headToEye = Trafo3d.Scale(1.0, 1.0, -1.0) * headToEye
-        depthRange |> Mod.map (fun range ->
+        depthRange |> AVal.map (fun range ->
             let proj = system.System.GetProjectionMatrix(EVREye.Eye_Left, float32 range.Min, float32 range.Max)
             let lProj = VrTrafo.ofHmdMatrix44 proj
 
@@ -941,7 +942,7 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
             hmds() |> Seq.toArray |> Array.map (fun hmd ->
                 {
                     framebufferSize = desiredSize.Value
-                    viewTrafos = hmd.MotionState.Pose |> Mod.map view  //CameraView.lookAt (V3d(3,4,5)) V3d.Zero V3d.OOI |> CameraView.viewTrafo |> Mod.constant //hmd.MotionState.Pose |> Mod.map Trafo.inverse |> Unhate.register "viewTrafo"
+                    viewTrafos = hmd.MotionState.Pose |> AVal.map view  //CameraView.lookAt (V3d(3,4,5)) V3d.Zero V3d.OOI |> CameraView.viewTrafo |> AVal.constant //hmd.MotionState.Pose |> AVal.map Trafo.inverse |> Unhate.register "viewTrafo"
                     projTrafos = projections
                 }
             )

@@ -2,7 +2,7 @@
 
 
 open System
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 type IBackendTextureOutputView =
     inherit IFramebufferOutput

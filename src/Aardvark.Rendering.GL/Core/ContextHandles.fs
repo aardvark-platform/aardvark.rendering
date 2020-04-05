@@ -169,7 +169,103 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ContextHandle =
     
-    let private windows = ConcurrentDictionary<ContextHandle, NativeWindow>()
+    //let private windows = ConcurrentDictionary<ContextHandle, NativeWindow>()
+
+    //let mutable primaryContext : ContextHandle = null
+
+    ///// <summary>
+    ///// creates a new context using the default configuration
+    ///// </summary>
+    //let create (enableDebug : bool) =
+    //    let window, context =
+    //        if not (isNull primaryContext) then 
+    //            primaryContext.MakeCurrent()
+            
+    //        let mode = Graphics.GraphicsMode(ColorFormat(Config.BitsPerPixel), Config.DepthBits, Config.StencilBits, 1, ColorFormat.Empty, Config.Buffers, false)
+    //        let window = new NativeWindow(16, 16, "background", GameWindowFlags.Default, mode, DisplayDevice.Default)
+    //        let context = new GraphicsContext(GraphicsMode.Default, window.WindowInfo, Config.MajorVersion, Config.MinorVersion, Config.ContextFlags);
+    //        context.MakeCurrent(window.WindowInfo)
+    //        let ctx = context |> unbox<IGraphicsContextInternal>
+    //        ctx.LoadAll()
+
+    //        GL.Hint(HintTarget.PointSmoothHint, HintMode.Fastest)
+    //        GL.Enable(EnableCap.TextureCubeMapSeamless)
+    //        GL.Disable(EnableCap.PolygonSmooth)
+    //        GL.Hint(HintTarget.FragmentShaderDerivativeHint, HintMode.Nicest)
+
+    //        context.MakeCurrent(null)
+    //        window, context
+    
+        
+    //    let handle = new ContextHandle(context, window.WindowInfo)
+
+    //    if enableDebug then
+    //        handle.AttachDebugOutputIfNeeded(true)
+
+    //    if isNull primaryContext then
+    //        primaryContext <- handle
+
+    //    // add the window to the windows-table to save it from being
+    //    // garbage collected.
+    //    if not <| windows.TryAdd(handle, window) then failwith "failed to add new context to live-set"
+    
+    
+    //    handle
+
+    //let createContexts enableDebug resourceContextCount  =
+    //    // if there is a current context release it before creating
+    //    // the GameWindow since the GameWindow makes itself current
+    //    GraphicsContext.ShareContexts <- true;
+
+    //    let current = ContextHandle.Current
+    //    match current with
+    //        | Some handle -> handle.ReleaseCurrent()
+    //        | None -> ()
+
+    //    let contexts =
+    //        [ for i in 1..resourceContextCount do
+    //            yield create (enableDebug)
+    //        ]
+
+    //    // make the old context current again
+    //    match current with
+    //        | Some handle -> handle.MakeCurrent()
+    //        | None -> ()
+
+    //    contexts
+
+    /// <summary>
+    /// deletes the given context also destroying its associated window-info
+    /// </summary>
+    let delete(ctx : ContextHandle) =
+        if ctx.IsCurrent then
+            ctx.ReleaseCurrent()
+
+        //match windows.TryRemove ctx with
+        //    | (true, w) -> w.Dispose()
+        //    | _ -> ()
+
+    /// <summary>
+    /// checks whether the given context is current on the calling thread
+    /// </summary>
+    let isCurrent (ctx : ContextHandle) = ctx.IsCurrent
+
+    /// <summary>
+    /// makes the given context current on the calling thread.
+    /// releases any context being current before doing so.
+    /// </summary>
+    let makeCurrent (ctx : ContextHandle) = ctx.MakeCurrent()
+
+    /// <summary>
+    /// releases the given context from the calling thread
+    /// </summary>
+    let releaseCurrent (ctx : ContextHandle) = ctx.ReleaseCurrent()
+
+
+
+module ContextHandleOpenTK =
+    
+    let private windows = System.Collections.Concurrent.ConcurrentDictionary<ContextHandle, NativeWindow>()
 
     let mutable primaryContext : ContextHandle = null
 
@@ -211,55 +307,5 @@ module ContextHandle =
     
     
         handle
-
-    let createContexts enableDebug resourceContextCount  =
-        // if there is a current context release it before creating
-        // the GameWindow since the GameWindow makes itself current
-        GraphicsContext.ShareContexts <- true;
-
-        let current = ContextHandle.Current
-        match current with
-            | Some handle -> handle.ReleaseCurrent()
-            | None -> ()
-
-        let contexts =
-            [ for i in 1..resourceContextCount do
-                yield create (enableDebug)
-            ]
-
-        // make the old context current again
-        match current with
-            | Some handle -> handle.MakeCurrent()
-            | None -> ()
-
-        contexts
-
-    /// <summary>
-    /// deletes the given context also destroying its associated window-info
-    /// </summary>
-    let delete(ctx : ContextHandle) =
-        if ctx.IsCurrent then
-            ctx.ReleaseCurrent()
-
-        match windows.TryRemove ctx with
-            | (true, w) -> w.Dispose()
-            | _ -> ()
-
-    /// <summary>
-    /// checks whether the given context is current on the calling thread
-    /// </summary>
-    let isCurrent (ctx : ContextHandle) = ctx.IsCurrent
-
-    /// <summary>
-    /// makes the given context current on the calling thread.
-    /// releases any context being current before doing so.
-    /// </summary>
-    let makeCurrent (ctx : ContextHandle) = ctx.MakeCurrent()
-
-    /// <summary>
-    /// releases the given context from the calling thread
-    /// </summary>
-    let releaseCurrent (ctx : ContextHandle) = ctx.ReleaseCurrent()
-
 
 

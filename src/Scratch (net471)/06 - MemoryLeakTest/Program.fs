@@ -1,7 +1,7 @@
 ﻿open System
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
@@ -26,34 +26,36 @@ module Shader =
 [<EntryPoint>]
 let main argv = 
     
-    Ag.initialize()
+    
     Aardvark.Init()
 
     use app = new OpenGlApplication()
-    let win = app.CreateGameWindow(samples = 8)
+    let win = app.CreateSimpleRenderWindow(8)
     win.Title <- "Memory Leak"
+    
 
     let initialView = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
     let frustum = 
         win.Sizes 
-            |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
+            |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
 
     let cameraView = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
 
-    let stuff = Sg.Group()
+    let stuff = cset()
     let sphere = IndexedGeometryPrimitives.Sphere.solidPhiThetaSphere Sphere3d.Unit 10 C4b.White
     let sphere = Sg.ofIndexedGeometry sphere
     stuff.Add(sphere) |> ignore
 
     let sg =
             stuff
+            |> Sg.set
             |> Sg.effect [
                     Shader.badTrafo                       |> toEffect // using ModelView* trafo will pin the computation and source indefinitely
                     DefaultSurfaces.constantColor C4f.Red |> toEffect
                     DefaultSurfaces.simpleLighting        |> toEffect
                 ]
-            |> Sg.viewTrafo (cameraView  |> Mod.map CameraView.viewTrafo )
-            |> Sg.projTrafo (frustum |> Mod.map Frustum.projTrafo    )
+            |> Sg.viewTrafo (cameraView  |> AVal.map CameraView.viewTrafo )
+            |> Sg.projTrafo (frustum |> AVal.map Frustum.projTrafo    )
 
 
     let renderTask = 
@@ -62,7 +64,8 @@ let main argv =
     
     let renderTask =
         RenderTask.custom (fun (self,token,outputDesc) -> 
-            
+            win.Time.GetValue self |> ignore
+
             transact (fun () -> 
                     // clear old geometry and create new
                     stuff.Clear() 
@@ -73,8 +76,8 @@ let main argv =
                     // global inputs like "CameraLocation" will hold WeakReferences to already collected 
                     // temporary short living runtime outputs as long as the input does not change
                     // after 1m of not moving the camera 1k WeakReference
-                    let leak = Mod.init (sphere, Trafo3d.Identity) 
-                    let trafo = leak |> Mod.map (fun (_, t) -> t)
+                    let leak = AVal.init (sphere, Trafo3d.Identity) 
+                    let trafo = leak |> AVal.map (fun (_, t) -> t)
                     let sg = Sg.ofIndexedGeometry sphere
                                     |> Sg.trafo trafo
                     stuff.Add(sg) |> ignore

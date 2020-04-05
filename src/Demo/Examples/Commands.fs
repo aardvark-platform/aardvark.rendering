@@ -3,14 +3,14 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
 open Aardvark.Application
 open Aardvark.Application.WinForms
 open Aardvark.Rendering.Vulkan
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection
 open FShade
@@ -25,21 +25,21 @@ module CommandTest =
         let device = runtime.Device
 
         let cameraView  = DefaultCameraController.control win.Mouse win.Keyboard win.Time (CameraView.LookAt(3.0 * V3d.III, V3d.OOO, V3d.OOI))    
-        let frustum     = win.Sizes    |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))       
-        let viewTrafo   = cameraView    |> Mod.map CameraView.viewTrafo
-        let projTrafo   = frustum       |> Mod.map Frustum.projTrafo        
+        let frustum     = win.Sizes    |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))       
+        let viewTrafo   = cameraView    |> AVal.map CameraView.viewTrafo
+        let projTrafo   = frustum       |> AVal.map Frustum.projTrafo        
 
 
 
         let rotor =
             let startTime = System.DateTime.Now
-            win.Time |> Mod.map (fun t ->
+            win.Time |> AVal.map (fun t ->
                 let t = (t - startTime).TotalSeconds
                 Trafo3d.RotationZ (0.5 * t)
             )
 
         let viewTrafo =
-            Mod.map2 (*) rotor viewTrafo
+            AVal.map2 (*) rotor viewTrafo
 
 
 
@@ -53,7 +53,7 @@ module CommandTest =
                 | null ->
                     None, pos.Length
                 | index -> 
-                    let idx = Aardvark.Base.BufferView(Mod.constant (ArrayBuffer index :> IBuffer), typeof<int>)
+                    let idx = Aardvark.Base.BufferView(AVal.constant (ArrayBuffer index :> IBuffer), typeof<int>)
                     Some idx, index.Length
 
         let rand = RandomSystem()
@@ -68,7 +68,7 @@ module CommandTest =
                 Mode = IndexedGeometryMode.TriangleList,
                 SingleAttributes =
                     SymDict.ofList [
-                        Symbol.Create "NodeColor", (Mod.constant color) :> obj
+                        Symbol.Create "NodeColor", (AVal.constant color) :> obj
                     ],
 
                 IndexedAttributes =
@@ -80,22 +80,22 @@ module CommandTest =
 
         let state =
             {
-                depthTest           = Mod.constant DepthTestMode.LessOrEqual
-                depthBias           = Mod.constant (DepthBiasState(0.0, 0.0, 0.0))
-                cullMode            = Mod.constant CullMode.None
-                frontFace           = Mod.constant WindingOrder.CounterClockwise
-                blendMode           = Mod.constant BlendMode.None
-                fillMode            = Mod.constant FillMode.Fill
-                stencilMode         = Mod.constant StencilMode.Disabled
-                multisample         = Mod.constant true
+                depthTest           = AVal.constant DepthTestMode.LessOrEqual
+                depthBias           = AVal.constant (DepthBiasState(0.0, 0.0, 0.0))
+                cullMode            = AVal.constant CullMode.None
+                frontFace           = AVal.constant WindingOrder.CounterClockwise
+                blendMode           = AVal.constant BlendMode.None
+                fillMode            = AVal.constant FillMode.Fill
+                stencilMode         = AVal.constant StencilMode.Disabled
+                multisample         = AVal.constant true
                 writeBuffers        = None
                 globalUniforms      = 
                     UniformProvider.ofList [
-                        "ModelTrafo", Mod.constant Trafo3d.Identity :> IMod
-                        "ViewTrafo", viewTrafo :> IMod
-                        "ProjTrafo", projTrafo :> IMod
-                        "LightLocation", viewTrafo |> Mod.map (fun v -> v.Backward.C3.XYZ) :> IMod
-                        "CameraLocation", viewTrafo |> Mod.map (fun v -> v.Backward.C3.XYZ) :> IMod
+                        "ModelTrafo", AVal.constant Trafo3d.Identity :> IAdaptiveValue
+                        "ViewTrafo", viewTrafo :> IAdaptiveValue
+                        "ProjTrafo", projTrafo :> IAdaptiveValue
+                        "LightLocation", viewTrafo |> AVal.map (fun v -> v.Backward.C3.XYZ) :> IAdaptiveValue
+                        "CameraLocation", viewTrafo |> AVal.map (fun v -> v.Backward.C3.XYZ) :> IAdaptiveValue
                     ]
 
                 geometryMode        = IndexedGeometryMode.TriangleList
@@ -136,7 +136,7 @@ module CommandTest =
 
         let mutable urdar = System.Collections.Generic.Stack()
 
-        let geometries = CSet.ofSeq oida
+        let geometries = cset oida
 
         let mutable up = false
 
@@ -158,7 +158,7 @@ module CommandTest =
                     ()
         )
 
-        let current = Mod.init 0
+        let current = AVal.init 0
 
         win.Keyboard.DownWithRepeats.Values.Add (fun k ->
             match k with

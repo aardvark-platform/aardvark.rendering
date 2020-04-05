@@ -5,7 +5,7 @@ open System.Threading
 open System.Collections.Generic
 open System.Collections.Concurrent
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 type ColoredLockStatus<'a> =
     | Exclusive

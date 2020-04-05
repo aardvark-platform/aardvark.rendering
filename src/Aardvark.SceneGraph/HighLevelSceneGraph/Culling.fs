@@ -11,9 +11,9 @@
 //                let! child = c.Child
 //                let jobs = child?RenderObjects() : aset<RenderObject>
 //
-//                let viewProjTrafo = c?ViewProjTrafo() : IMod<Trafo3d>
+//                let viewProjTrafo = c?ViewProjTrafo() : aval<Trafo3d>
 //
-//                yield! jobs |> ASet.filterM (fun rj -> Mod.map2 intersectsFrustum (rj.GetBoundingBox()) viewProjTrafo)
+//                yield! jobs |> ASet.filterM (fun rj -> AVal.map2 intersectsFrustum (rj.GetBoundingBox()) viewProjTrafo)
 ////
 ////                for rj : RenderObject in jobs do
 ////                    let! viewProjTrafo = c?ViewProjTrafo() : Mod<Trafo3d>

@@ -8,7 +8,7 @@ open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Base.Monads.State
 open Microsoft.FSharp.NativeInterop
@@ -22,7 +22,7 @@ type AdaptiveGeometry =
         faceVertexCount  : int
         vertexCount      : int
         indices          : Option<BufferView>
-        uniforms         : Map<Symbol,IMod>
+        uniforms         : Map<Symbol,IAdaptiveValue>
         vertexAttributes : Map<Symbol,BufferView>
     }
 
@@ -36,7 +36,7 @@ type GeometrySignature =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module AdaptiveGeometry =
 
-    let ofIndexedGeometry (uniforms : list<Symbol * IMod>) (ig : IndexedGeometry) =
+    let ofIndexedGeometry (uniforms : list<Symbol * IAdaptiveValue>) (ig : IndexedGeometry) =
         let anyAtt = (ig.IndexedAttributes |> Seq.head).Value
 
         let faceVertexCount, index =
@@ -64,12 +64,13 @@ type IManagedBufferWriter =
 
 type IManagedBuffer =
     inherit IDisposable
-    inherit IMod<IBuffer>
+    inherit aval<IBuffer>
     abstract member Clear : unit -> unit
     abstract member Capacity : int
+    abstract member Set : nativeint * IntPtr * nativeint -> unit
     abstract member Set : Range1l * byte[] -> unit
     abstract member Add : Range1l * BufferView -> IDisposable
-    abstract member Add : int * IMod -> IDisposable
+    abstract member Add : int * IAdaptiveValue -> IDisposable
     abstract member ElementType : Type
 
 type IManagedBuffer<'a when 'a : unmanaged> =
@@ -81,17 +82,27 @@ type IManagedBuffer<'a when 'a : unmanaged> =
 [<AutoOpen>]
 module private ManagedBufferImplementation =
 
-    type ManagedBuffer<'a when 'a : unmanaged>(runtime : IRuntime) =
-        inherit DirtyTrackingAdaptiveObject<ManagedBufferWriter>()
+    type ManagedBuffer<'a when 'a : unmanaged>(runtime : IRuntime, usage : BufferUsage) =
+        inherit AdaptiveObject()
         static let asize = sizeof<'a> |> nativeint
 
-        let mutable store = runtime.CreateBuffer(0n)
+        let mutable store = runtime.CreateBuffer(0n, usage)
 
         let bufferWriters = Dict<BufferView, ManagedBufferWriter<'a>>()
-        let uniformWriters = Dict<IMod, ManagedBufferSingleWriter<'a>>()
+        let uniformWriters = Dict<IAdaptiveValue, ManagedBufferSingleWriter<'a>>()
+
+        let dirtyLock = obj()
+        let mutable dirty = System.Collections.Generic.HashSet<ManagedBufferWriter>()
+
+        override x.InputChangedObject(transaction, object) =
+            match object with
+            | :? ManagedBufferWriter as writer -> 
+                lock dirtyLock (fun () -> dirty.Add writer |> ignore)
+            | _ ->
+                ()
 
         member x.Resize (sz : nativeint) =
-            let newStore = runtime.CreateBuffer(sz)
+            let newStore = runtime.CreateBuffer(sz, usage)
             if sz > 0n && store.SizeInBytes > 0n then
                 (runtime :> IBufferRuntime).Copy(store, 0n, newStore, 0n, min sz store.SizeInBytes)
             runtime.DeleteBuffer store
@@ -113,14 +124,14 @@ module private ManagedBufferImplementation =
                     bufferWriters.GetOrCreate(view, fun view ->
                         isNew <- true
                         let data = BufferView.download 0 (int count) view
-                        let real : IMod<'a[]> = data |> PrimitiveValueConverter.convertArray view.ElementType
+                        let real : aval<'a[]> = data |> PrimitiveValueConverter.convertArray view.ElementType
                         let remove w =
-                            x.Dirty.Remove w |> ignore
+                            lock dirtyLock (fun () -> dirty.Remove w |> ignore)
                             bufferWriters.Remove view |> ignore
                             view.Buffer.Outputs.Remove(real) |> ignore // remove converter from Output of data Mod (in case there is no converter remove will do nothing, but Release of ManagedBufferSingleWriter will)
 
                         let w = new ManagedBufferWriter<'a>(remove, real, x)
-                        x.Dirty.Add w |> ignore
+                        lock dirtyLock (fun () -> dirty.Add w |> ignore)
                         w
                     )
 
@@ -143,20 +154,20 @@ module private ManagedBufferImplementation =
             if isNew then transact (fun () -> x.MarkOutdated ())
             res
 
-        member x.Add(index : int, data : IMod) =
+        member x.Add(index : int, data : IAdaptiveValue) =
             let mutable isNew = false
             let res = lock x (fun () ->
                 let writer =
                     uniformWriters.GetOrCreate(data, fun data ->
                         isNew <- true
-                        let real : IMod<'a> = data |> PrimitiveValueConverter.convertValue
+                        let real : aval<'a> = data |> PrimitiveValueConverter.convertValue
                         let remove w =
-                            x.Dirty.Remove w |> ignore
+                            lock dirtyLock (fun () -> dirty.Remove w |> ignore)
                             uniformWriters.Remove data |> ignore
                             data.Outputs.Remove(real) |> ignore // remove converter from Output of data Mod (in case there is no converter remove will do nothing, but Release of ManagedBufferSingleWriter will)
 
                         let w = new ManagedBufferSingleWriter<'a>(remove, real, x)
-                        x.Dirty.Add w |> ignore
+                        lock dirtyLock (fun () -> dirty.Add w |> ignore)
                         w
                     )
  
@@ -180,6 +191,14 @@ module private ManagedBufferImplementation =
                 transact (fun () -> x.MarkOutdated ())
             res
 
+        member x.Set(byteOffset : nativeint, src : IntPtr, byteCount : nativeint) =
+            let e = byteOffset + byteCount
+            if x.Store.SizeInBytes < e then
+                x.Resize(Fun.NextPowerOfTwo(int64 e) |> nativeint)
+
+            x.Store.Upload(byteOffset, src, byteCount)
+
+        /// allows to set the provided value-array repeated if the range is larger than the value-array
         member x.Set(range : Range1l, value : byte[]) =
             let count = range.Size + 1L
             let e = nativeint(range.Min + count) * asize
@@ -231,11 +250,17 @@ module private ManagedBufferImplementation =
             finally gc.Free()
 
         member x.GetValue(token : AdaptiveToken) =
-            x.EvaluateAlways' token (fun token dirty ->
-                    for d in dirty do
-                        d.Write(token)
-                    store :> IBuffer
-                )
+            x.EvaluateAlways token (fun token ->
+                let dirty = 
+                    lock dirtyLock (fun () ->
+                        let d = dirty
+                        dirty <- System.Collections.Generic.HashSet()
+                        d
+                    )
+                for d in dirty do
+                    d.Write(token)
+                x.Store :> IBuffer
+            )
 
         member x.Capacity = store.SizeInBytes
         member x.Count = store.SizeInBytes / asize |> int
@@ -248,17 +273,19 @@ module private ManagedBufferImplementation =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
-        interface IMod with
+        interface IAdaptiveValue with
+            member x.ContentType = typeof<IBuffer>
             member x.IsConstant = false
-            member x.GetValue c = x.GetValue c :> obj
+            member x.GetValueUntyped c = x.GetValue c :> obj
 
-        interface IMod<IBuffer> with
+        interface aval<IBuffer> with
             member x.GetValue c = x.GetValue c
             
         interface IManagedBuffer with
             member x.Clear() = x.Clear()
             member x.Add(range : Range1l, view : BufferView) = x.Add(range, view)
-            member x.Add(index : int, data : IMod) = x.Add(index, data)
+            member x.Add(index : int, data : IAdaptiveValue) = x.Add(index, data)
+            member x.Set(byteOffset : nativeint, src : IntPtr, byteCount : nativeint) = x.Set(byteOffset, src, byteCount)
             member x.Set(range : Range1l, value : byte[]) = x.Set(range, value)
             member x.Capacity = x.Capacity |> int
             member x.ElementType = typeof<'a>
@@ -305,7 +332,7 @@ module private ManagedBufferImplementation =
         interface IManagedBufferWriter with
             member x.Write c = x.Write c
 
-    and ManagedBufferWriter<'a when 'a : unmanaged>(remove : ManagedBufferWriter -> unit, data : IMod<'a[]>, buffer : ManagedBuffer<'a>) =
+    and ManagedBufferWriter<'a when 'a : unmanaged>(remove : ManagedBufferWriter -> unit, data : aval<'a[]>, buffer : ManagedBuffer<'a>) =
         inherit ManagedBufferWriter(remove)
         static let asize = sizeof<'a> |> nativeint
 
@@ -322,7 +349,7 @@ module private ManagedBufferImplementation =
             finally 
                 gc.Free()
 
-    and ManagedBufferSingleWriter<'a when 'a : unmanaged>(remove : ManagedBufferWriter -> unit, data : IMod<'a>, buffer : ManagedBuffer<'a>) =
+    and ManagedBufferSingleWriter<'a when 'a : unmanaged>(remove : ManagedBufferWriter -> unit, data : aval<'a>, buffer : ManagedBuffer<'a>) =
         inherit ManagedBufferWriter(remove)
         static let asize = sizeof<'a> |> nativeint
             
@@ -348,15 +375,15 @@ module ManagedBuffer =
                 tb.GetConstructor(
                     BindingFlags.NonPublic ||| BindingFlags.Public ||| BindingFlags.Instance ||| BindingFlags.Static ||| BindingFlags.CreateInstance,
                     Type.DefaultBinder,
-                    [| typeof<IRuntime> |],
+                    [| typeof<IRuntime>; typeof<BufferUsage> |],
                     null
                 )
             )
         )
 
-    let create (t : Type) (runtime : IRuntime) =
+    let create (t : Type) (runtime : IRuntime) (usage : BufferUsage) =
         let ctor = ctor t
-        ctor.Invoke [| runtime |] |> unbox<IManagedBuffer>
+        ctor.Invoke [| runtime; usage |] |> unbox<IManagedBuffer>
 
 
 type private LayoutManager<'a>() =
@@ -418,11 +445,11 @@ type ManagedPool(runtime : IRuntime, signature : GeometrySignature) =
     let mutable count = 0
     let indexManager = LayoutManager<Option<BufferView> * int>()
     let vertexManager = LayoutManager<Map<Symbol, BufferView>>()
-    let instanceManager = LayoutManager<Map<Symbol, IMod>>()
+    let instanceManager = LayoutManager<Map<Symbol, IAdaptiveValue>>()
 
-    let indexBuffer = new ManagedBuffer<int>(runtime) :> IManagedBuffer<int>
-    let vertexBuffers = signature.vertexBufferTypes |> Map.toSeq |> Seq.map (fun (k,t) -> k, ManagedBuffer.create t runtime) |> SymDict.ofSeq
-    let instanceBuffers = signature.uniformTypes |> Map.toSeq |> Seq.map (fun (k,t) -> k, ManagedBuffer.create t runtime) |> SymDict.ofSeq
+    let indexBuffer = new ManagedBuffer<int>(runtime, BufferUsage.Index ||| BufferUsage.ReadWrite) :> IManagedBuffer<int>
+    let vertexBuffers = signature.vertexBufferTypes |> Map.toSeq |> Seq.map (fun (k,t) -> k, ManagedBuffer.create t runtime (BufferUsage.Vertex ||| BufferUsage.ReadWrite)) |> SymDict.ofSeq
+    let instanceBuffers = signature.uniformTypes |> Map.toSeq |> Seq.map (fun (k,t) -> k, ManagedBuffer.create t runtime (BufferUsage.Vertex ||| BufferUsage.ReadWrite)) |> SymDict.ofSeq
     let vertexDisposables = Dictionary<BufferView, IDisposable>()
 
 
@@ -518,14 +545,46 @@ type ManagedPool(runtime : IRuntime, signature : GeometrySignature) =
         BufferView(indexBuffer, indexBuffer.ElementType)
 
 type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
-    inherit Mod.AbstractMod<IIndirectBuffer>()
+    inherit AVal.AbstractVal<IndirectBuffer>()
 
     let indices = Dict<DrawCallInfo, int>()
     let calls = List<DrawCallInfo>()
-    let store = new ManagedBuffer<DrawCallInfo>(runtime)
+    let store = new ManagedBuffer<int>(runtime, BufferUsage.Indirect ||| BufferUsage.ReadWrite)
     
     let locked x (f : unit -> 'a) =
         lock x f
+    
+    // https://www.khronos.org/opengl/wiki/Vertex_Rendering#Indirect_rendering
+
+    // non-indexed
+    //typedef  struct {
+    //   GLuint  count;
+    //   GLuint  instanceCount;
+    //   GLuint  first;
+    //   GLuint  baseInstance;
+    //} DrawArraysIndirectCommand;
+
+    // indexed
+    //typedef  struct {
+    //    uint  count;
+    //    uint  instanceCount;
+    //    uint  firstIndex;
+    //    uint  baseVertex;
+    //    uint  baseInstance;
+    //} DrawElementsIndirectCommand;
+
+    //let stride = if indexed then 20 else 16 // NOTE: vulkan currently does not support custom stride
+    let stride = 20
+    let upload (call : DrawCallInfo) (index : int) =
+        let mutable c = call
+        if indexed then
+            Fun.Swap(&c.BaseVertex, &c.FirstInstance)
+        let gc = GCHandle.Alloc(c, GCHandleType.Pinned)
+        try
+            let ptr = gc.AddrOfPinnedObject()
+            store.Set(nativeint(stride * index), ptr, nativeint stride)
+        finally
+            gc.Free()
 
     let add x (call : DrawCallInfo) =
         locked x (fun () ->
@@ -535,7 +594,7 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
                 let index = calls.Count
                 indices.[call] <- calls.Count
                 calls.Add call
-                store.Set(index, call)
+                upload call index
                 true
         )
 
@@ -553,7 +612,7 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
                         let last = calls.[lastIndex]
                         indices.[last] <- index
                         calls.[index] <- last
-                        store.Set(index, last)
+                        upload last index
                         calls.RemoveAt lastIndex
                         
                     true
@@ -577,85 +636,11 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
             
     override x.Compute(token) =
         let inner = store.GetValue(token)
-        IndirectBuffer(inner, calls.Count) :> IIndirectBuffer
+        IndirectBuffer(inner, calls.Count, stride, indexed)
 
     override x.Finalize() =
         try store.Dispose()
         with _ -> ()    
-
-
-//type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
-//    inherit Mod.AbstractMod<IIndirectBuffer>()
-
-//    let indices = Dict<DrawCallInfo, int>()
-//    let calls = List<DrawCallInfo>()
-//    let store = runtime.CreateMappedIndirectBuffer(indexed)
-
-//    let locked x (f : unit -> 'a) =
-//        lock x f
-
-//    let add x (call : DrawCallInfo) =
-//        locked x (fun () ->
-//            if indices.ContainsKey call then 
-//                false
-//            else
-//                store.Resize(Fun.NextPowerOfTwo (calls.Count + 1))
-//                let count = calls.Count
-//                indices.[call] <- count
-//                calls.Add call
-//                store.Count <- calls.Count
-//                store.[count] <- call
-//                true
-//        )
-
-//    let remove x (call : DrawCallInfo) =
-//        locked x (fun () ->
-//            match indices.TryRemove call with
-//                | (true, index) ->
-//                    if calls.Count = 1 then
-//                        calls.Clear()
-//                        store.Resize(0)
-//                    elif index = calls.Count-1 then
-//                        calls.RemoveAt index
-//                    else
-//                        let lastIndex = calls.Count - 1
-//                        let last = calls.[lastIndex]
-//                        indices.[last] <- index
-//                        calls.[index] <- last
-//                        store.[index] <- last
-//                        calls.RemoveAt lastIndex
-                        
-//                    store.Count <- calls.Count
-//                    true
-//                | _ ->
-//                    false
-//        )
-
-//    member x.Add (call : DrawCallInfo) =
-//        if add x call then
-//            transact (fun () -> x.MarkOutdated())
-//            true
-//        else
-//            false
-
-//    member x.Remove(call : DrawCallInfo) =
-//        if remove x call then
-//            transact (fun () -> x.MarkOutdated())
-//            true
-//        else
-//            false
-
-//    interface ILockedResource with
-//        member x.Lock = store.Lock
-//        member x.OnLock u = ()
-//        member x.OnUnlock u = ()
-
-//    override x.Compute(token) =
-//        store.GetValue()
-
-//    override x.Finalize() =
-//        try store.Dispose()
-//        with _ -> ()    
 
 [<AbstractClass; Sealed; Extension>]
 type IRuntimePoolExtensions private() =
@@ -666,11 +651,11 @@ type IRuntimePoolExtensions private() =
 
     [<Extension>]
     static member CreateManagedBuffer<'a when 'a : unmanaged>(this : IRuntime) : IManagedBuffer<'a> =
-        new ManagedBuffer<'a>(this) :> IManagedBuffer<'a>
+        new ManagedBuffer<'a>(this, (BufferUsage.Vertex ||| BufferUsage.ReadWrite)) :> IManagedBuffer<'a>
 
     [<Extension>]
     static member CreateManagedBuffer(this : IRuntime, elementType : Type) : IManagedBuffer =
-        this |> ManagedBuffer.create elementType
+        ManagedBuffer.create elementType this (BufferUsage.Vertex ||| BufferUsage.ReadWrite)
 
     [<Extension>]
     static member CreateDrawCallBuffer(this : IRuntime, indexed : bool) =
@@ -691,17 +676,17 @@ module ManagedPoolSg =
 
 
 module ``Pool Semantics`` =
-    [<Aardvark.Base.Ag.Semantic>]
+    [<Aardvark.Base.Rule>]
     type PoolSem() =
-        member x.RenderObjects(p : Sg.PoolNode) =
+        member x.RenderObjects(p : Sg.PoolNode, scope : Ag.Scope) =
             
             let pool = p.Pool
             
             let r = (p.Calls |> ASet.map (fun mdc -> mdc.Call)).GetReader()
             let calls =
                 let buffer = DrawCallBuffer(pool.Runtime, true) // who manages this? using finalizer for now
-                Mod.custom (fun self ->
-                    let deltas = r.GetOperations self
+                AVal.custom (fun self ->
+                    let deltas = r.GetChanges self
                     for d in deltas do
                         match d with
                             | Add(_,v) -> buffer.Add v |> ignore
@@ -716,12 +701,12 @@ module ``Pool Semantics`` =
                 let! c = calls;
                 if c.Count > 0 then
                     if ((ro :> obj) = null) then
-                        ro <- Aardvark.SceneGraph.Semantics.RenderObject.create()
+                        ro <- Aardvark.SceneGraph.Semantics.RenderObject.ofScope scope
                         ro.Mode <- p.Mode
                         ro.Indices <- Some pool.IndexBuffer
                         ro.VertexAttributes <- pool.VertexAttributes
                         ro.InstanceAttributes <- pool.InstanceAttributes
-                        ro.IndirectBuffer <- calls
+                        ro.DrawCalls <- Indirect calls
                     yield (ro :> IRenderObject)
                 else
                     ro <- Unchecked.defaultof<RenderObject>

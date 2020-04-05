@@ -3,12 +3,12 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection
 open Aardvark.Rendering.Vulkan
@@ -22,24 +22,24 @@ module Wobble =
 
         //FShade.EffectDebugger.attach()
 
-        let offset = Mod.init (V3d(1000000.0, 0.0, 0.0))
+        let offset = AVal.init (V3d(1000000.0, 0.0, 0.0))
         
         let cameraView = 
             let mutable currentCam = CameraView.lookAt (V3d(6,-6,2)) V3d.Zero V3d.OOI
             let mutable oldoffset = V3d.Zero
-            offset |> Mod.bind (fun o ->
+            offset |> AVal.bind (fun o ->
                 let init = currentCam.WithLocation(currentCam.Location + (o - oldoffset))
                 oldoffset <- o
                 init
                     |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
-                    |> Mod.map (fun c -> currentCam <- c; c)
-                    |> Mod.map CameraView.viewTrafo
+                    |> AVal.map (fun c -> currentCam <- c; c)
+                    |> AVal.map CameraView.viewTrafo
             )
 
         let projection = 
             win.Sizes 
-                |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y))
-                |> Mod.map Frustum.projTrafo
+                |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y))
+                |> AVal.map Frustum.projTrafo
 
         let font = Aardvark.Rendering.Text.Font("Consolas")
         let task =
@@ -55,7 +55,7 @@ module Wobble =
                             do! DefaultSurfaces.stableHeadlight
                         }
 
-                    Sg.text font C4b.White (Mod.constant "stable trafo")
+                    Sg.text font C4b.White (AVal.constant "stable trafo")
                         |> Sg.scale 0.2
                         |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero) * Trafo3d.Translation(0.0, 0.0, 1.5))
 
@@ -71,20 +71,20 @@ module Wobble =
                             do! DefaultSurfaces.trafo
                             do! DefaultSurfaces.simpleLighting
                         }
-                    Sg.text font C4b.White (Mod.constant "non-stable trafo")
+                    Sg.text font C4b.White (AVal.constant "non-stable trafo")
                         |> Sg.scale 0.2
                         |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero) * Trafo3d.Translation(0.0, 0.0, 1.5))
                 ]
                 |> Sg.translate 2.0 0.0 0.0
                 
-                Sg.text font C4b.Red (offset |> Mod.map (fun v -> sprintf "offset = %A" v))
+                Sg.text font C4b.Red (offset |> AVal.map (fun v -> sprintf "offset = %A" v))
                     |> Sg.scale 0.2
                     |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero) * Trafo3d.Translation(0.0, 0.0, 2.0))
                     |> Sg.translate 1.0 0.0 0.0
 
 
             ]
-            |> Sg.trafo (offset |> Mod.map Trafo3d.Translation)
+            |> Sg.trafo (offset |> AVal.map Trafo3d.Translation)
             |> Sg.viewTrafo cameraView
             |> Sg.projTrafo projection
             |> Sg.compile app.Runtime win.FramebufferSignature

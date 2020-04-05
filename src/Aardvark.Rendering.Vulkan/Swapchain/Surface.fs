@@ -1,7 +1,7 @@
 namespace Aardvark.Rendering.Vulkan
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open System.Runtime.InteropServices
@@ -49,7 +49,7 @@ type SurfaceInfo =
 module VkSurfaceTransformFlagsKHR =
     let ofImageTrafo =
         LookupTable.lookupTable [
-            ImageTrafo.Rot0,            VkSurfaceTransformFlagsKHR.IdentityBit
+            ImageTrafo.Identity,            VkSurfaceTransformFlagsKHR.IdentityBit
             ImageTrafo.Rot90,           VkSurfaceTransformFlagsKHR.Rotate90Bit
             ImageTrafo.Rot180,          VkSurfaceTransformFlagsKHR.Rotate180Bit
             ImageTrafo.Rot270,          VkSurfaceTransformFlagsKHR.Rotate270Bit
@@ -61,7 +61,7 @@ module VkSurfaceTransformFlagsKHR =
 
     let toImageTrafo =
         LookupTable.lookupTable [
-           VkSurfaceTransformFlagsKHR.IdentityBit,                      ImageTrafo.Rot0
+           VkSurfaceTransformFlagsKHR.IdentityBit,                      ImageTrafo.Identity
            VkSurfaceTransformFlagsKHR.Rotate90Bit,                      ImageTrafo.Rot90
            VkSurfaceTransformFlagsKHR.Rotate180Bit,                     ImageTrafo.Rot180
            VkSurfaceTransformFlagsKHR.Rotate270Bit,                     ImageTrafo.Rot270

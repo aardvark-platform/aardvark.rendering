@@ -6,12 +6,12 @@ open System.Collections.Generic
 open System.Threading
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 type DrawCallSet(collapseAdjacent : bool) =
-    inherit Mod.AbstractMod<DrawCallInfo[]>()
+    inherit AVal.AbstractVal<DrawCallInfo[]>()
 
-    let all = HashSet<Range1i>()
+    let all = System.Collections.Generic.HashSet<Range1i>()
     let mutable ranges = RangeSet.empty
 
     member x.AddUnsafe(r : Range1i) =
@@ -83,6 +83,6 @@ module DrawCallSet =
     let inline add (r : Range1i) (set : DrawCallSet) = set.Add r
     let inline remvoe (r : Range1i) (set : DrawCallSet) = set.Remove r
 
-    let inline toMod (set : DrawCallSet) = set :> IMod<_>
+    let inline toMod (set : DrawCallSet) = set :> aval<_>
 
 

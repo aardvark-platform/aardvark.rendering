@@ -15,7 +15,7 @@ namespace Examples
 //
 //open Default 
 //
-//open Aardvark.Base.Incremental
+//open FSharp.Data.Adaptive
 //open Aardvark.SceneGraph
 //open Aardvark.Application
 //
@@ -64,7 +64,7 @@ namespace Examples
 //        let value (m : pmod<'a>) = m.Value
 //
 //    module ModInternal =
-//        let getValue (x : IMod<_>) caller = x.GetValue(caller)
+//        let getValue (x : aval<_>) caller = x.GetValue(caller)
 //
 //    module ASet =
 //        let getReader (x : aset<_>) = x.GetReader()
@@ -89,7 +89,7 @@ namespace Examples
 //        let private git = Git.init () // git should be private, i.e. all modification should go via Logics module
 //        let unsafeGit = git
 //
-//        let (<~) (p : pmod<'a>) v = PMod.change p v
+//        let (<~) (p : pmod<'a>) v = PAVal.change p v
 //        
 //        type Polygon  = pmod<list<pmod<V3f>>>
 //        type Polygons = pset<Polygon>
@@ -108,7 +108,7 @@ namespace Examples
 //        let createWorkingState () = 
 //            { polygon        = Scope.pmod git "workingPolygon" []; 
 //              unique         = Scope.empty ()
-//              hoverPosition  = Mod.init None
+//              hoverPosition  = AVal.init None
 //              selectedPoint  = ref None
 //              dragging       = ref false
 //            }
@@ -177,16 +177,16 @@ namespace Examples
 //                        match nearbyRay with
 //                            | [] -> ()
 //                            | (p,bestPosition,d) :: _ when d < Double.MaxValue && not !state.dragging -> 
-//                                yield fun () -> Mod.change state.hoverPosition (Some (p, bestPosition)) 
+//                                yield fun () -> AVal.change state.hoverPosition (Some (p, bestPosition)) 
 //                            | _ -> 
-//                                yield fun () -> Mod.change state.hoverPosition None 
+//                                yield fun () -> AVal.change state.hoverPosition None 
 //                    ]
 //
 //                transact (fun () -> 
 //                    for c in changes do c ()
 //                )
 //
-//        let computePick (mousePosition : IMod<PixelPosition>) (camera : IMod<Camera>) =
+//        let computePick (mousePosition : aval<PixelPosition>) (camera : aval<Camera>) =
 //            adaptive {
 //                let! camera        = camera
 //                let! pixelPosition = mousePosition
@@ -199,7 +199,7 @@ namespace Examples
 //
 //        let viewTrafo = viewTrafo ()
 //        let frustum = perspective ()
-//        let camera = Mod.map2 Camera.create viewTrafo frustum
+//        let camera = AVal.map2 Camera.create viewTrafo frustum
 //
 //        [<AutoOpen>]
 //        module Controller =
@@ -215,15 +215,15 @@ namespace Examples
 //             
 //            let polygons = (appState.polygons.CSet :> aset<_>).GetReader()
 //            win.Mouse.Move.Values.Subscribe(fun (last,current) ->
-//                pick (Mod.force camera) current
+//                pick (AVal.force camera) current
 //
-//                interact <| MovePoint (camPick |> Mod.force |> Option.get |> V3f.op_Explicit) 
+//                interact <| MovePoint (camPick |> AVal.force |> Option.get |> V3f.op_Explicit) 
 //            ) |> ignore
 //
 //            win.Mouse.Click.Values.Subscribe(fun c ->
 //                match c with 
 //                 | MouseButtons.Left  -> 
-//                    interactGit <| (camPick |> Mod.force |> Option.map V3f.op_Explicit |> Option.get |> AddPoint)
+//                    interactGit <| (camPick |> AVal.force |> Option.map V3f.op_Explicit |> Option.get |> AddPoint)
 //                 | MouseButtons.Right -> 
 //                    interactGit <| ClosePolygon 
 //                 | MouseButtons.Middle -> 
@@ -234,7 +234,7 @@ namespace Examples
 //
 //        [<AutoOpen>]
 //        module Visualization =
-//            let endPoint = camPick |> Mod.map (Option.map V3f.op_Explicit)
+//            let endPoint = camPick |> AVal.map (Option.map V3f.op_Explicit)
 //
 //            let lineGeometry (color : C4b) (points : list<V3f>) (endPoint : Option<V3f>) =
 //                Helpers.lineLoopGeometry color (points |> List.append (endPoint |> Option.toList) |> List.toArray)
@@ -243,7 +243,7 @@ namespace Examples
 //                aset {
 //                    for p in appState.polygons do
 //                        let lines = 
-//                            Mod.custom (fun self -> 
+//                            AVal.custom (fun self -> 
 //                                let positions = ModInternal.getValue p self
 //                                let lines = 
 //                                    List.foldBack (fun p s -> ModInternal.getValue p self :: s) positions [] 
@@ -253,19 +253,19 @@ namespace Examples
 //                }
 //
 //            let scene =
-//                Mod.map2 (lineGeometry C4b.Red) workingState.polygon endPoint 
+//                AVal.map2 (lineGeometry C4b.Red) workingState.polygon endPoint 
 //                    |> Sg.dynamic
 //                    |> Sg.andAlso (polygonVis |> Sg.set)
 //
 //
-//        let conditionally (size:float) color (m : IMod<_>) =
-//            Sphere.solidSphere color 5  |> Sg.trafo (Mod.constant <| Trafo3d.Scale size)
-//                |> Sg.trafo (m |> Mod.map (Option.defaultValue Trafo3d.Identity << Option.map Trafo3d.Translation))
-//                |> Sg.onOff (m |> Mod.map Option.isSome)    
+//        let conditionally (size:float) color (m : aval<_>) =
+//            Sphere.solidSphere color 5  |> Sg.trafo (AVal.constant <| Trafo3d.Scale size)
+//                |> Sg.trafo (m |> AVal.map (Option.defaultValue Trafo3d.Identity << Option.map Trafo3d.Translation))
+//                |> Sg.onOff (m |> AVal.map Option.isSome)    
 //
 //        let pickSphere  = conditionally 0.040 C4b.Green camPick
 //        let hoverSphere = 
-//            conditionally 0.041 C4b.Yellow (Mod.map (Option.map (conv << PMod.value << snd)) workingState.hoverPosition)
+//            conditionally 0.041 C4b.Yellow (AVal.map (Option.map (conv << PAVal.value << snd)) workingState.hoverPosition)
 //        let groundPlane = Helpers.quad C4b.Gray
 //
 //        let sg =
@@ -278,7 +278,7 @@ namespace Examples
 //                   ]
 //                |> Sg.andAlso ( 
 //                    scene  
-//                        |> Sg.uniform "LineWidth" (Mod.constant 5.0)
+//                        |> Sg.uniform "LineWidth" (AVal.constant 5.0)
 //                        |> Sg.effect [ 
 //                            DefaultSurfaces.trafo |> toEffect; 
 //                            DefaultSurfaces.constantColor C4f.Red |> toEffect

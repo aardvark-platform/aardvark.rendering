@@ -2,7 +2,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open System.Runtime.InteropServices
@@ -60,7 +60,7 @@ module ImageTrafoExtensions =
     type Box3i with
         member x.Transformed(t : ImageTrafo) =
             match t with
-                | ImageTrafo.Rot0 -> 
+                | ImageTrafo.Identity -> 
                     x
 
                 | ImageTrafo.MirrorX -> 

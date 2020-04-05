@@ -3,7 +3,7 @@
 open Aardvark.Base
 open Aardvark.Base.Sorting
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 #nowarn "9"
 #nowarn "51"
@@ -11,6 +11,13 @@ open Aardvark.Base.Incremental
 module Loader =
     open System
     open System.IO
+
+    [<OnAardvarkInit>]
+    let init() =
+        Assimp.Unmanaged.AssimpLibraryImplementation.NativeLibraryPath <- Aardvark.NativeLibraryPath
+        Assimp.Unmanaged.AssimpLibraryImplementation.SeparateLibraryDirectories <- Aardvark.SeparateLibraryDirectories
+
+
 
     type Texture =
         {
@@ -36,27 +43,27 @@ module Loader =
         interface IUniformProvider with
             member x.TryGetUniform(_, sem) =
                 match Map.tryFind sem x.textures with
-                    | Some tex -> Mod.constant tex.texture :> IMod |> Some
+                    | Some tex -> AVal.constant tex.texture :> IAdaptiveValue |> Some
                     | _ ->
                         let singleValueTexture (c : C4f) =
                             let img = PixImage<float32>(Col.Format.RGBA, V2i.II)
                             
                             img.GetMatrix<C4f>().Set(c) |> ignore
                             let mip = PixImageMipMap [| img :> PixImage |]
-                            PixTexture2d(mip, false) :> ITexture |> Mod.constant :> IMod |> Some
+                            PixTexture2d(mip, false) :> ITexture |> AVal.constant :> IAdaptiveValue |> Some
 
                         match string sem with
                             | "DiffuseColorTexture" -> singleValueTexture x.diffuse
                             | "SpecularColorTexture" -> singleValueTexture x.specular
                             | "NormalMapTexture" -> singleValueTexture (C4f(0.5f, 0.5f, 1.0f, 1.0f))
 
-                            | "AmbientColor" -> Mod.constant x.ambient :> IMod |> Some
-                            | "DiffuseColor" -> Mod.constant x.diffuse :> IMod |> Some
-                            | "EmissiveColor" -> Mod.constant x.emissive :> IMod |> Some
-                            | "ReflectiveColor" -> Mod.constant x.reflective :> IMod |> Some
-                            | "SpecularColor" -> Mod.constant x.specular :> IMod |> Some
-                            | "Shininess" -> Mod.constant x.shininess :> IMod |> Some
-                            | "BumpScale" -> Mod.constant x.bumpScale :> IMod |> Some
+                            | "AmbientColor" -> AVal.constant x.ambient :> IAdaptiveValue |> Some
+                            | "DiffuseColor" -> AVal.constant x.diffuse :> IAdaptiveValue |> Some
+                            | "EmissiveColor" -> AVal.constant x.emissive :> IAdaptiveValue |> Some
+                            | "ReflectiveColor" -> AVal.constant x.reflective :> IAdaptiveValue |> Some
+                            | "SpecularColor" -> AVal.constant x.specular :> IAdaptiveValue |> Some
+                            | "Shininess" -> AVal.constant x.shininess :> IAdaptiveValue |> Some
+                            | "BumpScale" -> AVal.constant x.bumpScale :> IAdaptiveValue |> Some
 
 
                             | _ -> None
@@ -94,16 +101,16 @@ module Loader =
             member x.TryGetAttribute(sem) =
                 match x.geometry.IndexedAttributes.TryGetValue sem with
                     | (true, arr) ->
-                        let b = arr |> ArrayBuffer :> IBuffer |> Mod.constant
+                        let b = arr |> ArrayBuffer :> IBuffer |> AVal.constant
                         Some (BufferView(b, arr.GetType().GetElementType()))
                     | _ ->
                         match x.geometry.SingleAttributes.TryGetValue sem with
                             | (true, value) ->
                                 let v = bitsToV4f value
-                                Some (BufferView(SingleValueBuffer(Mod.constant v), value.GetType()))
+                                Some (BufferView(SingleValueBuffer(AVal.constant v), value.GetType()))
 
                             | _ -> 
-                                Some (BufferView(SingleValueBuffer(Mod.constant V4f.Zero), typeof<V4f>))
+                                Some (BufferView(SingleValueBuffer(AVal.constant V4f.Zero), typeof<V4f>))
 
             member x.All = Seq.empty
             member x.Dispose() = ()
@@ -198,54 +205,51 @@ module Loader =
         open Aardvark.SceneGraph.Semantics
 
         type Node with      
-            member x.RenderObjects() : aset<IRenderObject> = x?RenderObjects()
+            member x.RenderObjects(scope : Ag.Scope) : aset<IRenderObject> = x?RenderObjects(scope)
+
+        type Ag.Scope with
             member x.ModelTrafoStack 
-                with get() : list<IMod<Trafo3d>> = x?ModelTrafoStack
-                and set v = x?ModelTrafoStack <- v
+                with get() : list<aval<Trafo3d>> = x?ModelTrafoStack
 
             
             member x.Uniforms 
                 with get() : list<IUniformProvider> = x?Uniforms
                 and set v = x?Uniforms <- v
 
-            member x.ModelTrafo : IMod<Trafo3d> = x?ModelTrafo()
-
         type Scene with      
-            member x.RenderObjects() : aset<IRenderObject> = x?RenderObjects()
-            member x.ModelTrafoStack : list<IMod<Trafo3d>> = x?ModelTrafoStack
-            member x.ModelTrafo : IMod<Trafo3d> = x?ModelTrafo()
+            member x.RenderObjects(scope) : aset<IRenderObject> = x?RenderObjects(scope)
 
-        [<Semantic>]
+        [<Rule>]
         type SceneSem() =
 
-            member x.Uniforms(n : Node) =
-                let parent = n.Uniforms
+            member x.Uniforms(n : Node, scope : Ag.Scope) =
+                let parent = scope.Uniforms
                 match n with
                     | Material(m,c) ->
-                        c.Uniforms <- (m :> IUniformProvider)::parent
+                        c?Uniforms <- (m :> IUniformProvider)::parent
                     | _ ->
                         n.AllChildren?Uniforms <- parent
 
-            member x.ModelTrafoStack(n : Node) =
-                let parent = n.ModelTrafoStack
+            member x.ModelTrafoStack(n : Node, scope : Ag.Scope) =
+                let parent = scope.ModelTrafoStack
                 match n with
                     | Trafo(t,c) -> 
-                        c.ModelTrafoStack <- (Mod.constant t)::parent
+                        c?ModelTrafoStack <- (AVal.constant t)::parent
 
                     | Material(m,c) ->
-                        c.ModelTrafoStack <- parent
+                        c?ModelTrafoStack <- parent
 
                     | _ ->
                         n.AllChildren?ModelTrafoStack <- parent
 
-            member x.RenderObjects(n : Node) =
+            member x.RenderObjects(n : Node, scope : Ag.Scope) =
                 match n with
                     | Trafo(_,n) -> 
-                        n.RenderObjects()
+                        n.RenderObjects(scope)
                     | Material(_,n) -> 
-                        n.RenderObjects()
+                        n.RenderObjects(scope)
                     | Group(nodes) ->
-                        nodes |> ASet.ofList |> ASet.collect (fun n -> n.RenderObjects())
+                        nodes |> ASet.ofList |> ASet.collect (fun n -> n.RenderObjects(scope))
                     | Empty ->
                         ASet.empty
                     | Leaf mesh ->
@@ -263,14 +267,14 @@ module Loader =
                                 InstanceCount = 1
                             )
 
-                        let ro = RenderObject.create()
+                        let ro = RenderObject.ofScope scope
                         ro.VertexAttributes <- mesh
                         ro.Mode <- mesh.geometry.Mode
-                        ro.DrawCallInfos <- Mod.constant [call]
+                        ro.DrawCalls <- Direct(AVal.constant [call])
 
                         let uniforms =
                             UniformProvider.ofList [
-                                "MeshTrafoBone", Mod.constant mesh.meshTrafoId :> IMod
+                                "MeshTrafoBone", AVal.constant mesh.meshTrafoId :> IAdaptiveValue
                             ]
 
                         ro.Uniforms <- UniformProvider.union uniforms ro.Uniforms
@@ -278,48 +282,56 @@ module Loader =
                         if indexed then 
                             let index = mesh.geometry.IndexArray
                             let t = index.GetType().GetElementType()
-                            let b = Mod.constant (ArrayBuffer index :> IBuffer)
+                            let b = AVal.constant (ArrayBuffer index :> IBuffer)
                             ro.Indices <- Some (BufferView(b, t))
                         else 
                             ro.Indices <- None
 
                         ASet.single (ro :> IRenderObject)
 
-            member x.RenderObjects(s : Scene) =
-                s.root.RenderObjects()
+            member x.RenderObjects(s : Scene, scope : Ag.Scope) =
+                s.root.RenderObjects(scope)
 
-            member x.LocalBoundingBox(s : Scene) =
-                Mod.constant s.bounds
+            member x.LocalBoundingBox(s : Scene, scope : Ag.Scope) =
+                AVal.constant s.bounds
 
-            member x.GlobalBoundingBox(n : Node) : IMod<Box3d> =
+            member x.GlobalBoundingBox(n : Node, scope : Ag.Scope) : aval<Box3d> =
                 match n with
                     | Trafo(_,n) -> 
-                        n?GlobalBoundingBox()
+                        n?GlobalBoundingBox(scope)
                     | Material(_,n) -> 
-                        n?GlobalBoundingBox()
+                        n?GlobalBoundingBox(scope)
                     | Group(nodes) ->
-                        nodes |> List.map (fun n -> n?GlobalBoundingBox()) |> Mod.mapN (Seq.fold (curry Box3d.Union) Box3d.Invalid)
+                        let bbs : list<aval<Box3d>> = nodes |> List.map (fun n -> n?GlobalBoundingBox(scope)) 
+                        AVal.custom (fun token ->
+                            let bbs = bbs |> List.map (fun v -> v.GetValue token)
+                            Box3d bbs
+                        )
                     | Empty ->
-                        Mod.constant Box3d.Invalid
+                        AVal.constant Box3d.Invalid
                     | Leaf mesh ->
-                        n.ModelTrafo |> Mod.map (fun t -> mesh.bounds.Transformed t)
+                        scope.ModelTrafo |> AVal.map (fun t -> mesh.bounds.Transformed t)
                             
-            member x.LocalBoundingBox(n : Node) : IMod<Box3d> =
+            member x.LocalBoundingBox(n : Node, scope : Ag.Scope) : aval<Box3d> =
                 match n with
                     | Trafo(t,n) -> 
-                        let box : IMod<Box3d> = n?LocalBoundingBox()
-                        box |> Mod.map (fun b -> b.Transformed t)
+                        let box : aval<Box3d> = n?LocalBoundingBox(scope)
+                        box |> AVal.map (fun b -> b.Transformed t)
                     | Material(_,n) -> 
-                        n?LocalBoundingBox()
+                        n?LocalBoundingBox(scope)
                     | Group(nodes) ->
-                        nodes |> List.map (fun n -> n?LocalBoundingBox()) |> Mod.mapN (Seq.fold (curry Box3d.Union) Box3d.Invalid)
+                        let bbs : list<aval<Box3d>> = nodes |> List.map (fun n -> n?LocalBoundingBox(scope)) 
+                        AVal.custom (fun token ->
+                            let bbs = bbs |> List.map (fun v -> v.GetValue token)
+                            Box3d bbs
+                        )
                     | Empty ->
-                        Mod.constant Box3d.Invalid
+                        AVal.constant Box3d.Invalid
                     | Leaf mesh ->
-                        Mod.constant mesh.bounds
+                        AVal.constant mesh.bounds
                             
-            member x.GlobalBoundingBox(s : Scene) =
-                s.ModelTrafo |> Mod.map (fun t -> s.bounds.Transformed t)
+            member x.GlobalBoundingBox(s : Scene, scope : Ag.Scope) =
+                scope.ModelTrafo |> AVal.map (fun t -> s.bounds.Transformed t)
 
 
     type Assimp = class end
@@ -503,8 +515,8 @@ module Loader =
             let toV2d (v : Assimp.Vector2D) =
                 V2d(v.X, v.Y)
                
-            let toRot3d (v : Assimp.Quaternion) =
-                Rot3d(float v.W, float v.X, float v.Y, float v.Z)
+            let toQuaternion (v : Assimp.Quaternion) =
+                QuaternionD(float v.W, float v.X, float v.Y, float v.Z)
 
             let private toV4i (arr : int[]) =
                 match arr.Length with
@@ -743,18 +755,18 @@ module Loader =
 
 
 
-        [<CompiledName("Initialize")>]
-        let initialize () =
-            Log.start "unpacking native dependencies for assimp"
-            let r = 
-                try
-                    DynamicLinker.tryUnpackNativeLibrary "Assimp"
-                with e -> 
-                    Log.warn "failed to unpack native dependencies: %s" e.Message
-                    false
-            Log.stop ()
-            if r then Log.line "Assimp native dependencies successfully unpacked."
-            else Log.line "Failed to unpack native assimp dependencies. Did you forget Aardvark.Init()? Make sure Aardvark.SceneGraph.IO.dll is in your output directory."
+        //[<CompiledName("Initialize")>]
+        //let initialize () =
+        //    Log.start "unpacking native dependencies for assimp"
+        //    let r = 
+        //        try
+        //            DynamicLinker.tryUnpackNativeLibrary "Assimp"
+        //        with e -> 
+        //            Log.warn "failed to unpack native dependencies: %s" e.Message
+        //            false
+        //    Log.stop ()
+        //    if r then Log.line "Assimp native dependencies successfully unpacked."
+        //    else Log.line "Failed to unpack native assimp dependencies. Did you forget Aardvark.Init()? Make sure Aardvark.SceneGraph.IO.dll is in your output directory."
 
         let defaultFlags = 
             Assimp.PostProcessSteps.CalculateTangentSpace |||
@@ -826,7 +838,7 @@ module Loader =
 
                 for na in a.NodeAnimationChannels do
                     let pos         = na.PositionKeys |> Seq.map (fun e -> e.Time, toV3d e.Value) |> MapExt.ofSeq
-                    let rot         = na.RotationKeys |> Seq.map (fun e -> e.Time, toRot3d e.Value) |> MapExt.ofSeq
+                    let rot         = na.RotationKeys |> Seq.map (fun e -> e.Time, toQuaternion e.Value) |> MapExt.ofSeq
                     let scale       = na.ScalingKeys |> Seq.map (fun e -> e.Time, toV3d e.Value) |> MapExt.ofSeq
 
                     let position (t : float) =
@@ -878,7 +890,7 @@ module Loader =
                             | None, Some(_,rv) ->
                                 rv
                             | None, None ->
-                                Rot3d.Identity
+                                QuaternionD.Identity
 
                     let node = na.NodeName
 
@@ -888,7 +900,7 @@ module Loader =
                             let p = position t
                             let rot = rotation t
 
-                            let r : M44d = rot |> Rot3d.op_Explicit
+                            let r : M44d = rot |> QuaternionD.op_Explicit
                             let s = scale t
                             M44d.Translation(p) * r * M44d.Scale(s) 
                         )

@@ -2,7 +2,7 @@
 
 open System.Diagnostics
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Valve.VR
@@ -56,6 +56,9 @@ module StereoShader =
             return V4d.IIII
         }
 
+type private DummyObject() =
+    inherit AdaptiveObject()
+
 type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i -> V2i) as this  =
     inherit VrRenderer(adjustSize)
     
@@ -74,7 +77,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
 
     let start = System.DateTime.Now
     let sw = System.Diagnostics.Stopwatch.StartNew()
-    let time = Mod.custom(fun _ -> start + sw.Elapsed)
+    let time = AVal.custom(fun _ -> start + sw.Elapsed)
 
     let renderPass = 
         device.CreateRenderPass(
@@ -93,10 +96,10 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
             ]
         )
 
-    let caller = AdaptiveObject()
+    let caller = DummyObject()
 
-    let version = Mod.init 0
-    let tex = Mod.custom (fun _ -> fImg :> ITexture)
+    let version = AVal.init 0
+    let tex = AVal.custom (fun _ -> fImg :> ITexture)
 
 
     let keyboard = new EventKeyboard()
@@ -127,10 +130,10 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
                 |> Sg.shader {
                     do! StereoShader.hiddenAreaFragment
                 }
-                |> Sg.stencilMode (Mod.constant writeStencil)
+                |> Sg.stencilMode (AVal.constant writeStencil)
                 |> Sg.writeBuffers' (Set.ofList [DefaultSemantic.Stencil])
 
-        hiddenTask <- RuntimeCommand.Render(sg.RenderObjects())
+        hiddenTask <- RuntimeCommand.Render(sg.RenderObjects(Ag.Scope.Root))
 
     let swClear     = Stopwatch()
     let swRender    = Stopwatch()
@@ -154,7 +157,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
 
     member x.FramebufferSignature = renderPass :> IFramebufferSignature
     member x.Runtime = app.Runtime
-    member x.Sizes = Mod.constant x.DesiredSize
+    member x.Sizes = AVal.constant x.DesiredSize
     member x.Samples = samples
     member x.Time = time
     
@@ -365,7 +368,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
 
     interface IRenderTarget with
         member x.Runtime = app.Runtime :> IRuntime
-        member x.Sizes = Mod.constant x.DesiredSize
+        member x.Sizes = AVal.constant x.DesiredSize
         member x.Samples = samples
         member x.FramebufferSignature = x.FramebufferSignature
         member x.RenderTask

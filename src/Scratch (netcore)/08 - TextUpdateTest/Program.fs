@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Rendering.Text
 open Aardvark.Application
@@ -12,13 +12,13 @@ open Aardvark.Base.Ag
 module IncrementalExtensions = 
     open System.Threading
 
-    let throttled (name : string) (ms : int) (f : 'a -> unit) (m : IMod<'a>) : IMod<'a> = 
+    let throttled (name : string) (ms : int) (f : 'a -> unit) (m : aval<'a>) : aval<'a> = 
         let v = MVar.empty()
-        let r = Mod.init (Mod.force m)
+        let r = AVal.init (AVal.force m)
         let f () = 
             while true do
                 let () = MVar.take v
-                let v = Mod.force m
+                let v = AVal.force m
                 f v 
                 transact (fun _ -> r.Value <- v)
                 Thread.Sleep ms
@@ -29,16 +29,16 @@ module IncrementalExtensions =
         t.IsBackground <- true
         t.Name <- name
         t.Start()
-        r :> IMod<_>
+        r :> aval<_>
 
 
 type WtfRuntimeApplicator(r : IRuntime, child : ISg) =
     inherit Sg.AbstractApplicator(child)
     member x.Runtime = r
 
-[<Semantic>]
+[<Rule>]
 type RuntimeSem() =
-    member x.Runtime(w : WtfRuntimeApplicator) = w.Child?Runtime <- w.Runtime
+    member x.Runtime(w : WtfRuntimeApplicator, scope : Ag.Scope) = w.Child?Runtime <- w.Runtime
 
 module Sg = 
     let applyRuntime (r : IRuntime) (sg : ISg) = WtfRuntimeApplicator(r,sg) :> ISg
@@ -48,7 +48,7 @@ let main argv =
 
     Aardvark.Rendering.Vulkan.Config.showRecompile <- false
     
-    Ag.initialize()
+    
     Aardvark.Init()
 
     // window { ... } is similar to show { ... } but instead
@@ -56,7 +56,7 @@ let main argv =
     // and may show it later.
     let win =
         window {
-            backend Backend.Vulkan
+            backend Backend.GL
             display Display.Mono
             debug true
             samples 1
@@ -69,9 +69,9 @@ let main argv =
 
 
     let cfg = { Aardvark.Rendering.Text.TextConfig.Default with color = C4b.Red; align = TextAlignment.Center }
-    let inputText = Mod.init "aaaa"
+    let inputText = AVal.init "aaaa"
 
-    let text = inputText |> Mod.map (fun t -> cfg.Layout t)
+    let text = inputText |> AVal.map (fun t -> cfg.Layout t)
 
 
     let size = V2i(512,512)
@@ -95,18 +95,18 @@ let main argv =
                 ]
             )
         let mutable old : Option<IRenderTask> = None
-        let t = Mod.init (text |> Mod.force) |> Sg.shape |> Sg.applyRuntime runtime |> Sg.compile runtime signature
+        let t = AVal.init (text |> AVal.force) |> Sg.shape |> Sg.applyRuntime runtime |> Sg.compile runtime signature
         fun (s : ShapeList) ->
             let o = old
             Log.startTimed "compile text"
-            let s = Sg.shape (Mod.constant s) 
+            let s = Sg.shape (AVal.constant s) 
             s?Runtime <- runtime
             let task = 
                 s 
                 |> Sg.applyRuntime runtime 
                 |> Sg.scale 0.1
-                |> Sg.viewTrafo (Mod.constant Trafo3d.Identity)
-                |> Sg.projTrafo (Frustum.ortho (Box3d.Unit) |> Frustum.projTrafo |> Mod.constant)
+                |> Sg.viewTrafo (AVal.constant Trafo3d.Identity)
+                |> Sg.projTrafo (Frustum.ortho (Box3d.Unit) |> Frustum.projTrafo |> AVal.constant)
                 |> Sg.compile runtime signature
             old <- Some task
             task.Run(RenderToken.Empty, fbo)
@@ -118,7 +118,7 @@ let main argv =
     let prepare () = ()
 
 
-    let text = win.Time  |> Mod.map (fun _ -> 
+    let text = win.Time  |> AVal.map (fun _ -> 
             Log.startTimed "layout"
             let s = System.Guid.NewGuid() |> string 
             let r = cfg.Layout s
@@ -142,7 +142,7 @@ let main argv =
     let sw = System.Diagnostics.Stopwatch.StartNew()
     let mutable last = sw.Elapsed.TotalSeconds
     let t = 
-        win.Time |> Mod.map (fun _ -> 
+        win.Time |> AVal.map (fun _ -> 
             let took = (sw.Elapsed.TotalSeconds - last) * 1000.0
             if took > 6.0 then printfn "last frame took: %A" took
             last <- sw.Elapsed.TotalSeconds
@@ -151,9 +151,9 @@ let main argv =
 
     let sg = 
         // create a red box with a simple shader
-        //Sg.box (Mod.constant color) (Mod.constant box)
+        //Sg.box (AVal.constant color) (AVal.constant box)
             //Sg.fullScreenQuad
-            //|> Sg.diffuseTexture (color :> ITexture |> Mod.constant)
+            //|> Sg.diffuseTexture (color :> ITexture |> AVal.constant)
             overlay
             |> Sg.trafo t
             |> Sg.shader {

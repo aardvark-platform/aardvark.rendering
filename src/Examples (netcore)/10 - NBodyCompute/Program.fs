@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -123,7 +123,7 @@ let main argv =
     
     //failwith "REMOVE THIS FAILWITH"
 
-    Ag.initialize()
+    
     Aardvark.Init()
 
     let win =
@@ -198,7 +198,7 @@ let main argv =
     let magic =
         let sw = System.Diagnostics.Stopwatch()
     
-        win.Time |> Mod.map (fun _ ->
+        win.Time |> AVal.map (fun _ ->
             let dt = sw.Elapsed.TotalSeconds
             sw.Restart()
     
@@ -233,17 +233,17 @@ let main argv =
     
     win.Scene <-
         Sg.render IndexedGeometryMode.TriangleList call
-            |> Sg.vertexBuffer DefaultSemantic.Positions (BufferView(Mod.constant (ArrayBuffer pos :> IBuffer), typeof<V3f>))
-            |> Sg.vertexBuffer DefaultSemantic.Normals (BufferView(Mod.constant (ArrayBuffer norm :> IBuffer), typeof<V3f>))
-            |> instanceBuffer (Symbol.Create "Offset") (BufferView(Mod.constant (positions :> IBuffer), typeof<V4f>))
-            |> instanceBuffer (Symbol.Create "Mass") (BufferView(Mod.constant (masses :> IBuffer), typeof<float32>))
+            |> Sg.vertexBuffer DefaultSemantic.Positions (BufferView(AVal.constant (ArrayBuffer pos :> IBuffer), typeof<V3f>))
+            |> Sg.vertexBuffer DefaultSemantic.Normals (BufferView(AVal.constant (ArrayBuffer norm :> IBuffer), typeof<V3f>))
+            |> instanceBuffer (Symbol.Create "Offset") (BufferView(AVal.constant (positions :> IBuffer), typeof<V4f>))
+            |> instanceBuffer (Symbol.Create "Mass") (BufferView(AVal.constant (masses :> IBuffer), typeof<float32>))
             |> Sg.translate 0.0 0.0 1.0
             |> Sg.shader {
                 do! Shaders.instanceOffset
                 do! DefaultSurfaces.trafo
                 do! DefaultSurfaces.simpleLighting
             }
-            |> Sg.uniform "Scale" (Mod.constant 0.05)
+            |> Sg.uniform "Scale" (AVal.constant 0.05)
             |> Sg.uniform "Magic" magic
     
     win.Run(preventDisposal = true)

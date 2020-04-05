@@ -7,13 +7,12 @@ open Aardvark.Base.Rendering
 open Aardvark.Rendering
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open FShade
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Rendering.GL
 
 #nowarn "9"
-#nowarn "44"
 
 type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * AttachmentSignature>, images : Map<int, Symbol>, depth : Option<AttachmentSignature>, stencil : Option<AttachmentSignature>, layers : int, perLayer : Set<string>) =
    
@@ -90,21 +89,21 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     let shaderCache = System.Collections.Concurrent.ConcurrentDictionary<string*list<int*Symbol>,BackendSurface>()
     let onDispose = Event<unit>()    
-    do if not (isNull ctx) then using ctx.ResourceLock (fun _ -> GLVM.vmInit())
+    do if not (isNull ctx) then Operators.using ctx.ResourceLock (fun _ -> GLVM.vmInit())
 
     let compute = lazy ( new GLCompute(ctx) )
 
     new(ctx) = new Runtime(ctx, true, true)
 
-    member x.SupportsUniformBuffers =
-        ExecutionContext.uniformBuffersSupported
+    //member x.SupportsUniformBuffers =
+    //    ExecutionContext.uniformBuffersSupported
 
     member x.Context
         with get() = ctx
         and set c = 
             ctx <- c
             manager <- ResourceManager(ctx, None, shareTextures, shareBuffers)
-            using ctx.ResourceLock (fun _ -> GLVM.vmInit())
+            Operators.using ctx.ResourceLock (fun _ -> GLVM.vmInit())
 
             //compiler <- Compiler.Compiler(x, c)
             //currentRuntime <- Some (x :> IRuntime)
@@ -379,7 +378,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             shaderCache.GetOrAdd(key,fun _ -> 
                 let glsl = 
                     signature.Link(effect, Range1d(-1.0, 1.0), false, topology)
-                        |> ModuleCompiler.compileGLSL430
+                        |> ModuleCompiler.compileGLSL ctx.FShadeBackend
 
                 let entries =
                     effect.Shaders 
@@ -435,8 +434,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CompileRender (signature, engine : BackendConfiguration, set : aset<IRenderObject>) = x.CompileRender(signature, engine,set)
         member x.CompileClear(signature, color, depth) = x.CompileClear(signature, color, depth)
       
-            
-        member x.CreateBuffer(size : nativeint) = x.CreateBuffer(size) :> IBackendBuffer
+        ///NOTE: OpenGL does not care about 
+        member x.CreateBuffer(size : nativeint, usage : BufferUsage) = x.CreateBuffer(size) :> IBackendBuffer
         member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = x.Upload(src, dst, dstOffset, size)
         member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) = x.Download(src, srcOffset, dst, size)
         member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = 
@@ -460,7 +459,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 | :? Texture as t -> x.DeleteTexture t
                 | _ -> failwithf "unsupported texture-type: %A" t
 
-        member x.PrepareBuffer (b : IBuffer) = x.PrepareBuffer b :> IBackendBuffer
+        member x.PrepareBuffer (b : IBuffer, usage : BufferUsage) = x.PrepareBuffer b :> IBackendBuffer
         member x.DeleteBuffer (b : IBackendBuffer) = 
             match b with
                 | :? Aardvark.Rendering.GL.Buffer as b -> x.DeleteBuffer b
@@ -502,17 +501,11 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
         member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : IRenderbuffer =
             x.CreateRenderbuffer(size, format, samples) :> IRenderbuffer
-
-        // Remove "nowarn 44" when deleting this
-        member x.CreateMappedBuffer()  =
-            x.CreateMappedBuffer ()
+            
 
         member x.CreateGeometryPool(types : Map<Symbol, Type>) =
             x.CreateGeometryPool(types)
 
-        // Remove "nowarn 44" when deleting this
-        member x.CreateMappedIndirectBuffer(indexed)  =
-            x.CreateMappedIndirectBuffer (indexed)
             
         member x.MaxLocalSize = compute.Value.WorkGroupSize
         member x.CreateComputeShader (c : FShade.ComputeShader) = ctx.CompileKernel c :> IComputeShader
@@ -531,7 +524,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.Clear(fbo : IFramebuffer, clearColors : Map<Symbol, C4f>, depth : Option<float>, stencil : Option<int>) =
             use __ = ctx.ResourceLock
 
-            let handle = fbo.GetHandle(null) |> unbox<int>
+            let handle = fbo.GetHandle(Unchecked.defaultof<_>) |> unbox<int>
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, handle)
             GL.Check "could not bind framebuffer"
             
@@ -715,7 +708,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)
     member x.PrepareSurface (signature : IFramebufferSignature, s : ISurface) : IBackendSurface = 
-        using ctx.ResourceLock (fun d -> 
+        Operators.using ctx.ResourceLock (fun d -> 
             let surface =
                 match s with
                     | :? FShadeSurface as f -> Aardvark.Base.Surface.FShadeSimple f.Effect
@@ -726,7 +719,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
             let iface, program = ctx.CreateProgram(signature, surface, IndexedGeometryMode.TriangleList)
 
-            Mod.force program :> IBackendSurface
+            AVal.force program :> IBackendSurface
 
         )
 
@@ -752,7 +745,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             | _ ->
                 failwithf "unsupported streaming texture: %A" t
 
-    member private x.CompileRenderInternal (fboSignature : IFramebufferSignature, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) =
+    member private x.CompileRenderInternal (fboSignature : IFramebufferSignature, engine : aval<BackendConfiguration>, set : aset<IRenderObject>) =
         let set = EffectDebugger.Hook set
         let eng = engine.GetValue()
         let shareTextures = eng.sharing &&& ResourceSharing.Textures <> ResourceSharing.None
@@ -779,19 +772,19 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         //     | :? PreparedRenderObject | :? PreparedMultiRenderObject -> failwith "tried to prepare prepared render object"
         //     | _ -> failwith "unknown render object type"
 
-    member x.CompileRender(fboSignature : IFramebufferSignature, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) : IRenderTask =
+    member x.CompileRender(fboSignature : IFramebufferSignature, engine : aval<BackendConfiguration>, set : aset<IRenderObject>) : IRenderTask =
         x.CompileRenderInternal(fboSignature, engine, set)
 
     member x.CompileRender(fboSignature : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) : IRenderTask =
-        x.CompileRenderInternal(fboSignature, Mod.constant engine, set)
+        x.CompileRenderInternal(fboSignature, AVal.constant engine, set)
         
     member x.Compile (signature : IFramebufferSignature, commands : alist<RenderCommand>) =
         failwith "[GL] no commands"
-        //new CommandRenderTask(manager, signature, commands, Mod.constant BackendConfiguration.Default, true, true) :> ICommandRenderTask
+        //new CommandRenderTask(manager, signature, commands, AVal.constant BackendConfiguration.Default, true, true) :> ICommandRenderTask
 
-    member x.CompileClear(fboSignature : IFramebufferSignature, color : IMod<Map<Symbol, C4f>>, depth : IMod<Option<float>>) : IRenderTask =
+    member x.CompileClear(fboSignature : IFramebufferSignature, color : aval<Map<Symbol, C4f>>, depth : aval<Option<float>>) : IRenderTask =
         let clearValues =
-            color |> Mod.map (fun clearColors ->
+            color |> AVal.map (fun clearColors ->
                 fboSignature.ColorAttachments
                     |> Map.toList
                     |> List.map (fun (_,(s,_)) -> Map.tryFind s clearColors)
@@ -800,18 +793,18 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         new RenderTasks.ClearTask(x, fboSignature, clearValues, depth, ctx) :> IRenderTask
 
     member x.ResolveMultisamples(ms : IFramebufferOutput, srcOffset : V2i, ss : IBackendTexture, dstOffset : V2i, dstLayer : int, size : V2i, trafo : ImageTrafo) =
-        using ctx.ResourceLock (fun _ ->
+        Operators.using ctx.ResourceLock (fun _ ->
             let mutable oldFbo = 0
-            OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo);
+            GL.GetInteger(GetPName.FramebufferBinding, &oldFbo);
 
             let targetTex = ss |> unbox<Texture>
-            //let size = ms.Size
-            let readFbo = OpenGL.GL.GenFramebuffer()
-            let drawFbo = OpenGL.GL.GenFramebuffer()
+            let readFbo = GL.GenFramebuffer()
+            let drawFbo = GL.GenFramebuffer()
 
-            OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.ReadFramebuffer,readFbo)
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer,readFbo)
             GL.Check "could not bind read framebuffer"
-            let mutable multiSlice = false
+            let mutable srcAtt = FramebufferAttachment.ColorAttachment0
+
             match ms with
                 | :? IBackendTextureOutputView as ms ->
                     let baseSlice = ms.slices.Min
@@ -820,16 +813,19 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
                     if slices <> 1 then failwith "layer sub-ranges not supported atm."
                     
+                    if TextureFormat.hasDepth tex.Format then srcAtt <- FramebufferAttachment.DepthStencilAttachment
                     if tex.IsArray || tex.Dimension = TextureDimension.TextureCube then
-                        GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, tex.Handle, ms.level, baseSlice)
+                        GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, srcAtt, tex.Handle, ms.level, baseSlice)
                         GL.Check "could not set read framebuffer texture"
                     else
                         // NOTE: allow to resolve/copy singlesample textures as well
-                        GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, (if tex.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), tex.Handle, ms.level)
+                        GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, srcAtt, (if tex.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), tex.Handle, ms.level)
                         GL.Check "could not set read framebuffer texture"
                     
                 | :? Renderbuffer as ms ->
-                    GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, ms.Handle)
+                
+                    if TextureFormat.hasDepth (RenderbufferFormat.toTextureFormat ms.Format) then srcAtt <- FramebufferAttachment.DepthStencilAttachment
+                    GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, srcAtt, RenderbufferTarget.Renderbuffer, ms.Handle)
                     GL.Check "could not set read framebuffer texture"
 
                 | :? ITextureLevel as ms ->
@@ -839,12 +835,13 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
                     if slices <> 1 then failwith "layer sub-ranges not supported atm."
                     
+                    if TextureFormat.hasDepth tex.Format then srcAtt <- FramebufferAttachment.DepthStencilAttachment
                     if tex.IsArray || tex.Dimension = TextureDimension.TextureCube then
-                        GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, tex.Handle, ms.Level, baseSlice)
+                        GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, srcAtt, tex.Handle, ms.Level, baseSlice)
                         GL.Check "could not set read framebuffer texture"
                     else
                         // NOTE: allow to resolve/copy singlesample textures as well
-                        GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, (if tex.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), tex.Handle, ms.Level)
+                        GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, srcAtt, (if tex.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), tex.Handle, ms.Level)
                         GL.Check "could not set read framebuffer texture"
 
                 | _ ->
@@ -855,10 +852,10 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer,drawFbo)
             GL.Check "could not bind write framebuffer"
             if targetTex.IsArray || targetTex.Dimension = TextureDimension.TextureCube then
-                GL.FramebufferTextureLayer(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, targetTex.Handle, 0, dstLayer)
+                GL.FramebufferTextureLayer(FramebufferTarget.DrawFramebuffer, srcAtt, targetTex.Handle, 0, dstLayer)
                 GL.Check "could not set write framebuffer texture"
             else
-                GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, targetTex.Handle, 0)
+                GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, srcAtt, targetTex.Handle, 0)
                 GL.Check "could not set write framebuffer texture"
 
 
@@ -866,21 +863,29 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             let mutable dst = Box2i.FromMinAndSize(dstOffset, size)
 
             match trafo with
-                | ImageTrafo.Rot0 -> ()
+                | ImageTrafo.Identity -> ()
                 | ImageTrafo.MirrorY -> 
                     dst.Min.Y <- dst.Max.Y - 1
                     dst.Max.Y <- -1
                 | ImageTrafo.MirrorX ->
                     dst.Min.X <- dst.Max.X - 1
                     dst.Max.X <- -1
-                | _ -> failwith "unsupported image trafo"
+                | _ -> 
+                    failwith "unsupported image trafo"
                     
+            let mask =  
+                if srcAtt = FramebufferAttachment.DepthStencilAttachment then 
+                    ClearBufferMask.DepthBufferBit
+                else 
+                    GL.ReadBuffer(ReadBufferMode.ColorAttachment0)
+                    GL.DrawBuffer(DrawBufferMode.ColorAttachment0)
+                    ClearBufferMask.ColorBufferBit
 
-            GL.BlitFramebuffer(src.Min.X, src.Min.Y, src.Max.X, src.Max.Y, dst.Min.X, dst.Min.Y, dst.Max.X, dst.Max.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest)
+            GL.BlitFramebuffer(src.Min.X, src.Min.Y, src.Max.X, src.Max.Y, dst.Min.X, dst.Min.Y, dst.Max.X, dst.Max.Y, mask, BlitFramebufferFilter.Nearest)
             GL.Check "could not blit framebuffer"
 
-            GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, 0)
-            GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, 0, 0)
+            GL.FramebufferTexture(FramebufferTarget.ReadFramebuffer, srcAtt, 0, 0)
+            GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, srcAtt, 0, 0)
 
             GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
@@ -899,7 +904,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             | :? Texture as t ->
                 if t.MipMapLevels > 1 then
                     let target = Uploads.getTextureTarget t
-                    using ctx.ResourceLock (fun _ ->
+                    Operators.using ctx.ResourceLock (fun _ ->
                         GL.BindTexture(target, t.Handle)
                         GL.Check "could not bind texture"
 
@@ -986,16 +991,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : Renderbuffer =
         ctx.CreateRenderbuffer(size, format, samples)
-
-    // Remove "nowarn 44" when deleting this
-    member x.CreateMappedBuffer() : IMappedBuffer =
-        ctx.CreateMappedBuffer()
-        
+                
     member x.CreateGeometryPool(types : Map<Symbol, Type>) =
         new SparseBufferGeometryPool(ctx, types) :> IGeometryPool
-
-    // Remove "nowarn 44" when deleting this
-    member x.CreateMappedIndirectBuffer(indexed : bool) : IMappedIndirectBuffer =
-        ctx.CreateMappedIndirectBuffer(indexed)
-
+        
     new() = new Runtime(null)

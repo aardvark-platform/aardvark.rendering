@@ -2,7 +2,8 @@
 
 open System.Collections.Generic
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Traceable
+open FSharp.Data.Adaptive
 
 type ILodDataNode =
     abstract member Id : obj
@@ -38,7 +39,7 @@ type LodDataNode =
 type ILodData =
     abstract member BoundingBox : Box3d
     abstract member RootNode : unit -> ILodDataNode
-    abstract member Dependencies : list<IMod>
+    abstract member Dependencies : list<IAdaptiveValue>
     abstract member GetData : node : ILodDataNode -> Async<Option<IndexedGeometry>>
 
 module LodData =
@@ -71,7 +72,7 @@ module LodData =
 
     let defaultRasterizeSet (targetPixelDistance : float) (viewTrafo : Trafo3d) (projTrafo : Trafo3d) (viewPortSize : V2i) (cameraHull : FastHull3d) (root : ILodDataNode) =
         
-        let result = HashSet<ILodDataNode>()
+        let result = System.Collections.Generic.HashSet<ILodDataNode>()
 
         let rec traverse (node : ILodDataNode) =
             if cameraHull.Intersects(node.Bounds) then
@@ -352,7 +353,7 @@ type LoadConfig<'a, 'b> =
         submitDelay         : TimeSpan
         progressInterval    : TimeSpan
         progress            : LoaderProgress -> unit
-        frozen              : IMod<bool>
+        frozen              : aval<bool>
     }
 
 module Loader =
@@ -424,29 +425,23 @@ module Loader =
 
             member x.EvaluationTime = evalTime.MicroTime
 
-            override x.Mark() =
+            override x.MarkObject() =
                 MVar.put mvar ()
                 true
 
-            member x.Dispose() =
-                r.Dispose()
-
-            interface IDisposable with
-                member x.Dispose() = x.Dispose()
-
-            member x.GetOperations(ct : CancellationToken) =
+            member x.GetChanges(ct : CancellationToken) =
                 try
                     mvar.Take(ct)
                     x.EvaluateAlways AdaptiveToken.Top (fun token ->
                         evalTime.Restart()
-                        let ops = r.GetOperations(token)
+                        let ops = r.GetChanges(token)
                         evalTime.Stop()
                         Some ops
                     )
                 with CancelExn -> 
                     None
 
-        type aset<'a> with
+        type IAdaptiveHashSet<'a> with
             member x.GetAsyncReader() =
                 new AsyncSetReader<'a>(x)
 
@@ -458,28 +453,28 @@ module Loader =
             t
         ) fmt
 
-    type AsyncLoadASet<'a, 'x, 'b>(config : LoadConfig<'a, 'b>, input : IMod<'x>, mapping : 'x -> ISet<'a>) as x =
+    type AsyncLoadASet<'a, 'x, 'b>(config : LoadConfig<'a, 'b>, input : aval<'x>, mapping : 'x -> ISet<'a>) as x =
         static let noDisposable = { new IDisposable with member x.Dispose() = () }
 
         let resultDeltaLock = obj()
-        let mutable dead = HSet.empty
+        let mutable dead = HashSet.empty
 
-        let finalize (ops : hdeltaset<'b>) =
+        let finalize (ops : HashSetDelta<'b>) =
             if ops.Count > 0 then
                 lock resultDeltaLock (fun () ->
                     let old = dead.Count
                     for op in ops do
                         match op with
-                            | Rem(_,v) -> dead <- HSet.add v dead
+                            | Rem(_,v) -> dead <- HashSet.add v dead
                             | _ -> ()
                 )
 
-        let history = new History<hrefset<'b>, hdeltaset<'b>>(HRefSet.traceNoRefCount, finalize)
+        let history = new History<CountingHashSet<'b>, HashSetDelta<'b>>(CountingHashSet.traceNoRefCount, finalize)
 
         let reset() =
-            history.Perform(HRefSet.computeDelta history.State HRefSet.empty) |> ignore
+            history.Perform(CountingHashSet.computeDelta history.State CountingHashSet.empty) |> ignore
 
-        let emit (ops : hdeltaset<'b>) =
+        let emit (ops : HashSetDelta<'b>) =
             if ops.Count > 0 then
                 history.Perform ops |> ignore
 
@@ -552,14 +547,14 @@ module Loader =
                     null
 
             let resultDeltaReady = MVar.empty()
-            let mutable resultDeltas = HDeltaSet.empty
+            let mutable resultDeltas = HashSetDelta.empty
 
             let getDeltaThread () =
                 let changed = MVar.create()
                 let cb = input.AddMarkingCallback(fun () -> MVar.put changed ())
                 try
                     try
-                        let mutable last = HashSet() :> ISet<_>
+                        let mutable last = System.Collections.Generic.HashSet() :> ISet<_>
                         let sw = System.Diagnostics.Stopwatch()
                         while true do
                             changed.Take(cancel.Token)
@@ -571,7 +566,7 @@ module Loader =
                                 let set = mapping res
                                 let add = set |> Seq.filter (last.Contains >> not) |> Seq.map Add
                                 let rem = last |> Seq.filter (set.Contains >> not) |> Seq.map Rem
-                                let ops = HDeltaSet.combine (HDeltaSet.ofSeq add) (HDeltaSet.ofSeq rem)
+                                let ops = HashSetDelta.combine (HashSetDelta.ofSeq add) (HashSetDelta.ofSeq rem)
                                 last <- set
                                 sw.Stop()
 
@@ -612,7 +607,7 @@ module Loader =
                                             try
                                                 let loaded = config.load cts.Token v
                                                 lock resultDeltaLock (fun () -> 
-                                                    resultDeltas <- HDeltaSet.add (Add loaded) resultDeltas
+                                                    resultDeltas <- HashSetDelta.add (Add loaded) resultDeltas
                                                 )
                                                 MVar.put resultDeltaReady ()
                                                 tcs.SetResult(loaded)
@@ -637,13 +632,13 @@ module Loader =
                                             try
                                                 let res = task.Result
                                                 lock resultDeltaLock (fun () -> 
-                                                    let m = resultDeltas |> HDeltaSet.toHMap
+                                                    let m = resultDeltas |> HashSetDelta.toHashMap
 
                                                     let newMap = 
-                                                        m |> HMap.alter res (fun o ->
+                                                        m |> HashMap.alter res (fun o ->
                                                             match o with
                                                                 | Some 1 -> 
-                                                                    dead <- HSet.add res dead
+                                                                    dead <- HashSet.add res dead
                                                                     None
                                                                 | Some o ->
                                                                     Some (o - 1)
@@ -651,7 +646,7 @@ module Loader =
                                                                     Some (-1)
                                                         )
 
-                                                    resultDeltas <- HDeltaSet.ofHMap newMap
+                                                    resultDeltas <- HashSetDelta.ofHashMap newMap
                                                 )
                                                 MVar.put resultDeltaReady ()
                                             with
@@ -686,7 +681,7 @@ module Loader =
                         let ops = 
                             lock resultDeltaLock (fun () ->
                                 let res = resultDeltas
-                                resultDeltas <- HDeltaSet.empty
+                                resultDeltas <- HashSetDelta.empty
                                 res
                             )
 
@@ -706,7 +701,7 @@ module Loader =
                 let rem = 
                     lock resultDeltaLock (fun () ->
                         let res = dead
-                        dead <- HSet.empty
+                        dead <- HashSet.empty
                         res
                     )
                 for v in rem do config.unload v
@@ -765,32 +760,30 @@ module Loader =
 
         member x.GetReader() =
             x.AddRef()
-            new AsnycLoadSetReader<'a, 'x, 'b>(x, history.NewReader()) :> ISetReader<_>
+            new AsnycLoadSetReader<'a, 'x, 'b>(x, history.NewReader()) :> IHashSetReader<_>
 
         interface aset<'b> with
+            member x.History = Some history 
             member x.IsConstant = false
-            member x.Content = history :> IMod<_>
+            member x.Content = history |> AVal.map (CountingHashSet.toHashSet) 
             member x.GetReader() = x.GetReader()
 
-    and private AsnycLoadSetReader<'a, 'x, 'b>(parent : AsyncLoadASet<'a, 'x, 'b>, r : ISetReader<'b>) =
-        inherit AdaptiveDecorator(r)
+    and private AsnycLoadSetReader<'a, 'x, 'b>(parent : AsyncLoadASet<'a, 'x, 'b>, r : IHashSetReader<'b>) =
+        inherit AdaptiveObject()
 
         member private x.Dispose (disposing : bool) =
             if disposing then GC.SuppressFinalize x
-            r.Dispose()
             parent.RemoveRef()
 
         override x.Finalize() =
             x.Dispose false
 
-        interface ISetReader<'b> with
-            member x.GetOperations t = 
-                r.GetOperations t
-
-            member x.Dispose() = x.Dispose true
+        interface IHashSetReader<'b> with
+            member x.Trace = CountingHashSet.trace
+            member x.GetChanges t = r.GetChanges t
             member x.State = r.State
 
-    let load (mapping : 'x -> ISet<'a>) (config : LoadConfig<'a, 'b>) (input : IMod<'x>) : aset<'b> =
+    let load (mapping : 'x -> ISet<'a>) (config : LoadConfig<'a, 'b>) (input : aval<'x>) : aset<'b> =
         AsyncLoadASet<'a, 'x, 'b>(config, input, mapping) :> aset<_>
 
 

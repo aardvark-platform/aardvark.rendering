@@ -13,7 +13,7 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Interactive
 
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -31,23 +31,23 @@ module Assimp =
     
     // for convenience we define some extension
     // functions accessing Attributes type-safely
-    type Node with
+    type Ag.Scope with
         member x.Scene : Scene = x?AssimpScene
 
-        member x.RenderObjects() : aset<IRenderObject> = x?RenderObjects()
-
-        member x.LocalBoundingBox() : IMod<Box3d> = x?LocalBoundingBox()
+    type Node with
+        member x.RenderObjects(scope) : aset<IRenderObject> = x?RenderObjects(scope)
+        member x.LocalBoundingBox(scope) : aval<Box3d> = x?LocalBoundingBox(scope)
 
     type Scene with
-        member x.LocalBoundingBox() : IMod<Box3d> = x?LocalBoundingBox()
-        member x.RenderObjects() : aset<IRenderObject> = x?RenderObjects()
+        member x.LocalBoundingBox(scope) : aval<Box3d> = x?LocalBoundingBox(scope)
+        member x.RenderObjects(scope) : aset<IRenderObject> = x?RenderObjects(scope)
 
 
     // in order to integrate Assimo's scene structure we
     // need to define several attributes for it (namely RenderObjects, ModelTrafo, etc.)
     // which can be done using s single or multiple semantic-types. 
     // Since the implementation is relatively dense we opted for only one type here.
-    [<Semantic>]
+    [<Rule>]
     type AssimpSemantics() =
 
         // semantics may define local fields/functions as needed
@@ -59,7 +59,7 @@ module Assimp =
         let cache = ConditionalWeakTable<Mesh, ISg>()
 
 
-        let textureCache = Dictionary<string, IMod<ITexture>>()
+        let textureCache = Dictionary<string, aval<ITexture>>()
 
         // mapAttribute takes attributes as defined by assimp and converts 
         // them using a given function. Furthermore the result is upcasted to
@@ -67,23 +67,23 @@ module Assimp =
         // Note that the conversion is applied lazily
         let mapAttribute (f : 'a -> 'b) (l : List<'a>) =
             let data = 
-                Mod.delay(fun () ->
+                AVal.delay(fun () ->
                     let arr = Array.zeroCreate l.Count
                     for i in 0..l.Count-1 do
                         arr.[i] <- f l.[i]
 
                     arr :> Array
                 )
-            BufferView(data |> Mod.map (fun data -> ArrayBuffer data :> IBuffer), typeof<'b>)
+            BufferView(data |> AVal.map (fun data -> ArrayBuffer data :> IBuffer), typeof<'b>)
 
         // try to find the Mesh's diffuse texture
         // and convert it into a file-texture.
         // Finally cache texture-mods per path helping the
         // backend to identify equal textures
-        let tryFindDiffuseTexture (m : Mesh) =
+        let tryFindDiffuseTexture (m : Mesh) (scope : Ag.Scope) =
 
-            let scene : Scene = m?AssimpScene
-            let workDirectory : string = scene?WorkDirectory
+            let scene : Scene = scope?AssimpScene
+            let workDirectory : string = scope?WorkDirectory
 
             if m.MaterialIndex >= 0 then 
                 let mat = scene.Materials.[m.MaterialIndex]
@@ -107,7 +107,7 @@ module Assimp =
                             Some tex
                         | _ ->
                             let tex = FileTexture(path, true)
-                            let m = Mod.constant (tex :> ITexture)
+                            let m = AVal.constant (tex :> ITexture)
                             textureCache.[path] <- m
                             Some m
                 else
@@ -122,13 +122,13 @@ module Assimp =
         // Note that it would also be possible here to create RenderObjects 
         //      directly. However this is very wordy and we therefore create
         //      a partial SceneGraph for each mesh
-        let toSg (m : Mesh) =
+        let toSg (scope : Ag.Scope) (m : Mesh)  =
             match cache.TryGetValue m with
                 | (true, sg) -> 
                     sg
                 | _ ->
                     if m.HasFaces && m.FaceCount > 0 && m.PrimitiveType = PrimitiveType.Triangle then
-                        let scene : Scene  = m?AssimpScene
+                        let scene : Scene  = scope.Scene
                         let indexArray = m.GetIndices()
 
                         let vertexCount = m.Vertices.Count
@@ -148,7 +148,7 @@ module Assimp =
                                     if m.Normals.Count = m.Vertices.Count then
                                         yield DefaultSemantic.Normals, m.Normals |> mapAttribute (fun v -> V3f(v.X, v.Y, v.Z))
                                     else
-                                        yield DefaultSemantic.Normals, BufferView(SingleValueBuffer(Mod.constant V4f.OOOO), typeof<V4f>)
+                                        yield DefaultSemantic.Normals, BufferView(SingleValueBuffer(AVal.constant V4f.OOOO), typeof<V4f>)
                                 
                                 if m.TextureCoordinateChannelCount > 0 then
                                     let tc = m.TextureCoordinateChannels.[0]
@@ -157,7 +157,7 @@ module Assimp =
                             ]
 
                         // try to find the Mesh's diffuse texture
-                        let diffuseTexture = tryFindDiffuseTexture m
+                        let diffuseTexture = tryFindDiffuseTexture m scope
 
                         
                         // if the mesh is indexed use its index for determinig the
@@ -169,7 +169,7 @@ module Assimp =
                                 vertexCount
 
                         if faceVertexCount = 0 || faceVertexCount % 3 <> 0 then
-                            let sg = Sg.group' []
+                            let sg = Sg.empty
                             cache.Add(m, sg)
                             sg
                         else
@@ -207,7 +207,7 @@ module Assimp =
                             cache.Add(m, sg)
                             sg
                     else
-                        let sg = Sg.group' []
+                        let sg = Sg.empty
                         cache.Add(m, sg)
                         sg
 
@@ -215,8 +215,8 @@ module Assimp =
         // define a utility-function performing this transformation.
         // Note that RenderObjects cannot be cached per Mesh since they
         //      can differ when seen in different paths
-        let toRenderObjects (m : Mesh) =
-            (toSg m).RenderObjects()
+        let toRenderObjects (scope : Ag.Scope) (m : Mesh) =
+            (toSg scope m).RenderObjects(scope)
 
         // another utility function for converting
         // transformation matrices
@@ -233,14 +233,14 @@ module Assimp =
 
         // when the attribute is not defined for the scene itself
         // we simply use the current directory as working directory
-        member x.WorkDirectory(scene : Scene) =
+        member x.WorkDirectory(scene : Scene, scope : Ag.Scope) =
             scene.AllChildren?WorkDirectory <- System.Environment.CurrentDirectory
 
         // since the Assimp-Nodes need to be aware of their
         // enclosing Scene (holding Meshes/Textures/etc.) we
         // simply define an inherited attribute for passing it down
         // the tree
-        member x.AssimpScene(scene : Scene) =
+        member x.AssimpScene(scene : Scene, scope : Ag.Scope) =
             scene.AllChildren?AssimpScene <- scene
 
         // the inherited attribute ModelTrafo will be modified
@@ -248,59 +248,59 @@ module Assimp =
         // Note that this code is quite compilcated since we want to efficiently
         //      filter out identity trafos here and also want to be aware of the system's 
         //      overall root-trafo (which is Identity too)
-        member x.ModelTrafoStack (n : Node) =
-            let p : list<IMod<Trafo3d>> = n?ModelTrafoStack
+        member x.ModelTrafoStack (n : Node, scope : Ag.Scope) =
+            let p : list<aval<Trafo3d>> = scope.ModelTrafoStack
             let mine = n.Transform |> toTrafo
 
             // in general the following code would be sufficient (but not optimal):
-            // n.AllChildren?ModelTrafo <- Mod.map (fun t -> t * mine) p
+            // n.AllChildren?ModelTrafo <- AVal.map (fun t -> t * mine) p
 
             if mine.Forward.IsIdentity(Constant.PositiveTinyValue) then
                 n.AllChildren?ModelTrafoStack <- p
             else
-                n.AllChildren?ModelTrafoStack <- (Mod.constant mine)::p
+                n.AllChildren?ModelTrafoStack <- (AVal.constant mine)::p
 
-        member x.ModelTrafo(e : Node) : IMod<Trafo3d> =
-            let sg = Sg.set (ASet.empty)
-            sg?ModelTrafo()
+        member x.ModelTrafo(e : Node, scope : Ag.Scope) : aval<Trafo3d> =
+            let sg = Sg.empty
+            sg?ModelTrafo(scope)
 
         // here we define the RenderObjects semantic for the Assimp-Scene
         // which directly queries RenderObjects from its contained Scene-Root
-        member x.RenderObjects(scene : Scene) : aset<IRenderObject> =
-            scene.RootNode?RenderObjects()
+        member x.RenderObjects(scene : Scene, scope : Ag.Scope) : aset<IRenderObject> =
+            scene.RootNode?RenderObjects(scope)
 
         // here we define the RenderObjects semantic for Assimp's Nodes
         // which basically enumerates all directly contained 
         // Geometries and recursively yields all child-renderjobs
-        member x.RenderObjects(n : Node) : aset<IRenderObject> =
+        member x.RenderObjects(n : Node, scope : Ag.Scope) : aset<IRenderObject> =
             aset {
                 // get the inherited Scene attribute (needed for Mesh lookups here)
-                let scene = n.Scene
+                let scene = scope.Scene
 
                 // enumerate over all meshes and yield their 
                 // RenderObjects (according to the current scope)
                 for i in n.MeshIndices do
                     let mesh = scene.Meshes.[i]
                     
-                    yield! toRenderObjects mesh
+                    yield! toRenderObjects scope mesh
 
                 // recursively yield all child-renderjobs
                 for c in n.Children do
-                    yield! c.RenderObjects()
+                    yield! c.RenderObjects(scope)
 
             }
 
-        member x.LocalBoundingBox(s : Scene) : IMod<Box3d> =
-            s.RootNode.LocalBoundingBox()
+        member x.LocalBoundingBox(s : Scene, scope : Ag.Scope) : aval<Box3d> =
+            s.RootNode.LocalBoundingBox(scope)
 
-        member x.LocalBoundingBox(n : Node) : IMod<Box3d> =
+        member x.LocalBoundingBox(n : Node, scope : Ag.Scope) : aval<Box3d> =
             adaptive {
-                let scene = n.Scene
+                let scene = scope.Scene
                 let meshes = n.MeshIndices |> Seq.map (fun i -> scene.Meshes.[i]) |> Seq.toList
                 let trafo = toTrafo n.Transform
 
                 let box = Box3d(meshes |> Seq.collect (fun m -> m.Vertices |> Seq.map (fun v -> V3d(v.X, v.Y, v.Z))))
-                let childBoxes = Box3d(n.Children |> Seq.map (fun c -> c.LocalBoundingBox().GetValue()))
+                let childBoxes = Box3d(n.Children |> Seq.map (fun c -> c.LocalBoundingBox(scope).GetValue()))
 
                 let overall = Box3d [box; childBoxes]
                 return overall.Transformed(trafo)
@@ -335,7 +335,7 @@ module Assimp =
         let tex =
             PixTexture2d(PixImageMipMap [|image :> PixImage|], true) :> ITexture
 
-        Mod.constant tex
+        AVal.constant tex
 
 
     // a scene can simply be loaded using assimp.
@@ -360,7 +360,7 @@ module AssimpInterop =
 
     FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
     System.Environment.CurrentDirectory <- Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"]
-    Aardvark.SceneGraph.IO.Loader.Assimp.initialize ()
+    //Aardvark.SceneGraph.IO.Loader.Assimp.initialize ()
 
 
     let win = Interactive.Window
@@ -370,8 +370,8 @@ module AssimpInterop =
     let sg =
         model 
             |> Sg.normalizeTo ( Box3d(-V3d.III, V3d.III) )
-            |> Sg.trafo (Mod.constant Trafo3d.ChangeYZ)
-            |> Sg.blendMode (Mod.constant Rendering.BlendMode.Blend)
+            |> Sg.trafo (AVal.constant Trafo3d.ChangeYZ)
+            |> Sg.blendMode (AVal.constant Rendering.BlendMode.Blend)
             |> Sg.effect [
                     DefaultSurfaces.trafo |> toEffect                  
                     DefaultSurfaces.constantColor C4f.Red |> toEffect  

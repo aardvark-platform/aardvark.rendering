@@ -11,7 +11,7 @@ namespace Examples
 //open Aardvark.Base
 //open Aardvark.Base.Rendering
 //    
-//open Aardvark.Base.Incremental
+//open FSharp.Data.Adaptive
 //open Aardvark.SceneGraph
 //open Aardvark.Application
 //open Aardvark.Rendering.Interactive
@@ -25,19 +25,19 @@ namespace Examples
 //    module V3i =
 //        let toTup (v : V3i) = (v.X, v.Y, v.Z)
 //
-//    open Aardvark.Base.Incremental.Git
+//    open FSharp.Data.Adaptive.Git
 //
-//    let git = Aardvark.Base.Incremental.Git.init ()
+//    let git = FSharp.Data.Adaptive.Git.init ()
 //
 //    module PMod =
 //        let value (p : pmod<_>) = p.Value
 //        let modify f p =
-//            PMod.change p (f (value p))
+//            PAVal.change p (f (value p))
 //
 //    module Mod =
 //        let value (p : IModRef<_>) = p.Value
 //        let modify f p =
-//            transact (fun () -> Mod.change p (f (value p)))
+//            transact (fun () -> AVal.change p (f (value p)))
 //
 //    type Player = A | B
 //    type Tick = Tick of Player | Free
@@ -61,17 +61,17 @@ namespace Examples
 //
 //        let empty = { 
 //            arr = Array3D.init 4 4 4 (fun x y z -> git.pmod (sprintf "%A" (x,y,z)) Free)
-//            player = Mod.init A
-//            stateA = Mod.init { cursor = V3i.OOO }
-//            stateB = Mod.init { cursor = V3i.OOO }
+//            player = AVal.init A
+//            stateA = AVal.init { cursor = V3i.OOO }
+//            stateB = AVal.init { cursor = V3i.OOO }
 //        }
 //    
 //    let directions = Map.ofList [ Left, (fun v -> v - V3i.IOO); Right, (fun v -> v + V3i.IOO); Forward, (fun v -> v + V3i.OIO); Backward, (fun v -> v - V3i.OIO); Up, (fun v -> v + V3i.OOI); Down, (fun v -> v - V3i.OOI) ]
 //
 //    let flipPlayer (g : GameState) =
-//        match g.player |> Mod.force with
-//         | A -> Mod.change g.player B
-//         | B -> Mod.change g.player A
+//        match g.player |> AVal.force with
+//         | A -> AVal.change g.player B
+//         | B -> AVal.change g.player A
 //
 //    let inField (c : V3i) = 
 //        Box3i.FromMinAndSize(V3i.OOO,V3i.III * 3).Contains c
@@ -79,7 +79,7 @@ namespace Examples
 //    let visualizeHistory c = Git2Dgml.visualizeHistory (Path.combine [ __SOURCE_DIRECTORY__; "tictactoe.dgml" ])  c
 //
 //    let processInput (g : GameState) (i : Input) =
-//        let player = Mod.force g.player
+//        let player = AVal.force g.player
 //        let c = [
 //            match i with
 //             | Move d -> 
@@ -89,15 +89,15 @@ namespace Examples
 //                    inField c && (Array3D.get g.arr c.X c.Y c.Z).Value = Free
 //
 //                match player with 
-//                 | A -> Mod.modify (GameState.move valid dir) g.stateA
-//                 | B -> Mod.modify (GameState.move valid dir) g.stateB
+//                 | A -> AVal.modify (GameState.move valid dir) g.stateA
+//                 | B -> AVal.modify (GameState.move valid dir) g.stateB
 //             
 //             | Set ->
 //                let pos,msg = 
 //                    match player with
 //                      | A -> g.stateA.Value.cursor, sprintf "A set on %A" g.stateA.Value.cursor
 //                      | B -> g.stateB.Value.cursor, sprintf "B set on %A" g.stateA.Value.cursor
-//                yield PMod.change (Array3D.get g.arr pos.X pos.Y pos.Z) (Tick player),msg
+//                yield PAVal.change (Array3D.get g.arr pos.X pos.Y pos.Z) (Tick player),msg
 //        ]
 //        for (a,msg) in c do git.apply a
 //        let msg = c |> Seq.toArray |> Array.map snd |> String.Concat
@@ -133,7 +133,7 @@ namespace Examples
 //    let cube c = Helpers.box c Box3d.Unit |> Sg.ofIndexedGeometry
 //    let cursorA = Helpers.wireBox C4b.Green Box3d.Unit |> Sg.ofIndexedGeometry
 //    let cursorB = Helpers.wireBox C4b.Red Box3d.Unit |> Sg.ofIndexedGeometry
-//    let markA = Sphere.solidSphere C4b.Green 5 |> Sg.trafo (Mod.constant <| Trafo3d.Scale 0.5 *  Trafo3d.Translation(0.5,0.5,0.5))
+//    let markA = Sphere.solidSphere C4b.Green 5 |> Sg.trafo (AVal.constant <| Trafo3d.Scale 0.5 *  Trafo3d.Translation(0.5,0.5,0.5))
 //    let markB = cube C4b.Red
 //
 //    let boxes = 
@@ -142,10 +142,10 @@ namespace Examples
 //             for y in 0 .. 3 do
 //              for z in 0 .. 3 do
 //                 let t = 
-//                    Trafo3d.Translation(float x ,float y ,float z) |> Mod.constant
+//                    Trafo3d.Translation(float x ,float y ,float z) |> AVal.constant
 //                 yield 
 //                    Array3D.get s.arr x y z
-//                      |> Mod.map (function
+//                      |> AVal.map (function
 //                              | Tick A -> Sg.trafo t markA
 //                              | Tick B -> Sg.trafo t markB
 //                              | Free -> Sg.trafo t cubeSg
@@ -155,16 +155,16 @@ namespace Examples
 //
 //    let cursor = 
 //        let toTrafo c = c.cursor |> V3d.op_Explicit |> Trafo3d.Translation
-//        let A = s.player |> Mod.map ((=)A)
-//        let B = s.player |> Mod.map ((=)B)
-//        Sg.group [ Sg.onOff A <| Sg.trafo (s.stateA |> Mod.map toTrafo) (cube C4b.Blue)
-//                   Sg.onOff B <| Sg.trafo (s.stateB |> Mod.map toTrafo) (cube C4b.Red) ]
+//        let A = s.player |> AVal.map ((=)A)
+//        let B = s.player |> AVal.map ((=)B)
+//        Sg.group [ Sg.onOff A <| Sg.trafo (s.stateA |> AVal.map toTrafo) (cube C4b.Blue)
+//                   Sg.onOff B <| Sg.trafo (s.stateB |> AVal.map toTrafo) (cube C4b.Red) ]
 //
 //    let viewTrafo = 
 //        let view =  CameraView.LookAt(V3d(2, 12, 7), V3d(2,2,2), V3d.OOI)
-//        Mod.integrate view win.Time 
+//        AVal.integrate view win.Time 
 //            [DefaultCameraController.controlOrbitAround win.Mouse 
-//                (Mod.constant <| V3d(2,2,2))]
+//                (AVal.constant <| V3d(2,2,2))]
 //
 //    let sg =
 //        boxes
@@ -174,8 +174,8 @@ namespace Examples
 //                DefaultSurfaces.simpleLighting |> toEffect
 //                ]
 //        |> Sg.andAlso cursor 
-//        |> Sg.viewTrafo (viewTrafo      |> Mod.map CameraView.viewTrafo )
-//        |> Sg.projTrafo (perspective () |> Mod.map Frustum.projTrafo    )
+//        |> Sg.viewTrafo (viewTrafo      |> AVal.map CameraView.viewTrafo )
+//        |> Sg.projTrafo (perspective () |> AVal.map Frustum.projTrafo    )
 //
 //
 //    let run () =

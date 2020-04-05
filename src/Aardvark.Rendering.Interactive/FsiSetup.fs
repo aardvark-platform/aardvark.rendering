@@ -7,7 +7,7 @@ module FsiSetup =
     open System.Threading
 
     open Aardvark.Base
-    open Aardvark.Base.Incremental
+    open FSharp.Data.Adaptive
     open Aardvark.Base.Rendering
     open Aardvark.SceneGraph
     open Aardvark.SceneGraph.Semantics
@@ -33,12 +33,7 @@ module FsiSetup =
                 System.Reflection.Assembly.LoadFile(entryPath)
             #endif
 
-            Ag.initialize()
-            Aardvark.Base.Ag.unpack <- fun o ->
-                    match o with
-                        | :? IMod as o -> o.GetValue()
-                        | _ -> o
-
+            
             Aardvark.Init()
 
     let initFsi entryPath =
@@ -51,11 +46,6 @@ module FsiSetup =
             IntrospectionProperties.CustomEntryAssembly <- 
                 System.Reflection.Assembly.LoadFile(entryPath)
 
-            Ag.initialize()
-            Aardvark.Base.Ag.unpack <- fun o ->
-                    match o with
-                        | :? IMod as o -> o.GetValue()
-                        | _ -> o
-
+            
             Aardvark.Init()
  

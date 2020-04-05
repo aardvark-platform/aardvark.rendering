@@ -2,7 +2,7 @@
 
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
 
@@ -11,39 +11,39 @@ open Aardvark.SceneGraph.Internal
 [<AutoOpen>]
 module ActiveSemantics =
 
-    type ISg with
-        member x.IsActive : IMod<bool> = x?IsActive
+    type Ag.Scope with
+        member x.IsActive : aval<bool> = x?IsActive
         member x.RenderPass : RenderPass = x?RenderPass
 
     module Semantic =
-        let isActive (s : ISg) : IMod<bool> = s?IsActive
-        let renderPass (s : ISg) : RenderPass = s?RenderPass
+        let isActive (s : Ag.Scope) : aval<bool> = s?IsActive
+        let renderPass (s : Ag.Scope) : RenderPass = s?RenderPass
 
-    [<Semantic>]
+    [<Rule>]
     type ActiveSemantics() =
 
-        let trueConstant = Mod.constant true
-        let andCache = Caching.BinaryOpCache (Mod.map2 (&&))
+        let trueConstant = AVal.constant true
+        let andCache = Caching.BinaryOpCache (AVal.map2 (&&))
 
-        let (<&>) (a : IMod<bool>) (b : IMod<bool>) =
+        let (<&>) (a : aval<bool>) (b : aval<bool>) =
             if a = trueConstant then b
             elif b = trueConstant then a
             else andCache.Invoke a b
 
-        member x.IsActive(r : Root<ISg>) =
+        member x.IsActive(r : Root<ISg>, scope : Ag.Scope) =
             r.Child?IsActive <- trueConstant
 
-        member x.IsActive(o : Sg.OnOffNode) =
-            o.Child?IsActive <- o?IsActive <&> o.IsActive
+        member x.IsActive(o : Sg.OnOffNode, scope : Ag.Scope) =
+            o.Child?IsActive <- scope.IsActive <&> o.IsActive
 
 
-    [<Semantic>]
+    [<Rule>]
     type PassSemantics() =
 
         let defaultPass = RenderPass.main
         
-        member x.RenderPass(e : Root<ISg>) =
+        member x.RenderPass(e : Root<ISg>, scope : Ag.Scope) =
             e.Child?RenderPass <- defaultPass
 
-        member x.RenderPass(p : Sg.PassApplicator) =
+        member x.RenderPass(p : Sg.PassApplicator, scope : Ag.Scope) =
             p.Child?RenderPass <- p.Pass

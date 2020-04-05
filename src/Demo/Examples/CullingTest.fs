@@ -2,8 +2,8 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Base.Rendering
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
@@ -24,9 +24,9 @@ module CullingTest =
         let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
         let frustum = 
             win.Sizes 
-              |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 200.0 (float s.X / float s.Y))
+              |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 200.0 (float s.X / float s.Y))
 
-        let mode = Mod.init Viewer
+        let mode = AVal.init Viewer
         let currentMain = ref (CameraView.lookAt (V3d(3,3,3)) V3d.Zero V3d.OOI)
         let currentTest = ref (CameraView.lookAt (V3d(3,3,3)) V3d.Zero V3d.OOI)
         let mainCam =
@@ -63,22 +63,22 @@ module CullingTest =
             }
 
         let changed = MVar.empty ()
-        cameraView |> Mod.unsafeRegisterCallbackKeepDisposable (fun _ -> MVar.put changed ()) |> ignore
+        cameraView.AddCallback (fun _ -> MVar.put changed ()) |> ignore
 
-        let objectIndex = Mod.init 1
+        let objectIndex = AVal.init 1
 
         let objectTypes =
             [| Sg.box' C4b.White Box3d.Unit
                Sg.sphere' 9 C4b.White 0.3 |]
 
-        let viewProj = Mod.map2 (fun view proj -> CameraView.viewTrafo view * Frustum.projTrafo proj) mainCam frustum
+        let viewProj = AVal.map2 (fun view proj -> CameraView.viewTrafo view * Frustum.projTrafo proj) mainCam frustum
         let box = Box3d.FromPoints(V3d(-1,-1,-1),V3d(1,1,1))
-        let noCull = Mod.init false
+        let noCull = AVal.init false
 
 //        let cache = Array3D.init 13 13 13
 //        let isActives =
-//            Mod.custom (fun token ->
-//                Mod.
+//            AVal.custom (fun token ->
+//                AVal.
 //            )
 
         let objs =
@@ -87,17 +87,17 @@ module CullingTest =
                     for y in -8 .. 12 do
                         for z in -8 .. 12 do
                             let pos = V3d(float x,float y, float z)
-                            //let isActive = Mod.map (fun (a : bool[,,]) -> a.[x,y,z]) isActives
-                            let isActive = Mod.init false
+                            //let isActive = AVal.map (fun (a : bool[,,]) -> a.[x,y,z]) isActives
+                            let isActive = AVal.init false
 //                            let isActive =
-//                                viewProj |> Mod.map (fun viewProj -> 
+//                                viewProj |> AVal.map (fun viewProj -> 
 //                                    let noCull = false
 //                                    //let! noCull = noCull
 //                                    let ndc = viewProj.Forward.TransformPosProj pos
 //                                    let visible = box.Contains(ndc) || noCull
 //                                    visible
-//                                ) |> Mod.onPush
-                            let bar = isActive |> Mod.bind Mod.constant |> Mod.bind Mod.constant
+//                                ) |> AVal.onPush
+                            let bar = isActive |> AVal.bind AVal.constant |> AVal.bind AVal.constant
 
                             let sg = 
 //                                adaptive {
@@ -187,13 +187,13 @@ module CullingTest =
                     Sg.frustum ~~C4b.White mainCam frustum
                     |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.vertexColor |> toEffect]
                   )
-               |> Sg.viewTrafo (cameraView   |> Mod.map CameraView.viewTrafo )
-               |> Sg.projTrafo (frustum      |> Mod.map Frustum.projTrafo    )
+               |> Sg.viewTrafo (cameraView   |> AVal.map CameraView.viewTrafo )
+               |> Sg.projTrafo (frustum      |> AVal.map Frustum.projTrafo    )
 
        
         Log.startTimed "gather objs"
-        let objects = sg.RenderObjects()
-        objects |> ASet.toArray |> ignore
+        let objects = sg.RenderObjects(Ag.Scope.Root)
+        objects.Content |> AVal.force |> HashSet.toArray |> ignore
         Log.stop()
 
 
@@ -265,18 +265,18 @@ module CullingTest =
 
     let runInstanced () =
 
-        Ag.initialize()
+        
         Aardvark.Init()
 
         use app = new OpenGlApplication()
-        let win = app.CreateGameWindow()
+        let win = app.CreateSimpleRenderWindow()
 
         let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
         let frustum = 
             win.Sizes 
-              |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 40.0 (float s.X / float s.Y))
+              |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 40.0 (float s.X / float s.Y))
 
-        let mode = Mod.init Viewer
+        let mode = AVal.init Viewer
         let currentMain = ref (CameraView.lookAt (V3d(3,3,3)) V3d.Zero V3d.OOI)
         let currentTest = ref (CameraView.lookAt (V3d(3,3,3)) V3d.Zero V3d.OOI)
         let mainCam =
@@ -313,9 +313,9 @@ module CullingTest =
             }
 
         let changed = MVar.empty ()
-        cameraView |> Mod.unsafeRegisterCallbackKeepDisposable (fun _ -> MVar.put changed ()) |> ignore
+        cameraView.AddCallback (fun _ -> MVar.put changed ()) |> ignore
 
-        let objectIndex = Mod.init 1
+        let objectIndex = AVal.init 1
 
         let sphere = IndexedGeometryPrimitives.solidSubdivisionSphere (Sphere3d.FromRadius(0.3)) 9 C4b.Red
 
@@ -329,7 +329,7 @@ module CullingTest =
                     for y in -8 .. 12 do
                         for z in -8 .. 12 do
                             let pos = V3d(float x,float y, float z)
-                            let isActive = Mod.init false
+                            let isActive = AVal.init false
                             let sg = 
                                 adaptive {
                                     let! index = objectIndex
@@ -345,7 +345,7 @@ module CullingTest =
         let mutable visibleThings = 0
 
 
-        let instanceTrafos = Mod.init [||]
+        let instanceTrafos = AVal.init [||]
 
         let culling () =
             while true do
@@ -388,11 +388,11 @@ module CullingTest =
                     Sg.frustum ~~C4b.White mainCam frustum
                     |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.vertexColor |> toEffect]
                   )
-               |> Sg.viewTrafo (cameraView   |> Mod.map CameraView.viewTrafo )
-               |> Sg.projTrafo (frustum      |> Mod.map Frustum.projTrafo    )
+               |> Sg.viewTrafo (cameraView   |> AVal.map CameraView.viewTrafo )
+               |> Sg.projTrafo (frustum      |> AVal.map Frustum.projTrafo    )
 
        
-        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, sg.RenderObjects())
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, sg.RenderObjects(Ag.Scope.Root))
 
         win.Keyboard.KeyDown(Keys.Space).Values.Subscribe(fun _ -> 
             transact (fun _ ->
@@ -421,9 +421,9 @@ module CullingTest =
         let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
         let frustum = 
             win.Sizes 
-              |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 40.0 (float s.X / float s.Y))
+              |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 40.0 (float s.X / float s.Y))
 
-        let mode = Mod.init Viewer
+        let mode = AVal.init Viewer
         let currentMain = ref (CameraView.lookAt (V3d(3,3,3)) V3d.Zero V3d.OOI)
         let currentTest = ref (CameraView.lookAt (V3d(3,3,3)) V3d.Zero V3d.OOI)
         let mainCam =
@@ -460,9 +460,9 @@ module CullingTest =
             }
 
         let changed = MVar.empty ()
-        cameraView |> Mod.unsafeRegisterCallbackKeepDisposable (fun _ -> MVar.put changed ()) |> ignore
+        cameraView.AddCallback (fun _ -> MVar.put changed ()) |> ignore
 
-        let objectIndex = Mod.init 1
+        let objectIndex = AVal.init 1
 
         let objectTypes =
             [| Sg.box' C4b.White Box3d.Unit
@@ -474,7 +474,7 @@ module CullingTest =
                     for y in -8 .. 12 do
                         for z in -8 .. 12 do
                             let pos = V3d(float x,float y, float z)
-                            let isActive = Mod.init false
+                            let isActive = AVal.init false
                             let sg = 
                                 adaptive {
                                     let! index = objectIndex
@@ -489,7 +489,7 @@ module CullingTest =
         let cullTimer = System.Diagnostics.Stopwatch()
         let mutable visibleThings = 0
 
-        let renderSet = CSet.empty
+        let renderSet = cset()
 
         let cullComputeTime = System.Diagnostics.Stopwatch()
 
@@ -511,11 +511,11 @@ module CullingTest =
                             isActive.Value <- visible
                             if visible then 
                                 visibleThings <- visibleThings + 1
-                                let worked = CSet.add sg renderSet
+                                let worked = renderSet.Add sg
                                 assert worked
                             else 
                                 visibleThings <- visibleThings - 1
-                                let worked = CSet.remove sg renderSet
+                                let worked = renderSet.Add sg
                                 assert worked
                             changedCount <- changedCount + 1
                     cullComputeTime.Stop()
@@ -542,11 +542,11 @@ module CullingTest =
                     Sg.frustum ~~C4b.White mainCam frustum
                     |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.vertexColor |> toEffect]
                   )
-               |> Sg.viewTrafo (cameraView   |> Mod.map CameraView.viewTrafo )
-               |> Sg.projTrafo (frustum      |> Mod.map Frustum.projTrafo    )
+               |> Sg.viewTrafo (cameraView   |> AVal.map CameraView.viewTrafo )
+               |> Sg.projTrafo (frustum      |> AVal.map Frustum.projTrafo    )
 
        
-        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, sg.RenderObjects())
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, sg.RenderObjects(Ag.Scope.Root))
 
         win.Keyboard.KeyDown(Keys.Space).Values.Subscribe(fun _ -> 
             transact (fun _ ->

@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -64,7 +64,7 @@ module Shader =
 let main argv = 
     
     // first we need to initialize Aardvark's core components
-    Ag.initialize()
+    
     Aardvark.Init()
 
 
@@ -82,7 +82,7 @@ let main argv =
 
     let scale =
         let sw = System.Diagnostics.Stopwatch()
-        window.Time |> Mod.map (fun _ -> 
+        window.Time |> AVal.map (fun _ -> 
             if not sw.IsRunning then sw.Start()
 
             exp (-0.15 * (sw.Elapsed.TotalSeconds % 40.0))
@@ -92,10 +92,10 @@ let main argv =
 
     let sg = 
         Sg.fullScreenQuad
-            |> Sg.uniform "Iterations" (Mod.constant 1000)
-            |> Sg.uniform "Scale" scale //(Mod.constant 2.2)
-            |> Sg.uniform "Center" (Mod.constant <| center)
-            |> Sg.uniform "TransferFunction" (Mod.constant texture)
+            |> Sg.uniform "Iterations" (AVal.constant 1000)
+            |> Sg.uniform "Scale" scale //(AVal.constant 2.2)
+            |> Sg.uniform "Center" (AVal.constant <| center)
+            |> Sg.uniform "TransferFunction" (AVal.constant texture)
 
             |> Sg.shader {
                 do! Shader.mandelbrot

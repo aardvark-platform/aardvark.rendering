@@ -291,6 +291,17 @@ module Buffer =
                )
             |> Seq.toList
 
+    let toVkUsage (usage : BufferUsage) = 
+        let mutable flags = VkBufferUsageFlags.None
+        if usage.HasFlag BufferUsage.Index then flags <- flags ||| VkBufferUsageFlags.IndexBufferBit
+        if usage.HasFlag BufferUsage.Vertex then flags <- flags ||| VkBufferUsageFlags.VertexBufferBit
+        if usage.HasFlag BufferUsage.Uniform then flags <- flags ||| VkBufferUsageFlags.UniformBufferBit
+        if usage.HasFlag BufferUsage.Indirect then flags <- flags ||| VkBufferUsageFlags.IndirectBufferBit
+        if usage.HasFlag BufferUsage.Storage then flags <- flags ||| VkBufferUsageFlags.StorageBufferBit
+        if usage.HasFlag BufferUsage.Read then flags <- flags ||| VkBufferUsageFlags.TransferSrcBit
+        if usage.HasFlag BufferUsage.Write then flags <- flags ||| VkBufferUsageFlags.TransferDstBit
+        flags
+
     let private emptyBuffers = ConcurrentDictionary<Device * VkBufferUsageFlags, Buffer>()
 
     let empty (usage : VkBufferUsageFlags) (device : Device) =

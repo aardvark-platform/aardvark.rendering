@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open System.IO
@@ -153,7 +153,7 @@ module Scatter =
 let main argv = 
     
     // first we need to initialize Aardvark's core components
-    Ag.initialize()
+    
     Aardvark.Init()
 
     // show the scene in a simple window
@@ -167,7 +167,7 @@ let main argv =
     let box = Box3d(-V3d.III, V3d.III)
     let color = C4b.Red
 
-    let folder = @"D:\volumes\hechtkopfsalamander male - Copy"
+    let folder = @"C:\Users\Schorsch\Development\WorkDirectory\hechtkopfsalamander male - Copy"
     let files = Directory.GetFiles folder
 
     let images = files |> Array.map (fun p -> PixImage.Create(p).ToPixImage<byte>(Col.Format.Gray))
@@ -179,7 +179,7 @@ let main argv =
 
 
     let texture = PixTexture3d(volume, false) :> ITexture
-    let texture = win.Runtime.PrepareTexture(texture) :> ITexture |> Mod.constant
+    let texture = win.Runtime.PrepareTexture(texture) :> ITexture |> AVal.constant
 
 
     let fvc = int64 volume.Size.X * int64 volume.Size.Y * int64 volume.Size.Z
@@ -223,7 +223,7 @@ let main argv =
             do! Shader.vertex
             do! Shader.fragment
             }
-        |> Sg.cullMode (Mod.constant CullMode.Back)
+        |> Sg.cullMode (AVal.constant CullMode.Back)
 
     win.Scene <- sg
     win.Run()

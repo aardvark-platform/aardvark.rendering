@@ -3,7 +3,7 @@
 open System
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 open System.Threading
 open System.Collections.Concurrent
@@ -305,16 +305,16 @@ type PointCloudInfo =
         attributeTypes : Map<Symbol, Type>
         
         /// rasterizer function
-        lodRasterizer : IMod<LodData.SetRasterizer>
+        lodRasterizer : aval<LodData.SetRasterizer>
 
         /// freeze LOD loading?
-        freeze : IMod<bool>
+        freeze : aval<bool>
 
         /// an optional custom view trafo
-        customView : Option<IMod<Trafo3d>>
+        customView : Option<aval<Trafo3d>>
 
         /// an optional custom view projection trafo
-        customProjection : Option<IMod<Trafo3d>>
+        customProjection : Option<aval<Trafo3d>>
 
         /// the maximal percentage of inactive vertices kept in memory
         /// For Example a value of 0.5 means that at most 50% of the vertices in memory are inactive
@@ -328,7 +328,7 @@ type PointCloudInfo =
 
         /// optional surface for bounding boxes of cells that are load in progress.
         // the surface should properly transform instances by using DefaultSemantic.InstanceTrafo
-        boundingBoxSurface : Option<IMod<ISurface>>
+        boundingBoxSurface : Option<aval<ISurface>>
 
         progressCallback : Option<Action<LoaderProgress>>
     }
@@ -391,7 +391,7 @@ module Helper =
     open Aardvark.Base
     open Aardvark.Base.Ag
     open Aardvark.Base.Rendering
-    open Aardvark.Base.Incremental
+    open FSharp.Data.Adaptive
     open Aardvark.SceneGraph
     open Aardvark.SceneGraph.Semantics
     open LodProgress
@@ -433,7 +433,7 @@ module PointCloudRenderObjectSemantics =
         open System
         open System.Threading
         open Aardvark.Base
-        open Aardvark.Base.Incremental
+        open FSharp.Data.Adaptive
         open Aardvark.SceneGraph
         open Aardvark.SceneGraph.Semantics
         open Aardvark.Base.Ag
@@ -474,45 +474,45 @@ module PointCloudRenderObjectSemantics =
             let rasterizer = 
                 config.lodRasterizer
 
-            let view : IMod<Trafo3d> = 
+            let view : aval<Trafo3d> = 
                 match config.customView with
                     | Some view -> view
                     | None -> 
                         match ro.Uniforms.TryGetUniform(scope, Symbol.Create "ViewTrafo") with
-                            | Some (:? IMod<Trafo3d> as v) -> v
+                            | Some (:? aval<Trafo3d> as v) -> v
                             | _ -> scope?ViewTrafo
 
-            let proj : IMod<Trafo3d> = 
+            let proj : aval<Trafo3d> = 
                 match config.customProjection with
                     | Some proj -> proj
                     | None -> 
                         match ro.Uniforms.TryGetUniform(scope, Symbol.Create "ProjTrafo") with
-                            | Some (:? IMod<Trafo3d> as v) -> v
+                            | Some (:? aval<Trafo3d> as v) -> v
                             | _ -> scope?ProjTrafo
 
-            let size : IMod<V2i> = 
+            let size : aval<V2i> = 
                 match ro.Uniforms.TryGetUniform(scope, Symbol.Create "ViewportSize") with
-                    | Some (:? IMod<V2i> as v) -> v
+                    | Some (:? aval<V2i> as v) -> v
                     | _ -> scope?ViewportSize
                     
 
             
             let vp =
-                let both = Mod.map2 (fun a b -> a,b) view proj 
-                config.freeze |> Mod.bind(fun frozen ->
+                let both = AVal.map2 (fun a b -> a,b) view proj 
+                config.freeze |> AVal.bind(fun frozen ->
                     if frozen then
-                        Mod.constant (view.GetValue(), proj.GetValue())
+                        AVal.constant (view.GetValue(), proj.GetValue())
                     else
                         both
                 )
 
             let dependencies =
-                Mod.custom (fun token ->
+                AVal.custom (fun token ->
                     let view,proj = vp.GetValue(token)
                     let size = size.GetValue(token)
                     let rasterizer = rasterizer.GetValue(token)
 
-                    for d in data.Dependencies do d.GetValue token |> ignore
+                    for d in data.Dependencies do d.GetValueUntyped token |> ignore
 
                     view, proj, size, rasterizer
                 )
@@ -621,22 +621,21 @@ module PointCloudRenderObjectSemantics =
 
                 loadedGeometries 
                     |> ASet.foldGroup add sub RangeSet.empty
-                    |> Mod.map (fun ranges ->
+                    |> AVal.map (fun ranges ->
                         let calls = ranges |> RangeSet.toSeq |> Seq.map call |> Seq.toArray
-                        IndirectBuffer(ArrayBuffer calls, calls.Length) :> IIndirectBuffer
+                        IndirectBuffer.ofArray false calls 
                     )
 
-            ro.IndirectBuffer <- drawCallBuffer
+            ro.DrawCalls <- Indirect drawCallBuffer
             ro.Mode <- IndexedGeometryMode.PointList
             ro.VertexAttributes <- vertexAttributes
             ro.Activate <- activate
 
             ro :> IRenderObject
 
-        [<Semantic>]
+        [<Rule>]
         type MyPCSem() =
-            member x.RenderObjects(m : Sg.PointCloud) =
-                let scope = Ag.getContext()
+            member x.RenderObjects(m : Sg.PointCloud, scope : Ag.Scope) =
                 let obj = createRenderObject scope m.Config m.Data
                 ASet.single obj
 

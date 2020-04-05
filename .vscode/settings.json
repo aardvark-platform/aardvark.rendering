@@ -1,3 +1,17 @@
 {
-    "FSharp.fsacRuntime": "netcore"
+    "FSharp.fsacRuntime": "netcore",
+    "files.exclude": {
+        "**/.git": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        "**/.vs": true,
+        "**/obj/": true,
+        "**/CVS": true,
+        "**/.DS_Store": true,
+        ".fake": true,
+        ".ionide": true,
+        ".paket": true,
+        "paket-files": true,
+        "packages": true
+    }
 }

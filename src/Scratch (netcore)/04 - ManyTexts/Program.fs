@@ -1,7 +1,7 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive
+open FSharp.Data.Adaptive.Operators
 open Aardvark.SceneGraph
 open Aardvark.Rendering.Text
 open Aardvark.Application
@@ -11,7 +11,7 @@ open Aardvark.Application
 [<EntryPoint>]
 let main argv = 
     
-    Ag.initialize()
+    
     Aardvark.Init()
 
     // window { ... } is similar to show { ... } but instead
@@ -28,21 +28,21 @@ let main argv =
 
 
     let baseTrafo =
-        Mod.init (Trafo3d.FromOrthoNormalBasis(V3d.IOO, V3d.OOI, -V3d.OIO) * Trafo3d.Scale(0.6))
+        AVal.init (Trafo3d.FromOrthoNormalBasis(V3d.IOO, V3d.OOI, -V3d.OIO) * Trafo3d.Scale(0.6))
 
     let suffix =
-        Mod.init ""
+        AVal.init ""
 
     let withSuffix str =
-        suffix |> Mod.map (fun s -> str + s)
+        suffix |> AVal.map (fun s -> str + s)
 
-    let withTrafo t =  Mod.map (fun b -> b * t) baseTrafo
+    let withTrafo t =  AVal.map (fun b -> b * t) baseTrafo
 
     let rand = RandomSystem()
 
     let texts =
-        CSet.ofList [
-            baseTrafo :> IMod<_>, withSuffix "Identity"
+        cset [
+            baseTrafo :> aval<_>, withSuffix "Identity"
             withTrafo (Trafo3d.Translation(0.0, 0.0, 3.0)), withSuffix "Up"
             withTrafo (Trafo3d.Translation(3.0, 0.0, 0.0)), withSuffix "Right"
             withTrafo (Trafo3d.Translation(0.0, 3.0, 0.0)), withSuffix "Forward"
@@ -124,7 +124,7 @@ let main argv =
                 do! DefaultSurfaces.vertexColor
             }
 
-    let bias = Mod.init (1.0 / float (1 <<< 22))
+    let bias = AVal.init (1.0 / float (1 <<< 22))
 
     let shapes =
         let dark = C4b(30uy, 30uy, 30uy, 255uy)
@@ -132,7 +132,7 @@ let main argv =
 
         texts |> ASet.map (fun (trafo, text) ->
             let shape = 
-                text |> Mod.map cfg.Layout |> Mod.map (fun shapes ->
+                text |> AVal.map cfg.Layout |> AVal.map (fun shapes ->
                     let bounds = shapes.bounds.EnlargedBy(V2d(0.05, 0.0))
                     let rect = ConcreteShape.fillRoundedRectangle dark 0.05 bounds
                     let rectb = ConcreteShape.roundedRectangle blue 0.05 0.075 (bounds.EnlargedBy 0.025)
@@ -162,7 +162,7 @@ let main argv =
         ////let rectb = ConcreteShape.roundedRectangle C4b.Gray 0.05 0.125 (bounds.EnlargedBy 0.025)
         ////let shapes = ShapeList.prepend rect shapes
         //ShapeList.prepend rect shapes
-        //|> Mod.constant
+        //|> AVal.constant
         //|> Sg.shape
         //|> Sg.transform (Trafo3d.FromOrthoNormalBasis(V3d.IOO, V3d.OOI, -V3d.OIO))
 

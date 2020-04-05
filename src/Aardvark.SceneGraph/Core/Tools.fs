@@ -5,7 +5,8 @@ open System.Threading
 open System.Collections.Generic
 open System.Collections.Concurrent
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
+open FSharp.Data.Traceable
 
 [<ReferenceEquality; NoComparison>]
 type private Entry<'a> = { value : 'a; count : int }
@@ -111,31 +112,31 @@ type ConcurrentDeltaQueue<'a>() =
 
 module ConcurrentDeltaQueue =
     
-    type AsyncReader<'a>(inner : ISetReader<'a>) =
-        inherit AbstractReader<hdeltaset<'a>>(Ag.emptyScope, HDeltaSet.monoid)
+    type AsyncReader<'a>(inner : IHashSetReader<'a>) =
+        inherit AbstractReader<HashSetDelta<'a>>(HashSetDelta.empty)
 
         let sem = new SemaphoreSlim(1)
 
-        member x.GetOperationsAsync() =
+        member x.GetChangesAsync() =
             async {
                 do! Async.SwitchToThreadPool()
                 let! _ = Async.AwaitIAsyncResult(sem.WaitAsync())
-                let d = EvaluationUtilities.evaluateTopLevel (fun () -> x.GetOperations())
+
+                // TODO: evaluateTopLevel
+                //let d = EvaluationUtilities.evaluateTopLevel (fun () -> x.GetChanges())
+                let d = x.GetChanges()
                 return d
             }
 
-        override x.Mark() =
+        override x.MarkObject() =
             sem.Release() |> ignore
             true
 
         override x.Compute(token) =
-            inner.GetOperations(token)
+            inner.GetChanges(token)
 
-        override x.Release() =
+        override x.Finalize() =
             sem.Dispose()
-            inner.Dispose()
-
-        override x.Inputs = Seq.singleton (inner :> IAdaptiveObject)
 
     let ofASet (s : aset<'a>) =
         let queue = new ConcurrentDeltaQueue<'a>()
@@ -146,7 +147,7 @@ module ConcurrentDeltaQueue =
             async {
                 do! Async.SwitchToThreadPool()
                 while true do
-                    let! deltas = reader.GetOperationsAsync()
+                    let! deltas = reader.GetChangesAsync()
                     for d in deltas do queue.Enqueue d |> ignore
             }
 
@@ -157,7 +158,6 @@ module ConcurrentDeltaQueue =
             { new IDisposable with
                 member x.Dispose() =
                     cancel.Cancel()
-                    reader.Dispose()
             }
 
         queue.Subscription <- disposable

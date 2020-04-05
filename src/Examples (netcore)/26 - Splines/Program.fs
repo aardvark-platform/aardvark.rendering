@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -200,13 +200,13 @@ module Sg =
     open Aardvark.Base.Ag
     open Aardvark.SceneGraph.Semantics
 
-    type SplineNode(viewportSize : IMod<V2i>, threshold : IMod<float>, controlPoints : IMod<V3d[]>) =
+    type SplineNode(viewportSize : aval<V2i>, threshold : aval<float>, controlPoints : aval<V3d[]>) =
         interface ISg
         member x.ViewportSize = viewportSize
         member x.Threshold = threshold
         member x.ControlPoints = controlPoints
 
-    [<Semantic>]
+    [<Rule>]
     type SplineSemantics() =
         
         static let cache = System.Collections.Concurrent.ConcurrentDictionary<IRuntime, ParallelPrimitives * IComputeShader * IComputeShader>()
@@ -219,7 +219,7 @@ module Sg =
                 prim, prepare, evaluate
             )
 
-        static let subdiv (runtime : IRuntime) (threshold : IMod<float>) (size : IMod<V2i>) (viewProj : IMod<Trafo3d>) (cpsArray : V3d[]) =
+        static let subdiv (runtime : IRuntime) (threshold : aval<float>) (size : aval<V2i>) (viewProj : aval<Trafo3d>) (cpsArray : V3d[]) =
             let prim, prepare, evaluate = get runtime
             
             let cnt = cpsArray.Length / 4
@@ -331,19 +331,19 @@ module Sg =
             //    }
             //buffer :> IOutputMod<_>, count :> IOutputMod<_>
             
-        member x.GlobalBoundingBox(s : SplineNode) =
-            let t = s.ModelTrafo
-            Mod.map2 (fun (trafo : Trafo3d) (cps : V3d[]) -> Box3d(cps |> Array.map trafo.Forward.TransformPos)) t s.ControlPoints
+        member x.GlobalBoundingBox(s : SplineNode, scope : Ag.Scope) =
+            let t = scope.ModelTrafo
+            AVal.map2 (fun (trafo : Trafo3d) (cps : V3d[]) -> Box3d(cps |> Array.map trafo.Forward.TransformPos)) t s.ControlPoints
 
-        member x.LocalBoundingBox(s : SplineNode) =
-            s.ControlPoints |> Mod.map Box3d
+        member x.LocalBoundingBox(s : SplineNode, scope : Ag.Scope) =
+            s.ControlPoints |> AVal.map Box3d
 
-        member x.RenderObjects(s : SplineNode) : aset<IRenderObject> =
-            let runtime = s.Runtime
-            let viewProj = Mod.map2 (*) s.ViewTrafo s.ProjTrafo
-            let mvp = Mod.map2 (*) s.ModelTrafo viewProj
+        member x.RenderObjects(s : SplineNode, scope : Ag.Scope) : aset<IRenderObject> =
+            let runtime = scope.Runtime
+            let viewProj = AVal.map2 (*) scope.ViewTrafo scope.ProjTrafo
+            let mvp = AVal.map2 (*) scope.ModelTrafo viewProj
 
-            //let mm = s.ControlPoints |> Mod.map (subdiv runtime s.Threshold s.ViewportSize mvp)
+            //let mm = s.ControlPoints |> AVal.map (subdiv runtime s.Threshold s.ViewportSize mvp)
             let cps = s.ControlPoints
 
             let mutable last : Option<IOutputMod<_>> = None
@@ -351,7 +351,7 @@ module Sg =
 
             let bind (view : IBuffer<V4f> * int -> 'a) =
                 { new AbstractOutputMod<'a>() with
-                    override x.InputChanged(o,i) =
+                    override x.InputChangedObject(o,i) =
                         if i = (cps :> IAdaptiveObject) then cpsChanged <- true
 
                     member x.Create() =
@@ -364,7 +364,7 @@ module Sg =
                     member x.Destroy() =
                         match last with
                         | Some o -> 
-                            o.RemoveOutput x
+                            o.Outputs.Remove x |> ignore
                             o.Release()
                             last <- None
                         | _ -> 
@@ -378,7 +378,7 @@ module Sg =
                                 cpsChanged <- false
                                 match last with
                                 | Some o ->
-                                    o.RemoveOutput x
+                                    o.Outputs.Remove x |> ignore
                                     o.Release()
                                 | _ -> 
                                     ()
@@ -399,8 +399,8 @@ module Sg =
             let count = bind (fun (_,c) -> 2*c)
                 
 
-            let o = RenderObject.create()
-            o.DrawCallInfos <- count |> Mod.map (fun c -> [DrawCallInfo(FaceVertexCount = c, InstanceCount = 1)])
+            let o = RenderObject.ofScope scope
+            o.DrawCalls <- Direct(count |> AVal.map (fun c -> [DrawCallInfo(FaceVertexCount = c, InstanceCount = 1)]))
             o.Mode <- IndexedGeometryMode.LineList
             o.VertexAttributes <-
                 let oa = o.VertexAttributes
@@ -419,7 +419,7 @@ module Sg =
 
 [<EntryPoint>]
 let main argv = 
-    Ag.initialize()
+    
     Aardvark.Init()
     
     let win =
@@ -434,13 +434,13 @@ let main argv =
 
 
     let cps =
-        Mod.init [|
+        AVal.init [|
             V3d.OOO; V3d.OOI; V3d.IOI; V3d.IOO
             V3d(0,1,0); V3d(0,1,1); V3d(1,1,-1); V3d(1,1,0)
         |]
 
-    let threshold = Mod.init 10.0
-    let active = Mod.init true
+    let threshold = AVal.init 10.0
+    let active = AVal.init true
 
     let rand = RandomSystem()
     let bounds = Box3d(-V3d.III, V3d.III)
@@ -470,7 +470,7 @@ let main argv =
             for x in 0 .. 0 do
                 yield 
                     Sg.SplineNode(win.Sizes, threshold, cps) :> ISg
-                    |> Sg.uniform "LineWidth" (Mod.constant 6.0)
+                    |> Sg.uniform "LineWidth" (AVal.constant 6.0)
                     |> Sg.translate (float x * 2.0) 0.0 0.0
                     |> Sg.shader {
                         do! DefaultSurfaces.trafo
@@ -482,7 +482,7 @@ let main argv =
 
     let sg =
         active 
-        |> Mod.map (function true -> sg | false -> Sg.empty)
+        |> AVal.map (function true -> sg | false -> Sg.empty)
         |> Sg.dynamic
 
 

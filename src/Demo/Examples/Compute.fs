@@ -3,11 +3,11 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection
 
@@ -427,8 +427,8 @@ module ComputeTest =
 
         let kernel = ctx.CompileKernel (scan <@ (*) @> <@ 1.0 @>)
         let f a = 1.0f
-        let ba = ctx.CreateBuffer(Array.init size f, BufferUsage.Dynamic)
-        let bb = ctx.CreateBuffer(Array.zeroCreate<float32> size, BufferUsage.Dynamic)
+        let ba = ctx.CreateBuffer(Array.init size f, BufferUsageHint.Dynamic)
+        let bb = ctx.CreateBuffer(Array.zeroCreate<float32> size, BufferUsageHint.Dynamic)
 
         let img = PixImage<float32>(Col.Format.Gray, 1024L, 1024L)
         img.GetChannel(0L).SetByCoord (fun (x : int64) (y : int64) -> float32 x) |> ignore

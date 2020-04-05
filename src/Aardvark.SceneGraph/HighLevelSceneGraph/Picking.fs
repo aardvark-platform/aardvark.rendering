@@ -3,7 +3,7 @@
 open System
 open Aardvark.Base
 open Aardvark.Base.Geometry
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
 
@@ -93,35 +93,35 @@ module ``Sg Picking Extensions`` =
                     | ts -> ts |> Array.min |> Some |> getRealT
                 | Custom(_,intersect) -> intersect local |> getRealT
 
-    type PickObject(scope : Ag.Scope, pickable : IMod<Pickable>) =
+    type PickObject(scope : Ag.Scope, pickable : aval<Pickable>) =
         member x.Scope = scope
         member x.Pickable = pickable
         
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module PickObject =
         let bounds (p : PickObject) =
-            p.Pickable |> Mod.map Pickable.bounds
+            p.Pickable |> AVal.map Pickable.bounds
 
     type PickTree(objects : aset<PickObject>) =
         
         let objects =
-            objects |> ASet.filterM (fun o ->
-                PickObject.bounds o |> Mod.map (fun b -> b.IsValid)
+            objects |> ASet.filterA (fun o ->
+                PickObject.bounds o |> AVal.map (fun b -> b.IsValid)
             )
 
         //let objects =
         //    objects |> ASet.chooseM (fun o ->
-        //        PickObject.bounds o |> Mod.map (fun b ->
+        //        PickObject.bounds o |> AVal.map (fun b ->
         //            if b.IsInvalid then None
         //            else Some (b.EnlargedBy(1E-8), o)
         //        )
         //    )
 
         let bvh = 
-            BvhTree.ofASet (fun a -> PickObject.bounds a |> Mod.map ( fun b -> b.EnlargedBy(1E-8))) objects
+            BvhTree.ofASet (fun a -> PickObject.bounds a |> AVal.map ( fun b -> b.EnlargedBy(1E-8))) objects
 
         static let intersectLeaf (part : RayPart) (p : PickObject) =
-            let pickable = p.Pickable |> Mod.force
+            let pickable = p.Pickable |> AVal.force
             match Pickable.intersect part pickable with
                 | Some t -> 
                     let pt = part.Ray.Ray.GetPointOnRay t
@@ -129,22 +129,17 @@ module ``Sg Picking Extensions`` =
                 | None -> 
                     None
                 
-        member x.Dispose() =
-            bvh.Dispose()
-
-        interface IDisposable with
-            member x.Dispose() = x.Dispose()
 
         member x.Update() =
             bvh.GetValue() |> ignore
 
         member x.Intersect(ray : Ray3d, tmin : float, tmax : float) =
-            bvh |> Mod.map (fun bvh ->
+            bvh |> AVal.map (fun bvh ->
                 bvh.Intersect(intersectLeaf, RayPart(FastRay3d(ray), tmin, tmax))
             )
 
         member x.Intersect(ray : Ray3d) =
-            bvh |> Mod.map (fun bvh ->
+            bvh |> AVal.map (fun bvh ->
                 bvh.Intersect(intersectLeaf, RayPart(FastRay3d(ray), 0.0, System.Double.PositiveInfinity))
             )
 
@@ -156,7 +151,7 @@ module ``Sg Picking Extensions`` =
             res
 
         let ofSg (sg : ISg) =
-            sg?PickObjects() |> ofPickObjects
+            sg?PickObjects(Ag.Scope.Root) |> ofPickObjects
 
         let intersectFull (ray : Ray3d) (tmin : float) (tmax : float) (t : PickTree) =
             t.Intersect(ray, tmin, tmax)
@@ -165,24 +160,24 @@ module ``Sg Picking Extensions`` =
             t.Intersect(ray)
 
     module Sg =
-        type PickableApplicator(pickable : IMod<Pickable>, child : IMod<ISg>) =
+        type PickableApplicator(pickable : aval<Pickable>, child : aval<ISg>) =
             inherit Sg.AbstractApplicator(child)
 
             member x.Pickable = pickable
             
-        type RequirePickingApplicator(child : IMod<ISg>) =
+        type RequirePickingApplicator(child : aval<ISg>) =
             inherit Sg.AbstractApplicator(child)
 
 
         let pickable (shape : PickShape) (sg : ISg) =
-            PickableApplicator(Mod.constant (Pickable.ofShape shape), Mod.constant sg) :> ISg
+            PickableApplicator(AVal.constant (Pickable.ofShape shape), AVal.constant sg) :> ISg
             
         let pickBoundingBox (sg : ISg) =
-            let pickable = sg.LocalBoundingBox() |> Mod.map (PickShape.Box >> Pickable.ofShape)
-            PickableApplicator(pickable, Mod.constant sg) :> ISg
+            let pickable = sg.LocalBoundingBox(Ag.Scope.Root) |> AVal.map (PickShape.Box >> Pickable.ofShape)
+            PickableApplicator(pickable, AVal.constant sg) :> ISg
 
         let requirePicking (sg : ISg) =
-            RequirePickingApplicator(Mod.constant sg) :> ISg
+            RequirePickingApplicator(AVal.constant sg) :> ISg
 
 
 
@@ -190,7 +185,7 @@ namespace Aardvark.SceneGraph.Semantics
 
 open Aardvark.Base
 open Aardvark.Base.Geometry
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
 
@@ -198,21 +193,23 @@ open Aardvark.SceneGraph
 module PickingSemantics =
 
     type ISg with
-        member x.PickObjects() : aset<PickObject> = x?PickObjects()
+        member x.PickObjects(scope : Ag.Scope) : aset<PickObject> = x?PickObjects(scope)
+
+    type Ag.Scope with
         member x.RequirePicking : bool = x?RequirePicking
 
     type private PickingKey =
         {
             index : Option<BufferView>
             positions : Option<BufferView>
-            call : IMod<DrawCallInfo>
+            call : aval<DrawCallInfo>
             mode : IndexedGeometryMode
         }
 
-    [<Semantic>]
+    [<Rule>]
     type PickObjectSem() =
 
-        static let cache = Dict<PickingKey, Option<IMod<Pickable>>>()
+        static let cache = Dict<PickingKey, Option<aval<Pickable>>>()
 
         static let bb (t : Triangle3d) =
             let mutable b = t.BoundingBox3d
@@ -297,8 +294,8 @@ module PickingSemantics =
                                 | Some view ->
                                     let converter = PrimitiveValueConverter.getArrayConverter view.ElementType typeof<int>
                                     key.call 
-                                        |> Mod.bind (fun call -> BufferView.download call.FirstIndex call.FaceVertexCount view)
-                                        |> Mod.map (converter >> unbox<int[]>)
+                                        |> AVal.bind (fun call -> BufferView.download call.FirstIndex call.FaceVertexCount view)
+                                        |> AVal.map (converter >> unbox<int[]>)
                                         |> Some
                                 | None ->
                                     None
@@ -309,18 +306,18 @@ module PickingSemantics =
                                     let maxVertexExclusice =
                                         match index with
                                             | Some idx -> 
-                                                idx |> Mod.map (fun idx ->
+                                                idx |> AVal.map (fun idx ->
                                                     1 + Array.max idx
                                                 )
                                             | None -> 
-                                                call |> Mod.map (fun call -> 
+                                                call |> AVal.map (fun call -> 
                                                     call.FirstIndex + call.FaceVertexCount
                                                 )
                                     let converter = PrimitiveValueConverter.getArrayConverter view.ElementType typeof<V3d>
 
                                     maxVertexExclusice 
-                                        |> Mod.bind (fun cnt -> BufferView.download 0 cnt view)
-                                        |> Mod.map (converter >> unbox<V3d[]>)
+                                        |> AVal.bind (fun cnt -> BufferView.download 0 cnt view)
+                                        |> AVal.map (converter >> unbox<V3d[]>)
                                         |> Some
 
                                 | None ->
@@ -330,8 +327,8 @@ module PickingSemantics =
                             | Some pos ->   
                                 let triangles = 
                                     match index with
-                                        | Some idx -> Mod.map2 (getTriangles mode) idx pos
-                                        | None -> Mod.map (getTriangles mode null) pos
+                                        | Some idx -> AVal.map2 (getTriangles mode) idx pos
+                                        | None -> AVal.map (getTriangles mode null) pos
 
            
                                 let pickable = 
@@ -341,7 +338,7 @@ module PickingSemantics =
                                             member x.PlaneSide(a,b) = Spatial.triangle.PlaneSide(a,b)
                                         }
 
-                                    triangles |> Mod.map ( 
+                                    triangles |> AVal.map ( 
                                         KdTree.build spatial KdBuildInfo.Default >> 
                                         PickShape.Triangles >>
                                         Pickable.ofShape
@@ -355,27 +352,26 @@ module PickingSemantics =
                 )
             )
 
-        member x.RequirePicking(r : Root<ISg>) =
+        member x.RequirePicking(r : Root<ISg>, scope : Ag.Scope) =
             r.Child?RequirePicking <- false
 
-        member x.RequirePicking(a : Sg.RequirePickingApplicator) =
+        member x.RequirePicking(a : Sg.RequirePickingApplicator, scope : Ag.Scope) =
             a.Child?RequirePicking <- true
 
-        member x.PickObjects(render : Sg.RenderNode) : aset<PickObject> =
-            if render.RequirePicking then
+        member x.PickObjects(render : Sg.RenderNode, scope : Ag.Scope) : aset<PickObject> =
+            if scope.RequirePicking then
                 let key =
                     {
-                        positions = render.VertexAttributes |> Map.tryFind DefaultSemantic.Positions
-                        index = render.VertexIndexBuffer
+                        positions = scope.VertexAttributes |> Map.tryFind DefaultSemantic.Positions
+                        index = scope.VertexIndexBuffer
                         call = render.DrawCallInfo
                         mode = render.Mode
                     }
 
                 match createLeafPickable key with
                     | Some pickable ->
-                        let ctx = Ag.getContext()
-                        let pickable = Mod.map2 Pickable.transform x.ModelTrafo pickable
-                        let o = PickObject(ctx, pickable)
+                        let pickable = AVal.map2 Pickable.transform scope.ModelTrafo pickable
+                        let o = PickObject(scope, pickable)
                         ASet.single o
                     | None ->
                         ASet.empty
@@ -383,22 +379,22 @@ module PickingSemantics =
             else
                 ASet.empty
 
-        member x.PickObjects(app : IApplicator) : aset<PickObject> =
+        member x.PickObjects(app : IApplicator, scope : Ag.Scope) : aset<PickObject> =
             aset {
                 let! c = app.Child
-                yield! c.PickObjects()
+                yield! c.PickObjects(scope)
             }
 
-        member x.PickObjects(set : IGroup) : aset<PickObject> =
+        member x.PickObjects(set : IGroup, scope : Ag.Scope) : aset<PickObject> =
             aset {
                 for c in set.Children do
-                    yield! c.PickObjects()
+                    yield! c.PickObjects(scope)
             }
 
-        member x.PickObjects(s : ISg) : aset<PickObject> =
+        member x.PickObjects(s : ISg, scope : Ag.Scope) : aset<PickObject> =
             ASet.empty
 
-        member x.PickObjects(pickable : Sg.PickableApplicator) : aset<PickObject> =
-            let pickable = Mod.map2 Pickable.transform x.ModelTrafo pickable.Pickable
-            let o = PickObject(Ag.getContext(), pickable)
+        member x.PickObjects(pickable : Sg.PickableApplicator, scope : Ag.Scope) : aset<PickObject> =
+            let pickable = AVal.map2 Pickable.transform scope.ModelTrafo pickable.Pickable
+            let o = PickObject(scope, pickable)
             ASet.single o

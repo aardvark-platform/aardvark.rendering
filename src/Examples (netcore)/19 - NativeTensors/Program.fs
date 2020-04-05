@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -55,7 +55,7 @@ let howManyColorsIllusion (size : int) =
 let main argv = 
     
     // first we need to initialize Aardvark's core components
-    Ag.initialize()
+    
     Aardvark.Init()
 
     // let's create an input image containing a simple illusion
@@ -69,9 +69,9 @@ let main argv =
     
 
     // first we need to pin both images in order to use them as NativeVolumes
-    NativeVolume.using inputImage.Volume (fun vInput ->
-        NativeVolume.using resultImage.Volume (fun vOutput ->
-
+    NativeVolume.using inputImage.Volume (fun (vInput : NativeVolume<byte>) ->
+        NativeVolume.using resultImage.Volume (fun (vOutput : NativeVolume<byte>) ->
+            let b = Fun.Lerp(1.0, 0uy, 255uy)
             // blit the input-image to the output
             NativeVolume.blit vInput vOutput
 
@@ -117,7 +117,7 @@ let main argv =
         samples 8
         scene (
             Sg.fullScreenQuad
-                |> Sg.diffuseTexture (Mod.constant (texture :> ITexture))
+                |> Sg.diffuseTexture (AVal.constant (texture :> ITexture))
                 |> Sg.shader {
                     do! DefaultSurfaces.diffuseTexture
                 }

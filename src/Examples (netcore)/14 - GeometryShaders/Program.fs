@@ -1,10 +1,10 @@
 ﻿open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.Slim
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection
 open Aardvark.Rendering.Vulkan
@@ -173,7 +173,7 @@ module Shader =
 [<EntryPoint>]
 let main argv = 
     
-    Ag.initialize()
+    
     Aardvark.Init()
 
     let available = 
@@ -220,7 +220,7 @@ let main argv =
     let w = 1 + (ceil (sqrt (float combinations.Length)) |> int)
     let h = ceil (float combinations.Length / float w) |> int
 
-    let font = Font("Consolas")
+    let font = FontSquirrel.Hack.Regular
 
     let sg =
         Sg.ofList [
@@ -231,7 +231,7 @@ let main argv =
                         let (name, effect) = combinations.[id]
      
                         let label = 
-                            Sg.text font C4b.White (Mod.constant name)
+                            Sg.text font C4b.White (AVal.constant name)
                                 |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero) * Trafo3d.Scale(0.1))
                                 |> Sg.translate 0.0 0.0 1.0
 
@@ -239,10 +239,10 @@ let main argv =
                             Sg.ofList [
                                 Sg.sphere' 3 C4b.Red 0.5
                                     |> Sg.translate 0.5 0.5 0.5
-                                    |> Sg.uniform "Color" (Mod.constant V4d.IOOI)
+                                    |> Sg.uniform "Color" (AVal.constant V4d.IOOI)
 
                                 Sg.box' C4b.Blue Box3d.Unit
-                                    |> Sg.uniform "Color" (Mod.constant V4d.IIOI)
+                                    |> Sg.uniform "Color" (AVal.constant V4d.IIOI)
                                     |> Sg.translate 1.6 0.0 0.0
                             ]   
                             |> Sg.scale 0.5

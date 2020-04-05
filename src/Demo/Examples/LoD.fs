@@ -12,7 +12,7 @@ open System.Collections.Generic
 open Aardvark.Base
 open Aardvark.Rendering.Interactive
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -37,8 +37,8 @@ module Helpers =
     let randomColor2 ()  =
         C4b(rand.Next(255) |> byte, rand.Next(255) |> byte, rand.Next(255) |> byte, 255uy)
 
-    let frustum (f : IMod<CameraView>) (proj : IMod<Frustum>) =
-        let invViewProj = Mod.map2 (fun v p -> (CameraView.viewTrafo v * Frustum.projTrafo p).Inverse) f proj
+    let frustum (f : aval<CameraView>) (proj : aval<Frustum>) =
+        let invViewProj = AVal.map2 (fun v p -> (CameraView.viewTrafo v * Frustum.projTrafo p).Inverse) f proj
 
         let positions = 
             [|
@@ -175,7 +175,7 @@ module LoD =
             | Main
             | Test
 
-        let mode = Mod.init Main
+        let mode = AVal.init Main
 
         let currentMain = ref (CameraView.lookAt (V3d(3,3,3)) V3d.Zero V3d.OOI)
         let currentTest = ref (CameraView.lookAt (V3d(3,3,3)) V3d.Zero V3d.OOI)
@@ -215,8 +215,8 @@ module LoD =
         win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ ->
             transact (fun () ->
                 match mode.Value with
-                    | Main -> Mod.change mode Test
-                    | Test -> Mod.change mode Main
+                    | Main -> mode.Value <- Test
+                    | Test -> mode.Value <- Main
 
                 printfn "mode: %A" mode.Value
             )
@@ -230,7 +230,7 @@ module LoD =
         )
 
         let mainProj = Interactive.DefaultFrustum  
-        let gridProj = Frustum.perspective 60.0 1.0 50.0 1.0 |> Mod.constant
+        let gridProj = Frustum.perspective 60.0 1.0 50.0 1.0 |> AVal.constant
 
         let proj =
             adaptive {
@@ -269,7 +269,7 @@ module LoD =
 //        win.Runtime.PrepareSurface(
 //            win.FramebufferSignature,
 //            eff
-//        ) :> ISurface |> Mod.constant
+//        ) :> ISurface |> AVal.constant
 
     let progress = 
         {   
@@ -283,7 +283,7 @@ module LoD =
         Sg.pointCloud data config
 
 
-    let fr = Mod.init false
+    let fr = AVal.init false
     win.Keyboard.KeyDown(Keys.C).Values.Add ( fun _ ->
         transact ( fun _ -> fr.Value <- not fr.Value )
         Log.line "frozen now: %A" fr.Value
@@ -292,13 +292,13 @@ module LoD =
 
     let cloud =
         pointCloud data {
-            lodRasterizer           = Mod.constant (LodData.defaultRasterizeSet 5.0)
+            lodRasterizer           = AVal.constant (LodData.defaultRasterizeSet 5.0)
             freeze                  = fr
             maxReuseRatio           = 0.5
             minReuseCount           = 1L <<< 20
             pruneInterval           = 500
-            customView              = Some (gridCam |> Mod.map CameraView.viewTrafo)
-            customProjection        = Some (gridProj |> Mod.map Frustum.projTrafo)
+            customView              = Some (gridCam |> AVal.map CameraView.viewTrafo)
+            customProjection        = Some (gridProj |> AVal.map Frustum.projTrafo)
             attributeTypes =
                 Map.ofList [
                     DefaultSemantic.Positions, typeof<V3f>
@@ -309,7 +309,7 @@ module LoD =
         } 
                      
     let sg = 
-        Sg.group' [
+        Sg.ofList [
             cloud
                 |> Sg.effect [
                     DefaultSurfaces.trafo |> toEffect 
@@ -333,9 +333,9 @@ module LoD =
                 DefaultSurfaces.trafo |> toEffect                
                 DefaultSurfaces.vertexColor  |> toEffect 
                 ]
-            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo ) 
-            |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo    )
-            |> Sg.uniform "PointSize" (Mod.constant 4.0)
+            |> Sg.viewTrafo (view |> AVal.map CameraView.viewTrafo ) 
+            |> Sg.projTrafo (proj |> AVal.map Frustum.projTrafo    )
+            |> Sg.uniform "PointSize" (AVal.constant 4.0)
             |> Sg.uniform "ViewportSize" win.Sizes
     
     let run() =

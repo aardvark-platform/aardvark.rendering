@@ -2,10 +2,10 @@
 
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 
 
 // we now need to define some shaders performing the per-pixel blur on a given input texture.
@@ -79,7 +79,7 @@ module Shaders =
 let main argv = 
     
     // first we need to initialize Aardvark's core components
-    Ag.initialize()
+    
     Aardvark.Init()
 
 
@@ -91,7 +91,7 @@ let main argv =
             samples 8
         }
 
-    let pointSize = Mod.init 50.0
+    let pointSize = AVal.init 50.0
 
     let pointSg = 
         let pointCount = 2048
@@ -100,25 +100,25 @@ let main argv =
         let randomColor() = C4b(rand.NextDouble(), rand.NextDouble(), rand.NextDouble(), 1.0)
 
         Sg.draw IndexedGeometryMode.PointList
-            |> Sg.vertexAttribute DefaultSemantic.Positions (Array.init pointCount (fun _ -> randomV3f()) |> Mod.constant)
-            |> Sg.vertexAttribute DefaultSemantic.Colors (Array.init pointCount (fun _ -> randomColor()) |> Mod.constant)
-            |> Sg.viewTrafo (win.View |> Mod.map (Array.item 0))    // for stereo rendering we would get two views
-            |> Sg.projTrafo (win.Proj |> Mod.map (Array.item 0))    // but we take the first one here.
+            |> Sg.vertexAttribute DefaultSemantic.Positions (Array.init pointCount (fun _ -> randomV3f()) |> AVal.constant)
+            |> Sg.vertexAttribute DefaultSemantic.Colors (Array.init pointCount (fun _ -> randomColor()) |> AVal.constant)
+            |> Sg.viewTrafo (win.View |> AVal.map (Array.item 0))    // for stereo rendering we would get two views
+            |> Sg.projTrafo (win.Proj |> AVal.map (Array.item 0))    // but we take the first one here.
             |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.pointSprite |> toEffect; Shaders.pointSpriteFragment |> toEffect; DefaultSurfaces.vertexColor |> toEffect]
             |> Sg.uniform "PointSize" pointSize
    
     // for rendering the filtered image we need a fullscreen quad
     let fullscreenQuad =
         Sg.draw IndexedGeometryMode.TriangleStrip
-            |> Sg.vertexAttribute DefaultSemantic.Positions (Mod.constant [|V3f(-1.0,-1.0,0.0); V3f(1.0,-1.0,0.0); V3f(-1.0,1.0,0.0);V3f(1.0,1.0,0.0) |])
-            |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (Mod.constant [|V2f.OO; V2f.IO; V2f.OI; V2f.II|])
+            |> Sg.vertexAttribute DefaultSemantic.Positions (AVal.constant [|V3f(-1.0,-1.0,0.0); V3f(1.0,-1.0,0.0); V3f(-1.0,1.0,0.0);V3f(1.0,1.0,0.0) |])
+            |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (AVal.constant [|V2f.OO; V2f.IO; V2f.OI; V2f.II|])
             |> Sg.depthTest ~~DepthTestMode.None
 
 
 
     // so in a first pass we need to render our pointScene to a color texture which
     // is quite simple using the RenderTask utilities provided in Base.Rendering.
-    // from the rendering we get an IMod<ITexture> which will be outOfDate whenever
+    // from the rendering we get an aval<ITexture> which will be outOfDate whenever
     // something changes in pointScene and updated whenever subsequent passes need it.
     let singleSampledSignature = 
         win.Runtime.CreateFramebufferSignature(1, [
@@ -137,7 +137,7 @@ let main argv =
             |> RenderTask.renderToColor win.Sizes
 
     // by taking the texture created above and the fullscreen quad we can now apply
-    // the first gaussian filter to it and in turn get a new IMod<ITexture>     
+    // the first gaussian filter to it and in turn get a new aval<ITexture>     
     let blurredOnlyX =
         fullscreenQuad 
             |> Sg.texture DefaultSemantic.DiffuseColorTexture mainResult
@@ -146,7 +146,7 @@ let main argv =
             |> RenderTask.renderToColor win.Sizes
 
     // by taking the texture created above and the fullscreen quad we can now apply
-    // the first gaussian filter to it and in turn get a new IMod<ITexture>     
+    // the first gaussian filter to it and in turn get a new aval<ITexture>     
     let blurredOnlyY =
         fullscreenQuad 
             |> Sg.texture DefaultSemantic.DiffuseColorTexture mainResult
@@ -173,7 +173,7 @@ let main argv =
                 |> Sg.effect [Shaders.gaussY |> toEffect]
 
 
-        Sg.group' [mainResult; overlayOriginal] 
+        Sg.ofList [mainResult; overlayOriginal] 
             |> Sg.viewTrafo ~~Trafo3d.Identity 
             |> Sg.projTrafo ~~Trafo3d.Identity
 
@@ -183,7 +183,7 @@ let main argv =
             |> Sg.texture DefaultSemantic.DiffuseColorTexture t
             |> Sg.effect [DefaultSurfaces.diffuseTexture |> toEffect]
 
-    let variant = Mod.init 0
+    let variant = AVal.init 0
     let variants = [| final; showTexture mainResult; showTexture blurredOnlyX; showTexture blurredOnlyY |]
 
     win.Keyboard.Down.Values.Add(fun k ->
@@ -198,7 +198,7 @@ let main argv =
     )
 
     win.Scene <- 
-        Mod.map (fun i -> Array.item i variants) variant |> Sg.dynamic
+        AVal.map (fun i -> Array.item i variants) variant |> Sg.dynamic
 
     win.Run()
     0

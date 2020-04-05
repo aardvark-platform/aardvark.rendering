@@ -5,7 +5,7 @@ open System.Threading
 open System.Collections.Concurrent
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open OpenTK
 open OpenTK.Platform
 open OpenTK.Graphics
@@ -16,7 +16,6 @@ open Management
 
 #nowarn "9"
 #nowarn "51"
-#nowarn "44"
 
 
 [<AutoOpen>]
@@ -92,248 +91,6 @@ module ResizeBufferImplementation =
             member x.Dispose() = x.Dispose()
 
 
-    [<AbstractClass>] [<Obsolete>]
-    type AbstractResizeBuffer(ctx : Context, handle : int, pageSize : int64) =
-        inherit Buffer(ctx, 0n, handle)
-
-        let resourceLock = new ResourceLock()
-
-        let mutable pendingWrites : hmap<ContextHandle, Fence> = HMap.empty
-
-        let afterWrite() =
-            lock resourceLock (fun () ->
-                let f = Fence.Create()
-
-                pendingWrites <- 
-                    pendingWrites |> HMap.update f.Context (fun old ->
-                        match old with 
-                            | Some o -> o.Dispose()
-                            | None -> ()
-                        f
-                    )
-            )
-
-        let beforeResize() =
-            if not (HMap.isEmpty pendingWrites) then
-                for (_,f) in pendingWrites |> HMap.toSeq do 
-                    f.WaitCPU()
-                    f.Dispose()
-
-                pendingWrites <- HMap.empty
-
-        let afterResize() =
-            use f = Fence.Create()
-            f.WaitCPU()
-
-        let beforeRead() =
-            lock resourceLock (fun () ->
-                if not (HMap.isEmpty pendingWrites) then
-                    let handle = ctx.CurrentContextHandle |> Option.get
-                    pendingWrites |> Seq.iter (fun (_, f) -> f.WaitGPU(handle))
-            )
-            
-
-        member x.Lock = resourceLock
-
-        interface ILockedResource with
-            member x.Lock = resourceLock
-            member x.OnLock u = x.OnLock u
-            member x.OnUnlock u = x.OnUnlock u
-        
-        member x.OnLock (usage : Option<ResourceUsage>) =
-            match usage with
-                | Some ResourceUsage.Render -> beforeRead()
-                | _ -> ()
-
-        member x.OnUnlock (usage : Option<ResourceUsage>) = ()
-
-        abstract member Realloc : oldCapacity : nativeint * newCapacity : nativeint -> unit
-        abstract member MapRead<'x> : offset : nativeint * size : nativeint * reader : (nativeint -> 'x) -> 'x
-        abstract member MapWrite<'x> : offset : nativeint * size : nativeint * writer : (nativeint -> 'x) -> 'x
-
-
-        member x.ResizeUnsafe(newCapacity : nativeint) =
-            let newCapacity = Fun.NextPowerOfTwo(int64 newCapacity) |> Alignment.next pageSize |> nativeint
-            let oldCapacity = x.SizeInBytes
-            if oldCapacity <> newCapacity then
-                using ctx.ResourceLock (fun _ ->
-                    x.Realloc(oldCapacity, newCapacity)
-                )
-                x.SizeInBytes <- newCapacity
-                updateBuffer ctx (int64 oldCapacity) (int64 newCapacity)
-
-        member x.UseReadUnsafe(offset : nativeint, size : nativeint, reader : nativeint -> 'x) =
-            using ctx.ResourceLock (fun _ ->
-                x.MapRead(offset, size, reader)
-            )
-
-        member x.UseWriteUnsafe(offset : nativeint, size : nativeint, writer : nativeint -> 'x) =
-            using ctx.ResourceLock (fun _ ->
-                x.MapWrite(offset, size, writer)
-            )
-
-
-        member x.Resize(newCapacity : nativeint) =
-            LockedResource.update x (fun () ->
-                let newCapacity = Fun.NextPowerOfTwo(int64 newCapacity) |> Alignment.next pageSize |> nativeint
-                let oldCapacity = x.SizeInBytes
-                if oldCapacity <> newCapacity then
-                    using ctx.ResourceLock (fun _ ->
-                        beforeResize()
-                        x.Realloc(oldCapacity, newCapacity)
-                        afterResize()
-                    )
-                    x.SizeInBytes <- newCapacity
-                    updateBuffer ctx (int64 oldCapacity) (int64 newCapacity)
-            )
-
-        member x.UseRead(offset : nativeint, size : nativeint, reader : nativeint -> 'x) =
-            if size = 0n then
-                reader 0n
-            else
-                LockedResource.access x (fun () ->
-                    if offset < 0n then failwith "offset < 0n"
-                    if size < 0n then failwith "negative size"
-                    if size + offset > x.SizeInBytes then failwith "insufficient buffer size"
-
-                    using ctx.ResourceLock (fun _ ->
-                        beforeRead()
-                        let res = x.MapRead(offset, size, reader)
-                        res
-                    )
-                )
-
-        member x.UseWrite(offset : nativeint, size : nativeint, writer : nativeint -> 'x) =
-            if size = 0n then
-                writer 0n
-            else
-                LockedResource.access x (fun () ->
-                    if offset < 0n then failwith "offset < 0n"
-                    if size < 0n then failwith "negative size"
-                    if size + offset > x.SizeInBytes then failwith "insufficient buffer size"
-
-                    using ctx.ResourceLock (fun _ ->
-                        let res = x.MapWrite(offset, size, writer)
-                        afterWrite()
-                        res
-                    )
-                )
-
-
-
-        interface IResizeBuffer with
-            member x.Resize cap = x.Resize cap
-            member x.UseRead(off, size, reader) = x.UseRead(off, size, reader)
-            member x.UseWrite(off, size, reader) = x.UseRead(off, size, reader)
-
-    [<Obsolete>]
-    type internal SparseMemoryResizeBuffer(ctx : Context, pageSize : int64, handle : int) =
-        inherit AbstractResizeBuffer(ctx, handle, pageSize)
-
-        override x.Realloc(oldCapacity : nativeint, newCapacity : nativeint) =
-            if newCapacity > oldCapacity then
-                GL.NamedBufferPageCommitment(handle, oldCapacity, newCapacity - oldCapacity, true)
-                GL.Check "[ResizeableBuffer] could not commit pages"
-
-            elif newCapacity < oldCapacity then
-                GL.NamedBufferPageCommitment(handle, newCapacity, oldCapacity - newCapacity, false)
-                GL.Check "[ResizeableBuffer] could not decommit pages"
-                
-
-        override x.MapWrite(offset : nativeint, size : nativeint, writer : nativeint -> 'a) =
-            let data = Marshal.AllocHGlobal size
-            let res = writer data
-
-            GL.NamedBufferSubData(x.Handle, offset, size, data)
-            GL.Check "[ResizeableBuffer] could not upload buffer"
-                    
-            Marshal.FreeHGlobal data
-            res
-
-        override x.MapRead(offset : nativeint, size : nativeint, reader : nativeint -> 'a) =
-            let data = Marshal.AllocHGlobal size
-
-            GL.GetNamedBufferSubData(x.Handle,  offset, size, data)
-            GL.Check "[ResizeableBuffer] could not download buffer"
-
-            let res = reader data
-            Marshal.FreeHGlobal data
-            res
-
-    [<Obsolete>]
-    type internal CopyResizeBuffer(ctx : Context, handle : int) =
-        inherit AbstractResizeBuffer(ctx, handle, 1L)
-
-        override x.Realloc(oldCapacity : nativeint, newCapacity : nativeint) =
-            let copyBytes = min newCapacity oldCapacity
-
-            if copyBytes <> 0n then
-                let tmpBuffer = GL.GenBuffer()
-                GL.NamedBufferData(tmpBuffer, copyBytes, 0n, BufferUsageHint.StaticDraw)
-                GL.Check "[ResizeableBuffer] could not allocate buffer"
-
-                GL.NamedCopyBufferSubData(x.Handle, tmpBuffer, 0n, 0n, copyBytes)
-                GL.Check "[ResizeableBuffer] could not copy buffer"
-
-                GL.NamedBufferData(x.Handle, newCapacity, 0n, BufferUsageHint.StaticDraw)
-                GL.Check "[ResizeableBuffer] could not allocate buffer"
-                
-                GL.NamedCopyBufferSubData(tmpBuffer, x.Handle, 0n, 0n, copyBytes)
-                GL.Check "[ResizeableBuffer] could not copy buffer"
-
-                GL.DeleteBuffer(tmpBuffer)
-                GL.Check "[ResizeableBuffer] could not delete buffer"
-
-            else
-                GL.NamedBufferData(x.Handle, newCapacity, 0n, BufferUsageHint.StaticDraw)
-                GL.Check "[ResizeableBuffer] could not allocate buffer"
-
-
-        override x.MapWrite(offset : nativeint, size : nativeint, writer : nativeint -> 'a) =
-            let data = Marshal.AllocHGlobal size
-            let res = writer data
-
-            GL.NamedBufferSubData(x.Handle, offset, size, data)
-            GL.Check "[ResizeableBuffer] could not upload buffer"
-
-            Marshal.FreeHGlobal data
-            res
-
-        override x.MapRead(offset : nativeint, size : nativeint, reader : nativeint -> 'a) =
-            let data = Marshal.AllocHGlobal size
-
-            GL.GetNamedBufferSubData(x.Handle, offset, size, data)
-            GL.Check "[ResizeableBuffer] could not download buffer"
-
-            let res = reader data
-            Marshal.FreeHGlobal data
-            res
-
-
-    type Context with
-        member x.CreateResizeBuffer() =
-            addBuffer x 0L
-
-            use __ = x.ResourceLock
-            if not RuntimeConfig.SupressSparseBuffers && GL.ARB_sparse_buffer then
-                let pageSize = GL.GetInteger64(GetPName.BufferPageSize)
-                GL.Check "could not get sparse page-size"
-
-                let buffer = GL.GenBuffer()
-                GL.Check "could not create buffer"
-
-                GL.NamedBufferStorage(
-                    buffer, 
-                    2n <<< 30, 0n, 
-                    BufferStorageFlags.SparseStorageBit ||| BufferStorageFlags.DynamicStorageBit
-                )
-                GL.Check "could not allocate sparse storage"
-
-                new SparseMemoryResizeBuffer(x, pageSize, buffer) :> AbstractResizeBuffer
-            else
-                let buffer = GL.GenBuffer()
-                new CopyResizeBuffer(x, buffer) :> AbstractResizeBuffer
-
 module ManagedBufferImplementation =
     
     [<AutoOpen>]
@@ -389,13 +146,13 @@ module ManagedBufferImplementation =
             else align + v - r       
 
     type Fences(ctx : Context) =
-        let mutable store : hmap<ContextHandle, Fence> = HMap.empty
+        let mutable store : HashMap<ContextHandle, Fence> = HashMap.empty
 
 
         member x.WaitCPU() =
             lock x (fun () ->
                 let all = store
-                store <- HMap.empty
+                store <- HashMap.empty
 
                 for (_,f) in all do 
                     f.WaitCPU()
@@ -412,7 +169,7 @@ module ManagedBufferImplementation =
             let f = Fence.Create()
             lock x (fun () ->
                 store <-
-                    store |> HMap.alter f.Context (fun o ->
+                    store |> HashMap.alter f.Context (fun o ->
                         match o with
                             | Some o -> o.Dispose()
                             | None -> ()
@@ -566,7 +323,7 @@ module ManagedBufferImplementation =
 
         member x.TryGetBufferView(sem : Symbol) =
             match Map.tryFind sem handles with
-                | Some (b,t,_) -> BufferView(Mod.constant (b :> IBuffer), t) |> Some
+                | Some (b,t,_) -> BufferView(AVal.constant (b :> IBuffer), t) |> Some
                 | _ -> None
 
         member x.Dispose() =
@@ -785,7 +542,7 @@ module ManagedBufferImplementation =
 
         member x.TryGetBufferView(sem : Symbol) =
             match Map.tryFind sem handles with
-                | Some (b,s,t) -> BufferView(Mod.constant (b :> IBuffer), t) |> Some
+                | Some (b,s,t) -> BufferView(AVal.constant (b :> IBuffer), t) |> Some
                 | _ -> None
 
         member x.Dispose() =
@@ -863,165 +620,4 @@ module ManagedBufferImplementation =
                 match c with
                     | Some ResourceUsage.Render -> parent.AfterRender()
                     | _ -> ()
-
-
-
- // =========================================================================
- // Historical monsters
-
-
-module MappedBufferImplementations = 
-
-    [<Obsolete>]
-    type FakeMappedBuffer(ctx : Context) =
-        inherit Mod.AbstractMod<IBuffer>()
-        let buffer = ctx.CreateResizeBuffer()
-        let onDispose = new System.Reactive.Subjects.Subject<unit>()
-
-        member x.Write(sourcePtr : IntPtr, offset : nativeint, size : nativeint) = 
-            buffer.UseWrite(offset, size, fun ptr ->
-                Marshal.Copy(sourcePtr, ptr, size)
-            )
-
-        member x.Read(targetPtr : IntPtr, offset : nativeint, size : nativeint) =
-            buffer.UseWrite(offset, size, fun ptr ->
-                Marshal.Copy(ptr, targetPtr, size)
-            )
-
-        member x.Capacity = buffer.SizeInBytes
-
-        member x.Resize(newCapacity : nativeint) =
-            buffer.Resize(newCapacity)
-
-        member x.UseWrite(offset : nativeint, size : nativeint, f : nativeint -> 'a) =
-            buffer.UseWrite(offset, size, f)
-
-        member x.UseRead(offset : nativeint, size : nativeint, f : nativeint -> 'a) =
-            buffer.UseRead(offset, size, f)
-
-
-        override x.Compute(token) =
-            buffer :> IBuffer
-
-        member x.Dispose() =
-            if buffer.Handle <> 0 then
-                using ctx.ResourceLock (fun _ ->
-                    ctx.Delete buffer
-                )
-                onDispose.OnNext()
-                onDispose.Dispose()
-
-        interface IMappedBuffer with
-            member x.Write(sourcePtr, offset, size) = x.Write(sourcePtr,offset,size)
-            member x.Read(targetPtr, offset, size) = x.Read(targetPtr,offset,size)
-            member x.Capacity = x.Capacity
-            member x.Resize(newCapacity) = x.Resize(newCapacity) 
-            member x.Dispose() = x.Dispose()
-            member x.OnDispose = onDispose :> IObservable<_>
-            member x.UseRead(offset, size, f) = x.UseRead(offset, size, f)
-            member x.UseWrite(offset, size, f) = x.UseWrite(offset, size, f)
-
-        interface ILockedResource with
-            member x.Lock = buffer.Lock
-            member x.OnLock u = ()
-            member x.OnUnlock u = ()
-
-[<AutoOpen>]
-module ``MappedBuffer Context Extensions`` =
-    type Context with
-        [<Obsolete>]
-        member x.CreateMappedBuffer() =
-            using x.ResourceLock (fun _ ->
-                new MappedBufferImplementations.FakeMappedBuffer(x) :> IMappedBuffer
-            )
-
-[<Obsolete>]
-type MappedIndirectBuffer(ctx : Context, indexed : bool) =
-    inherit Mod.AbstractMod<IIndirectBuffer>()
-    
-    static let sd = sizeof<DrawCallInfo> |> nativeint
-    let buffer = ctx.CreateMappedBuffer()
-
-    let createCount() =
-        let ptr = NativePtr.alloc 1
-        NativePtr.write ptr 0
-        ptr
-
-    let mutable capacity = 0
-    let count : nativeptr<int> = createCount()
-    
-    let convert =
-        if indexed then
-            fun (info : DrawCallInfo) ->
-                DrawCallInfo(
-                    FaceVertexCount = info.FaceVertexCount,
-                    InstanceCount = info.InstanceCount,
-                    FirstIndex = info.FirstIndex,
-                    BaseVertex = info.FirstInstance,
-                    FirstInstance = info.BaseVertex
-                )
-        else id
-
-    member x.Dispose() =
-        buffer.Dispose()
-        NativePtr.free count
-        capacity <- 0
-
-
-    member x.Resize(cap : int) =
-        buffer.Resize(nativeint cap * sd)
-        transact (fun () -> x.MarkOutdated())
-
-    member x.Capacity = 
-        buffer.Capacity / sd |> int
-
-    member x.Count
-        with get() = NativePtr.read count
-        and set c = 
-            NativePtr.write count c
-            transact (fun () -> x.MarkOutdated())
-
-    member x.Item
-        with get (i : int) = 
-            let mutable info = DrawCallInfo()
-            buffer.Read(NativePtr.toNativeInt &&info, nativeint i * sd, sd)
-            convert info
-
-        and set (i : int) (info : DrawCallInfo) =
-            let info = convert info
-            let gc = GCHandle.Alloc(info, GCHandleType.Pinned)
-            try
-                buffer.Write(gc.AddrOfPinnedObject(), nativeint i * sd, sd)
-            finally
-                gc.Free()
-    override x.Compute(token) =
-        let inner = buffer.GetValue(token) |> unbox<Buffer>
-        IndirectBuffer(inner, x.Count, 20, indexed) :> IIndirectBuffer
-
-    interface ILockedResource with
-        member x.Lock = buffer.Lock
-        member x.OnLock u = ()
-        member x.OnUnlock u = ()
-
-    interface IMappedIndirectBuffer with
-        member x.Dispose() = x.Dispose()
-        member x.Indexed = indexed
-        member x.Capacity = x.Capacity
-        member x.Count
-            with get() = x.Count
-            and set c = x.Count <- c
-
-        member x.Item
-            with get i = x.[i]
-            and set i v = x.[i] <- v
-
-        member x.Resize c = x.Resize c
-
-[<AutoOpen>]
-module ``MappedIndirectBuffer Context Extensions`` =
-    type Context with
-        [<Obsolete>]
-        member x.CreateMappedIndirectBuffer(indexed : bool) =
-            new MappedIndirectBuffer(x, indexed) :> IMappedIndirectBuffer
-
 

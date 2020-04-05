@@ -10,11 +10,15 @@ open Aardvark.Fake
 open Fake.Core
 open Fake.Tools
 open Fake.IO.Globbing.Operators
+open System.Runtime.InteropServices
 
 //do MSBuildDefaults <- { MSBuildDefaults with Verbosity = Some Minimal }
 do Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
 
-DefaultSetup.install ["src/Aardvark.Rendering.sln"]
+if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
+    DefaultSetup.install ["src/Aardvark.Rendering.sln"]
+else
+    DefaultSetup.install ["src/Aardvark.Rendering.NonWindows.sln"]
 
 #if DEBUG
 do System.Diagnostics.Debugger.Launch() |> ignore

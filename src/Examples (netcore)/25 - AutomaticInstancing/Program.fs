@@ -1,7 +1,7 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive
+open FSharp.Data.Adaptive.Operators
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.IO
 open Aardvark.Rendering.Text
@@ -22,7 +22,7 @@ module Shader =
 
 [<EntryPoint>]
 let main argv = 
-    Ag.initialize()
+    
     Aardvark.Init()
     
     let win =
@@ -92,8 +92,8 @@ let main argv =
     // NOTE that the name "ModelTrafo" is treated specially by the system (since trafos are implicitly stacked)
     let instancedUniforms =
         Map.ofList [
-            "ModelTrafo",   (typeof<Trafo3d>,   Mod.constant (trafos :> System.Array))
-            "Color",        (typeof<C4b>,       Mod.constant (colors :> System.Array))
+            "ModelTrafo",   (typeof<Trafo3d>,   AVal.constant (trafos :> System.Array))
+            "Color",        (typeof<C4b>,       AVal.constant (colors :> System.Array))
         ]
 
     // the magical combinator instanced adjusts all used shaders in order to use

@@ -3,27 +3,27 @@
 open System
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
 
 [<AutoOpen>]
 module SurfaceSemantics =
 
-    type ISg with
+    type Ag.Scope with
         member x.Surface : Surface = x?Surface
 
     module Semantic =
-        let surface (s : ISg) : Surface = s?Surface
+        let surface (s : Ag.Scope) : Surface = s?Surface
 
     let private emptySurface : Surface = 
         Surface.None
 
-    [<Semantic>]
+    [<Rule>]
     type SurfaceSem() =
 
-        member x.Surface(e : Root<ISg>) =
+        member x.Surface(e : Root<ISg>, scope : Ag.Scope) =
             e.Child?Surface <- emptySurface
 
-        member x.Surface(s : Sg.SurfaceApplicator) =
+        member x.Surface(s : Sg.SurfaceApplicator, scope : Ag.Scope) =
             s.Child?Surface <- s.Surface 

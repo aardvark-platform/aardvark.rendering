@@ -8,7 +8,7 @@ open System.Runtime.CompilerServices
 open System.Collections.Generic
 open Microsoft.FSharp.Quotations
 open Microsoft.FSharp.Quotations.Patterns
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open System
 
 
@@ -498,9 +498,9 @@ type FShadeRuntimeExtensions private() =
         )
 
     [<Extension>]
-    static member PrepareEffect (this : IRuntime, signature : IFramebufferSignature, l : IMod<list<FShadeEffect>>) =
+    static member PrepareEffect (this : IRuntime, signature : IFramebufferSignature, l : aval<list<FShadeEffect>>) =
         let mutable current = None
-        l |> Mod.map (fun l ->
+        l |> AVal.map (fun l ->
             let newPrep = 
                 this.PrepareSurface(
                     signature,

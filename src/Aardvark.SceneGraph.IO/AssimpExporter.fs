@@ -6,8 +6,7 @@ open Aardvark.Base.Ag
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.CSharp
 open Aardvark.SceneGraph.Semantics
-open Aardvark.Base.Incremental
-open Aardvark.Base.Incremental.CSharp
+open FSharp.Data.Adaptive
 open Assimp
 open Assimp.Unmanaged
 open System.Runtime.CompilerServices
@@ -101,7 +100,7 @@ open System.IO
 //
 //    let createMaterial (e : SceneEnv) (u : IUniformProvider) : Material = 
 //        match u.TryGetUniform(Ag.emptyScope, DefaultSemantic.DiffuseColorTexture) with
-//            | Some (:? IMod<ITexture> as t) ->
+//            | Some (:? aval<ITexture> as t) ->
 //                match materialCache.TryGetValue t with
 //                    | (true, r) -> r
 //                    | _ ->
@@ -290,21 +289,21 @@ open System.IO
 //            renderObjects
 //                |> Seq.map (fun rj -> 
 //                    let index =
-//                        if rj.Indices <> null then rj.Indices |> Mod.force
+//                        if rj.Indices <> null then rj.Indices |> AVal.force
 //                        else null
 //
 //                    let attributes = 
 //                        rj.VertexAttributes.All 
 //                            |> Seq.map (fun (s,b) ->
 //                                let array =
-//                                    match b.Buffer |> Mod.force with
+//                                    match b.Buffer |> AVal.force with
 //                                        | :? ArrayBuffer as ab -> ab.Data
 //                                        | _ -> failwith "could not get buffer data"
 //                                s,array
 //                            )
 //                            |> Seq.toList
 //
-//                    let info = rj.DrawCallInfo |> Mod.force
+//                    let info = rj.DrawCallInfo |> AVal.force
 //
 //                    let matIndex = materialIndices.[renderObjectMaterials.[rj]]
 //                    let mesh = createMesh matIndex info index attributes
@@ -327,7 +326,7 @@ open System.IO
 //
 //                    let trafo = 
 //                        match rj.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "ModelTrafo") with
-//                            | Some (:? IMod<Trafo3d> as t) -> t.GetValue()
+//                            | Some (:? aval<Trafo3d> as t) -> t.GetValue()
 //                            | _ -> currentTrafo
 //
 //                    let additionalTrafo = currentTrafo * trafo.Inverse
@@ -403,7 +402,7 @@ open System.IO
 //        let sg = Sg.ofIndexedGeometry ig
 //        let sg = 
 //            [1..10] 
-//                |> List.map (fun i -> sg |> Sg.trafo (Mod.constant <| Trafo3d.Translation(float i, 0.0, 0.0))) 
+//                |> List.map (fun i -> sg |> Sg.trafo (AVal.constant <| Trafo3d.Translation(float i, 0.0, 0.0))) 
 //                |> Sg.group
 //                |> Sg.effect []
 //

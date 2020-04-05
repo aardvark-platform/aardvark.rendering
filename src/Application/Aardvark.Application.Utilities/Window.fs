@@ -4,12 +4,12 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.Slim
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection
 open Aardvark.Rendering.Vulkan
@@ -165,24 +165,24 @@ module Utilities =
         inherit IDisposable
 
         abstract member Runtime : IRuntime
-        abstract member Sizes : IMod<V2i>
+        abstract member Sizes : aval<V2i>
         abstract member Samples : int
-        abstract member Time : IMod<DateTime>
+        abstract member Time : aval<DateTime>
         
         abstract member IsVR : bool
         abstract member Controllers : list<VrDevice> 
         abstract member Keyboard : IKeyboard
         abstract member Mouse : IMouse
 
-        abstract member View : IMod<Trafo3d[]>
-        abstract member Proj : IMod<Trafo3d[]>
+        abstract member View : aval<Trafo3d[]>
+        abstract member Proj : aval<Trafo3d[]>
 
         abstract member Scene : ISg with get, set
         abstract member Run : ?preventDisposal:bool -> unit
 
 
     [<AbstractClass>]
-    type private SimpleRenderWindow(win : IRenderWindow, view : IMod<Trafo3d[]>, proj : IMod<Trafo3d[]>) =
+    type private SimpleRenderWindow(win : IRenderWindow, view : aval<Trafo3d[]>, proj : aval<Trafo3d[]>) =
         let mutable scene = Sg.empty
 
         let controllers, isVr = 
@@ -226,7 +226,7 @@ module Utilities =
                 match win with
                     | :? OpenVR.VulkanVRApplicationLayered as win ->
                         let sg =  x.WrapSg(win, sg)
-                        win.RenderTask <- RuntimeCommand.Render(sg.RenderObjects())
+                        win.RenderTask <- RuntimeCommand.Render(sg.RenderObjects(Ag.Scope.Root))
                     | _ ->
                         let task = x.Compile(win, sg)
                         win.RenderTask <- task
@@ -253,13 +253,13 @@ module Utilities =
             member x.Dispose() = x.Dispose()
 
     let private hookSg (win : IRenderControl) (sg : ISg) =
-        let fillMode = Mod.init FillMode.Fill
-        let cullMode = Mod.init CullMode.None
+        let fillMode = AVal.init FillMode.Fill
+        let cullMode = AVal.init CullMode.None
 
-        let status = Mod.init ""
+        let status = AVal.init ""
         
         win.Keyboard.KeyDown(Aardvark.Application.Keys.X).Values.Add (fun () ->
-            if Mod.force win.Keyboard.Alt then
+            if AVal.force win.Keyboard.Alt then
                 transact (fun () ->
                     let newFillMode = 
                         match fillMode.Value with
@@ -273,7 +273,7 @@ module Utilities =
         )
 
         win.Keyboard.KeyDown(Aardvark.Application.Keys.Y).Values.Add (fun () ->
-            if Mod.force win.Keyboard.Alt then
+            if AVal.force win.Keyboard.Alt then
                 transact (fun () ->
                     let newCull = 
                         match cullMode.Value with
@@ -322,46 +322,43 @@ module Utilities =
 
 
         let overlay =
-            match Environment.OSVersion with
-                | Windows ->  
-                    let help = status |> Mod.map (fun s -> helpText + "\r\n" + s)
+            let help = status |> AVal.map (fun s -> helpText + "\r\n" + s)
 
-                    let showHelp = Mod.init false
+            let showHelp = AVal.init false
 
-                    win.Keyboard.KeyDown(Aardvark.Application.Keys.H).Values.Add (fun () ->
-                        transact (fun () -> showHelp.Value <- not showHelp.Value)
-                    )
+            win.Keyboard.KeyDown(Aardvark.Application.Keys.H).Values.Add (fun () ->
+                transact (fun () -> showHelp.Value <- not showHelp.Value)
+            )
 
-                    let text = showHelp |> Mod.bind (function true -> help | false -> Mod.constant teaser)
+            let text = showHelp |> AVal.bind (function true -> help | false -> AVal.constant teaser)
 
 
         
 
-                    let trafo = 
-                        win.Sizes |> Mod.map (fun s -> 
-                            let border = V2d(20.0, 10.0) / V2d s
-                            let pixels = 30.0 / float s.Y
-                            Trafo3d.Scale(pixels) *
-                            Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
-                            Trafo3d.Translation(-1.0 + border.X, 1.0 - border.Y - pixels, -1.0)
-                        )
+            let trafo = 
+                win.Sizes |> AVal.map (fun s -> 
+                    let border = V2d(20.0, 10.0) / V2d s
+                    let pixels = 30.0 / float s.Y
+                    Trafo3d.Scale(pixels) *
+                    Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
+                    Trafo3d.Translation(-1.0 + border.X, 1.0 - border.Y - pixels, -1.0)
+                )
 
-                    let font = Font "Consolas"
-        
-                    let chars =
-                        seq {
-                            for c in 0 .. 255 do yield char c
-                        }
+            let chars =
+                seq {
+                    for c in 0 .. 255 do yield char c
+                }
 
-                    win.Runtime.PrepareGlyphs(font, chars)
-                    Sg.text font C4b.White text
-                        |> Sg.trafo trafo
-                        |> Sg.uniform "ViewTrafo" (Mod.constant Trafo3d.Identity)
-                        |> Sg.uniform "ProjTrafo" (Mod.constant Trafo3d.Identity)
-                        |> Sg.viewTrafo (Mod.constant Trafo3d.Identity)
-                        |> Sg.projTrafo (Mod.constant Trafo3d.Identity)
-                | _ ->
-                    Sg.empty
+            let font = FontSquirrel.Hack.Regular
+            use __ = win.Runtime.ContextLock
+            win.Runtime.PrepareGlyphs(font, chars)
+            Sg.text font C4b.White text
+                |> Sg.trafo trafo
+                |> Sg.uniform "ViewTrafo" (AVal.constant Trafo3d.Identity)
+                |> Sg.uniform "ProjTrafo" (AVal.constant Trafo3d.Identity)
+                |> Sg.viewTrafo (AVal.constant Trafo3d.Identity)
+                |> Sg.projTrafo (AVal.constant Trafo3d.Identity)
+   
 
         let sg = sg |> Sg.fillMode fillMode |> Sg.cullMode cullMode
         sg, overlay
@@ -373,12 +370,12 @@ module Utilities =
             let view =
                 initialView
                     |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
-                    |> Mod.map CameraView.viewTrafo
+                    |> AVal.map CameraView.viewTrafo
 
             let proj =
                 win.Sizes 
-                    |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
-                    |> Mod.map Frustum.projTrafo
+                    |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
+                    |> AVal.map Frustum.projTrafo
 
             let (sg, overlay) = hookSg win sg
             let sg = sg |> Sg.viewTrafo view |> Sg.projTrafo proj
@@ -454,14 +451,14 @@ module Utilities =
         let view =
             initialView
                 |> DefaultCameraController.controlExt speed win.Mouse win.Keyboard win.Time
-                |> Mod.map CameraView.viewTrafo
+                |> AVal.map CameraView.viewTrafo
 
         let proj =
             win.Sizes 
-                |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
-                |> Mod.map Frustum.projTrafo
+                |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
+                |> AVal.map Frustum.projTrafo
 
-        { new SimpleRenderWindow(win, view |> Mod.map Array.singleton, proj |> Mod.map Array.singleton) with
+        { new SimpleRenderWindow(win, view |> AVal.map Array.singleton, proj |> AVal.map Array.singleton) with
             override x.Compile(win, sg) =
                 let sg, overlay = sg |> hookSg win
                 sg
@@ -518,7 +515,7 @@ module Utilities =
                 ]
             )  
 
-        let s = win.Sizes |> Mod.map (fun s -> s / V2i(2,1))
+        let s = win.Sizes |> AVal.map (fun s -> s / V2i(2,1))
 
         let colors =
             OutputMod.custom 
@@ -562,13 +559,13 @@ module Utilities =
         let view = 
             initialView
                 |> DefaultCameraController.controlExt speed win.Mouse win.Keyboard win.Time
-                |> Mod.map CameraView.viewTrafo
+                |> AVal.map CameraView.viewTrafo
 
         let near = 0.1
         let far = 1000.0
 
         let views =
-            view |> Mod.map (fun view ->
+            view |> AVal.map (fun view ->
                 [| 
                     view * Trafo3d.Translation(0.05, 0.0, 0.0)
                     view * Trafo3d.Translation(-0.05, 0.0, 0.0)
@@ -580,7 +577,7 @@ module Utilities =
             let outer = 1.0537801252809621805875367233154
             let inner = 0.77567951104961310377955052031392
 
-            win.Sizes |> Mod.map (fun size ->
+            win.Sizes |> AVal.map (fun size ->
                 let aspect = float size.X / float size.Y 
                 let y = tan (120.0 * Constant.RadiansPerDegree / 2.0) / aspect //(outer + inner) / (2.0 * aspect)
 
@@ -602,8 +599,8 @@ module Utilities =
                 |> Sg.uniform "ViewTrafo" views
                 |> Sg.uniform "ProjTrafo" projs
                 |> Sg.viewTrafo view
-                |> Sg.uniform "CameraLocation" (view |> Mod.map (fun t -> t.Backward.C3.XYZ))
-                |> Sg.uniform "LightLocation" (view |> Mod.map (fun t -> t.Backward.C3.XYZ))
+                |> Sg.uniform "CameraLocation" (view |> AVal.map (fun t -> t.Backward.C3.XYZ))
+                |> Sg.uniform "LightLocation" (view |> AVal.map (fun t -> t.Backward.C3.XYZ))
                 |> Sg.compile runtime signature
 
             let clearTask =
@@ -611,8 +608,8 @@ module Utilities =
 
             let task =
                 Sg.fullScreenQuad
-                    |> Sg.uniform "Dependent" (Mod.constant 0.0)
-                    |> Sg.diffuseTexture (resolved |> Mod.map (fun a -> a :> ITexture))
+                    |> Sg.uniform "Dependent" (AVal.constant 0.0)
+                    |> Sg.diffuseTexture (resolved |> AVal.map (fun a -> a :> ITexture))
                     |> Sg.shader {
                         do! Shader.renderStereo
                     }
@@ -669,7 +666,7 @@ module Utilities =
                 if enableDebug then
                     app.Runtime.DebugVerbosity <- toMessageSeverity cfg.debug
 
-                let hmdLocation = app.Hmd.MotionState.Pose |> Mod.map (fun t -> t.Forward.C3.XYZ)
+                let hmdLocation = app.Hmd.MotionState.Pose |> AVal.map (fun t -> t.Forward.C3.XYZ)
 
 
                 let stencilTest =
@@ -690,7 +687,7 @@ module Utilities =
 
                     override x.WrapSg(win, sg) =
                         sg
-                        |> Sg.stencilMode (Mod.constant stencilTest)
+                        |> Sg.stencilMode (AVal.constant stencilTest)
                         |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
                         |> Sg.uniform "ProjTrafo" app.Info.projTrafos
                         |> Sg.uniform "CameraLocation" hmdLocation
@@ -698,7 +695,7 @@ module Utilities =
 
                     override x.Compile(win, sg) =
                         sg
-                        |> Sg.stencilMode (Mod.constant stencilTest)
+                        |> Sg.stencilMode (AVal.constant stencilTest)
                         |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
                         |> Sg.uniform "ProjTrafo" app.Info.projTrafos
                         |> Sg.uniform "CameraLocation" hmdLocation
@@ -710,7 +707,7 @@ module Utilities =
                 let enableDebug = cfg.debug <> DebugVerbosity.None
                 let app = new OpenGlVRApplicationLayered(cfg.samples, enableDebug)
 
-                let hmdLocation = app.Hmd.MotionState.Pose |> Mod.map (fun t -> t.Forward.C3.XYZ)
+                let hmdLocation = app.Hmd.MotionState.Pose |> AVal.map (fun t -> t.Forward.C3.XYZ)
 
 
                 let stencilTest =
@@ -731,7 +728,7 @@ module Utilities =
 
                     override x.WrapSg(win, sg) =
                         sg
-                        |> Sg.stencilMode (Mod.constant stencilTest)
+                        |> Sg.stencilMode (AVal.constant stencilTest)
                         |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
                         |> Sg.uniform "ProjTrafo" app.Info.projTrafos
                         |> Sg.uniform "CameraLocation" hmdLocation
@@ -739,7 +736,7 @@ module Utilities =
 
                     override x.Compile(win, sg) =
                         sg
-                        |> Sg.stencilMode (Mod.constant stencilTest)
+                        |> Sg.stencilMode (AVal.constant stencilTest)
                         |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
                         |> Sg.uniform "ProjTrafo" app.Info.projTrafos
                         |> Sg.uniform "CameraLocation" hmdLocation
@@ -906,7 +903,7 @@ module ``Render Utilities`` =
         member x.Yield(()) =
             {
                 app = None
-                backend = Backend.Vulkan
+                backend = Backend.GL
                 debug = DebugVerbosity.Warning
                 samples = 8
                 deviceKind = DeviceKind.Dedicated

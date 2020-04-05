@@ -3,18 +3,27 @@
 open System
 open System.Collections.Generic
 open System.Threading
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
 
+[<Flags>]
+type BufferUsage = // Buffer usage 
+    | None = 0
+    | Index = 1
+    | Indirect = 2
+    | Vertex = 4
+    | Uniform = 8
+    | Storage = 16
+    | Read = 256
+    | Write = 512
+    | ReadWrite = 0x300
+    | Default = 0x031f
+            
 type IBuffer = interface end
-
-type IIndirectBuffer =
-    abstract member Buffer : IBuffer
-    abstract member Count : int
 
 type INativeBuffer =
     inherit IBuffer
@@ -24,22 +33,27 @@ type INativeBuffer =
     abstract member Unpin : unit -> unit
 
 type IBackendBuffer =
-    inherit IBuffer
+    inherit IBuffer // ISSUE: this allows a backend buffer to be used everywhere even if it is restricted to a specific type -> HOWEVER buffers can have multiple mixed usage flags -> interface restriction not possible
     inherit IDisposable
     abstract member Runtime : IBufferRuntime
     abstract member Handle : obj
     abstract member SizeInBytes : nativeint
-
+        
 and IBufferRuntime =
+    /// Deletes a buffer and releases all GPU resources and API handles
     abstract member DeleteBuffer : IBackendBuffer -> unit
-    abstract member PrepareBuffer : data : IBuffer -> IBackendBuffer
-    abstract member CreateBuffer : size : nativeint -> IBackendBuffer
+    /// Prepares a buffer, allocating and uploading the data to GPU memory
+    /// If the buffer is an IBackendBuffer the operation performs NOP
+    abstract member PrepareBuffer : data : IBuffer * usage : BufferUsage -> IBackendBuffer
+    /// Creates a GPU buffer with the specified size in bytes and usage
+    abstract member CreateBuffer : size : nativeint * usage : BufferUsage -> IBackendBuffer
     abstract member Copy : srcData : nativeint * dst : IBackendBuffer * dstOffset : nativeint * size : nativeint -> unit
     abstract member Copy : srcBuffer : IBackendBuffer * srcOffset : nativeint * dstData : nativeint * size : nativeint -> unit
     abstract member Copy : srcBuffer : IBackendBuffer * srcOffset : nativeint * dstBuffer : IBackendBuffer * dstOffset : nativeint * size : nativeint -> unit
 
     abstract member CopyAsync : srcBuffer : IBackendBuffer * srcOffset : nativeint * dstData : nativeint * size : nativeint -> (unit -> unit)
-
+        
+        
 type ArrayBuffer(data : Array) =
     let elementType = data.GetType().GetElementType()
     let mutable gchandle = Unchecked.defaultof<_>
@@ -70,8 +84,8 @@ type ArrayBuffer(data : Array) =
             | :? ArrayBuffer as o -> System.Object.ReferenceEquals(o.Data,data)
             | _ -> false
 
-type SingleValueBuffer(value : IMod<V4f>) =
-    inherit Mod.AbstractMod<IBuffer>()
+type SingleValueBuffer(value : aval<V4f>) =
+    inherit AVal.AbstractVal<IBuffer>()
 
     member x.Value = value
 
@@ -85,7 +99,7 @@ type SingleValueBuffer(value : IMod<V4f>) =
             | :? SingleValueBuffer as o -> value = o.Value
             | _ -> false
 
-    new() = SingleValueBuffer(Mod.constant V4f.Zero)
+    new() = SingleValueBuffer(AVal.constant V4f.Zero)
 
 
 type NativeMemoryBuffer(ptr : nativeint, sizeInBytes : int) =
@@ -105,16 +119,7 @@ type NativeMemoryBuffer(ptr : nativeint, sizeInBytes : int) =
                 n.Ptr = ptr && n.SizeInBytes = sizeInBytes
             | _ -> false
 
-type IndirectBuffer(b : IBuffer, count : int) =
-    member x.Buffer = b
-    member x.Count = count
-
-    interface IIndirectBuffer with
-        member x.Buffer = b
-        member x.Count = count
-
-
-type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : int) =
+type BufferView(b : aval<IBuffer>, elementType : Type, offset : int, stride : int) =
     let singleValue =
         match b with
             | :? SingleValueBuffer as nb -> Some nb.Value
@@ -127,10 +132,10 @@ type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : in
     member x.SingleValue = singleValue
     member x.IsSingleValue = Option.isSome singleValue
 
-    new(b : IMod<IBuffer>, elementType : Type, offset : int) =
+    new(b : aval<IBuffer>, elementType : Type, offset : int) =
         BufferView(b, elementType, offset, 0)
 
-    new(b : IMod<IBuffer>, elementType : Type) =
+    new(b : aval<IBuffer>, elementType : Type) =
         BufferView(b, elementType, 0, 0)
 
     override x.GetHashCode() =
@@ -143,24 +148,33 @@ type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : in
             | _ -> false
 
 
-
+/// native indirect buffers are supposed to have data layout as required by the graphics API, currently this is equal for OpenGL, Vulkan (and DX11)
+/// Indexed:     { uint count; uint primCount; uint firstIndex; uint baseVertex; uint baseInstance; }
+/// Non-indexed: { uint count; uint primCount; uint first; uint baseInstance; }
+/// NOTE: 
+///  1. indexed or non-indexed only matters if directly an IBackendBuffer is used, ArrayBuffers will be uploaded according to if there are indirect present
+///   -> constructor intended to be used with IBackendBuffer, other should use IndirectBuffer module
+///  2. stride is actually hard-coded to 20 in glvm and vkvm
+type IndirectBuffer(b : IBuffer, count : int, stride : int, indexed : bool) =
+    member x.Buffer = b
+    member x.Count = count
+    member x.Stride = stride /// not supported, hardcoded to 20 in execution
+    member x.Indexed = indexed
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module IndirectBuffer =
-    let ofArray (arr : DrawCallInfo[]) =
-        IndirectBuffer(ArrayBuffer arr, arr.Length) :> IIndirectBuffer
+    let ofArray (indexed : bool) (arr : DrawCallInfo[]) =
+        IndirectBuffer(ArrayBuffer arr, arr.Length, sizeof<DrawCallInfo>, indexed)
 
-    let ofList (l : list<DrawCallInfo>) =
-        l |> List.toArray |> ofArray
-
-    let count (b : IIndirectBuffer) = b.Count
+    let ofList (indexed : bool) (l : list<DrawCallInfo>) =
+        l |> List.toArray |> ofArray indexed
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module BufferView =
     
     let ofArray (arr : Array) =
         let t = arr.GetType().GetElementType()
-        BufferView(Mod.constant (ArrayBuffer arr :> IBuffer), t)
+        BufferView(AVal.constant (ArrayBuffer arr :> IBuffer), t)
 
 
     [<AbstractClass>]
@@ -213,9 +227,9 @@ module BufferView =
 
         match view.SingleValue with
             | Some value ->
-                value |> Mod.map (fun v -> reader.Initialize(v, count))
+                value |> AVal.map (fun v -> reader.Initialize(v, count))
             | _ -> 
-                view.Buffer |> Mod.map (fun b -> 
+                view.Buffer |> AVal.map (fun b -> 
                     match b with
                         | :? ArrayBuffer as a when stride = elementSize && offset = 0 ->
                             if count = a.Data.Length then 
@@ -454,12 +468,12 @@ type IBufferRuntimeExtensions private() =
 
     [<Extension>]
     static member CreateBuffer<'a when 'a : unmanaged>(this : IBufferRuntime, count : int) =
-        let buffer = this.CreateBuffer(nsa<'a> * nativeint count)
+        let buffer = this.CreateBuffer(nsa<'a> * nativeint count, BufferUsage.Default)
         new RuntimeBuffer<'a>(buffer, count) :> IBuffer<'a>
         
     [<Extension>]
     static member CreateBuffer<'a when 'a : unmanaged>(this : IBufferRuntime, data : 'a[]) =
-        let buffer = this.CreateBuffer(nsa<'a> * nativeint data.Length)
+        let buffer = this.CreateBuffer(nsa<'a> * nativeint data.Length, BufferUsage.Default)
         let res = new RuntimeBuffer<'a>(buffer, data.Length) :> IBuffer<'a>
         IBufferRuntimeExtensions.Upload(res, data)
         res
@@ -467,6 +481,21 @@ type IBufferRuntimeExtensions private() =
     [<Extension>] 
     static member Coerce<'a when 'a : unmanaged>(this : IBackendBuffer) =
         new RuntimeBuffer<'a>(this, int (this.SizeInBytes / nativeint sizeof<'a>)) :> IBuffer<'a>
+
+    /// <summary>
+    /// Creates a buffer in GPU memory with default BufferUsage flags, enabling all usages as well as read and write.
+    /// </summary>
+    [<Extension>]
+    static member CreateBuffer(this : IBufferRuntime, size : nativeint) =
+        this.CreateBuffer(size, BufferUsage.Default)
+
+    /// <summary>
+    /// Prepares a buffer for GPU usage with all BufferUsage flags, but only write permissions.
+    /// If the buffer is an IBackendBuffer the operation performs NOP
+    /// </summary>
+    [<Extension>]
+    static member PrepareBuffer(this : IBufferRuntime, buffer : IBuffer) =
+        this.PrepareBuffer(buffer, BufferUsage.Default &&& ~~~BufferUsage.Read)
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module BufferRange =
@@ -479,42 +508,3 @@ module Buffer =
     let inline create<'a when 'a : unmanaged> (runtime : IBufferRuntime) (count : int) = runtime.CreateBuffer<'a>(count)
     let inline ofArray<'a when 'a : unmanaged> (runtime : IBufferRuntime) (data : 'a[]) = runtime.CreateBuffer<'a>(data)
     let inline delete (b : IBuffer<'a>) =  b.Dispose()
-
-
-
-// obsolete
-[<Obsolete>]
-type IResizeBuffer =
-    inherit IBackendBuffer
-    inherit ILockedResource
-
-    abstract member Resize : capacity : nativeint -> unit
-    abstract member UseRead : offset : nativeint * size : nativeint * reader : (nativeint -> 'x) -> 'x
-    abstract member UseWrite : offset : nativeint * size : nativeint * writer : (nativeint -> 'x) -> 'x
-
-[<Obsolete>]
-type IMappedIndirectBuffer =
-    inherit IMod<IIndirectBuffer>
-    inherit IDisposable
-    inherit ILockedResource
-
-    abstract member Indexed : bool
-    abstract member Capacity : int
-    abstract member Count : int with get, set
-    abstract member Item : int -> DrawCallInfo with get, set
-    abstract member Resize : int -> unit
-
-[<Obsolete>]
-type IMappedBuffer =
-    inherit IMod<IBuffer>
-    inherit IDisposable
-    inherit ILockedResource
-
-    abstract member Write : ptr : nativeint * offset : nativeint * sizeInBytes : nativeint -> unit
-    abstract member Read : ptr : nativeint * offset : nativeint * sizeInBytes : nativeint -> unit
-    abstract member UseWrite : offset : nativeint * sizeInBytes : nativeint * (nativeint -> 'a) -> 'a
-    abstract member UseRead : offset : nativeint * sizeInBytes : nativeint * (nativeint -> 'a) -> 'a
-
-    abstract member Capacity : nativeint
-    abstract member Resize : newCapacity : nativeint -> unit
-    abstract member OnDispose : IObservable<unit>

@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.SceneGraph
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
 open Aardvark.Base.Rendering
@@ -12,5 +12,5 @@ open System.Runtime.CompilerServices
 [<AutoOpen>]
 module RuntimeSemantics =
 
-    type ISg with
+    type Ag.Scope with
         member x.Runtime : IRuntime = x?Runtime

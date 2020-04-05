@@ -2,12 +2,12 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 type GeometryInstance =
     {
         mode                : IndexedGeometryMode
-        uniforms            : Map<string, IMod>
+        uniforms            : Map<string, IAdaptiveValue>
         indexBuffer         : Option<BufferView>
         vertexBuffers       : Map<string, BufferView>
     }
@@ -29,7 +29,7 @@ type GeometryInfo =
     | Single of GeometryInstance
     | Unordered of aset<GeometryInstance>
     | Ordered of alist<GeometryInstance>
-    | Dynamic of IMod<Tree<GeometryInstance>>
+    | Dynamic of aval<Tree<GeometryInstance>>
 
 [<AllowNullLiteral>]    
 type MNode<'a, 'b>(key : 'a, value : 'b) =
@@ -48,10 +48,10 @@ type MNode<'a, 'b>(key : 'a, value : 'b) =
         with get() = children
         and set c = children <- c
 //
-//type MTree<'a, 'b>(input : IMod<Tree<'a>>, invoke : 'a -> 'b, revoke : 'b -> unit) =
+//type MTree<'a, 'b>(input : aval<Tree<'a>>, invoke : 'a -> 'b, revoke : 'b -> unit) =
 //    inherit AdaptiveObject()
 //
-//    let trigger = Mod.init ()
+//    let trigger = AVal.init ()
 //    let mutable state : MNode<'a, 'b> = null
 //
 //    let rec difference (old : Tree<'a>) (t : Tree<'a>) =
