@@ -585,6 +585,7 @@ let ellipseTest() =
 
 
 
+open Aardvark.Rendering.Text
 
 [<EntryPoint; STAThread>]
 let main argv = 
@@ -856,8 +857,15 @@ let main argv =
 
     let aa = AVal.init true
 
-    
+
+
     let f = Aardvark.Rendering.Text.FontSquirrel.Hack.Regular
+
+    //let r = f.Layout "asdsadas"
+    //let bb = r.bounds
+
+
+
     let label3 =
         Sg.text f C4b.White message
         |> Sg.scale 0.1

@@ -19,7 +19,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
             OpenTK.Graphics.ColorFormat(Config.BitsPerPixel), 
             Config.DepthBits, 
             Config.StencilBits, 
-            samples, 
+            0, 
             OpenTK.Graphics.ColorFormat.Empty,
             Config.Buffers, 
             false
@@ -67,7 +67,87 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
             ignore, 
             [0, DefaultSemantic.Colors, Renderbuffer(ctx, 0, V2i.Zero, RenderbufferFormat.Rgba8, samples, 0L) :> IFramebufferOutput], None
         )
-    let mutable defaultOutput = OutputDescription.ofFramebuffer defaultFramebuffer
+
+    let mutable framebuffer : option<Texture * Texture * Framebuffer * option<Texture * Framebuffer>> = None
+
+    let getFramebuffer (realSize : V2i) (size : V2i) (samples : int) = 
+        let subsampled, resolved = 
+            match framebuffer with
+            | Some (c, _, f, f0) when f.Size = realSize && c.Multisamples = samples ->
+                f, f0
+            | _ -> 
+                match framebuffer with
+                | Some (c, d, f, f0) ->
+                    ctx.Delete f
+                    ctx.Delete c
+                    ctx.Delete d
+                    match f0 with
+                    | Some (c0, f0) -> 
+                        ctx.Delete f0
+                        ctx.Delete c0
+                    | None -> 
+                        ()
+                | _ ->
+                    ()
+
+                let c = ctx.CreateTexture(V3i(realSize, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 1, 1, samples)
+                let d = ctx.CreateTexture(V3i(realSize, 1), TextureDimension.Texture2D, TextureFormat.Depth24Stencil8, 1, 1, samples)
+                let f = 
+                    ctx.CreateFramebuffer(
+                        fboSignature, 
+                        [ 0, DefaultSemantic.Colors, { texture = c; slice = 0; level = 0 } :> IFramebufferOutput ],
+                        Some ( { texture = d; slice = 0; level = 0 } :> IFramebufferOutput),
+                        None
+                    )
+
+                let f0 =
+                    if samples > 1 then
+                        let c0 = ctx.CreateTexture(V3i(realSize, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 1, 1, 1)
+                        let f0 = 
+                            ctx.CreateFramebuffer(
+                                fboSignature, 
+                                [ 0, DefaultSemantic.Colors, { texture = c0; slice = 0; level = 0 } :> IFramebufferOutput ],
+                                None,
+                                None
+                            )
+                        Some (c0, f0)
+                    else
+                        None
+
+                framebuffer <- Some (c, d, f, f0)
+                f, f0
+
+        let blit() =
+            let s = realSize
+            match resolved with
+            | Some(_, resolved) -> 
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, subsampled.Handle)
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, resolved.Handle)
+                GL.DrawBuffer(DrawBufferMode.ColorAttachment0)
+                GL.ReadBuffer(ReadBufferMode.ColorAttachment0)
+                GL.BlitFramebuffer(0, 0, s.X, s.Y, 0, 0, s.X, s.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest)
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
+
+            
+                GL.DrawBuffer(DrawBufferMode.Back)
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, resolved.Handle)
+                GL.ReadBuffer(ReadBufferMode.ColorAttachment0)
+                GL.BlitFramebuffer(0, 0, s.X, s.Y, 0, 0, size.X, size.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Linear)
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
+            | None ->
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, subsampled.Handle)
+                GL.ReadBuffer(ReadBufferMode.ColorAttachment0)
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
+                GL.DrawBuffer(DrawBufferMode.Back)
+                GL.BlitFramebuffer(0, 0, s.X, s.Y, 0, 0, size.X, size.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Linear)
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
+                
+        subsampled, blit
+
+    //let mutable defaultOutput = OutputDescription.ofFramebuffer defaultFramebuffer
 
     let sizes = AVal.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
 
@@ -86,6 +166,8 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
             now()
     let time = AVal.init (now())
 
+    let mutable samples = samples
+    let mutable subsampling = 1.0
 
     let mutable needsRedraw = false
     let mutable first = true
@@ -144,8 +226,17 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
             taskSubscription <- t.AddMarkingCallback x.ForceRedraw
 
     member x.Sizes = sizes :> aval<_>
-    member x.Samples = samples
+    member x.Samples
+        with get() = samples
+        and set s = 
+            samples <- s
+            x.ForceRedraw()
 
+    member x.SubSampling
+        with get() = subsampling
+        and set v = 
+            subsampling <- v
+            x.ForceRedraw()
 
 
     override x.OnHandleCreated(e) =
@@ -173,6 +264,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
         base.MakeCurrent()
          
     member x.Render() = 
+
         let mutable initial = false
         if loaded then
             if isNull contextHandle || contextHandle.Handle.IsDisposed then
@@ -180,80 +272,77 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
                 contextHandle.AttachDebugOutputIfNeeded(enableDebug)
                 initial <- true
 
-            let size = V2i(base.ClientSize.Width, base.ClientSize.Height)
-          
-            
             beforeRender.Trigger()
-
+            
+            let screenSize = V2i(base.ClientSize.Width, base.ClientSize.Height)
+            let fboSize = V2i(max 1 (int (round (float screenSize.X * subsampling))), (int (round (float screenSize.Y * subsampling))))
             match task with
-                | Some t ->
-                    Operators.using (ctx.RenderingLock contextHandle) (fun _ ->
-                        if initial then
-                            GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
-                            let ms = GL.IsEnabled(EnableCap.Multisample)
-                            if ms then Log.warn "multisample enabled"
-                            else Log.warn "multisample disabled"
-                            let samples = Array.zeroCreate 1
-                            GL.GetFramebufferParameter(FramebufferTarget.Framebuffer, unbox (int All.Samples), samples)
-                            Log.warn "effective samples: %A" samples.[0]
+            | Some t ->
+                use __ = ctx.RenderingLock contextHandle
+                let fbo, blit = getFramebuffer fboSize screenSize samples
 
-                        let stopDispatcherProcessing = threadStealing.StopStealing()
+                if initial then
+                    GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
+                    GL.Disable(EnableCap.Multisample)
+                    //let ms = GL.IsEnabled(EnableCap.Multisample)
+                    //if ms then Log.warn "multisample enabled"
+                    //else Log.warn "multisample disabled"
+                    //let samples = Array.zeroCreate 1
+                    //GL.GetFramebufferParameter(FramebufferTarget.Framebuffer, unbox (int All.Samples), samples)
+                    //Log.warn "effective samples: %A" samples.[0]
 
-                        frameWatch.Restart()
-                        transact (fun () -> time.Value <- nextFrameTime())
+                let stopDispatcherProcessing = threadStealing.StopStealing()
 
-                        if size <> sizes.Value then
-                            transact (fun () -> sizes.Value <- size)
+                frameWatch.Restart()
+                transact (fun () -> time.Value <- nextFrameTime())
 
-                        defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
-                        defaultOutput <- { defaultOutput with viewport = Box2i(V2i.OO, defaultFramebuffer.Size - V2i.II) }
+                if fboSize <> sizes.Value then
+                    transact (fun () -> sizes.Value <- fboSize)
 
-                        GL.ColorMask(true, true, true, true)
-                        GL.DepthMask(true)
-                        GL.StencilMask(0xFFFFFFFFu)
-                        GL.Viewport(0,0,x.ClientSize.Width, x.ClientSize.Height)
-                        GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
-                        GL.ClearDepth(1.0)
-                        GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+                defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
+                //defaultOutput <- { defaultOutput with viewport = Box2i(V2i.OO, defaultFramebuffer.Size - V2i.II) }
 
+                GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo.Handle)
+                GL.ColorMask(true, true, true, true)
+                GL.DepthMask(true)
+                GL.StencilMask(0xFFFFFFFFu)
+                GL.Viewport(0,0,x.ClientSize.Width, x.ClientSize.Height)
+                GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+                GL.ClearDepth(1.0)
+                GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
 
-                        //EvaluationUtilities.evaluateTopLevel(fun () ->
-                        t.Run(AdaptiveToken.Top, RenderToken.Empty, defaultOutput)
-                        //)
-                        
-//                        let sw = System.Diagnostics.Stopwatch()
-//                        sw.Start()
-//                        while sw.Elapsed.TotalMilliseconds < 10.0 do 1;
+                
+                GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
+                //EvaluationUtilities.evaluateTopLevel(fun () ->
+                t.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer fbo)
+                blit()
 
+                x.SwapBuffers()
+                //System.Threading.Thread.Sleep(200)
+                frameWatch.Stop()
+                if not first then
+                    frameTime.Add frameWatch.Elapsed.TotalSeconds
 
-                        
-                        x.SwapBuffers()
-                        //System.Threading.Thread.Sleep(200)
-                        frameWatch.Stop()
-                        if not first then
-                            frameTime.Add frameWatch.Elapsed.TotalSeconds
+                transact (fun () -> time.MarkOutdated())
 
-                        transact (fun () -> time.MarkOutdated())
-
-                        stopDispatcherProcessing.Dispose()
-                        if t.OutOfDate then
+                stopDispatcherProcessing.Dispose()
+                if t.OutOfDate then
 //                            let sleepTime = max 0.0 (10.0 - sw.Elapsed.TotalMilliseconds)
 //                            let t = System.Threading.Tasks.Task.Delay (int sleepTime)
 //                            t.Wait()
-                            needsRedraw <- true                    
-                            if autoInvalidate then x.Invalidate()
-                            ()
-                        else
-                            needsRedraw <- false
-
-                        first <- false
-                    )
-
-                | None ->
-                    if size <> sizes.Value then
-                        transact (fun () -> sizes.Value <- size)
-
+                    needsRedraw <- true                    
+                    if autoInvalidate then x.Invalidate()
+                    ()
+                else
                     needsRedraw <- false
+
+                first <- false
+
+            | None ->
+                if fboSize <> sizes.Value then
+                    transact (fun () -> sizes.Value <- fboSize)
+
+                needsRedraw <- false
 
             afterRender.Trigger()
 
