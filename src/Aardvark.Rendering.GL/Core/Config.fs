@@ -39,6 +39,11 @@ module Config =
     /// rendering context instance.
     /// </summary>
     let mutable NumberOfResourceContexts = 1
+    
+    /// <summary>
+    /// Use the "new" RenderTask OpenGL RenderTask supporting RuntimeCommands (5.1.0)
+    /// </summary>
+    let mutable UseNewRenderTask = false
 
     /// <summary>
     /// The number of bits used for color values in default contexts

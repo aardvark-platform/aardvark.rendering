@@ -751,7 +751,10 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         let shareTextures = eng.sharing &&& ResourceSharing.Textures <> ResourceSharing.None
         let shareBuffers = eng.sharing &&& ResourceSharing.Buffers <> ResourceSharing.None
             
-        new RenderTasks.RenderTask(manager, fboSignature, set, engine, shareTextures, shareBuffers) :> IRenderTask
+        if Config.UseNewRenderTask then
+            new RenderTasks.NewRenderTask(manager, fboSignature, set, engine, shareTextures, shareBuffers) :> IRenderTask
+        else
+            new RenderTasks.RenderTask(manager, fboSignature, set, engine, shareTextures, shareBuffers) :> IRenderTask
 
     member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) : IPreparedRenderObject =
         PreparedCommand.ofRenderObject fboSignature manager rj :> IPreparedRenderObject
