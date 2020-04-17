@@ -366,6 +366,11 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
     member x.BeforeRender = beforeRender
     member x.AfterRender = afterRender
 
+    member x.SubSampling
+        with get() = 1.0
+        and set v = if v <> 1.0 then failwith "[OpenVR] SubSampling not implemented (use adjustSize instead)"
+
+
     interface IRenderTarget with
         member x.Runtime = app.Runtime :> IRuntime
         member x.Sizes = AVal.constant x.DesiredSize
@@ -374,6 +379,10 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
         member x.RenderTask
             with get() = RenderTask.empty
             and set t = () //x.RenderTask <- t
+        member x.SubSampling
+            with get() = 1.0
+            and set v = if v <> 1.0 then failwith "[OpenVR] SubSampling not implemented (use adjustSize instead)"
+
         member x.Time = time
         member x.BeforeRender = beforeRender.Publish
         member x.AfterRender = afterRender.Publish

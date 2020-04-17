@@ -373,6 +373,11 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
         member x.RenderTask
             with get() = x.RenderTask
             and set t = x.RenderTask <- t
+
+        member x.SubSampling
+            with get() = x.SubSampling
+            and set v = x.SubSampling <- v
+
         member x.Sizes = sizes :> aval<_>
         member x.Samples = samples
         member x.BeforeRender = beforeRender.Publish

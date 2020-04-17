@@ -34,6 +34,9 @@ type SimpleRenderWindow() as this =
     member x.RenderTask
         with get() = ctrl.RenderTask
         and set t = ctrl.RenderTask <- t
+    member x.SubSampling
+        with get() = ctrl.SubSampling
+        and set t = ctrl.SubSampling <- t
         
     member x.FramebufferSignature = ctrl.FramebufferSignature
     member x.Runtime = ctrl.Runtime
@@ -55,6 +58,9 @@ type SimpleRenderWindow() as this =
         member x.RenderTask
             with get() = ctrl.RenderTask
             and set t = ctrl.RenderTask <- t
+        member x.SubSampling
+            with get() = ctrl.SubSampling
+            and set t = ctrl.SubSampling <- t
 
         member x.Sizes = ctrl.Sizes
         member x.Samples = ctrl.Samples

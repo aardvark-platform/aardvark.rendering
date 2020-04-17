@@ -40,13 +40,13 @@ let main argv =
                 else n
             Log.warn "Samples: %A" ctrl.Samples
         | Keys.OemPlus -> 
-            let n = ctrl.SubSampling * Constant.Sqrt2 |> clamp 0.015625 2.0
-            ctrl.SubSampling <- n
-            Log.warn "SubSampling: %A" ctrl.SubSampling
+            let n = win.SubSampling * Constant.Sqrt2 |> clamp 0.015625 2.0
+            win.SubSampling <- n
+            Log.warn "SubSampling: %A" win.SubSampling
         | Keys.OemMinus -> 
-            let n = ctrl.SubSampling / Constant.Sqrt2 |> clamp 0.015625 2.0
-            ctrl.SubSampling <- n
-            Log.warn "SubSampling: %A" ctrl.SubSampling
+            let n = win.SubSampling / Constant.Sqrt2 |> clamp 0.015625 2.0
+            win.SubSampling <- n
+            Log.warn "SubSampling: %A" win.SubSampling
         | _ ->
             ()
     )

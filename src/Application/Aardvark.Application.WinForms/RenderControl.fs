@@ -11,6 +11,7 @@ open Aardvark.Application
 type RenderControl() as this =
     inherit Control()
 
+    let mutable subsampling = 1.0
     let mutable renderTask : Option<IRenderTask> = None
     let mutable impl : Option<IRenderTarget> = None
     let mutable ctrl : Option<Control> = None
@@ -67,6 +68,8 @@ type RenderControl() as this =
         match renderTask with
             | Some task -> cr.RenderTask <- task
             | None -> ()
+
+        cr.SubSampling <- subsampling
 
         transact(fun () ->
             inner <- Some cr.Time
@@ -159,12 +162,26 @@ type RenderControl() as this =
     member x.Time = time
     member x.Focus = focus :> aval<_>
     
+    member x.SubSampling 
+        with get() = subsampling
+        and set v =
+            subsampling <- v
+            match impl with
+            | Some i -> i.SubSampling <- v
+            | None -> ()
+            
+
     [<CLIEvent>]
     member x.BeforeRender = beforeRender.Publish
     [<CLIEvent>]
     member x.AfterRender = afterRender.Publish
 
     interface IRenderControl with
+        
+        member x.SubSampling
+            with get() = x.SubSampling
+            and set v = x.SubSampling <- v
+
         member x.FramebufferSignature = impl.Value.FramebufferSignature
         member x.Runtime = impl.Value.Runtime
         member x.Time = time

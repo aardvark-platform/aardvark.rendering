@@ -29,6 +29,7 @@ type IRenderTarget =
     abstract member Samples : int
     abstract member FramebufferSignature : IFramebufferSignature
     abstract member RenderTask : IRenderTask with get, set
+    abstract member SubSampling : float with get, set
     abstract member Time : aval<DateTime>
 
     abstract member BeforeRender : Microsoft.FSharp.Control.IEvent<unit>
