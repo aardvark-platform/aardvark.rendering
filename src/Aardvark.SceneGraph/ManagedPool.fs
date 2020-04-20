@@ -692,7 +692,7 @@ module ``Pool Semantics`` =
                             | Add(_,v) -> buffer.Add v |> ignore
                             | Rem(_,v) -> buffer.Remove v |> ignore
 
-                    buffer.GetValue()
+                    buffer.GetValue self
                 )
             
             let mutable ro = Unchecked.defaultof<RenderObject>
