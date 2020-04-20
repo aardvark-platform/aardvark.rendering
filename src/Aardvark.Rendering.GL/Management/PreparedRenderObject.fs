@@ -1438,6 +1438,21 @@ module rec Command =
                 o.Id :> obj 
             ]
 
+        static let compileEpilog (program : FragmentProgram) (info : CompilerInfo) =
+            program.NewFragment (fun s p ->
+                let stream = AssemblerCommandStream s
+                stream.SetDepthMask(true)
+                stream.SetStencilMask(true)
+                stream.SetDrawBuffers(info.drawBufferCount, info.drawBuffers)
+                stream.UseProgram(0)
+                stream.BindBuffer(int OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer, 0)
+                for i in 0 .. 7 do
+                    stream.Disable(int OpenTK.Graphics.OpenGL4.EnableCap.ClipDistance0 + i)
+
+            )
+
+        let mutable epilog : option<ProgramFragment> = None
+
         override x.PerformUpdate(token, program, info) =
             let ops = reader.GetChanges token
             let removes = System.Collections.Generic.List<IRenderObject>(ops.Count)
@@ -1468,16 +1483,38 @@ module rec Command =
 
             dirty.Clear()
 
+            let epilog =
+                match epilog with
+                | Some e -> e
+                | None ->
+                    let e = compileEpilog program info
+                    epilog <- Some e
+                    e
+
             program.First <- 
                 match trie.First with
                 | Some f -> f.Fragment
                 | None -> None
 
+            match trie.Last with
+            | Some l -> 
+                match l.Fragment with
+                | Some f -> f.Next <- Some epilog
+                | None -> ()
+            | None ->
+                ()
 
 
         override x.Free(info : CompilerInfo) =
             for cmd in cache.Values do
                 cmd.Free(info)
+
+            match epilog with
+            | Some e -> 
+                e.Dispose()
+                epilog <- None
+            | None ->
+                ()
 
             cache.Clear()
             trie.Clear()
