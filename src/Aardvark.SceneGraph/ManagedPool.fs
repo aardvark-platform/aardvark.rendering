@@ -773,15 +773,15 @@ module ``Pool Semantics`` =
                 let buffer = DrawCallBuffer(pool.Runtime, true) // who manages this? using finalizer for now
                 AVal.custom (fun self ->
                     let deltas = r.GetChanges self
-                    for d in deltas do
-                        match d with
-                            | Add(_,v) -> additions.Add v
-                            | Rem(_,v) -> removals.Add v
+                    if deltas.Count > 0 then
+                        for d in deltas do
+                            match d with
+                                | Add(_,v) -> additions.Add v
+                                | Rem(_,v) -> removals.Add v
 
-                    buffer.Update(removals, additions) |> ignore
-
-                    additions.Clear()
-                    removals.Clear()
+                        buffer.Update(removals, additions) |> ignore
+                        additions.Clear()
+                        removals.Clear()
 
                     buffer.GetValue self
                 )
