@@ -3,6 +3,10 @@
 open Aardvark.Base
 open FSharp.Data.Adaptive
 
+type DrawCalls =
+    | Direct of aval<DrawCallInfo list>
+    | Indirect of aval<IndirectBuffer>
+
 type DrawCallSet(collapseAdjacent : bool) =
     inherit AVal.AbstractVal<DrawCallInfo[]>()
 

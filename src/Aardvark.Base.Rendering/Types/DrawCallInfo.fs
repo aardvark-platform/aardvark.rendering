@@ -19,7 +19,3 @@ type DrawCallInfo =
             BaseVertex = 0;
         }
     end
-
-type DrawCalls =
-    | Direct of aval<list<DrawCallInfo>> // F# list seriously !?
-    | Indirect of aval<IndirectBuffer>

@@ -91,8 +91,8 @@ let testCompile() =
 
     let fbo = framebuffer.GetValue()
 
-    let set = ASet.ofArray (Array.take (1 <<< 16) objects)
-    let commands = AList.ofArray (Array.take (1 <<< 16) objects |> Array.map RenderCommand.Render) 
+    //let set = ASet.ofArray (Array.take (1 <<< 16) objects)
+    //let commands = AList.ofArray (Array.take (1 <<< 16) objects |> Array.map RenderCommand.Render) 
 
 //    Log.line "starting"
 //    while true do

@@ -780,10 +780,6 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     member x.CompileRender(fboSignature : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) : IRenderTask =
         x.CompileRenderInternal(fboSignature, AVal.constant engine, set)
-        
-    member x.Compile (signature : IFramebufferSignature, commands : alist<RenderCommand>) =
-        failwith "[GL] no commands"
-        //new CommandRenderTask(manager, signature, commands, AVal.constant BackendConfiguration.Default, true, true) :> ICommandRenderTask
 
     member x.CompileClear(fboSignature : IFramebufferSignature, color : aval<Map<Symbol, C4f>>, depth : aval<Option<float>>) : IRenderTask =
         let clearValues =

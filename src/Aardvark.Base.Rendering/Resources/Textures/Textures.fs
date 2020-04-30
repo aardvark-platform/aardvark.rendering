@@ -33,6 +33,20 @@ type ISparseTexture<'a when 'a : unmanaged> =
     abstract member BrickSize : V3i
     abstract member UploadBrick : level : int * slice : int * index : V3i * data : NativeTensor4<'a> -> IDisposable
 
+type INativeTextureData =
+    abstract member Size : V3i
+    abstract member SizeInBytes : int64
+    abstract member Use : (nativeint -> 'a) -> 'a
+
+[<AllowNullLiteral>]
+type INativeTexture =
+    inherit ITexture
+    abstract member Dimension : TextureDimension
+    abstract member Format : TextureFormat
+    abstract member MipMapLevels : int
+    abstract member Count : int
+    abstract member Item : slice : int * level : int -> INativeTextureData with get
+
 type IBackendTexture =
     inherit ITexture
     abstract member Runtime : ITextureRuntime
@@ -49,6 +63,12 @@ and IFramebufferOutput =
     abstract member Format : RenderbufferFormat
     abstract member Samples : int
     abstract member Size : V2i
+
+and IBackendTextureOutputView =
+    inherit IFramebufferOutput
+    abstract member texture : IBackendTexture
+    abstract member level : int
+    abstract member slices : Range1i
 
 and ITextureRange =
     abstract member Texture : IBackendTexture

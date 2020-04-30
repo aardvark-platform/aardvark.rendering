@@ -81,7 +81,6 @@ type RenderbufferFormat =
     | Rgb8i = 36239
     | Rgb10A2ui = 36975
 
-
 type CompressionMode =
     | None = 0
     | BC1 = 1
@@ -93,8 +92,6 @@ type CompressionMode =
 type TextureFormat =
     | Bgr8 = 1234
     | Bgra8 = 1235
-
-
     | DepthComponent = 6402
     | Alpha = 6406
     | Rgb = 6407
@@ -246,6 +243,11 @@ type TextureFormat =
     | Three = 3
     | Four = 4
 
+type AttachmentSignature =
+    {
+        format : RenderbufferFormat
+        samples : int
+    }
 
 type TextureParams =
     {

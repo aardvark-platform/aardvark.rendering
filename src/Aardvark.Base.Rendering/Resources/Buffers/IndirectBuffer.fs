@@ -16,8 +16,8 @@ type IndirectBuffer(b : IBuffer, count : int, stride : int, indexed : bool) =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module IndirectBuffer =
 
-    let inline ofArray (indexed : bool) (arr : ^a[]) =
-        IndirectBuffer(ArrayBuffer arr, arr.Length, sizeof< ^a>, indexed)
+    let inline ofArray (indexed : bool) (arr : DrawCallInfo[]) =
+        IndirectBuffer(ArrayBuffer arr, arr.Length, sizeof<DrawCallInfo>, indexed)
 
-    let inline ofList (indexed : bool) (l : ^a list) =
+    let inline ofList (indexed : bool) (l : DrawCallInfo list) =
         l |> List.toArray |> ofArray indexed
