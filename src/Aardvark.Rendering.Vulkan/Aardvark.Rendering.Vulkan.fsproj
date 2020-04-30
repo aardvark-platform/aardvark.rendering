@@ -57,6 +57,7 @@
     <Compile Include="Swapchain\Swapchain.fs" />
     <Compile Include="Management\ResourceManager.fs" />
     <Compile Include="Management\PreparedRenderObject.fs" />
+    <Compile Include="Runtime\OrderTrie.fs" />
     <Compile Include="Runtime\DebugReport.fs" />
     <Compile Include="Runtime\GraphicsCommands.fs" />
     <Compile Include="Runtime\CommandTask.fs" />

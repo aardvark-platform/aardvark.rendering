@@ -895,37 +895,45 @@ module private RuntimeCommands =
                 override x.Compile(_,_) = ()
             }
         
-        let trie = Trie<PreparedCommand>()
-        do trie.Add([], firstCommand)
+        let trie = OrderMaintenanceTrie<obj,PreparedCommand>()
+        do trie.Set([], firstCommand) |> ignore
 
-        override x.First = trie.First.Value
-        override x.Last = trie.Last.Value
+        override x.First = trie.First.Value.Value
+        override x.Last = trie.Last.Value.Value
 
         override x.Add(cmd : PreparedCommand) =
-            trie.Add(cmd.GroupKey, cmd)
-            match trie.Last with
-                | Some last -> 
-                    let next = x.Next |> Option.map (fun n -> n.First)
-                    last.Next <- next
-                    match next with
-                        | Some n -> n.Prev <- Some last
-                        | None -> ()
+            let o : list<obj> = cmd.GroupKey
+            let ref = trie.Set(cmd.GroupKey, cmd)
+            match ref.Prev with
+            | ValueNone -> ()
+            | ValueSome v -> 
+                v.Value.Next <- Some cmd
+                cmd.Prev <- Some v.Value
 
-                | None ->
-                    failwith "[Vulkan] empty CommandBucket"
+            match trie.Last with
+            | ValueNone -> failwith "[Vulkan] empty CommandBucket"
+            | ValueSome l -> 
+                let next = x.Next |> Option.map (fun n -> n.First)
+                l.Value.Next <- next
+                match next with
+                | None -> ()
+                | Some n -> n.Prev <- Some l.Value
 
         override x.Remove(cmd : PreparedCommand) =
-            let res = trie.Remove(cmd.GroupKey)
-            match trie.Last with
-                | Some last -> 
-                    let next = x.Next  |> Option.map (fun n -> n.First)
-                    last.Next <- next
+            let res = trie.TryRemove(cmd.GroupKey)
+            match res with
+            | ValueNone -> false
+            | ValueSome l -> 
+                match trie.Last with
+                | ValueNone -> failwith "[Vulkan] empty CommandBucket"
+                | ValueSome l -> 
+                    let next = x.Next |> Option.map (fun n -> n.First)
+                    l.Value.Next <- next
                     match next with
-                        | Some n -> n.Prev <- Some last
-                        | None -> ()
-                | None ->
-                    failwith "[Vulkan] empty CommandBucket"
-            res
+                    | None -> ()
+                    | Some n -> n.Prev <- Some l.Value
+                true
+
 
         override x.Release() =
             firstCommand.Dispose()
